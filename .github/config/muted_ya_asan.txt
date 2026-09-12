@@ -28,10 +28,15 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery22
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/proxy_service/ut ScriptExecutionsTest.GetOperationDuringAtomicUploadFinalization
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column+UseStreamIndex+UseChannelsV2
+ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column-UseStreamIndex+UseChannelsV2
+ydb/core/kqp/ut/arrow unittest.[*/*] chunk
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
 ydb/core/kqp/ut/batch_operations KqpBatchUpdate.ManyPartitions_1
 ydb/core/kqp/ut/indexes KqpIndexes.DirectAccessToIndexImplTable+UserIsClusterAdmin+HasUsePermission
 ydb/core/kqp/ut/indexes KqpIndexes.DirectAccessToIndexImplTable-UserIsClusterAdmin+HasUsePermission
+ydb/core/kqp/ut/indexes KqpIndexes.PreSharding+Unique
+ydb/core/kqp/ut/indexes KqpIndexes.PreSharding-Unique
+ydb/core/kqp/ut/indexes KqpIndexes.PreShardingMultiCol
 ydb/core/kqp/ut/opt KqpConcurrentResults.ConcurrentStreamNamedExprRandomConsistency+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery+EnableIndexStreamWrite
 ydb/core/kqp/ut/opt KqpNamedExpressions.NamedExpressionRandomUpsertRevert+UseDataQuery-EnableIndexStreamWrite
@@ -146,8 +151,10 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWith
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldSucceedWithHedgingWhenPrimariesHangAndHandoffsOk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TWriteRequestWithPBufferReplicationTest.ShouldWorkWithMultipleResponsesAndHedge
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
+ydb/core/persqueue/pqrb/ut Balancing.Balancing_ManyTopics_PQv1
 ydb/core/persqueue/pqrb/ut Balancing.Balancing_OneTopic_TopicApi
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCounters
+ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCountersWithKeepMessageOrder
 ydb/core/persqueue/pqtablet/quota/ut TWriteQuoterTests.WaitMessagesQuota
 ydb/core/persqueue/pqtablet/quota/ut unittest.sole chunk
 ydb/core/persqueue/public/describer/ut TDescriberTests.AccessOrAllows
@@ -188,8 +195,10 @@ ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithData
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithoutConsumer
 ydb/core/persqueue/public/mlp/ut TMLPReaderTests.TopicWithoutConsumer
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
+ydb/core/persqueue/public/schema/ut DescribeOperationActor.FiltersPartitionsByStrategy
 ydb/core/persqueue/public/schema/ut DescribeOperationActor.ValidateSchemaThrowsMapsToInternalError
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicMlpConsumerFailsWhenChangingDlqToTopicWithoutAccess
+ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicUnrelatedChangeSucceedsAfterDlqAccessRevoked
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerFailsWhenDlqTopicDoesNotExist
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerFailsWithoutDlqTopicAccess
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerSucceedsWithAlterSchemaAndUpdateRowOnDlqTopic
@@ -253,6 +262,7 @@ ydb/core/tx/datashard/ut_stats DataShardStats.BackupTableStatsReportInterval
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleFollower-0-0
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleFollower-0-1
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleFollower-1-0
+ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleFollower-1-1
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-0
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-1
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-1-0
@@ -271,6 +281,7 @@ ydb/core/tx/schemeshard/ut_serverless TSchemeShardServerLess.StorageBilling
 ydb/core/tx/schemeshard/ut_serverless unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_topic_cloud_events unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
+ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideThenStopTenantAndForceDeleteSubDomain-AlterDatabaseCreateHiveFirst-true
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_acl_write
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart
 ydb/core/ymq/actor/cloud_events/cloud_events_ut unittest.sole chunk
@@ -301,10 +312,12 @@ ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTa
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/1
 ydb/services/metadata/secret/ut Secret.Simple
 ydb/services/metadata/secret/ut Secret.SimpleQueryService
+ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.AlterCannotChangeConsumerType
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.AlterSuccessAndMissing
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ByteBurstDefaultsToWriteSpeed
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ConsumerCodecsMustCoverTopicCodecs
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.CreateExistingTopicSucceeds
+ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.CreateWithRetentionStorageBytes
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.FccKeepsLiteralDashDashTopicName
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.FederationTopicNameFormats
 ydb/services/persqueue_v1/actors/schema/pqv1/ut SchemaOps_PQv1.ImportantConsumerAndCodecsStored
@@ -346,6 +359,7 @@ ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_prestable-26-4-2-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-0-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-0-8388608-COLUMN]
+ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-1-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-1-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-1-2048-COLUMN]
@@ -374,6 +388,7 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-0-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-1-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-1-8388608-COLUMN]
+ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_prestable-26-4_to_stable-26-3-1-2-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-2-1_to_stable-26-3-1-2-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_prestable-26-4-0-8388608-COLUMN]
@@ -441,6 +456,7 @@ ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedClust
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_each_proxy_survives_tablet_move[mixed_stable-26-3-1_and_stable-26-2-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_prestable-26-4]
+ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_prestable-26-4_and_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_from_mid_blob_offset[mixed_stable-26-3-1]
 ydb/tests/compatibility/topics test_direct_read.py.TestTopicDirectReadMixedCluster.test_direct_read_mid_blob_survives_tablet_move[mixed_prestable-26-4]
 ydb/tests/compatibility/workloads py3test.[test_statistics.py */*] chunk
@@ -466,6 +482,7 @@ ydb/tests/functional/dstool py3test.sole chunk
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_balance_skips_not_bsc_ready
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_filter_healthy_groups_requires_bsc_ready
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_list_fallback_to_legacy_api
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots_legacy_api
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_vdisk_evict_fallback_to_legacy_api
 ydb/tests/functional/dstool test_static_vdisk_evict.py.test_dstool_evict_static_vdisk
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx

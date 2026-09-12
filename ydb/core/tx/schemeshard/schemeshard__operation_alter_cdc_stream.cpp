@@ -60,7 +60,7 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistCdcStream(db, pathId);
-        context.SS->CdcStreams[pathId]->FinishAlter();
+        context.SS->CdcStreams.at(pathId)->FinishAlter();
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, pathId);

@@ -284,7 +284,6 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
                    "NbsConfig.NbsFrontendConfig.Enabled=true, got "
                 << grpcConfig.GetPort());
     }
-
     if (config.HasAuthConfig()) {
         NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateAuthConfig(config.GetAuthConfig(), msg);
         if (result == NKikimr::NConfig::EValidationResult::Error) {
@@ -344,6 +343,12 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
                     return EValidationResult::Error;
                 }
             }
+        }
+    }
+    if (config.HasCompositeConveyorConfig()) {
+        auto result = ValidateCompositeConveyorConfig(config.GetCompositeConveyorConfig(), msg);
+        if (result == EValidationResult::Error) {
+            return result;
         }
     }
     {

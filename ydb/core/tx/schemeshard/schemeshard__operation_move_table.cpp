@@ -282,7 +282,7 @@ public:
             tableInfo->AlterVersion += 1;
 
             // copy table info
-            context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
+            context.SS->Tables.Set(dstPath.Base()->PathId, tableInfo);
             context.SS->PersistTable(db, dstPath.Base()->PathId);
             context.SS->PersistAllTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
             {
@@ -299,10 +299,10 @@ public:
             tableInfo->AlterVersion += 1;
             context.SS->PersistColumnTable(db, dstPath.Base()->PathId, *tableInfo, false);
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
+            context.SS->AcquireOwnDbRef(dstPath.Base()->PathId, "move table info");
         } else {
             Y_ABORT();
         }
-        context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "move table info");
 
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, dstPath.Base()->PathId, step);

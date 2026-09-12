@@ -415,6 +415,18 @@ void SetSubscriptions(TTenantTestRuntime &runtime, TActorId aid, TVector<ui32> k
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TConfigsDispatcherTests) {
+    Y_UNIT_TEST(TestCompositeConveyorConfigSubscription) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        TAutoPtr<IEventHandle> handle;
+        InitConfigsDispatcher(runtime);
+
+        AddSubscriber(runtime, {(ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem});
+
+        runtime.GrabEdgeEventRethrow<TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>(handle);
+        auto notification = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvGotNotification>(handle);
+        UNIT_ASSERT(!notification->Config.HasCompositeConveyorConfig());
+    }
+
     Y_UNIT_TEST(TestSubscriptionNotification) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         TAutoPtr<IEventHandle> handle;

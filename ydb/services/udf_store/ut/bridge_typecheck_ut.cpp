@@ -61,10 +61,16 @@ constexpr TStringBuf BridgeTypeCheckWast = R"(
         (import "env" "BridgeListLength" (func $list_length (param i64) (result i64)))
         (import "env" "BridgeListMakeIterator" (func $list_iter (param i64) (result i64)))
         (import "env" "BridgeMakeArray" (func $make_array (param i64 i32) (result i64)))
+        (import "env" "BridgeMakeArrayTyped" (func $make_array_typed (param i64 i64 i32) (result i64)))
         (import "env" "BridgeMakeDict" (func $make_dict (param i64 i64 i32) (result i64)))
         (import "env" "BridgeMakeList" (func $make_list (param i64 i32) (result i64)))
+        (import "env" "BridgeMakeListTyped" (func $make_list_typed (param i64 i64 i32) (result i64)))
         (import "env" "BridgeMakeOptional" (func $make_optional (param i64) (result i64)))
+        (import "env" "BridgeMakeStructTyped" (func $make_struct_typed (param i64 i64 i32) (result i64)))
         (import "env" "BridgeRun" (func $run (param i64 i64 i32) (result i64)))
+        (import "env" "BridgeTypeListItem" (func $type_list_item (param i64) (result i64)))
+        (import "env" "BridgeTypeMember" (func $type_member (param i64 i32) (result i64)))
+        (import "env" "BridgeTypeOptionalItem" (func $type_optional_item (param i64) (result i64)))
         (import "env" "BridgeUnref" (func $unref (param i64)))
 
         (func $contains_raw (param $ctx i64) (param $result i64) (param $dict i64) (param $key i64)
@@ -136,6 +142,91 @@ constexpr TStringBuf BridgeTypeCheckWast = R"(
             (i64.store (local.get $result) (call $make_list (local.get $items) (i32.const 2)))
         )
         (export "make_list_two" (func $make_list_two))
+
+        ;; Build a two-item list of the type named by BridgeTypeListItem on the
+        ;; result type -- the inner List of List<List<...>>, or any other list
+        ;; the guest reaches by walking the type tree itself.
+        (func $make_inner_list_typed (param $ctx i64) (param $result i64)
+                (param $a i64) (param $b i64) (param $items i64)
+            (local $outer i64)
+            (local $inner i64)
+            (local.set $outer (call $result_type))
+            (local.set $inner (call $type_list_item (local.get $outer)))
+            (i64.store (local.get $items) (local.get $a))
+            (i64.store (i64.add (local.get $items) (i64.const 8)) (local.get $b))
+            (i64.store (local.get $result)
+                (call $make_list_typed (local.get $inner) (local.get $items) (i32.const 2)))
+            (call $unref (local.get $inner))
+            (call $unref (local.get $outer))
+        )
+        (export "make_inner_list_typed" (func $make_inner_list_typed))
+
+        ;; Build the second Tuple member of a two-member result via typed Make.
+        (func $make_second_tuple_typed (param $ctx i64) (param $result i64)
+                (param $a i64) (param $b i64) (param $elems i64)
+            (local $outer i64)
+            (local $inner i64)
+            (local.set $outer (call $result_type))
+            (local.set $inner (call $type_member (local.get $outer) (i32.const 1)))
+            (i64.store (local.get $elems) (local.get $a))
+            (i64.store (i64.add (local.get $elems) (i64.const 8)) (local.get $b))
+            (i64.store (local.get $result)
+                (call $make_array_typed (local.get $inner) (local.get $elems) (i32.const 2)))
+            (call $unref (local.get $inner))
+            (call $unref (local.get $outer))
+        )
+        (export "make_second_tuple_typed" (func $make_second_tuple_typed))
+
+        ;; Same for a Struct: the member named by BridgeTypeMember is itself a
+        ;; Struct, and its own members are handed over in declared order.
+        (func $make_second_struct_typed (param $ctx i64) (param $result i64)
+                (param $a i64) (param $b i64) (param $members i64)
+            (local $outer i64)
+            (local $inner i64)
+            (local.set $outer (call $result_type))
+            (local.set $inner (call $type_member (local.get $outer) (i32.const 1)))
+            (i64.store (local.get $members) (local.get $a))
+            (i64.store (i64.add (local.get $members) (i64.const 8)) (local.get $b))
+            (i64.store (local.get $result)
+                (call $make_struct_typed (local.get $inner) (local.get $members) (i32.const 2)))
+            (call $unref (local.get $inner))
+            (call $unref (local.get $outer))
+        )
+        (export "make_second_struct_typed" (func $make_second_struct_typed))
+
+        ;; Name the second member of the result and build it as a List: how a
+        ;; guest resolves sibling Lists the handles cannot tell apart.
+        (func $make_second_list_typed (param $ctx i64) (param $result i64)
+                (param $a i64) (param $b i64) (param $items i64)
+            (local $outer i64)
+            (local $inner i64)
+            (local.set $outer (call $result_type))
+            (local.set $inner (call $type_member (local.get $outer) (i32.const 1)))
+            (i64.store (local.get $items) (local.get $a))
+            (i64.store (i64.add (local.get $items) (i64.const 8)) (local.get $b))
+            (i64.store (local.get $result)
+                (call $make_list_typed (local.get $inner) (local.get $items) (i32.const 2)))
+            (call $unref (local.get $inner))
+            (call $unref (local.get $outer))
+        )
+        (export "make_second_list_typed" (func $make_second_list_typed))
+
+        ;; An Optional result: the type to build sits under the wrapper, which
+        ;; is what BridgeTypeOptionalItem peels.
+        (func $make_optional_tuple_typed (param $ctx i64) (param $result i64)
+                (param $a i64) (param $b i64) (param $elems i64)
+            (local $outer i64)
+            (local $inner i64)
+            (local.set $outer (call $result_type))
+            (local.set $inner (call $type_optional_item (local.get $outer)))
+            (i64.store (local.get $elems) (local.get $a))
+            (i64.store (i64.add (local.get $elems) (i64.const 8)) (local.get $b))
+            (i64.store (local.get $result)
+                (call $make_array_typed (local.get $inner) (local.get $elems) (i32.const 2)))
+            (call $unref (local.get $inner))
+            (call $unref (local.get $outer))
+        )
+        (export "make_optional_tuple_typed" (func $make_optional_tuple_typed))
 
         (func $dict_iter_then_lookup (param $ctx i64) (param $result i64)
                 (param $dict i64) (param $key i64)
@@ -227,10 +318,28 @@ TMkqlType* MkqlInt64Type(TMiniKqlEnv& mkql) {
     return NKikimr::NMiniKQL::TDataType::Create(NYql::NUdf::TDataType<i64>::Id, mkql.Env);
 }
 
+//! Int64's family with a different kind: what tells two sibling containers
+//! apart once the family comparison has accepted both.
+TMkqlType* MkqlInt32Type(TMiniKqlEnv& mkql) {
+    return NKikimr::NMiniKQL::TDataType::Create(NYql::NUdf::TDataType<i32>::Id, mkql.Env);
+}
+
 TMkqlType* MkqlTupleType(TMiniKqlEnv& mkql, const TVector<TMkqlType*>& elements) {
     return NKikimr::NMiniKQL::TTupleType::Create(
         elements.size(),
         elements.data(),
+        mkql.Env);
+}
+
+//! Members go in as given, so the names here are already in the order a
+//! declared Struct arrives in.
+TMkqlType* MkqlStructType(
+    TMiniKqlEnv& mkql,
+    const TVector<std::pair<TString, TMkqlType*>>& members)
+{
+    return NKikimr::NMiniKQL::TStructType::Create(
+        members.data(),
+        members.size(),
         mkql.Env);
 }
 
@@ -900,6 +1009,331 @@ Y_UNIT_TEST(AnIteratorStillWalksThroughItsOwnIntrinsic) {
     UNIT_ASSERT_VALUES_EQUAL(has, 1u);
 
     table.Unref(dictHandle);
+}
+
+Y_UNIT_TEST(MakeListBuildsTheInnerListOfANestedListResult) {
+    // FindListTypeIn used to accept the outer List first, so building the
+    // inner List<Int64> under List<List<Int64>> checked items as lists and
+    // failed every row. Item families now pick the inner candidate.
+    TMiniKqlEnv mkql;
+
+    auto* innerType = NKikimr::NMiniKQL::TListType::Create(MkqlInt64Type(mkql), mkql.Env);
+    auto* outerType = NKikimr::NMiniKQL::TListType::Create(innerType, mkql.Env);
+    TTypeCheckUdf udf(mkql, 62, outerType);
+    auto& table = udf.Table();
+
+    const ui64 a = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{1}));
+    const ui64 b = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{2}));
+
+    const ui64 resultHandle = udf.Invoke("make_list_two", {a, b, udf.Scratch(2)});
+    UNIT_ASSERT(resultHandle != NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.Resolve(resultHandle).Type, AsBridgeType(innerType));
+
+    table.Unref(resultHandle);
+    table.Unref(b);
+    table.Unref(a);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeListBuildsTheSecondListOfATupleResult) {
+    // Sibling Lists of different item families: the first match was
+    // List<Int64>, so a list of strings failed the item check. Families pick
+    // List<String>.
+    TMiniKqlEnv mkql;
+
+    auto* intList = NKikimr::NMiniKQL::TListType::Create(MkqlInt64Type(mkql), mkql.Env);
+    auto* stringList = NKikimr::NMiniKQL::TListType::Create(MkqlStringType(mkql), mkql.Env);
+    TTypeCheckUdf udf(mkql, 63, MkqlTupleType(mkql, {intList, stringList}));
+    auto& table = udf.Table();
+
+    const ui64 a = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("a", 1)));
+    const ui64 b = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("b", 1)));
+
+    const ui64 resultHandle = udf.Invoke("make_list_two", {a, b, udf.Scratch(2)});
+    UNIT_ASSERT(resultHandle != NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.Resolve(resultHandle).Type, AsBridgeType(stringList));
+
+    table.Unref(resultHandle);
+    table.Unref(b);
+    table.Unref(a);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeArrayBuildsAnInnerTupleOfTheOuterArity) {
+    // Outer and inner Tuples share arity 2, so the first match was the outer
+    // one and string members failed against Tuple slots. Families pick the
+    // Tuple<String,String> member.
+    TMiniKqlEnv mkql;
+
+    auto* ints = MkqlTupleType(mkql, {MkqlInt64Type(mkql), MkqlInt64Type(mkql)});
+    auto* strings = MkqlTupleType(mkql, {MkqlStringType(mkql), MkqlStringType(mkql)});
+    TTypeCheckUdf udf(mkql, 64, MkqlTupleType(mkql, {ints, strings}));
+    auto& table = udf.Table();
+
+    const ui64 a = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("a", 1)));
+    const ui64 b = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("b", 1)));
+
+    const ui64 resultHandle = udf.Invoke("make_array_two", {a, b, udf.Scratch(2)});
+    UNIT_ASSERT(resultHandle != NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.Resolve(resultHandle).Type, AsBridgeType(strings));
+
+    table.Unref(resultHandle);
+    table.Unref(b);
+    table.Unref(a);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeListTypedNamesTheInnerListExplicitly) {
+    // Preferred path for nested containers: the guest walks BridgeGetResultType
+    // with BridgeTypeListItem and names the list, the way BridgeMakeDict does.
+    TMiniKqlEnv mkql;
+
+    auto* innerType = NKikimr::NMiniKQL::TListType::Create(MkqlInt64Type(mkql), mkql.Env);
+    auto* outerType = NKikimr::NMiniKQL::TListType::Create(innerType, mkql.Env);
+    TTypeCheckUdf udf(mkql, 65, outerType);
+    auto& table = udf.Table();
+
+    const ui64 a = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{1}));
+    const ui64 b = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{2}));
+
+    const ui64 resultHandle = udf.Invoke("make_inner_list_typed", {a, b, udf.Scratch(2)});
+    UNIT_ASSERT(resultHandle != NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.Resolve(resultHandle).Type, AsBridgeType(innerType));
+
+    table.Unref(resultHandle);
+    table.Unref(b);
+    table.Unref(a);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeArrayTypedNamesTheSecondTupleExplicitly) {
+    TMiniKqlEnv mkql;
+
+    auto* ints = MkqlTupleType(mkql, {MkqlInt64Type(mkql), MkqlInt64Type(mkql)});
+    auto* strings = MkqlTupleType(mkql, {MkqlStringType(mkql), MkqlStringType(mkql)});
+    TTypeCheckUdf udf(mkql, 66, MkqlTupleType(mkql, {ints, strings}));
+    auto& table = udf.Table();
+
+    const ui64 a = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("a", 1)));
+    const ui64 b = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("b", 1)));
+
+    const ui64 resultHandle = udf.Invoke("make_second_tuple_typed", {a, b, udf.Scratch(2)});
+    UNIT_ASSERT(resultHandle != NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.Resolve(resultHandle).Type, AsBridgeType(strings));
+
+    table.Unref(resultHandle);
+    table.Unref(b);
+    table.Unref(a);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeStructTypedNamesTheNestedStructExplicitly) {
+    TMiniKqlEnv mkql;
+
+    auto* point = MkqlStructType(mkql, {{"x", MkqlInt64Type(mkql)}, {"y", MkqlInt64Type(mkql)}});
+    auto* outer = MkqlStructType(mkql, {{"label", MkqlStringType(mkql)}, {"point", point}});
+    TTypeCheckUdf udf(mkql, 67, outer);
+    auto& table = udf.Table();
+
+    const ui64 a = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{1}));
+    const ui64 b = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{2}));
+
+    const ui64 resultHandle = udf.Invoke("make_second_struct_typed", {a, b, udf.Scratch(2)});
+    UNIT_ASSERT(resultHandle != NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.Resolve(resultHandle).Type, AsBridgeType(point));
+
+    table.Unref(resultHandle);
+    table.Unref(b);
+    table.Unref(a);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeArrayTypedNamesTheTupleUnderAnOptionalResult) {
+    // BridgeGetResultType hands out Optional<Tuple<..>>, and the type to build
+    // is what BridgeTypeOptionalItem peels off it.
+    TMiniKqlEnv mkql;
+
+    auto* tupleType = MkqlTupleType(mkql, {MkqlInt64Type(mkql), MkqlInt64Type(mkql)});
+    auto* resultType = NKikimr::NMiniKQL::TOptionalType::Create(tupleType, mkql.Env);
+    TTypeCheckUdf udf(mkql, 68, resultType);
+    auto& table = udf.Table();
+
+    const ui64 a = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{1}));
+    const ui64 b = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{2}));
+
+    const ui64 resultHandle = udf.Invoke("make_optional_tuple_typed", {a, b, udf.Scratch(2)});
+    UNIT_ASSERT(resultHandle != NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.Resolve(resultHandle).Type, AsBridgeType(tupleType));
+
+    table.Unref(resultHandle);
+    table.Unref(b);
+    table.Unref(a);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeArrayReportsANullSlotWithSeveralCandidates) {
+    // Nothing accepts a null here: both the outer and the inner Tuple declare
+    // one mandatory member. Narrowing has no candidate to pick, and dropping
+    // the type instead would take the mandatory-null check with it and hand
+    // MiniKQL a tuple whose only member is absent.
+    TMiniKqlEnv mkql;
+
+    auto* inner = MkqlTupleType(mkql, {MkqlStringType(mkql)});
+    TTypeCheckUdf udf(mkql, 69, MkqlTupleType(mkql, {inner}));
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        udf.Invoke("make_array_one", {NullBridgeHandle, udf.Scratch(1)}),
+        yexception,
+        "BridgeMakeArray slot 0 is null");
+
+    UNIT_ASSERT_VALUES_EQUAL(udf.Table().DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeArrayReportsAWrongMemberInsteadOfPickingASibling) {
+    // Int32 and Int64 share a family, so Tuple<Int32,Int32> accepts two Int64
+    // handles. A guest that means the sibling Tuple<Int64,String> and gets its
+    // second member wrong must hear about that member instead of having its
+    // tuple silently rebuilt as the other declaration.
+    TMiniKqlEnv mkql;
+
+    auto* wanted = MkqlTupleType(mkql, {MkqlInt64Type(mkql), MkqlStringType(mkql)});
+    auto* sibling = MkqlTupleType(mkql, {MkqlInt32Type(mkql), MkqlInt32Type(mkql)});
+    TTypeCheckUdf udf(mkql, 70, MkqlTupleType(mkql, {wanted, sibling}));
+    auto& table = udf.Table();
+
+    const ui64 a = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{1}));
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        udf.Invoke("make_array_two", {a, a, udf.Scratch(2)}),
+        yexception,
+        "BridgeMakeArray expected a string value, got scalar");
+
+    table.Unref(a);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeArrayPicksTheSiblingWhoseKindsMatchExactly) {
+    // The control for the test above: with a String second member the same
+    // declaration resolves to Tuple<Int64,String>, which names both kinds
+    // exactly, and not to the Tuple<Int32,Int32> the families also allow.
+    TMiniKqlEnv mkql;
+
+    auto* wanted = MkqlTupleType(mkql, {MkqlInt64Type(mkql), MkqlStringType(mkql)});
+    auto* sibling = MkqlTupleType(mkql, {MkqlInt32Type(mkql), MkqlInt32Type(mkql)});
+    TTypeCheckUdf udf(mkql, 71, MkqlTupleType(mkql, {wanted, sibling}));
+    auto& table = udf.Table();
+
+    const ui64 a = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{1}));
+    const ui64 b = table.Register(
+        EBridgeNodeKind::String,
+        EBridgeValueKind::String,
+        AsBridgeType(MkqlStringType(mkql)),
+        mkql.ValueBuilder.NewString(TStringRef("b", 1)));
+
+    const ui64 resultHandle = udf.Invoke("make_array_two", {a, b, udf.Scratch(2)});
+    UNIT_ASSERT(resultHandle != NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.Resolve(resultHandle).Type, AsBridgeType(wanted));
+
+    table.Unref(resultHandle);
+    table.Unref(b);
+    table.Unref(a);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(MakeListLeavesIndistinguishableSiblingsUntyped) {
+    // Two Lists of the same item type: the handles say nothing about which one
+    // the guest is building, so the node stays untyped rather than being
+    // stamped with a guess.
+    TMiniKqlEnv mkql;
+
+    auto* first = NKikimr::NMiniKQL::TListType::Create(MkqlInt64Type(mkql), mkql.Env);
+    auto* second = NKikimr::NMiniKQL::TListType::Create(MkqlInt64Type(mkql), mkql.Env);
+    TTypeCheckUdf udf(mkql, 72, MkqlTupleType(mkql, {first, second}));
+    auto& table = udf.Table();
+
+    const ui64 a = table.Register(
+        EBridgeNodeKind::Scalar,
+        EBridgeValueKind::Int64,
+        AsBridgeType(MkqlInt64Type(mkql)),
+        TUnboxedValuePod(i64{1}));
+
+    const ui64 untypedHandle = udf.Invoke("make_list_two", {a, a, udf.Scratch(2)});
+    UNIT_ASSERT(untypedHandle != NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.Resolve(untypedHandle).Type, nullptr);
+
+    // Which is what the typed path is for: naming the member settles it.
+    const ui64 typedHandle = udf.Invoke("make_second_list_typed", {a, a, udf.Scratch(2)});
+    UNIT_ASSERT(typedHandle != NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.Resolve(typedHandle).Type, AsBridgeType(second));
+
+    table.Unref(typedHandle);
+    table.Unref(untypedHandle);
+    table.Unref(a);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
 }
 
 } // Y_UNIT_TEST_SUITE

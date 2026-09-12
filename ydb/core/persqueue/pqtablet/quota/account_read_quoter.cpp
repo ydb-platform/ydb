@@ -62,13 +62,12 @@ void TBasicAccountQuoter::InitCounters(const TActorContext& ctx) {
 
 void TBasicAccountQuoter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     LOG_I("Killed");
-    for (const auto& event : Queue) {
-        auto cookie = event.Request->Get()->Cookie;
-        ReplyPersQueueError(
-            TabletActorId, ctx, TabletId, TopicConverter->GetClientsideName(), Partition, Counters, NKikimrServices::PQ_RATE_LIMITER,
-            cookie, NPersQueue::NErrorCode::INITIALIZING,
-            TStringBuilder() << "Tablet is restarting, topic " << TopicConverter->GetClientsideName() << " (ReadInfo) cookie " << cookie
-        );
+    // Parent waits for TEvResponse. TEvError(INITIALIZING) to the tablet does not
+    // unblock PendingAccountQuotaRequests, and poison also runs on consumer delete
+    // while the tablet is still alive.
+    while (!Queue.empty()) {
+        ApproveQuota(Queue.front().Request, Queue.front().StartWait, ctx);
+        Queue.pop_front();
     }
     Die(ctx);
 }
@@ -102,7 +101,14 @@ void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed:
             {"creditBytes", CreditBytes}
     );
     auto it = InProcessQuotaRequestCookies.find(ev->Get()->RequestCookie);
-    PQ_ENSURE(it != InProcessQuotaRequestCookies.end());
+    if (it == InProcessQuotaRequestCookies.end()) {
+        YDB_LOG_ERROR_COMP(Service, "Consumed quota for unknown cookie",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"tablet_id", TabletId},
+            {"partition", Partition},
+            {"cookie", ev->Get()->RequestCookie});
+        return;
+    }
     InProcessQuotaRequestCookies.erase(it);
 
     if (!QuotaRequestInFlight) {

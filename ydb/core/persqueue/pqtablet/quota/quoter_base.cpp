@@ -117,13 +117,37 @@ void TPartitionQuoterBase::CheckTotalPartitionQuota(TRequestContext&& context) {
 }
 
 void TPartitionQuoterBase::HandleAccountQuotaApproved(NAccountQuoterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-    auto pendingIter = PendingAccountQuotaRequests.find(ev->Get()->Request->Cookie);
-    AFL_ENSURE(!pendingIter.IsEnd());
+    // TEvResponse can arrive after the request left PendingAccountQuotaRequests:
+    // account-quoter poison (consumer delete) fail-opens queued TEvRequest, and a
+    // duplicate/late clearance can follow. AFL_ENSURE here used to kill the partition
+    // quoter; log and drop instead.
+    auto* response = ev->Get();
+    if (!response->Request) {
+        YDB_LOG_ERROR("Account quota response without a request",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"tablet_id", TabletId},
+            {"partition", Partition});
+        return;
+    }
 
-    TRequestContext context{std::move(pendingIter->second.Request), pendingIter->second.PartitionActor, ev->Get()->WaitTime, ctx.Now()};
-    context.Request->Request = std::move(ev->Get()->Request->Request);
-    OnAccountQuotaApproved(std::move(context));
+    auto pendingIter = PendingAccountQuotaRequests.find(response->Request->Cookie);
+    if (pendingIter.IsEnd()) {
+        YDB_LOG_ERROR("Account quota response for unknown cookie",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"tablet_id", TabletId},
+            {"partition", Partition},
+            {"cookie", response->Request->Cookie});
+        return;
+    }
+
+    TRequestContext context = std::move(pendingIter->second);
     PendingAccountQuotaRequests.erase(pendingIter);
+    if (context.Request) {
+        context.Request->Request = std::move(response->Request->Request);
+    }
+    context.AccountQuotaWaitTime = response->WaitTime;
+    context.PartitionQuotaWaitStart = ctx.Now();
+    OnAccountQuotaApproved(std::move(context));
 }
 
 void TPartitionQuoterBase::ApproveQuota(TRequestContext& context) {
@@ -134,6 +158,34 @@ void TPartitionQuoterBase::ApproveQuota(TRequestContext& context) {
         context.TotalQuotaWaitTime = waitTime;
     }
     Send(context.PartitionActor, MakeQuotaApprovedEvent(context));
+}
+
+void TPartitionQuoterBase::ApproveQueuedRequestsForConsumer(const TString& consumer) {
+    auto takeMatching = [&](std::deque<TRequestContext>& queue, bool inflightAlreadyCounted) {
+        std::deque<TRequestContext> kept;
+        for (auto& context : queue) {
+            if (!consumer.empty() && context.Consumer == consumer) {
+                if (!inflightAlreadyCounted) {
+                    ++RequestsInflight;
+                }
+                ApproveQuota(context);
+            } else {
+                kept.push_back(std::move(context));
+            }
+        }
+        queue = std::move(kept);
+    };
+
+    takeMatching(WaitingInflightRequests, false);
+    takeMatching(WaitingTotalPartitionQuotaRequests, true);
+}
+
+void TPartitionQuoterBase::OnException(const std::exception& exc) {
+    PoisonChildren();
+    TBaseTabletActor<TPartitionQuoterBase>::OnException(exc);
+}
+
+void TPartitionQuoterBase::PoisonChildren() {
 }
 
 bool TPartitionQuoterBase::CanExaust(TInstant now) {
@@ -197,7 +249,7 @@ void TPartitionQuoterBase::HandleConfigUpdate(TEvPQ::TEvChangePartitionConfig::T
     bool totalQuotaUpdated = false;
     if (PartitionTotalQuotaTracker.Defined()) {
         totalQuotaUpdated = PartitionTotalQuotaTracker->UpdateConfigIfChanged(
-                GetTotalPartitionSpeedBurst(PQTabletConfig, ctx), GetTotalPartitionSpeed(PQTabletConfig, ctx)
+                GetTotalPartitionSpeedBurst(PQTabletConfig, ctx), GetTotalPartitionSpeed(PQTabletConfig, ctx), ctx.Now()
         );
     }
     UpdateQuotaConfigImpl(totalQuotaUpdated, ctx);
@@ -220,7 +272,19 @@ void TPartitionQuoterBase::ScheduleWakeUp(const TActorContext& ctx) {
 }
 
 void TPartitionQuoterBase::HandleAcquireExclusiveLock(TEvPQ::TEvAcquireExclusiveLock::TPtr& ev, const TActorContext& ctx) {
-    AFL_ENSURE(ExclusiveLockState != EExclusiveLockState::EAcquired);
+    if (ExclusiveLockState == EExclusiveLockState::EAcquired) {
+        YDB_LOG_ERROR("Exclusive lock already acquired",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"tablet_id", TabletId},
+            {"partition", Partition},
+            {"requester", ExclusiveLockRequester},
+            {"sender", ev->Sender});
+        if (ev->Sender == ExclusiveLockRequester) {
+            ReplyExclusiveLockAcquired(ev->Sender);
+        }
+        return;
+    }
+
     switch (ExclusiveLockState) {
     case EExclusiveLockState::EReleased:
         ExclusiveLockState = EExclusiveLockState::EAcquiring;

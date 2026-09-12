@@ -4,6 +4,8 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ {
 
 void TReadQuoter::Bootstrap(const TActorContext& ctx) {
@@ -16,8 +18,23 @@ void TReadQuoter::Bootstrap(const TActorContext& ctx) {
 }
 
 void TReadQuoter::HandleQuotaRequestImpl(TRequestContext& context) {
+    // TEvRequestQuota carries the original TEvRead as Request->Request. ClientId is the
+    // consumer name. Copy it onto TRequestContext now: StartQuoting may Release() the
+    // TEvRead to the account quoter, and TEvConsumerRemoved matches queued requests by
+    // context.Consumer, not by digging into the payload.
+    if (!context.Request || !context.Request->Request) {
+        return;
+    }
     auto* readRequest = context.Request->Request->CastAsLocal<TEvPQ::TEvRead>();
-    GetOrCreateConsumerQuota(readRequest->ClientId, ActorContext());
+    if (!readRequest) {
+        return;
+    }
+    context.Consumer = readRequest->ClientId;
+    // Empty ClientId is not a consumer; GetOrCreateConsumerQuota refuses it. The request
+    // still proceeds and CheckConsumerPerPartitionQuota fail-opens if there is no tracker.
+    if (!context.Consumer.empty()) {
+        GetOrCreateConsumerQuota(context.Consumer, ActorContext());
+    }
 }
 
 void TReadQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
@@ -25,10 +42,15 @@ void TReadQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
 }
 
 TAccountQuoterHolder* TReadQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) {
-    if (!TopicConverter)
+    if (!TopicConverter || !request || !request->Request) {
         return nullptr;
-    auto clientId = request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId;
-    return GetOrCreateConsumerQuota(clientId, ActorContext())->AccountQuotaTracker.Get();
+    }
+    auto* readRequest = request->Request->CastAsLocal<TEvPQ::TEvRead>();
+    if (!readRequest || readRequest->ClientId.empty()) {
+        return nullptr;
+    }
+    auto* consumerQuota = GetOrCreateConsumerQuota(readRequest->ClientId, ActorContext());
+    return consumerQuota ? consumerQuota->AccountQuotaTracker.Get() : nullptr;
 }
 
 IEventBase* TReadQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
@@ -46,11 +68,20 @@ bool TReadQuoter::CanExaust(TInstant now) {
 }
 
 void TReadQuoter::CheckConsumerPerPartitionQuota(TRequestContext&& context) {
-    AFL_ENSURE(context.Request->Request);
-    auto consumerQuota = GetOrCreateConsumerQuota(
-            context.Request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId,
-            ActorContext()
-    );
+    if (!context.Request || !context.Request->Request) {
+        return;
+    }
+    TString consumerId = context.Consumer;
+    if (consumerId.empty()) {
+        if (auto* readRequest = context.Request->Request->CastAsLocal<TEvPQ::TEvRead>()) {
+            consumerId = readRequest->ClientId;
+        }
+    }
+    auto consumerQuota = GetConsumerQuotaIfExists(consumerId);
+    if (!consumerQuota) {
+        ApproveQuota(context);
+        return;
+    }
     auto now = ActorContext().Now();
     if (!consumerQuota->PartitionPerConsumerQuotaTracker.CanExaust(now)
             || !consumerQuota->PartitionPerConsumerMessageQuotaTracker.CanExaust(now)
@@ -109,7 +140,21 @@ void TReadQuoter::ProcessPerConsumerQuotaQueue(const TActorContext& ctx) {
 }
 
 void TReadQuoter::HandleConsumerRemoved(TEvPQ::TEvConsumerRemoved::TPtr& ev, const TActorContext&) {
-    auto it = ConsumerQuotas.find(ev->Get()->Consumer);
+    const TString& consumer = ev->Get()->Consumer;
+    auto it = ConsumerQuotas.find(consumer);
+    // Partition already waits for TEvApproveReadQuota (and has counted the read as in-quota).
+    // Dropping the queues here hangs the client until tablet restart. Approve so the parent
+    // can reply "consumer deleted". Pending account requests are unblocked by poisoning the
+    // account actor (it fail-opens with TEvResponse; see TBasicAccountQuoter poison handler).
+    if (it != ConsumerQuotas.end()) {
+        for (auto& context : it->second.ReadRequests) {
+            ApproveQuota(context);
+        }
+        it->second.ReadRequests.clear();
+    }
+
+    ApproveQueuedRequestsForConsumer(consumer);
+
     if (it != ConsumerQuotas.end()) {
         if (it->second.AccountQuotaTracker) {
             Send(it->second.AccountQuotaTracker->Actor, new TEvents::TEvPoisonPill());
@@ -130,13 +175,17 @@ void TReadQuoter::UpdateCounters(const TActorContext& ctx) {
 }
 
 void TReadQuoter::HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+    PoisonChildren();
+    ConsumerQuotas.clear();
+    Die(ctx);
+}
+
+void TReadQuoter::PoisonChildren() {
     for (auto& consumerQuota : ConsumerQuotas) {
         if (consumerQuota.second.AccountQuotaTracker) {
             Send(consumerQuota.second.AccountQuotaTracker->Actor, new TEvents::TEvPoisonPill());
         }
     }
-    ConsumerQuotas.clear();
-    Die(ctx);
 }
 
 void TReadQuoter::UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorContext& ctx) {
@@ -144,18 +193,18 @@ void TReadQuoter::UpdateQuotaConfigImpl(bool totalQuotaUpdated, const TActorCont
     TVector<std::pair<TString, ui64>> updatedMessagesQuotas;
     for (auto& [consumerStr, consumerQuota] : ConsumerQuotas) {
         if (consumerQuota.PartitionPerConsumerQuotaTracker.UpdateConfigIfChanged(
-            GetConsumerReadBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadSpeed(PQTabletConfig, consumerStr, ctx))) {
+            GetConsumerReadBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadSpeed(PQTabletConfig, consumerStr, ctx), ctx.Now())) {
             updatedQuotas.push_back({consumerStr, consumerQuota.PartitionPerConsumerQuotaTracker.GetTotalSpeed()});
         }
 
         if (consumerQuota.PartitionPerConsumerMessageQuotaTracker.UpdateConfigIfChanged(
-            GetConsumerReadMessageBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadMessageSpeed(PQTabletConfig, consumerStr, ctx))) {
+            GetConsumerReadMessageBurst(PQTabletConfig, consumerStr, ctx), GetConsumerReadMessageSpeed(PQTabletConfig, consumerStr, ctx), ctx.Now())) {
             updatedMessagesQuotas.push_back({consumerStr, consumerQuota.PartitionPerConsumerMessageQuotaTracker.GetTotalSpeed()});
         }
     }
 
     totalQuotaUpdated |= PartitionTotalMessageQuotaTracker.Defined() && PartitionTotalMessageQuotaTracker->UpdateConfigIfChanged(
-        GetTotalPartitionMessageSpeedBurst(PQTabletConfig, ctx), GetTotalPartitionMessageSpeed(PQTabletConfig, ctx)
+        GetTotalPartitionMessageSpeedBurst(PQTabletConfig, ctx), GetTotalPartitionMessageSpeed(PQTabletConfig, ctx), ctx.Now()
     );
 
     ui64 totalSpeed = 0;
@@ -272,7 +321,13 @@ THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TStri
 }
 
 TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consumerStr, const TActorContext& ctx) {
-    AFL_ENSURE(!consumerStr.empty());
+    if (consumerStr.empty()) {
+        YDB_LOG_ERROR("Refuse to create consumer quota with empty name",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"tablet_id", TabletId},
+            {"partition", Partition});
+        return nullptr;
+    }
     auto it = ConsumerQuotas.find(consumerStr);
     if (it == ConsumerQuotas.end()) {
         TConsumerReadQuota consumer(

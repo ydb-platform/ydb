@@ -353,6 +353,7 @@ def read_table_request_factory(
     ordered=False,
     row_limit=None,
     use_snapshot=None,
+    return_not_null_data_as_optional=None,
 ):
     request = _apis.ydb_table.ReadTableRequest()
     request.path = path
@@ -383,6 +384,14 @@ def read_table_request_factory(
                 request.use_snapshot = _apis.FeatureFlag.DISABLED
         else:
             request.use_snapshot = use_snapshot
+    if return_not_null_data_as_optional is not None:
+        if isinstance(return_not_null_data_as_optional, bool):
+            if return_not_null_data_as_optional:
+                request.return_not_null_data_as_optional = _apis.FeatureFlag.ENABLED
+            else:
+                request.return_not_null_data_as_optional = _apis.FeatureFlag.DISABLED
+        else:
+            request.return_not_null_data_as_optional = return_not_null_data_as_optional
     return session_state.attach_request(request)
 
 

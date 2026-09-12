@@ -70,7 +70,15 @@ def from_str(duration):
                 "Invalid value {} in duration {}".format(value, original))
 
     microseconds = total / _microsecond_size
-    return datetime.timedelta(microseconds=sign * microseconds)
+    try:
+        return datetime.timedelta(microseconds=sign * microseconds)
+    except (OverflowError, ValueError) as e:
+        # A huge value overflows timedelta's day count, and a value large enough
+        # to become float inf makes timedelta reject it too. Report either as a
+        # DurationError instead of leaking the raw exception.
+        raise DurationError(
+            "Duration out of range: {}".format(original)
+        ) from e
 
 def to_str(delta, extended=False):
     """Format a datetime.timedelta to a duration string"""

@@ -4,7 +4,7 @@
 
 This guide takes a schema and two queries through code generation and execution in an application. Select your language and framework once: the selection is synchronized across all four tabbed sections.
 
-## Install the tool {#install}
+## Installation {#install}
 
 On Linux and macOS, run the commands below. Generation needs no SDK or database connection. The installer selects the latest stable release, verifies SHA256 and places the executable in `~/.local/bin`. If PATH setup is needed, follow the installer’s instructions before running `sqlc-ydb version`.
 
@@ -15,7 +15,7 @@ sqlc-ydb version
 
 For Windows, download the appropriate archive from the [latest stable release](https://github.com/ydb-platform/sqlc-ydb/releases/latest). See the [installation guide](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/installation.md) for other installation methods and version selection.
 
-## Define the schema and queries {#inputs}
+## Schema and queries {#inputs}
 
 Create an empty project directory and save this schema, shared by all languages, as `schema.sql`:
 
@@ -39,7 +39,7 @@ SELECT id, name FROM authors WHERE id = $author_id;
 
 The `-- name:` comment sets the generated method name. `:exec` executes a statement without result rows; `:one` retrieves one row. Every example below uses these same input files.
 
-## 1. Select a generator in sqlc.yaml {#configuration}
+## 1. Generator configuration in sqlc.yaml {#configuration}
 
 Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the `out` directory are resolved relative to this file.
 
@@ -366,7 +366,7 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
 
 {% endlist %}
 
-## 2. Generate code {#generate}
+## 2. Code generation {#generate}
 
 Run these commands next to `sqlc.yaml`. `compile` checks the inputs, `generate` writes code, and `diff` checks that saved files match generation. Add `diff` to CI: it exits with code 1 when files differ.
 
@@ -770,7 +770,7 @@ The following excerpts show actual generated row types or read methods for the s
 
 {% endlist %}
 
-## Prepare the application {#prepare}
+## Application setup {#prepare}
 
 The generator does not create database tables. Apply `schema.sql` using your migration tool or the [YDB CLI](../reference/ydb-cli/sql.md), then add a row for the single-query example:
 
@@ -780,7 +780,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
 
 Add the selected SDK/driver dependencies and configure [authentication](../reference/ydb-sdk/auth.md). The fragments below assume initialized connections or clients and imported generated code. See the [project examples](https://github.com/ydb-platform/sqlc-ydb/tree/main/examples) for complete projects with dependencies and connection setup.
 
-## 3. Execute a single query {#single-query}
+## 3. Individual query execution {#single-query}
 
 Call the generated method for author 42:
 
@@ -1034,9 +1034,9 @@ Call the generated method for author 42:
 
 {% endlist %}
 
-## 4. Combine calls in a transaction {#transactions}
+## 4. Multiple query execution in one transaction {#transactions}
 
-Use the same transaction object for both calls: write the name, then read it. The application controls transaction boundaries and retries; retry the whole block when needed. Keep external side effects out of callbacks that the SDK may retry.
+In each example, two generated methods execute two YQL queries in one transaction: `UpsertAuthor` writes the name, then `GetAuthor` reads it. The application controls transaction boundaries and retries; retry the whole block when needed. Keep external side effects out of callbacks that the SDK may retry.
 
 {% list tabs group=sqlc-language %}
 
@@ -1375,14 +1375,4 @@ Use the same transaction object for both calls: write the name, then read it. Th
 
 {% endlist %}
 
-## Differences from upstream sqlc {#limitations}
-
-sqlc-ydb preserves the SQL-first workflow and the `init`, `compile`, `generate`, `diff`, and `version` commands, but is not a drop-in replacement for upstream sqlc:
-
-- It supports only {{ ydb-short-name }} and a subset of sqlc v2 configuration. There are no external plugins, sqlc macros or cloud commands; generators are built into the binary.
-- It analyzes a subset of YQL. Unsupported constructs and types produce errors; successful generation does not replace server-side query validation.
-- Generated APIs follow each SDK’s contract: for example, `Uint64` maps to Go `uint64`, TypeScript `bigint` or a PHP string. Missing-row behavior for `:one` also depends on the profile.
-- Besides `:one` and `:exec`, `:many` returns a collection. Bound large reads in SQL. Streaming APIs and `:execrows` are not generated.
-- ORM entities and generic CRUD for Hibernate, Spring JPA and linq2db are outside the project’s contract.
-
-See the [target reference](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/targets.md) and [compatibility contract](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/compatibility.md) for details. If a query is unsupported or generated code is awkward to use, open an [issue](https://github.com/ydb-platform/sqlc-ydb/issues) with a minimal schema, query, configuration and the output of `sqlc-ydb version --verbose`.
+The current set of supported commands, configuration options, and YQL constructs is maintained in the [upstream sqlc compatibility contract](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/compatibility.md). If a query is unsupported or generated code is awkward to use, open an [issue](https://github.com/ydb-platform/sqlc-ydb/issues) with a minimal schema, query, configuration and the output of `sqlc-ydb version --verbose`.

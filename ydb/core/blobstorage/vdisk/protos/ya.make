@@ -7,6 +7,11 @@ ENDIF()
 
 SRCS(
     events.proto
+    space_report.proto
+)
+
+PEERDIR(
+    ydb/core/protos
 )
 
 EXCLUDE_TAGS(GO_PROTO)

@@ -61,6 +61,12 @@ struct TControllerSchema: NIceDb::Schema {
         struct TransformLambda: Column<10, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
         struct RunAsUser: Column<11, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
         struct DirectoryPath: Column<12, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
+        // Marks that registration has completed for the target, so Workers is
+        // a complete partition-membership set rather than a partial stream of
+        // asynchronous registrations.
+        struct WorkerSetComplete: Column<13, NScheme::NTypeIds::Bool> {
+            static constexpr bool Default = false;
+        };
 
         using TKey = TableKey<ReplicationId, Id>;
         using TColumns = TableColumns<
@@ -75,7 +81,8 @@ struct TControllerSchema: NIceDb::Schema {
             Issue,
             TransformLambda,
             RunAsUser,
-            DirectoryPath
+            DirectoryPath,
+            WorkerSetComplete
         >;
     };
 

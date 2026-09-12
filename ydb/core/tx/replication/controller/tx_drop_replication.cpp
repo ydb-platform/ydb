@@ -78,6 +78,10 @@ public:
                 continue;
             }
 
+            Self->CompleteWorkerSets.erase({Replication->GetId(), tid});
+            db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
+
             target->Shutdown(ctx);
 
             target->SetStreamState(TReplication::EStreamState::Removing);

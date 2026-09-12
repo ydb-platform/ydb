@@ -60,7 +60,7 @@ PEERDIR(
     ydb/core/blobstorage/dsproxy/mock
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/incrhuge
-    ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/pdisk/common
     ydb/core/engine/minikql
     ydb/core/kesus/tablet
     ydb/core/keyvalue

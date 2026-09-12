@@ -24,7 +24,7 @@ PEERDIR(
     ydb/core/blobstorage/backpressure
     ydb/core/blobstorage/dsproxy/mock
     ydb/core/blobstorage/nodewarden
-    ydb/core/blobstorage/pdisk
+    ydb/core/blobstorage/pdisk/common
     ydb/core/blobstorage/pdisk/mock
     ydb/core/blobstorage/vdisk/common
     ydb/core/load_test/nbs

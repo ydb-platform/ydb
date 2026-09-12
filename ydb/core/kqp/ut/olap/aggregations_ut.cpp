@@ -1681,6 +1681,25 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             UNIT_ASSERT_C(ast.find("KqpOlapJsonValue") == TString::npos,
                 "JSON_VALUE with RETURNING type must not be pushed as KqpOlapJsonValue projection. Query: " << query);
         }
+
+        {
+            const TString query = R"(
+                SELECT id FROM `/Root/tableWithNulls`
+                WHERE JSON_VALUE(jsonval, "$.obj" DEFAULT "none" ON ERROR) = "none" AND id <= 5
+                ORDER BY id;
+            )";
+            auto explainResult = StreamExplainQuery(query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), R"([[1];[2];[3];[4];[5]])");
+
+            UNIT_ASSERT_C(ast.find("KqpOlapJsonValue") == TString::npos,
+                "JSON_VALUE with DEFAULT ON ERROR must not be pushed as KqpOlapJsonValue. Query: " << query);
+        }
     }
 
     // Pushing JSON_VALUE as `KqpOlapJsonValue` before `KqpOlapApply` must not widen the set of predicates which are pushed down:

@@ -2,7 +2,7 @@
 
 [sqlc-ydb](https://github.com/ydb-platform/sqlc-ydb) generates typed code for {{ ydb-short-name }} from a schema and [YQL](../yql/reference/index.md) queries. You write SQL; the tool creates methods that bind parameters and read results through the selected SDK or driver. It is an independent project following the familiar [sqlc](https://sqlc.dev/) workflow.
 
-This guide takes two queries through generation and execution with version 0.1.0: nine languages and 18 SDK/framework profiles. Select your language and framework once: the selection is synchronized across all four tabbed sections.
+This guide takes a schema and two queries through code generation and execution in an application. Select your language and framework once: the selection is synchronized across all four tabbed sections.
 
 ## Install the tool {#install}
 
@@ -13,7 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/ydb-platform/sqlc-ydb/main/install.
 sqlc-ydb version
 ```
 
-For Windows, use a [release archive](https://github.com/ydb-platform/sqlc-ydb/releases/tag/v0.1.0). To pin the version, pass `--version v0.1.0` to the installer with `bash -s -- --version v0.1.0`. See the [installation guide](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/docs/installation.md) for other options.
+For Windows, download the appropriate archive from the [latest stable release](https://github.com/ydb-platform/sqlc-ydb/releases/latest). See the [installation guide](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/installation.md) for other installation methods and version selection.
 
 ## Define the schema and queries {#inputs}
 
@@ -778,7 +778,7 @@ The generator does not create database tables. Apply `schema.sql` using your mig
 UPSERT INTO authors (id, name) VALUES (42, "Alice");
 ```
 
-Add the selected SDK/driver dependencies and configure [authentication](../reference/ydb-sdk/auth.md). The fragments below assume initialized connections or clients and imported generated code. See the [release examples](https://github.com/ydb-platform/sqlc-ydb/tree/v0.1.0/examples) for complete projects with dependencies and connection setup.
+Add the selected SDK/driver dependencies and configure [authentication](../reference/ydb-sdk/auth.md). The fragments below assume initialized connections or clients and imported generated code. See the [project examples](https://github.com/ydb-platform/sqlc-ydb/tree/main/examples) for complete projects with dependencies and connection setup.
 
 ## 3. Execute a single query {#single-query}
 
@@ -797,7 +797,7 @@ Call the generated method for author 42:
     auto author = queries.GetAuthor(42);
     ```
 
-    `client` is a configured `NYdb::NQuery::TQueryClient`; C++20 and the YDB C++ SDK are required. Standalone calls use SDK retries; `RetryQuerySync` retries the entire transaction. `Queries` does not finish a supplied transaction: the example commits or rolls it back explicitly. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/cpp/native/main.cpp).
+    `client` is a configured `NYdb::NQuery::TQueryClient`; C++20 and the YDB C++ SDK are required. Standalone calls use SDK retries; `RetryQuerySync` retries the entire transaction. `Queries` does not finish a supplied transaction: the example commits or rolls it back explicitly. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/cpp/native/main.cpp).
 
   - userver {#cpp-userver}
 
@@ -806,7 +806,7 @@ Call the generated method for author 42:
     auto author = queries.GetAuthor(42);
     ```
 
-    `table_client` is a `userver::ydb::TableClient` obtained from the YDB component; run this code in a userver coroutine. `RetryTx` retries the whole callback and finishes the transaction according to `TxAction`; return `kRollback` to discard changes. `Utf8` is userver's string type for YQL Utf8. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/cpp/userver/smoke_handler.cpp).
+    `table_client` is a `userver::ydb::TableClient` obtained from the YDB component; run this code in a userver coroutine. `RetryTx` retries the whole callback and finishes the transaction according to `TxAction`; return `kRollback` to discard changes. `Utf8` is userver's string type for YQL Utf8. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/cpp/userver/smoke_handler.cpp).
 
   {% endlist %}
 
@@ -896,7 +896,7 @@ Call the generated method for author 42:
     author = queries.get_author(42)
     ```
 
-    `pool` is an initialized `ydb.QuerySessionPool`. `retry_tx_sync` retries the whole transaction and commits after the callback; the callback must have no external side effects. The repeated UPSERT in this example sets fixed values. [Runnable example](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/python/smoke.py).
+    `pool` is an initialized `ydb.QuerySessionPool`. `retry_tx_sync` retries the whole transaction and commits after the callback; the callback must have no external side effects. The repeated UPSERT in this example sets fixed values. [Runnable example](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/python/smoke.py).
 
   - DB-API {#python-dbapi}
 
@@ -906,7 +906,7 @@ Call the generated method for author 42:
     author = Querier(connection).get_author(42)
     ```
 
-    `connection` is an open `ydb_dbapi` connection with no active transaction. The driver defaults to AUTOCOMMIT: select SERIALIZABLE before `begin()` to share a transaction. The caller manages retries of the whole transaction. [Runnable example](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/python/smoke.py).
+    `connection` is an open `ydb_dbapi` connection with no active transaction. The driver defaults to AUTOCOMMIT: select SERIALIZABLE before `begin()` to share a transaction. The caller manages retries of the whole transaction. [Runnable example](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/python/smoke.py).
 
   - SQLAlchemy {#python-sqlalchemy}
 
@@ -917,7 +917,7 @@ Call the generated method for author 42:
         author = Querier(connection).get_author(42)
     ```
 
-    `engine` is an initialized SQLAlchemy Engine using the `yql+ydb` dialect. Set SERIALIZABLE before `begin()`: a transaction block alone does not override the driver's AUTOCOMMIT. The context commits or rolls back; the caller manages retries of the whole transaction. [Runnable example](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/python/smoke.py).
+    `engine` is an initialized SQLAlchemy Engine using the `yql+ydb` dialect. Set SERIALIZABLE before `begin()`: a transaction block alone does not override the driver's AUTOCOMMIT. The context commits or rolls back; the caller manages retries of the whole transaction. [Runnable example](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/python/smoke.py).
 
   {% endlist %}
 
@@ -933,7 +933,7 @@ Call the generated method for author 42:
         cancellationToken);
     ```
 
-    Requires .NET 8, Ydb.Sdk 0.35.0, a configured `YdbDataSource dataSource`, and a `CancellationToken cancellationToken`. `ExecuteAsync` retries the whole callback according to the data source policy. Commit is explicit; `await using` rolls back an unfinished transaction on an exception. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/csharp/adonet/Smoke.cs). `GetAuthorAsync` throws `InvalidOperationException` when no row is found.
+    Requires .NET 8, Ydb.Sdk, a configured `YdbDataSource dataSource`, and a `CancellationToken cancellationToken`. `ExecuteAsync` retries the whole callback according to the data source policy. Commit is explicit; `await using` rolls back an unfinished transaction on an exception. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/csharp/adonet/Smoke.cs). `GetAuthorAsync` throws `InvalidOperationException` when no row is found.
 
   - Dapper {#csharp-dapper}
 
@@ -943,7 +943,7 @@ Call the generated method for author 42:
         cancellationToken);
     ```
 
-    Requires .NET 8, Ydb.Sdk 0.35.0 and Dapper 2.1.79, a configured `YdbDataSource dataSource`, and a `CancellationToken cancellationToken`. `ExecuteAsync` retries the whole callback according to the data source policy. Commit is explicit; `await using` rolls back an unfinished transaction on an exception. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/csharp/Program.cs). `GetAuthorAsync` throws `InvalidOperationException` when no row is found.
+    Requires .NET 8, Ydb.Sdk and Dapper, a configured `YdbDataSource dataSource`, and a `CancellationToken cancellationToken`. `ExecuteAsync` retries the whole callback according to the data source policy. Commit is explicit; `await using` rolls back an unfinished transaction on an exception. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/main/tests/examples/csharp/Program.cs). `GetAuthorAsync` throws `InvalidOperationException` when no row is found.
 
   {% endlist %}
 
@@ -996,7 +996,7 @@ Call the generated method for author 42:
     $author = $queries->getAuthor('42');
     ```
 
-    `$table` is an initialized `YdbPlatform\Ydb\Table`; generated classes are available through autoload. Pass `Uint64` as a decimal string. For this SELECT, safe retries are explicitly enabled with `idempotent: true`. [Runnable example](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/php/live.php).
+    `$table` is an initialized `YdbPlatform\Ydb\Table`; generated classes are available through autoload. Pass `Uint64` as a decimal string. For this SELECT, safe retries are explicitly enabled with `idempotent: true`. [Runnable example](https://github.com/ydb-platform/sqlc-ydb/blob/main/tests/examples/php/live.php).
 
   {% endlist %}
 
@@ -1318,7 +1318,7 @@ Use the same transaction object for both calls: write the name, then read it. Th
 
   - YDB SDK {#php-ydb}
 
-    Unsupported: each helper opens and commits its own transaction. The SDK has no public API that both joins an existing transaction and returns the raw results needed for lossless decoding. Wrapping these calls in `retryTransaction()` does not combine them. [PHP contract](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/docs/php.md).
+    Unsupported: each helper opens and commits its own transaction. The SDK has no public API that both joins an existing transaction and returns the raw results needed for lossless decoding. Wrapping these calls in `retryTransaction()` does not combine them. [PHP contract](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/php.md).
 
   {% endlist %}
 
@@ -1379,10 +1379,10 @@ Use the same transaction object for both calls: write the name, then read it. Th
 
 sqlc-ydb preserves the SQL-first workflow and the `init`, `compile`, `generate`, `diff`, and `version` commands, but is not a drop-in replacement for upstream sqlc:
 
-- It supports only {{ ydb-short-name }} and a subset of sqlc v2 configuration. There are no external plugins, sqlc macros or cloud commands; all nine generators are built into the binary.
+- It supports only {{ ydb-short-name }} and a subset of sqlc v2 configuration. There are no external plugins, sqlc macros or cloud commands; generators are built into the binary.
 - It analyzes a subset of YQL. Unsupported constructs and types produce errors; successful generation does not replace server-side query validation.
 - Generated APIs follow each SDK’s contract: for example, `Uint64` maps to Go `uint64`, TypeScript `bigint` or a PHP string. Missing-row behavior for `:one` also depends on the profile.
 - Besides `:one` and `:exec`, `:many` returns a collection. Bound large reads in SQL. Streaming APIs and `:execrows` are not generated.
 - ORM entities and generic CRUD for Hibernate, Spring JPA and linq2db are outside the project’s contract.
 
-See the [target reference](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/docs/targets.md) and [compatibility contract](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/docs/compatibility.md) for details. If a query is unsupported or generated code is awkward to use, open an [issue](https://github.com/ydb-platform/sqlc-ydb/issues) with a minimal schema, query, configuration and the output of `sqlc-ydb version --verbose`.
+See the [target reference](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/targets.md) and [compatibility contract](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/compatibility.md) for details. If a query is unsupported or generated code is awkward to use, open an [issue](https://github.com/ydb-platform/sqlc-ydb/issues) with a minimal schema, query, configuration and the output of `sqlc-ydb version --verbose`.

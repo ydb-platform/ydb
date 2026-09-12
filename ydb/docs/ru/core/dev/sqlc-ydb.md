@@ -2,7 +2,7 @@
 
 [sqlc-ydb](https://github.com/ydb-platform/sqlc-ydb) генерирует типизированный код для {{ ydb-short-name }} по схеме и запросам на [YQL](../yql/reference/index.md). Вы пишете SQL, а утилита создаёт методы, передающие параметры и читающие результаты через выбранный SDK или драйвер. Это самостоятельный проект со знакомым подходом [sqlc](https://sqlc.dev/).
 
-Ниже показан путь от двух запросов до вызовов в приложении для версии 0.1.0: девять языков и 18 профилей SDK/фреймворков. Выберите язык и фреймворк во вкладках один раз — выбор синхронизируется во всех четырёх разделах страницы.
+Ниже показан путь от схемы и двух запросов до сгенерированного кода и его вызовов в приложении. Выберите язык и фреймворк во вкладках один раз — выбор синхронизируется во всех четырёх разделах страницы.
 
 ## Установите утилиту {#install}
 
@@ -13,7 +13,7 @@ curl -fsSL https://raw.githubusercontent.com/ydb-platform/sqlc-ydb/main/install.
 sqlc-ydb version
 ```
 
-Для Windows используйте [архив релиза](https://github.com/ydb-platform/sqlc-ydb/releases/tag/v0.1.0). Для фиксации версии передайте установщику `--version v0.1.0` через `bash -s -- --version v0.1.0`. Остальные варианты описаны в [инструкции установки](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/docs/installation.md).
+Для Windows скачайте подходящий архив со [страницы последнего стабильного релиза](https://github.com/ydb-platform/sqlc-ydb/releases/latest). Другие способы установки и выбор конкретной версии описаны в [инструкции установки](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/installation.md).
 
 ## Опишите схему и запросы {#inputs}
 
@@ -778,7 +778,7 @@ sqlc-ydb diff
 UPSERT INTO authors (id, name) VALUES (42, "Alice");
 ```
 
-Подключите зависимости выбранного SDK/драйвера и настройте [аутентификацию](../reference/ydb-sdk/auth.md). Фрагменты ниже используют уже открытые соединения или клиенты и импортированный сгенерированный код. Полные проекты с зависимостями и настройкой подключения доступны в [примерах релиза](https://github.com/ydb-platform/sqlc-ydb/tree/v0.1.0/examples).
+Подключите зависимости выбранного SDK/драйвера и настройте [аутентификацию](../reference/ydb-sdk/auth.md). Фрагменты ниже используют уже открытые соединения или клиенты и импортированный сгенерированный код. Полные проекты с зависимостями и настройкой подключения доступны в [примерах проекта](https://github.com/ydb-platform/sqlc-ydb/tree/main/examples).
 
 ## 3. Выполните отдельный запрос {#single-query}
 
@@ -797,7 +797,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
     auto author = queries.GetAuthor(42);
     ```
 
-    `client` — настроенный `NYdb::NQuery::TQueryClient`; нужны C++20 и YDB C++ SDK. Одиночный вызов использует SDK retry; `RetryQuerySync` повторяет всю транзакцию. `Queries` не завершает переданную транзакцию: пример явно делает commit или rollback. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/cpp/native/main.cpp).
+    `client` — настроенный `NYdb::NQuery::TQueryClient`; нужны C++20 и YDB C++ SDK. Одиночный вызов использует SDK retry; `RetryQuerySync` повторяет всю транзакцию. `Queries` не завершает переданную транзакцию: пример явно делает commit или rollback. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/cpp/native/main.cpp).
 
   - userver {#cpp-userver}
 
@@ -806,7 +806,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
     auto author = queries.GetAuthor(42);
     ```
 
-    `table_client` — `userver::ydb::TableClient` из компонента YDB; код выполняется в корутине userver. `RetryTx` повторяет весь callback и завершает транзакцию по `TxAction`; `kRollback` позволяет отменить изменения. `Utf8` — строковый тип userver для YQL Utf8. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/cpp/userver/smoke_handler.cpp).
+    `table_client` — `userver::ydb::TableClient` из компонента YDB; код выполняется в корутине userver. `RetryTx` повторяет весь callback и завершает транзакцию по `TxAction`; `kRollback` позволяет отменить изменения. `Utf8` — строковый тип userver для YQL Utf8. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/cpp/userver/smoke_handler.cpp).
 
   {% endlist %}
 
@@ -896,7 +896,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
     author = queries.get_author(42)
     ```
 
-    `pool` — готовый `ydb.QuerySessionPool`. `retry_tx_sync` повторяет всю транзакцию и выполняет commit после callback; callback не должен иметь внешних побочных эффектов. В примере повторяемый UPSERT задаёт фиксированные значения. [Запускаемый пример](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/python/smoke.py).
+    `pool` — готовый `ydb.QuerySessionPool`. `retry_tx_sync` повторяет всю транзакцию и выполняет commit после callback; callback не должен иметь внешних побочных эффектов. В примере повторяемый UPSERT задаёт фиксированные значения. [Запускаемый пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/python/smoke.py).
 
   - DB-API {#python-dbapi}
 
@@ -906,7 +906,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
     author = Querier(connection).get_author(42)
     ```
 
-    `connection` — открытое соединение `ydb_dbapi` без активной транзакции. По умолчанию драйвер использует AUTOCOMMIT: для общей транзакции нужно выбрать SERIALIZABLE до `begin()`. Повторы всей транзакции организует вызывающий код. [Запускаемый пример](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/python/smoke.py).
+    `connection` — открытое соединение `ydb_dbapi` без активной транзакции. По умолчанию драйвер использует AUTOCOMMIT: для общей транзакции нужно выбрать SERIALIZABLE до `begin()`. Повторы всей транзакции организует вызывающий код. [Запускаемый пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/python/smoke.py).
 
   - SQLAlchemy {#python-sqlalchemy}
 
@@ -917,7 +917,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
         author = Querier(connection).get_author(42)
     ```
 
-    `engine` — готовый SQLAlchemy Engine с диалектом `yql+ydb`. SERIALIZABLE задаётся до `begin()`: один transaction block не отменяет AUTOCOMMIT драйвера. Контекст выполняет commit или rollback; повторы всей транзакции организует вызывающий код. [Запускаемый пример](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/python/smoke.py).
+    `engine` — готовый SQLAlchemy Engine с диалектом `yql+ydb`. SERIALIZABLE задаётся до `begin()`: один transaction block не отменяет AUTOCOMMIT драйвера. Контекст выполняет commit или rollback; повторы всей транзакции организует вызывающий код. [Запускаемый пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/python/smoke.py).
 
   {% endlist %}
 
@@ -933,7 +933,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
         cancellationToken);
     ```
 
-    Нужны .NET 8, Ydb.Sdk 0.35.0, настроенный `YdbDataSource dataSource` и `CancellationToken cancellationToken`. `ExecuteAsync` повторяет весь callback согласно политике data source. Транзакция коммитится явно; `await using` откатывает незавершённую транзакцию при исключении. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/authors/csharp/adonet/Smoke.cs). Если строка не найдена, `GetAuthorAsync` выбрасывает `InvalidOperationException`.
+    Нужны .NET 8, Ydb.Sdk, настроенный `YdbDataSource dataSource` и `CancellationToken cancellationToken`. `ExecuteAsync` повторяет весь callback согласно политике data source. Транзакция коммитится явно; `await using` откатывает незавершённую транзакцию при исключении. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/csharp/adonet/Smoke.cs). Если строка не найдена, `GetAuthorAsync` выбрасывает `InvalidOperationException`.
 
   - Dapper {#csharp-dapper}
 
@@ -943,7 +943,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
         cancellationToken);
     ```
 
-    Нужны .NET 8, Ydb.Sdk 0.35.0 и Dapper 2.1.79, настроенный `YdbDataSource dataSource` и `CancellationToken cancellationToken`. `ExecuteAsync` повторяет весь callback согласно политике data source. Транзакция коммитится явно; `await using` откатывает незавершённую транзакцию при исключении. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/csharp/Program.cs). Если строка не найдена, `GetAuthorAsync` выбрасывает `InvalidOperationException`.
+    Нужны .NET 8, Ydb.Sdk и Dapper, настроенный `YdbDataSource dataSource` и `CancellationToken cancellationToken`. `ExecuteAsync` повторяет весь callback согласно политике data source. Транзакция коммитится явно; `await using` откатывает незавершённую транзакцию при исключении. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/tests/examples/csharp/Program.cs). Если строка не найдена, `GetAuthorAsync` выбрасывает `InvalidOperationException`.
 
   {% endlist %}
 
@@ -996,7 +996,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
     $author = $queries->getAuthor('42');
     ```
 
-    `$table` — готовый `YdbPlatform\Ydb\Table`; сгенерированные классы подключены через autoload. `Uint64` передаётся десятичной строкой. Для этого SELECT безопасные повторы явно включены через `idempotent: true`. [Запускаемый пример](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/examples/php/live.php).
+    `$table` — готовый `YdbPlatform\Ydb\Table`; сгенерированные классы подключены через autoload. `Uint64` передаётся десятичной строкой. Для этого SELECT безопасные повторы явно включены через `idempotent: true`. [Запускаемый пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/tests/examples/php/live.php).
 
   {% endlist %}
 
@@ -1318,7 +1318,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
 
   - YDB SDK {#php-ydb}
 
-    Не поддерживается: каждый helper открывает и завершает собственную транзакцию. В SDK нет публичного API, который одновременно присоединяется к существующей транзакции и возвращает необработанные результаты, нужные для точного декодирования. Обёртка `retryTransaction()` не объединяет эти вызовы. [Контракт PHP](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/docs/php.md).
+    Не поддерживается: каждый helper открывает и завершает собственную транзакцию. В SDK нет публичного API, который одновременно присоединяется к существующей транзакции и возвращает необработанные результаты, нужные для точного декодирования. Обёртка `retryTransaction()` не объединяет эти вызовы. [Контракт PHP](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/php.md).
 
   {% endlist %}
 
@@ -1379,10 +1379,10 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
 
 sqlc-ydb сохраняет SQL-first подход и команды `init`, `compile`, `generate`, `diff`, `version`, но не является полной заменой upstream sqlc:
 
-- Поддерживает только {{ ydb-short-name }} и подмножество конфигурации sqlc v2. Внешних плагинов, макросов sqlc и облачных команд нет; все девять генераторов встроены в бинарник.
+- Поддерживает только {{ ydb-short-name }} и подмножество конфигурации sqlc v2. Внешних плагинов, макросов sqlc и облачных команд нет; генераторы встроены в бинарник.
 - Анализирует подмножество YQL. Неподдерживаемые конструкции и типы вызывают ошибку; успешная генерация не заменяет проверку запроса на сервере.
 - Генерирует API под конкретный SDK: например, `Uint64` становится Go `uint64`, TypeScript `bigint` или PHP-строкой. Поведение `:one` при отсутствии строки также зависит от профиля.
 - Помимо `:one` и `:exec`, есть `:many`, возвращающий коллекцию. Ограничивайте большие выборки в SQL. Потоковый API и `:execrows` не генерируются.
 - ORM-сущности и универсальный CRUD для Hibernate, Spring JPA и linq2db не входят в контракт проекта.
 
-Подробности и ограничения профилей приведены в [справочнике генераторов](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/docs/targets.md) и [описании совместимости](https://github.com/ydb-platform/sqlc-ydb/blob/v0.1.0/docs/compatibility.md). Если ваш запрос не поддерживается или сгенерированный код неудобен, создайте [issue](https://github.com/ydb-platform/sqlc-ydb/issues) с минимальными схемой, запросом, конфигурацией и выводом `sqlc-ydb version --verbose`.
+Подробности и ограничения профилей приведены в [справочнике генераторов](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/targets.md) и [описании совместимости](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/compatibility.md). Если ваш запрос не поддерживается или сгенерированный код неудобен, создайте [issue](https://github.com/ydb-platform/sqlc-ydb/issues) с минимальными схемой, запросом, конфигурацией и выводом `sqlc-ydb version --verbose`.

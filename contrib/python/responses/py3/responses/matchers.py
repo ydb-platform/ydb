@@ -176,9 +176,16 @@ def fragment_identifier_matcher(identifier: Optional[str]) -> Callable[..., Any]
         reason = ""
         url_fragment = urlparse(request.url).fragment
         if identifier:
-            url_fragment_qsl = sorted(parse_qsl(url_fragment))  # type: ignore[type-var]
-            identifier_qsl = sorted(parse_qsl(identifier))
-            valid = identifier_qsl == url_fragment_qsl
+            if "=" in identifier:
+                # Query-string-style fragment: compare order-insensitively.
+                url_fragment_qsl = sorted(parse_qsl(url_fragment))  # type: ignore[type-var]
+                identifier_qsl = sorted(parse_qsl(identifier))
+                valid = identifier_qsl == url_fragment_qsl
+            else:
+                # Opaque fragment (e.g. "/users/5"): parse_qsl() yields no
+                # pairs, so any two opaque fragments would compare equal.
+                # Compare them verbatim instead.
+                valid = identifier == url_fragment
         else:
             valid = not url_fragment
 
@@ -259,8 +266,12 @@ def query_string_matcher(query: Optional[str]) -> Callable[..., Any]:
         data = parse_url(request.url or "")
         request_query = data.query
 
-        request_qsl = sorted(parse_qsl(request_query)) if request_query else {}
-        matcher_qsl = sorted(parse_qsl(query)) if query else {}
+        request_qsl = (
+            sorted(parse_qsl(request_query, keep_blank_values=True))
+            if request_query
+            else {}
+        )
+        matcher_qsl = sorted(parse_qsl(query, keep_blank_values=True)) if query else {}
 
         valid = not query if request_query is None else request_qsl == matcher_qsl
 

@@ -99,7 +99,7 @@ struct TReadInfo {
 
     NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
         return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "TReadInfo"},
+            {"className", "TReadInfo"},
             {"user", User},
             {"offset", Offset},
             {"destination", Destination});

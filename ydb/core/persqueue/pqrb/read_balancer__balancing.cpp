@@ -197,15 +197,13 @@ void TPartitionFamily::Release(const TActorContext& ctx, ETargetStatus targetSta
     Y_DEBUG_ABORT_UNLESS(Session, "Releasing a family without a session, family %lu", Id);
     if (Status != EStatus::Active) {
         YDB_LOG_CRIT("Releasing the family that isn't active",
-            {LogPrefix()},
-            {"debugStr", DebugStr()});
+            {LogPrefix()});
         return;
     }
 
     if (!Session) {
         YDB_LOG_CRIT("Releasing the family that does not have a session",
-            {LogPrefix()},
-            {"debugStr", DebugStr()});
+            {LogPrefix()});
         return;
     }
 
@@ -410,7 +408,7 @@ void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx)
 void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, const TActorContext& ctx) {
     YDB_LOG_DEBUG("Attaching partitions",
         {LogPrefix()},
-        {"partitions", JoinRange(", ", partitions.begin(), partitions.end())});
+        {"attachedPartitions", JoinRange(", ", partitions.begin(), partitions.end())});
 
     absl::flat_hash_set<ui32> existedPartitions;
     existedPartitions.insert(Partitions.begin(), Partitions.end());

@@ -95,7 +95,7 @@ public:
 
     NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
         return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "TAutopartitioningManager"},
+            {"className", "TAutopartitioningManager"},
             {"partition", PartitionId});
     }
 

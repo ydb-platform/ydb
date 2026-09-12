@@ -93,7 +93,7 @@ void TInitializer::DoNext(const TActorContext& ctx) {
 
 NActors::NStructuredLog::TStructuredMessage TInitializer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "Initializer"},
+        {"className", "Initializer"},
         {"topic", Partition->TopicName()},
         {"partition", Partition->Partition.ToString()});
 }
@@ -147,7 +147,7 @@ TInitializionContext& TInitializerStep::GetContext() {
 
 NActors::NStructuredLog::TStructuredMessage TInitializerStep::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", Name},
+        {"className", Name},
         {"topic", Partition()->TopicName()},
         {"partition", PartitionId().ToString()});
 }

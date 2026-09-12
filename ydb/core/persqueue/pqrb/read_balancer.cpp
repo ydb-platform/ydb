@@ -241,8 +241,6 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         } else { //version already applied
             YDB_LOG_DEBUG("BALANCER Topic Tablet Config already applied version actor txId",
                 {LogPrefix()},
-                {"topic", Topic},
-                {"tabletID", TabletID()},
                 {"version", record.GetVersion()},
                 {"sender", ev->Sender},
                 {"txId", record.GetTxId()});
@@ -439,14 +437,14 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
     if (it == TabletPipes.end() || it->second.PipeActor != ev->Get()->ClientId) {
         YDB_LOG_DEBUG("TEvClientDestroyed for stale pipe",
             {LogPrefix()},
-            {"tabletId", tabletId},
+            {"partitionTabletId", tabletId},
             {"clientId", ev->Get()->ClientId});
         return;
     }
 
     YDB_LOG_DEBUG("TEvClientDestroyed",
         {LogPrefix()},
-        {"tabletId", tabletId});
+        {"partitionTabletId", tabletId});
 
     ClosePipe(tabletId, ctx);
     RequestTabletIfNeeded(tabletId, ctx, true);
@@ -460,7 +458,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
     if (it == TabletPipes.end() || it->second.PipeActor != ev->Get()->ClientId) {
         YDB_LOG_DEBUG("TEvClientConnected for stale pipe",
             {LogPrefix()},
-            {"tabletId", tabletId},
+            {"partitionTabletId", tabletId},
             {"clientId", ev->Get()->ClientId});
         return;
     }
@@ -474,7 +472,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         YDB_LOG_ERROR("TEvClientConnected Status TabletId",
             {LogPrefix()},
             {"status", ev->Get()->Status},
-            {"tabletId", tabletId});
+            {"partitionTabletId", tabletId});
         return;
     }
 
@@ -490,7 +488,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
 
     YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
         {LogPrefix()},
-        {"tabletId", tabletId},
+        {"partitionTabletId", tabletId},
         {"nodeId", ev->Get()->ServerId.NodeId()},
         {"generation", ev->Get()->Generation});
 
@@ -549,7 +547,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
 
         YDB_LOG_DEBUG("Send TEvPersQueue::TEvStatus",
             {LogPrefix()},
-            {"tabletId", tabletId},
+            {"partitionTabletId", tabletId},
             {"cookie", cookie});
         NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
     }
@@ -754,8 +752,7 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPa
     {
         YDB_LOG_DEBUG("Discovered subdomain at RB",
             {LogPrefix()},
-            {"localPathId", msg->LocalPathId},
-            {"tabletID", TabletID()});
+            {"localPathId", msg->LocalPathId});
 
         SubDomainPathId.emplace(msg->SchemeShardId, msg->LocalPathId);
         Execute(new TTxWriteSubDomainPathId(this), ctx);
@@ -812,8 +809,7 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
         YDB_LOG_DEBUG("Discovered subdomain state, at RB",
             {LogPrefix()},
             {"pathId", msg->PathId},
-            {"outOfSpace", outOfSpace},
-            {"tabletID", TabletID()});
+            {"outOfSpace", outOfSpace});
 
         SubDomainOutOfSpace = outOfSpace;
 

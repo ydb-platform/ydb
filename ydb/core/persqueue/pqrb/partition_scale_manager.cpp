@@ -31,7 +31,7 @@ TPartitionScaleManager::TPartitionScaleManager(
 
 NActors::NStructuredLog::TStructuredMessage TPartitionScaleManager::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "TPartitionScaleManager"},
+        {"className", "TPartitionScaleManager"},
         {"topic", TopicName});
 }
 

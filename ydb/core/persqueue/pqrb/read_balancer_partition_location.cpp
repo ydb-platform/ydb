@@ -148,7 +148,7 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
 
         YDB_LOG_DEBUG("The partition location was added to response",
             {LogPrefix()},
-            {"tabletId", tabletId},
+            {"partitionTabletId", tabletId},
             {"partitionId", partitionId},
             {"nodeId", pResponse->GetNodeId()},
             {"generation", pResponse->GetGeneration()});

@@ -32,7 +32,7 @@ Keep the list of what you found for Step 9.
 ## Step 2. Choose the place
 
 - The rule is about one directory: `<dir>/AGENTS.md` or `<dir>/.agents/skills/<name>/`.
-- The rule is about the whole repo (build, tests, style): `ydb/agents/<FILE>.md`, plus one line in the root `AGENTS.md` that says what it is and when to read it.
+- The rule is about the whole repo (build, tests, style): the root `AGENTS.md`. When the text is long, put it in a separate doc next to the shared docs Step 1 found, and add one line in the root `AGENTS.md` that says what the doc is and when to read it.
 - The rule is needed in every session, in every directory: a skill in the root `.agents/skills` or one line in the root `AGENTS.md`. Write the reason in the pull request.
 
 Decision table, budgets and the layout of a skill directory: references/placement.md.
@@ -59,16 +59,16 @@ python3 .agents/skills/ydb-agent-instructions/scripts/find.py --skills
 If a reader could take the new name for an existing skill, or for a component the skill does not cover, tell the human and propose two or three other names before you continue.
 
 ```bash
-python3 .agents/skills/ydb-agent-instructions/scripts/scaffold.py <dir> <skill-name> --description "<one sentence>"
+python3 .agents/skills/ydb-agent-instructions/scripts/create_skill.py <dir> <skill-name> --description "<one sentence>"
 ```
 
-It creates `<dir>/.agents/skills/<skill-name>/SKILL.md`, `<dir>/AGENTS.md` when absent, and `<dir>/CLAUDE.md` with `@./AGENTS.md` plus one line per skill; when `CLAUDE.md` exists it prints the line to add. It never overwrites a file and refuses a name that is already taken. `--dry-run` shows the plan. Why each file exists: references/tool-compatibility.md.
+It creates `<dir>/.agents/skills/<skill-name>/SKILL.md`, `<dir>/AGENTS.md` when absent, and `<dir>/CLAUDE.md` with `@./AGENTS.md` plus one line per skill. When `CLAUDE.md` already exists it adds the line of the new skill and changes nothing else. Every file goes into `<dir>` itself, never into a parent: Claude Code reads the `CLAUDE.md` of the directory it works in. It never overwrites a file and refuses a name that is already taken. `--dry-run` shows the plan. Why each file exists: references/tool-compatibility.md.
 
 ## Step 5. Write the text
 
 - `description`: one short sentence that says when to use the skill; name the directory or component and the task type.
 - A skill about a code directory usually has three sections, as in `ydb-pdisk-development`. "Source map": a table of the main files and what each one does. "Trace the changed contract": what to read on both sides of a change and which invariants to keep. "Validation": the smallest test target to run first.
-- Write paths as plain text, relative to the file (`.agents/skills/<name>/SKILL.md`, `../README.md`) or from the repo root (`ydb/agents/GUIDE.md`).
+- Write paths as plain text, relative to the file (`.agents/skills/<name>/SKILL.md`, `../README.md`) or from the repo root (`ydb/core/blobstorage/README.md`).
 - Replace every `TODO` line the script created, in `SKILL.md` and in `AGENTS.md`.
 
 ## Step 6. Verify every command and claim

@@ -2,7 +2,7 @@
 """Create the files for a new agent skill in one directory.
 
 Usage:
-    python3 scaffold.py DIR SKILL_NAME --description TEXT [--dry-run] [--root DIR]
+    python3 create_skill.py DIR SKILL_NAME --description TEXT [--dry-run] [--root DIR]
 
 DIR is the directory the skill is about. SKILL_NAME starts with ydb- and
 uses lowercase letters, digits and dashes. The script creates:
@@ -11,8 +11,12 @@ uses lowercase letters, digits and dashes. The script creates:
     DIR/AGENTS.md                            rules of the directory, only when absent
     DIR/CLAUDE.md                            @./AGENTS.md plus one line per skill with its path and description
 
-It never overwrites a file. When anything conflicts it writes nothing and
-exits with code 1. A second run with the same arguments does nothing.
+The files are written in DIR itself, never in a parent directory: Claude
+Code loads DIR/CLAUDE.md when it works on files in DIR. When DIR/CLAUDE.md
+already exists, the script adds the line of the new skill to it and changes
+nothing else. It never overwrites a file and never
+removes a line. When anything conflicts it writes nothing and exits with
+code 1. A second run with the same arguments does nothing.
 After writing it runs check.py on DIR; exit code 1 then means check.py
 found errors in the files (the files stay in place, fix them).
 Exit code 2 means a bad SKILL_NAME, a missing DIR, or no repository root.
@@ -45,15 +49,34 @@ TODO: what to read on both sides of a change (producer and consumer), and which 
 
 ## Validation
 
-TODO: the smallest test target to run first, then wider targets.{guide_note}
+TODO: the smallest test target to run first, then wider targets.
 """
 
 AGENTS_TEMPLATE = """# {title}
 
 These instructions apply to {dir_text}.
 
-TODO: one or two rules that always apply here; steps of a task go to the skill.{guide_line}
+TODO: one or two rules that always apply here; steps of a task go to the skill.
 """
+
+def claude_with_skill(text, skill_line):
+    """Text of an existing CLAUDE.md with skill_line in the list, or None when it is already there."""
+    lines = text.splitlines()
+    stripped = [line.strip() for line in lines]
+    if skill_line in stripped:
+        return None
+    if check.CLAUDE_SKILLS_HEADER in stripped:
+        start = stripped.index(check.CLAUDE_SKILLS_HEADER) + 1
+        end = start
+        while end < len(lines) and stripped[end].startswith("- .agents/skills/"):
+            end += 1
+        lines[start:end] = sorted(lines[start:end] + [skill_line])
+    else:
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines += [check.CLAUDE_SKILLS_HEADER, skill_line]
+    return "\n".join(lines) + "\n"
+
 
 def claude_content(owner_dir, name, description):
     """CLAUDE.md for owner_dir: the include, the header and one line per skill (the new one included)."""
@@ -87,47 +110,40 @@ def plan_actions(args, root):
     claude_md = os.path.join(target_dir, "CLAUDE.md")
     rel_dir = relative_link(root, target_dir)
     dir_text = "the repo root" if rel_dir == "." else "`%s/`" % rel_dir
-    guide = os.path.join(root, "ydb", "agents", "GUIDE.md")
-    has_guide = os.path.isfile(guide)
     fields = {
         "name": args.skill_name,
         "title": title_from_name(args.skill_name),
         "description": yaml_double_quoted(args.description),
         "dir_text": dir_text,
-        "guide_line": "",
-        "guide_note": "",
     }
-    if has_guide:
-        fields["guide_line"] = "\nBuild and test commands: ydb/agents/GUIDE.md."
-        fields["guide_note"] = " Build and test commands are in ydb/agents/GUIDE.md; do not copy them here."
-    else:
-        notes.append("no ydb/agents/GUIDE.md in this repo; the build and test link is left out")
 
     if os.path.exists(skill_md):
         notes.append("exists, not touched: %s" % skill_md)
     else:
-        actions.append((skill_md, SKILL_TEMPLATE.format(**fields)))
+        actions.append(("create", skill_md, SKILL_TEMPLATE.format(**fields)))
 
     if os.path.isfile(agents_md):
         notes.append("exists, not touched: %s" % agents_md)
     elif os.path.exists(agents_md):
         conflicts.append("%s exists but is not a file" % agents_md)
     else:
-        actions.append((agents_md, AGENTS_TEMPLATE.format(**fields)))
+        actions.append(("create", agents_md, AGENTS_TEMPLATE.format(**fields)))
 
     skill_line = "- .agents/skills/%s/SKILL.md: %s" % (args.skill_name, " ".join(args.description.split()))
     if os.path.isfile(claude_md):
-        claude_lines = [line.strip() for line in check.read_text(claude_md).splitlines()]
-        if check.CLAUDE_INCLUDE not in claude_lines:
+        text = check.read_text(claude_md)
+        if check.CLAUDE_INCLUDE not in [line.strip() for line in text.splitlines()]:
             conflicts.append("%s exists without the line %s; add it or move its rules to AGENTS.md" % (claude_md, check.CLAUDE_INCLUDE))
-        elif skill_line not in claude_lines:
-            notes.append("MANUAL STEP: add these lines to %s (the first one only if it is not there yet):\n    %s\n    %s" % (claude_md, check.CLAUDE_SKILLS_HEADER, skill_line))
         else:
-            notes.append("exists and lists the skill: %s" % claude_md)
+            updated = claude_with_skill(text, skill_line)
+            if updated is None:
+                notes.append("exists and lists the skill: %s" % claude_md)
+            else:
+                actions.append(("update", claude_md, updated))
     elif os.path.exists(claude_md):
         conflicts.append("%s exists but is not a file" % claude_md)
     else:
-        actions.append((claude_md, claude_content(target_dir, args.skill_name, " ".join(args.description.split()))))
+        actions.append(("create", claude_md, claude_content(target_dir, args.skill_name, " ".join(args.description.split()))))
 
     names = check.repo_skill_names(root)
     taken = None if names is None else names.get(args.skill_name)
@@ -137,11 +153,16 @@ def plan_actions(args, root):
 
 
 def apply_actions(actions):
-    for path, content in actions:
+    for kind, path, content in actions:
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "x", encoding="utf-8") as handle:
-            handle.write(content)
-        print("created %s" % path)
+        if kind == "create":
+            with open(path, "x", encoding="utf-8") as handle:
+                handle.write(content)
+            print("created %s" % path)
+        else:
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(content)
+            print("updated %s" % path)
 
 
 def main(argv=None):
@@ -180,9 +201,9 @@ def main(argv=None):
         print("nothing to do")
         return 0
     if args.dry_run:
-        print("would create:")
-        for path, _ in actions:
-            print("  " + path)
+        print("would write:")
+        for kind, path, _ in actions:
+            print("  %s %s" % (kind, path))
         return 0
     apply_actions(actions)
     print("")

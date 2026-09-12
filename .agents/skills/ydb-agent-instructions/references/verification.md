@@ -10,7 +10,7 @@
 
 ## Safe commands
 
-Run these freely: help and version commands; dry runs (`git add -n`, `scaffold.py --dry-run`); script tests; a build of one small target (`./ya make --build relwithdebinfo <small folder>`); the discovery commands from `tool-compatibility.md`.
+Run these freely: help and version commands; dry runs (`git add -n`, `create_skill.py --dry-run`); script tests; a build of one small target (`./ya make --build relwithdebinfo <small folder>`); the discovery commands from `tool-compatibility.md`.
 
 Do not run these only to check a document: test runs with `-tA` of large folders; anything that needs credentials or a cluster; anything that writes outside your change. The first `./ya` run downloads the tool into the home directory; that is allowed.
 

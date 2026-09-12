@@ -8,7 +8,7 @@
 | One directory, a task with steps | `<dir>/.agents/skills/<name>/SKILL.md` | a skill |
 | Several directories changed together by one team | the closest common parent, same forms as above | |
 | A directory that already has `RULES.md` or `rules/*.md` (plain files reached by a pointer from `AGENTS.md`; no tool loads them on its own) | that existing file | keep its form; do not start a second one |
-| The whole repo (build, tests, style, safety) | `ydb/agents/<FILE>.md` | a doc, plus one line in the root `AGENTS.md`: what it is and when to read it |
+| The whole repo (build, tests, style, safety) | root `AGENTS.md`, or a separate doc next to the shared docs Step 1 found | a line, or a doc plus one line in the root `AGENTS.md`: what it is and when to read it |
 | Every session of every developer | root `.agents/skills/<name>/` or root `AGENTS.md` | a skill, or one line, with a written reason |
 
 `<dir>` is the directory that holds the code the rule is about, for example `ydb/core/blobstorage/pdisk`.

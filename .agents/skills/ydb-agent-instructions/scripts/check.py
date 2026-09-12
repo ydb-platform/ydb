@@ -183,7 +183,7 @@ def path_targets(line):
 def check_paths(path, text, root, report):
     """Every file the text points to must exist, relative to the file or to the repo root.
 
-    Covers markdown links [text](target) and bare paths such as ydb/agents/GUIDE.md.
+    Covers markdown links [text](target) and bare paths such as ydb/core/blobstorage/README.md.
     Fenced code blocks and inline code are skipped: paths there are examples.
     Tokens with < > * { } are placeholders and are skipped too.
     """

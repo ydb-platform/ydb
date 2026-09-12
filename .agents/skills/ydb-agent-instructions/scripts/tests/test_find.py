@@ -34,9 +34,6 @@ class FindTests(unittest.TestCase):
         write(os.path.join(self.root, "ydb", "docs", "en", "core", "contributor", "toc_i.yaml"), "pdisk: yes\n")
         write(os.path.join(self.root, "ydb", "other.md"), "pdisk but not an instruction\n")
         write(os.path.join(self.root, "ydb", "core", ".hidden", "x.md"), "hidden\n")
-        write(os.path.join(self.root, "ydb", "agents", "GUIDE.md"), "shared guide, no topic\n")
-        write(os.path.join(self.root, "ydb", "agents", "TESTS.md"), "how to run pdisk tests\n")
-        write(os.path.join(self.root, "ydb", "agents", "notes.txt"), "pdisk, not markdown\n")
         write(os.path.join(self.root, "contrib", "libs", "x", "AGENTS.md"), "vendored pdisk\n")
         write(os.path.join(self.root, "contrib", "libs", "x", ".agents", "skills", "typer", "SKILL.md"), "vendored\n")
         subprocess.run(["git", "init", "-q", self.root], check=True)
@@ -56,19 +53,18 @@ class FindTests(unittest.TestCase):
         code, out = self.run_find()
         self.assertEqual(code, 0)
         for path in ("AGENTS.md", "ydb/core/foo/AGENTS.md", "ydb/core/foo/.agents/skills/ydb-foo-skill/SKILL.md", "ydb/core/bar/RULES.md",
-                     "ydb/core/bar/rules/coding.md", "ydb/agents/GUIDE.md", "ydb/agents/TESTS.md"):
+                     "ydb/core/bar/rules/coding.md"):
             self.assertIn("  " + path + "\n", out)
         self.assertNotIn("contrib/", out)
-        self.assertNotIn("notes.txt", out)
         self.assertNotIn("files that mention", out)
 
     def test_topic_matches_markdown_only(self):
         code, out = self.run_find("PDisk")
         self.assertEqual(code, 0)
         mention = out.split("files that mention")[1]
-        for path in ("ydb/core/bar/README.md", "ydb/docs/en/core/contributor/storage.md", "ydb/core/foo/.agents/skills/ydb-foo-skill/SKILL.md", "ydb/agents/TESTS.md"):
+        for path in ("ydb/core/bar/README.md", "ydb/docs/en/core/contributor/storage.md", "ydb/core/foo/.agents/skills/ydb-foo-skill/SKILL.md"):
             self.assertIn(path, mention)
-        for absent in ("ydb/other.md", "ydb/agents/GUIDE.md", "toc_i.yaml", "notes.txt", "contrib/"):
+        for absent in ("ydb/other.md", "toc_i.yaml", "contrib/"):
             self.assertNotIn(absent, mention)
 
     def test_skills_prints_names_directories_and_components(self):

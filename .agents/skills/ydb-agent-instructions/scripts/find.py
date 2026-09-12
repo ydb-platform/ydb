@@ -4,9 +4,8 @@
 Usage:
     python3 find.py [TOPIC] [--skills] [--root DIR]
 
-Without options: prints every AGENTS.md, SKILL.md, RULES.md, rules/*.md and
-every .md file under ydb/agents/, outside contrib/ and vendor/ (tracked or
-not yet added, but not ignored).
+Without options: prints every AGENTS.md, SKILL.md, RULES.md and rules/*.md
+outside contrib/ and vendor/ (tracked or not yet added, but not ignored).
 With TOPIC: also prints the README.md files, the .md files under
 ydb/docs/en/core/contributor/ and the instruction files that contain TOPIC
 (case does not matter).
@@ -27,7 +26,6 @@ import check  # noqa: E402
 INSTRUCTION_RE = re.compile(r"(^|/)(AGENTS\.md|SKILL\.md|RULES\.md|rules/[^/]+\.md)$")
 SKILL_RE = re.compile(r"(^|/)\.agents/skills/([^/]+)/SKILL\.md$")
 SKIP_PREFIXES = ("contrib/", "vendor/")
-SHARED_DIR = "ydb/agents/"
 DOCS_DIR = "ydb/docs/en/core/contributor/"
 
 
@@ -40,7 +38,7 @@ def tracked_files(root):
 
 
 def is_instruction(path):
-    return bool(INSTRUCTION_RE.search(path)) or (path.startswith(SHARED_DIR) and path.endswith(".md"))
+    return bool(INSTRUCTION_RE.search(path))
 
 
 def instruction_files(files):

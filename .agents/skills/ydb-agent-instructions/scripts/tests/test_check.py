@@ -29,7 +29,7 @@ class Fixture(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp(prefix="check-test-")
         write(os.path.join(self.root, ".gitignore"), GITIGNORE)
-        write(os.path.join(self.root, "ydb", "agents", "GUIDE.md"), "# guide\n")
+        write(os.path.join(self.root, "ydb", "core", "base", "README.md"), "# base\n")
         self.has_git = shutil.which("git") is not None
         if self.has_git:
             subprocess.run(["git", "init", "-q", self.root], check=True)
@@ -196,13 +196,13 @@ class SkillTests(Fixture):
         self.assertIn("skills live only in .agents/skills", out)
 
     def test_paths_are_checked_outside_code(self):
-        body = "# D\n\nRead ydb/agents/GUIDE.md, [x](missing.md \"t\") and ydb/nope/missing.md, not `ydb/nope/in-code.md` or ydb/nope/<name>.md.\n\n```bash\ncat ydb/nope/example.md\n```\n"
+        body = "# D\n\nRead ydb/core/base/README.md, [x](missing.md \"t\") and ydb/nope/missing.md, not `ydb/nope/in-code.md` or ydb/nope/<name>.md.\n\n```bash\ncat ydb/nope/example.md\n```\n"
         owner, _ = self.make_skill(body=body)
         code, out = self.run_check(owner)
         self.assertEqual(code, 1)
         self.assertIn("path does not exist: missing.md", out)
         self.assertIn("path does not exist: ydb/nope/missing.md", out)
-        for absent in ("GUIDE.md", "in-code.md", "<name>", "example.md"):
+        for absent in ("README.md", "in-code.md", "<name>", "example.md"):
             self.assertNotIn(absent, out)
 
     def test_broken_path_in_reference_is_error(self):

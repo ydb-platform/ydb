@@ -1,6 +1,6 @@
 # {{ ydb-short-name }} DSTool overview
 
-With the {{ ydb-short-name }} DSTool utility, you can manage your {{ ydb-short-name }} cluster's disk subsystem. To install and configure the utility, follow the [instructions](install.md).
+With the {{ ydb-short-name }} DSTool utility, you can manage your {{ ydb-short-name }} cluster's disk subsystem. To install and configure the utility, follow the [instructions](install.md). Before you work with a cluster, configure [connection and authentication](connect.md).
 
 {{ ydb-short-name }} DSTool includes the following commands:
 

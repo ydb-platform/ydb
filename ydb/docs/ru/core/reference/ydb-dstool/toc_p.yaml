@@ -3,6 +3,8 @@ items:
     href: index.md
   - name: Установка
     href: install.md
+  - name: Подключение и аутентификация
+    href: connect.md
   - name: Глобальные опции
     href: global-options.md
   - name: Список устройств

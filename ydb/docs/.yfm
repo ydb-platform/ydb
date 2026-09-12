@@ -9,6 +9,8 @@ allowCustomResources: true
 included: true
 singlePage: true
 strict: false
+extensions:
+ - ./assets/asset.cjs
 
 resources:
   style:

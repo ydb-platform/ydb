@@ -45,6 +45,7 @@ SRCS(
     ut_program.cpp
     ut_snapshot_holders.cpp
     ut_scan_snapshot_guard.cpp
+    ut_scan_cursor.cpp
     ut_script.cpp
     ut_minmax_index.cpp
     ut_sync_portion_index_reuse.cpp

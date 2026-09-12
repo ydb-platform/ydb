@@ -27,7 +27,12 @@ protected:
     struct TValueWriter : public TBaseValueWriter<TTextWriter> {
         TValueWriter(TTextWriter& writer);
 
-        void operator()(const TString& value) const;
+        void operator()(const auto& value) const {
+            auto stringValue = TTypesMapping::ToString(value);
+            Append(stringValue);
+        }
+
+        void Append(const TString& value) const;
     };
 
     TBaseMessageWriter<TTextWriter> MessageWriter{*this};

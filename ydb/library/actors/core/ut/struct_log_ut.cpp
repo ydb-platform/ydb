@@ -3,8 +3,10 @@
 #include <ydb/library/actors/struct_log/json_writer.h>
 #include <ydb/library/actors/struct_log/key_name.h>
 #include <ydb/library/actors/struct_log/log_stack.h>
+#include <ydb/library/actors/struct_log/native_value_extractor.h>
 #include <ydb/library/actors/struct_log/native_types_mapping.h>
 #include <ydb/library/actors/struct_log/native_types_support.h>
+#include <ydb/library/actors/struct_log/string_value_extractor.h>
 #include <ydb/library/actors/struct_log/structured_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -17,27 +19,95 @@ template <typename T>
 void TestType(const std::vector<T>& values) {
     auto typeCode = TTypesMapping::GetCode<T>();
 
-    for (auto value : values) {
-        auto originalStr = TTypesMapping::ToString(value);
+    for (auto originalValue : values) {
+        auto originalStr = TTypesMapping::ToString(originalValue);
 
         TBinaryData data;
-        TTypesMapping::Serialize<T>(value, data);
+        TTypesMapping::Serialize<T>(originalValue, data);
 
         T readValue;
         auto hasRead = TTypesMapping::Deserialize<T>(readValue, typeCode, data.data(), data.size());
         UNIT_ASSERT(hasRead);
+        UNIT_ASSERT_VALUES_EQUAL(originalValue, readValue);
 
-        TString recoveredStr;
-        if (hasRead) {
-            recoveredStr = TTypesMapping::ToString(readValue);
-        }
-
-        UNIT_ASSERT(value == readValue);
+        auto recoveredStr = TTypesMapping::ToString(readValue);
+        UNIT_ASSERT_VALUES_EQUAL(originalStr, recoveredStr);
     }
 }
 
 Y_UNIT_TEST_SUITE(StructLog) {
-    Y_UNIT_TEST(NativeTypes) { TestType<TString>({"", "a", "ab", "abc"}); }
+    Y_UNIT_TEST(NativeTypes) {
+        TestType<TString>({"", "a", "ab", "abc"});
+        TestType<ui8>({1, 2, 3, 4, 5});
+        TestType<i8>({1, 2, 3, 4, 5});
+        TestType<ui16>({1, 2, 3, 4, 5});
+        TestType<i16>({1, 2, 3, 4, 5});
+        TestType<ui32>({1, 2, 3, 4, 5});
+        TestType<i32>({1, 2, 3, 4, 5});
+        TestType<ui64>({1, 2, 3, 4, 5});
+        TestType<i64>({1, 2, 3, 4, 5});
+        TestType<bool>({true, false});
+        TestType<float>({1, 2, 3, 4, 5});
+        TestType<double>({1, 2, 3, 4, 5});
+        TestType<long double>({1, 2, 3, 4, 5});
+        TestType<TInstant>({TInstant::Now()});
+    }
+
+    #define TEST_MESSAGE_EXTRACT_TO_STRING(M, S)                          \
+        {                                                                 \
+            TStringValueExtractor extractor;                              \
+            auto stringValue = extractor.ExtractValue(M, {"value"});      \
+            UNIT_ASSERT(stringValue.has_value());                         \
+            UNIT_ASSERT_STRINGS_EQUAL(stringValue.value(), S);            \
+        }
+
+    Y_UNIT_TEST(NativeTypesExtractString) {
+
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "3");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), "4");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), "5");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), "6");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), "7");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), "8");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", true}), "true");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", false}), "false");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), "abc");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), "abc");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "1.123000");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "1.123000");
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "1.123000");
+
+        int i = 0;
+        auto ptr = static_cast<void*>(&i);
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
+
+        ptr = nullptr;
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
+
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", TInstant::MicroSeconds(1789233327128336)}), "2026-09-12T17:15:27.128336Z");
+    }
+
+    template <typename T, typename A, bool OK>
+    void CheckNativeExtraction(const T& value) {
+        auto msg = YDB_LOG_CREATE_MESSAGE({"value", value});
+
+        using TExtractorType = TNativeValueExtractor<A>;
+        TExtractorType extractor;
+
+        auto result = extractor.ExtractValue(msg, {"value"});
+        UNIT_ASSERT_EQUAL(result.first, OK ? TExtractorType::TResultKind::Ok : TExtractorType::TResultKind::NoCast);
+        if constexpr(OK) {
+            UNIT_ASSERT(result.second.has_value());
+            UNIT_ASSERT_EQUAL(result.second.value(), static_cast<A>(value));
+        }
+    }
+
+    Y_UNIT_TEST(NativeTypesExtractNative) {
+        CheckNativeExtraction<ui8, ui64, true>(1);
+        CheckNativeExtraction<ui64, ui8, true>(1);
+        CheckNativeExtraction<ui8, TString, false>(1);
+        CheckNativeExtraction<TString, ui8, false>("1");
+    }
 
     Y_UNIT_TEST(TestKeyName) {
         // compile vs compile
@@ -89,7 +159,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     Y_UNIT_TEST(SortValues) {
         {
-            auto message = YDB_LOG_CREATE_MESSAGE({"v1", 2});
+            auto message = YDB_LOG_CREATE_MESSAGE({"v1", "2"});
             UNIT_ASSERT(message.GetValuesCount() == 1);
             UNIT_ASSERT(message.GetValueIndex("v1") == 0);
             UNIT_ASSERT(!message.GetValueIndex("v2").has_value());
@@ -97,7 +167,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
             UNIT_ASSERT(message.GetValue<TString>("v1") == "2");
         }
         {
-            auto message = YDB_LOG_CREATE_MESSAGE({"v3", 3}, {"v2", 1}, {"v1", 2});
+            auto message = YDB_LOG_CREATE_MESSAGE({"v3", "3"}, {"v2", "1"}, {"v1", "2"});
             UNIT_ASSERT(message.GetValuesCount() == 3);
             UNIT_ASSERT(message.GetValueIndex("v1") == 0);
             UNIT_ASSERT(message.GetValueIndex("v2") == 1);
@@ -109,7 +179,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
             UNIT_ASSERT(message.GetValue<TString>("v3") == "3");
         }
         {
-            auto message = YDB_LOG_CREATE_MESSAGE({"v0", 1}, {"v2", 1}, {"v1", 1}, {"v1", 2}, {"v1", 3});
+            auto message = YDB_LOG_CREATE_MESSAGE({"v0", "1"}, {"v2", "1"}, {"v1", "1"}, {"v1", "2"}, {"v1", "3"});
             UNIT_ASSERT(message.GetValuesCount() == 3);
             UNIT_ASSERT(message.GetValueIndex("v0") == 0);
             UNIT_ASSERT(message.GetValueIndex("v1") == 1);
@@ -120,7 +190,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
             UNIT_ASSERT(message.GetValue<TString>("v2") == "1");
         }
         {
-            auto message = YDB_LOG_CREATE_MESSAGE({"v0", 1}, {"v2", 1}, {"v1", 3}, {"v1", 2}, {"v1", 1});
+            auto message = YDB_LOG_CREATE_MESSAGE({"v0", "1"}, {"v2", "1"}, {"v1", "3"}, {"v1", "2"}, {"v1", "1"});
             UNIT_ASSERT(message.GetValuesCount() == 3);
             UNIT_ASSERT(message.GetValueIndex("v0") == 0);
             UNIT_ASSERT(message.GetValueIndex("v1") == 1);
@@ -147,14 +217,15 @@ Y_UNIT_TEST_SUITE(StructLog) {
     Y_UNIT_TEST(ScanValues) {
         auto message = YDB_LOG_CREATE_MESSAGE({"string", static_cast<TString>("abc")});
 
-        message.ForEachTyped(TOverloaded{[](const std::vector<TKeyName>& name, const TString& value) {
-            UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "string" && value == "abc");
+        message.ForEachTyped(TOverloaded{[](const std::vector<TKeyName>& name, const auto& value) {
+            auto stringValue = TTypesMapping::ToString(value);
+            UNIT_ASSERT(name.size() == 1 && name[0].ToString() == "string" && stringValue == "abc");
         }});
     }
 
     TString GetMessageString(const TStructuredMessage& message) {
         TString result;
-        auto append = [&result](const std::vector<TKeyName>& name, const auto& value) {
+        auto append = [&result](const std::vector<TKeyName>& name, const TString& value) {
             if (!result.empty()) result += ", ";
 
             bool addDot = false;
@@ -168,12 +239,13 @@ Y_UNIT_TEST_SUITE(StructLog) {
                 result += nameItem.ToString();
             }
             result += "=";
-            result += TTypesMapping::ToString(value);
+            result += value;
         };
 
-        message.ForEachTyped(TOverloaded{[&](const std::vector<TKeyName>& name, const TString& value) {
-            append(name, value);
-        }});
+        message.ForEachTyped([&](const std::vector<TKeyName>& name, const auto& value) {
+            auto stringValue = TTypesMapping::ToString(value);
+            append(name, stringValue);
+        });
         return result;
     }
 
@@ -196,8 +268,8 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     Y_UNIT_TEST(CreateMessageNativeTypes) {
         // Native type values
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>('a')}), "value=a");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('a')}), "value=a");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>(1)}), "value=1");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", 'a'}), "value=a");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), "value=3");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), "value=4");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), "value=5");
@@ -207,9 +279,10 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", true}), "value=true");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), "value=abc");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), "value=abc");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123");
-        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123000");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123000");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123000");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TInstant::MicroSeconds(1789233327128336)}), "value=2026-09-12T17:15:27.128336Z");
 
         int i = 0;
         auto ptr = static_cast<void*>(&i);
@@ -496,66 +569,66 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     Y_UNIT_TEST(GenerateJson) {
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(), R"({})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}), R"({"v1":"1"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}), R"({"v1":"1","v2":"2"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}, {"v3", 3}), R"({"v1":"1","v2":"2","v3":"3"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}), R"({"v1":1})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}), R"({"v1":1,"v2":2})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {"v2", 2}, {"v3", 3}), R"({"v1":1,"v2":2,"v3":3})");
 
         // Empty pairs
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {}), R"({"v1":"1"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"v1", 1}, {}), R"({"v1":1})");
 
         // Support types
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>('a')}), R"({"value":"a"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>('a')}), R"({"value":"a"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), R"({"value":"3"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), R"({"value":"4"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), R"({"value":"5"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), R"({"value":"6"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), R"({"value":"7"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), R"({"value":"8"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", true}), R"({"value":"true"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui8>(1)}), R"({"value":1})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i8>(1)}), R"({"value":1})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui16>(3)}), R"({"value":3})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i16>(4)}), R"({"value":4})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui32>(5)}), R"({"value":5})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i32>(6)}), R"({"value":6})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<ui64>(7)}), R"({"value":7})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<i64>(8)}), R"({"value":8})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", true}), R"({"value":true})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TString("abc")}), R"({"value":"abc"})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", "abc"}), R"({"value":"abc"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), R"({"value":"1.123"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), R"({"value":"1.123"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), R"({"value":"1.123"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), R"({"value":1.123})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), R"({"value":1.123})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), R"({"value":1.123})");
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", NActors::TActorId(1, 2)}), R"({"value":"[0:1:2]"})");
 
         // reuse message and sub message
         auto subMessage = YDB_LOG_CREATE_MESSAGE({"subValue1", 1}, {"subValue2", 2});
 
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(subMessage), R"({"subValue1":"1","subValue2":"2"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(subMessage, subMessage), R"({"subValue1":"1","subValue2":"2"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(subMessage), R"({"subValue1":1,"subValue2":2})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(subMessage, subMessage), R"({"subValue1":1,"subValue2":2})");
         TEST_JSON_MESSAGE(
-            YDB_LOG_CREATE_MESSAGE({"value", subMessage}), R"({"value":{"subValue1":"1","subValue2":"2"}})"
+            YDB_LOG_CREATE_MESSAGE({"value", subMessage}), R"({"value":{"subValue1":1,"subValue2":2}})"
         );
         TEST_JSON_MESSAGE(
             YDB_LOG_CREATE_MESSAGE(subMessage, {"value", subMessage}),
-            R"({"subValue1":"1","subValue2":"2","value":{"subValue1":"1","subValue2":"2"}})"
+            R"({"subValue1":1,"subValue2":2,"value":{"subValue1":1,"subValue2":2}})"
         );
 
         // optional values
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{}}), R"({"value":"\u003Cnull\u003E"})");
-        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{1}}), R"({"value":"1"})");
+        TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<ui16>{1}}), R"({"value":1})");
 
         // optional subMessages
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{}}), R"({})");
         TEST_JSON_MESSAGE(
             YDB_LOG_CREATE_MESSAGE({"value", TMaybe<TStructuredMessage>{subMessage}}),
-            R"({"value":{"subValue1":"1","subValue2":"2"}})"
+            R"({"value":{"subValue1":1,"subValue2":2}})"
         );
         TEST_JSON_MESSAGE(YDB_LOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{}), R"({})");
         TEST_JSON_MESSAGE(
-            YDB_LOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), R"({"subValue1":"1","subValue2":"2"})"
+            YDB_LOG_CREATE_MESSAGE(TMaybe<TStructuredMessage>{subMessage}), R"({"subValue1":1,"subValue2":2})"
         );
 
         // subMessage name conflict
         TEST_JSON_MESSAGE(
             YDB_LOG_CREATE_MESSAGE({"value", 1}, {"value", YDB_LOG_CREATE_MESSAGE({"value", 1})}),
-            R"({"value":"1","_value":{"value":"1"}})"
+            R"({"value":1,"_value":{"value":1}})"
         );
         TEST_JSON_MESSAGE(
             YDB_LOG_CREATE_MESSAGE({"value", 1}, {"value", YDB_LOG_CREATE_MESSAGE({"value", 1}, {"value2", 2})}),
-            R"({"value":"1","_value":{"value":"1","value2":"2"}})"
+            R"({"value":1,"_value":{"value":1,"value2":2}})"
         );
         TEST_JSON_MESSAGE(
             YDB_LOG_CREATE_MESSAGE(
@@ -563,8 +636,16 @@ Y_UNIT_TEST_SUITE(StructLog) {
                 {"value", YDB_LOG_CREATE_MESSAGE({"value", 1})},
                 {"xvalue", YDB_LOG_CREATE_MESSAGE({"value", 10})}
             ),
-            R"({"value":"1","_value":{"value":"1"},"xvalue":{"value":"10"}})"
+            R"({"value":1,"_value":{"value":1},"xvalue":{"value":10}})"
+        );
+
+        TEST_JSON_MESSAGE(
+            YDB_LOG_CREATE_MESSAGE(
+                {"value", TInstant::MicroSeconds(1789233327128336)}
+            ),
+            R"({"value":"2026-09-12T17:15:27.128336Z"})"
         );
     }
+
 }
 }  // namespace NActors::NStructuredLog

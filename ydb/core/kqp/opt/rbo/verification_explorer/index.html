@@ -36,6 +36,8 @@
         <span aria-hidden="true">＋</span> Open artifacts <span class="button-arrow">↗</span>
       </button>
       <input id="file-input" type="file" multiple accept=".json,.yql,.sql,.smt2,.txt" hidden />
+      <button class="text-button" id="folder-button">Open rule investigation folder</button>
+      <input id="folder-input" type="file" webkitdirectory multiple hidden />
       <button class="text-button" id="demo-button">Restore example collection</button>
       <div class="sidebar-footer">
         <span class="lock-mark" aria-hidden="true">◇</span>
@@ -59,7 +61,7 @@
       <section id="view" aria-live="polite"></section>
       <footer class="main-footer">
         <span>Inspect the model. Keep the evidence.</span
-        ><span>Initial logical plan ↔ Final pre-physical plan</span>
+        ><span>Captured plans · bounded model evidence</span>
       </footer>
     </main>
     <dialog id="help-dialog">

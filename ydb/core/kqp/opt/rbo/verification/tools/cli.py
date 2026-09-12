@@ -1,4 +1,4 @@
-"""Command line for sequential transformation-prefix localization."""
+"""Command line for transformation localization."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from .bisect import Config, LocalizationError, localize
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
-        description="Sequentially localize a new-RBO transformation-prefix failure"
+        description="Localize new-RBO changes using exhaustive midpoint-first comparisons"
     )
     result.add_argument("--verifier", type=Path, required=True)
     result.add_argument("--solver", type=Path, required=True)
@@ -22,6 +22,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--timeout-ms", type=int, default=10_000)
     result.add_argument("--capture-timeout-seconds", type=int, default=300)
     result.add_argument("--max-events", type=int, default=10_000)
+    result.add_argument("--strategy", choices=("divide-and-conquer", "sequential"),
+                        default="divide-and-conquer")
+    result.add_argument("--all-steps", action="store_true",
+                        help="audit every step even when the final check has no counterexample")
     result.add_argument(
         "capture_command",
         nargs=argparse.REMAINDER,
@@ -45,6 +49,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
         timeout_ms=options.timeout_ms,
         capture_timeout_seconds=options.capture_timeout_seconds,
         max_events=options.max_events,
+        strategy=options.strategy,
+        all_steps=options.all_steps,
     )
     try:
         result = localize(config)
@@ -62,6 +68,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         "FAILING_PREFIX_INTERVAL",
         "FAILING_INTERVAL_TO_FINAL",
         "GLOBAL_SUFFIX_FAILURE",
+        "LOCALIZED_FAILURES",
     }:
         return 1
-    return 0 if result["status"] == "FINAL_VERIFIED_BOUNDED" else 2
+    return 0 if result["status"] in {"FINAL_VERIFIED_BOUNDED", "STEPS_VERIFIED_BOUNDED"} else 2

@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import io
 import json
 import os
@@ -37,7 +38,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     parse_snapshot,
     stage_task_counts,
 )
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import aggregate, bundle, cli, decimal, floating
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import aggregate, bundle, cli, decimal, floating, ir
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import analysis as plan_analysis
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import relation as relation_model
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
@@ -70,6 +71,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import (
     VerificationError,
     build_logical_kernel_problem_for_tests,
     build_problem,
+    build_transformation_pair_problem,
     build_transformation_prefix_problem,
     solve,
 )
@@ -4251,6 +4253,89 @@ class BoundaryContractTest(unittest.TestCase):
         self.assertIn('"status": "UNSUPPORTED"', errors.getvalue())
         self.assertIn("final snapshot", errors.getvalue())
 
+    def test_transformation_pair_accepts_staged_left_without_weakening_normal_roles(self):
+        staged = passthrough_stage_snapshot({"kind": "map"})
+        logical = passthrough_stage_snapshot()
+        for after in (logical, staged):
+            problem = build_transformation_pair_problem(staged, after, 1, observation_snapshot=logical)
+            self.assertIsInstance(problem, Problem)
+            if SOLVER:
+                self.assertEqual(solve(problem, SOLVER, 1).status, "VERIFIED_BOUNDED")
+            with self.assertRaisesRegex(VerificationError, "initial snapshot"):
+                build_problem(staged, after, 1)
+        project = logical.plan.nodes[-1]
+        changed = replace(logical, plan=replace(logical.plan, nodes=(logical.plan.nodes[0], replace(
+            project, columns=(replace(project.columns[0], expression=Expr("literal", value=0, result_type="Int64", nullable=False)),),
+        ))))
+        problem = build_transformation_pair_problem(staged, changed, 1, observation_snapshot=logical)
+        if SOLVER:
+            self.assertEqual(solve(problem, SOLVER, 1).status, "COUNTEREXAMPLE")
+
+    @staticmethod
+    def observation_boundaries():
+        table = ir.Table("A", (Column("x", "Int64", False),), ())
+        scan = Scan("scan", "A", (ScanColumn("x", "x"),), None, None)
+        initial = ir.Snapshot((table,), ir.Plan((scan,), "scan", ("x",), ()))
+        sort = Sort("out", "scan", (SortOrder("x", True, True),), None, "final")
+        graph = ir.StageGraph("root", (
+            ir.Stage("source", ("scan",), (), (ir.StageOutput(0, "scan"),), "column"),
+            ir.Stage("root", ("out",), ("scan",), (ir.StageOutput(0, "out"),), None),
+        ), (ir.StageEdge("gather", "source", "root", 0, 0, 0, "union_all", parallel=False),))
+        ordered = replace(initial, plan=ir.Plan((scan, sort), "out", ("x",), ()), stage_graph=graph)
+        project = ir.Project("out", "scan", (ir.Projection("x", Expr("column", column="x")),), False)
+        unordered = replace(ordered, plan=replace(ordered.plan, nodes=(scan, project)))
+        return initial, ordered, unordered
+
+    @unittest.skipUnless(SOLVER, "requires Z3")
+    def test_pair_uses_original_observation_and_retains_physical_selection(self):
+        initial, ordered, unordered = self.observation_boundaries()
+        ordered_initial = replace(ordered, stage_graph=None)
+        cases = (
+            (initial, ordered, unordered, "VERIFIED_BOUNDED"),
+            (initial, unordered, ordered, "VERIFIED_BOUNDED"),
+            (ordered_initial, ordered, unordered, "COUNTEREXAMPLE"),
+            (ordered_initial, unordered, ordered, "COUNTEREXAMPLE"),
+            # Neither intermediate carries order: compare both permutation languages.
+            (ordered_initial, initial, unordered, "VERIFIED_BOUNDED"),
+            # Bag observation ignores output order, never TopSort row selection.
+            (initial, replace(ordered, plan=replace(ordered.plan, nodes=(
+                ordered.plan.nodes[0], replace(ordered.plan.nodes[1], limit=Expr("literal", value=1, result_type="Uint64", nullable=False)),
+            ))), unordered, "COUNTEREXAMPLE"),
+        )
+        for anchor, before, after, expected in cases:
+            with self.subTest(anchor=anchor.plan.root, before=before.plan.root, expected=expected):
+                problem = build_transformation_pair_problem(before, after, 2, observation_snapshot=anchor)
+                self.assertEqual(problem.observation_kind, "bag" if anchor is initial else "sequence")
+                self.assertEqual(solve(problem, SOLVER, 2).status, expected)
+
+    def test_pair_observation_contract_and_common_scalar_mode(self):
+        initial, ordered, unordered = self.observation_boundaries()
+        with self.assertRaisesRegex(VerificationError, "logical initial"):
+            build_transformation_pair_problem(ordered, unordered, 2, observation_snapshot=ordered)
+        with self.assertRaisesRegex(VerificationError, "same ordered table schema"):
+            build_transformation_pair_problem(ordered, unordered, 2, observation_snapshot=replace(
+                initial, tables=(replace(initial.tables[0], unique_keys=(ir.UniqueKey(("x",), False),)),),
+            ))
+        renamed = ir.Project("renamed", "scan", (ir.Projection("y", Expr("column", column="x")),), False)
+        wrong_output = replace(initial, plan=ir.Plan((initial.plan.nodes[0], renamed), "renamed", ("y",), ()))
+        with self.assertRaisesRegex(VerificationError, "observation snapshot is incompatible") as error:
+            build_transformation_pair_problem(ordered, unordered, 2, observation_snapshot=wrong_output)
+        self.assertNotIsInstance(error.exception, SchemaMismatch)
+        with self.assertRaises(SchemaMismatch):
+            build_transformation_pair_problem(initial, wrong_output, 2, observation_snapshot=initial)
+        promoted = build_transformation_pair_problem(ordered, unordered, 1, observation_snapshot=replace(
+            initial, semantic_mode=ir.BINARY64_SEMANTIC_MODE,
+        ))
+        self.assertEqual(promoted.semantic_mode, ir.BINARY64_SEMANTIC_MODE)
+        empty_anchor = replace(initial, plan=ir.Plan((initial.plan.nodes[0], Filter(
+            "empty", "scan", Expr("literal", value=False, result_type="Bool", nullable=False),
+        )), "empty", ("x",), ()))
+        # Only the observation kind flows out of the isolated anchor evaluator.
+        self.assertEqual(
+            build_transformation_pair_problem(ordered, unordered, 2, observation_snapshot=initial).formula(),
+            build_transformation_pair_problem(ordered, unordered, 2, observation_snapshot=empty_anchor).formula(),
+        )
+
     def test_cli_labels_the_explicit_transformation_prefix_scope(self):
         logical = passthrough_stage_snapshot()
         output = io.StringIO()
@@ -4276,6 +4361,28 @@ class BoundaryContractTest(unittest.TestCase):
             output.getvalue(),
         )
         builder.assert_called_once_with(logical, logical, 2, 10_000)
+
+    def test_cli_labels_transformation_pair_and_excludes_bundle(self):
+        staged = passthrough_stage_snapshot({"kind": "map"})
+        logical = passthrough_stage_snapshot()
+        source = b'{"original":"bytes"}\n'
+        output = io.StringIO()
+        with (mock.patch.object(cli, "load_snapshot", return_value=staged),
+              mock.patch.object(cli.Path, "read_bytes", return_value=source),
+              mock.patch.object(cli, "parse_snapshot", return_value=logical) as parse,
+              mock.patch.object(cli, "build_transformation_pair_problem", return_value=Problem(smt.Script(), {}, observation_kind="bag")) as builder,
+              mock.patch.object(cli.Path, "write_text"), redirect_stdout(output)):
+            self.assertEqual(cli.main(["a.json", "b.json", "--diagnostic-transformation-pair", "--diagnostic-observation-snapshot", "initial.json", "--emit-smt", "unused.smt2"]), 0)
+        builder.assert_called_once_with(staged, staged, 2, 10_000, observation_snapshot=logical)
+        parse.assert_called_once_with({"original": "bytes"})
+        verdict = json.loads(output.getvalue())
+        self.assertEqual(verdict["comparison_scope"], "OPTIMIZER_TRANSFORMATION_PAIR")
+        self.assertEqual(verdict["observation_kind"], "bag")
+        self.assertEqual(verdict["observation_snapshot_sha256"], hashlib.sha256(source).hexdigest())
+        with redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(["--bundle", "bundle.json", "--diagnostic-transformation-pair"]), 2)
+            self.assertEqual(cli.main(["a", "b", "--diagnostic-transformation-pair", "--emit-smt", "unused"]), 2)
+            self.assertEqual(cli.main(["a", "b", "--diagnostic-observation-snapshot", "initial", "--emit-smt", "unused"]), 2)
 
 
 class _MissingFunction(Exception):

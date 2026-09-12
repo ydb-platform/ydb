@@ -1,6 +1,7 @@
 // Local evidence adapter, not a verifier. No URLs are fetched or commands run.
 // Unsafe integers and decimal/exponent tokens remain exact strings. Supplied
 // bytes are authoritative for SHA256; text-only imports hash UTF-8 text bytes.
+import { formulaIndex } from './formula-model.mjs';
 
 export function parseLosslessJson(text) {
     let pos = 0;
@@ -65,9 +66,10 @@ const object = value => value !== null && typeof value === "object" && !Array.is
 const formats = {
     snapshot: "ydb-rbo-semantic-snapshot", trace: "ydb-rbo-concrete-trace",
     bundle: "ydb-rbo-result-bundle", coverage: "ydb-rbo-benchmark-coverage",
+    formulas: "ydb-rbo-operator-formulas", localization: "ydb-rbo-transformation-localization",
 };
-const roles = ["before", "after", "verdict", "trace", "query"];
-const rawSuffix = /^(.*)\.(initial\.json|final\.json|verdict\.json|trace\.json|query\.(?:yql|sql))$/;
+const roles = ["before", "after", "verdict", "trace", "formulas", "query"];
+const rawSuffix = /^(.*)\.(initial\.json|final\.json|verdict\.json|trace\.json|formulas\.json|query\.(?:yql|sql))$/;
 const rawRole = suffix => suffix.startsWith("initial") ? "before" : suffix.startsWith("final") ? "after"
     : suffix.split(".")[0];
 
@@ -258,11 +260,11 @@ export async function loadArtifacts(files) {
     function resolve(entry, ref, owner, role, hashes = {}, basename = false) {
         if (ref === undefined || ref === null) return null;
         try {
-            const name = localName(ref);
+            const name = typeof ref === 'string' && ref.startsWith('../') ? null : localName(ref);
             const relative = ref.startsWith("/") ? name : localName(`${owner.slice(0, owner.lastIndexOf("/") + 1)}${ref}`);
-            let key = imports.has(relative) ? relative : name;
+            let key = imports.has(relative) ? relative : name || relative;
             if (!imports.has(key) && basename) {
-                const matches = [...imports.keys()].filter(k => k.split("/").at(-1) === name.split("/").at(-1));
+                const matches = [...imports.keys()].filter(k => k.split("/").at(-1) === (name || relative).split("/").at(-1));
                 if (matches.length > 1) throw new Error(`Ambiguous imported basename for ${ref}`);
                 if (matches.length === 1) {
                     key = matches[0];
@@ -284,13 +286,15 @@ export async function loadArtifacts(files) {
         if (!item) return;
         const value = item.value;
         const valid = role === "query" || (object(value) && (role === "verdict" ? typeof value.status === "string"
-            : value.version === 1 && value.format === (role === "trace" ? formats.trace : formats.snapshot)));
+            : value.version === 1 && value.format === (formats[role] || formats.snapshot)));
         if (!valid) entry.issues.push(`${role}: unsupported artifact format in ${item.name}`);
         else {
             try {
-                if (role !== "query") displayShape(value, role);
+                if (role === "formulas") formulaIndex(value);
+                else if (role !== "query") displayShape(value, role);
                 entry[role] = role === "query" ? item.text : value;
                 if (role === "query") entry.querySha256 = item.sha256;
+                if (["before", "after"].includes(role)) (entry.snapshotHashes ??= {})[role] = item.sha256;
             } catch (error) { entry.issues.push(`${role}: unsupported display shape in ${item.name}: ${error.message}`); }
         }
     }
@@ -317,6 +321,31 @@ export async function loadArtifacts(files) {
         if (conflicts.length) {
             entry.issues.push(`Trace detached: ${conflicts.join("; ")}`);
             entry.trace = null;
+        }
+        if (entry.formulas) {
+            const failures = [];
+            if (entry.formulas.status !== 'FORMULAS_GENERATED') failures.push('unexpected formula status');
+            if (entry.formulas.semantic_mode !== (entry.before?.semantic_mode ?? entry.after?.semantic_mode ?? null))
+                failures.push('effective formula semantic mode differs from the snapshots');
+            for (const side of ["before", "after"]) {
+                if (!entry[side] || entry.formulas.inputs?.[`${side}_sha256`] !== entry.snapshotHashes?.[side])
+                    failures.push(`${side} snapshot bytes do not match the formula input hash`);
+                else {
+                    if (entry.formulas.semantic_modes?.[side] !== (entry[side].semantic_mode ?? null))
+                        failures.push(`${side} formula semantic mode differs from the snapshot`);
+                    const nodes = new Map(entry[side].plan.nodes.map(node => [node.id, node.op]));
+                    if (entry.formulas[side].operators.some(event => nodes.get(event.node) !== event.op))
+                        failures.push(`${side} operator identity does not match the snapshot`);
+                }
+            }
+            for (const key of ["row_bound", "task_bound"]) {
+                if (!Number.isSafeInteger(entry.formulas[key]) || entry.formulas[key] < 0)
+                    failures.push(`invalid formula ${key}`);
+                for (const companion of [entry.verdict, entry.trace])
+                    if (companion?.[key] !== undefined && companion[key] !== entry.formulas[key])
+                        failures.push(`formula ${key} differs from attached evidence`);
+            }
+            if (failures.length) { entry.issues.push(`Formulas detached: ${[...new Set(failures)].join('; ')}`); entry.formulas = null; }
         }
         if (!entry.results) for (const role of ["before", "after"]) {
             if (!entry[role]) entry.issues.push(`Missing ${role} snapshot evidence`);
@@ -345,6 +374,82 @@ export async function loadArtifacts(files) {
         entry.observation = "buffered_tuple_or_error";
         entry.issues.push("Bundle verdict applies to the joint result tuple, not to individual result slots");
     }
+    function localization(entry, value, owner) {
+        if (value.version !== 1 || !Array.isArray(value.events) || !Array.isArray(value.boundaries)
+            || !Array.isArray(value.comparisons) || !Array.isArray(value.findings) || !Array.isArray(value.gaps)
+            || value.comparisons.length > 20000) throw new Error('Invalid localization report shape');
+        if (value.events.some((event, index) => !object(event) || event.ordinal !== index + 1
+            || typeof event.name !== 'string' || !event.name)) throw new Error('Invalid localization event sequence');
+        const boundaries = new Map(), ids = new Set();
+        for (const boundary of value.boundaries) {
+            if (!object(boundary) || !Number.isSafeInteger(boundary.ordinal) || boundary.ordinal < 0
+                || boundaries.has(boundary.ordinal)) throw new Error('Invalid localization boundary');
+            boundaries.set(boundary.ordinal, boundary);
+        }
+        if (value.observation_boundary !== 0 || typeof value.observation_snapshot_sha256 !== 'string'
+            || !/^[a-f0-9]{64}$/.test(value.observation_snapshot_sha256)
+            || boundaries.get(0)?.artifacts?.snapshot?.sha256 !== value.observation_snapshot_sha256
+            || ![null, 'bag', 'sequence'].includes(value.observation_kind))
+            throw new Error('Invalid localization observation anchor');
+        entry.localization = value;
+        entry.comparisons = value.comparisons.map(comparison => {
+            if (!object(comparison) || typeof comparison.id !== 'string' || ids.has(comparison.id)
+                || !boundaries.has(comparison.before) || !boundaries.has(comparison.after)
+                || comparison.before >= comparison.after || !object(comparison.verifier)
+                || typeof comparison.verifier.status !== 'string'
+                || comparison.adjacent !== (comparison.after === comparison.before + 1))
+                throw new Error('Invalid localization comparison');
+            ids.add(comparison.id);
+            const whole = comparison.before === 0 && comparison.after === value.events.length + 1;
+            if (!whole && comparison.verifier.status !== 'UNSUPPORTED'
+                && comparison.verifier.comparison_scope !== 'OPTIMIZER_TRANSFORMATION_PAIR')
+                throw new Error('Invalid localization pair comparison scope');
+            if (comparison.verifier.comparison_scope === 'OPTIMIZER_TRANSFORMATION_PAIR') {
+                const verdict = comparison.verifier;
+                const solved = ['VERIFIED_BOUNDED', 'COUNTEREXAMPLE', 'UNKNOWN'].includes(verdict.status);
+                if (((solved || verdict.status === 'SCHEMA_MISMATCH' || verdict.observation_snapshot_sha256 !== undefined)
+                    && verdict.observation_snapshot_sha256 !== value.observation_snapshot_sha256)
+                    || ((solved || verdict.observation_kind !== undefined)
+                        && (!['bag', 'sequence'].includes(verdict.observation_kind)
+                            || verdict.observation_kind !== value.observation_kind)))
+                    throw new Error('Invalid localization pair observation context');
+            }
+            const pair = blank(comparison.id, `Boundaries ${comparison.before} → ${comparison.after}`);
+            pair.binding = 'localization-report';
+            pair.observation_kind = value.observation_kind;
+            pair.observation_snapshot_sha256 = value.observation_snapshot_sha256;
+            const report = imports.get(owner);
+            if (report) evidence(pair, report, 'localization');
+            pair.interval = {before: comparison.before, after: comparison.after};
+            pair.reported = comparison.verifier;
+            const refs = {before: boundaries.get(comparison.before).artifacts?.snapshot,
+                after: boundaries.get(comparison.after).artifacts?.snapshot, verdict: comparison.artifacts?.verdict};
+            for (const [role, ref] of Object.entries(refs)) {
+                if (!ref) { pair.issues.push(`No ${role} artifact recorded`); continue; }
+                if (typeof ref.path !== 'string' || typeof ref.sha256 !== 'string')
+                    throw new Error('Localization artifact must carry its path and SHA256');
+                attach(pair, role, resolve(pair, ref.path, owner, role, {[ref.path]: ref.sha256}));
+            }
+            if (pair.verdict && !sameJson(pair.verdict, comparison.verifier)) {
+                pair.issues.push('Verdict detached: raw verdict differs from the report'); pair.verdict = null;
+            }
+            return pair;
+        });
+        const records = new Map(value.comparisons.map(comparison => [comparison.id, comparison]));
+        for (const [items, statuses, adjacent] of [[value.findings, ['COUNTEREXAMPLE', 'SCHEMA_MISMATCH'], true],
+            [value.gaps, ['UNKNOWN', 'UNSUPPORTED'], false]]) {
+            for (const finding of items) {
+                const comparison = object(finding) && records.get(finding.comparison);
+                if (!comparison || (adjacent && !comparison.adjacent)
+                    || !statuses.includes(comparison.verifier.status) || finding.status !== comparison.verifier.status)
+                    throw new Error('Invalid localization finding comparison/status');
+            }
+        }
+        const whole = entry.comparisons.find(pair => pair.interval.before === 0
+            && pair.interval.after === Math.max(...boundaries.keys()));
+        if (whole) for (const role of ['before', 'after', 'verdict', 'snapshotHashes', 'provenance']) entry[role] = whole[role];
+        entry.binding = 'localization-report';
+    }
     // Explicit explorer manifests bind exact filenames; no basename guessing.
     for (const item of imports.values()) {
         if (!item || item.value?.format !== "rbo-explorer") continue;
@@ -361,6 +466,7 @@ export async function loadArtifacts(files) {
             entry.binding = "manifest";
             for (const field of ["kind", "revision", "provenance_notes"]) if (typeof spec[field] === "string") entry[field] = spec[field];
             if (object(spec.trace_producer)) entry.trace_producer = spec.trace_producer;
+            if (object(spec.formula_producer)) entry.formula_producer = spec.formula_producer;
             evidence(entry, item, "manifest");
             const hashes = spec.hashes ?? {};
             if (!object(hashes)) entry.issues.push("Manifest hashes must be a filename-to-SHA256 object");
@@ -382,7 +488,12 @@ export async function loadArtifacts(files) {
     for (const item of reportsFirst) {
         if (!item || used.has(item.name) || !object(item.value)) continue;
         const value = item.value;
-        if (value.format === formats.bundle) {
+        if (value.format === formats.localization) {
+            used.add(item.name);
+            const entry = blank(item.name, 'Rule-by-rule investigation');
+            try { localization(entry, value, item.name); evidence(entry, item, 'localization'); finish(entry); }
+            catch (error) { issues.push(`${item.name}: ${error.message}`); }
+        } else if (value.format === formats.bundle) {
             const entry = blank(item.name);
             entry.binding = "bundle-manifest";
             evidence(entry, item, "manifest");

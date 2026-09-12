@@ -1,12 +1,10 @@
 PY3TEST()
 
-TEST_SRCS(
-    test_resource_pool.py
-)
+TAG(ya:manual)
 
-FORK_TESTS()
-FORK_TEST_FILES()
-FORK_SUBTESTS()
+TEST_SRCS(
+    test_s3_cpu_throttle.py
+)
 
 REQUIREMENTS(ram:16 cpu:4)
 
@@ -17,7 +15,6 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-ENV(YDB_ENABLE_COLUMN_TABLES="true")
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(NO_KUBER_LOGS="yes")
@@ -33,7 +30,3 @@ DEPENDS(
 )
 
 END()
-
-RECURSE(
-    s3_cpu
-)

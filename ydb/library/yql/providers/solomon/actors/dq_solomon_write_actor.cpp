@@ -608,17 +608,11 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredT
             NYql::NSo::NProto::TDqSolomonShard&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
-            auto txId = args.TxId;
-            auto taskParamsIt = args.TaskParams.find("query_path");
-            if (taskParamsIt != args.TaskParams.end()) {
-                txId = taskParamsIt->second;
-            }
-
             return CreateDqSolomonWriteActor(
                 std::move(settings),
                 args.OutputIndex,
                 args.StatsLevel,
-                txId,
+                args.TxId,
                 args.TaskId,
                 args.SecureParams,
                 args.Callback,

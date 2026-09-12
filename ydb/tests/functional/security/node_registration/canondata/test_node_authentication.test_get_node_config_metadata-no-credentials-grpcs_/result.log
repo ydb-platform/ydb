@@ -1,0 +1,7 @@
+{
+  "details": "unauthenticated, unauthenticated: { <main>: Error: Access denied without user token }",
+  "grpc_status": "UNAUTHENTICATED",
+  "ydb_log": [
+    "GRPC_SERVER DEBUG: issuing response Name# NKikimrClient.TGRpcServer/ConsoleRequest nodata (unauthenticated, unauthenticated: { <main>: Error: Access denied without user token }) peer# <peer>, grpc status# (16)"
+  ]
+}

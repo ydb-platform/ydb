@@ -1,0 +1,8 @@
+{
+  "exit_code": 1,
+  "registration": null,
+  "startup": [
+    "Error [YDBE-10025]: File <test-dir>/missing.yaml does not exist"
+  ],
+  "ydb_log": []
+}

@@ -1,0 +1,13 @@
+{
+  "expiry_positive": true,
+  "grpc_status": "OK",
+  "node_id_is_dynamic": true,
+  "node_id_is_zero": false,
+  "node_id_present": true,
+  "nodes_empty": false,
+  "registered_endpoint_present": true,
+  "status": "OK",
+  "ydb_log": [
+    "GRPC_SERVER DEBUG: issuing response Name# NKikimrClient.TGRpcServer/RegisterNode data# Status { Code: OK } NodeId: <dynamic-node> DomainPath: \"Root\" Expire: <expiry> Nodes { NodeId: <dynamic-node> Host: \"localhost\" Port: <port> ResolveHost: \"localhost\" Address: \"127.0.0.1\" Location { } Expire: <expiry> ExpireV2: <expiry> Liveness: ALIVE } Nodes { NodeId: 1 Host: \"localhost\" Port: <port> ResolveHost: \"localhost\" Address: \"\" Location { DataCenterNum: 49 RoomNum: 0 RackNum: 1 BodyNum: 1 DataCenter: \"1\" Rack: \"1\" Unit: \"1\" } }  peer# <peer>"
+  ]
+}

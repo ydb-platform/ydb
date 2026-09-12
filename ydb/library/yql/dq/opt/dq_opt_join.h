@@ -4,6 +4,7 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 #include <yql/essentials/core/yql_cost_function.h>
 
@@ -49,6 +50,17 @@ NNodes::TExprBase DqBuildJoin(
 );
 
 NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, TTypeAnnotationContext& typeCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false, bool blockHashJoinBuildSideLeft = false);
+
+// Join-key positions (index in LeftJoinKeyNames / RightJoinKeyNames) that use IS NOT DISTINCT FROM.
+// Sources: TDqJoin.Flags "EqualNulls" (all keys) or JoinAlgoOptions EqualNulls=true / EqualNulls=<index>.
+TVector<ui32> CollectEqualNullsKeys(const NNodes::TDqJoin& join, ui32 keyCount);
+
+// Settings emitted on TDqPhyBlockHashJoin: optional BuildSide=Left plus one EqualNulls tuple per key.
+TVector<NNodes::TCoNameValueTuple> BuildBlockHashJoinSettings(
+    const NNodes::TDqJoin& join,
+    EJoinAlgoType joinAlgo,
+    ui32 keyCount,
+    TExprContext& ctx);
 
 NNodes::TExprBase DqBuildBlockHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
 

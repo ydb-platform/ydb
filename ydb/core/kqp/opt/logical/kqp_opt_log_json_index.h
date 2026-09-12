@@ -24,6 +24,7 @@ std::expected<TJsonIndexSettings, NYql::TIssue> CollectJsonIndexPredicate(const 
     const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, const THashSet<TString>& jsonIndexedColumns,
     const TVector<TString>& prefixColumns = {},
     const TVector<std::pair<TString, NYql::TExprNode::TPtr>>& seedPrefixColumns = {},
-    EJsonIndexSelectionMode selectionMode = EJsonIndexSelectionMode::Explicit);
+    EJsonIndexSelectionMode selectionMode = EJsonIndexSelectionMode::Explicit,
+    const NYql::TExprNode* expectedRow = nullptr);
 
 }   // namespace NKikimr::NKqp::NOpt

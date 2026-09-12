@@ -5,6 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
@@ -314,6 +315,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
     Y_ABORT_UNLESS(nbsService->Timer);
 
     TVector<IDirectBlockGroupPtr> directBlockGroups;
+    auto arenaAllocator = CreateArenaAllocator();
     directBlockGroups.reserve(DirectBlockGroupsCount);
     TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls;
     chaosInjectorControls.reserve(DirectBlockGroupsCount);
@@ -361,6 +363,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
         transport = std::move(chaosInjector);
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
+            arenaAllocator,
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
             executors[dbgIndex],

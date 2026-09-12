@@ -37,7 +37,6 @@ class TVChunk
 {
 public:
     TVChunk(
-        IArenaAllocatorPtr arenaAllocator,
         NActors::TActorSystem* actorSystem,
         ITraceService* traceService,
         IPartitionDirectService* partitionDirectService,

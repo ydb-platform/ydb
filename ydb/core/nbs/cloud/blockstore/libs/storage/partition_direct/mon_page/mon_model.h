@@ -65,6 +65,7 @@ struct TTabletInfo
 struct TArenaMemoryUsage
 {
     TVector<TArenaAllocatorStats> Slots;
+    TVector<TArenaAllocatorStats> PoolSlots;
 };
 
 struct TFastPathServiceInfo

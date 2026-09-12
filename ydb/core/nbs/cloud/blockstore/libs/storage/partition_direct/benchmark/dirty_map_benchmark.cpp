@@ -16,6 +16,26 @@ namespace {
 constexpr ui32 BlockSize = 4096;
 constexpr ui16 BlockCount = 32768;
 
+struct TLoadSimulation
+{
+    std::array<ui64, sizeof(TInflightInfo) / sizeof(ui64)> Ranges;
+};
+
+template <typename TKey>
+TKey Make(ui64 k);
+
+template <>
+ui64 Make(ui64 k)
+{
+    return k;
+}
+
+template <>
+TPBufferKey Make(ui64 k)
+{
+    return TPBufferKey{.Generation = 0, .Lsn = k};
+}
+
 void PrintAllocatorStats(const IArenaAllocatorPtr& allocator)
 {
     Cout << "allocator:" << Endl;
@@ -56,7 +76,7 @@ void FlushAndErase(TBlocksDirtyMap& dirtyMap)
     }
 }
 
-template <typename TRange>
+template <typename TKey>
 void BM_BlockRangeMapMemory(benchmark::State& state)
 {
     const size_t rangeCount = state.range(0);
@@ -67,26 +87,21 @@ void BM_BlockRangeMapMemory(benchmark::State& state)
         auto allocator = CreateArenaAllocator();
         TArenaAllocatorPool arenaAllocatorPool{allocator};
 
-        TBlockRangeMap<ui64, TString, TRange, true> rangeMap(
+        TBlockRangeMap<TKey, TLoadSimulation, TBlockRange16, true> rangeMap(
             &arenaAllocatorPool);
-        const size_t baseUsedSize = arenaAllocatorPool.GetUsedSize();
-        const size_t baseAllocatedSize = arenaAllocatorPool.GetAllocatedSize();
 
         for (size_t i = 0; i < rangeCount; ++i) {
-            rangeMap.AddRange(i + 1, TRange::MakeOneBlock(i % BlockCount));
+            rangeMap.AddRange(
+                Make<TKey>(i + 1),
+                TBlockRange16::MakeOneBlock(i % BlockCount));
         }
 
-        const size_t usedSize = arenaAllocatorPool.GetUsedSize() - baseUsedSize;
-        const size_t allocatedSize =
-            arenaAllocatorPool.GetAllocatedSize() - baseAllocatedSize;
+        const size_t usedSize = arenaAllocatorPool.GetUsedSize();
         benchmark::DoNotOptimize(rangeMap.Size());
 
         state.counters["usedSize"] = static_cast<double>(usedSize);
         state.counters["usedPerInflight"] =
             static_cast<double>(usedSize) / rangeCount;
-        state.counters["allocatedSize"] = static_cast<double>(allocatedSize);
-        state.counters["allocatedPerInflight"] =
-            static_cast<double>(allocatedSize) / rangeCount;
     }
 }
 
@@ -98,7 +113,8 @@ void BM_DirtyMapInflightMemory(benchmark::State& state)
     for (auto _: state) {
         Y_UNUSED(_);
 
-        auto allocator = CreateArenaAllocator();
+        auto arenaAllocatorPool = CreateArenaAllocatorPool();
+        auto allocator = arenaAllocatorPool->GetAllocator();
         const auto config = TVChunkConfig::MakeDefault(
             /*vChunkIndex=*/0,
             /*hostCount=*/5,
@@ -108,7 +124,7 @@ void BM_DirtyMapInflightMemory(benchmark::State& state)
         dirtyMaps.reserve(dirtyMapCount);
         for (size_t i = 0; i < dirtyMapCount; ++i) {
             dirtyMaps.push_back(std::make_shared<TBlocksDirtyMap>(
-                allocator,
+                arenaAllocatorPool,
                 config,
                 BlockSize,
                 BlockCount));
@@ -146,13 +162,8 @@ void BM_DirtyMapInflightMemory(benchmark::State& state)
 
 }   // namespace
 
-BENCHMARK(BM_BlockRangeMapMemory<TBlockRange16>)
-    ->Args({100'000 * 15})
-    ->Iterations(1);
-BENCHMARK(BM_BlockRangeMapMemory<TBlockRange32>)
-    ->Args({100'000 * 15})
-    ->Iterations(1);
-BENCHMARK(BM_BlockRangeMapMemory<TBlockRange64>)
+BENCHMARK(BM_BlockRangeMapMemory<ui64>)->Args({100'000 * 15})->Iterations(1);
+BENCHMARK(BM_BlockRangeMapMemory<TPBufferKey>)
     ->Args({100'000 * 15})
     ->Iterations(1);
 BENCHMARK(BM_DirtyMapInflightMemory)->Args({10, 100'000 * 15})->Iterations(1);

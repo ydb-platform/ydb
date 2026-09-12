@@ -1318,7 +1318,6 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         // A vchunk that still only knows the pre-add host count.
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             Service.get(),

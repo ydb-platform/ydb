@@ -5,6 +5,7 @@
 #include "restore_request.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
@@ -116,6 +117,11 @@ public:
     virtual void Register(TVChunkWeakPtr vChunk) = 0;
 
     virtual TExecutorPtr GetExecutor() = 0;
+
+    virtual TArenaAllocatorPoolPtr GetArenaAllocatorPool()
+    {
+        return {};
+    }
 
     // The tablet generation this DBG was created with. New records are
     // minted under it; restored records keep the generation they were

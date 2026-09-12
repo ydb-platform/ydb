@@ -165,6 +165,7 @@ CreateWaitSessionCbForSyncWithPBuffer(
 ////////////////////////////////////////////////////////////////////////////////
 
 TDirectBlockGroup::TDirectBlockGroup(
+    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
     TExecutorPtr executor,
@@ -176,7 +177,9 @@ TDirectBlockGroup::TDirectBlockGroup(
     ui32 dbgConnectionsConfigGeneration,
     NTransport::TStorageTransportPtr storageTransport,
     NMonitoring::TDynamicCounterPtr counters)
-    : ActorSystem(actorSystem)
+    : ArenaAllocatorPool(
+          std::make_shared<TArenaAllocatorPool>(std::move(arenaAllocator)))
+    , ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
     , Executor(std::move(executor))
     , TabletId(diskDescription.TabletId)
@@ -219,6 +222,11 @@ TDirectBlockGroup::~TDirectBlockGroup()
         NKikimrServices::NBS_PARTITION,
         "%s ~TDirectBlockGroup",
         LogTitle.GetWithTime().c_str());
+}
+
+TArenaAllocatorPoolPtr TDirectBlockGroup::GetArenaAllocatorPool()
+{
+    return ArenaAllocatorPool;
 }
 
 void TDirectBlockGroup::Register(TVChunkWeakPtr weakVChunk)

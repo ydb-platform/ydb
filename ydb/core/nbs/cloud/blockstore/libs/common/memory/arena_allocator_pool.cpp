@@ -4,6 +4,7 @@
 #include <util/system/yassert.h>
 
 #include <cstring>
+#include <memory>
 
 namespace NYdb::NBS::NBlockStore {
 
@@ -33,6 +34,11 @@ TArenaAllocatorPool::TSlot::~TSlot()
     if (Base) {
         Allocator->DeAllocate(Base);
     }
+}
+
+IArenaAllocatorPtr TArenaAllocatorPool::GetAllocator() const
+{
+    return Allocator;
 }
 
 void* TArenaAllocatorPool::TSlot::Allocate()
@@ -218,4 +224,10 @@ TVector<TArenaAllocatorStats> TArenaAllocatorPool::GetStats() const
 
 //////////////////////////////////////////////////////////////////////////////
 
+TArenaAllocatorPoolPtr CreateArenaAllocatorPool()
+{
+    return std::make_shared<TArenaAllocatorPool>(CreateArenaAllocator());
+}
+
+//////////////////////////////////////////////////////////////////////////////
 }   // namespace NYdb::NBS::NBlockStore

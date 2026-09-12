@@ -1,5 +1,7 @@
 #include "direct_block_group_mock.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator_pool.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 using namespace NThreading;
@@ -143,6 +145,7 @@ TString TOracleMock::Dump() const
 
 TDirectBlockGroupMock::TDirectBlockGroupMock()
 {
+    ArenaAllocatorPool = CreateArenaAllocatorPool();
     Executor = TExecutor::Create("NBS_TEST");
     Executor->Start();
 
@@ -220,6 +223,11 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
     {
         return TDuration::Zero();
     };
+}
+
+TArenaAllocatorPoolPtr TDirectBlockGroupMock::GetArenaAllocatorPool()
+{
+    return ArenaAllocatorPool;
 }
 
 void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)

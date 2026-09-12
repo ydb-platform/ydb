@@ -23,6 +23,7 @@ public:
 
     void* Allocate(size_t size);
     void Deallocate(void*) noexcept;
+    [[nodiscard]] IArenaAllocatorPtr GetAllocator() const;
 
     // Returns the total size of slots allocated from the arena.
     [[nodiscard]] size_t GetAllocatedSize() const;
@@ -104,6 +105,8 @@ private:
     // Slot bases for O(log n) lookup in Deallocate.
     TMap<void*, TSlot*> Bases;
 };
+
+TArenaAllocatorPoolPtr CreateArenaAllocatorPool();
 
 /////////////////////////////////////////////////////////////////////////////
 

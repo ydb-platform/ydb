@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(2, 40 * DefaultBlockSize);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.EvacuateHost(1);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(THostIndex{2}, 40 * DefaultBlockSize);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -444,7 +444,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -517,7 +517,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -660,7 +660,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -733,7 +733,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -766,7 +766,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -803,7 +803,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -846,7 +846,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -905,7 +905,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -973,7 +973,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1025,7 +1025,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(4, DefaultBlockSize * 1024);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1077,7 +1077,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(3, DefaultBlockSize * 1024);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1133,7 +1133,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.PromoteHost(3);
         vchunkConfig.SetWatermark(3, 100);
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1192,7 +1192,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1254,7 +1254,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1291,7 +1291,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1327,7 +1327,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1360,7 +1360,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1414,7 +1414,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1454,7 +1454,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1512,7 +1512,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1553,7 +1553,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1593,7 +1593,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1646,7 +1646,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1683,7 +1683,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1732,7 +1732,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1759,7 +1759,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1797,7 +1797,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1838,7 +1838,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1885,7 +1885,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1936,7 +1936,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -1996,7 +1996,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2044,7 +2044,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2080,7 +2080,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2126,7 +2126,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2168,7 +2168,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2217,7 +2217,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2287,7 +2287,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2338,7 +2338,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2386,7 +2386,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2442,7 +2442,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2505,7 +2505,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2567,7 +2567,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(THostIndex{0}, 30 * DefaultBlockSize);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2608,7 +2608,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(THostIndex{0}, 0);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2669,7 +2669,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(THostIndex{0}, 0);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2701,7 +2701,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(THostIndex{0}, 0);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2749,7 +2749,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.DisableHost(1);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2816,7 +2816,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.DisableHost(1);
 
         auto source = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2847,7 +2847,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Load into a freshly constructed dirty map with the same config.
         auto target = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2876,7 +2876,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);
@@ -2899,7 +2899,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         vchunkConfig.SetWatermark(3, std::nullopt);
 
         auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
-            CreateArenaAllocator(),
+            CreateArenaAllocatorPool(),
             vchunkConfig,
             DefaultBlockSize,
             DefaultVChunkSize / DefaultBlockSize);

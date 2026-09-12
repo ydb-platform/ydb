@@ -81,7 +81,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         request->Sglist = MakeSgList();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -170,7 +169,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         PartitionDirectService->LsnGenerator = 122;
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -249,7 +247,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         };
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -299,7 +296,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -405,7 +401,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -475,7 +470,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         VChunkConfig.SetWatermark(3, std::nullopt);
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -534,7 +528,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         VChunkConfig.DisableHost(0);
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -622,7 +615,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         };
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -794,7 +786,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         RangeData = GenerateRandomString(BlockSize * range.Size());
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -900,7 +891,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         RangeData = GenerateRandomString(BlockSize * range.Size());
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -972,7 +962,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -1049,7 +1038,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
@@ -1097,7 +1085,6 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
-            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),

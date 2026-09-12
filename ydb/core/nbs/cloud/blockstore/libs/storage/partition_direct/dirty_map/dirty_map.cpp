@@ -32,14 +32,15 @@ TString TPBufferCounters::DebugPrint() const
 ////////////////////////////////////////////////////////////////////////////////
 
 TBlocksDirtyMap::TBlocksDirtyMap(
-    IArenaAllocatorPtr arenaAllocator,
+    TArenaAllocatorPoolPtr arenaAllocatorPool,
     const TVChunkConfig& vChunkConfig,
     ui32 blockSize,
     ui16 blockCount)
-    : ArenaAllocator(std::move(arenaAllocator))
+    : ArenaAllocatorPool(std::move(arenaAllocatorPool))
+    , ArenaAllocator(ArenaAllocatorPool->GetAllocator())
     , BlockSize(blockSize)
     , BlockCount(blockCount)
-    , Inflight(&ArenaAllocatorPool)
+    , Inflight(ArenaAllocatorPool.get())
     , PBufferCounters(vChunkConfig.GetHostCount())
 {
     Y_ABORT_UNLESS(ArenaAllocator);
@@ -232,7 +233,7 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
         return result;
     }
 
-    TPBufferKeySet readyToFlush{&ArenaAllocatorPool};
+    TPBufferKeySet readyToFlush{ArenaAllocatorPool.get()};
     readyToFlush.swap(ReadyToFlush);
 
     for (TPBufferKey pBufferKey: readyToFlush) {
@@ -279,7 +280,7 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
         return result;
     }
 
-    TPBufferKeySet readyToErase{&ArenaAllocatorPool};
+    TPBufferKeySet readyToErase{ArenaAllocatorPool.get()};
     readyToErase.swap(ReadyToErase);
 
     for (TPBufferKey pBufferKey: readyToErase) {
@@ -317,7 +318,7 @@ TEraseHints TBlocksDirtyMap::MakeEraseBelatedHint()
 {
     TEraseHints result;
 
-    TInfoEraseBelatedSet readyToEraseBelated{&ArenaAllocatorPool};
+    TInfoEraseBelatedSet readyToEraseBelated{ArenaAllocatorPool.get()};
     readyToEraseBelated.swap(ReadyToEraseBelated);
     for (const auto& item: readyToEraseBelated) {
         auto hostMask = item.Hosts;
@@ -829,7 +830,7 @@ ui32 TBlocksDirtyMap::GetCurrentGeneration() const
 size_t TBlocksDirtyMap::GetAllocatedSize() const
 {
     size_t size = 0;
-    size += ArenaAllocatorPool.GetAllocatedSize();
+    size += ArenaAllocatorPool->GetAllocatedSize();
     for (const auto& ddiskState: DDiskStates) {
         size += ddiskState.GetAllocatedSize();
     }
@@ -839,7 +840,7 @@ size_t TBlocksDirtyMap::GetAllocatedSize() const
 size_t TBlocksDirtyMap::GetUsedSize() const
 {
     size_t size = 0;
-    size += ArenaAllocatorPool.GetUsedSize();
+    size += ArenaAllocatorPool->GetUsedSize();
     for (const auto& ddiskState: DDiskStates) {
         size += ddiskState.GetUsedSize();
     }

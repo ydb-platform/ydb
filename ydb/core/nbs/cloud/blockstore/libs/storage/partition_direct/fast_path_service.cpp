@@ -93,7 +93,6 @@ ui32 CheckedBlockSize(ui32 blockSize, const TStorageConfig& storageConfig)
 }
 
 TVector<TRegionPtr> CreateRegions(
-    IArenaAllocatorPtr arenaAllocator,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
@@ -109,7 +108,6 @@ TVector<TRegionPtr> CreateRegions(
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         regions[i] = std::make_shared<TRegion>(
-            arenaAllocator,
             TActorContext::ActorSystem(),
             traceService,
             partitionDirectService,
@@ -150,11 +148,9 @@ TFastPathService::TFastPathService(
     , DiskDescription(diskDescription)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
-    , ArenaAllocator(CreateArenaAllocator())
     , DirectBlockGroups(std::move(directBlockGroups))
     , ChaosInjectorControls(std::move(chaosInjectorControls))
     , Regions(CreateRegions(
-          ArenaAllocator,
           this,
           this,
           DiskDescription,
@@ -534,13 +530,35 @@ void TFastPathService::PersistHostHealth(
 
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
+    TMap<size_t, TArenaAllocatorStats> poolStats;
+    for (const auto& dbg: DirectBlockGroups) {
+        for (const auto& stats: dbg->GetArenaAllocatorPool()->GetStats()) {
+            auto& total = poolStats[stats.SlotSize];
+            total.SlotSize = stats.SlotSize;
+            total.ArenaSize += stats.ArenaSize;
+            total.ReservedSize += stats.ReservedSize;
+            total.UsedSize += stats.UsedSize;
+            total.MaxUsedSize += stats.MaxUsedSize;
+            total.Count += stats.Count;
+        }
+    }
+    TVector<TArenaAllocatorStats> poolSlots;
+    for (const auto& [_, stats]: poolStats) {
+        poolSlots.push_back(stats);
+    }
+
     return {
         .LsnCounter = SequenceGenerator.load(),
         .LastSafeBarrier = LastSafeBarrier.load(),
         .TotalVChunks =
             Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
         .DbgCount = DirectBlockGroups.size(),
-        .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetStats()},
+        .ArenaMemoryUsage =
+            {.Slots = DirectBlockGroups.front()
+                          ->GetArenaAllocatorPool()
+                          ->GetAllocator()
+                          ->GetStats(),
+             .PoolSlots = std::move(poolSlots)},
     };
 }
 

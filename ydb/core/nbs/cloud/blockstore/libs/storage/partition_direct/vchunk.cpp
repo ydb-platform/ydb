@@ -53,7 +53,6 @@ NProto::TError MakeVChunkStoppedError()
 ////////////////////////////////////////////////////////////////////////////////
 
 TVChunk::TVChunk(
-    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
@@ -82,7 +81,7 @@ TVChunk::TVChunk(
      }}
     , VChunkConfig(vChunkConfig)
     , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(
-          std::move(arenaAllocator),
+          DirectBlockGroup->GetArenaAllocatorPool(),
           VChunkConfig,
           BlockSize,
           BlocksCount))

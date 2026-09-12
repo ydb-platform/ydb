@@ -178,7 +178,7 @@ static void BM_ReadSingleLocationRequestExecutorCreation(
 
     // Contiguous hint: a fresh dirty map without the split registered above.
     auto cleanDirtyMap = std::make_shared<TBlocksDirtyMap>(
-        CreateArenaAllocator(),
+        CreateArenaAllocatorPool(),
         fixture.VChunkConfig,
         fixture.BlockSize,
         fixture.VChunkBlockCount);

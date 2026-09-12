@@ -58,7 +58,7 @@ public:
     };
 
     TBlocksDirtyMap(
-        IArenaAllocatorPtr arenaAllocator,
+        TArenaAllocatorPoolPtr arenaAllocatorPool,
         const TVChunkConfig& vChunkConfig,
         ui32 blockSize,
         ui16 blockCount);
@@ -249,11 +249,11 @@ private:
 
     void RemovePBuffer(TPBufferKey pBufferKey);
 
+    const TArenaAllocatorPoolPtr ArenaAllocatorPool;
     const IArenaAllocatorPtr ArenaAllocator;
     const ui32 BlockSize;
     const ui16 BlockCount;
 
-    TArenaAllocatorPool ArenaAllocatorPool{ArenaAllocator};
     THostMask DesiredDDisks;
     THostMask DisabledHosts;
 
@@ -266,13 +266,13 @@ private:
 
     // Ranges that are written PBuffers with quorum and ready to be flushed to
     // DDisk. Using TSet for O(1) min LSN access.
-    TPBufferKeySet ReadyToFlush{&ArenaAllocatorPool};
+    TPBufferKeySet ReadyToFlush{ArenaAllocatorPool.get()};
 
     // Ranges that are fully transferred to DDisk and can be erased.
     // Using TSet for O(1) min LSN access.
-    TPBufferKeySet ReadyToErase{&ArenaAllocatorPool};
+    TPBufferKeySet ReadyToErase{ArenaAllocatorPool.get()};
 
-    TInfoEraseBelatedSet ReadyToEraseBelated{&ArenaAllocatorPool};
+    TInfoEraseBelatedSet ReadyToEraseBelated{ArenaAllocatorPool.get()};
 
     // In-flight reads and the locks they create.
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;

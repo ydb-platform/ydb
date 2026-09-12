@@ -96,6 +96,79 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                     }
                 }
             }
+
+            TAG (TH3) {
+                str << "Arena allocator pool";
+            }
+            TABLE_CLASS ("table table-condensed") {
+                TABLEHEAD () {
+                    TABLER () {
+                        TABLEH () {
+                            str << "Slot size";
+                        }
+                        TABLEH () {
+                            str << "Reserved";
+                        }
+                        TABLEH () {
+                            str << "Used";
+                        }
+                        TABLEH () {
+                            str << "Max used";
+                        }
+                        TABLEH () {
+                            str << "Count";
+                        }
+                    }
+                }
+                TABLEBODY () {
+                    size_t totalReservedSize = 0;
+                    size_t totalUsedSize = 0;
+                    size_t totalMaxUsedSize = 0;
+                    size_t totalCount = 0;
+                    for (const auto& usage:
+                         data.FastPathServiceInfo->ArenaMemoryUsage.PoolSlots)
+                    {
+                        totalReservedSize += usage.ReservedSize;
+                        totalUsedSize += usage.UsedSize;
+                        totalMaxUsedSize += usage.MaxUsedSize;
+                        totalCount += usage.Count;
+                        TABLER () {
+                            TABLED () {
+                                str << FormatByteSize(usage.SlotSize);
+                            }
+                            TABLED () {
+                                str << FormatByteSize(usage.ReservedSize);
+                            }
+                            TABLED () {
+                                str << FormatByteSize(usage.UsedSize);
+                            }
+                            TABLED () {
+                                str << FormatByteSize(usage.MaxUsedSize);
+                            }
+                            TABLED () {
+                                str << usage.Count;
+                            }
+                        }
+                    }
+                    TABLER () {
+                        TABLED () {
+                            str << "Total";
+                        }
+                        TABLED () {
+                            str << FormatByteSize(totalReservedSize);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(totalUsedSize);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(totalMaxUsedSize);
+                        }
+                        TABLED () {
+                            str << totalCount;
+                        }
+                    }
+                }
+            }
         }
 
         TAG (TH3) {

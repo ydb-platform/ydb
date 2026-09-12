@@ -34,7 +34,7 @@ static void s_suppress_unused_lookup3_func_warnings(void) {
 /**
  * Calculate the hash for the given key.
  * Ensures a reasonable semantics for null keys.
- * Ensures that no object ever hashes to 0, which is the sentinal value for an empty hash element.
+ * Ensures that no object ever hashes to 0, which is the sentinel value for an empty hash element.
  */
 static uint64_t s_hash_for(struct hash_table_state *state, const void *key) {
     AWS_PRECONDITION(hash_table_state_is_valid(state));

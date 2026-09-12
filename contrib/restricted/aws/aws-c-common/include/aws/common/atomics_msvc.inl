@@ -69,14 +69,14 @@ AWS_EXTERN_C_BEGIN
  * This means more permissible memory ordering allowed between stores and loads.
  *
  * Thus ARM port will need more hardware fences/barriers to assure developer intent.
- * Memory barriers will prevent reordering stores and loads accross them depending on their type
+ * Memory barriers will prevent reordering stores and loads across them depending on their type
  * (read write, write only, read only ...)
  *
  * For more information about ARM64 memory ordering,
  * see https://developer.arm.com/documentation/102336/0100/Memory-ordering
  * For more information about Memory barriers,
  * see https://developer.arm.com/documentation/102336/0100/Memory-barriers
- * For more information about Miscosoft Interensic ARM64 APIs,
+ * For more information about Microsoft Intrinsic ARM64 APIs,
  * see https://learn.microsoft.com/en-us/cpp/intrinsics/arm64-intrinsics?view=msvc-170
  * Note: wrt _Interlocked[Op]64 is the same for ARM64 and x64 processors
  */
@@ -96,7 +96,7 @@ typedef long long aws_atomic_impl_int_t;
 #    define AWS_R_BARRIER() __dmb(_ARM64_BARRIER_LD)
 /* Hardware Write barrier, prevents all memory operations to cross the barrier downwards */
 #    define AWS_W_BARRIER() __dmb(_ARM64_BARRIER_ST)
-/* Software barrier, prevents the compiler from reodering the operations across the barrier */
+/* Software barrier, prevents the compiler from reordering the operations across the barrier */
 #    define AWS_SW_BARRIER() _ReadWriteBarrier();
 #else
 /* hardware barriers, do nothing on x86 since it has a strong memory model

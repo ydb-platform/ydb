@@ -403,7 +403,7 @@ cleanup:
         s_thread_wrapper_destroy(wrapper);
         if (options && options->cpu_id >= 0) {
             /*
-             * `pthread_create` can fail with an `EINVAL` error or `EDEADLK` on freebasd if the `cpu_id` is
+             * `pthread_create` can fail with an `EINVAL` error or `EDEADLK` on FreeBSD if the `cpu_id` is
              * restricted/invalid. Since the pinning to a particular `cpu_id` is supposed to be best-effort, try to
              * launch a thread again without pinning to a specific cpu_id.
              */

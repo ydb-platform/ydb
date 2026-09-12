@@ -500,7 +500,7 @@ int aws_byte_buf_append_null_terminator(struct aws_byte_buf *buf);
 /**
  * Attempts to increase the capacity of a buffer to the requested capacity
  *
- * If the the buffer's capacity is currently larger than the request capacity, the
+ * If the buffer's capacity is currently larger than the request capacity, the
  * function does nothing (no shrink is performed).
  */
 AWS_COMMON_API

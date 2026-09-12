@@ -178,7 +178,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [8:10]
+        README.md [14:16]
 
 KEEP     Public-Domain        6f73b312395754a90fe2614a46eb72b4
 BELONGS ya.make
@@ -202,7 +202,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [209:209]
+        README.md [215:215]
 
 KEEP     BSD-3-Clause         8bad928e3b305eb76775886df88d05d2
 BELONGS ya.make

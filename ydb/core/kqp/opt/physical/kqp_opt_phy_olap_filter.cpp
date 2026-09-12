@@ -760,7 +760,9 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
     TExprNode::TListType lambdaArgs;
 
     for (const auto& externalArg : externalArgs) {
-        realArgs.push_back(pushdownOptions.FindExternalArg(*externalArg));
+        auto olapExpr = pushdownOptions.FindExternalArg(*externalArg);
+        YQL_ENSURE(olapExpr, "External argument " << externalArg->Content() << " has no OLAP expression");
+        realArgs.push_back(std::move(olapExpr));
         TString argumentName = "external_" + TString(externalArg->Content());
         lambdaArgs.emplace_back(ctx.NewArgument(externalArg->Pos(), TStringBuf(argumentName)));
         replacements.emplace(externalArg.Get(), lambdaArgs.back());

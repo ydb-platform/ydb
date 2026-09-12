@@ -33,11 +33,31 @@ struct TPushdownOptions {
         return copy;
     }
 
+    TPushdownOptions WithExternalArgs(const TNodeOnNodeOwnedMap* externalArgs) const {
+        TPushdownOptions copy = *this;
+        copy.ExternalArgs = externalArgs;
+        return copy;
+    }
+
+    // Returns OLAP expression which stands for the given free lambda argument or nullptr if it is not an external argument.
+    TExprNode::TPtr FindExternalArg(const TExprNode& node) const {
+        if (!ExternalArgs || !node.IsArgument()) {
+            return nullptr;
+        }
+        const auto it = ExternalArgs->find(&node);
+        return it == ExternalArgs->end() ? nullptr : it->second;
+    }
+
+    bool IsExternalArg(const TExprNode& node) const {
+        return FindExternalArg(node) != nullptr;
+    }
+
     bool AllowOlapApply{false};
     bool PushdownSubstring{false};
     bool StripAliasPrefixFromColName{false};
     bool PushdownRegexp{false};
     bool FastAsciiIgnoreCaseContains{false};
+    const TNodeOnNodeOwnedMap* ExternalArgs{nullptr};
 };
 
 extern THashMap<TString, TString> IgnoreCaseSubstringMatchFunctions;

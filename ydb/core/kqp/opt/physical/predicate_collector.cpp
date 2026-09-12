@@ -88,6 +88,13 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
     return false;
 }
 
+bool HasExternalArgs(const TExprBase& expr, const TPushdownOptions& options) {
+    if (!options.ExternalArgs) {
+        return false;
+    }
+    return !!FindNode(expr.Ptr(), [&options](const TExprNode::TPtr& node) { return options.IsExternalArg(*node); });
+}
+
 bool IsGoodTypeForUnaryArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
     const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
     return ((NUdf::EDataTypeFeatures::NumericType) & features)
@@ -184,7 +191,9 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TPushdownOptions& push
         return !FindNode(ifPresent.PresentHandler().Ptr(), hasToDict);
     }
 
-    return !applies.empty();
+    // External arguments (e.g. `KqpOlapJsonValue`) replace UDF applies (e.g. `Json2.SqlValue*`) computed by the column shard,
+    // so the tree is still worth being pushed as `KqpOlapApply` even if it has no other UDF applies.
+    return !applies.empty() || HasExternalArgs(expr, pushdownOptions);
 }
 
 bool CanBePushedAsBlockKernel(const TExprBase &node) {
@@ -211,6 +220,8 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
         return IsSupportedDataType(maybeData.Cast(), options.AllowOlapApply);
     } else if (const auto maybeMember = node.Maybe<TCoMember>()) {
         return IsMemberColumn(maybeMember.Cast(), lambdaArg);
+    } else if (options.IsExternalArg(node.Ref())) {
+        return true;
     } else if (const auto maybeJsonValue = node.Maybe<TCoJsonValue>()) {
         const auto jsonOp = maybeJsonValue.Cast();
         return jsonOp.Json().Maybe<TCoMember>() && jsonOp.JsonPath().Maybe<TCoUtf8>();

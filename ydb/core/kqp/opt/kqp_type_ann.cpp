@@ -1935,7 +1935,11 @@ TStatus AnnotateKqpPredicateClosure(const TExprNode::TPtr& node, TExprContext& c
     argTypes.reserve(argTypesTuple->GetSize());
 
     for (const auto& argTypeRaw : argTypesTuple->GetItems()) {
-        if (!EnsureStructType(node->Pos(), *argTypeRaw, ctx)) {
+        // The first argument is a row, the rest ones are external values (e.g. results of `KqpOlapJsonValue`) of any computable type.
+        if (argTypes.empty() && !EnsureStructType(node->Pos(), *argTypeRaw, ctx)) {
+            return TStatus::Error;
+        }
+        if (!EnsureComputableType(node->Pos(), *argTypeRaw, ctx)) {
             return TStatus::Error;
         }
         argTypes.push_back(argTypeRaw);

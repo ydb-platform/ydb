@@ -1363,6 +1363,212 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         TestTableWithNulls({testCase});
     }
 
+    // JSON_VALUE must be computed by the column shard (`KqpOlapJsonValue`) and only its value must be passed
+    // into `KqpOlapApply`, instead of the whole JSON column.
+    Y_UNIT_TEST(JsonValuePushedIntoOlapApply) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        auto tableClient = kikimr.GetTableClient();
+
+        const auto countOccurrences = [](const TString& text, const TString& pattern) {
+            ui32 count = 0;
+            for (size_t pos = text.find(pattern); pos != TString::npos; pos = text.find(pattern, pos + 1)) {
+                ++count;
+            }
+            return count;
+        };
+
+        struct TCase {
+            TString Query;
+            TString ExpectedReply;
+            // Each JSON_VALUE of the predicate is computed once by `KqpOlapJsonValue` and shared by all `KqpOlapApply` callables.
+            ui32 ExpectedJsonValues;
+        };
+
+        const std::vector<TCase> cases = {
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.\"col-abc\"") ILIKE "%A%b%"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                1
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsondoc, "$.\"col-abc\"") ILIKE "%A%b%"
+                    ORDER BY id;
+                )",
+                R"([[6];[7];[8];[9];[10]])",
+                1
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE CAST(JSON_VALUE(jsonval, "$.obj.obj_col2_int") AS Int32) + 1 > 16 AND id < 3
+                    ORDER BY id;
+                )",
+                R"([[1];[2]])",
+                1
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") || JSON_VALUE(jsonval, "$.\"col-abc\"") LIKE "val1%abc" AND id > 3
+                    ORDER BY id;
+                )",
+                R"([[4];[5]])",
+                2
+            },
+        };
+
+        for (const auto& testCase : cases) {
+            auto explainResult = StreamExplainQuery(testCase.Query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            UNIT_ASSERT_C(ast.find("KqpOlapFilter") != TString::npos, "Predicate is not pushed down. Query: " << testCase.Query);
+            UNIT_ASSERT_C(ast.find("KqpOlapApply") != TString::npos, "Predicate is not pushed by KqpOlapApply. Query: " << testCase.Query);
+            UNIT_ASSERT_VALUES_EQUAL_C(countOccurrences(ast, "KqpOlapJsonValue"), testCase.ExpectedJsonValues,
+                "Unexpected number of KqpOlapJsonValue callables. Query: " << testCase.Query);
+            // Only `id` is selected, so JSON must not be processed outside of `KqpOlapJsonValue` at all.
+            UNIT_ASSERT_C(ast.find("Json2.") == TString::npos,
+                "JSON is processed by Json2 UDF instead of KqpOlapJsonValue. Query: " << testCase.Query);
+
+            auto it = tableClient.StreamExecuteScanQuery(testCase.Query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), testCase.ExpectedReply);
+        }
+    }
+
+    // `KqpOlapJsonValue` kernel differs from `JsonValue` for non-Utf8 RETURNING types (e.g. it does not support dates
+    // and uses lenient `SqlValueConvertToUtf8` for String), so such JSON_VALUE must stay inside `KqpOlapApply` lambda.
+    Y_UNIT_TEST(JsonValueWithReturningTypeIsNotPushedIntoOlapApply) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        auto tableClient = kikimr.GetTableClient();
+
+        struct TCase {
+            TString Query;
+            TString ExpectedReply;
+        };
+
+        // "obj_col2_int" is a number 16 in the JSON.
+        const std::vector<TCase> cases = {
+            {
+                // Strict `SqlValueUtf8` returns NULL for a number, so nothing must match.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING String) ILIKE "%1%6%"
+                    ORDER BY id;
+                )",
+                R"([])"
+            },
+            {
+                // Kernel does not support date types at all.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE CAST(JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Date) AS Utf8) LIKE "1970%17"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE CAST(JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int32) AS Utf8) ILIKE "%1%6%"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
+        };
+
+        for (const auto& testCase : cases) {
+            auto explainResult = StreamExplainQuery(testCase.Query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            auto it = tableClient.StreamExecuteScanQuery(testCase.Query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), testCase.ExpectedReply);
+
+            UNIT_ASSERT_C(ast.find("KqpOlapApply") != TString::npos, "Predicate is not pushed by KqpOlapApply. Query: " << testCase.Query);
+            UNIT_ASSERT_C(ast.find("KqpOlapJsonValue") == TString::npos,
+                "JSON_VALUE with non-Utf8 RETURNING type must not be pushed as KqpOlapJsonValue. Query: " << testCase.Query);
+        }
+    }
+
+    // Pushing JSON_VALUE as `KqpOlapJsonValue` before `KqpOlapApply` must not widen the set of predicates which are pushed down:
+    // these predicates have never been pushed and are still computed by KQP (via `Json2` UDFs) over the whole JSON column.
+    Y_UNIT_TEST(JsonValueExternalArgsDoNotWidenPushdown) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        TTableWithNullsHelper(kikimr).CreateTableWithNulls();
+        WriteTestDataForTableWithNulls(kikimr, "/Root/tableWithNulls");
+        auto tableClient = kikimr.GetTableClient();
+
+        struct TCase {
+            TString Query;
+            TString ExpectedReply;
+        };
+
+        const std::vector<TCase> cases = {
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") IS NULL AND id < 8
+                    ORDER BY id;
+                )",
+                R"([[6];[7]])"
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsondoc, "$.col1") IS NOT NULL
+                    ORDER BY id;
+                )",
+                R"([[6];[7];[8];[9];[10]])"
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") IN ("val1", "val2")
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
+        };
+
+        for (const auto& testCase : cases) {
+            auto explainResult = StreamExplainQuery(testCase.Query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            auto it = tableClient.StreamExecuteScanQuery(testCase.Query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), testCase.ExpectedReply);
+
+            UNIT_ASSERT_C(ast.find("KqpOlapJsonValue") == TString::npos, "Unexpected KqpOlapJsonValue pushdown. Query: " << testCase.Query);
+            UNIT_ASSERT_C(ast.find("KqpOlapApply") == TString::npos, "Unexpected KqpOlapApply pushdown. Query: " << testCase.Query);
+            UNIT_ASSERT_C(ast.find("Json2.") != TString::npos, "JSON_VALUE is expected to be computed by KQP. Query: " << testCase.Query);
+        }
+    }
+
     Y_UNIT_TEST(BlockGenericWithDistinct) {
         TAggregationTestCase testCase;
         testCase.SetQuery(R"(

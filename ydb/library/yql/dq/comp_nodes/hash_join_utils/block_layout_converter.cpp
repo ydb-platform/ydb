@@ -801,7 +801,7 @@ public:
         VALIDATE_DATUM_ARROW_BLOCK_CONSTRUCTOR(columns);
     }
 
-    const NPackedTuple::TTupleLayout* GetTupleLayout() const override {
+    NPackedTuple::TTupleLayout* GetTupleLayout() const override {
         return TupleLayout_.get();
     }
 

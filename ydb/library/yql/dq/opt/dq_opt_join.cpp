@@ -1374,6 +1374,70 @@ TExprNode::TPtr ReplaceJoinOnSide(TExprNode::TPtr&& input, const TTypeAnnotation
         .Seal().Build();
 }
 
+} // namespace
+
+TVector<ui32> CollectEqualNullsKeys(const TDqJoin& join, ui32 keyCount) {
+    TVector<ui32> keys;
+    bool allKeys = false;
+    if (const auto maybeFlags = join.Flags()) {
+        for (const auto& flag : maybeFlags.Cast()) {
+            if (flag.Value() == "EqualNulls") {
+                allKeys = true;
+            }
+        }
+    }
+    if (const auto maybeOpts = join.JoinAlgoOptions()) {
+        for (const auto& opt : maybeOpts.Cast()) {
+            if (opt.Name().Value() != "EqualNulls") {
+                continue;
+            }
+            if (const auto atom = opt.Value().Maybe<TCoAtom>()) {
+                const auto value = atom.Cast().Value();
+                // Parse an index first: TryFromString<bool> also accepts "0"/"1".
+                ui32 index = 0;
+                if (TryFromString<ui32>(value, index)) {
+                    keys.push_back(index);
+                    continue;
+                }
+                bool asBool = false;
+                if (TryFromString<bool>(value, asBool)) {
+                    allKeys = asBool;
+                }
+            }
+        }
+    }
+    if (allKeys) {
+        keys.clear();
+        keys.reserve(keyCount);
+        for (ui32 i = 0; i < keyCount; ++i) {
+            keys.push_back(i);
+        }
+    }
+    return keys;
+}
+
+TVector<TCoNameValueTuple> BuildBlockHashJoinSettings(
+    const TDqJoin& join,
+    EJoinAlgoType joinAlgo,
+    ui32 keyCount,
+    TExprContext& ctx)
+{
+    TVector<TCoNameValueTuple> joinSettings;
+    if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
+        joinSettings.push_back(
+            Build<TCoNameValueTuple>(ctx, join.Pos())
+                .Name().Build("BuildSide")
+                .Value<TCoAtom>().Build("Left")
+                .Done());
+    }
+    for (ui32 keyIndex : CollectEqualNullsKeys(join, keyCount)) {
+        joinSettings.push_back(
+            Build<TCoNameValueTuple>(ctx, join.Pos())
+                .Name().Build("EqualNulls")
+                .Value<TCoAtom>().Build(ToString(keyIndex))
+                .Done());
+    }
+    return joinSettings;
 }
 
 TExprBase DqBuildHashJoin(
@@ -1757,14 +1821,7 @@ TExprBase DqBuildHashJoin(
         case EHashJoinMode::GraceAndSelf:
         case EHashJoinMode::Grace:
             if (useBlockHashJoin) {
-                TVector<TCoNameValueTuple> joinSettings;
-                if (joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
-                    joinSettings.push_back(
-                        Build<TCoNameValueTuple>(ctx, join.Pos())
-                            .Name().Build("BuildSide")
-                            .Value<TCoAtom>().Build("Left")
-                            .Done());
-                }
+                const auto joinSettings = BuildBlockHashJoinSettings(join, joinAlgo, leftKeys.size(), ctx);
 
                 hashJoin = Build<TDqPhyBlockHashJoin>(ctx, join.Pos())
                     .LeftInput(leftInputArg)

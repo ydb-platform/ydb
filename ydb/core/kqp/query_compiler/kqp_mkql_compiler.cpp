@@ -416,9 +416,19 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
 
             NMiniKQL::TBlockHashJoinSettings settings;
             for (const auto& setting : node.Child(7)->Children()) {
-                if (setting->Child(0)->Content() == "BuildSide") {
+                const auto name = setting->Child(0)->Content();
+                if (name == "BuildSide") {
                     if (setting->Child(1)->Content() == "Left") {
                         settings.BuildSide = NMiniKQL::EBuildSide::Left;
+                    }
+                } else if (name == NMiniKQL::EqualNullsSettingName) {
+                    const auto& value = *setting->Child(1);
+                    if (value.IsList()) {
+                        for (const auto& child : value.Children()) {
+                            settings.EqualNullsKeys.push_back(FromString<ui32>(child->Content()));
+                        }
+                    } else {
+                        settings.EqualNullsKeys.push_back(FromString<ui32>(value.Content()));
                     }
                 }
             }

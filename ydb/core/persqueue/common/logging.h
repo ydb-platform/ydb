@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/struct_log/text_writer.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <util/generic/maybe.h>
@@ -88,13 +87,6 @@ TStructuredMessage MakeRuntimeLogPrefix(const T& self) {
         prefix.AppendMessage(self.LogPrefix());
     }
     return prefix;
-}
-
-inline TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
-    TStringBuilder out;
-    NActors::NStructuredLog::TTextWriter writer;
-    writer.Write(out, prefix);
-    return out;
 }
 
 } // namespace NKikimr::NPQ

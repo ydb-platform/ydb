@@ -7,6 +7,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -17,6 +18,13 @@ using namespace NKikimr;
 using namespace NKikimr::NPQ;
 
 namespace {
+
+TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
+    TStringBuilder out;
+    NActors::NStructuredLog::TTextWriter writer;
+    writer.Write(out, prefix);
+    return out;
+}
 
 enum EEv {
     EvHandled = EventSpaceBegin(TEvents::ES_PRIVATE),

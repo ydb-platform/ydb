@@ -5,9 +5,10 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
@@ -28,6 +29,13 @@ static constexpr TDuration DEFAULT_REWIND_COMMIT_OFFSET_DELAY = TDuration::Minut
 static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
 
 namespace {
+
+TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
+    TStringBuilder out;
+    NActors::NStructuredLog::TTextWriter writer;
+    writer.Write(out, prefix);
+    return out;
+}
 
 struct TBatchInfo {
     ui32 LogicalMessageCount = 1;

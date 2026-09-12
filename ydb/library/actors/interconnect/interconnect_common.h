@@ -122,12 +122,14 @@ namespace NActors {
             bool EnableProvidedBuffers = true;
             // Number of shared-pool buffers reserved per ring.
             ui32 PoolBufCount = 128;
-            // Minimum and maximum write buffer size.
+            // Minimum and maximum write scratch size (copied bytes; aliased payloads do not use it).
             ui32 MinWriteBufferSize = 4_KB;
             ui32 MaxWriteBufferSize = 256_KB;
-            // Minimum and maximum read buffer size.
+            // Minimum and maximum main-socket read buffer size. Capped by TCPSocketBufferSize when set.
             ui32 MinReadBufferSize = 4_KB;
             ui32 MaxReadBufferSize = 256_KB;
+            // Bytes per XDC readv into already-allocated section destinations.
+            ui32 MaxXdcReadBytes = 1 << 20;
             // Per-socket cap on serialized-but-not-yet-CQE'd bytes. Max is clamped to TCPSocketBufferSize
             // when that is set. Main is further capped when XDC is enabled (see TSerializeWindow).
             ui32 MinSerializeWindowSize = 4_KB;

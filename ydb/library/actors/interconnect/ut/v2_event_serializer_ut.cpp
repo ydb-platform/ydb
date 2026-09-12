@@ -134,6 +134,24 @@ void CheckSerializeThenDeserialize(bool withPayload, bool buffer, ui32 metaLengt
 
 Y_UNIT_TEST_SUITE(EventSerializerV2) {
 
+    Y_UNIT_TEST(UnusedNonAlignedScratchIsNotTrimmed) {
+        TEventSerializer ser(false);
+        TRcBuf buffer = TRcBuf::Uninitialized(5000);
+        std::vector<TContiguousSpan> spans;
+        UNIT_ASSERT_VALUES_EQUAL(ser.ProduceOutputStream(buffer, &spans), 0);
+        UNIT_ASSERT_VALUES_EQUAL(buffer.size(), 5000);
+        UNIT_ASSERT(spans.empty());
+
+        TEventSerializer xdcSer(false, true);
+        TRcBuf main = TRcBuf::Uninitialized(5000);
+        TRcBuf xdc = TRcBuf::Uninitialized(5000);
+        std::vector<TContiguousSpan> mainSpans;
+        std::vector<TContiguousSpan> xdcSpans;
+        UNIT_ASSERT_VALUES_EQUAL(xdcSer.ProduceOutputStream(main, &mainSpans, &xdc, &xdcSpans, 5000, 5000), 0);
+        UNIT_ASSERT_VALUES_EQUAL(main.size(), 5000);
+        UNIT_ASSERT_VALUES_EQUAL(xdc.size(), 5000);
+    }
+
     Y_UNIT_TEST(CheckSerializeThenDeserializeProtoWithoutPayload) {
         CheckSerializeThenDeserialize(false, false, 10);
     }

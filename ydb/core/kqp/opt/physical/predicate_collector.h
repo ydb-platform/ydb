@@ -64,8 +64,9 @@ struct TPushdownOptions {
 extern THashMap<TString, TString> IgnoreCaseSubstringMatchFunctions;
 
 // Whether `JsonValue` can be computed by the column shard as `KqpOlapJsonValue` with exactly the same semantics:
-// JSON_VALUE over a column with a constant path, without RETURNING / PASSING and with default `NULL ON EMPTY` / `NULL ON ERROR`.
-bool CanBePushedAsOlapJsonValue(const NNodes::TCoJsonValue& jsonValue);
+// JSON_VALUE over a column of the row (`lambdaArg`) with a constant path, without RETURNING / PASSING
+// and with default `NULL ON EMPTY` / `NULL ON ERROR`.
+bool CanBePushedAsOlapJsonValue(const NNodes::TCoJsonValue& jsonValue, const TExprNode* lambdaArg);
 
 void CollectPredicates(const NNodes::TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
                        const TPushdownOptions& options);

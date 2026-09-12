@@ -224,7 +224,7 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
     } else if (options.IsExternalArg(node.Ref())) {
         return true;
     } else if (const auto maybeJsonValue = node.Maybe<TCoJsonValue>()) {
-        return CanBePushedAsOlapJsonValue(maybeJsonValue.Cast());
+        return CanBePushedAsOlapJsonValue(maybeJsonValue.Cast(), lambdaArg);
     } else if (node.Maybe<TCoNull>() || node.Maybe<TCoParameter>() || node.Maybe<TCoJust>()) {
         return true;
     }
@@ -459,9 +459,9 @@ void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& pred
 
 } // namespace
 
-bool CanBePushedAsOlapJsonValue(const TCoJsonValue& jsonValue) {
-    // Currently we support only simple columns and constant paths in pushdown.
-    if (!jsonValue.Json().Maybe<TCoMember>() || !jsonValue.JsonPath().Maybe<TCoUtf8>()) {
+bool CanBePushedAsOlapJsonValue(const TCoJsonValue& jsonValue, const TExprNode* lambdaArg) {
+    // Currently we support only simple columns of the row and constant paths in pushdown.
+    if (!IsMemberColumn(jsonValue.Json(), lambdaArg) || !jsonValue.JsonPath().Maybe<TCoUtf8>()) {
         return false;
     }
 

@@ -249,6 +249,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPosting
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPostingWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPostingWithOverlap
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.BuildToBuild
+ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPosting
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingLastKeyAckInProgress
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingResumeFromLastKeyAck
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingWithOverlap

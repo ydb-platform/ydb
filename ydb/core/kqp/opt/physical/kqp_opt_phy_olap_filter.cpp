@@ -6,7 +6,6 @@
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
-#include <yql/essentials/core/sql_types/yql_atom_enums.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -238,25 +237,22 @@ TMaybeNode<TExprBase> YqlIfPushdown(const TCoIf& ifOp, const TExprNode& argument
 TExprBase BuildOlapJsonValue(const TCoJsonValue& jsonValue, TExprContext& ctx, TPositionHandle pos, const TPushdownOptions& pushdownOptions) {
     auto maybeColMember = jsonValue.Json().Maybe<TCoMember>();
     auto maybePathUtf8 = jsonValue.JsonPath().Maybe<TCoUtf8>();
-    auto maybeReturningType = jsonValue.ReturningType();
 
     YQL_ENSURE(maybeColMember, "Expected TCoMember in column field of JSON_VALUE function for pushdown");
     YQL_ENSURE(maybePathUtf8, "Expected TCoUtf8 in path of JSON_VALUE function for pushdown");
+    // See `CanBePushedAsOlapJsonValue`: `KqpOlapJsonValue` kernel is equivalent to JSON_VALUE only without RETURNING (Utf8 result).
+    YQL_ENSURE(!jsonValue.ReturningType(), "JSON_VALUE with RETURNING type can not be pushed down as KqpOlapJsonValue");
     const TString colName = GetOlapColumnName(maybeColMember.Cast().Name().StringValue(), pushdownOptions.StripAliasPrefixFromColName);
 
-    auto builder = Build<TKqpOlapJsonValue>(ctx, pos)
+    return Build<TKqpOlapJsonValue>(ctx, pos)
         .Column<TCoAtom>()
             .Value(colName)
         .Build()
-        .Path(maybePathUtf8.Cast());
-    if (maybeReturningType) {
-        builder.ReturningType(maybeReturningType.Cast());
-    } else {
-        builder.ReturningType<TCoDataType>()
+        .Path(maybePathUtf8.Cast())
+        .ReturningType<TCoDataType>()
             .Type().Value("Utf8", TNodeFlags::Default).Build()
-            .Build();
-    }
-    return builder.Done();
+        .Build()
+        .Done();
 }
 
 TMaybeNode<TExprBase> JsonExistsPushdown(const TCoJsonExists& jsonExists, TExprContext& ctx, TPositionHandle pos)
@@ -805,33 +801,10 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
 namespace {
 
 bool IsSuitableJsonValueForExternalArg(const TCoJsonValue& jsonValue, const TExprNode& argument) {
-    const auto maybeMember = jsonValue.Json().Maybe<TCoMember>();
-    if (!maybeMember || maybeMember.Cast().Struct().Raw() != &argument) {
+    if (!CanBePushedAsOlapJsonValue(jsonValue)) {
         return false;
     }
-    if (!jsonValue.JsonPath().Maybe<TCoUtf8>()) {
-        return false;
-    }
-
-    // `KqpOlapJsonValue` returns NULL both on empty result and on error (default modes of JSON_VALUE).
-    const auto isDefaultNull = [](const TCoAtom& mode, const TExprBase& value) {
-        return mode.Value() == ToString(EJsonValueHandlerMode::DefaultValue) && value.Maybe<TCoNull>();
-    };
-    if (!isDefaultNull(jsonValue.OnEmptyMode(), jsonValue.OnEmpty()) || !isDefaultNull(jsonValue.OnErrorMode(), jsonValue.OnError())) {
-        return false;
-    }
-
-    // PASSING variables are not supported by `KqpOlapJsonValue`.
-    const auto variablesType = jsonValue.Variables().Ref().GetTypeAnn();
-    if (!variablesType || variablesType->GetKind() != ETypeAnnotationKind::EmptyDict) {
-        return false;
-    }
-
-    // `KqpOlapJsonValue` kernel matches `JsonValue` semantics only without RETURNING (lenient `SqlValueConvertToUtf8`).
-    // With an explicit RETURNING type `JsonValue` is stricter (e.g. `SqlValueUtf8` returns NULL for a JSON number even for
-    // RETURNING Utf8, `SqlValueNumber` + cast is used for numeric types) and date types are not supported by the kernel at all.
-    // Such JSON_VALUE stays inside the closure and is computed by `KqpOlapApply` over the whole column as before.
-    return !jsonValue.ReturningType();
+    return jsonValue.Json().Cast<TCoMember>().Struct().Raw() == &argument;
 }
 
 } // anonymous namespace
@@ -962,7 +935,7 @@ TExprNode::TPtr IsSuitableToCollectProjection(TExprNode::TPtr node) {
     auto jsonValuePred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TCoJsonValue>(node); };
     if (auto jsonValues = FindNodes(node, jsonValuePred); jsonValues.size() == 1) {
         auto jsonValue = TExprBase(jsonValues.front()).Cast<TCoJsonValue>();
-        return jsonValue.Json().Maybe<TCoMember>() && jsonValue.JsonPath().Maybe<TCoUtf8>() ? jsonValue.Ptr() : nullptr;
+        return CanBePushedAsOlapJsonValue(jsonValue) ? jsonValue.Ptr() : nullptr;
     }
     return nullptr;
 }

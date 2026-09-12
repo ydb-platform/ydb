@@ -1248,7 +1248,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.col1" RETURNING String), JSON_VALUE(jsondoc, "$.col1") FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.col1" RETURNING String) = "val1" AND id = 1;
             )")
-            .AddExpectedPlanOptions("KqpOlapJsonValue")
+            .AddExpectedPlanOptions("KqpOlapApply")
             .SetExpectedReply(R"([[1;["val1"];#]])");
 
         TestTableWithNulls({ testCase });
@@ -1260,7 +1260,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int) = 16 AND id = 1;
             )")
-            .AddExpectedPlanOptions("KqpOlapJsonValue")
+            .AddExpectedPlanOptions("KqpOlapApply")
             .SetExpectedReply(R"([[1;[16];#]])");
 
         TestTableWithNulls({ testCase });
@@ -1284,7 +1284,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.col1"), JSON_VALUE(jsondoc, "$.col1" RETURNING String) FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsondoc, "$.col1" RETURNING String) = "val1" AND id = 6;
             )")
-            .AddExpectedPlanOptions("KqpOlapJsonValue")
+            .AddExpectedPlanOptions("KqpOlapApply")
             .SetExpectedReply(R"([[6;#;["val1"]]])");
 
         TestTableWithNulls({ testCase });
@@ -1296,7 +1296,7 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 SELECT id, JSON_VALUE(jsonval, "$.obj.obj_col2_int"), JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) FROM `/Root/tableWithNulls`
                 WHERE JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING Int) = 16 AND id = 6;
             )")
-            .AddExpectedPlanOptions("KqpOlapJsonValue")
+            .AddExpectedPlanOptions("KqpOlapApply")
             .SetExpectedReply(R"([[6;#;[16]]])");
 
         TestTableWithNulls({ testCase });
@@ -1449,9 +1449,10 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
     }
 
     // `KqpOlapJsonValue` kernel differs from `JsonValue` with an explicit RETURNING type (e.g. it does not support dates
-    // and uses lenient `SqlValueConvertToUtf8` instead of strict `SqlValueUtf8` for Utf8 / String),
-    // so such JSON_VALUE must stay inside `KqpOlapApply` lambda.
-    Y_UNIT_TEST(JsonValueWithReturningTypeIsNotPushedIntoOlapApply) {
+    // and uses lenient `SqlValueConvertToUtf8` instead of strict `SqlValueUtf8` for Utf8 / String) and ignores
+    // ON EMPTY / ON ERROR defaults, so such JSON_VALUE must be computed inside `KqpOlapApply` lambda via `Json2` UDFs
+    // both when it is compared natively and when it is an argument of some other pushed expression.
+    Y_UNIT_TEST(JsonValueWithReturningTypeIsNotPushedAsOlapJsonValue) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -1502,6 +1503,40 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 )",
                 R"([[1];[2];[3];[4];[5]])"
             },
+            // Native comparisons: the same semantics must be preserved when JSON_VALUE is compared directly.
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Utf8) LIKE "%16%"
+                    ORDER BY id;
+                )",
+                R"([])"
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsondoc, "$.obj.obj_col2_int" RETURNING String) = "16"
+                    ORDER BY id;
+                )",
+                R"([])"
+            },
+            {
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Int32) = 16
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
+            {
+                // `KqpOlapJsonValue` returns NULL on empty result, so DEFAULT ON EMPTY must not be pushed as well.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.missing" DEFAULT "dflt" ON EMPTY) = "dflt" AND id <= 5
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])"
+            },
         };
 
         for (const auto& testCase : cases) {
@@ -1516,7 +1551,25 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
 
             UNIT_ASSERT_C(ast.find("KqpOlapApply") != TString::npos, "Predicate is not pushed by KqpOlapApply. Query: " << testCase.Query);
             UNIT_ASSERT_C(ast.find("KqpOlapJsonValue") == TString::npos,
-                "JSON_VALUE with non-Utf8 RETURNING type must not be pushed as KqpOlapJsonValue. Query: " << testCase.Query);
+                "JSON_VALUE with RETURNING type or non-default options must not be pushed as KqpOlapJsonValue. Query: " << testCase.Query);
+        }
+
+        // The same applies to the projection pushdown.
+        {
+            const TString query = R"(
+                SELECT JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Utf8) FROM `/Root/tableWithNulls` WHERE id = 1;
+            )";
+            auto explainResult = StreamExplainQuery(query, tableClient);
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
+            Cerr << "AST: " << ast << Endl;
+
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            CompareYson(StreamResultToYson(it), R"([[#]])");
+
+            UNIT_ASSERT_C(ast.find("KqpOlapJsonValue") == TString::npos,
+                "JSON_VALUE with RETURNING type must not be pushed as KqpOlapJsonValue projection. Query: " << query);
         }
     }
 

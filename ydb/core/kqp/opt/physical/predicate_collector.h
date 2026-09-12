@@ -1,5 +1,6 @@
 #pragma once
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
 
 namespace NKikimr::NKqp::NOpt {
@@ -61,6 +62,10 @@ struct TPushdownOptions {
 };
 
 extern THashMap<TString, TString> IgnoreCaseSubstringMatchFunctions;
+
+// Whether `JsonValue` can be computed by the column shard as `KqpOlapJsonValue` with exactly the same semantics:
+// JSON_VALUE over a column with a constant path, without RETURNING / PASSING and with default `NULL ON EMPTY` / `NULL ON ERROR`.
+bool CanBePushedAsOlapJsonValue(const NNodes::TCoJsonValue& jsonValue);
 
 void CollectPredicates(const NNodes::TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
                        const TPushdownOptions& options);

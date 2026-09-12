@@ -1,5 +1,6 @@
 #include "predicate_collector.h"
 
+#include <yql/essentials/core/sql_types/yql_atom_enums.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
@@ -223,8 +224,7 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
     } else if (options.IsExternalArg(node.Ref())) {
         return true;
     } else if (const auto maybeJsonValue = node.Maybe<TCoJsonValue>()) {
-        const auto jsonOp = maybeJsonValue.Cast();
-        return jsonOp.Json().Maybe<TCoMember>() && jsonOp.JsonPath().Maybe<TCoUtf8>();
+        return CanBePushedAsOlapJsonValue(maybeJsonValue.Cast());
     } else if (node.Maybe<TCoNull>() || node.Maybe<TCoParameter>() || node.Maybe<TCoJust>()) {
         return true;
     }
@@ -458,6 +458,33 @@ void CollectChildrenPredicates(const TExprNode& opNode, TOLAPPredicateNode& pred
 }
 
 } // namespace
+
+bool CanBePushedAsOlapJsonValue(const TCoJsonValue& jsonValue) {
+    // Currently we support only simple columns and constant paths in pushdown.
+    if (!jsonValue.Json().Maybe<TCoMember>() || !jsonValue.JsonPath().Maybe<TCoUtf8>()) {
+        return false;
+    }
+
+    // `KqpOlapJsonValue` kernel matches `JsonValue` semantics only without RETURNING (lenient `SqlValueConvertToUtf8`).
+    // With an explicit RETURNING type `JsonValue` is stricter (e.g. `SqlValueUtf8` returns NULL for a JSON number even for
+    // RETURNING Utf8, `SqlValueNumber` + cast is used for numeric types) and date types are not supported by the kernel at all.
+    // Such JSON_VALUE is computed by `KqpOlapApply` (or by KQP) over the whole JSON column via `Json2` UDFs.
+    if (jsonValue.ReturningType()) {
+        return false;
+    }
+
+    // `KqpOlapJsonValue` returns NULL both on empty result and on error (default modes of JSON_VALUE).
+    const auto isDefaultNull = [](const TCoAtom& mode, const TExprBase& value) {
+        return mode.Value() == ToString(EJsonValueHandlerMode::DefaultValue) && value.Maybe<TCoNull>();
+    };
+    if (!isDefaultNull(jsonValue.OnEmptyMode(), jsonValue.OnEmpty()) || !isDefaultNull(jsonValue.OnErrorMode(), jsonValue.OnError())) {
+        return false;
+    }
+
+    // PASSING variables are not supported by `KqpOlapJsonValue`.
+    const auto variablesType = jsonValue.Variables().Ref().GetTypeAnn();
+    return variablesType && variablesType->GetKind() == ETypeAnnotationKind::EmptyDict;
+}
 
 void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const TTypeAnnotationNode* inputType,
                        const TPushdownOptions& options) {

@@ -11,6 +11,7 @@ Key materials:
 - [Cluster configuration DSL](dynamic-config-selectors.md)
 - [Configuration parameters](config-settings.md)
 - [{#T}](cluster-expansion.md)
+- [{#T}](node-removal.md)
 - [{#T}](state-storage-reconfiguration.md)
 - [{#T}](state-storage-move.md)
 - [{#T}](static-group-move.md)

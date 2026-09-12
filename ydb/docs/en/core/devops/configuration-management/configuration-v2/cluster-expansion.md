@@ -111,6 +111,6 @@ To add static nodes to the cluster, you need to perform the following sequence o
 
 10. Ensure that added storage groups are displayed on the [cluster monitoring page in the {{ ydb-ui-name }}](../../../reference/ydb-ui/ydb-monitoring.md).
 
-Removing static nodes from the {{ ydb-short-name }} cluster is performed according to the [documented decommissioning procedure](../../deployment-options/manual/decommissioning.md).
+Removing static nodes from the {{ ydb-short-name }} cluster is performed according to the [documented decommissioning procedure](node-removal.md#remove-static-node).
 
 In case of damage and inability to repair a server running a static cluster node, it is necessary to place the unavailable static node on a new server containing a similar or greater number and volume of disks.

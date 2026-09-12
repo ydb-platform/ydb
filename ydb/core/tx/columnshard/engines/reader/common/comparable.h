@@ -8,7 +8,8 @@ class TPortionInfo;
 
 namespace NReader {
 class TReadMetadataBase;
-}
+enum class ERequestSorting;
+}   // namespace NReader
 }   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NReader::NCommon {
@@ -19,8 +20,8 @@ private:
     NArrow::TSimpleRow Value;
 
 public:
-    static TReplaceKeyAdapter BuildStart(const TPortionInfo& portion, const TReadMetadataBase& readMetadata);
-    static TReplaceKeyAdapter BuildFinish(const TPortionInfo& portion, const TReadMetadataBase& readMetadata);
+    static TReplaceKeyAdapter BuildStart(const TPortionInfo& portion, const ERequestSorting sorting);
+    static TReplaceKeyAdapter BuildFinish(const TPortionInfo& portion, const ERequestSorting sorting);
 
     const NArrow::TSimpleRow& GetValue() const {
         return Value;

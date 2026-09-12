@@ -7,7 +7,7 @@ PRAGMA YqlSelectAllowUnnamedGroupByExpr;
 
 $frequent_ss_items = (
     SELECT
-        Substring(i_item_desc, 1, 30) AS itemdesc,
+        Substring(CAST(i_item_desc AS String), 1, 30) AS itemdesc,
         i_item_sk AS item_sk,
         d_date AS solddate,
         Count(*) AS cnt
@@ -22,7 +22,7 @@ $frequent_ss_items = (
         AND ss_item_sk == i_item_sk
         AND d_year IN (1999, 1999 + 1, 1999 + 2, 1999 + 3)
     GROUP BY
-        Substring(i_item_desc, 1, 30),
+        Substring(CAST(i_item_desc AS String), 1, 30),
         i_item_sk,
         d_date
     HAVING
@@ -125,7 +125,7 @@ LIMIT 100;
 
 $frequent_ss_items = (
     SELECT
-        Substring(i_item_desc, 1, 30) AS itemdesc,
+        Substring(CAST(i_item_desc AS String), 1, 30) AS itemdesc,
         i_item_sk AS item_sk,
         d_date AS solddate,
         Count(*) AS cnt
@@ -140,7 +140,7 @@ $frequent_ss_items = (
         AND ss_item_sk == i_item_sk
         AND d_year IN (1999, 1999 + 1, 1999 + 2, 1999 + 3)
     GROUP BY
-        Substring(i_item_desc, 1, 30),
+        Substring(CAST(i_item_desc AS String), 1, 30),
         i_item_sk,
         d_date
     HAVING

@@ -206,12 +206,7 @@ class TCreateStreamingQuery : public TSubOperation {
             .AlterVersion = 1,
             .Properties = Transaction.GetCreateStreamingQuery().GetProperties(),
         });
-        const auto [it, inserted] = context.SS->StreamingQueries.emplace(dstPath.Base()->PathId, streamingQueryInfo);
-        if (inserted) {
-            context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId);
-        } else {
-            it->second = streamingQueryInfo;
-        }
+        context.SS->StreamingQueries.Set(dstPath.Base()->PathId, streamingQueryInfo);
     }
 
 public:

@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/tools/testing/loadtest/lib/protos/nbs2_load.pb.h>
 
 #include <util/generic/vector.h>

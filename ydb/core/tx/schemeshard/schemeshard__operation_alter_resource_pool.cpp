@@ -162,7 +162,7 @@ public:
         context.DbChanges.PersistResourcePool(resourcePool->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        context.SS->ResourcePools[resourcePool->PathId] = resourcePoolInfo;
+        context.SS->ResourcePools.Set(resourcePool->PathId, resourcePoolInfo);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterResourcePool, resourcePool->PathId);
         txState.Shards.clear();

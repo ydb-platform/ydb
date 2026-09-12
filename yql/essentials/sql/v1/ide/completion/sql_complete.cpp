@@ -18,6 +18,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/charset/utf8.h>
+#include <util/stream/output.h>
 
 namespace NSQLComplete {
 
@@ -255,8 +256,7 @@ ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
 
 } // namespace NSQLComplete
 
-template <>
-void Out<NSQLComplete::TCandidate>(IOutputStream& out, const NSQLComplete::TCandidate& value) {
+Y_DECLARE_OUT_SPEC(, NSQLComplete::TCandidate, out, value) {
     out << "{" << value.Kind << ", \"" << value.Content << "\"";
     if (value.CursorShift != 0) {
         out << ", " << value.CursorShift;

@@ -777,6 +777,16 @@ message TEvScanPing {
 message TEvKqpScanCursor {
     optional uint64 TabletId = 1;
 
+    // How the scan that produced this cursor ordered its sources. A source index means nothing without
+    // it: the same portion takes a different index under a different order.
+    enum ESourcesSorting {
+        SOURCE_ID_ASC = 0;
+        FIRST_PK_ASC = 1;
+        LAST_PK_ASC = 2;
+        LAST_PK_DESC = 3;
+    }
+    optional ESourcesSorting SourcesSorting = 2;
+
     message TColumnShardScanPlain {
     }
     message TDeprecatedColumnShardScanSimple {

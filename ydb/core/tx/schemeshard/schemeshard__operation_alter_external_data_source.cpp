@@ -227,7 +227,7 @@ public:
         context.DbChanges.PersistExternalDataSource(externalDataSource->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        context.SS->ExternalDataSources[externalDataSource->PathId] = externalDataSourceInfo;
+        context.SS->ExternalDataSources.Set(externalDataSource->PathId, externalDataSourceInfo);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterExternalDataSource, externalDataSource->PathId);
         txState.Shards.clear();

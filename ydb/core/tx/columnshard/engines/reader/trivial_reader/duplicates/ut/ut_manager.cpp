@@ -241,8 +241,9 @@ public:
 };
 
 void EnableDeduplicationConveyorFlag() {
-    std::unique_ptr<NActors::IActor> unusedDistributor(
-        NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), MakeIntrusive<NMonitoring::TDynamicCounters>()));
+    const auto protoConfig = NConveyorComposite::NConfig::TConfig::BuildDefaultProto();
+    std::unique_ptr<NActors::IActor> unusedDistributor(NConveyorComposite::CreateService(
+        NConveyorComposite::NConfig::TConfig::BuildFromProto(protoConfig).DetachResult(), MakeIntrusive<NMonitoring::TDynamicCounters>()));
     Y_UNUSED(unusedDistributor);
 }
 
@@ -276,11 +277,10 @@ std::shared_ptr<TReadContext> MakeTestReadContext(const TSnapshot& requestSnapsh
     auto versionedIndex = std::make_shared<TVersionedIndex>();
     versionedIndex->AddIndex(TSnapshot(1, 1), std::move(entryGuard));
 
-    TReadDescription readDesc(0, requestSnapshot, sorting);
+    TReadDescription readDesc(0, requestSnapshot, sorting, true, EReaderClass::Trivial,
+        std::make_shared<TUserTableAccessor>("test", NColumnShard::TUnifiedPathId::BuildValid(TInternalPathId::FromRawValue(1),
+                                                         NColumnShard::TSchemeShardLocalPathId::FromRawValue(1))), std::nullopt);
     readDesc.SetScanCursor(nullptr);
-    readDesc.DeduplicationPolicy = EDeduplicationPolicy::PREVENT_DUPLICATES;
-    readDesc.TableMetadataAccessor = std::make_shared<TUserTableAccessor>("test",
-        NColumnShard::TUnifiedPathId::BuildValid(TInternalPathId::FromRawValue(1), NColumnShard::TSchemeShardLocalPathId::FromRawValue(1)));
 
     auto readMetadata = std::make_shared<NTrivial::TReadMetadata>(versionedIndex, readDesc);
     readMetadata->SetPKRangesFilter(readDesc.PKRangesFilter);

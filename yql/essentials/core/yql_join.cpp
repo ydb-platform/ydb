@@ -1152,6 +1152,7 @@ TExprNode::TPtr FilterOutNullJoinColumns(
     }
 
     if (IsSkipNullsUnessential(types)) {
+        // clang-format off
         return ctx.Builder(pos)
             .Callable(ordered ? "OrderedFilter" : "Filter")
                 .Add(0, input)
@@ -1160,8 +1161,10 @@ TExprNode::TPtr FilterOutNullJoinColumns(
                     .Callable("Unessential")
                         .Callable(0, "And")
                             .Do([&optColumns] (TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                // clang-format on
                                 size_t i = 0;
                                 for (const auto& column : optColumns) {
+                                    // clang-format off
                                     parent.Callable(i++, "Not")
                                         .Callable(0, "HasNull")
                                             .Callable(0, "Member")
@@ -1170,8 +1173,10 @@ TExprNode::TPtr FilterOutNullJoinColumns(
                                             .Seal()
                                         .Seal()
                                     .Seal();
+                                    // clang-format on
                                 }
                                 return parent;
+                            // clang-format off
                             })
                         .Seal()
                         .Add(1, MakeBool<true>(pos, ctx))
@@ -1179,8 +1184,10 @@ TExprNode::TPtr FilterOutNullJoinColumns(
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 
+    // clang-format off
     return ctx.Builder(pos)
         .Callable("SkipNullMembers")
             .Add(0, input)
@@ -1189,6 +1196,7 @@ TExprNode::TPtr FilterOutNullJoinColumns(
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TMap<TStringBuf, TVector<TStringBuf>> LoadJoinRenameMap(const TExprNode& settings) {
@@ -1215,9 +1223,11 @@ TCoLambda BuildJoinRenameLambda(TPositionHandle pos, const TMap<TStringBuf, TVec
         }
     }
 
+    // clang-format off
     TCoArgument rowArg = Build<TCoArgument>(ctx, pos)
         .Name("row")
         .Done();
+    // clang-format on
 
     TVector<TExprBase> renameTuples;
     for (auto& item : joinResultType.GetItems()) {
@@ -1225,6 +1235,7 @@ TCoLambda BuildJoinRenameLambda(TPositionHandle pos, const TMap<TStringBuf, TVec
         auto renamedFrom = reverseRenameMap.FindPtr(newName);
         TStringBuf oldName = renamedFrom ? *renamedFrom : newName;
 
+        // clang-format off
         auto tuple = Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(newName)
             .Value<TCoMember>()
@@ -1232,16 +1243,19 @@ TCoLambda BuildJoinRenameLambda(TPositionHandle pos, const TMap<TStringBuf, TVec
                 .Name().Build(oldName)
             .Build()
             .Done();
+        // clang-format on
 
         renameTuples.push_back(tuple);
     }
 
+    // clang-format off
     return Build<TCoLambda>(ctx, pos)
         .Args({rowArg})
         .Body<TCoAsStruct>()
             .Add(renameTuples)
         .Build()
         .Done();
+    // clang-format on
 }
 
 
@@ -1436,6 +1450,7 @@ void AppendEquiJoinRenameMap(TPositionHandle pos, const TMap<TStringBuf, TVector
     TExprNode::TListType& joinSettingNodes, TExprContext& ctx) {
     for (auto& x : newRenameMap) {
         if (x.second.empty()) {
+            // clang-format off
             joinSettingNodes.push_back(ctx.Builder(pos)
                 .List()
                     .Atom(0, "rename")
@@ -1443,6 +1458,7 @@ void AppendEquiJoinRenameMap(TPositionHandle pos, const TMap<TStringBuf, TVector
                     .Atom(2, "")
                 .Seal()
                 .Build());
+            // clang-format on
             continue;
         }
 
@@ -1451,6 +1467,7 @@ void AppendEquiJoinRenameMap(TPositionHandle pos, const TMap<TStringBuf, TVector
                 continue;
             }
 
+            // clang-format off
             joinSettingNodes.push_back(ctx.Builder(pos)
                 .List()
                     .Atom(0, "rename")
@@ -1458,6 +1475,7 @@ void AppendEquiJoinRenameMap(TPositionHandle pos, const TMap<TStringBuf, TVector
                     .Atom(2, y)
                 .Seal()
                 .Build());
+            // clang-format on
         }
     }
 }
@@ -1467,6 +1485,7 @@ void AppendEquiJoinSortSets(TPositionHandle pos, const TSet<TVector<TStringBuf>>
 {
     for (auto& ss : newSortSets) {
         YQL_ENSURE(!ss.empty());
+        // clang-format off
         joinSettingNodes.push_back(ctx.Builder(pos)
             .List()
                 .Atom(0, "preferred_sort")
@@ -1480,6 +1499,7 @@ void AppendEquiJoinSortSets(TPositionHandle pos, const TSet<TVector<TStringBuf>>
                 .Seal()
             .Seal()
             .Build());
+        // clang-format on
     }
 }
 
@@ -1616,6 +1636,7 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
 
 TExprNode::TPtr BuildEquiJoinLinkSettings(const TEquiJoinLinkSettings& linkSettings, TExprContext& ctx) {
     auto builder = [&](const TStringBuf& side) -> TExprNode::TPtr {
+        // clang-format off
         return ctx.Builder(linkSettings.Pos)
             .List()
                 .Atom(0, side)
@@ -1630,6 +1651,7 @@ TExprNode::TPtr BuildEquiJoinLinkSettings(const TEquiJoinLinkSettings& linkSetti
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     };
 
     TExprNode::TListType settings;
@@ -1661,16 +1683,19 @@ TExprNode::TPtr RemapNonConvertibleMemberForJoin(TPositionHandle pos, const TExp
     TExprNode::TPtr result = memberValue;
 
     if (&memberType != &unifiedType) {
+        // clang-format off
         result = ctx.Builder(pos)
             .Callable("StrictCast")
                 .Add(0, std::move(result))
                 .Add(1, ExpandType(pos, unifiedType, ctx))
             .Seal()
             .Build();
+        // clang-format on
     }
 
     if (RemoveOptionalType(&unifiedType)->GetKind() != ETypeAnnotationKind::Data) {
         if (unifiedType.HasOptionalOrNull()) {
+            // clang-format off
             result = ctx.Builder(pos)
                 .Callable("If")
                     .Callable(0, "HasNull")
@@ -1683,6 +1708,7 @@ TExprNode::TPtr RemapNonConvertibleMemberForJoin(TPositionHandle pos, const TExp
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         } else {
             result = ctx.NewCallable(pos, "StablePickle", { result });
         }
@@ -1697,18 +1723,21 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
         if (payloads.empty()) {
             parent.Arg(1, "row");
         } else {
+            // clang-format off
             parent.Callable(1, "FilterMembers")
                 .Arg(0, "row")
                 .List(1)
                     .Add(std::move(payloads))
                 .Seal()
             .Seal();
+            // clang-format on
         }
         return parent;
     };
 
     if (keyTypes.empty() && 1U == keys.size()) {
         return payload ?
+            // clang-format off
             ctx.Builder(pos)
                 .Callable("Map")
                     .Add(0, std::move(list))
@@ -1730,11 +1759,13 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                     .Seal()
                 .Seal()
             .Build();
+            // clang-format on
     }
 
     if (1U == keyTypes.size()) {
         const auto keyType = ctx.MakeType<TOptionalExprType>(keyTypes.front());
         list = payload ? optional ?
+            // clang-format off
             ctx.Builder(pos)
                 .Callable("Map")
                     .Add(0, std::move(list))
@@ -1794,9 +1825,11 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                     .Seal()
                 .Seal()
             .Build();
+            // clang-format on
     } else {
         const auto keyType = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TTupleExprType>(keyTypes));
         list = payload ? optional ?
+            // clang-format off
             ctx.Builder(pos)
                 .Callable("Map")
                     .Add(0, std::move(list))
@@ -1806,14 +1839,18 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                             .Callable(0, "StrictCast")
                                 .List(0)
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        // clang-format on
                                         ui32 pos = 0;
                                         for (auto& key : keys) {
+                                            // clang-format off
                                             parent.Callable(pos++, "Member")
                                                 .Arg(0, "row")
                                                 .Add(1, std::move(key))
                                             .Seal();
+                                            // clang-format on
                                         }
                                         return parent;
+                                    // clang-format off
                                     })
                                 .Seal()
                                 .Add(1, ExpandType(pos, *keyType, ctx))
@@ -1832,14 +1869,18 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                             .Callable(0, "StrictCast")
                                 .List(0)
                                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                        // clang-format on
                                         ui32 pos = 0;
                                         for (auto& key : keys) {
+                                            // clang-format off
                                             parent.Callable(pos++, "Member")
                                                 .Arg(0, "row")
                                                 .Add(1, std::move(key))
                                             .Seal();
+                                            // clang-format on
                                         }
                                         return parent;
+                                    // clang-format off
                                     })
                                 .Seal()
                                 .Add(1, ExpandType(pos, *keyType, ctx))
@@ -1865,14 +1906,18 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                         .Callable("StrictCast")
                             .List(0)
                                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    // clang-format on
                                     ui32 pos = 0;
                                     for (auto& key : keys) {
+                                        // clang-format off
                                         parent.Callable(pos++, "Member")
                                             .Arg(0, "row")
                                             .Add(1, std::move(key))
                                         .Seal();
+                                        // clang-format on
                                     }
                                     return parent;
+                                // clang-format off
                                 })
                             .Seal()
                             .Add(1, ExpandType(pos, *keyType, ctx))
@@ -1880,10 +1925,12 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                     .Seal()
                 .Seal()
             .Build();
+            // clang-format on
     }
 
     if (optional && filter) {
         list = payload ?
+            // clang-format off
             ctx.Builder(pos)
                 .Callable("Filter")
                     .Add(0, std::move(list))
@@ -1909,6 +1956,7 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
                     .Seal()
                 .Seal()
             .Build();
+            // clang-format on
     }
 
     return list;
@@ -1917,6 +1965,7 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
 template <bool Squeeze>
 TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx) {
     return payload ?
+        // clang-format off
         ctx.Builder(list->Pos())
             .Callable(Squeeze ? "SqueezeToDict" : "ToDict")
                 .Add(0, std::move(list))
@@ -1971,12 +2020,14 @@ TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi
                 .Seal()
             .Seal()
         .Build();
+        // clang-format on
 }
 
 template TExprNode::TPtr MakeDictForJoin<true>(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);
 template TExprNode::TPtr MakeDictForJoin<false>(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);
 
 TExprNode::TPtr MakeCrossJoin(TPositionHandle pos, TExprNode::TPtr left, TExprNode::TPtr right, TExprContext& ctx) {
+    // clang-format off
     return ctx.Builder(pos)
         .List()
             .Atom(0, "Cross")
@@ -1990,6 +2041,7 @@ TExprNode::TPtr MakeCrossJoin(TPositionHandle pos, TExprNode::TPtr left, TExprNo
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {

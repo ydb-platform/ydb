@@ -272,6 +272,14 @@ namespace NKikimr::NDDisk {
                 EvBeginStopping,
                 EvCompleteStop,
                 EvRetryIODelayed,
+                EvProcessPersistentBufferRemoval,
+            };
+
+            struct TEvProcessPersistentBufferRemoval : TEventLocal<TEvProcessPersistentBufferRemoval, EvProcessPersistentBufferRemoval> {
+                TPersistentBufferTabletKey Key;
+                explicit TEvProcessPersistentBufferRemoval(TPersistentBufferTabletKey key)
+                    : Key(key)
+                {}
             };
 
             struct TEvCompleteStop : TEventLocal<TEvCompleteStop, EvCompleteStop> {};
@@ -937,6 +945,29 @@ namespace NKikimr::NDDisk {
 
             creds.SerializeResolvedForRequest(record.MutableCredentials());
 
+            if constexpr (std::is_same_v<TEventType, TEvWritePersistentBuffer>
+                    || std::is_same_v<TEventType, TEvReadPersistentBuffer>
+                    || std::is_same_v<TEventType, TEvErasePersistentBuffer>
+                    || std::is_same_v<TEventType, TEvBatchErasePersistentBuffer>
+                    || std::is_same_v<TEventType, TEvListPersistentBuffer>) {
+                // NOTE: durable registration (TEvRegisterPersistentBuffer) is a hard precondition
+                // for all persistent-buffer reads/writes/erases below. This requires lockstep
+                // upgrades of client and DDisk: an older client without register support loses
+                // all PB operations against a DDisk running this code, and this client build
+                // connecting to an older DDisk gets its register event undelivered and the
+                // connect fails. There is no fallback or version negotiation, so mixed fleets
+                // running old/new builds simultaneously are not supported for PB traffic.
+                if (PersistentBufferReady) {
+                    const auto status = CheckPersistentBufferOwnership(creds);
+                    if (status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+                        SendReply(ev, std::make_unique<typename TEvent::TResult>(status,
+                            "persistent buffer registration is not registered, not yet durable, or closed"));
+                        registerError();
+                        return false;
+                    }
+                }
+            }
+
             using TRecord = std::decay_t<decltype(record)>;
 
             if constexpr (NPrivate::THasSelectorField<TRecord>::value) {
@@ -1149,6 +1180,8 @@ namespace NKikimr::NDDisk {
             std::optional<TString> ErrorMessage = std::nullopt;
 
             NHPTimer::STime StartTs{};
+            enum class EBarrierOperation { None, Erase, Register, Close, Remove };
+            EBarrierOperation BarrierOperation = EBarrierOperation::None;
         };
 
         struct TPersistentBufferEraseInflight {
@@ -1171,6 +1204,25 @@ namespace NKikimr::NDDisk {
 
         TPersistentBufferSpaceAllocator PersistentBufferSpaceAllocator;
         TPersistentBufferBarriersManager PersistentBufferBarriersManager;
+
+        struct TPersistentBufferRemoval {
+            enum class EStage { Drain, Close, Wait, Remove };
+            EStage Stage = EStage::Drain;
+            TInstant Deadline;
+            TAutoPtr<IEventHandle> Request;
+        };
+        std::map<TPersistentBufferTabletKey, TPersistentBufferRemoval> PersistentBufferRemovals;
+        std::set<TPersistentBufferTabletKey> PersistentBufferRegistrations;
+        // In-flight barrier sectors stay occupied even if a newer version is durable.
+        // The flag requests reclamation once this sector's own write has completed.
+        absl::flat_hash_map<TPersistentBufferLocation, bool> PersistentBufferBarrierWrites;
+        void ReleasePersistentBufferBarrierSector(TPersistentBufferSectorInfo sector);
+        void CompletePersistentBufferBarrierWrite(TPersistentBufferDiskOperationInFlight& inflight);
+        NKikimrBlobStorage::NDDisk::TReplyStatus::E CheckPersistentBufferOwnership(const TQueryCredentials& creds) const;
+        void Handle(TEvRegisterPersistentBuffer::TPtr ev);
+        void Handle(TEvUnregisterPersistentBuffer::TPtr ev);
+        void Handle(TEvPrivate::TEvProcessPersistentBufferRemoval::TPtr ev);
+        void ProcessPersistentBufferRemoval(TPersistentBufferTabletKey key);
 
         ui64 PersistentBufferChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingPersistentBufferEvents;
@@ -1218,7 +1270,8 @@ namespace NKikimr::NDDisk {
         void ProcessPersistentBufferBatchWrite();
         double GetPersistentBufferFreeSpace();
         void ErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases);
-        void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn);
+        void BarrierErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, ui64 lsn,
+            TPersistentBufferDiskOperationInFlight::EBarrierOperation operation = TPersistentBufferDiskOperationInFlight::EBarrierOperation::Erase);
         void FastErasePersistentBuffer(IEventHandle& queryEv, const TQueryCredentials& creds, const std::vector<TEraseLsnId>& erases, const TFastErase& fastErase);
         void ClearPersistentBufferRecords(TPersistentBufferDiskOperationInFlight& inflight, ui64 partCookie);
         void HandleWritePart(TPersistentBufferDiskOperationInFlight& inflight,  ui64 opCookie, ui64 partCookie);

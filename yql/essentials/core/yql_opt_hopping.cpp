@@ -35,37 +35,47 @@ TKeysDescription::TKeysDescription(const TStructExprType& rowType, const TCoAtom
 }
 
 TExprNode::TPtr TKeysDescription::BuildPickleLambda(TExprContext& ctx, TPositionHandle pos) const {
+    // clang-format off
     TCoArgument arg = Build<TCoArgument>(ctx, pos)
         .Name("item")
         .Done();
+    // clang-format on
 
     TExprBase body = arg;
 
     for (const auto& key : PickleKeys) {
+        // clang-format off
         const auto member = Build<TCoMember>(ctx, pos)
                 .Name().Build(key)
                 .Struct(arg)
             .Done()
             .Ptr();
+        // clang-format on
 
+        // clang-format off
         body = Build<TCoReplaceMember>(ctx, pos)
             .Struct(body)
             .Name().Build(key)
             .Item(ctx.NewCallable(pos, "StablePickle", { member }))
             .Done();
+        // clang-format on
     }
 
+    // clang-format off
     return Build<TCoLambda>(ctx, pos)
         .Args({arg})
         .Body(body)
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr TKeysDescription::BuildUnpickleLambda(TExprContext& ctx, TPositionHandle pos, const TStructExprType& rowType) {
+    // clang-format off
     TCoArgument arg = Build<TCoArgument>(ctx, pos)
         .Name("item")
         .Done();
+    // clang-format on
 
     TExprBase body = arg;
 
@@ -74,24 +84,30 @@ TExprNode::TPtr TKeysDescription::BuildUnpickleLambda(TExprContext& ctx, TPositi
         Y_ENSURE(index);
 
         auto itemType = rowType.GetItems().at(*index)->GetItemType();
+        // clang-format off
         const auto member = Build<TCoMember>(ctx, pos)
                 .Name().Build(key)
                 .Struct(arg)
             .Done()
             .Ptr();
+        // clang-format on
 
+        // clang-format off
         body = Build<TCoReplaceMember>(ctx, pos)
             .Struct(body)
             .Name().Build(key)
             .Item(ctx.NewCallable(pos, "Unpickle", { ExpandType(pos, *itemType, ctx), member }))
             .Done();
+        // clang-format on
     }
 
+    // clang-format off
     return Build<TCoLambda>(ctx, pos)
         .Args({arg})
         .Body(body)
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TVector<TCoAtom> TKeysDescription::GetKeysList(TExprContext& ctx, TPositionHandle pos) const {
@@ -276,12 +292,14 @@ TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprCont
     }
     // TODO: EarlyPolicy adjust and SizeLimit != max is not implemented, but not obviously possible to evaluate here, error will be reported on runtime
 
+    // clang-format off
     const auto newTraits = Build<TCoHoppingTraits>(ctx, aggregate.Pos())
         .InitFrom(traits)
         .DataWatermarks(analyticsMode
             ? ctx.NewAtom(aggregate.Pos(), "false")
             : traits.DataWatermarks().Ptr())
         .Done();
+    // clang-format on
 
     return THoppingTraits {
         .Column=hoppingColumn,
@@ -302,6 +320,7 @@ TExprNode::TPtr BuildTimeExtractor(const TCoHoppingTraits& hoppingTraits, TExprC
         return ctx.DeepCopyLambda(hoppingTraits.TimeExtractor().Ref());
     }
 
+    // clang-format off
     return Build<TCoLambda>(ctx, pos)
         .Args({"item"})
         .Body<TExprApplier>()
@@ -313,6 +332,7 @@ TExprNode::TPtr BuildTimeExtractor(const TCoHoppingTraits& hoppingTraits, TExprC
             .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildInitHopLambda(const TCoAggregate& aggregate, TExprContext& ctx) {
@@ -332,18 +352,23 @@ TExprNode::TPtr BuildInitHopLambda(const TCoAggregate& aggregate, TExprContext& 
         // Project the full input row onto the type expected by InitHandler,
         // so that extra fields (e.g. the hopping time column) do not "leak"
         // into the accumulator state type.
+        // clang-format off
         const auto castedItem = Build<TCoSafeCast>(ctx, pos)
             .Type(trait.ItemType())
             .Value(initItemArg)
             .Done();
+        // clang-format on
 
         TMaybeNode<TExprBase> applier;
         if (trait.InitHandler().Args().Size() == 1) {
+            // clang-format off
             applier = Build<TExprApplier>(ctx, pos)
                 .Apply(trait.InitHandler())
                 .With(0, castedItem)
                 .Done();
+            // clang-format on
         } else {
+            // clang-format off
             applier = Build<TExprApplier>(ctx, pos)
                 .Apply(trait.InitHandler())
                 .With(0, castedItem)
@@ -351,15 +376,19 @@ TExprNode::TPtr BuildInitHopLambda(const TCoAggregate& aggregate, TExprContext& 
                     .Literal().Build(ToString(index))
                     .Build()
                 .Done();
+            // clang-format on
         }
 
+        // clang-format off
         structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(BuildColumnName(tuple.ColumnName()))
             .Value(applier)
             .Done());
+        // clang-format on
         ++index;
     }
 
+    // clang-format off
     return Build<TCoLambda>(ctx, pos)
         .Args({initItemArg})
         .Body<TCoAsStruct>()
@@ -367,6 +396,7 @@ TExprNode::TPtr BuildInitHopLambda(const TCoAggregate& aggregate, TExprContext& 
             .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildUpdateHopLambda(const TCoAggregate& aggregate, TExprContext& ctx) {
@@ -385,27 +415,34 @@ TExprNode::TPtr BuildUpdateHopLambda(const TCoAggregate& aggregate, TExprContext
         const auto trait = tuple.Trait().Cast<TCoAggregationTraits>();
         const TString columnName = BuildColumnName(tuple.ColumnName());
 
+        // clang-format off
         const auto member = Build<TCoMember>(ctx, pos)
             .Struct(updateStateArg)
             .Name().Build(columnName)
             .Done();
+        // clang-format on
 
         // Project the full input row onto the type expected by UpdateHandler,
         // so that extra fields (e.g. the hopping time column) do not "leak"
         // into the accumulator state type.
+        // clang-format off
         const auto castedItem = Build<TCoSafeCast>(ctx, pos)
             .Type(trait.ItemType())
             .Value(updateItemArg)
             .Done();
+        // clang-format on
 
         TMaybeNode<TExprBase> applier;
         if (trait.UpdateHandler().Args().Size() == 2) {
+            // clang-format off
             applier = Build<TExprApplier>(ctx, pos)
                 .Apply(trait.UpdateHandler())
                 .With(0, castedItem)
                 .With(1, member)
                 .Done();
+            // clang-format on
         } else {
+            // clang-format off
             applier = Build<TExprApplier>(ctx, pos)
                 .Apply(trait.UpdateHandler())
                 .With(0, castedItem)
@@ -414,15 +451,19 @@ TExprNode::TPtr BuildUpdateHopLambda(const TCoAggregate& aggregate, TExprContext
                     .Literal().Build(ToString(index))
                     .Build()
                 .Done();
+            // clang-format on
         }
 
+        // clang-format off
         structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(columnName)
             .Value(applier)
             .Done());
+        // clang-format on
         ++index;
     }
 
+    // clang-format off
     return Build<TCoLambda>(ctx, pos)
         .Args({updateItemArg, updateStateArg})
         .Body<TCoAsStruct>()
@@ -430,6 +471,7 @@ TExprNode::TPtr BuildUpdateHopLambda(const TCoAggregate& aggregate, TExprContext
             .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildMergeHopLambda(const TCoAggregate& aggregate, TExprContext& ctx) {
@@ -446,6 +488,7 @@ TExprNode::TPtr BuildMergeHopLambda(const TCoAggregate& aggregate, TExprContext&
         const auto tuple = handler.Cast<TCoAggregateTuple>();
         const TString columnName = BuildColumnName(tuple.ColumnName());
 
+        // clang-format off
         const auto member1 = Build<TCoMember>(ctx, pos)
             .Struct(mergeState1Arg)
             .Name().Build(columnName)
@@ -454,7 +497,9 @@ TExprNode::TPtr BuildMergeHopLambda(const TCoAggregate& aggregate, TExprContext&
             .Struct(mergeState2Arg)
             .Name().Build(columnName)
             .Done();
+        // clang-format on
 
+        // clang-format off
         structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(columnName)
             .Value<TExprApplier>()
@@ -463,8 +508,10 @@ TExprNode::TPtr BuildMergeHopLambda(const TCoAggregate& aggregate, TExprContext&
                 .With(1, member2)
                 .Build()
             .Done());
+        // clang-format on
     }
 
+    // clang-format off
     return Build<TCoLambda>(ctx, pos)
         .Args({mergeState1Arg, mergeState2Arg})
         .Body<TCoAsStruct>()
@@ -472,6 +519,7 @@ TExprNode::TPtr BuildMergeHopLambda(const TCoAggregate& aggregate, TExprContext&
             .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildFinishHopLambda(
@@ -491,12 +539,15 @@ TExprNode::TPtr BuildFinishHopLambda(
     structItems.reserve(actualGroupKeys.size() + aggregateHandlers.Size() + 1);
 
     if (actualGroupKeys.size() == 1) {
+        // clang-format off
         structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(actualGroupKeys[0])
             .Value(finishKeyArg)
             .Done());
+        // clang-format on
     } else {
         for (size_t i = 0; i < actualGroupKeys.size(); ++i) {
+            // clang-format off
             structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(actualGroupKeys[i])
                 .Value<TCoNth>()
@@ -506,6 +557,7 @@ TExprNode::TPtr BuildFinishHopLambda(
                         .Build()
                     .Build()
                 .Done());
+            // clang-format on
         }
     }
 
@@ -513,12 +565,15 @@ TExprNode::TPtr BuildFinishHopLambda(
         const auto tuple = handler.Cast<TCoAggregateTuple>();
         const TString compoundColumnName = BuildColumnName(tuple.ColumnName());
 
+        // clang-format off
         const auto member = Build<TCoMember>(ctx, pos)
             .Struct(finishStateArg)
             .Name().Build(compoundColumnName)
             .Done();
+        // clang-format on
 
         if (tuple.ColumnName().Maybe<TCoAtom>()) {
+            // clang-format off
             structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
                 .Name().Build(compoundColumnName)
                 .Value<TExprApplier>()
@@ -526,27 +581,34 @@ TExprNode::TPtr BuildFinishHopLambda(
                     .With(0, member)
                     .Build()
                 .Done());
+            // clang-format on
 
             continue;
         }
 
         if (const auto namesList = tuple.ColumnName().Maybe<TCoAtomList>()) {
+            // clang-format off
             const auto expApplier = Build<TExprApplier>(ctx, pos)
                 .Apply(tuple.Trait().Cast<TCoAggregationTraits>().FinishHandler())
                 .With(0, member)
                 .Done();
+            // clang-format on
 
             int index = 0;
             for (const auto columnName : namesList.Cast()) {
+                // clang-format off
                 const auto extracter = Build<TCoNth>(ctx, pos)
                     .Tuple(expApplier)
                     .Index<TCoAtom>().Build(index++)
                     .Done();
+                // clang-format on
 
+                // clang-format off
                 structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
                     .Name(columnName)
                     .Value(extracter)
                     .Done());
+                // clang-format on
             }
 
             continue;
@@ -556,11 +618,14 @@ TExprNode::TPtr BuildFinishHopLambda(
             << tuple.ColumnName().Ptr()->Dump());
     }
 
+    // clang-format off
     structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
         .Name().Build(hoppingColumn)
         .Value(finishTimeArg)
         .Done());
+    // clang-format on
 
+    // clang-format off
     return Build<TCoLambda>(ctx, pos)
         .Args({finishKeyArg, finishStateArg, finishTimeArg})
         .Body<TCoAsStruct>()
@@ -568,6 +633,7 @@ TExprNode::TPtr BuildFinishHopLambda(
             .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildSaveHopLambda(const TCoAggregate& aggregate, TExprContext& ctx) {
@@ -583,11 +649,14 @@ TExprNode::TPtr BuildSaveHopLambda(const TCoAggregate& aggregate, TExprContext& 
         const auto tuple = handler.Cast<TCoAggregateTuple>();
         const TString columnName = BuildColumnName(tuple.ColumnName());
 
+        // clang-format off
         const auto member = Build<TCoMember>(ctx, pos)
             .Struct(saveStateArg)
             .Name().Build(columnName)
             .Done();
+        // clang-format on
 
+        // clang-format off
         structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(columnName)
             .Value<TExprApplier>()
@@ -595,8 +664,10 @@ TExprNode::TPtr BuildSaveHopLambda(const TCoAggregate& aggregate, TExprContext& 
                 .With(0, member)
                 .Build()
             .Done());
+        // clang-format on
     }
 
+    // clang-format off
     return Build<TCoLambda>(ctx, pos)
         .Args({saveStateArg})
         .Body<TCoAsStruct>()
@@ -604,6 +675,7 @@ TExprNode::TPtr BuildSaveHopLambda(const TCoAggregate& aggregate, TExprContext& 
             .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildLoadHopLambda(const TCoAggregate& aggregate, TExprContext& ctx) {
@@ -619,11 +691,14 @@ TExprNode::TPtr BuildLoadHopLambda(const TCoAggregate& aggregate, TExprContext& 
         const auto tuple = handler.Cast<TCoAggregateTuple>();
         const TString columnName = BuildColumnName(tuple.ColumnName());
 
+        // clang-format off
         const auto member = Build<TCoMember>(ctx, pos)
             .Struct(loadStateArg)
             .Name().Build(columnName)
             .Done();
+        // clang-format on
 
+        // clang-format off
         structItems.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(columnName)
             .Value<TExprApplier>()
@@ -631,8 +706,10 @@ TExprNode::TPtr BuildLoadHopLambda(const TCoAggregate& aggregate, TExprContext& 
                 .With(0, member)
                 .Build()
             .Done());
+        // clang-format on
     }
 
+    // clang-format off
     return Build<TCoLambda>(ctx, pos)
         .Args({loadStateArg})
         .Body<TCoAsStruct>()
@@ -640,6 +717,7 @@ TExprNode::TPtr BuildLoadHopLambda(const TCoAggregate& aggregate, TExprContext& 
             .Build()
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 } // NYql::NHopping

@@ -1,10 +1,11 @@
+$to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
 /* dqfile can not */
 /* hybridfile can not - missing langver support */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 
 SELECT
-    Substring(r_reason_desc, 1, 20) AS reason,
+    Substring(CAST(r_reason_desc AS String), 1, 20) AS reason,
     Avg(ws_quantity) AS avg_ws_q,
     Avg(wr_refunded_cash) AS avg_wr_r,
     Avg(wr_fee) AS avg_wr_f
@@ -97,7 +98,7 @@ WHERE
 GROUP BY
     r_reason_desc
 ORDER BY
-    Substring(r_reason_desc, 1, 20),
+    Substring(CAST(r_reason_desc AS String), 1, 20),
     Avg(ws_quantity),
     Avg(wr_refunded_cash),
     Avg(wr_fee)

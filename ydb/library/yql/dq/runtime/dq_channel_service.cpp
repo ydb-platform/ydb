@@ -1575,16 +1575,18 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     HandleChannelData(ev);
 }
 
-void TNodeState::SendFromWaiters(ui64 deltaBytes) {
+// The bytes of an acknowledged message are released by the HandleAck pop sites, under the session Mutex
+// and before any of its early returns, so InflightBytes is always in sync with the Queue here.
+void TNodeState::SendFromWaiters() {
 
     if (Reconciliation.load() > 0) {
         return;
     }
-    ui64 inflightBytes = InflightBytes.load();
-
-    Y_ABORT_UNLESS(inflightBytes >= deltaBytes, "%s, inflightBytes=%" PRIu64 ", deltaBytes=%" PRIu64, LogPrefix.c_str(), inflightBytes, deltaBytes);
-
-    while (inflightBytes - deltaBytes < Limits.RemoteSessionInflightBytes) {
+    // InflightBytes is re-read on every iteration on purpose: PushDataChunk sends directly from the
+    // producer threads and adds to it concurrently, so a snapshot taken here would not account for those
+    // bytes and the loop would keep draining waiters well past RemoteSessionInflightBytes. The window is
+    // still checked before the bytes are added, so it is exceeded by at most one message, as in PushDataChunk.
+    while (InflightBytes.load() < Limits.RemoteSessionInflightBytes) {
         std::shared_ptr<TOutputDescriptor> waiter;
 
         {
@@ -1670,7 +1672,6 @@ now may need to send very last msg from terminated descriptor
                 SendMessage(item);
                 SendCount++;
                 (*SessionMessagesSent)++;
-                inflightBytes += bytes;
                 InflightBytes += bytes;
                 *OutputBufferInflightBytes += bytes;
                 (*OutputBufferInflightMessages)++;
@@ -1690,7 +1691,6 @@ now may need to send very last msg from terminated descriptor
         }
     }
 
-    InflightBytes -= deltaBytes;
 }
 
 void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
@@ -1749,6 +1749,12 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 item->Descriptor->AbortChannel(TStringBuilder() << "By Outdated GenMajor " << item->Descriptor->GenMajor.load() << " vs " << GenMajor);
             }
             deltaBytes += item->Data.Bytes;
+            // the counter is unsigned: releasing more than it holds wraps it around and the session
+            // stops sending for good, with an empty Queue and idle channels
+            Y_DEBUG_ABORT_UNLESS(InflightBytes.load() >= item->Data.Bytes,
+                "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
+                LogPrefix.c_str(), InflightBytes.load(), item->Data.Bytes, item->SeqNo);
+            InflightBytes -= item->Data.Bytes;
             *OutputBufferInflightBytes -= item->Data.Bytes;
             (*OutputBufferInflightMessages)--;
             Queue.pop_front();
@@ -1772,9 +1778,16 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 }
             } else {
                 if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
-                    LOG_W(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo);
-                    StartReconciliation(false, 'R');
-                    return;
+                    if (Reconciliation.load() == 0) {
+                        // the peer found a gap: this item is the 1st missing one, resend from it by a minor reconciliation
+                        LOG_W(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo);
+                        StartReconciliation(false, 'R');
+                        return;
+                    }
+                    // a discovery reply: RESEND carries the last confirmed SeqNo here (see HandleDiscovery), not the 1st
+                    // missing one. Nothing has been sent with the current GenMinor yet, so a gap RESEND cannot pass the
+                    // generation check above. The item is acked and the rest of the queue is resent below.
+                    LOG_D(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by discovery");
                 }
 
                 // if (!item->Descriptor->IsTerminatedOrAborted())
@@ -1797,6 +1810,12 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 }
 
                 deltaBytes += item->Data.Bytes;
+                // the counter is unsigned: releasing more than it holds wraps it around and the session
+                // stops sending for good, with an empty Queue and idle channels
+                Y_DEBUG_ABORT_UNLESS(InflightBytes.load() >= item->Data.Bytes,
+                    "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
+                    LogPrefix.c_str(), InflightBytes.load(), item->Data.Bytes, item->SeqNo);
+                InflightBytes -= item->Data.Bytes;
                 *OutputBufferInflightBytes -= item->Data.Bytes;
                 (*OutputBufferInflightMessages)--;
                 Queue.pop_front();
@@ -1806,7 +1825,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         if (Reconciliation.exchange(0) > 0) {
             ReconciliationCount = 0;
             ReconSent.store(TInstant::Zero());
-            LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", WQ=" << WaitersQueueSize.load() << ", InflightBytes=" << InflightBytes.load() << '-' << deltaBytes);
+            LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", WQ=" << WaitersQueueSize.load() << ", InflightBytes=" << InflightBytes.load() << ", Released=" << deltaBytes);
             if (!Queue.empty()) {
                 for (auto item : Queue) {
                     SendMessage(item);
@@ -1818,7 +1837,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         }
     }
 
-    SendFromWaiters(deltaBytes);
+    SendFromWaiters();
 }
 
 void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
@@ -1880,7 +1899,7 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 }
 
 void TNodeState::HandleSendWaiters(TEvPrivate::TEvSendWaiters::TPtr&) {
-   SendFromWaiters(0);
+   SendFromWaiters();
 }
 
 void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
@@ -2134,7 +2153,6 @@ void TNodeState::StartReconciliation(bool major, char logSymbol) {
         if (major) {
             GenMajor++;
             GenMinor = 1;
-            SeqNo = 0;
             InputNodeActorId = NActors::TActorId{};
         } else {
             GenMinor++;
@@ -2189,9 +2207,15 @@ void TNodeState::DoReconciliation(char logSymbol) {
             << ", WQ=" << WaitersQueueSize.load() << ", Log=" << reconciliationLog);
     }
 
-    ui32 delta = 0;
+    // the bytes of the dropped items, TDataChunk::Bytes wide: a narrower accumulator would wrap and
+    // corrupt InflightBytes once the queued bytes of a session pass its range
+    ui64 delta = 0;
 
     if (GenMinor == 1) { // => major reconciliation
+        // Nothing is sent while the reconciliation is in progress and the peer is at ConfirmedSeqNo == 0
+        // for the new generation, so every attempt (the 1st one and the timer retries) must number the
+        // queue from 1. Dropping aborted items below would leave gaps otherwise.
+        SeqNo = 0;
         std::deque<std::shared_ptr<TOutputItem>> RebuiltQueue;
         while (!Queue.empty()) {
 

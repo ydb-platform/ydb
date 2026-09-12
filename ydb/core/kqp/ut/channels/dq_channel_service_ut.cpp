@@ -14,6 +14,7 @@
 
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <util/random/random.h>
+#include <util/system/datetime.h>
 
 #include <atomic>
 
@@ -577,6 +578,361 @@ struct TReconTest : public TLoadTest {
 
 };
 
+// Direct access to the node sessions of both nodes, for the reconciliation scenarios below.
+struct TSessionTest : public TLoadTest {
+
+    static std::shared_ptr<TNodeState> FindNodeState(const std::shared_ptr<TDqChannelService>& service, ui32 peerNodeId) {
+        std::lock_guard lock(service->Mutex);
+        auto it = service->NodeStates.find(peerNodeId);
+        return it == service->NodeStates.end() ? nullptr : it->second;
+    }
+
+    static ui64 GetGenMajor(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        return state->GenMajor;
+    }
+
+    static ui64 GetGenMinor(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        return state->GenMinor;
+    }
+
+    static ui64 GetQueueSize(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        return state->Queue.size();
+    }
+
+    static ui64 GetFrontSeqNo(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        return state->Queue.empty() ? 0 : state->Queue.front()->SeqNo;
+    }
+
+    static ui64 GetConfirmedSeqNo(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        return state->ConfirmedSeqNo;
+    }
+
+    static ui64 GetInputCount(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        return state->InputDescriptors.size();
+    }
+
+    // the bytes the session believes are in flight; must match the queued bytes at any settled moment
+    static ui64 GetQueueBytes(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        ui64 bytes = 0;
+        for (const auto& item : state->Queue) {
+            bytes += item->Data.Bytes;
+        }
+        return bytes;
+    }
+
+    static TString GetReconciliationLog(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        return state->GetReconciliationLog();
+    }
+
+    static bool WaitFor(const std::function<bool()>& predicate, TDuration timeout) {
+        auto deadline = TInstant::Now() + timeout;
+        do {
+            if (predicate()) {
+                return true;
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        } while (TInstant::Now() < deadline);
+        return false;
+    }
+
+    // waits for the sender session to have nothing in flight and no reconciliation in progress
+    void WaitSettled(const std::shared_ptr<TNodeState>& sender) {
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(sender) == 0 && sender->Reconciliation.load() == 0; }, TDuration::Seconds(5)),
+            "sender node session did not settle");
+    }
+
+    // producer on node 0, consumer on node 1; the consumer is registered right away (the producer needs
+    // its id) but started only on demand
+    std::pair<NActors::TActorId, NActors::TActorId> StartChannel(ui32 channelId, bool startConsumer) {
+        auto producer = Runtime->Register(new TProducerActor(Service0, channelId, ProducerSettings, OutputQuotaManager), NodeIndex0);
+        auto consumer = Runtime->Register(new TConsumerActor(Service1, channelId, ConsumerSettings, InputQuotaManager), NodeIndex1);
+        Actors.insert(producer);
+        Actors.insert(consumer);
+        if (startConsumer) {
+            StartConsumer({producer, consumer});
+        }
+        Runtime->Send(producer, Control0, new TEvTestPrivate::TEvStart(consumer), NodeIndex0, true);
+        return {producer, consumer};
+    }
+
+    void StartConsumer(const std::pair<NActors::TActorId, NActors::TActorId>& channel) {
+        Runtime->Send(channel.second, Control1, new TEvTestPrivate::TEvStart(channel.first), NodeIndex1, true);
+    }
+
+    // details are collected at failure time, the reconciliation log is most useful then
+    void WaitChannel(const std::function<TString()>& details) {
+        try {
+            auto msg0 = Runtime->GrabEdgeEvent<TEvTestPrivate::TEvFinished>(Control0, TDuration::Seconds(10));
+            Actors.erase(msg0->Sender);
+            ErrorCount += msg0->Get()->Error;
+            auto msg1 = Runtime->GrabEdgeEvent<TEvTestPrivate::TEvFinished>(Control1, TDuration::Seconds(10));
+            Actors.erase(msg1->Sender);
+            ErrorCount += msg1->Get()->Error;
+        } catch (NActors::TEmptyEventQueueException&) {
+            UNIT_ASSERT_C(false, TStringBuilder() << "channel did not finish, " << details());
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(ErrorCount, 0, details());
+    }
+
+    void WaitChannel(const TString& details) {
+        WaitChannel([&]() { return details; });
+    }
+};
+
+// A major reconciliation which needs more than one discovery attempt renumbers the queued messages on
+// every attempt (TNodeState::DoReconciliation), but SeqNo is reset only when the major reconciliation
+// starts. The 2nd attempt turns [1..q] into [q+1..2q]. The receiver session is reset to
+// ConfirmedSeqNo == 0 by the new generation, so it sees a gap it can never close: it asks to resend
+// from 1, the sender has no such message, and the channel stalls forever.
+//
+// The scenario mirrors production: the receiver's node session is gone (idle destroy or reconciliation
+// failure), the sender's next data bounces with ActorUnknown and starts a major reconciliation, and the
+// receiver's channel service is too slow to answer the 1st discovery within the 1s reconciliation timeout.
+struct TMajorReconRetryTest : public TSessionTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 3, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+
+        // warm up: both node sessions exist afterwards, reconciled and idle
+        StartChannel(1, true);
+        WaitChannel("warm up");
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto receiverNodeId = Runtime->GetNodeId(1);
+        auto sender = FindNodeState(Service0, receiverNodeId);
+        auto receiver = FindNodeState(Service1, senderNodeId);
+        UNIT_ASSERT_C(sender, "sender node session not found");
+        UNIT_ASSERT_C(receiver, "receiver node session not found");
+        WaitSettled(sender);
+        auto genMajor = GetGenMajor(sender);
+
+        // the receiver's node session goes away exactly as the service does it after an idle destroy or a
+        // reconciliation failure; the sender still addresses the dead session actor
+        receiver->Terminating.store(true);
+        Service1->FreeNodeSession(senderNodeId, receiver->NodeActorId);
+        receiver.reset();
+
+        // the receiver's channel service does not answer the discovery until the lock is released
+        std::unique_lock serviceLock(Service1->Mutex);
+
+        auto channel = StartChannel(2, false);
+
+        // the data bounces with ActorUnknown, the sender starts a major reconciliation and renumbers the queue
+        UNIT_ASSERT_C(WaitFor([&]() { return GetGenMajor(sender) == genMajor + 1; }, TDuration::Seconds(5)),
+            "the sender did not start a major reconciliation");
+        auto reconciliationStarted = TInstant::Now();
+        auto queueSize = GetQueueSize(sender);
+        auto frontSeqNo = GetFrontSeqNo(sender);
+        UNIT_ASSERT_C(queueSize > 0, "nothing queued at the sender");
+        UNIT_ASSERT_VALUES_EQUAL_C(frontSeqNo, 1, "queue is not renumbered from 1 by the major reconciliation");
+
+        // let the 1st reconciliation timeout (1s) expire, the sender retries the discovery
+        SleepUntil(reconciliationStarted + TDuration::MilliSeconds(1500));
+        auto retriedFrontSeqNo = GetFrontSeqNo(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetGenMajor(sender), genMajor + 1, "unexpected 2nd major reconciliation");
+        UNIT_ASSERT_VALUES_EQUAL_C(GetQueueSize(sender), queueSize, "queue size changed during reconciliation");
+
+        // the discovery is answered now by a brand new receiver session (ConfirmedSeqNo == 0) and the sender
+        // resends the queue to it
+        serviceLock.unlock();
+        StartConsumer(channel);
+
+        auto details = TStringBuilder() << "queue front SeqNo after the reconciliation retry: " << retriedFrontSeqNo
+            << " (expected 1), queue size: " << queueSize;
+        WaitChannel(details);
+        UNIT_ASSERT_VALUES_EQUAL_C(retriedFrontSeqNo, 1, "queue renumbered again by the reconciliation retry");
+
+        // the node session must not outlive the actor system, its destructor logs through it
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
+// Two producers of RESEND acks disagree on the meaning of SeqNo: a data gap (TNodeState::HandleData)
+// asks to resend from ConfirmedSeqNo + 1, a discovery (TNodeState::HandleDiscovery) reports
+// ConfirmedSeqNo itself. TNodeState::HandleAck reads both as "resend from SeqNo". When the queue front
+// is exactly the confirmed message - its ack was lost, or as here dropped by the GenMinor check because
+// a minor reconciliation had started - the RESEND branch calls StartReconciliation(false, 'R'), which
+// only logs "-R" while a reconciliation is already running, and Reconciliation is never cleared.
+// Every discovery retry gets the same reply, the log reads TD-RT-RT-RTX, and the session is destroyed
+// with all its channels after ReconciliationCount attempts although the peer answered every time.
+//
+// The receiver is a TDebugNodeState, so that its data processing can be paused and replayed one message
+// at a time. The sender's [c, c+1] wait at the receiver, a disconnect starts a minor reconciliation at
+// the sender, the receiver processes c alone before it gets the discovery, and c+1 is dropped as
+// obsolete afterwards - lost on the wire, as far as both sides can tell.
+struct TDiscoveryResendTrapTest : public TSessionTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 1, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        // must precede anything which would create a regular receiver session
+        auto receiver = Service1->CreateDebugNodeState(senderNodeId);
+
+        // warm up: both node sessions are reconciled and idle afterwards
+        StartChannel(1, true);
+        WaitChannel("warm up");
+
+        auto sender = FindNodeState(Service0, receiverNodeId);
+        UNIT_ASSERT_C(sender, "sender node session not found");
+        WaitSettled(sender);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInputCount(receiver) == 0; }, TDuration::Seconds(5)),
+            "the warm up input descriptor is still there");
+        auto genMinor = GetGenMinor(sender);
+
+        // [c, c+1] (data + finish) reach the receiver and wait there
+        receiver->PauseChannelData();
+        auto channel = StartChannel(2, false);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(sender) == 2; }, TDuration::Seconds(5)),
+            "the sender did not send 2 messages");
+        auto frontSeqNo = GetFrontSeqNo(sender);
+
+        // the discovery of the minor reconciliation must reach the receiver after it has processed c
+        std::unique_lock serviceLock(Service1->Mutex);
+
+        Runtime->Send(sender->NodeActorId, Control0, new NActors::TEvInterconnect::TEvNodeDisconnected(receiverNodeId), NodeIndex0, true);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetGenMinor(sender) == genMinor + 1; }, TDuration::Seconds(5)),
+            "the sender did not start a minor reconciliation");
+
+        // the receiver processes c alone; its ack carries the old GenMinor and is ignored by the sender
+        receiver->ChannelDataPaused.store(false);
+        receiver->ProcessPending(1);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInputCount(receiver) == 1; }, TDuration::Seconds(5)),
+            "the receiver did not process the 1st message");
+        receiver->ChannelDataPaused.store(true);
+        auto confirmedSeqNo = GetConfirmedSeqNo(receiver);
+        UNIT_ASSERT_VALUES_EQUAL_C(confirmedSeqNo, frontSeqNo, "the receiver confirmed something else than the queue front");
+
+        // the discovery is answered now: RESEND with the confirmed c, which is the sender's queue front;
+        // the sender must drop c and get back to work
+        serviceLock.unlock();
+        auto reconciled = WaitFor([&]() { return sender->Reconciliation.load() == 0 && GetFrontSeqNo(sender) == frontSeqNo + 1; },
+            TDuration::Seconds(2));
+
+        // the receiver drops the stale c+1 as obsolete (old GenMinor) and takes the resent one
+        UNIT_ASSERT_C(WaitFor([&]() { return receiver->OutputNodeGenMinor.load() == genMinor + 1; }, TDuration::Seconds(5)),
+            "the receiver did not get the discovery");
+        receiver->ResumeChannelData();
+        StartConsumer(channel);
+
+        auto details = [&]() {
+            return TStringBuilder() << "reconciled after the discovery reply: " << reconciled
+                << ", queue front SeqNo: " << GetFrontSeqNo(sender) << " (confirmed by the receiver: " << confirmedSeqNo << ")"
+                << ", reconciliation log: " << GetReconciliationLog(sender);
+        };
+        WaitChannel(details);
+        UNIT_ASSERT_C(reconciled, details());
+
+        // the node sessions must not outlive the actor system, their destructors log through it
+        receiver.reset();
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
+// TNodeState::HandleAck pops the acknowledged prefix of the queue and accumulates its size in
+// deltaBytes, but the session counter is only adjusted at the very end, by SendFromWaiters(deltaBytes).
+// Every early return in between - 'F', 'L', 'N', 'Y' and a gap 'R' - drops that adjustment, and neither
+// the reconciliation nor the RECONCILED path ever recomputes InflightBytes from the queue. The drift is
+// permanent and accumulates: once it reaches RemoteSessionInflightBytes the session stops sending
+// anything at all, with an empty queue and idle channels.
+//
+// Staged here on the gap RESEND path: the receiver confirms the 1st two messages but their acks are lost,
+// then a message is lost as well, so the receiver asks to resend from the 1st missing one. The sender pops
+// the two confirmed messages (deltaBytes > 0) and returns through StartReconciliation(false, 'R').
+struct TInflightLeakTest : public TSessionTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        // both must precede anything which would create a regular session for the same peer
+        auto sender = Service0->CreateDebugNodeState(receiverNodeId);
+        auto receiver = Service1->CreateDebugNodeState(senderNodeId);
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 1, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+
+        // warm up: both sessions are reconciled and idle afterwards, no ack is in flight
+        StartChannel(1, true);
+        WaitChannel("warm up");
+        WaitSettled(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(sender->InflightBytes.load(), 0, "the warm up already leaked");
+
+        // 4 messages, the producer stalls in the middle for long enough to set the loss up between them
+        ProducerSettings = TWorkerSettings{ .MessageCount = 4, .MinMessageSize = 10, .MaxMessageSize = 20,
+            .PauseMessageIndex = 2, .PauseDelayMs = 2000 };
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 4, .MinMessageSize = 10, .MaxMessageSize = 20 };
+
+        // nothing is processed at the receiver until the whole batch is there
+        receiver->PauseChannelData();
+        auto channel = StartChannel(2, false);
+
+        // the 1st two messages (plus the leading one of the batch) have arrived and wait in the pending
+        // queue; the next arrival - the 3rd message - is dropped on the wire
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(sender) >= 2; }, TDuration::Seconds(5)),
+            "the sender did not send the 1st half of the batch");
+        receiver->SetLossProbability(1.0, 1, 0.0, 0);
+
+        // the batch is 4 messages plus the finish one
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(sender) >= 5; }, TDuration::Seconds(10)),
+            "the sender did not send the whole batch");
+        auto frontSeqNo = GetFrontSeqNo(sender);
+        auto queueBytes = GetQueueBytes(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(sender->InflightBytes.load(), queueBytes, "unexpected inflight bytes before the loss");
+
+        // the acks of the 1st two messages never reach the sender, so they stay in its queue; the
+        // receiver confirms them, misses the 3rd message and asks to resend from it
+        sender->SetLossProbability(0.0, 0, 1.0, 2);
+        receiver->ResumeChannelData();
+        StartConsumer(channel);
+
+        auto details = [&]() {
+            return TStringBuilder() << "front SeqNo before the loss: " << frontSeqNo
+                << ", queue bytes: " << queueBytes
+                << ", inflight bytes now: " << sender->InflightBytes.load()
+                << ", queue bytes now: " << GetQueueBytes(sender)
+                << ", reconciliation log: " << GetReconciliationLog(sender);
+        };
+
+        WaitChannel(details);
+        WaitSettled(sender);
+
+        // the queue is empty now, so nothing at all is in flight
+        UNIT_ASSERT_VALUES_EQUAL_C(sender->InflightBytes.load(), 0, details());
+
+        // the node sessions must not outlive the actor system, their destructors log through it
+        receiver.reset();
+        sender.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
@@ -688,6 +1044,30 @@ Y_UNIT_TEST_SUITE(Channels20) {
         test.Local = false;
         test.ProducerSettings.MessageCount = 100;
         test.ConsumerSettings.MessageCount = 100;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(MajorReconciliationRetry) {
+        TMajorReconRetryTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(DiscoveryResendTrap) {
+        TDiscoveryResendTrapTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(InflightLeakOnResend) {
+        TInflightLeakTest test;
+
+        test.Local = false;
 
         test.Run();
     }

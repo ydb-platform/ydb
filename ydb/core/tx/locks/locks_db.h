@@ -137,6 +137,66 @@ public:
             }
         }
 
+        // Load ancestor shard locks (DataShard only)
+        if constexpr (requires { typename Schema::AncestorShardsLocks; }) {
+            if (db.HaveTable<typename Schema::AncestorShardsLocks>()) {
+                auto rowset = db.Table<typename Schema::AncestorShardsLocks>().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+                while (!rowset.EndOfSet()) {
+                    auto lockId = rowset.template GetValue<typename Schema::AncestorShardsLocks::LockId>();
+                    auto it = lockIndex.find(lockId);
+                    if (it != lockIndex.end()) {
+                        auto& lock = rows[it->second];
+                        NDataShard::TAncestorLock ancestorLock;
+                        ancestorLock.TabletId = rowset.template GetValue<typename Schema::AncestorShardsLocks::TabletId>();
+                        ancestorLock.Generation = rowset.template GetValue<typename Schema::AncestorShardsLocks::Generation>();
+                        ancestorLock.Counter = rowset.template GetValue<typename Schema::AncestorShardsLocks::Counter>();
+                        ancestorLock.CreationTime = TInstant::MicroSeconds(rowset.template GetValue<typename Schema::AncestorShardsLocks::CreateTimestamp>());
+                        ancestorLock.Flags = NDataShard::ELockFlags(rowset.template GetValue<typename Schema::AncestorShardsLocks::Flags>());
+                        lock.AncestorLocks.push_back(std::move(ancestorLock));
+                    }
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        // Load ancestor shard write seq nums (DataShard only)
+        if constexpr (requires { typename Schema::AncestorLockWriteSeqNums; }) {
+            if (db.HaveTable<typename Schema::AncestorLockWriteSeqNums>()) {
+                auto rowset = db.Table<typename Schema::AncestorLockWriteSeqNums>().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+                while (!rowset.EndOfSet()) {
+                    auto lockId = rowset.template GetValue<typename Schema::AncestorLockWriteSeqNums::LockId>();
+                    auto it = lockIndex.find(lockId);
+                    if (it != lockIndex.end()) {
+                        auto& lock = rows[it->second];
+                        const ui64 tabletId = rowset.template GetValue<typename Schema::AncestorLockWriteSeqNums::TabletId>();
+                        auto ancestorIt = std::find_if(
+                            lock.AncestorLocks.begin(), lock.AncestorLocks.end(),
+                            [tabletId](const auto& al) { return al.TabletId == tabletId; });
+                        if (ancestorIt != lock.AncestorLocks.end()) {
+                            NDataShard::TWriteSeqNumState state;
+                            state.WriterIndex = rowset.template GetValue<typename Schema::AncestorLockWriteSeqNums::WriterIndex>();
+                            state.WriteSeqNum = rowset.template GetValue<typename Schema::AncestorLockWriteSeqNums::WriteSeqNum>();
+                            state.SerializedResult = rowset.template GetValueOrDefault<typename Schema::AncestorLockWriteSeqNums::WriteResult>();
+                            if (state.WriteSeqNum) {
+                                ancestorIt->WriteSeqNumStates[state.WriterIndex] = state;
+                            }
+                        }
+                    }
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+        }
+
         return true;
     }
 
@@ -191,6 +251,56 @@ public:
         } else {
             Y_UNUSED(lockId, writerIndex);
             Y_ABORT("WriteSeqNum is not supported");
+        }
+    }
+
+    void PersistAddAncestorLock(ui64 lockId, const NDataShard::TAncestorLock& lock) override {
+        using Schema = TSchemaDescription;
+        if constexpr (requires { typename Schema::AncestorShardsLocks; }) {
+            NIceDb::TNiceDb db(DB);
+            db.Table<typename Schema::AncestorShardsLocks>().Key(lockId, lock.TabletId).Update(
+                NIceDb::TUpdate<typename Schema::AncestorShardsLocks::Generation>(lock.Generation),
+                NIceDb::TUpdate<typename Schema::AncestorShardsLocks::Counter>(lock.Counter),
+                NIceDb::TUpdate<typename Schema::AncestorShardsLocks::CreateTimestamp>(lock.CreationTime.MicroSeconds()),
+                NIceDb::TUpdate<typename Schema::AncestorShardsLocks::Flags>(ui64(lock.Flags)));
+            HasChanges_ = true;
+        } else {
+            Y_ENSURE(false, "AncestorShardsLocks is not supported");
+        }
+    }
+
+    void PersistRemoveAncestorLock(ui64 lockId, ui64 tabletId) override {
+        using Schema = TSchemaDescription;
+        if constexpr (requires { typename Schema::AncestorShardsLocks; }) {
+            NIceDb::TNiceDb db(DB);
+            db.Table<typename Schema::AncestorShardsLocks>().Key(lockId, tabletId).Delete();
+            HasChanges_ = true;
+        } else {
+            Y_ENSURE(false, "AncestorShardsLocks is not supported");
+        }
+    }
+
+    void PersistAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) override {
+        using Schema = TSchemaDescription;
+        if constexpr (requires { typename Schema::LockWriteSeqNums; }) {
+            NIceDb::TNiceDb db(DB);
+            db.Table<typename Schema::AncestorLockWriteSeqNums>().Key(lockId, tabletId, writerIndex).Update(
+                NIceDb::TUpdate<typename Schema::AncestorLockWriteSeqNums::WriteSeqNum>(writeSeqNum),
+                NIceDb::TUpdate<typename Schema::AncestorLockWriteSeqNums::WriteResult>(serializedResult));
+            HasChanges_ = true;
+        } else {
+            Y_ENSURE(false, "AncestorLockWriteSeqNums is not supported");
+        }
+    }
+
+    void PersistRemoveAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex) override {
+        using Schema = TSchemaDescription;
+        if constexpr (requires { typename Schema::AncestorLockWriteSeqNums; }) {
+            NIceDb::TNiceDb db(DB);
+            db.Table<typename Schema::AncestorLockWriteSeqNums>().Key(lockId, tabletId, writerIndex).Delete();
+            HasChanges_ = true;
+        } else {
+            Y_ENSURE(false, "AncestorLockWriteSeqNums is not supported");
         }
     }
 

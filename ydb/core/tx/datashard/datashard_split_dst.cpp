@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
@@ -249,6 +250,75 @@ public:
             }
         }
 
+        // Restore ancestor locks transferred from the src shard.
+        // These represent persistent write-only locks whose uncommitted writes are in the borrowed snapshot.
+        const bool lockTransferEnabled = AppData(ctx)
+                ->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+        if (lockTransferEnabled && record.LocksSize() > 0) {
+            TDataShardLocksDb locksDb(*Self, txc);
+            for (const auto& srcLockInfo : record.GetLocks()) {
+                if (!srcLockInfo.GetReadTables().empty()) {
+                    // Skip if someone sent us a read lock.
+                    continue;
+                }
+
+                ILocksDb::TLockRow row;
+                row.LockId = srcLockInfo.GetLockId();
+                row.LockNodeId = srcLockInfo.GetLockNodeId();
+                row.Generation = srcLockInfo.GetGeneration();
+                row.Counter = srcLockInfo.GetCounter();
+                row.CreateTs = srcLockInfo.GetCreateTimestamp();
+                row.Flags = ui64(ELockFlags::Persistent);
+
+                auto writeSeqNumStateFromProto = [](const auto& proto) {
+                    TWriteSeqNumState state;
+                    state.WriterIndex = proto.GetWriterIndex();
+                    state.WriteSeqNum = proto.GetWriteSeqNum();
+                    state.SerializedResult = proto.GetSerializedResult();
+                    return state;
+                };
+
+                for (const auto& proto : srcLockInfo.GetWriteSeqNumStates()) {
+                    auto state = writeSeqNumStateFromProto(proto);
+                    if (state.WriteSeqNum) {
+                        row.WriteSeqNumStates.push_back(std::move(state));
+                    }
+                }
+
+                row.AncestorLocks.reserve(srcLockInfo.GetAncestorLocks().size());
+                for (const auto& protoLock : srcLockInfo.GetAncestorLocks()) {
+                    TAncestorLock ancestorLock;
+                    ancestorLock.TabletId = protoLock.GetTabletId();
+                    ancestorLock.Generation = protoLock.GetGeneration();
+                    ancestorLock.Counter = protoLock.GetCounter();
+                    ancestorLock.CreationTime = TInstant::MicroSeconds(protoLock.GetCreateTimestamp());
+                    ancestorLock.Flags = ELockFlags(protoLock.GetFlags());
+
+                    for (const auto& proto : protoLock.GetWriteSeqNumStates()) {
+                        auto state = writeSeqNumStateFromProto(proto);
+                        if (state.WriteSeqNum) {
+                            ancestorLock.WriteSeqNumStates[state.WriterIndex] = state;
+                        }
+                    }
+
+                    row.AncestorLocks.push_back(std::move(ancestorLock));
+                }
+
+                for (const auto& pathProto : srcLockInfo.GetWriteTables()) {
+                    row.WriteTables.push_back(TPathId::FromProto(pathProto));
+                }
+
+                if (!Self->SysLocksTable().RestoreLockFromSplitSrc(
+                        srcTabletId, std::move(row), locksDb)) {
+                    YDB_LOG_WARN_CTX(ctx, "Too many locks, couldn't restore all",
+                        {"tabletId", Self->TabletID()},
+                        {"opId", opId},
+                        {"srcTabletId", srcTabletId});
+                    break;
+                }
+            }
+        }
+
         // Persist the fact that the snapshot has been received, so that duplicate event can be ignored
         db.Table<Schema::SplitDstReceivedSnapshots>().Key(srcTabletId).Update();
         Self->ReceiveSnapshotsFrom.erase(srcTabletId);
@@ -341,6 +411,9 @@ public:
 
                 // We are already in StateWork, but we need to repeat many steps now that we are Ready
                 Self->SwitchToWork(ctx);
+
+                // Subscribe to any ancestor locks transferred during split/merge
+                Self->SubscribeNewLocks(ctx);
 
                 // We can send the registration request now that we are ready
                 Self->SendRegistrationRequestTimeCast(ctx);

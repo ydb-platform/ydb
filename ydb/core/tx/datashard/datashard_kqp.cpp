@@ -55,9 +55,9 @@ bool NeedCommitLocks(NKikimrDataEvents::TKqpLocks::ELocksOp op) {
     }
 }
 
-TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
+TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto, ui64 selfShardId) {
     auto lockId = lockProto.GetLockId();
-    auto lockDatashard = lockProto.GetDataShard();
+    auto lockDatashard = selfShardId;
     auto lockSchemeShard = lockProto.GetSchemeShard();
     auto lockPathId = lockProto.GetPathId();
 
@@ -76,7 +76,8 @@ TVector<TCell> MakeLockKey(const NKikimrDataEvents::TLock& lockProto) {
 }
 
 // returns list of broken locks
-TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks, ui64 tabletId)
+TVector<NKikimrDataEvents::TLock> ValidateLocks(
+    const NKikimrDataEvents::TKqpLocks& txLocks, TSysLocks& sysLocks, bool allowAncestorLocks)
 {
     TVector<NKikimrDataEvents::TLock> brokenLocks;
 
@@ -84,40 +85,83 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
         return {};
     }
 
+    ui64 selfShardId = sysLocks.SelfShardId();
+
     for (auto& lockProto : txLocks.GetLocks()) {
-        if (lockProto.GetDataShard() != tabletId) {
-            continue;
-        }
-
-        auto lockKey = MakeLockKey(lockProto);
-
-        auto lock = sysLocks.GetLock(lockKey);
-        // The echoed write seq nums must exactly match the shard's.
+        ui32 ourGeneration = 0;
+        ui64 ourCounter = 0;
         bool writeSeqNumMismatch = false;
-        if (lock.WriteSeqNumKnown) {
-            if (lockProto.WriteSeqNumsSize() > 1) {
-                writeSeqNumMismatch = true;
-            } else if (lockProto.WriteSeqNumsSize() == 1) {
-                const auto& writeSeqNum = lockProto.GetWriteSeqNums(0);
-                writeSeqNumMismatch = writeSeqNum.GetWriterIndex() != lock.WriterIndex
-                                   || writeSeqNum.GetWriteSeqNum() != lock.WriteSeqNum;
-            } else {
-                writeSeqNumMismatch = lock.WriteSeqNum != 0;
+        if (lockProto.GetDataShard() == selfShardId) {
+            auto lockKey = MakeLockKey(lockProto, selfShardId);
+            auto lock = sysLocks.GetLock(lockKey);
+            ourGeneration = lock.Generation;
+            ourCounter = lock.Counter;
+            if (lock.WriteSeqNumKnown) {
+                // The echoed write seq nums must exactly match the lock's.
+                if (lockProto.WriteSeqNumsSize() > 1) {
+                    writeSeqNumMismatch = true;
+                } else if (lockProto.WriteSeqNumsSize() == 1) {
+                    const auto& writeSeqNum = lockProto.GetWriteSeqNums(0);
+                    writeSeqNumMismatch = writeSeqNum.GetWriterIndex() != lock.WriterIndex
+                        || writeSeqNum.GetWriteSeqNum() != lock.WriteSeqNum;
+                } else {
+                    writeSeqNumMismatch = lock.WriteSeqNum != 0;
+                }
+            }
+        } else {
+            if (!allowAncestorLocks) {
+                continue;
+            }
+
+            auto lockInfo = sysLocks.GetRawLock(lockProto.GetLockId());
+            if (!lockInfo || lockInfo->IsBroken()) {
+                YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (main lock not found or broken)",
+                    {"lockId", lockProto.GetLockId()},
+                    {"shardId", lockProto.GetDataShard()});
+                brokenLocks.emplace_back(lockProto);
+                continue;
+            }
+
+            auto it = lockInfo->GetAncestorLocks().find(lockProto.GetDataShard());
+            if (it == lockInfo->GetAncestorLocks().end()) {
+                YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (ancestor lock not found)",
+                    {"lockId", lockProto.GetLockId()},
+                    {"shardId", lockProto.GetDataShard()});
+                brokenLocks.emplace_back(lockProto);
+                continue;
+            }
+            const auto& ancestorLock = it->second;
+
+            ourGeneration = ancestorLock.Generation;
+            ourCounter = ancestorLock.Counter;
+
+            writeSeqNumMismatch = static_cast<size_t>(lockProto.GetWriteSeqNums().size())
+                != ancestorLock.WriteSeqNumStates.size();
+            if (!writeSeqNumMismatch) {
+                for (const auto& wsn : lockProto.GetWriteSeqNums()) {
+                    auto it = ancestorLock.WriteSeqNumStates.find(wsn.GetWriterIndex());
+                    if (it == ancestorLock.WriteSeqNumStates.end()
+                        || it->second.WriteSeqNum != wsn.GetWriteSeqNum()) {
+                        writeSeqNumMismatch = true;
+                        break;
+                    }
+                }
             }
         }
-        if (lock.Generation != lockProto.GetGeneration() ||
-            lock.Counter != lockProto.GetCounter() ||
-            writeSeqNumMismatch)
+
+        if (ourGeneration != lockProto.GetGeneration()
+            || ourCounter != lockProto.GetCounter()
+            || writeSeqNumMismatch)
         {
             YDB_LOG_TRACE("ValidateLocks: broken lock",
                 {"lockId", lockProto.GetLockId()},
-                {"expectedGeneration", lockProto.GetGeneration()},
-                {"expectedCounter", lockProto.GetCounter()},
-                {"actualLockGeneration", lock.Generation},
-                {"actualLockCounter", lock.Counter},
-                {"writeSeqNums", lockProto.GetWriteSeqNums().size()},
-                {"actualWriterIndex", lock.WriterIndex},
-                {"actualWriteSeqNum", lock.WriteSeqNum});
+                {"shardId", lockProto.GetDataShard()},
+                {"protoLockGeneration", lockProto.GetGeneration()},
+                {"protoLockCounter", lockProto.GetCounter()},
+                {"ourLockGeneration", ourGeneration},
+                {"ourLockCounter", ourCounter},
+                {"writeSeqNumMismatch", writeSeqNumMismatch},
+                {"writeSeqNumsSize", lockProto.GetWriteSeqNums().size()});
             brokenLocks.emplace_back(lockProto);
         }
     }
@@ -140,7 +184,10 @@ bool ReceiveLocks(const NKikimrDataEvents::TKqpLocks& locks, ui64 shardId) {
 }  // namespace
 
 
-void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks, TKeyValidator& keyValidator) {
+void KqpSetTxLocksKeys(
+    const NKikimrDataEvents::TKqpLocks& locks, const TSysLocks& sysLocks,
+    TKeyValidator& keyValidator, bool allowAncestorLocks)
+{
     if (locks.LocksSize() == 0) {
         return;
     }
@@ -153,27 +200,56 @@ void KqpSetTxLocksKeys(const NKikimrDataEvents::TKqpLocks& locks, const TSysLock
         NScheme::TTypeInfo(NScheme::TUint64::TypeId),
     };
 
-    for (auto& lock : locks.GetLocks()) {
-        auto lockKey = MakeLockKey(lock);
-        if (sysLocks.IsMyKey(lockKey)) {
-            auto point = TTableRange(lockKey, true, {}, true, /* point */ true);
-            if (NeedValidateLocks(locks.GetOp())) {
-                keyValidator.AddReadRange(sysLocksTableId, {}, point, lockRowType);
+    const ui64 selfShardId = sysLocks.SelfShardId();
+    absl::flat_hash_set<ui64> processedLockIds;
+
+    auto addLockKey = [&](const NKikimrDataEvents::TLock& lock) {
+        // Always make the key with selfShardId, even for ancestor locks.
+        auto lockKey = MakeLockKey(lock, selfShardId);
+        auto point = TTableRange(lockKey, true, {}, true, /* point */ true);
+        if (NeedValidateLocks(locks.GetOp())) {
+            keyValidator.AddReadRange(sysLocksTableId, {}, point, lockRowType);
+        }
+        if (NeedEraseLocks(locks.GetOp())) {
+            keyValidator.AddWriteRange(sysLocksTableId, point, lockRowType, {}, /* isPureEraseOp */ true);
+        }
+    };
+
+    // First add keys for non-ancestor locks;
+    for (const auto& lock : locks.GetLocks()) {
+        if (lock.GetDataShard() != selfShardId) {
+            continue;
+        }
+        processedLockIds.insert(lock.GetLockId());
+        addLockKey(lock);
+    }
+
+    // First add keys for those ancestor locks that didn't have the key for the main lock added yet.
+    if (allowAncestorLocks) {
+        for (const auto& lock : locks.GetLocks()) {
+            if (lock.GetDataShard() == selfShardId) {
+                continue;
             }
-            if (NeedEraseLocks(locks.GetOp())) {
-                keyValidator.AddWriteRange(sysLocksTableId, point, lockRowType, {}, /* isPureEraseOp */ true);
+            if (!processedLockIds.insert(lock.GetLockId()).second) {
+                continue;
             }
+            addLockKey(lock);
         }
     }
+
 }
 
 
-std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets) {
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateLocks(
+    TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
+    bool useGenericReadSets, const TInputOpData::TInReadSets& inReadSets,
+    bool allowAncestorLocks)
+{
     if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
         return {true, {}};
     }
 
-    auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
+    auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, allowAncestorLocks);
 
     if (!brokenLocks.empty()) {
         return {false, std::move(brokenLocks)};
@@ -218,7 +294,12 @@ bool KqpLocksIsArbiter(ui64 tabletId, const NKikimrDataEvents::TKqpLocks* kqpLoc
     return KqpLocksHasArbiter(kqpLocks) && kqpLocks->GetArbiterShard() == tabletId;
 }
 
-std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 origin, TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks, bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets, TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets) {
+std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(
+    TSysLocks& sysLocks, const NKikimrDataEvents::TKqpLocks* kqpLocks,
+    bool useGenericReadSets, ui64 txId, const TVector<NKikimrTx::TEvReadSet>& delayedInReadSets,
+    TInputOpData::TAwaitingDecisions& awaitingDecisions, TOutputOpData::TOutReadSets& outReadSets,
+    bool allowAncestorLocks)
+{
     if (kqpLocks == nullptr || !NeedValidateLocks(kqpLocks->GetOp())) {
         return {true, {}};
     }
@@ -231,15 +312,16 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
     Y_ENSURE(outReadSets.empty());
     Y_ENSURE(awaitingDecisions.empty());
 
+    const ui64 selfShardId = sysLocks.SelfShardId();
     const bool hasArbiter = KqpLocksHasArbiter(kqpLocks);
-    const bool isArbiter = KqpLocksIsArbiter(origin, kqpLocks);
+    const bool isArbiter = KqpLocksIsArbiter(selfShardId, kqpLocks);
 
     // Note: usually all shards send locks, since they either have side effects or need to validate locks
     // However it is technically possible to have pure-read shards, that don't contribute to the final decision
-    bool sendLocks = SendLocks(*kqpLocks, origin);
+    bool sendLocks = SendLocks(*kqpLocks, selfShardId);
     if (sendLocks) {
         // Note: it is possible to have no locks
-        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, origin);
+        auto brokenLocks = ValidateLocks(*kqpLocks, sysLocks, allowAncestorLocks);
 
         if (!brokenLocks.empty()) {
             return {false, std::move(brokenLocks)};
@@ -248,12 +330,12 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
         Y_ENSURE(!isArbiter, "Arbiter is not in the sending shards set");
     }
 
-    bool receiveLocks = ReceiveLocks(*kqpLocks, origin);
+    bool receiveLocks = ReceiveLocks(*kqpLocks, selfShardId);
     if (receiveLocks) {
         // Note: usually only shards with side-effects receive locks, since they
         //       need the final outcome to decide whether to commit or abort.
         for (ui64 srcTabletId : kqpLocks->GetSendingShards()) {
-            if (srcTabletId == origin) {
+            if (srcTabletId == selfShardId) {
                 // Don't await decision from ourselves
                 continue;
             }
@@ -265,7 +347,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
 
             YDB_LOG_TRACE("Will wait for volatile decision from srcTabletId to origin",
                 {"srcTabletId", srcTabletId},
-                {"origin", origin});
+                {"selfShardId", selfShardId});
 
             awaitingDecisions.insert(srcTabletId);
         }
@@ -275,12 +357,12 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
         for (const auto& record : delayedInReadSets) {
             ui64 srcTabletId = record.GetTabletSource();
             ui64 dstTabletId = record.GetTabletDest();
-            if (dstTabletId != origin) {
+            if (dstTabletId != selfShardId) {
                 YDB_LOG_WARN("Ignoring unexpected readset from srcTabletId to dstTabletId for tx at origin tablet",
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
                     {"txId", txId},
-                    {"origin", origin});
+                    {"selfShardId", selfShardId});
                 continue;
             }
             if (!awaitingDecisions.contains(srcTabletId)) {
@@ -332,7 +414,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
     if (sendLocks) {
         // We need to form decision readsets for all other participants
         for (ui64 dstTabletId : kqpLocks->GetReceivingShards()) {
-            if (dstTabletId == origin) {
+            if (dstTabletId == selfShardId) {
                 // Don't send readsets to ourselves
                 continue;
             }
@@ -343,10 +425,10 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
             }
 
             YDB_LOG_TRACE("Send commit decision from origin to dstTabletId",
-                {"origin", origin},
+                {"selfShardId", selfShardId},
                 {"dstTabletId", dstTabletId});
 
-            auto key = std::make_pair(origin, dstTabletId);
+            auto key = std::make_pair(selfShardId, dstTabletId);
             NKikimrTx::TReadSetData data;
             data.SetDecision(NKikimrTx::TReadSetData::DECISION_COMMIT);
 
@@ -361,15 +443,18 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
     return {true, {}};
 }
 
-void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, TSysLocks& sysLocks, ui64 tabletId)
+void KqpFillOutReadSets(
+    TOutputOpData::TOutReadSets& outReadSets, const NKikimrDataEvents::TKqpLocks& kqpLocks, bool useGenericReadSets, TSysLocks& sysLocks, bool allowAncestorLocks)
 {
     TMap<std::pair<ui64, ui64>, NKikimrTxDataShard::TKqpReadset> readsetData;
 
     NKikimrTx::TReadSetData::EDecision decision = NKikimrTx::TReadSetData::DECISION_COMMIT;
     TMap<std::pair<ui64, ui64>, NKikimrTx::TReadSetData> genericData;
 
-    if (SendLocks(kqpLocks, tabletId) && !kqpLocks.GetReceivingShards().empty()) {
-        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, tabletId);
+    const ui64 selfShardId = sysLocks.SelfShardId();
+
+    if (SendLocks(kqpLocks, selfShardId) && !kqpLocks.GetReceivingShards().empty()) {
+        auto brokenLocks = ValidateLocks(kqpLocks, sysLocks, allowAncestorLocks);
 
         NKikimrTxDataShard::TKqpValidateLocksResult validateLocksResult;
         validateLocksResult.SetSuccess(brokenLocks.empty());
@@ -385,16 +470,16 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
         }
 
         for (auto& dstTabletId : kqpLocks.GetReceivingShards()) {
-            if (tabletId == dstTabletId) {
+            if (selfShardId == dstTabletId) {
                 continue;
             }
 
             YDB_LOG_TRACE("Send locks from srcTabletId to dstTabletId",
-                {"srcTabletId", tabletId},
+                {"srcTabletId", selfShardId},
                 {"dstTabletId", dstTabletId},
                 {"locks", validateLocksResult.ShortDebugString()});
 
-            auto key = std::make_pair(tabletId, dstTabletId);
+            auto key = std::make_pair(selfShardId, dstTabletId);
             if (useGenericReadSets) {
                 genericData[key].SetDecision(decision);
             } else {
@@ -465,40 +550,56 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
     }
 }
 
-void KqpEraseLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks) {
+void KqpEraseLocks(
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, bool allowAncestorLocks)
+{
     if (kqpLocks == nullptr || !NeedEraseLocks(kqpLocks->GetOp())) {
         return;
     }
 
+    const ui64 selfShardId = sysLocks.SelfShardId();
+    absl::flat_hash_set<ui64> processedLockIds;
+
     for (const auto& lockProto : kqpLocks->GetLocks()) {
-        if (lockProto.GetDataShard() != origin) {
+        if (lockProto.GetDataShard() != selfShardId && !allowAncestorLocks) {
+            continue;
+        }
+        if (!processedLockIds.insert(lockProto.GetLockId()).second) {
             continue;
         }
 
         YDB_LOG_TRACE("KqpEraseLock",
             {"lockProto", lockProto.ShortDebugString()});
 
-        auto lockKey = MakeLockKey(lockProto);
-        sysLocks.EraseLock(lockKey);
+        sysLocks.EraseLock(lockProto.GetLockId());
     }
 }
 
-void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks, IDataShardUserDb& userDb) {
+void KqpCommitLocks(
+    const NKikimrDataEvents::TKqpLocks* kqpLocks, TSysLocks& sysLocks,
+    IDataShardUserDb& userDb, bool allowAncestorLocks)
+{
     if (kqpLocks == nullptr) {
         return;
     }
 
+    const ui64 selfShardId = sysLocks.SelfShardId();
+
     if (NeedCommitLocks(kqpLocks->GetOp())) {
+        absl::flat_hash_set<ui64> processedLockIds;
+
         for (const auto& lockProto : kqpLocks->GetLocks()) {
-            if (lockProto.GetDataShard() != origin) {
+            if (lockProto.GetDataShard() != selfShardId && !allowAncestorLocks) {
+                continue;
+            }
+            if (!processedLockIds.insert(lockProto.GetLockId()).second) {
                 continue;
             }
 
             YDB_LOG_TRACE("KqpCommitLock",
                 {"lockProto", lockProto.ShortDebugString()});
 
-            auto lockKey = MakeLockKey(lockProto);
-            sysLocks.CommitLock(lockKey);
+            sysLocks.CommitLock(lockProto.GetLockId());
 
             TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
             auto txId = lockProto.GetLockId();
@@ -506,7 +607,7 @@ void KqpCommitLocks(ui64 origin, const NKikimrDataEvents::TKqpLocks* kqpLocks, T
             userDb.CommitChanges(tableId, txId);
         }
     } else {
-        KqpEraseLocks(origin, kqpLocks, sysLocks);
+        KqpEraseLocks(kqpLocks, sysLocks, allowAncestorLocks);
     }
 }
 

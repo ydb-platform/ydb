@@ -149,14 +149,24 @@ public:
 
         Self->SplitStarted = true;
 
-        // We need to remove all locks first, making sure persistent uncommitted
-        // changes are not borrowed by new shards. Otherwise those will become
-        // unaccounted for.
+        // We need to remove all locks that we won't be transferring to dst shards first,
+        // making sure their uncommitted changes are not borrowed by new shards.
         if (!Self->SysLocksTable().GetLocks().empty()) {
+            const bool lockTransferEnabled = AppData(ctx)
+                ->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+            auto lockTransferPredicate = [lockTransferEnabled](const TLockInfo& lock) {
+                return lockTransferEnabled
+                    && !lock.IsBroken()
+                    && lock.IsPersistent() && lock.GetReadTables().empty();
+            };
+
             auto countBefore = Self->SysLocksTable().GetLocks().size();
             TDataShardLocksDb locksDb(*Self, txc);
             TSetupSysLocks guardLocks(*Self, &locksDb);
             for (auto& pr : Self->SysLocksTable().GetLocks()) {
+                if (lockTransferPredicate(*pr.second)) {
+                    continue;
+                }
                 Self->SysLocksTable().EraseLock(pr.first);
                 if (pr.second->IsPersistent()) {
                     // Don't erase more than one persistent lock at a time
@@ -170,9 +180,66 @@ public:
                                                Nothing(), victimQuerySpanIds);
             }
             auto countAfter = Self->SysLocksTable().GetLocks().size();
-            Y_ENSURE(countAfter < countBefore, "Expected to erase at least one lock");
-            Self->Execute(Self->CreateTxStartSplit(), ctx);
-            return true;
+
+            if (countAfter < countBefore) {
+                // Still removing locks, re-execute.
+                Self->Execute(Self->CreateTxStartSplit(), ctx);
+                return true;
+            }
+
+            Y_ENSURE(countAfter == countBefore);
+            // All remaining locks are those that we want to transfer.
+            // Collect them for the snapshot.
+            Self->SrcLocksToTransfer.clear();
+            for (const auto& pr : Self->SysLocksTable().GetLocks()) {
+                const TLockInfo& lock = *pr.second;
+                Y_ENSURE(lockTransferPredicate(lock));
+
+                auto& srcLockInfo = Self->SrcLocksToTransfer.emplace_back();
+                srcLockInfo.SetLockId(lock.GetLockId());
+                srcLockInfo.SetLockNodeId(lock.GetLockNodeId());
+                srcLockInfo.SetGeneration(lock.GetGeneration());
+                srcLockInfo.SetCounter(lock.GetRawCounter());
+                srcLockInfo.SetCreateTimestamp(lock.GetCreationTime().MicroSeconds());
+                srcLockInfo.SetFlags(ui64(lock.GetFlags()));
+
+                auto writeSeqNumStateToProto = [](const TWriteSeqNumState& state, auto* proto) {
+                    proto->SetWriterIndex(state.WriterIndex);
+                    proto->SetWriteSeqNum(state.WriteSeqNum);
+                    if (!state.SerializedResult.empty()) {
+                        proto->SetSerializedResult(state.SerializedResult);
+                    }
+                };
+
+                for (const auto& [_, state] : lock.GetWriteSeqNumStates()) {
+                    if (state.WriteSeqNum == 0) {
+                        continue;
+                    }
+                    writeSeqNumStateToProto(state, srcLockInfo.AddWriteSeqNumStates());
+                }
+
+                // Forward grandparent ancestor locks (multi-hop split/merge)
+                for (const auto& [tabletId, ancestorLock] : lock.GetAncestorLocks()) {
+                    auto& proto = *srcLockInfo.AddAncestorLocks();
+                    proto.SetTabletId(tabletId);
+                    proto.SetGeneration(ancestorLock.Generation);
+                    proto.SetCounter(ancestorLock.Counter);
+                    proto.SetCreateTimestamp(ancestorLock.CreationTime.MicroSeconds());
+                    proto.SetFlags(ui64(ancestorLock.Flags));
+                    for (const auto& [_, state] : ancestorLock.WriteSeqNumStates) {
+                        if (state.WriteSeqNum == 0) {
+                            continue;
+                        }
+                        writeSeqNumStateToProto(state, proto.AddWriteSeqNumStates());
+                    }
+                }
+
+                for (const auto& pathId : lock.GetWriteTables()) {
+                    pathId.ToProto(srcLockInfo.AddWriteTables());
+                }
+            }
+        } else {
+            Self->SrcLocksToTransfer.clear();
         }
 
         ui64 opId = Self->SrcSplitOpId;
@@ -412,6 +479,11 @@ public:
 
                 if (sourceOffsetsBytes > 0) {
                     snapshot->SetReplicationSourceOffsetsBytes(sourceOffsetsBytes);
+                }
+
+                // Attach qualifying persistent write-only locks as ancestor locks for dst
+                for (const auto& ancestorLock : Self->SrcLocksToTransfer) {
+                    *snapshot->AddLocks() = ancestorLock;
                 }
 
                 // Persist snapshot data so that it can be sent if this datashard restarts

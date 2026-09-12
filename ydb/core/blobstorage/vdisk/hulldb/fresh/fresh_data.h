@@ -58,6 +58,7 @@ namespace NKikimr {
         // Compaction
         bool NeedsCompaction(ui64 yardFreeUpToLsn, bool force) const;
         ui64 GetFreeInPlaceSizeApproximation() const;
+        ui64 GetSpaceDebtBytes() const;
 
         TIntrusivePtr<TFreshSegment> FindSegmentForCompaction();
         void CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment);
@@ -142,6 +143,15 @@ namespace NKikimr {
             return size >= threshold ? 0 : threshold - size;
         }
         return threshold;
+    }
+
+    // Bytes every segment still owes to a compaction: the one being compacted right
+    // now included, since its space has not been released yet.
+    template <class TKey, class TMemRec>
+    ui64 TFreshData<TKey, TMemRec>::GetSpaceDebtBytes() const {
+        return (Old ? Old->InPlaceSizeApproximation() : 0)
+            + (Dreg ? Dreg->InPlaceSizeApproximation() : 0)
+            + (Cur ? Cur->InPlaceSizeApproximation() : 0);
     }
 
     template <class TKey, class TMemRec>

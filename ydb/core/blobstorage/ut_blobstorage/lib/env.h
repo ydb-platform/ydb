@@ -53,6 +53,10 @@ struct TEnvironmentSetup {
         const ui32 NumDataCenters = 0;
         const std::function<TNodeLocation(ui32)> LocationGenerator = nullptr;
         const bool SetupHive = false;
+        // When true, TenantPool is still started (so Hive can boot tablets via Local),
+        // but the Hive tablet itself is not bootstrapped on the static mock group.
+        // The test is expected to bootstrap Hive later on a real dynamic group.
+        const bool DeferHiveBootstrap = false;
         const bool SuppressCompatibilityCheck = false;
         const TFeatureFlags FeatureFlags = {};
         const NPDisk::EDeviceType DiskType = NPDisk::EDeviceType::DEVICE_TYPE_NVME;
@@ -641,7 +645,9 @@ config:
             {MakeBSControllerID(), TTabletTypes::BSController, &CreateFlatBsController},
         };
 
-        if (const ui64 tabletId = Runtime->GetDomainsInfo()->GetHive(); tabletId != TDomainsInfo::BadTabletId) {
+        if (const ui64 tabletId = Runtime->GetDomainsInfo()->GetHive();
+                tabletId != TDomainsInfo::BadTabletId && !Settings.DeferHiveBootstrap)
+        {
             tablets.push_back(TTabletInfo{tabletId, TTabletTypes::Hive, &CreateDefaultHive});
         }
 
@@ -662,6 +668,14 @@ config:
 
         localConfig->TabletClassInfo[TTabletTypes::NbsLoadTablet] = TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
             &NKikimr::NNbsDbgLike::CreateNbsDbgLikeLoadTablet, TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID,
+            TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID));
+
+        localConfig->TabletClassInfo[TTabletTypes::Hive] = TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+            &CreateDefaultHive, TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID,
+            TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID));
+
+        localConfig->TabletClassInfo[TTabletTypes::TestShard] = TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+            &NKikimr::NTestShard::CreateTestShard, TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID,
             TMailboxType::ReadAsFilled, Runtime->SYSTEM_POOL_ID));
 
         auto tenantPoolConfig = MakeIntrusive<TTenantPoolConfig>(localConfig);

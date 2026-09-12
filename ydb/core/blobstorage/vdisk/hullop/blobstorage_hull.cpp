@@ -55,9 +55,9 @@ namespace NKikimr {
             : LogoBlobsRunTimeCtx(std::make_shared<TLogoBlobsRunTimeCtx>(lsnMngr, pdiskCtx,
                         skeletonId, runHandoff, hullDs->LogoBlobs, hugeKeeperId))
             , BlocksRunTimeCtx(std::make_shared<TBlocksRunTimeCtx>(lsnMngr, pdiskCtx,
-                        skeletonId, runHandoff, hullDs->Blocks, TActorId()))
+                        skeletonId, runHandoff, hullDs->Blocks, hugeKeeperId))
             , BarriersRunTimeCtx(std::make_shared<TBarriersRunTimeCtx>(lsnMngr, pdiskCtx,
-                        skeletonId, runHandoff, hullDs->Barriers, TActorId()))
+                        skeletonId, runHandoff, hullDs->Barriers, hugeKeeperId))
             , LsnMngr(std::move(lsnMngr))
             , ActorSystem(as)
             , BarrierValidation(barrierValidation)
@@ -98,6 +98,10 @@ namespace NKikimr {
     {}
 
     THull::~THull() = default;
+
+    ui64 THull::GetFreshSpaceDebtBytes() const {
+        return HullDs->LogoBlobs->GetFreshSpaceDebtBytes();
+    }
 
     ////////////////////////////////////////////////////////////////////////////
     // Private

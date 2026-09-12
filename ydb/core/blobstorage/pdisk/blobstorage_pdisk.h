@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_params.h"
 #include "blobstorage_pdisk_config.h"
+#include "blobstorage_pdisk_util_space_color.h"
 
 #include <ydb/core/base/blobstorage_write_source.h>
 #include <ydb/core/blobstorage/base/vdisk_lsn.h>
@@ -549,6 +550,7 @@ struct TEvLogResult : TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResult> {
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
         str << " LogChunkCount# " << record.LogChunkCount;
+        str << " Headroom# " << record.Headroom.ToString();
         for (auto it = record.Results.begin(); it != record.Results.end(); ++it) {
             str << "{Lsn# " << it->Lsn << " Cookie# " << (ui64)it->Cookie << "}";
         }
@@ -563,6 +565,7 @@ struct TEvLogResult : TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResult> {
     TStatusFlags StatusFlags;
     TString ErrorReason;
     i64 LogChunkCount = 0;
+    TSpaceHeadroom Headroom;
 
     TEvLogResult(NKikimrProto::EReplyStatus status,
             TStatusFlags statusFlags,
@@ -891,6 +894,7 @@ struct TEvChunkReserveResult : TEventLocal<TEvChunkReserveResult, TEvBlobStorage
     TVector<TChunkIdx> ChunkIds;
     TStatusFlags StatusFlags;
     TString ErrorReason;
+    TSpaceHeadroom Headroom;
 
     TEvChunkReserveResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags)
         : Status(status)
@@ -912,6 +916,7 @@ struct TEvChunkReserveResult : TEventLocal<TEvChunkReserveResult, TEvBlobStorage
         str << "{EvChunkReserveResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
+        str << " Headroom# " << record.Headroom.ToString();
         str << "}";
         return str.Str();
     }
@@ -1279,6 +1284,7 @@ struct TEvChunkWriteResult : TEventLocal<TEvChunkWriteResult, TEvBlobStorage::Ev
     void *Cookie;
     TStatusFlags StatusFlags;
     TString ErrorReason;
+    TSpaceHeadroom Headroom;
 
     mutable NLWTrace::TOrbit Orbit;
 
@@ -1313,6 +1319,7 @@ struct TEvChunkWriteResult : TEventLocal<TEvChunkWriteResult, TEvBlobStorage::Ev
         str << " chunkIdx# " << record.ChunkIdx;
         str << " Cookie# " << (ui64)record.Cookie;
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
+        str << " Headroom# " << record.Headroom.ToString();
         str << "}";
         return str.Str();
     }
@@ -1581,6 +1588,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
     ui32 ExpectedSlotCount = 0; // maximum number of VDisks over PDisk
     TString ErrorReason;
     TStatusFlags LogStatusFlags;
+    TSpaceHeadroom Headroom; // chunk budget left before each write-gating boundary
 
     TEvCheckSpaceResult(
             NKikimrProto::EReplyStatus status,
@@ -1617,6 +1625,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         str << " ExpectedSlotCount# " << ExpectedSlotCount;
         str << " ErrorReason# \"" << ErrorReason << "\"";
         str << " LogStatusFlags# " << StatusFlagsToString(LogStatusFlags);
+        str << " Headroom# " << Headroom.ToString();
         str << "}";
         return str.Str();
     }

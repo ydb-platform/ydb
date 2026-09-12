@@ -1079,7 +1079,11 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
 
     ui64 headedRecordSize = payloadSize + sizeof(TFirstLogPageHeader);
     *Mon.BandwidthPLogRecordHeader += sizeof(TFirstLogPageHeader);
-    bool isAllowedForSpaceRed = isCommitRecord && (evLog.CommitRecord.DeleteChunks.size() > 0);
+    // A record that advances FirstLsnToKeep lets the log be cut, releasing log
+    // chunks, exactly like one that deletes chunks. Refusing it in RED would leave
+    // no way to shrink a log that has already filled its pool.
+    bool isAllowedForSpaceRed = isCommitRecord && (evLog.CommitRecord.DeleteChunks.size() > 0
+            || evLog.CommitRecord.FirstLsnToKeep > 0);
     if (!PreallocateLogChunks(headedRecordSize, evLog.Owner, evLog.Lsn, evLog.OwnerGroupType, isAllowedForSpaceRed)) {
         // TODO: make sure that commit records that delete chunks are applied atomically even if this error occurs.
         TStringStream str;
@@ -1091,6 +1095,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
             NotEnoughDiskSpaceStatusFlags(evLog.Owner, evLog.OwnerGroupType), str.Str(),
             Keeper.GetLogChunkCount()));
         Y_VERIFY_S(evLog.Result.Get(), PCtx->PDiskLogPrefix);
+        evLog.Result->Headroom = Keeper.GetSpaceHeadroom(evLog.Owner);
         evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
         return;
     }
@@ -1159,6 +1164,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OK,
         GetStatusFlags(OwnerSystem, evLog.OwnerGroupType), "", Keeper.GetLogChunkCount()));
     Y_VERIFY_S(evLog.Result.Get(), PCtx->PDiskLogPrefix);
+    evLog.Result->Headroom = Keeper.GetSpaceHeadroom(evLog.Owner);
     evLog.Result->Results.push_back(NPDisk::TEvLogResult::TRecord(evLog.Lsn, evLog.Cookie));
 }
 

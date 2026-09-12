@@ -14,6 +14,7 @@ PEERDIR(
 
 SRCS(
     blobstorage_blob_ut.cpp
+    fresh_space_tracker_ut.cpp
     blobstorage_hullsatisfactionrank_ut.cpp
     blobstorage_hullstorageratio_ut.cpp
     hullbase_barrier_ut.cpp

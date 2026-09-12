@@ -6,6 +6,10 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
+#include <util/generic/utility.h>
+#include <util/system/spinlock.h>
+
+#include <optional>
 
 namespace NKikimr {
 
@@ -39,19 +43,32 @@ namespace NKikimr {
             return StatusFlagToSpaceColor(GetLocalStatusFlags());
         }
 
-        // update state with flags received from local PDisk
-        void UpdateLocalChunk(NPDisk::TStatusFlags flags) {
-            if (flags & NKikimrBlobStorage::StatusIsValid && flags != AtomicGet(ChunkFlags)) {
-                AtomicSet(ChunkFlags, flags);
-                Update(SelfOrderNum, flags | AtomicGet(LogFlags));
-            }
+        // Authoritative update from the serialized TEvCheckSpace poll. It may
+        // move the known state in either direction.
+        void UpdateLocalChunk(NPDisk::TStatusFlags flags,
+                std::optional<ui64> expectedObservationGeneration = std::nullopt) {
+            UpdateLocalAuthoritative(flags, ChunkFlags, LogFlags, expectedObservationGeneration);
         }
 
-        void UpdateLocalLog(NPDisk::TStatusFlags flags) {
-            if (flags & NKikimrBlobStorage::StatusIsValid && flags != AtomicGet(LogFlags)) {
-                AtomicSet(LogFlags, flags);
-                Update(SelfOrderNum, flags | AtomicGet(ChunkFlags));
-            }
+        void UpdateLocalLog(NPDisk::TStatusFlags flags,
+                std::optional<ui64> expectedObservationGeneration = std::nullopt) {
+            UpdateLocalAuthoritative(flags, LogFlags, ChunkFlags, expectedObservationGeneration);
+        }
+
+        // Ordinary PDisk replies may be delivered out of order. Such a reply
+        // is only an observation and must never overwrite a newer, worse
+        // state with an older, better one. TEvCheckSpace is the sole source
+        // allowed to authoritatively improve the state.
+        void ObserveLocalChunk(NPDisk::TStatusFlags flags) {
+            ObserveLocal(flags, ChunkFlags, LogFlags);
+        }
+
+        void ObserveLocalLog(NPDisk::TStatusFlags flags) {
+            ObserveLocal(flags, LogFlags, ChunkFlags);
+        }
+
+        ui64 GetLocalSpaceObservationGeneration() const {
+            return static_cast<ui64>(AtomicGet(LocalSpaceObservationGeneration));
         }
 
         void UpdateLocalFreeSpaceShare(ui64 freeSpaceShare24bit) {
@@ -95,7 +112,120 @@ namespace NKikimr {
             return static_cast<ui32>(AtomicGet(LocalTotalChunks));
         }
 
+        // Room left before each write-gating boundary, as last reported by PDisk.
+        void UpdateSpaceHeadroom(const TSpaceHeadroom& headroom,
+                std::optional<ui64> expectedObservationGeneration = std::nullopt) {
+            if (!headroom.Valid) {
+                return;
+            }
+
+            TGuard<TSpinLock> gen(LocalFlagsLock);
+            TGuard<TSpinLock> hr(HeadroomLock);
+            const bool stale = expectedObservationGeneration
+                && *expectedObservationGeneration
+                    != static_cast<ui64>(AtomicGet(LocalSpaceObservationGeneration));
+            if (!Headroom.Valid || !stale) {
+                Headroom = headroom;
+                return;
+            }
+            Headroom.ToPreOrange = Min(Headroom.ToPreOrange, headroom.ToPreOrange);
+            Headroom.ToOrange = Min(Headroom.ToOrange, headroom.ToOrange);
+            Headroom.ToRed = Min(Headroom.ToRed, headroom.ToRed);
+            Headroom.ToBlack = Min(Headroom.ToBlack, headroom.ToBlack);
+        }
+
+        void ObserveSpaceHeadroom(const TSpaceHeadroom& headroom) {
+            if (!headroom.Valid) {
+                return;
+            }
+
+            TGuard<TSpinLock> gen(LocalFlagsLock);
+            TGuard<TSpinLock> hr(HeadroomLock);
+            if (!Headroom.Valid) {
+                Headroom = headroom;
+                AtomicIncrement(LocalSpaceObservationGeneration);
+                return;
+            }
+            bool worse = false;
+            auto take = [&](ui64& dst, ui64 src) {
+                if (src < dst) {
+                    dst = src;
+                    worse = true;
+                }
+            };
+            take(Headroom.ToPreOrange, headroom.ToPreOrange);
+            take(Headroom.ToOrange, headroom.ToOrange);
+            take(Headroom.ToRed, headroom.ToRed);
+            take(Headroom.ToBlack, headroom.ToBlack);
+            if (worse) {
+                AtomicIncrement(LocalSpaceObservationGeneration);
+            }
+        }
+
+        TSpaceHeadroom GetSpaceHeadroom() const {
+            TGuard<TSpinLock> guard(HeadroomLock);
+            return Headroom;
+        }
+
     private:
+        void UpdateLocalAuthoritative(NPDisk::TStatusFlags flags, TAtomic& observed, const TAtomic& other,
+                std::optional<ui64> expectedObservationGeneration) {
+            if (!(flags & NKikimrBlobStorage::StatusIsValid)) {
+                return;
+            }
+
+            TGuard<TSpinLock> guard(LocalFlagsLock);
+            const auto current = static_cast<NPDisk::TStatusFlags>(AtomicGet(observed));
+            if (expectedObservationGeneration
+                    && *expectedObservationGeneration
+                        != static_cast<ui64>(AtomicGet(LocalSpaceObservationGeneration))
+                    && (current & NKikimrBlobStorage::StatusIsValid)
+                    && StatusFlagToSpaceColor(flags) <= StatusFlagToSpaceColor(current)) {
+                // A regular PDisk reply was observed after this poll was sent.
+                // A stale poll may still worsen the state, but must not improve
+                // or rewrite an equally severe newer observation.
+                return;
+            }
+
+            if (flags != current) {
+                AtomicSet(observed, flags);
+                Update(SelfOrderNum, flags | AtomicGet(other));
+            }
+        }
+
+        void ObserveLocal(NPDisk::TStatusFlags flags, TAtomic& observed, const TAtomic& other) {
+            if (!(flags & NKikimrBlobStorage::StatusIsValid)) {
+                return;
+            }
+
+            TGuard<TSpinLock> guard(LocalFlagsLock);
+            const auto current = static_cast<NPDisk::TStatusFlags>(AtomicGet(observed));
+            const auto newColor = StatusFlagToSpaceColor(flags);
+            const auto oldColor = StatusFlagToSpaceColor(current);
+            if ((current & NKikimrBlobStorage::StatusIsValid) && newColor < oldColor) {
+                // Improving observations are ignored. They must not invalidate an
+                // in-flight CheckSpace poll, which is the sole source allowed to
+                // improve the known state.
+                return;
+            }
+
+            if (flags != current) {
+                // Only an accepted worsening (or the first valid observation)
+                // invalidates polls already in flight. No-op replies under load
+                // must not pin the color at its worst value.
+                if (!(current & NKikimrBlobStorage::StatusIsValid) || newColor > oldColor) {
+                    AtomicIncrement(LocalSpaceObservationGeneration);
+                }
+                AtomicSet(observed, flags);
+                Update(SelfOrderNum, flags | AtomicGet(other));
+            }
+        }
+
+        mutable TSpinLock LocalFlagsLock;
+        TAtomic LocalSpaceObservationGeneration = 0;
+        mutable TSpinLock HeadroomLock;
+        TSpaceHeadroom Headroom;
+
         // Log space flags.
         TAtomic LogFlags = 0;
         // Chunk space flags.

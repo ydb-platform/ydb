@@ -185,6 +185,10 @@ public:
         return QuotaForOwner[id].EstimateSpaceColor(allocationSize, occupancy);
     }
 
+    i64 GetHeadroomBelow(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
+        return QuotaForOwner[id].GetHeadroomBelow(color);
+    }
+
     bool TryAllocate(TOwner id, i64 count, TString &outErrorReason) {
         return QuotaForOwner[id].TryAllocate(count, outErrorReason);
     }
@@ -591,6 +595,34 @@ public:
             return EstimateSpaceColor(OwnerSystem, 0, occupancy);
         }
         return EstimateSpaceColor(owner, 0, occupancy);
+    }
+
+    // How much an owner may still take before each of the boundaries that gate
+    // writes. Follows the same two-quota rule as EstimateSpaceColor: a user owner
+    // is as badly off as the worse of its personal quota, capped by the color
+    // border, and the shared quota it competes for with its neighbours.
+    TSpaceHeadroom GetSpaceHeadroom(TOwner owner) const {
+        TSpaceHeadroom headroom;
+        headroom.Valid = true;
+        headroom.ToPreOrange = GetHeadroomBelow(owner, TColor::PRE_ORANGE);
+        headroom.ToOrange = GetHeadroomBelow(owner, TColor::ORANGE);
+        headroom.ToRed = GetHeadroomBelow(owner, TColor::RED);
+        headroom.ToBlack = GetHeadroomBelow(owner, TColor::BLACK);
+        return headroom;
+    }
+
+    i64 GetHeadroomBelow(TOwner owner, TColor::E color) const {
+        if (!IsOwnerUser(owner)) {
+            // Only user owners hold Fresh, and only they project their color ahead.
+            return 0;
+        }
+        // The personal quota is reported no worse than the color border, so a border
+        // below the boundary in question takes it out of the picture entirely.
+        const i64 personal = ColorBorder < color
+            ? Max<i64>()
+            : OwnerQuota->GetHeadroomBelow(owner, color);
+        const i64 shared = SharedQuota->GetHeadroomBelow(color) - GetStaticReserveFloor(owner);
+        return Max<i64>(0, Min(personal, shared));
     }
 
     // Estimate status flags after allocation of allocatinoSize

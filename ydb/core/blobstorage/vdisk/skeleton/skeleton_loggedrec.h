@@ -42,6 +42,9 @@ namespace NKikimr {
 
         const TLsnSeg Seg;
         const bool ConfirmSyncLogAlso;
+        // Bytes this record was admitted against, charged to the Fresh space tracker
+        // until the record reaches Fresh and the segment starts accounting for it.
+        ui64 FreshSpaceAdmission = 0;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

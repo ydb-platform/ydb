@@ -481,8 +481,13 @@ bool CanBePushedAsOlapJsonValue(const TCoJsonValue& jsonValue, const TExprNode* 
         return false;
     }
 
-    // PASSING variables are not supported by `KqpOlapJsonValue`.
-    const auto variablesType = jsonValue.Variables().Ref().GetTypeAnn();
+    // PASSING variables are not supported by `KqpOlapJsonValue`. Before the common optimizer they are `JsonVariables`
+    // (always typed as `Dict<Utf8, Resource<'JsonNode'>>` even when empty), after it `AsDict` (typed as `EmptyDict` when empty).
+    const auto& variables = jsonValue.Variables().Ref();
+    if (variables.IsCallable({"JsonVariables", "AsDict"})) {
+        return variables.ChildrenSize() == 0;
+    }
+    const auto variablesType = variables.GetTypeAnn();
     return variablesType && variablesType->GetKind() == ETypeAnnotationKind::EmptyDict;
 }
 

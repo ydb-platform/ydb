@@ -7,7 +7,7 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-class TSortedFullScanCollection: public ISourcesCollection {
+class TOrderedResultNoLimitCollection: public ISourcesCollection {
 private:
     using TBase = ISourcesCollection;
 
@@ -27,17 +27,8 @@ private:
         return SourcesConstructor->IsFinished();
     }
 
-    virtual std::shared_ptr<IScanCursor> DoBuildCursor(
-        const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
-        if (AppDataVerified().ColumnShardConfig.GetEnableCursorV1()) {
-            return std::make_shared<TSimpleScanCursor>(
-                std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch()), source->GetSourceIdx(),
-                readyRecords, source->GetPortionIdOptional());
-        } else {
-            return std::make_shared<TDeprecatedSimpleScanCursor>(
-                std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch()), source->GetDeprecatedPortionId(),
-                readyRecords);
-        }
+    virtual std::shared_ptr<NArrow::TSimpleRow> DoGetSourceStartPK(const std::shared_ptr<NCommon::IDataSource>& source) const override {
+        return std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch());
     }
 
     virtual std::shared_ptr<NCommon::IDataSource> DoTryExtractNext() override {
@@ -53,10 +44,10 @@ private:
 
 public:
     virtual TString GetClassName() const override {
-        return "FULL_SORTED";
+        return "ORDERED_RESULT_NO_LIMIT";
     }
 
-    TSortedFullScanCollection(
+    TOrderedResultNoLimitCollection(
         const std::shared_ptr<TSpecialReadContext>& context, std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesConstructor)
         : TBase(context, std::move(sourcesConstructor))
     {

@@ -157,8 +157,8 @@ public:
 private:
     TAtomic SyncSectionFlag = 1;
     YDB_READONLY(EType, Type, EType::Undefined);
-    YDB_READONLY(ui32, SourceIdx, 0);
-    YDB_READONLY_DEF(ui64, DeprecatedPortionId);
+    ui32 SourceIdx = 0;
+    YDB_READONLY_DEF(ui64, SourceId);
     static inline TAtomicCounter MemoryGroupCounter = 0;
     YDB_READONLY(ui64, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
@@ -167,19 +167,22 @@ private:
     std::optional<ui32> RecordsCountImpl;
     YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
     YDB_READONLY(bool, HasDeletions, false);
+    // A conflicting source is scanned only so TConflictDetector can detect a conflict and break the lock: it yields no
+    // rows and takes no part in the ordered stream
+    const bool ConflictingFlag;
     std::optional<ui64> MemoryGroupId;
     TExecutionContext ExecutionContext;
     virtual bool DoAddTxConflict() = 0;
 
-    virtual ui64 DoGetEntityId() const override {
+    virtual ui32 DoGetSourceIdx() const override {
         return SourceIdx;
     }
 
-    virtual ui64 DoGetDeprecatedPortionId() const override {
-        return DeprecatedPortionId;
+    virtual ui64 DoGetSourceId() const override {
+        return SourceId;
     }
 
-    virtual ui64 DoGetEntityRecordsCount() const override;
+    virtual ui64 DoGetSourceRecordsCount() const override;
 
     std::optional<bool> IsSourceInMemoryFlag;
     bool InFlightReleasedFlag = false;
@@ -384,9 +387,9 @@ public:
 
     virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const;
 
-    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const TSnapshot& recordSnapshotMin,
-        const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount, const std::optional<ui64> shardingVersion,
-        const bool hasDeletions, const ui64 deprecatedPortionId);
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const bool isConflicting,
+        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
+        const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId);
 
     virtual ~IDataSource() = default;
 
@@ -397,6 +400,10 @@ public:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ExtractResourceGuards();
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
+
+    bool IsConflicting() const {
+        return ConflictingFlag;
+    }
 
     bool IsSourceInMemory() const;
 

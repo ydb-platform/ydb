@@ -26,7 +26,9 @@ private:
     THashMap<TString, ui64> ResultStats;
     std::optional<NKikimrSSA::TProgram> ProgramProto;
     std::optional<TString> SerializedProgram;
-    YDB_ACCESSOR(bool, Reverse, false);
+    // Unset means the request carries no Reverse field at all, which is how KQP asks for a scan whose
+    // output needs no order: TTxScan then derives ERequestSorting::NONE.
+    YDB_ACCESSOR(std::optional<bool>, Reverse, false);
     YDB_ACCESSOR(ui32, Limit, 0);
     std::vector<TSerializedTableRange> Ranges;
     std::optional<NKikimrKqp::TEvKqpScanCursor> StartCursor;

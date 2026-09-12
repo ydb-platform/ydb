@@ -7,6 +7,7 @@
 | Задача | Справочный материал |
 |---|---|
 | Создать и зарегистрировать актор, организовать обработку событий, выбрать пул | [Жизненный цикл актора](actor-lifecycle.md) |
+| Зарегистрировать подсистему или мок, задать зависимости и lifecycle-хуки | [Подсистемы акторной системы](subsystems.md) |
 | Отправить, перенаправить, запланировать сообщение или передать его на другой узел | [События и обмен сообщениями](events-and-messaging.md) |
 | Обработать недоставку, отмену и завершение актора | [Сбои и завершение работы](failure-and-shutdown.md) |
 | Написать обработчик актора на корутине без собственного стека | [Акторы на корутинах](coroutine-actors.md) |
@@ -25,6 +26,7 @@
 | Пул исполнителей (executor pool) | Ресурсы процессора и механизм планирования для выполнения активаций почтовых ящиков. |
 | Активация | Запрос рабочему потоку обработать часть очереди почтового ящика. |
 | ServiceId | Стабильное локальное имя, сопоставленное с текущим ActorId. |
+| Подсистема | Принадлежащий системе объект ISubSystem с типизированным C++ API и хуками запуска и остановки. |
 | Сессия Interconnect | Один экземпляр соединения между двумя узлами. |
 
 Один цикл обработки события устроен так:
@@ -119,6 +121,7 @@
 | Bootstrap и диспетчеризация | [core/actor_bootstrapped.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/actor_bootstrapped.h), [core/hfunc.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/hfunc.h) |
 | Оболочки событий и передаваемые по сети данные | [core/event.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/event.h), [core/event_pb.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/event_pb.h) |
 | Регистрация, сервисы, маршрутизация | [core/actorsystem.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/actorsystem.cpp), [core/executor_pool_base.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/executor_pool_base.cpp) |
+| Интерфейсы подсистем, разрешение зависимостей, реализации | [core/subsystem.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/subsystem.h), [core/subsystem.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/subsystem.cpp), [core/subsystems/stats.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/subsystems/stats.h), [subsystems/](https://github.com/ydb-platform/ydb/tree/main/ydb/library/actors/subsystems) |
 | Планирование почтовых ящиков | [core/executor_thread.cpp](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/executor_thread.cpp), [core/mailbox_lockfree.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/mailbox_lockfree.h) |
 | Вынесение блокирующего ввода-вывода | [core/io_dispatcher.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/io_dispatcher.h), [core/invoke.h](https://github.com/ydb-platform/ydb/blob/main/ydb/library/actors/core/invoke.h) |
 | Межузловой транспорт | [interconnect/](https://github.com/ydb-platform/ydb/tree/main/ydb/library/actors/interconnect) |

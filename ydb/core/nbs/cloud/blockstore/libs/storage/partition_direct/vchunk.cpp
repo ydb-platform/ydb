@@ -53,6 +53,7 @@ NProto::TError MakeVChunkStoppedError()
 ////////////////////////////////////////////////////////////////////////////////
 
 TVChunk::TVChunk(
+    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
@@ -80,7 +81,11 @@ TVChunk::TVChunk(
         .VChunkIndex = vChunkConfig.GetVChunkIndex()
      }}
     , VChunkConfig(vChunkConfig)
-    , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(VChunkConfig, BlockSize, BlocksCount))
+    , BlocksDirtyMap(std::make_shared<TBlocksDirtyMap>(
+          std::move(arenaAllocator),
+          VChunkConfig,
+          BlockSize,
+          BlocksCount))
 {
     // ActorSystem thread
 
@@ -309,18 +314,28 @@ TCountAndSize TVChunk::GetPBuffersUsage(THostIndex hostIndex) const
     return BlocksDirtyMap->GetPBuffersUsage(hostIndex);
 }
 
-TCountAndSize TVChunk::GetAheadBlocks(THostIndex hostIndex) const
+ui64 TVChunk::GetFreshTotalBytes(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    return BlocksDirtyMap->GetAheadBlocks(hostIndex);
+    return BlocksDirtyMap->GetFreshTotalBytes(hostIndex);
 }
 
-TCountAndSize TVChunk::GetBehindBlocks(THostIndex hostIndex) const
+ui64 TVChunk::GetRottenTotalBytes(THostIndex hostIndex) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    return BlocksDirtyMap->GetBehindBlocks(hostIndex);
+    return BlocksDirtyMap->GetRottenTotalBytes(hostIndex);
+}
+
+size_t TVChunk::GetAllocatedMemorySize() const
+{
+    return BlocksDirtyMap->GetAllocatedSize();
+}
+
+size_t TVChunk::GetUsedMemorySize() const
+{
+    return BlocksDirtyMap->GetUsedSize();
 }
 
 std::optional<TPBufferKey> TVChunk::GetSafeBarrierForErase() const

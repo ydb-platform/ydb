@@ -1,6 +1,7 @@
 #include "mon_render.h"
 
 #include "mon_render_chaos.h"
+#include "mon_render_memory.h"
 #include "mon_render_overview.h"
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
@@ -74,6 +75,8 @@ const char* PageParam(EMonPage page)
             return "vchunkcounters";
         case EMonPage::Latency:
             return "latency";
+        case EMonPage::Memory:
+            return "memory";
     }
     return "overview";
 }
@@ -95,6 +98,8 @@ const char* PageTitle(EMonPage page)
             return "VChunk counters";
         case EMonPage::Latency:
             return "Latency";
+        case EMonPage::Memory:
+            return "Memory";
     }
     return "";
 }
@@ -215,6 +220,7 @@ void RenderMenu(
         EMonPage::VChunk,
         EMonPage::VChunkCounters,
         EMonPage::Latency,
+        EMonPage::Memory,
     };
     str << "<div class='pd-menu'>";
     for (EMonPage page: pages) {
@@ -227,7 +233,7 @@ void RenderMenu(
     str << "</div>";
 }
 
-void RenderFreshPercentage(
+void RenderWatermarks(
     IOutputStream& str,
     const TDbgSnapshot& dbg,
     ui32 blockSize)
@@ -236,6 +242,9 @@ void RenderFreshPercentage(
         TStringBuilder w;
         for (auto host: vChunkConfig.GetDDisks()) {
             if (auto watermark = vChunkConfig.GetWatermark(host)) {
+                if (!w.empty()) {
+                    w << ",";
+                }
                 w << PrintHostIndex(host) << ":" << *watermark / blockSize;
             }
         }
@@ -280,10 +289,7 @@ void RenderDbgList(
                         str << "PBuffers usage";
                     }
                     TABLEH () {
-                        str << "Ahead";
-                    }
-                    TABLEH () {
-                        str << "Behind";
+                        str << "Rotten";
                     }
                     TABLEH () {
                         str << "Fresh";
@@ -297,8 +303,8 @@ void RenderDbgList(
                     size_t consecutiveErrors = 0;
                     size_t consecutiveSuccesses = 0;
                     TCountAndSize pBuffersUsage;
-                    TCountAndSize aheadBlocks;
-                    TCountAndSize behindBlocks;
+                    ui64 freshTotalBytes = 0;
+                    ui64 rottenTotalBytes = 0;
                     for (const auto& host: dbg.Hosts) {
                         ++healthCounts[host.Health];
                         consecutiveErrors += host.Errors.ConsecutiveErrorCount;
@@ -310,8 +316,8 @@ void RenderDbgList(
                             inflight += host.InflightByOperation[operation];
                         }
                         pBuffersUsage += host.PBuffersUsage;
-                        aheadBlocks += host.AheadBlocks;
-                        behindBlocks += host.BehindBlocks;
+                        freshTotalBytes += host.FreshTotalBytes;
+                        rottenTotalBytes += host.RottenTotalBytes;
                     }
                     TABLER () {
                         TABLED () {
@@ -339,16 +345,12 @@ void RenderDbgList(
                             str << pBuffersUsage.Print(true);
                         }
                         TABLED () {
-                            str << aheadBlocks.Print(true);
+                            str << FormatByteSize(rottenTotalBytes);
                         }
                         TABLED () {
-                            str << behindBlocks.Print(true);
-                        }
-                        TABLED () {
-                            RenderFreshPercentage(
-                                str,
-                                dbg,
-                                tabletInfo.BlockSize);
+                            str << FormatByteSize(freshTotalBytes);
+                            str << "<br>";
+                            RenderWatermarks(str, dbg, tabletInfo.BlockSize);
                         }
                     }
                 }
@@ -403,10 +405,10 @@ void RenderDbgDetail(
                         str << "PBuffer used";
                     }
                     TABLEH () {
-                        str << "Ahead blocks";
+                        str << "Fresh blocks";
                     }
                     TABLEH () {
-                        str << "Behind blocks";
+                        str << "Rotten blocks";
                     }
                     TABLEH () {
                         str << "Consecutive errors";
@@ -432,10 +434,10 @@ void RenderDbgDetail(
                             str << host.PBuffersUsage.Print(true);
                         }
                         TABLED () {
-                            str << host.AheadBlocks.Print(true);
+                            str << FormatByteSize(host.FreshTotalBytes);
                         }
                         TABLED () {
-                            str << host.BehindBlocks.Print(true);
+                            str << FormatByteSize(host.RottenTotalBytes);
                         }
                         TABLED () {
                             str << host.Errors.ConsecutiveErrorCount;
@@ -1616,6 +1618,9 @@ TString RenderMonPage(const TMonPageData& data)
             break;
         case EMonPage::Latency:
             RenderLatency(str, data);
+            break;
+        case EMonPage::Memory:
+            RenderMemory(str, data);
             break;
     }
     return str.Str();

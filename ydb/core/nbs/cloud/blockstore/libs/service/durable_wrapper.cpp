@@ -3,7 +3,7 @@
 #include "context.h"
 #include "storage.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_map.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/backoff_delay_provider.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>

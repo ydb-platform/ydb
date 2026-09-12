@@ -1318,6 +1318,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
 
         // A vchunk that still only knows the pre-add host count.
         auto vchunk = std::make_shared<TVChunk>(
+            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             Service.get(),
@@ -1414,6 +1415,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             DefaultPrimaryCount);
         config.DisableHost(2);
         auto vchunk = std::make_shared<TVChunk>(
+            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             Service.get(),
@@ -1475,6 +1477,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         // drops below the quorum.
         config.SetWatermark(*config.GetDDisks().begin(), 1024);
         auto vchunk = std::make_shared<TVChunk>(
+            CreateArenaAllocator(),
             Runtime->GetActorSystem(0),
             TraceService.get(),
             Service.get(),

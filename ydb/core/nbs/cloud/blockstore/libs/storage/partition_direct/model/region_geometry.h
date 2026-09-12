@@ -2,7 +2,7 @@
 
 #include "vchunk_config.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {

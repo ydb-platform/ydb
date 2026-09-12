@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
@@ -29,6 +30,7 @@ enum class EMonPage
     VChunk,           // State of one vchunk.
     VChunkCounters,   // Vchunk operation counters.
     Latency,          // Per-node and per-slot latency.
+    Memory,           // Memory usage by direct block group.
 };
 
 // How much per-vchunk detail GatherVChunkStats should collect.
@@ -60,6 +62,11 @@ struct TTabletInfo
     TString State;   // "INIT" / "WORK"
 };
 
+struct TArenaMemoryUsage
+{
+    TVector<TArenaAllocatorStats> Slots;
+};
+
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
@@ -68,6 +75,8 @@ struct TFastPathServiceInfo
     ui64 LastSafeBarrier = 0;
     size_t TotalVChunks = 0;
     size_t DbgCount = 0;
+
+    TArenaMemoryUsage ArenaMemoryUsage;
 };
 
 struct TConnectionSnapshot
@@ -87,6 +96,8 @@ struct TDbgSnapshot
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
     TVChunkConfigs VChunkConfigs;
+    size_t AllocatedMemorySize = 0;
+    size_t UsedMemorySize = 0;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;
 };

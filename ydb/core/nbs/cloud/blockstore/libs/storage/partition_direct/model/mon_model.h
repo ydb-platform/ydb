@@ -35,8 +35,8 @@ struct THostSnapshot
     TInflightByOperation InflightByOperation{};
     THostErrorsInfo Errors;
     TCountAndSize PBuffersUsage;
-    TCountAndSize AheadBlocks;
-    TCountAndSize BehindBlocks;
+    ui64 FreshTotalBytes = 0;
+    ui64 RottenTotalBytes = 0;
     TLatencyByOperation LatencyByOperation;
 };
 

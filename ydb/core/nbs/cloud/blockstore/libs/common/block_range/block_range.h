@@ -17,9 +17,11 @@ namespace NYdb::NBS::NBlockStore {
 ////////////////////////////////////////////////////////////////////////////////
 
 // Range [start, end]. End value included to range.
-template <std::unsigned_integral TBlockIndex>
+template <std::unsigned_integral T>
 struct TBlockRange
 {
+    using TBlockIndex = T;
+
     struct TDifference
     {
         std::optional<TBlockRange> First;
@@ -79,7 +81,7 @@ struct TBlockRange
     {
         Y_DEBUG_ABORT_UNLESS(count);
         if (start < MaxIndex - (count - 1)) {
-            return {start, start + (count - 1)};
+            return {start, static_cast<TBlockIndex>(start + (count - 1))};
         } else {
             return {start, MaxIndex};
         }
@@ -256,10 +258,13 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TBlockRange32 = TBlockRange<ui32>;
-using TBlockRange64 = TBlockRange<ui64>;
-using TBlockRange32Builder = TBlockRangeBuilder<ui32>;
-using TBlockRange64Builder = TBlockRangeBuilder<ui64>;
+// Converts a 64-bit block range to a 16-bit block range with checked casts.
+inline TBlockRange16 ConvertRangeSafe16(const TBlockRange64& range)
+{
+    return TBlockRange16::MakeClosedInterval(
+        IntegerCast<ui16>(range.Start),
+        IntegerCast<ui16>(range.End));
+}
 
 inline TBlockRange32 ConvertRangeSafe(const TBlockRange64& range)
 {
@@ -283,9 +288,6 @@ struct TBlockRangeComparator
         return std::tie(a.Start, a.End) < std::tie(b.Start, b.End);
     }
 };
-
-using TBlockRangeSet64 = TSet<TBlockRange64, TBlockRangeComparator>;
-using TBlockRangeSet32 = TSet<TBlockRange32, TBlockRangeComparator>;
 
 template <typename T>
 IOutputStream& operator<<(IOutputStream& out, const TBlockRange<T>& rhs)

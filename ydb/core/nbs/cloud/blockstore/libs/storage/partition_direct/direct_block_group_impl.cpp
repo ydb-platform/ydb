@@ -2149,15 +2149,20 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
 
     auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
     TVChunkConfigs vChunkConfigs;
+    size_t allocatedMemorySize = 0;
+    size_t usedMemorySize = 0;
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
             vChunkConfigs[vChunk->GetConfig().GetVChunkIndex()] =
                 vChunk->GetConfig();
 
             for (THostIndex host = 0; host < GetHostCount(); ++host) {
-                hostsStat[host].AheadBlocks += vChunk->GetAheadBlocks(host);
-                hostsStat[host].BehindBlocks += vChunk->GetBehindBlocks(host);
+                auto& stat = hostsStat[host];
+                stat.FreshTotalBytes += vChunk->GetFreshTotalBytes(host);
+                stat.RottenTotalBytes += vChunk->GetRottenTotalBytes(host);
             }
+            allocatedMemorySize += vChunk->GetAllocatedMemorySize();
+            usedMemorySize += vChunk->GetUsedMemorySize();
         }
     }
 
@@ -2167,6 +2172,8 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
         .VChunkConfigs = std::move(vChunkConfigs),
+        .AllocatedMemorySize = allocatedMemorySize,
+        .UsedMemorySize = usedMemorySize,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };
 }

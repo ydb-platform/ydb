@@ -746,13 +746,39 @@ class Test(TestBase):
                                fake_grpc_handler=fake_grpc_handler)
 
         return [
-            # No overpopulated pdisks yet, no reassignments are necessary
+            # No overpopulated pdisks yet; no relocation is expected.
             _trace_cluster_balance('--only-from-overpopulated-pdisks'),
 
-            # Change GroupSizeInUnits. The pdisk becomes overpopulated
-            # ReassignGroupDisk should be invoked
+            # Increasing GroupSizeInUnits makes PDisk 1001 overpopulated;
+            # Group 0x80000002 is expected to move to PDisk 1002.
             builder.update_group(group_id=0x80000001, group_size_in_units=8) and None,
             _trace_cluster_balance('--only-from-overpopulated-pdisks', pending_reassigns={0x80000002: (1, 1002, 1000)}),
+
+            # Inferred SlotCount=16 takes precedence over ExpectedSlotCount=8;
+            # PDisk 1001 is not overpopulated and no relocation is expected.
+            builder.update_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=8, slot_count=16) and None,
+            _trace_cluster_balance('--only-from-overpopulated-pdisks'),
+
+            # With usages 5/4, 10/16 and 0/16, the overpopulated PDisk 1001 is preferred over PDisk 1002;
+            # Group 0x80000002 is expected to move from PDisk 1001 to PDisk 1003.
+            (
+                builder.update_group(group_id=0x80000001, group_size_in_units=4),
+                builder.update_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=4, slot_count=4),
+                builder.update_pdisk(node_id=1, pdisk_id=1002, expected_slot_count=16, slot_count=16),
+                builder.add_pdisk(node_id=1, pdisk_id=1003, expected_slot_count=16),
+                builder.add_group(group_id=0x80000003, vslot_ids=[(1, 1002, 1000)], group_size_in_units=10),
+                builder.add_vslot(node_id=1, pdisk_id=1002, vslot_id=1000, group_id=0x80000003, group_generation=1),
+            ) and None,
+            _trace_cluster_balance(pending_reassigns={0x80000002: (1, 1003, 1000)}),
+
+            # With usages 5/10, 11/16 and 0/16, no PDisk is overpopulated and regular balancing applies;
+            # The newly added group 0x80000004 is expected to move from PDisk 1002 to PDisk 1003.
+            (
+                builder.update_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=10, slot_count=10),
+                builder.add_group(group_id=0x80000004, vslot_ids=[(1, 1002, 1001)], group_size_in_units=1),
+                builder.add_vslot(node_id=1, pdisk_id=1002, vslot_id=1001, group_id=0x80000004, group_generation=1),
+            ) and None,
+            _trace_cluster_balance(pending_reassigns={0x80000004: (1, 1003, 1000)}),
         ]
 
     def test_cluster_balance_mismatching_size_in_units(self):

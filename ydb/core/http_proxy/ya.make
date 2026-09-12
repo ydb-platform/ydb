@@ -54,6 +54,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/grpc/actor_client
     ydb/core/base
+    ydb/core/persqueue/common
     ydb/core/protos
     ydb/core/grpc_services/local_rpc
     ydb/core/http_proxy/sqs_xml

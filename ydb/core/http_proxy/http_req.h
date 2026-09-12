@@ -2,6 +2,7 @@
 
 #include "events.h"
 
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
@@ -53,7 +54,7 @@ struct THttpResponseData {
     TString Body;
 };
 
-struct THttpRequestContext {
+struct THttpRequestContext : public NPQ::TLogPrefix {
     THttpRequestContext(const NKikimrConfig::TServerlessProxyConfig& config,
                         NHttp::THttpIncomingRequestPtr request,
                         NActors::TActorId sender,
@@ -86,7 +87,7 @@ struct THttpRequestContext {
     TString SerializedUserToken;
     TString UserName;
 
-    NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+    NPQ::TStructuredLogPrefix LogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"methodName", MethodName},
             {"requestId", RequestId});

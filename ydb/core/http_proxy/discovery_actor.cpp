@@ -1,7 +1,7 @@
 #include "discovery_actor.h"
 #include "events.h"
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
@@ -22,11 +22,13 @@ namespace NKikimr::NHttpProxy {
 
     using namespace NActors;
 
-    class TDiscoveryActor : public NActors::TActorBootstrapped<TDiscoveryActor> {
-        using TBase = NActors::TActorBootstrapped<TDiscoveryActor>;
+    class TDiscoveryActor : public NPQ::TBaseActor<TDiscoveryActor>
+                            , public NPQ::TConstantLogPrefix {
+        using TBase = NPQ::TBaseActor<TDiscoveryActor>;
     public:
         explicit TDiscoveryActor(std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider, TDiscoverySettings&& settings)
-            : Settings(std::move(settings))
+            : TBase(NKikimrServices::PERSQUEUE)
+            , Settings(std::move(settings))
             , CredentialsProvider(credentialsProvider)
         {
             NYdbGrpc::TGRpcClientConfig grpcConf;
@@ -38,14 +40,13 @@ namespace NKikimr::NHttpProxy {
             Connection = GrpcClient.CreateGRpcServiceConnection<TProtoService>(grpcConf);
         }
 
-        void Bootstrap(const TActorContext& ctx) {
-            YDB_LOG_INFO_CTX(ctx, "Discovery actor created",
-                {LogPrefix()});
+        void Bootstrap() {
+            LOG_I("Discovery actor created");
 
             TBase::Become(&TDiscoveryActor::StateWork);
         }
 
-        NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
+        NPQ::TStructuredLogPrefix BuildLogPrefix() const override {
             return YDB_LOG_CREATE_MESSAGE(
                 {"database", Settings.Database},
                 {"endpoint", Settings.DiscoveryEndpoint});
@@ -112,8 +113,7 @@ namespace NKikimr::NHttpProxy {
 
         Ydb::Discovery::ListEndpointsRequest request;
         request.set_database(Settings.Database);
-        YDB_LOG_INFO_CTX(ctx, "List endpoints request",
-            {LogPrefix()});
+        LOG_I("List endpoints request");
 
         NYdbGrpc::TResponseCallback<Ydb::Discovery::ListEndpointsResponse> responseCb =
                 [actorSystem = ctx.ActorSystem(), actorId = ctx.SelfID](NYdbGrpc::TGrpcStatus&& status, Ydb::Discovery::ListEndpointsResponse&& response) -> void {

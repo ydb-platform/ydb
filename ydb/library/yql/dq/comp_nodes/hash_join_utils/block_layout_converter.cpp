@@ -801,8 +801,12 @@ public:
         VALIDATE_DATUM_ARROW_BLOCK_CONSTRUCTOR(columns);
     }
 
-    NPackedTuple::TTupleLayout* GetTupleLayout() const override {
+    const NPackedTuple::TTupleLayout* GetTupleLayout() const override {
         return TupleLayout_.get();
+    }
+
+    void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) override {
+        TupleLayout_->ApplyEqualNulls(equalNullsJoinKeys);
     }
 
 private:

@@ -775,7 +775,7 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
             !layout->KeysEqual(row0, packRes.Overflow.data(), row1, packRes.Overflow.data()),
             "Null keys must not compare equal");
 
-        const_cast<NPackedTuple::TTupleLayout*>(layout)->EqualNullsKeyMask = 1;
+        converter->ApplyEqualNulls({0});
         UNIT_ASSERT_C(
             layout->KeysEqual(row0, packRes.Overflow.data(), row1, packRes.Overflow.data()),
             "Null keys must compare equal when EqualNulls is set");

@@ -24,7 +24,8 @@ public:
     // Can not be called multiple times due to immutability of arrow arrays
     virtual void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) = 0;
     // virtual void UnpackApply(const TPackResult& packed, std::function<void(const char*)>);
-    virtual NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
+    virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
+    virtual void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) = 0;
 };
 
 IBlockLayoutConverter::TPtr MakeBlockLayoutConverter(

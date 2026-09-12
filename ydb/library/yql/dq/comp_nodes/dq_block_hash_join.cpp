@@ -222,7 +222,7 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
         for(ESide side: EachSide) {
             const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), Meta_->KeyColumns.SelectSide(side));
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
-            ApplyEqualNulls(layouts.SelectSide(side)->GetTupleLayout(), Meta_->Settings.EqualNullsKeys);
+            layouts.SelectSide(side)->ApplyEqualNulls(Meta_->Settings.EqualNullsKeys);
         }
         const auto& userNullTypes = userTypes.SelectSide(Join.NullSupplying());
 

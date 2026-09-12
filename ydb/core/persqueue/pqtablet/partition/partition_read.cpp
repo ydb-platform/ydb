@@ -556,7 +556,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 continue;
             }
 
-            LOG_D("FormAnswer processing batch offset totakecount count size from batchStartIdx cbcount", 
+            LOG_D("FormAnswer processing batch offset totakecount count size from batchStartIdx cbcount",
                 {"offsetHeaderCount", (offset - header.GetCount())},
                 {"count", count},
                 {"headerCount", header.GetCount()},
@@ -643,7 +643,7 @@ TReadAnswer TReadInfo::FormAnswer(
     readResult->SetReadFromTimestampMs(ReadTimestampMs);
 
     AFL_ENSURE(endOffset <= (ui64)Max<i64>())("Max offset is too big", endOffset);
-    LOG_D("FormAnswer for blobs", 
+    LOG_D("FormAnswer for blobs",
         {"blobsSize", Blobs.size()});
 
     if (!isActive && response->GetBlobs().empty()) {

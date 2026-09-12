@@ -32,6 +32,7 @@ public:
 
     virtual TStructuredLogPrefix LogPrefix() const = 0;
 
+public:
     NKikimrServices::EServiceKikimr Service;
 };
 

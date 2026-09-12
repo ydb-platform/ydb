@@ -4,7 +4,6 @@
 
 #include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
-#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>

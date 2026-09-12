@@ -10,7 +10,6 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/common/blob_refcounter.h>
 #include <ydb/core/persqueue/common/logging.h>
-#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NPQ {

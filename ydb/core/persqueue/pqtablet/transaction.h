@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -9,8 +10,6 @@
 #include <ydb/core/tx/tx_processing.h>
 
 #include <ydb/library/actors/core/actorid.h>
-#include <ydb/core/persqueue/common/logging.h>
-#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>

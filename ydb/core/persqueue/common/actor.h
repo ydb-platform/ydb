@@ -5,7 +5,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
 namespace NKikimr::NPQ {

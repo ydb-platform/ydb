@@ -6574,6 +6574,17 @@ TRuntimeNode TProgramBuilder::BlockJust(TRuntimeNode data) {
     return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
+TRuntimeNode TProgramBuilder::BlockCast(TRuntimeNode data, TType* type, bool safe) {
+    const auto sourceType = AS_TYPE(TBlockType, data.GetStaticType());
+    const auto targetType = AS_TYPE(TBlockType, type);
+    MKQL_ENSURE(sourceType->GetShape() == targetType->GetShape(), "Expected matching block shapes");
+
+    TCallableBuilder callableBuilder(Env_, __func__, type);
+    callableBuilder.Add(data);
+    callableBuilder.Add(NewDataLiteral<bool>(safe));
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
+}
+
 TRuntimeNode TProgramBuilder::BlockFunc(const std::string_view& funcName, TType* returnType, const TArrayRef<const TRuntimeNode>& args) {
     for (const auto& arg : args) {
         MKQL_ENSURE(arg.GetStaticType()->IsBlock(), "Expected Block type");

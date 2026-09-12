@@ -549,6 +549,21 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
     if (!udfName.empty()) {
         const auto& leftArg = ctx.NewArgument(pos, "left");
         const auto& rightArg = ctx.NewArgument(pos, "right");
+        auto leftValue = parameter.first;
+        const auto sourceType = RemoveOptionalType(predicate.Left().Ref().GetTypeAnn());
+        if (sourceType->GetKind() == ETypeAnnotationKind::Data && sourceType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Utf8) {
+            const auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+            const auto targetType = [&]() -> const TTypeAnnotationNode* {
+                if (predicate.Left().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+                    return ctx.MakeType<TOptionalExprType>(stringType);
+                }
+                return stringType;
+            }();
+            leftValue = Build<TKqpOlapBlockCast>(ctx, pos)
+                .Input(leftValue)
+                .Type(ExpandType(pos, *targetType, ctx))
+            .Done();
+        }
 
         const auto& callUdfLambda = ctx.NewLambda(pos, ctx.NewArguments(pos, {leftArg, rightArg}),
             ctx.Builder(pos)
@@ -565,7 +580,7 @@ TExprBase BuildOneElementComparison(const std::pair<TExprBase, TExprBase>& param
         return Build<TKqpOlapApply>(ctx, pos)
             .Lambda(callUdfLambda)
             .Args()
-                .Add(parameter.first)
+                .Add(leftValue)
                 .Add(parameter.second)
             .Build()
             .KernelName(ctx.NewAtom(pos, udfName))

@@ -609,6 +609,13 @@ const TProgram::TAssignment* InvertResult(TProgram::TAssignment* command, TKqpOl
 
 TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileContext& ctx);
 
+TTypedColumn GetOrCreateApplyArgumentColumnIdAndType(const TExprBase& node, TKqpOlapCompileContext& ctx) {
+    if (const auto column = node.Maybe<TKqpOlapApplyColumnArg>()) {
+        return GetOrCreateColumnIdAndType(column.Cast().ColumnName(), ctx);
+    }
+    return GetOrCreateColumnIdAndType(node, ctx);
+}
+
 template<bool Empty = false>
 const TTypedColumn CompileExists(const TExprBase& arg, TKqpOlapCompileContext& ctx)
 {
@@ -627,32 +634,40 @@ const TTypedColumn CompileExists(const TExprBase& arg, TKqpOlapCompileContext& c
     auto *const notCommand = InvertResult(command, ctx);
     return {ConvertSafeCastToColumn(notCommand->GetColumn().GetId(), "Uint8", ctx), ctx.ConvertToBlockType(type)};
 }
-
 TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCompileContext& ctx) {
     std::vector<ui64> ids;
     TTypeAnnotationNode::TListType argTypes;
     ids.reserve(apply.Args().Size());
     argTypes.reserve(apply.Args().Size());
     for (const auto& arg : apply.Args()) {
-        if (const auto& column = arg.Maybe<TKqpOlapApplyColumnArg>()) {
-            const auto ssaCol = GetOrCreateColumnIdAndType(column.Cast().ColumnName(), ctx);
-            ids.emplace_back(ssaCol.Id);
-            argTypes.emplace_back(ssaCol.Type);
-        } else {
-            const auto& ssaCol = GetOrCreateColumnIdAndType(arg, ctx);
-            ids.emplace_back(ssaCol.Id);
-            argTypes.emplace_back(ssaCol.Type);
-        }
+        const auto ssaCol = GetOrCreateApplyArgumentColumnIdAndType(arg, ctx);
+        ids.emplace_back(ssaCol.Id);
+        argTypes.emplace_back(ssaCol.Type);
     }
 
     auto *const command = ctx.CreateAssignCmd();
     auto *const function = command->MutableFunction();
-    const auto idx = ctx.GetKernelRequestBuilder().AddScalarApply(apply.Lambda().Ref(), argTypes, ctx.ExprCtx());
+    const auto resultType = ctx.ExprCtx().MakeType<TBlockExprType>(apply.Lambda().Body().Ref().GetTypeAnn());
+    const auto kernelName = apply.KernelName().StringValue();
+    const auto idx = !kernelName.empty()
+        ? ctx.GetKernelRequestBuilder().Udf(kernelName, false, argTypes, resultType)
+        : ctx.GetKernelRequestBuilder().AddScalarApply(apply.Lambda().Ref(), argTypes, ctx.ExprCtx());
     function->SetKernelIdx(idx);
     function->SetFunctionType(TProgram::YQL_KERNEL);
-    function->SetKernelName(apply.KernelName().StringValue());
+    function->SetKernelName(kernelName);
     std::for_each(ids.cbegin(), ids.cend(), [function] (ui64 id) { function->AddArguments()->SetId(id); });
-    return {command->GetColumn().GetId(), ctx.ExprCtx().MakeType<TBlockExprType>(apply.Lambda().Body().Ref().GetTypeAnn())};
+    return {command->GetColumn().GetId(), resultType};
+}
+
+TTypedColumn CompileOlapBlockCast(const TKqpOlapBlockCast& cast, TKqpOlapCompileContext& ctx) {
+    const auto input = GetOrCreateApplyArgumentColumnIdAndType(cast.Input(), ctx);
+    const auto resultType = ctx.ConvertToBlockType(cast.Ref().GetTypeAnn());
+    auto* const command = ctx.CreateAssignCmd();
+    auto* const function = command->MutableFunction();
+    function->SetKernelIdx(ctx.GetKernelRequestBuilder().Cast(input.Type, resultType, /*safe=*/true));
+    function->SetFunctionType(TProgram::YQL_KERNEL);
+    function->AddArguments()->SetId(input.Id);
+    return {command->GetColumn().GetId(), resultType};
 }
 
 TTypedColumn CompileYqlKernelUnaryOperation(const TKqpOlapFilterUnaryOp& operation, TKqpOlapCompileContext& ctx)
@@ -856,6 +871,8 @@ TTypedColumn GetOrCreateColumnIdAndType(const TExprBase& node, TKqpOlapCompileCo
         return ConvertJsonValueToColumn(maybeJsonValue.Cast(), ctx);
     } else if (const auto& maybeJsonValue = node.Maybe<TKqpOlapJsonExists>()) {
         return CompileJsonExists(maybeJsonValue.Cast(), ctx);
+    } else if (const auto& maybeBlockCast = node.Maybe<TKqpOlapBlockCast>()) {
+        return CompileOlapBlockCast(maybeBlockCast.Cast(), ctx);
     } else if (const auto& maybeApply = node.Maybe<TKqpOlapApply>()) {
         return CompileYqlKernelScalarApply(maybeApply.Cast(), ctx);
     }

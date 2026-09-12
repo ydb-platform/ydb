@@ -1452,6 +1452,19 @@ TStatus AnnotateOlapApplyColumnArg(const TExprNode::TPtr& node, TExprContext& ct
     }
 }
 
+TStatus AnnotateOlapBlockCast(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2U, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureComputable(node->Head(), ctx) || !EnsureType(node->Tail(), ctx)) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(node->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 3U, ctx)) {
         return TStatus::Error;
@@ -3445,6 +3458,7 @@ public:
         AddHandler({TKqpPredicateClosure::CallableName()}, Hndl(&AnnotateKqpPredicateClosure));
         AddHandler({TKqpOlapFilter::CallableName()}, Hndl(&AnnotateOlapFilter));
         AddHandler({TKqpOlapApplyColumnArg::CallableName()}, Hndl(&AnnotateOlapApplyColumnArg));
+        AddHandler({TKqpOlapBlockCast::CallableName()}, Hndl(&AnnotateOlapBlockCast));
         AddHandler({TKqpOlapApply::CallableName()}, Hndl(&AnnotateOlapApply));
         AddHandler({TKqpOlapAgg::CallableName()}, Hndl(&AnnotateOlapAgg));
         AddHandler({TKqpOlapDistinct::CallableName()}, Hndl(&AnnotateOlapDistinct));

@@ -1,6 +1,7 @@
 #include "common.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/localdb.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
@@ -53,6 +54,120 @@ using namespace NFederatedQueryTest;
 using namespace NYdb::NConsoleClient::NAi;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
+    void ConfigureRowDispatcherMemoryLimit(TStreamingTestFixture& self, ui64 memoryLimit) {
+        auto& appConfig = self.SetupAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableSharedReadingInStreamingQueries(true);
+        appConfig.MutableFeatureFlags()->SetEnableSharedReadingStructuredJsonParsing(true);
+        appConfig.MutableFeatureFlags()->SetEnableRowDispatcherMemoryLimiting(true);
+        appConfig.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(false);
+        auto& resourceManager = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
+        resourceManager.SetQueryMemoryLimit(memoryLimit);
+        auto* queue = appConfig.MutableResourceBrokerConfig()->AddQueues();
+        queue->SetName(NLocalDb::KqpResourceManagerQueue);
+        queue->MutableLimit()->SetMemory(memoryLimit);
+        resourceManager.SetMkqlLightProgramMemoryLimit(1_MB);
+        resourceManager.SetMkqlHeavyProgramMemoryLimit(1_MB);
+        resourceManager.SetChannelBufferSize(128_KB);
+    }
+
+    void CreateRowDispatcherMemoryLimitTopics(TStreamingTestFixture& self) {
+        self.GetRuntime().SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
+        self.ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        self.CreateTopic("memoryLimitInput");
+        self.CreateTopic("memoryLimitOutput");
+        self.ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE memoryLimitSource WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{endpoint}",
+                DATABASE_NAME = "{database}",
+                AUTH_METHOD = "NONE",
+                SHARED_READING = "true"
+            );)",
+            "endpoint"_a = TStreamingTestFixture::YDB_ENDPOINT,
+            "database"_a = TStreamingTestFixture::YDB_DATABASE));
+    }
+
+    void WaitForRowDispatcherMemoryLimit(TStreamingTestFixture& self, const TString& memoryName) {
+        WaitFor(TDuration::Seconds(60), "Row Dispatcher memory limit", [&](TString& error) {
+            error = self.GetStreamingQueryIssues("memoryLimitQuery");
+            return error.contains("Row dispatcher memory limit exceeded")
+                && error.contains("bytes for " + memoryName) && error.contains("failed with code OVERLOADED");
+        });
+        UNIT_ASSERT_GT(self.GetCounters()->GetCounter("RM/NotEnoughMemory", true)->Val(), 0);
+        self.ExecQuery("ALTER STREAMING QUERY memoryLimitQuery SET (RUN = FALSE);");
+    }
+
+    Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnParserCreation, TStreamingTestFixture) {
+        constexpr ui64 memoryLimit = 8_MB;
+        ConfigureRowDispatcherMemoryLimit(*this, memoryLimit);
+        const auto pqGateway = SetupMockPqGateway();
+        CreateRowDispatcherMemoryLimitTopics(*this);
+
+        TStringBuilder schema;
+        TStringBuilder columns;
+        for (size_t i = 0; i < 512; ++i) {
+            if (i) {
+                schema << ", ";
+                columns << ", ";
+            }
+            schema << "c" << i << " String NOT NULL";
+            columns << "c" << i;
+        }
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
+                INSERT INTO memoryLimitSource.memoryLimitOutput
+                SELECT String::JoinFromList(AsList({columns}), "")
+                FROM memoryLimitSource.memoryLimitInput WITH (
+                    FORMAT = "json_each_row", SCHEMA ({schema})
+                );
+            END DO;)", "columns"_a = TString(columns), "schema"_a = TString(schema)));
+
+        WaitForRowDispatcherMemoryLimit(*this, "JsonParserAlloc");
+        const auto formatCounters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "json_each_row");
+        UNIT_ASSERT(!formatCounters->FindCounter("ActiveFilters"));
+        UNIT_ASSERT(!pqGateway->ExtractReadSession("memoryLimitInput"));
+    }
+
+    Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnReadSessionCreation, TStreamingTestFixture) {
+        ConfigureRowDispatcherMemoryLimit(*this, 12_MB);
+        const auto pqGateway = SetupMockPqGateway();
+        CreateRowDispatcherMemoryLimitTopics(*this);
+        ExecQuery(R"(
+            CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
+                INSERT INTO memoryLimitSource.memoryLimitOutput
+                SELECT Data FROM memoryLimitSource.memoryLimitInput;
+            END DO;
+        )");
+
+        WaitForRowDispatcherMemoryLimit(*this, "ReadSessionMemory");
+        const auto formatCounters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "raw");
+        UNIT_ASSERT(formatCounters->FindCounter("ActiveFilters"));
+        UNIT_ASSERT(!pqGateway->ExtractReadSession("memoryLimitInput"));
+    }
+
+    Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnLargeMessage, TStreamingTestFixture) {
+        ConfigureRowDispatcherMemoryLimit(*this, 64_MB);
+        CreateRowDispatcherMemoryLimitTopics(*this);
+        ExecQuery(R"(
+            CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
+                INSERT INTO memoryLimitSource.memoryLimitOutput
+                SELECT value FROM memoryLimitSource.memoryLimitInput WITH (
+                    FORMAT = "json_each_row", SCHEMA (value String NOT NULL)
+                );
+            END DO;
+        )");
+
+        WaitStreamingQueryStatus("memoryLimitQuery");
+        WriteTopicMessage("memoryLimitInput", R"({"value": "small"})");
+        const auto readBytes = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetCounter("SessionDataRate", true);
+        WaitFor(TDuration::Seconds(60), "Row Dispatcher receives the control message", [&] {
+            return readBytes->Val() > 0;
+        });
+        ReadTopicMessages("memoryLimitOutput", {"small"});
+        WriteTopicMessage("memoryLimitInput", "{\"value\":\"" + std::string(8_MB, 'x') + "\"}");
+        WaitForRowDispatcherMemoryLimit(*this, "SimdJsonMemory");
+    }
+
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 

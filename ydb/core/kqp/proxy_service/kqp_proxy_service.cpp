@@ -33,6 +33,7 @@
 #include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_memory_quota.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -2059,11 +2060,17 @@ private:
         auto counters = Counters->GetKqpCounters()->GetSubgroup("subsystem", "row_dispatcher");
 
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
+        NFq::TRowDispatcherSettings settings(
+            streamingQueries.GetExternalStorage(),
+            FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
+        );
+
+        if (FeatureFlags.GetEnableRowDispatcherMemoryLimiting()) {
+            settings.SetMemoryQuotaManager(NRm::CreateMemoryQuotaManager(ResourceManager_));
+        }
+
         auto rowDispatcher = NFq::NewRowDispatcherService(
-            NFq::TRowDispatcherSettings(
-                streamingQueries.GetExternalStorage(),
-                FeatureFlags.GetEnableSharedReadingStructuredJsonParsing()
-            ),
+            settings,
             NKikimr::CreateYdbCredentialsProviderFactory,
             FederatedQuerySetup->CredentialsFactory,
             AppData()->FunctionRegistry,

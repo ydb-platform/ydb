@@ -10,6 +10,7 @@ PEERDIR(
 
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/row_dispatcher/format_handler/common
+    ydb/core/fq/libs/row_dispatcher/memory
     ydb/core/fq/libs/row_dispatcher/purecalc_no_pg_wrapper
 
     ydb/library/actors/core

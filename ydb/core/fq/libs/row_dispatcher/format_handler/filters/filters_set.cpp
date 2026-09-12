@@ -32,7 +32,7 @@ public:
         , Counters_(std::move(counters))
     {}
 
-    void ProcessData(const TVector<ui64>& columnIndex, const TVector<ui64>& offsets, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) override {
+    void ProcessData(const TVector<ui64>& columnIndex, std::span<const ui64> offsets, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) override {
         YDB_LOG_TRACE("ProcessData for clients",
             {"logPrefix", LogPrefix},
             {"runHandlers", RunHandlers_.size()},
@@ -223,7 +223,7 @@ private:
         RunHandlers_.erase(iter);
     }
 
-    void PushToRunner(IProgramRunHandler::TPtr programRunHandler, const TVector<ui64>& /* offsets */, const TVector<ui64>& columnIndex, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) {
+    void PushToRunner(IProgramRunHandler::TPtr programRunHandler, std::span<const ui64> /* offsets */, const TVector<ui64>& columnIndex, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) {
         const auto consumer = programRunHandler->GetConsumer();
         const auto& columnIds = consumer->GetColumnIds();
 

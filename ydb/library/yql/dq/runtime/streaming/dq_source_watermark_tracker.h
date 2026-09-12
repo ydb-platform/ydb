@@ -7,6 +7,7 @@
 #include <util/system/types.h>
 #include <util/string/builder.h>
 #include <util/generic/set.h>
+#include <util/generic/yexception.h>
 
 namespace NYql::NDq {
 
@@ -25,7 +26,9 @@ public:
         , LateArrivalDelay_(lateArrivalDelay)
         , IdleTimeout_(idleTimeout)
         , Impl_(logPrefix, counters)
-    {}
+    {
+        Y_ENSURE(Granularity_, "Watermark granularity must be positive");
+    }
 
     [[nodiscard]] TMaybe<TInstant> NotifyNewPartitionTime(
         const TPartitionKey& partitionKey,

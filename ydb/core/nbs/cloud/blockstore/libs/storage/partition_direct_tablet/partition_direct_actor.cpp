@@ -514,9 +514,9 @@ void TPartitionActor::HandleFastPathServiceReady(
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
 
-    {
-        auto service = GetNbsService();
-
+    const auto service = GetNbsService();
+    // The frontend and auto-vhost are mutually exclusive process-wide modes.
+    if (!service->GetConfig().GetNbsFrontendConfig().GetEnabled()) {
         const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
         NVhost::TStorageOptions options{
             .DiskId = VolumeConfig.GetDiskId(),

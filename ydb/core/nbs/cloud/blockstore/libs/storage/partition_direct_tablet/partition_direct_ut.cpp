@@ -1,10 +1,12 @@
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/bootstrap.h>
+#include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_cleanup_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
@@ -40,6 +42,59 @@ constexpr ui64 DefaultVChunkSize = RegionSize / DirectBlockGroupsCount;
 const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
 const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Records auto-vhost registration without creating a real Unix socket.
+class TRecordingVhostServer final: public NVhost::IServer
+{
+public:
+    ui32 StartEndpointCalls = 0;
+    ui32 DetachStorageCalls = 0;
+    TString SocketPath;
+    NVhost::TStorageOptions Options;
+
+    // No worker threads are needed by the recording server.
+    void Start() override
+    {}
+
+    // No worker threads are owned by the recording server.
+    void Stop() override
+    {}
+
+    // Records the endpoint and validates that its backend is available.
+    NThreading::TFuture<NProto::TError> StartEndpoint(
+        TString socketPath,
+        ITraceServicePtr traceService,
+        IStoragePtr storage,
+        const NVhost::TStorageOptions& options) override
+    {
+        UNIT_ASSERT(traceService);
+        UNIT_ASSERT(storage);
+        ++StartEndpointCalls;
+        SocketPath = std::move(socketPath);
+        Options = options;
+        return NThreading::MakeFuture(NProto::TError{});
+    }
+
+    // Succeeds without a real endpoint to close.
+    NThreading::TFuture<NProto::TError> StopEndpoint(const TString&) override
+    {
+        return NThreading::MakeFuture(NProto::TError{});
+    }
+
+    // Records partition cleanup, including when auto-vhost was disabled.
+    void DetachStorage(const TString&) override
+    {
+        ++DetachStorageCalls;
+    }
+
+    // Resizing is not part of the registration test.
+    NProto::TError UpdateEndpoint(const TString&, ui64) override
+    {
+        return {};
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -89,7 +144,8 @@ struct TScopedNbsService: TDisableCopyMove
     EWriteMode writeMode,
     TDuration writeHedgingDelay = TDuration::Seconds(1),
     ui64 pbufferCleanupLsnStep = 0,
-    ui32 syncRequestsBatchSize = 0)
+    ui32 syncRequestsBatchSize = 0,
+    const NKikimrConfig::TNbsFrontendConfig& frontendConfig = {})
 {
     env.CreateBoxAndPool();
     env.Sim(TDuration::Seconds(30));
@@ -115,11 +171,13 @@ struct TScopedNbsService: TDisableCopyMove
     }
 
     // Setup NBS service with storage config
-    return std::make_unique<TScopedNbsService>(CreateNbsConfig(
+    auto nbsConfig = CreateNbsConfig(
         writeMode,
         writeHedgingDelay,
         pbufferCleanupLsnStep,
-        syncRequestsBatchSize));
+        syncRequestsBatchSize);
+    nbsConfig.MutableNbsFrontendConfig()->CopyFrom(frontendConfig);
+    return std::make_unique<TScopedNbsService>(nbsConfig);
 }
 
 NKikimrBlockStore::TVolumeConfig CreateVolumeConfig(
@@ -940,6 +998,70 @@ void ShouldWriteAndReadMultipleBlocks(
 
 Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 {
+    // Verify that vhost and NBS frontend are mutually exclusive serving modes.
+    Y_UNIT_TEST(ShouldUseAutoVhostOnlyWithoutFrontend)
+    {
+        for (const bool frontendEnabled: {false, true}) {
+            TEnvironmentSetup env{{
+                .NodeCount = 8,
+                .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            }};
+            NKikimrConfig::TNbsFrontendConfig frontendConfig;
+            frontendConfig.SetEnabled(frontendEnabled);
+            auto scopedService = SetupStorage(
+                env,
+                EWriteMode::DirectWrite,
+                TDuration::Seconds(1),
+                0,
+                0,
+                frontendConfig);
+            const auto service = GetNbsService();
+            service->VhostServer->Stop();
+            const auto vhostServer = std::make_shared<TRecordingVhostServer>();
+            service->VhostServer = vhostServer;
+
+            constexpr ui64 blockCount = 32768;
+            const ui64 partition = CreatePartitionTablet(env, blockCount);
+            const auto edge = env.Runtime->AllocateEdgeActor(
+                env.Settings.ControllerNodeId,
+                __FILE__,
+                __LINE__);
+
+            // Wait for the ready handler, not just tablet boot: otherwise the
+            // absence of StartEndpoint could be a false positive.
+            GetLoadActorAdapterActorId(env, partition, edge);
+            UNIT_ASSERT_VALUES_EQUAL(
+                vhostServer->StartEndpointCalls,
+                frontendEnabled ? 0 : 1);
+            if (!frontendEnabled) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    vhostServer->SocketPath,
+                    "/tmp/test-volume.sock");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    vhostServer->Options.DiskId,
+                    "test-volume");
+                UNIT_ASSERT_VALUES_EQUAL(vhostServer->Options.BlockSize, 4096);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    vhostServer->Options.BlocksCount,
+                    blockCount);
+            }
+
+            // Backend shutdown still runs in frontend mode, without an
+            // auto-vhost registration. Detaching a missing endpoint is
+            // intentionally allowed.
+            env.Runtime->SendToPipe(
+                partition,
+                edge,
+                new TEvPartitionDirectPrivate::TEvPoison("test shutdown"),
+                0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+            env.Runtime->DestroyActor(edge);
+            env.Runtime->Sim([&]
+                             { return vhostServer->DetachStorageCalls == 0; });
+            UNIT_ASSERT(vhostServer->DetachStorageCalls > 0);
+        }
+    }
+
     Y_UNIT_TEST(MultipleInit)
     {
         {

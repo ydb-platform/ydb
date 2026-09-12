@@ -8,6 +8,8 @@
 
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 
+#include <map>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CHUNK_KEEPER
 
 namespace NKikimr {
@@ -64,6 +66,7 @@ private:
         hFunc(TEvChunkKeeperAllocate, Handle)
         hFunc(TEvChunkKeeperFree, Handle)
         hFunc(TEvChunkKeeperDiscover, Handle)
+        hFunc(TEvChunkKeeperSpaceStat, Handle)
         hFunc(NPDisk::TEvCutLog, Handle)
         hFunc(TEvListChunks, Handle)
         cFunc(TEvents::TEvPoison::EventType, PassAway)
@@ -73,6 +76,7 @@ private:
         hFunc(TEvChunkKeeperAllocate, Handle)
         hFunc(TEvChunkKeeperFree, Handle)
         hFunc(TEvChunkKeeperDiscover, Handle)
+        hFunc(TEvChunkKeeperSpaceStat, Handle)
         hFunc(NPDisk::TEvChunkReserveResult, Handle)
         hFunc(NPDisk::TEvCutLog, Handle)
         hFunc(NPDisk::TEvLogResult, Handle)
@@ -84,6 +88,7 @@ private:
         IgnoreFunc(TEvChunkKeeperAllocate)
         IgnoreFunc(TEvChunkKeeperFree)
         IgnoreFunc(TEvChunkKeeperDiscover)
+        hFunc(TEvChunkKeeperSpaceStat, HandleTerminating)
         IgnoreFunc(NPDisk::TEvCutLog)
         IgnoreFunc(TEvListChunks)
         cFunc(TEvents::TEvPoison::EventType, PassAway)
@@ -93,6 +98,7 @@ private:
         hFunc(TEvChunkKeeperAllocate, HandleError)
         hFunc(TEvChunkKeeperFree, HandleError)
         hFunc(TEvChunkKeeperDiscover, HandleError)
+        hFunc(TEvChunkKeeperSpaceStat, HandleError)
         hFunc(NPDisk::TEvLogResult, HandleError)
         hFunc(TEvListChunks, HandleError)
         IgnoreFunc(NPDisk::TEvCutLog)
@@ -210,6 +216,29 @@ private:
             {"marker", "BSCK06"},
             {"subsystem", subsystem},
             {"discoveredChunks", discoveredChunks});
+    }
+
+    void Handle(const TEvChunkKeeperSpaceStat::TPtr& ev) {
+        auto result = std::make_unique<TEvChunkKeeperSpaceStatResult>();
+        std::map<ui32, TEvChunkKeeperSpaceStatResult::TSubsystemStat> bySubsystem;
+
+        for (const auto& [subsystem, chunks] : Committed->ChunksBySubsystem) {
+            auto& stat = bySubsystem[subsystem];
+            stat.Subsystem = subsystem;
+            stat.CommittedChunkCount = chunks.size();
+        }
+
+        result->Subsystems.reserve(bySubsystem.size());
+        for (auto& [subsystem, stat] : bySubsystem) {
+            Y_UNUSED(subsystem);
+            result->Subsystems.push_back(std::move(stat));
+        }
+        Send(ev->Sender, result.release(), 0, ev->Cookie);
+    }
+
+    void HandleTerminating(const TEvChunkKeeperSpaceStat::TPtr& ev) {
+        Send(ev->Sender, new TEvChunkKeeperSpaceStatResult(NKikimrProto::ERROR,
+            "ChunkKeeper is terminating"), 0, ev->Cookie);
     }
 
     void Handle(const NPDisk::TEvCutLog::TPtr& ev) {
@@ -598,6 +627,11 @@ private:
             {"marker", "BSCK02"},
             {"subsystem", subsystem});
         Send(ev->Sender, new TEvChunkKeeperDiscoverResult({}, NKikimrProto::ERROR, "ChunkKeeper is disabled"));
+    }
+
+    void HandleError(const TEvChunkKeeperSpaceStat::TPtr& ev) {
+        Send(ev->Sender, new TEvChunkKeeperSpaceStatResult(NKikimrProto::ERROR,
+            "ChunkKeeper is disabled"), 0, ev->Cookie);
     }
 
     void HandleError(const NPDisk::TEvLogResult::TPtr& ev) {

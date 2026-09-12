@@ -4,6 +4,11 @@
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
+<<<<<<< HEAD
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -30,6 +35,7 @@ private:
     const TString DiskId;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
+    const IArenaAllocatorPtr ArenaAllocator;
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
     const TVector<TRegionPtr> Regions;   // 4 GiB each
 

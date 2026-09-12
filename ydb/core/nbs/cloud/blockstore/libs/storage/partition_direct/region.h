@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
@@ -20,6 +21,7 @@ class TRegion: public std::enable_shared_from_this<TRegion>
 {
 public:
     TRegion(
+        IArenaAllocatorPtr arenaAllocator,
         NActors::TActorSystem* actorSystem,
         IPartitionDirectService* partitionDirectService,
         ui32 regionIndex,

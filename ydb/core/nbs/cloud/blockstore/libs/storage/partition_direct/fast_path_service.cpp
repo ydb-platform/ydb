@@ -5,8 +5,9 @@
 #include "range_translate.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -100,6 +101,11 @@ size_t RegionCount(ui64 blockCount, ui32 blockSize)
 }
 
 TVector<TRegionPtr> CreateRegions(
+<<<<<<< HEAD
+=======
+    IArenaAllocatorPtr arenaAllocator,
+    ITraceService* traceService,
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
     ui32 blockSize,
@@ -115,6 +121,7 @@ TVector<TRegionPtr> CreateRegions(
             counters->GetSubgroup("region", ToString(i));
 
         regions[i] = std::make_shared<TRegion>(
+            arenaAllocator,
             TActorContext::ActorSystem(),
             partitionDirectService,
             i,
@@ -151,8 +158,10 @@ TFastPathService::TFastPathService(
     , DiskId(diskId)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
+    , ArenaAllocator(CreateArenaAllocator())
     , DirectBlockGroups(std::move(directBlockGroups))
     , Regions(CreateRegions(
+          ArenaAllocator,
           this,
           blockCount,
           blockSize,
@@ -462,6 +471,7 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
         .LsnCounter = SequenceGenerator.load(),
         .TotalVChunks = Regions.size() * (RegionSize / vchunkSize),
         .DbgCount = DirectBlockGroups.size(),
+        .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetStats()},
     };
 }
 

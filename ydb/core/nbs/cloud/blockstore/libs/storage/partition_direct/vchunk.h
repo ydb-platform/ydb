@@ -8,6 +8,7 @@
 #include "write_request_bundle.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
@@ -34,6 +35,7 @@ class TVChunk
 {
 public:
     TVChunk(
+        IArenaAllocatorPtr arenaAllocator,
         NActors::TActorSystem* actorSystem,
         IPartitionDirectService* partitionDirectService,
         const TVChunkConfig& vChunkConfig,
@@ -62,7 +64,25 @@ public:
     void OnHostAppended(size_t newHostCount);
 
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
+<<<<<<< HEAD
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
+=======
+    [[nodiscard]] TExecutorPtr GetExecutor() const;
+    [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
+    [[nodiscard]] ui64 GetFreshTotalBytes(THostIndex hostIndex) const;
+    [[nodiscard]] ui64 GetRottenTotalBytes(THostIndex hostIndex) const;
+    [[nodiscard]] size_t GetAllocatedMemorySize() const;
+    [[nodiscard]] size_t GetUsedMemorySize() const;
+
+    // This vchunk's contribution to the tablet-wide cleanup watermark: the
+    // smallest record id still held in PBuffers, or nullopt when nothing is
+    // inflight. Until the dirty map is restored it returns the zero record id
+    // (the blocking bound), so the cleanup cannot erase records that are not
+    // accounted for yet.
+    // Must run on the executor thread.
+    [[nodiscard]] std::optional<TPBufferKey> GetSafeBarrierForErase() const;
+
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
     [[nodiscard]] TString DebugPrintDirtyMap();
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the

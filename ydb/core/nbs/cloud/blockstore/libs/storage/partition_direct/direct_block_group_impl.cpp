@@ -2012,17 +2012,52 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+<<<<<<< HEAD
     const auto hostStats = Oracle.BuildHostStats(TInstant::Now());
     TVector<THostSnapshot> hosts;
     hosts.reserve(hostStats.size());
     for (const auto& stat: hostStats) {
         hosts.push_back(MakeHostSnapshot(stat));
+=======
+    TVector<TConnectionSnapshot> connections;
+    connections.reserve(Connections.GetSlotCount());
+    for (size_t host = 0; host < Connections.GetSlotCount(); ++host) {
+        connections.push_back(MakeConnectionSnapshot(host));
+    }
+
+    auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
+    TVChunkConfigs vChunkConfigs;
+    size_t allocatedMemorySize = 0;
+    size_t usedMemorySize = 0;
+    for (const auto& weakVChunk: VChunks) {
+        if (auto vChunk = weakVChunk.lock()) {
+            vChunkConfigs[vChunk->GetConfig().GetVChunkIndex()] =
+                vChunk->GetConfig();
+
+            for (THostIndex host = 0; host < GetHostCount(); ++host) {
+                auto& stat = hostsStat[host];
+                stat.FreshTotalBytes += vChunk->GetFreshTotalBytes(host);
+                stat.RottenTotalBytes += vChunk->GetRottenTotalBytes(host);
+            }
+            allocatedMemorySize += vChunk->GetAllocatedMemorySize();
+            usedMemorySize += vChunk->GetUsedMemorySize();
+        }
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
     }
 
     return {
         .Index = DirectBlockGroupIndex,
         .VChunkCount = VChunks.size(),
+<<<<<<< HEAD
         .Hosts = std::move(hosts),
+=======
+        .Hosts = std::move(hostsStat),
+        .Connections = std::move(connections),
+        .VChunkConfigs = std::move(vChunkConfigs),
+        .AllocatedMemorySize = allocatedMemorySize,
+        .UsedMemorySize = usedMemorySize,
+        .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
     };
 }
 

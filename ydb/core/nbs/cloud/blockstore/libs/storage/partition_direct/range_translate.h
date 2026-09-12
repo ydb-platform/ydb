@@ -1,8 +1,15 @@
 #pragma once
 
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/range_translate.h
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/volume_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+=======
+#include "vchunk_config.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+>>>>>>> 78a20188184 (Field map set optimization (#52565)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 

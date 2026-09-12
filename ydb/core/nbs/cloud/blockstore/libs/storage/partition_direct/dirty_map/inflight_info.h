@@ -1,5 +1,9 @@
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
@@ -110,6 +114,7 @@ public:
     };
 
     TInflightInfo(
+<<<<<<< HEAD
         IReadyQueue* readyQueues,
         ui64 lsn,
         size_t byteCount,
@@ -119,6 +124,13 @@ public:
     // ReadMask is empty (reads wait on the quorum future) and the write is not
     // flushable. Call OnWritten once a quorum of PBuffers confirms the write.
     TInflightInfo(IReadyQueue* readyQueue, ui64 lsn, size_t byteCount);
+=======
+        IReadyQueue* readyQueue,
+        THostMask desiredDDisks,
+        THostMask disabled,
+        TPBufferKey pBufferKey,
+        size_t byteCount);
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
@@ -153,8 +165,7 @@ public:
     [[nodiscard]] THostMask GetRequestedFlushes() const;
 
     void RequestErase(THostIndex host);
-    // Returns true when all erases confirmed.
-    [[nodiscard]] bool ConfirmErase(THostIndex host);
+    void ConfirmErase(THostIndex host);
     void EraseFailed(THostIndex host);
     // Hosts where a write was requested but erase is not yet
     // requested/confirmed.

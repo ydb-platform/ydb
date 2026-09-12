@@ -1,5 +1,16 @@
 #include "mon_render.h"
 
+<<<<<<< HEAD
+=======
+#include "mon_render_chaos.h"
+#include "mon_render_memory.h"
+#include "mon_render_overview.h"
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
+
+#include <ydb/core/base/services/blobstorage_service_id.h>
+
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/map.h>
@@ -33,6 +44,17 @@ const char* PageParam(EMonPage page)
             return "dbg";
         case EMonPage::LocalDb:
             return "localdb";
+<<<<<<< HEAD
+=======
+        case EMonPage::VChunk:
+            return "vchunk";
+        case EMonPage::VChunkCounters:
+            return "vchunkcounters";
+        case EMonPage::Latency:
+            return "latency";
+        case EMonPage::Memory:
+            return "memory";
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
     }
     return "overview";
 }
@@ -46,6 +68,17 @@ const char* PageTitle(EMonPage page)
             return "DBGs";
         case EMonPage::LocalDb:
             return "Local DB";
+<<<<<<< HEAD
+=======
+        case EMonPage::VChunk:
+            return "VChunk";
+        case EMonPage::VChunkCounters:
+            return "VChunk counters";
+        case EMonPage::Latency:
+            return "Latency";
+        case EMonPage::Memory:
+            return "Memory";
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
     }
     return "";
 }
@@ -119,6 +152,13 @@ void RenderMenu(
         EMonPage::Overview,
         EMonPage::Dbg,
         EMonPage::LocalDb,
+<<<<<<< HEAD
+=======
+        EMonPage::VChunk,
+        EMonPage::VChunkCounters,
+        EMonPage::Latency,
+        EMonPage::Memory,
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
     };
     str << "<div style='margin:0.5em 0 1em;'>";
     for (EMonPage page: pages) {
@@ -133,11 +173,28 @@ void RenderMenu(
     str << "</div>";
 }
 
+<<<<<<< HEAD
 void RenderOverview(IOutputStream& str, const TFastPathServiceInfo& info)
 {
     HTML (str) {
         TAG (TH3) {
             str << "Overview";
+=======
+void RenderWatermarks(
+    IOutputStream& str,
+    const TDbgSnapshot& dbg,
+    ui32 blockSize)
+{
+    for (const auto& [vChunkId, vChunkConfig]: dbg.VChunkConfigs) {
+        TStringBuilder w;
+        for (auto host: vChunkConfig.GetDDisks()) {
+            if (auto watermark = vChunkConfig.GetWatermark(host)) {
+                if (!w.empty()) {
+                    w << ",";
+                }
+                w << PrintHostIndex(host) << ":" << *watermark / blockSize;
+            }
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
         }
         TABLE_CLASS ("table table-condensed") {
             TABLEBODY () {
@@ -201,7 +258,17 @@ void RenderDbgList(
                         str << "Consecutive errors";
                     }
                     TABLEH () {
+<<<<<<< HEAD
                         str << "Consecutive success";
+=======
+                        str << "PBuffers usage";
+                    }
+                    TABLEH () {
+                        str << "Rotten";
+                    }
+                    TABLEH () {
+                        str << "Fresh";
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
                     }
                 }
             }
@@ -211,6 +278,12 @@ void RenderDbgList(
                     size_t inflight = 0;
                     size_t consecutiveErrors = 0;
                     size_t consecutiveSuccesses = 0;
+<<<<<<< HEAD
+=======
+                    TCountAndSize pBuffersUsage;
+                    ui64 freshTotalBytes = 0;
+                    ui64 rottenTotalBytes = 0;
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
                     for (const auto& host: dbg.Hosts) {
                         ++healthCounts[host.Health];
                         consecutiveErrors += host.Errors.ConsecutiveErrorCount;
@@ -221,6 +294,12 @@ void RenderDbgList(
                         {
                             inflight += host.InflightByOperation[operation];
                         }
+<<<<<<< HEAD
+=======
+                        pBuffersUsage += host.PBuffersUsage;
+                        freshTotalBytes += host.FreshTotalBytes;
+                        rottenTotalBytes += host.RottenTotalBytes;
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
                     }
                     TABLER () {
                         TABLED () {
@@ -244,7 +323,19 @@ void RenderDbgList(
                             str << consecutiveErrors;
                         }
                         TABLED () {
+<<<<<<< HEAD
                             str << consecutiveSuccesses;
+=======
+                            str << pBuffersUsage.Print(true);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(rottenTotalBytes);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(freshTotalBytes);
+                            str << "<br>";
+                            RenderWatermarks(str, dbg, tabletInfo.BlockSize);
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
                         }
                     }
                 }
@@ -299,11 +390,65 @@ void RenderDbgDetail(
                         str << "PBuffer used";
                     }
                     TABLEH () {
+<<<<<<< HEAD
+=======
+                        str << "Fresh blocks";
+                    }
+                    TABLEH () {
+                        str << "Rotten blocks";
+                    }
+                    TABLEH () {
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
                         str << "Consecutive errors";
                     }
                     TABLEH () {
                         str << "Consecutive success";
                     }
+<<<<<<< HEAD
+=======
+                }
+            }
+            TABLEBODY () {
+                for (const auto& host: dbg.Hosts) {
+                    TABLER () {
+                        TABLED () {
+                            str << PrintHostIndex(host.Index);
+                        }
+                        TABLED () {
+                            str << ToString(host.State);
+                        }
+                        TABLED () {
+                            str << ToString(host.Health);
+                        }
+                        TABLED () {
+                            str << host.PBuffersUsage.Print(true);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(host.FreshTotalBytes);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(host.RottenTotalBytes);
+                        }
+                        TABLED () {
+                            str << host.Errors.ConsecutiveErrorCount;
+                        }
+                        TABLED () {
+                            str << host.Errors.ConsecutiveSuccessCount;
+                        }
+                    }
+                }
+            }
+        }
+        TAG (TH4) {
+            str << "Inflight by operation";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "Host";
+                    }
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
                     for (size_t operation = 0; operation < OperationCount;
                          ++operation)
                     {
@@ -460,6 +605,21 @@ TString RenderMonPage(const TMonPageData& data)
                 RenderLocalDb(str, *data.LocalDb);
             }
             break;
+<<<<<<< HEAD
+=======
+        case EMonPage::VChunk:
+            RenderVChunk(str, data);
+            break;
+        case EMonPage::VChunkCounters:
+            RenderVChunkCounters(str, data);
+            break;
+        case EMonPage::Latency:
+            RenderLatency(str, data);
+            break;
+        case EMonPage::Memory:
+            RenderMemory(str, data);
+            break;
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
     }
     return str.Str();
 }

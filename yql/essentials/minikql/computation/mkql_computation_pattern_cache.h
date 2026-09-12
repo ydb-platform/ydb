@@ -5,6 +5,7 @@
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <library/cpp/threading/future/future.h>
+#include <util/datetime/base.h>
 
 #include <memory>
 #include <mutex>
@@ -31,6 +32,12 @@ struct TPatternCacheEntry {
     size_t SizeForCache = 0;             // set only by cache to lock the size, which can slightly vary when pattern is used
     std::atomic<size_t> AccessTimes = 0; // set only by cache
     std::atomic<bool> IsInCache = false; // set only by cache
+
+    // Compilation bookkeeping, set only by cache and touched under its lock. AccessTimes above is left to mean just
+    // what its name says - how popular the pattern is - while whether it is worth compiling is decided by these.
+    TInstant CachedAt;           // when the entry has entered the cache
+    size_t CompileAttempts = 0;  // how many times the entry has been queued for compilation
+    ui64 LastCompileEpoch = 0;   // the compilation epoch the entry was queued in last
 
     void UpdateSizeForCache() {
         Y_DEBUG_ABORT_UNLESS(!SizeForCache);
@@ -100,7 +107,7 @@ public:
     }
 
     TPatternCacheEntryPtr Find(const TProgramKey& key);
-    TPatternCacheEntryFuture FindOrSubscribe(const TProgramKey& key);
+    std::optional<TPatternCacheEntryFuture> FindOrSubscribe(const TProgramKey& key);
 
     void EmplacePattern(const TProgramKey& key, TPatternCacheEntryPtr patternWithEnv);
 
@@ -165,6 +172,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr Waits_;
     NMonitoring::TDynamicCounters::TCounterPtr Misses_;
     NMonitoring::TDynamicCounters::TCounterPtr NotSuitablePattern_;
+    NMonitoring::TDynamicCounters::TCounterPtr CompilationsPostponed_;
     NMonitoring::TDynamicCounters::TCounterPtr SizeItems_;
     NMonitoring::TDynamicCounters::TCounterPtr SizeCompiledItems_;
     NMonitoring::TDynamicCounters::TCounterPtr SizeBytes_;

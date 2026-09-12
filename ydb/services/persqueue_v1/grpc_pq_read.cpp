@@ -9,7 +9,6 @@
 #include <ydb/core/tx/scheme_board/cache.h>
 
 #include <algorithm>
-#include <ydb/library/actors/core/log.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -41,7 +40,8 @@ IActor* CreatePQReadService(const TActorId& schemeCache, const TActorId& newSche
 
 TPQReadService::TPQReadService(const TActorId& schemeCache, const TActorId& newSchemeCache,
                              TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions)
-    : SchemeCache(schemeCache)
+    : TBase(NKikimrServices::PQ_READ_PROXY)
+    , SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
     , Counters(counters)
     , MaxSessions(maxSessions)
@@ -53,7 +53,7 @@ TPQReadService::TPQReadService(const TActorId& schemeCache, const TActorId& newS
 void TPQReadService::Bootstrap(const TActorContext& ctx) {
     HaveClusters = !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(); // ToDo[migration] - proper condition
     if (HaveClusters) {
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "TPQReadService: send TEvClusterTracker::TEvSubscribe");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE_CLUSTER_TRACKER, "TPQReadService: send TEvClusterTracker::TEvSubscribe");
 
         ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
                  new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
@@ -75,10 +75,10 @@ ui64 TPQReadService::NextCookie() {
 }
 
 void TPQReadService::Handle(NGRpcService::TEvCommitOffsetRequest::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New commit offset request");
+    LOG_D("New commit offset request");
 
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New commit offset request failed - cluster is not known yet");
+        LOG_I("New commit offset request failed - cluster is not known yet");
 
         auto e = dynamic_cast<TEvCommitOffsetRequest*>(ev->Get());
         AFL_ENSURE(e)("reason", "unexpected event type for commit offset")("local_cluster", LocalCluster);
@@ -145,17 +145,17 @@ void TPQReadService::Handle(NGRpcService::TEvStreamTopicReadRequest::TPtr& ev, c
 
 void TPQReadService::Handle(NGRpcService::TEvStreamTopicDirectReadRequest::TPtr& ev, const TActorContext& ctx) {
 
-    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New grpc connection");
+    LOG_D("New grpc connection");
 
     if (TooMuchSessions()) {
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New grpc connection failed - too much sessions");
+        LOG_I("New grpc connection failed - too much sessions");
         ev->Get()->Attach(ctx.SelfID);
         ev->Get()->WriteAndFinish(
             FillDirectReadResponse("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), Ydb::StatusIds::OVERLOADED); //CANCELLED
         return;
     }
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New grpc connection failed - cluster is not known yet");
+        LOG_I("New grpc connection failed - cluster is not known yet");
 
         ev->Get()->Attach(ctx.SelfID);
         ev->Get()->WriteAndFinish(
@@ -168,7 +168,7 @@ void TPQReadService::Handle(NGRpcService::TEvStreamTopicDirectReadRequest::TPtr&
 
         const ui64 cookie = NextCookie();
 
-        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New direct session created cookie",
+        LOG_D("New direct session created cookie",
             {"cookie", cookie});
 
         TActorId worker = ctx.Register(new TDirectReadSessionActor(
@@ -190,10 +190,10 @@ void TPQReadService::HandleReadInfo(TAutoPtr<NActors::IEventHandle>& evHandle, c
     evHandle->DropRewrite();
     auto* ev = evHandle->Get<TEvPQReadInfoRequest>();
 
-    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New read info request");
+    LOG_D("New read info request");
 
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
-        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New read info request failed - cluster is not known yet");
+        LOG_I("New read info request failed - cluster is not known yet");
 
         ev->RaiseIssue(FillIssue("cluster initializing", PersQueue::ErrorCode::INITIALIZING));
         ev->ReplyWithYdbStatus(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING));

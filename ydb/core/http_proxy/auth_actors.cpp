@@ -4,19 +4,18 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/core/security/ticket_parser_impl.h>
 #include <ydb/core/tx/scheme_board/cache.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/http_proxy/authorization/signature.h>
 #include <ydb/library/ycloud/impl/access_service.h>
 #include <ydb/library/ycloud/impl/iam_token_service.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
 #include <util/stream/file.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
 
 namespace NKikimr::NHttpProxy {
     NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, const TString& userAgentHint, bool enableV2Interface)
@@ -39,13 +38,15 @@ namespace NKikimr::NHttpProxy {
         return NCloud::CreateIamTokenService(tsSettings);
     }
 
-    class THttpAuthActor: public NActors::TActorBootstrapped<THttpAuthActor> {
+    class THttpAuthActor: public NPQ::TBaseActor<THttpAuthActor>
+                         , public NPQ::TConstantLogPrefix {
     public:
-        using TBase = NActors::TActorBootstrapped<THttpAuthActor>;
+        using TBase = NPQ::TBaseActor<THttpAuthActor>;
 
         THttpAuthActor(const TActorId sender, THttpRequestContext& context,
                        THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature)
-            : Sender(sender)
+            : TBase(NKikimrServices::HTTP_PROXY)
+            , Sender(sender)
             , Prefix(context.LogPrefix())
             , ServiceAccountId(context.ServiceAccountId)
             , ServiceAccountCredentialsProvider(context.ServiceAccountCredentialsProvider)
@@ -59,8 +60,10 @@ namespace NKikimr::NHttpProxy {
         {
         }
 
-        TStringBuilder LogPrefix() const {
-            return TStringBuilder() << Prefix << " [auth] ";
+        NPQ::TStructuredMessage BuildLogPrefix() const override {
+            return YDB_LOG_CREATE_MESSAGE(
+                Prefix,
+                {"component", "auth"});
         }
 
     private:
@@ -134,8 +137,7 @@ namespace NKikimr::NHttpProxy {
             }
             ctx.Send(Sender, new TEvServerlessProxy::TEvToken(userToken.GetUserSID(), "", userToken.GetSerializedToken(), {"", DatabaseId, DatabasePath, CloudId, FolderId}));
 
-            YDB_LOG_DEBUG_CTX(ctx, "Authorized successfully",
-                {"logPrefix", LogPrefix()});
+            LOG_D("Authorized successfully");
 
             TBase::Die(ctx);
         }
@@ -261,8 +263,7 @@ namespace NKikimr::NHttpProxy {
         void HandleAuthenticationResultImpl(typename TEvResponse::TPtr& ev, const TActorContext& ctx) {
             if (!ev->Get()->Status.Ok()) {
                 RetryCounter.Click();
-                YDB_LOG_INFO_CTX(ctx, "Retry can not authenticate service account",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Retry can not authenticate service account",
                     {"attempN", RetryCounter.AttempN()},
                     {"user", ev->Get()->Status.Msg});
                 if (RetryCounter.HasAttemps()) {
@@ -280,8 +281,7 @@ namespace NKikimr::NHttpProxy {
             RetryCounter.Void();
 
             ServiceAccountId = ev->Get()->Response.subject().service_account().id();
-            YDB_LOG_INFO_CTX(ctx, "Authenticated",
-                {"logPrefix", LogPrefix()},
+            LOG_I("Authenticated",
                 {"serviceAccountId", ServiceAccountId});
             SendIamTokenRequest(ctx);
         }
@@ -315,8 +315,7 @@ namespace NKikimr::NHttpProxy {
                                           const TActorContext& ctx) {
             if (!ev->Get()->Status.Ok()) {
                 RetryCounter.Click();
-                YDB_LOG_INFO_CTX(ctx, "Retry IAM token issue",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Retry IAM token issue",
                     {"attempN", RetryCounter.AttempN()},
                     {"error", ev->Get()->Status.Msg});
 
@@ -334,8 +333,7 @@ namespace NKikimr::NHttpProxy {
             ctx.Send(Sender,
                      new TEvServerlessProxy::TEvToken(ServiceAccountId, ev->Get()->Response.iam_token(), "", {}));
 
-            YDB_LOG_DEBUG_CTX(ctx, "IAM token generated",
-                {"logPrefix", LogPrefix()});
+            LOG_D("IAM token generated");
 
             TBase::Die(ctx);
         }
@@ -359,7 +357,7 @@ namespace NKikimr::NHttpProxy {
 
     private:
         const TActorId Sender;
-        const TString Prefix;
+        const NActors::NStructuredLog::TStructuredMessage Prefix;
         TString ServiceAccountId;
         std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
         const TString RequestId;

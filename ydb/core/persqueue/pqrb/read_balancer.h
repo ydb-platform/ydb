@@ -6,6 +6,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/utils.h>
@@ -97,7 +98,8 @@ private:
 
 
 class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
-                               public TTabletExecutedFlat {
+                               public TTabletExecutedFlat,
+                               public TLogPrefix {
     struct TTxPreInit;
     struct TTxInit;
     struct TTxWrite;
@@ -162,7 +164,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr &ev, const TActorContext& ctx);
     // End kafka integration
 
-    TStringBuilder LogPrefix() const;
+    TStructuredMessage LogPrefix() const override;
 
     TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
     void RequestTabletIfNeeded(const ui64 tabletId, const TActorContext&, bool pipeReconnected = false);

@@ -30,7 +30,7 @@ namespace NKikimr::NHttpProxy {
             TBase::Become(&TMetricsActor::StateWork);
         }
 
-        TStringBuilder LogPrefix() const {
+        NActors::NStructuredLog::TStructuredMessage LogPrefix() const {
             return {};
         }
 

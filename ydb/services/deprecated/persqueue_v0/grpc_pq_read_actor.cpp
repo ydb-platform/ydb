@@ -49,7 +49,10 @@ bool IsKafkaBatchDataChunk(const NKikimrPQClient::TDataChunk& proto) {
 #undef PQ_LOG_PREFIX
 #endif
 
-#define PQ_LOG_PREFIX (TStringBuilder() << "session cookie " << Cookie << " client " << InternalClientId << " session " << Session)
+#define PQ_LOG_PREFIX YDB_LOG_CREATE_MESSAGE( \
+    {"sessionCookie", Cookie}, \
+    {"client", InternalClientId}, \
+    {"session", Session})
 
 //11 tries = 10,23 seconds, then each try for 5 seconds , so 21 retries will take near 1 min
 static const NTabletPipe::TClientRetryPolicy RetryPolicyForPipes = {
@@ -362,7 +365,7 @@ void TReadSessionActor::Die(const TActorContext& ctx) {
             NTabletPipe::CloseClient(ctx, t.second->PipeClient);
     }
     YDB_LOG_INFO_CTX(ctx, "Is DEAD",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX});
+        {PQ_LOG_PREFIX});
 
     if (SessionsActive) {
         --(*SessionsActive);
@@ -419,7 +422,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvCommit::TPtr& ev, const TActorCont
         return;
     }
     YDB_LOG_DEBUG_CTX(ctx, "Commit request from client",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"readId", readId});
     MakeCommit(ctx);
 }
@@ -440,7 +443,7 @@ void TReadSessionActor::MakeCommit(const TActorContext& ctx) {
         return;
     NextCommits.erase(NextCommits.begin(), it);
     YDB_LOG_DEBUG_CTX(ctx, "Commit request",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"readIdCommittedPlus1", ReadIdCommitted + 1},
         {"readId", readId});
 
@@ -502,7 +505,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr& ev, const TActorC
     if (it == Partitions.end() || it->second.Releasing || it->second.LockGeneration != ev->Get()->Generation) {
         //do nothing - already released partition
         YDB_LOG_WARN_CTX(ctx, "Got NOTACTUAL get status request from client for generation",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", ev->Get()->Topic},
             {"partition", ev->Get()->Partition},
             {"generation", ev->Get()->Generation});
@@ -533,7 +536,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvLocked::TPtr& ev, const TActorCont
     if (it == Partitions.end() || it->second.Releasing || it->second.LockGeneration != ev->Get()->Generation) {
         //do nothing - already released partition
         YDB_LOG_WARN_CTX(ctx, "Got NOTACTUAL lock from client for at offset generation",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", topic},
             {"partition", ev->Get()->Partition},
             {"readOffset", ev->Get()->ReadOffset},
@@ -542,7 +545,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvLocked::TPtr& ev, const TActorCont
         return;
     }
     YDB_LOG_INFO_CTX(ctx, "Got lock from client for at readOffset commitOffset generation",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", ev->Get()->Topic},
         {"partition", ev->Get()->Partition},
         {"readOffset", ev->Get()->ReadOffset},
@@ -610,7 +613,7 @@ void TReadSessionActor::AnswerForCommitsIfCan(const TActorContext& ctx) {
             result.MutableCommit()->AddCookie(i);
         }
         YDB_LOG_DEBUG_CTX(ctx, "Replying for commits",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"startReadId", it->second.StartReadId},
             {"readId", readId});
         ui64 diff = result.ByteSize();
@@ -737,7 +740,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         topicsToResolve.insert(t);
     }
     YDB_LOG_INFO_CTX(ctx, "From",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"init", event->Request},
         {"peerName", PeerName});
 
@@ -865,7 +868,7 @@ void TReadSessionActor::Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& 
 void TReadSessionActor::RegisterSession(const TActorId& pipe, const TString& topic, const TActorContext& ctx) {
 
     YDB_LOG_INFO_CTX(ctx, "Register session",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", topic});
     THolder<TEvPersQueue::TEvRegisterReadSession> request;
     request.Reset(new TEvPersQueue::TEvRegisterReadSession);
@@ -980,7 +983,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
     LastACLCheckTimestamp = ctx.Now();
 
     YDB_LOG_DEBUG_CTX(ctx, "Auth ok, got topics, init done",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topicAndTablets", ev->Get()->TopicAndTablets.size()},
         {"initDone", InitDone});
 
@@ -1089,7 +1092,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     auto converterIter = FullPathToConverter.find(NPersQueue::NormalizeFullPath(path));
     if (converterIter.IsEnd()) {
         YDB_LOG_ALERT_CTX(ctx, "Ignored ev lock for event path not recognized",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"record", record.ShortDebugString()});
         CloseSession(
                 TStringBuilder() << "Internal server error, cannot parse lock event: " << record.ShortDebugString() << ", reason: topic not found",
@@ -1104,7 +1107,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
 
     if (jt == Topics.end() || pipe != jt->second->PipeClient) { //this is message from old version of pipe
         YDB_LOG_DEBUG_CTX(ctx, "Ignored ev lock for topic path recognized, but topic is unknown, this is unexpected",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", converterIter->second->GetPrintableString()});
         return;
     }
@@ -1113,7 +1116,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     auto* partitionNode = partitionGraph->GetPartition(record.GetPartition());
     if (!partitionNode) {
         YDB_LOG_DEBUG_CTX(ctx, "Lock for unknown partition",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"partition", record.GetPartition()});
         Locks.push_back(ev->Release());
         if (!AuthInflight) {
@@ -1163,7 +1166,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
     it->second.PartitionsInfly.Inc();
 
     YDB_LOG_INFO_CTX(ctx, "Lock partition",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"ev", record});
 
     ctx.Send(actorId, new TEvPQProxy::TEvLockPartition(0, 0, false, !ClientsideLocksAllowed));
@@ -1178,7 +1181,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionStatus::TPtr& ev, const T
     Y_ABORT_UNLESS(it != Partitions.end());
     if (!it->second.LockGeneration) {
         YDB_LOG_ALERT_CTX(ctx, "The unlocked partition status has been requested",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"partition", ev->Get()->Partition});
         CloseSession(
                 TStringBuilder() << "Internal server error, the unlocked partition " << ev->Get()->Partition << " status has been requested",
@@ -1254,7 +1257,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
     auto converterIter = FullPathToConverter.find(NPersQueue::NormalizeFullPath(topic));
     if (converterIter.IsEnd()) {
         YDB_LOG_ALERT_CTX(ctx, "Failed to parse balancer",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"response", record.ShortDebugString()});
         CloseSession(
                 TStringBuilder() << "Internal server error, cannot parse release event: " << record.ShortDebugString() << ", path not recognized",
@@ -1276,7 +1279,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
 
     auto onUnknownPartition = [&](auto& marker) {
         YDB_LOG_ALERT_CTX(ctx, "Releasing unknown",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"partition", record.ShortDebugString()},
             {"marker", marker});
         CloseSession(
@@ -1312,7 +1315,7 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvReleasePartition::TPtr& ev, cons
     }
 
     YDB_LOG_INFO_CTX(ctx, "Releasing",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"key", jt->first.first},
         {"partition", jt->first.second});
     jt->second.Releasing = true;
@@ -1369,7 +1372,7 @@ void TReadSessionActor::InformBalancerAboutRelease(const THashMap<std::pair<TStr
     req.SetPartition(it->first.second);
 
     YDB_LOG_INFO_CTX(ctx, "Released",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"key", it->first.first},
         {"partition", it->first.second});
 
@@ -1400,7 +1403,7 @@ void TReadSessionActor::CloseSession(const TString& errorReason, const NPersQueu
         error->SetCode(errorCode);
 
         YDB_LOG_INFO_CTX(ctx, "Closed with error",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"reason", errorReason});
         if (!Handler->IsShuttingDown()) {
             ui64 diff = result.ByteSize();
@@ -1409,11 +1412,11 @@ void TReadSessionActor::CloseSession(const TString& errorReason, const NPersQueu
             Handler->Reply(std::move(result));
         } else {
             YDB_LOG_WARN_CTX(ctx, "GRps is shutting down, skip reply",
-                {"PQLOGPREFIX", PQ_LOG_PREFIX});
+                {PQ_LOG_PREFIX});
         }
     } else {
         YDB_LOG_INFO_CTX(ctx, "Closed",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX});
+            {PQ_LOG_PREFIX});
     }
 
     Die(ctx);
@@ -1514,7 +1517,7 @@ bool TReadSessionActor::ProcessBalancerDead(const ui64 tablet, const TActorConte
     for (auto& t : Topics) {
         if (t.second->TabletID == tablet) {
             YDB_LOG_INFO_CTX(ctx, "Balancer for topic is dead, restarting all from this topic",
-                {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                {PQ_LOG_PREFIX},
                 {"topic", t.first});
 
             //Drop all partitions from this topic
@@ -1579,7 +1582,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContex
     event->Request.ClearCredentials();
 
     YDB_LOG_DEBUG_CTX(ctx, "Got read with",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"request", event->Request.GetRead()},
         {"guid", event->Guid});
 
@@ -1624,7 +1627,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadResponse::TPtr& ev, const TAct
     TFormedReadResponse::TPtr formedResponse = it->second;
 
     YDB_LOG_DEBUG_CTX(ctx, "Read done guid size",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"guid", formedResponse->Guid},
         {"keyFirst", key.first},
         {"keySecond", key.second},
@@ -1674,7 +1677,7 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
     const bool hasMessages = HasMessages(formedResponse->Response.GetBatchedData());
     if (hasMessages) {
         YDB_LOG_DEBUG_CTX(ctx, "Assign read id to read request",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"readIdToResponse", ReadIdToResponse},
             {"guid", formedResponse->Guid});
         formedResponse->Response.MutableBatchedData()->SetCookie(ReadIdToResponse);
@@ -1686,7 +1689,7 @@ bool TReadSessionActor::ProcessAnswer(const TActorContext& ctx, TFormedReadRespo
         Handler->Reply(std::move(formedResponse->Response));
     } else {
         YDB_LOG_DEBUG_CTX(ctx, "Empty read result start new reading",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"guid", formedResponse->Guid});
     }
 
@@ -1834,7 +1837,7 @@ bool TReadSessionActor::ProcessReads(const TActorContext& ctx) {
             readR->SetReadTimestampMs(ReadTimestampMs);
 
             YDB_LOG_DEBUG_CTX(ctx, "Performing read with guid from count size partitionsAsked maxTimeLag ms",
-                {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                {PQ_LOG_PREFIX},
                 {"request", (*readR)},
                 {"guid", read->Guid},
                 {"topic", part.Topic->GetPrintableString()},
@@ -1882,7 +1885,7 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvPartitionReady::TPtr& ev, const TA
         return;
 
     YDB_LOG_DEBUG_CTX(ctx, "Ready for read with readOffset endOffset WTime sizeLag",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", ev->Get()->Topic->GetPrintableString()},
         {"partition", ev->Get()->Partition},
         {"readOffset", ev->Get()->ReadOffset},
@@ -1913,7 +1916,7 @@ void TReadSessionActor::HandleWakeup(const TActorContext& ctx) {
         RequestNotChecked = false;
         Y_ABORT_UNLESS(!AuthInitActor);
         YDB_LOG_DEBUG_CTX(ctx, "Checking auth because of timeout",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX});
+            {PQ_LOG_PREFIX});
 
         SendAuthRequest(ctx);
     }
@@ -2015,7 +2018,7 @@ void TPartitionActor::CheckRelease(const TActorContext& ctx) {
     const bool hasUncommittedData = ReadOffset > ClientCommitOffset && ReadOffset > ClientReadOffset;
     if (NeedRelease) {
         YDB_LOG_DEBUG_CTX(ctx, "Checking release readOffset committedOffset ReadGuid CommitsInfly.size Released",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition},
             {"readOffset", ReadOffset},
@@ -2029,7 +2032,7 @@ void TPartitionActor::CheckRelease(const TActorContext& ctx) {
         Released = true;
         ctx.Send(ParentId, new TEvPQProxy::TEvPartitionReleased(Topic, Partition));
         YDB_LOG_INFO_CTX(ctx, "Check release done - releasing; readOffset committedOffset ReadGuid CommitsInfly.size Released",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition},
             {"readOffset", ReadOffset},
@@ -2083,7 +2086,7 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
         commit->SetSessionId(Session);
 
         YDB_LOG_DEBUG_CTX(ctx, "Committing to position prev end by cookie",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition},
             {"offset", offset},
@@ -2101,7 +2104,7 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
 void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     if (CommitsInfly.empty()) {
         YDB_LOG_DEBUG_CTX(ctx, "Unwaited commit-response with cookie waiting for nothing",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition},
             {"cookie", cookie});
@@ -2111,7 +2114,7 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
 
     if (cookie != readId) {
         YDB_LOG_DEBUG_CTX(ctx, "Unwaited commit-response with cookie waiting",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition},
             {"cookie", cookie},
@@ -2127,7 +2130,7 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     if (readId != Max<ui64>()) //this readId is reserved for upcommits on client skipping with ClientCommitOffset
         ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(readId, Topic, Partition));
     YDB_LOG_DEBUG_CTX(ctx, "Commit done to position endOffset with cookie",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"committedOffset", CommittedOffset},
@@ -2139,7 +2142,7 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
         CommitsInfly.pop_front();
         ctx.Send(ParentId, new TEvPQProxy::TEvCommitDone(readId, Topic, Partition));
         YDB_LOG_DEBUG_CTX(ctx, "Partition commit done with no effect with cookie",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition},
             {"readId", readId});
@@ -2151,7 +2154,7 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
 
 void TPartitionActor::SendPartitionReady(const TActorContext& ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Ready for read with readOffset endOffset",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"readOffset", ReadOffset},
@@ -2184,7 +2187,7 @@ void TPartitionActor::RestartPipe(const TActorContext& ctx, const TString& reaso
     ctx.Schedule(TDuration::MilliSeconds(RESTART_PIPE_DELAY_MS), new TEvPQProxy::TEvRestartPipe());
 
     YDB_LOG_INFO_CTX(ctx, "Schedule pipe restart attempt",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"pipeGeneration", PipeGeneration},
@@ -2208,7 +2211,7 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
     Y_ABORT_UNLESS(TabletID);
 
     YDB_LOG_INFO_CTX(ctx, "Pipe restart attempt RequestInfly ReadOffset EndOffset InitDone WaitForData",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"pipeGeneration", PipeGeneration},
@@ -2220,7 +2223,7 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
 
     if (RequestInfly) { //got read infly
         YDB_LOG_INFO_CTX(ctx, "Resend",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition},
             {"currentRequest", CurrentRequest});
@@ -2278,7 +2281,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "InitDone event",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"initDone", InitDone},
@@ -2288,7 +2291,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     if (!InitDone) {
         if (result.GetCookie() != INIT_COOKIE) {
             YDB_LOG_DEBUG_CTX(ctx, "Unwaited response in init with cookie",
-                {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                {PQ_LOG_PREFIX},
                 {"topic", Topic->GetPrintableString()},
                 {"partition", Partition},
                 {"cookie", result.GetCookie()});
@@ -2314,7 +2317,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         InitDone = true;
         PipeGeneration = 0; //reset tries counter - all ok
         YDB_LOG_INFO_CTX(ctx, "INIT DONE EndOffset readOffset committedOffset",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition},
             {"endOffset", EndOffset},
@@ -2342,7 +2345,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     if (result.GetCookie() != (ui64)ReadOffset) {
         YDB_LOG_DEBUG_CTX(ctx, "Partition unwaited read-response with cookie waiting for current read guid is",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition},
             {"cookie", result.GetCookie()},
@@ -2392,7 +2395,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         if (!r.GetSourceId().empty()) {
             if (!NPQ::NSourceIdEncoding::IsValidEncoded(r.GetSourceId())) {
                 YDB_LOG_ERROR_CTX(ctx, "Read bad sourceId from topic offset seqNo sourceId ReadGuid",
-                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {PQ_LOG_PREFIX},
                     {"topic", Topic->GetPrintableString()},
                     {"partition", Partition},
                     {"offset", r.GetOffset()},
@@ -2456,7 +2459,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
             const auto codec = proto.GetCodec();
             if (codec < Min<int>() || codec > Max<int>() || !NPersQueueCommon::ECodec_IsValid(codec)) {
                 YDB_LOG_ERROR_CTX(ctx, "Data chunk codec is not a valid NPersQueueCommon::ECodec; compression codec info may be lost",
-                    {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                    {PQ_LOG_PREFIX},
                     {"topic", Topic->GetInternalName()},
                     {"partition", Partition},
                     {"offset", r.GetOffset()},
@@ -2487,7 +2490,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     }
 
     YDB_LOG_DEBUG_CTX(ctx, "After read state EndOffset ReadOffset ReadGuid",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"endOffset", EndOffset},
@@ -2512,7 +2515,7 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const 
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
     YDB_LOG_INFO_CTX(ctx, "Pipe restart attempt pipe creation",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"pipeGeneration", PipeGeneration},
@@ -2531,7 +2534,7 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const 
 
 void TPartitionActor::Handle(TEvPQProxy::TEvReleasePartition::TPtr&, const TActorContext& ctx) {
     YDB_LOG_INFO_CTX(ctx, "(partition)releasing",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"readOffset", ReadOffset},
@@ -2607,7 +2610,7 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
     Y_ABORT_UNLESS(AllPrepareInited);
     Y_ABORT_UNLESS(!WaitForData);
     YDB_LOG_INFO_CTX(ctx, "Start reading EndOffset readOffset committedOffset clientCommittedOffset clientReadOffset",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"endOffset", EndOffset},
@@ -2700,7 +2703,7 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
         cmd->SetStep(Step);
 
         YDB_LOG_INFO_CTX(ctx, "INITING",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition});
 
@@ -2742,7 +2745,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     event->Record.SetClientId(InternalClientId);
 
     YDB_LOG_DEBUG_CTX(ctx, "Wait data in partition inited",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"waitDataCookie", WaitDataCookie});
@@ -2763,7 +2766,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     auto it = WaitDataInfly.find(ev->Get()->Record.GetCookie());
     if (it == WaitDataInfly.end()) {
         YDB_LOG_DEBUG_CTX(ctx, "Unwaited response for WaitData",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition},
             {"record", ev->Get()->Record});
@@ -2781,7 +2784,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     Y_ABORT_UNLESS(ReadOffset >= EndOffset); //otherwise no WaitData were needed
 
     YDB_LOG_DEBUG_CTX(ctx, "Wait for data done: readOffset EndOffset newEndOffset commitOffset clientCommitOffset cookie",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"readOffset", ReadOffset},
@@ -2822,7 +2825,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
 void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "READ FROM event readOffset EndOffset ClientCommitOffset committedOffset Guid",
-        {"PQLOGPREFIX", PQ_LOG_PREFIX},
+        {PQ_LOG_PREFIX},
         {"topic", Topic->GetPrintableString()},
         {"partition", Partition},
         {"request", ev->Get()->Request},
@@ -2888,7 +2891,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvCommit::TPtr& ev, const TActorContex
     Y_ABORT_UNLESS(offset != Max<ui64>()); // has concreete offset
     if (offset < ClientCommitOffset) {
         YDB_LOG_ERROR_CTX(ctx, "Commit done to too small position committedOffset cookie",
-            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {PQ_LOG_PREFIX},
             {"topic", Topic->GetPrintableString()},
             {"partition", Partition},
             {"offset", offset},
@@ -2902,7 +2905,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvCommit::TPtr& ev, const TActorContex
     if (!hasProgress) {//nothing to commit for this partition
         if (CommitsInfly.empty()) {
             YDB_LOG_DEBUG_CTX(ctx, "Commit done with no effect with cookie",
-                {"PQLOGPREFIX", PQ_LOG_PREFIX},
+                {PQ_LOG_PREFIX},
                 {"topic", Topic->GetPrintableString()},
                 {"partition", Partition},
                 {"readId", readId});

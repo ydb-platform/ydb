@@ -221,9 +221,8 @@ void TConsumerActor::PassAway() {
     TBase::PassAway();
 }
 
-TLogPrefix TConsumerActor::BuildLogPrefix() const {
+TStructuredMessage TConsumerActor::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "MLPConsumer"},
         {"partition", PartitionId},
         {"consumer", Config.GetName()});
 }

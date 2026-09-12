@@ -52,7 +52,7 @@ namespace {
         for (const auto& [name, _] : cgi) {
             if (!IsKnownPublicPersQueueDevUiParam(name)) {
                 YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "PersQueue DevUI request is admin only",
-                    {"logPrefix", LogPrefix()},
+                    {LogPrefix()},
                     {"param", name},
                     {"cgi", cgi.Print()});
                 return false;
@@ -101,9 +101,8 @@ public:
         ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
-    const TLogPrefix& GetLogPrefix() const {
-        static const TLogPrefix LogPrefix = YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "MonitoringProxy"});
+    const TStructuredMessage& GetLogPrefix() const {
+        static const TStructuredMessage LogPrefix;
         return LogPrefix;
     }
 
@@ -184,8 +183,7 @@ private:
 
         LOG_D(
             "Answer TEvRemoteHttpInfoRes: to self",
-            {"sender", Sender},
-            {"selfId", ctx.SelfID}
+            {"sender", Sender}
         );
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         Die(ctx);
@@ -370,8 +368,7 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         return OnRenderAppHtmlPageTx(ev, ctx);
     }
 
-    YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE, "Handle",
-        {"logPrefix", LogPrefix()},
+    LOG_I("Handle",
         {"TEvRemoteHttpInfo", ev->Get()->Query});
 
     TMap<ui32, TActorId> res;

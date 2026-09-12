@@ -11,9 +11,11 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/core/ymq/actor/auth_multi_factory.h>
 #include <ydb/core/ymq/actor/serviceid.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
@@ -29,8 +31,6 @@
 #include <ydb/services/ymq/ymq_proxy.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HTTP_PROXY
 
 namespace NKikimr::NHttpProxy {
 
@@ -61,14 +61,16 @@ namespace NKikimr::NHttpProxy {
 
     private:
 
-        class TSqsTopicHttpRequestActor : public NActors::TActorBootstrapped<TSqsTopicHttpRequestActor> {
+        class TSqsTopicHttpRequestActor : public NPQ::TBaseActor<TSqsTopicHttpRequestActor>
+                                         , public NPQ::TConstantLogPrefix {
         public:
-            using TBase = NActors::TActorBootstrapped<TSqsTopicHttpRequestActor>;
+            using TBase = NPQ::TBaseActor<TSqsTopicHttpRequestActor>;
 
             TSqsTopicHttpRequestActor(THttpRequestContext&& httpContext,
                               THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature,
                               TProtoCall protoCall, const TString& method)
-                : HttpContext(std::move(httpContext))
+                : TBase(NKikimrServices::HTTP_PROXY)
+                , HttpContext(std::move(httpContext))
                 , Signature(std::move(signature))
                 , ProtoCall(protoCall)
                 , Method(method)
@@ -78,7 +80,7 @@ namespace NKikimr::NHttpProxy {
                 }
             }
 
-            TStringBuilder LogPrefix() const {
+            NPQ::TStructuredMessage BuildLogPrefix() const override {
                 return HttpContext.LogPrefix();
             }
 
@@ -99,8 +101,7 @@ namespace NKikimr::NHttpProxy {
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
                 ReportInputCounters(ctx);
-                YDB_LOG_INFO_CTX(ctx, "Sending grpc request to database: iam token",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Sending grpc request to database: iam token",
                     {"discoveryEndpoint", HttpContext.DiscoveryEndpoint},
                     {"databasePath", HttpContext.DatabasePath},
                     {"size", HttpContext.IamToken.size()});
@@ -360,8 +361,7 @@ namespace NKikimr::NHttpProxy {
                                 NKikimr::NSQS::NErrors::INTERNAL_FAILURE.HttpStatusCode)
                             : NKikimr::NSQS::TErrorClass::GetErrorAndCode(issues.begin()->GetCode());
 
-                        YDB_LOG_DEBUG_CTX(ctx, "Not retrying GRPC response",
-                            {"logPrefix", LogPrefix()},
+                        LOG_D("Not retrying GRPC response",
                             {"code", errorCode},
                             {"error", error});
                         return ReplyWithMessageQueueError(
@@ -410,8 +410,7 @@ namespace NKikimr::NHttpProxy {
                     }
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
                 } catch (const std::exception& e) {
-                    YDB_LOG_WARN_CTX(ctx, "Got new request with incorrect json from database",
-                        {"logPrefix", LogPrefix()},
+                    LOG_W("Got new request with incorrect json from database",
                         {"sourceAddress", HttpContext.SourceAddress},
                         {"databasePath", HttpContext.DatabasePath});
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
@@ -433,8 +432,7 @@ namespace NKikimr::NHttpProxy {
                     }
                 }
 
-                YDB_LOG_INFO_CTX(ctx, "Got new request from database stream",
-                    {"logPrefix", LogPrefix()},
+                LOG_I("Got new request from database stream",
                     {"sourceAddress", HttpContext.SourceAddress},
                     {"databasePath", HttpContext.DatabasePath},
                     {"request", MaybeGetQueueUrl<TProtoRequest>(Request)});

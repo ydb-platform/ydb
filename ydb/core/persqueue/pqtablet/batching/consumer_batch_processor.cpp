@@ -29,7 +29,7 @@ namespace {
 
     void LogKafkaBatchUserError(
         TStringBuf message,
-        const TLogPrefix& logPrefix,
+        const TStructuredMessage& logPrefix,
         ui32 partition,
         ui64 offset,
         const TString& error,
@@ -48,7 +48,7 @@ namespace {
         const IBatchCutter& cutter,
         const TBatchCutterData& data,
         ui64 readStartOffset,
-        const TLogPrefix& logPrefix,
+        const TStructuredMessage& logPrefix,
         const TString& user,
         ui32 partition)
     {
@@ -70,7 +70,7 @@ namespace {
         const IBatchCutter& cutter,
         const TBatchCutterData& data,
         ui64 readStartOffset,
-        const TLogPrefix& logPrefix,
+        const TStructuredMessage& logPrefix,
         ui32 partition)
     {
         auto outcome = cutter.GetKeys(data, readStartOffset);
@@ -90,15 +90,14 @@ namespace {
 TConsumerBatchProcessor::TConsumerBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId, TString user)
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     , User(std::move(user))
-    , LogPrefix(YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "ConsumerBatchProcessor"},
+    , LogPrefix_(YDB_LOG_CREATE_MESSAGE(
         {"consumer", User}))
 {
     BatchCutters.emplace(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1, MakeHolder<TKafkaBatchCutter>());
 }
 
-const TLogPrefix& TConsumerBatchProcessor::GetLogPrefix() const {
-    return LogPrefix;
+const TStructuredMessage& TConsumerBatchProcessor::GetLogPrefix() const {
+    return LogPrefix_;
 }
 
 void TConsumerBatchProcessor::Bootstrap(const NActors::TActorContext& ctx) {

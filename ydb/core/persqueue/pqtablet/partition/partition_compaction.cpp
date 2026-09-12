@@ -16,7 +16,6 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     LOG_T(
         "Topic partition process write",
         {"topicName", TopicName()},
-        {"partition", Partition},
         {"sourceId", EscapeC(p.Msg.SourceId)},
         {"disableDeduplication", p.Msg.DisableDeduplication},
         {"seqNo", p.Msg.SeqNo},
@@ -57,7 +56,6 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     LOG_D(
         "Topic partition part blob processing sourceId seqNo partNo",
         {"topicName", TopicName()},
-        {"partition", Partition},
         {"sourceId", EscapeC(p.Msg.SourceId)},
         {"seqNo", p.Msg.SeqNo},
         {"partNo", p.Msg.PartNo}
@@ -97,7 +95,6 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
         LOG_D(
             "Topic partition part blob sourceId seqNo partNo result is size",
             {"topicName", TopicName()},
-            {"partition", Partition},
             {"sourceId", EscapeC(p.Msg.SourceId)},
             {"seqNo", p.Msg.SeqNo},
             {"partNo", p.Msg.PartNo},
@@ -146,7 +143,6 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
         LOG_D(
             "Topic partition part blob complete sourceId seqNo partNo FormedBlobsCount",
             {"topicName", TopicName()},
-            {"partition", Partition},
             {"sourceId", EscapeC(p.Msg.SourceId)},
             {"seqNo", p.Msg.SeqNo},
             {"partNo", p.Msg.PartNo},
@@ -764,7 +760,6 @@ void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request,
     LOG_D(
         "Add new write blob: topic partition compactOffset HeadOffset endOffset curOffset size WTime",
         {"topicName", TopicName()},
-        {"partition", Partition},
         {"offset", key.GetOffset()},
         {"count", key.GetCount()},
         {"compactionBlobEncoderHeadOffset", CompactionBlobEncoder.Head.Offset},

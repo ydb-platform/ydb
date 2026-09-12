@@ -12,11 +12,11 @@ You need to have a GitHub account to suggest any changes to the {{ ydb-short-nam
 
 * To connect to GitHub, you can use: ssh/token/ssh from yubikey/password, etc. The recommended method is ssh keys.
 * If you don't have already created keys (or yubikey), then just create new keys. Full instructions are on [this GitHub page](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#generating-a-new-ssh-key).
+{% if audience == "tech" %}
 * If you have your own private keys and use skotty as an ssh-agent:
 
-  * Add keys to skotty with command [ssh-add](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#adding-your-ssh-key-to-the-ssh-agent)
+  * Add keys to skotty with command [ssh-add](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#adding-your-ssh-key-to-the-ssh-agent).
   * Edit `~/.skotty/config.yaml` file by adding a section:
-
 
     ```yaml
     keys_order:
@@ -28,10 +28,17 @@ You need to have a GitHub account to suggest any changes to the {{ ydb-short-nam
 
 * If you have a yubikey, you can use the legacy key from the yubikey:
 
-  * Suppose you already have a configured yubikey (or you configured yubikey locally)
-  * On your laptop: `skotty ssh keys`
-  * Upload `legacy@yubikey` ssh key to GitHub ([via UI](https://github.com/settings/keys))
-  * test connection on laptop: `ssh -T git@github.com`
+  * Suppose you already have a configured yubikey (or you configured yubikey locally).
+  * On your laptop: `skotty ssh keys`.
+  * Upload `legacy@yubikey` ssh key to GitHub ([via UI](https://github.com/settings/keys)).
+  * Test connection on laptop: `ssh -T git@github.com`.
+{% endif %}
+
+{% if audience != "tech" %}
+
+* If you have a yubikey, you can use its key: upload the ssh key to GitHub [via UI](https://github.com/settings/keys).
+
+{% endif %}
 
 #### Remote development
 

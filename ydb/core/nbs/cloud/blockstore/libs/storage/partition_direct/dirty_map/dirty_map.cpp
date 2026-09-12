@@ -852,6 +852,15 @@ void TBlocksDirtyMap::Trim()
     Inflight.Trim();
 }
 
+TDirtyMapStats TBlocksDirtyMap::GetStats() const
+{
+    return {
+        .InflightCount = GetInflightCount(),
+        .ReadyToFlushCount = GetFlushPendingCount(),
+        .ReadyToEraseCount = GetErasePendingCount(),
+    };
+}
+
 TString TBlocksDirtyMap::DebugPrintPBuffers()
 {
     TInstant now = TInstant::Now();

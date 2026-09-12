@@ -2163,6 +2163,7 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
     TVChunkConfigs vChunkConfigs;
     size_t allocatedMemorySize = 0;
     size_t usedMemorySize = 0;
+    TDirtyMapStats dirtyMapStats;
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
             vChunkConfigs[vChunk->GetConfig().GetVChunkIndex()] =
@@ -2175,6 +2176,7 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
             }
             allocatedMemorySize += vChunk->GetAllocatedMemorySize();
             usedMemorySize += vChunk->GetUsedMemorySize();
+            dirtyMapStats.Aggregate(vChunk->GetDirtyMapStats());
         }
     }
 
@@ -2186,6 +2188,7 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .VChunkConfigs = std::move(vChunkConfigs),
         .AllocatedMemorySize = allocatedMemorySize,
         .UsedMemorySize = usedMemorySize,
+        .DirtyMapStats = dirtyMapStats,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };
 }

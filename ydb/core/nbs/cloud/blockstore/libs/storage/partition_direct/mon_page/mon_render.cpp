@@ -283,6 +283,15 @@ void RenderDbgList(
                         str << "Inflight";
                     }
                     TABLEH () {
+                        str << "Dirty map inflight";
+                    }
+                    TABLEH () {
+                        str << "Ready to flush";
+                    }
+                    TABLEH () {
+                        str << "Ready to erase";
+                    }
+                    TABLEH () {
                         str << "Consecutive success / errors";
                     }
                     TABLEH () {
@@ -336,6 +345,15 @@ void RenderDbgList(
                         }
                         TABLED () {
                             str << inflight;
+                        }
+                        TABLED () {
+                            str << dbg.DirtyMapStats.InflightCount;
+                        }
+                        TABLED () {
+                            str << dbg.DirtyMapStats.ReadyToFlushCount;
+                        }
+                        TABLED () {
+                            str << dbg.DirtyMapStats.ReadyToEraseCount;
                         }
                         TABLED () {
                             str << consecutiveSuccesses << " / "

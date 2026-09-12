@@ -87,6 +87,7 @@ public:
     [[nodiscard]] std::optional<TPBufferKey> GetSafeBarrierForErase() const;
 
     [[nodiscard]] TString DebugPrintDirtyMap();
+    [[nodiscard]] TDirtyMapStats GetDirtyMapStats() const;
 
     // Snapshot for the mon page. Must run on the executor thread.
     [[nodiscard]] TVChunkSnapshot BuildMonSnapshot();

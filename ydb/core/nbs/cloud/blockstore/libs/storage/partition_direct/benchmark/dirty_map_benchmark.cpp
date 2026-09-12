@@ -16,11 +16,6 @@ namespace {
 constexpr ui32 BlockSize = 4096;
 constexpr ui16 BlockCount = 32768;
 
-struct TLoadSimulation
-{
-    std::array<ui64, sizeof(TInflightInfo) / sizeof(ui64)> Ranges;
-};
-
 template <typename TKey>
 TKey Make(ui64 k);
 
@@ -76,9 +71,14 @@ void FlushAndErase(TBlocksDirtyMap& dirtyMap)
     }
 }
 
-template <typename TKey>
+template <typename TKey, size_t LoadSize>
 void BM_BlockRangeMapMemory(benchmark::State& state)
 {
+    struct TLoadSimulation
+    {
+        std::array<ui64, (LoadSize + sizeof(ui64) - 1) / sizeof(ui64)> Data;
+    };
+
     const size_t rangeCount = state.range(0);
 
     for (auto _: state) {
@@ -99,6 +99,8 @@ void BM_BlockRangeMapMemory(benchmark::State& state)
         const size_t usedSize = arenaAllocatorPool.GetUsedSize();
         benchmark::DoNotOptimize(rangeMap.Size());
 
+        state.counters["keySize"] = static_cast<double>(sizeof(TKey));
+        state.counters["loadSize"] = static_cast<double>(LoadSize);
         state.counters["usedSize"] = static_cast<double>(usedSize);
         state.counters["usedPerInflight"] =
             static_cast<double>(usedSize) / rangeCount;
@@ -162,8 +164,23 @@ void BM_DirtyMapInflightMemory(benchmark::State& state)
 
 }   // namespace
 
-BENCHMARK(BM_BlockRangeMapMemory<ui64>)->Args({100'000 * 15})->Iterations(1);
-BENCHMARK(BM_BlockRangeMapMemory<TPBufferKey>)
+struct TCompactInflightInfo
+{
+    IReadyQueue* ReadyQueue = nullptr;
+    TInstant StartAt;
+    ui32 PersistGeneration = 0;
+    ui32 PBuffersLockCount : 24 = 0;
+    ui8 State : 8 = 0;
+    ui64 Mask = 0;
+};
+
+BENCHMARK(BM_BlockRangeMapMemory<ui64, sizeof(TInflightInfo)>)
+    ->Args({100'000 * 15})
+    ->Iterations(1);
+BENCHMARK(BM_BlockRangeMapMemory<TPBufferKey, sizeof(TInflightInfo)>)
+    ->Args({100'000 * 15})
+    ->Iterations(1);
+BENCHMARK(BM_BlockRangeMapMemory<ui64, sizeof(TCompactInflightInfo)>)
     ->Args({100'000 * 15})
     ->Iterations(1);
 BENCHMARK(BM_DirtyMapInflightMemory)->Args({10, 100'000 * 15})->Iterations(1);

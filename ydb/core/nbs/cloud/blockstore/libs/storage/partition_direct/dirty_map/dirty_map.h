@@ -3,6 +3,7 @@
 #include "ddisk_state.h"
 #include "hints.h"
 #include "inflight_info.h"
+#include "mon_model.h"
 #include "range_locker.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_map.h>
@@ -179,6 +180,7 @@ public:
     void Trim();
 
     // Debug purposes
+    [[nodiscard]] TDirtyMapStats GetStats() const;
     [[nodiscard]] TString DebugPrintPBuffers();
     [[nodiscard]] TString DebugPrintPBuffersUsage() const;
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();

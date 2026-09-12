@@ -14,6 +14,10 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
 {
     size_t totalAllocatedMemorySize = 0;
     size_t totalUsedMemorySize = 0;
+    TDirtyMapStats dirtyMapStats;
+    for (const auto& dbg: data.Dbgs) {
+        dirtyMapStats.Aggregate(dbg.DirtyMapStats);
+    }
 
     HTML (str) {
         if (data.FastPathServiceInfo) {
@@ -166,6 +170,35 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                         TABLED () {
                             str << totalCount;
                         }
+                    }
+                }
+            }
+            TAG (TH3) {
+                str << "Dirty map queues";
+            }
+            TABLE_CLASS ("table table-condensed") {
+                TABLER () {
+                    TABLED () {
+                        str << "Inflight";
+                    }
+                    TABLED () {
+                        str << dirtyMapStats.InflightCount;
+                    }
+                }
+                TABLER () {
+                    TABLED () {
+                        str << "Ready to flush";
+                    }
+                    TABLED () {
+                        str << dirtyMapStats.ReadyToFlushCount;
+                    }
+                }
+                TABLER () {
+                    TABLED () {
+                        str << "Ready to erase";
+                    }
+                    TABLED () {
+                        str << dirtyMapStats.ReadyToEraseCount;
                     }
                 }
             }

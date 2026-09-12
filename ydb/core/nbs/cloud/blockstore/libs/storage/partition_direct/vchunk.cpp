@@ -375,6 +375,11 @@ TString TVChunk::DebugPrintDirtyMap()
     return sb;
 }
 
+TDirtyMapStats TVChunk::GetDirtyMapStats() const
+{
+    return BlocksDirtyMap->GetStats();
+}
+
 TVChunkSnapshot TVChunk::BuildMonSnapshot()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());

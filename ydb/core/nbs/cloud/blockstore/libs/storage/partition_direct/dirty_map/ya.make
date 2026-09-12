@@ -10,6 +10,7 @@ SRCS(
     dirty_map.cpp
     hints.cpp
     inflight_info.cpp
+    mon_model.cpp
     range_locker.cpp
 )
 

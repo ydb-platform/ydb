@@ -57,7 +57,7 @@ public:
     }
 
     bool OnUnhandledException(const std::exception& exc) override {
-        DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+        DoLogUnhandledException(Service, *this, exc);
         if (Response) {
             ReplyError(
                 Ydb::StatusIds::INTERNAL_ERROR,

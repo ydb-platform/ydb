@@ -11,10 +11,13 @@ namespace NKikimr::NPQ {
 
 void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStructuredMessage& prefix, const std::exception& exc);
 void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, TStringBuf prefix, const std::exception& exc);
+void IncrementUnhandledExceptionCounter(const NActors::TActorContext& ctx);
 
-namespace NPrivate {
-    void IncrementUnhandledExceptionCounter(const NActors::TActorContext& ctx);
-} // namespace NPrivate
+template <typename T>
+    requires std::is_base_of_v<TLogPrefix, T>
+void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const T& actor, const std::exception& exc) {
+    DoLogUnhandledException(service, MakeRuntimeLogPrefix(actor), exc);
+}
 
 template<typename TDerived>
 class TBaseActor : public NActors::TActorBootstrapped<TDerived>
@@ -32,11 +35,11 @@ public:
 
     bool OnUnhandledException(const std::exception& exc) override {
         if (AppData()->FeatureFlags.GetEnableTabletRestartOnUnhandledExceptions()) {
-            DoLogUnhandledException(Service, MakeRuntimeLogPrefix(static_cast<const TDerived&>(*this)), exc);
+            DoLogUnhandledException(Service, static_cast<const TDerived&>(*this), exc);
 
             OnException(exc);
 
-            NPrivate::IncrementUnhandledExceptionCounter(this->ActorContext());
+            IncrementUnhandledExceptionCounter(this->ActorContext());
             this->PassAway();
 
             return true;

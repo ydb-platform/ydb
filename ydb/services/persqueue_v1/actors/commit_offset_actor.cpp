@@ -94,7 +94,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
 }
 
 bool TCommitOffsetActor::OnUnhandledException(const std::exception& exc) {
-    NPQ::DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+    NPQ::DoLogUnhandledException(Service, *this, exc);
 
     Ydb::Topic::CommitOffsetResult result;
     Request().SendResult(result, Ydb::StatusIds::INTERNAL_ERROR);

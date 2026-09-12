@@ -1910,7 +1910,7 @@ void TPartitionActor::CloseSessionAndDie(const TString& reason, PersQueue::Error
 }
 
 bool TPartitionActor::OnUnhandledException(const std::exception& exc) {
-    NPQ::DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+    NPQ::DoLogUnhandledException(Service, *this, exc);
 
     CloseSessionAndDie(
         TStringBuilder() << "unexpected error: " << exc.what(),

@@ -18,7 +18,7 @@ void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, TStringBuf
     DoLogUnhandledException(service, YDB_LOG_CREATE_MESSAGE({"prefix", TString(prefix)}), exc);
 }
 
-void NPrivate::IncrementUnhandledExceptionCounter(const NActors::TActorContext& ctx) {
+void IncrementUnhandledExceptionCounter(const NActors::TActorContext& ctx) {
     GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_exception", true)->Inc();
 }
 

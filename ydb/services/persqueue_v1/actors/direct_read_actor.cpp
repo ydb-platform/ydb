@@ -142,7 +142,7 @@ void TDirectReadSessionActor::Handle(typename IContext::TEvWriteFinished::TPtr& 
 }
 
 bool TDirectReadSessionActor::OnUnhandledException(const std::exception& exc) {
-    NPQ::DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+    NPQ::DoLogUnhandledException(Service, *this, exc);
 
     this->Die(ActorContext());
 

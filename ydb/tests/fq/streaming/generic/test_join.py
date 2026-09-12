@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Callable
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, get_sensors
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 import ydb.issues
 import os
@@ -870,7 +870,7 @@ TESTCASES = [
                     $input as e
                 left join {streamlookup} any $listified as u
                 on(e.lza = u.a AND e.lyb = u.b)
-                left join /*+streamlookup()*/ any $listified as u2
+                left join /*+ streamlookup()*/ any $listified as u2
                 on(e.sza = u2.a AND e.syb = u2.b)
                 -- MultiGet true
             ;
@@ -1244,11 +1244,12 @@ class TestJoinYdbStreaming(StreamingTestBase):
             streamlookup=Rf'/*+ streamlookup({" ".join(options)}) */' if streamlookup else '',
         )
 
-        # options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
+        options_dict = dict(zip(islice(options, 0, None, 2), islice(options, 1, None, 2)))
 
+        path = f"{kikimr.get_database_name()}/{query_name}"
         try:
             kikimr.ydb_client.query(f"""
-                CREATE STREAMING QUERY {query_name} AS DO BEGIN
+                CREATE STREAMING QUERY {query_name} WITH (STATS_COLLECTION_MODE="PROFILE") AS DO BEGIN
                 {sql}
                 END DO;
             """)
@@ -1269,25 +1270,32 @@ class TestJoinYdbStreaming(StreamingTestBase):
         messages_ctr = Counter(map(freeze, map(json.loads, chain(*map(lambda row: islice(row, 1, None), messages)))))
         assert read_data_ctr == messages_ctr
 
-        """ TODO dq_tasks sensors unavailable in ydb streaming
-        for node_index in kikimr.compute_plane.kikimr_cluster.nodes:
-            sensors = kikimr.compute_plane.get_sensors(node_index, "dq_tasks")
+        hits = 0
+        miss = 0
+        for node_index in kikimr.cluster.slots:
+            sensors = get_sensors(kikimr.cluster, node_index, "kqp")
             for component in ["Lookup", "LookupSrc"]:
                 componentSensors = sensors.find_sensors(
-                    labels={"operation": query_id, "component": component},
+                    labels={
+                        "subsystem": "DqLookup",
+                        "tx_id": path,
+                        "component": component,
+                    },
                     key_label="sensor",
                 )
+                for k in componentSensors:
+                    logging.debug(f'node[{node_index}].tx_id[{path}].component[{component}].{k} = {componentSensors[k]}')
+                if component == "Lookup":
+                    hits += componentSensors.get("Hits", 0)
+                    miss += componentSensors.get("Miss", 0)
                 if component == "LookupSrc":
                     if options_dict.get("FullscanLimit") == "0" or (
                         "FullscanLimit" not in options_dict and options_dict.get("MaxCachedRows") == "0"
                     ):
                         assert componentSensors.get("Fullscans", 0) == 0
-                for k in componentSensors:
-                    print(
-                        f'node[{node_index}].operation[{query_id}].component[{component}].{k} = {componentSensors[k]}',
-                        file=sys.stderr,
-                    )
-        """
+
+        if "MultiGet true" not in sql:
+            assert hits + miss == len(messages)*sql.count("/*+ streamlookup(")
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY {query_name}")
         if not local:

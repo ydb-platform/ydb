@@ -2064,6 +2064,10 @@ protected:
         )
     {
         auto collectStatsLevel = StatsModeToCollectStatsLevel(RuntimeSettings.StatsMode);
+        auto txId = TxId;
+        if (auto it = taskParams.find("query_path"); it != taskParams.end()) {
+            txId = it->second;
+        }
         for (auto& [inputIndex, source] : SourcesMap) {
             Y_ABORT_UNLESS(AsyncIoFactory);
             const auto& inputDesc = Task.GetInputs(inputIndex);
@@ -2079,7 +2083,7 @@ protected:
                         .InputDesc = inputDesc,
                         .InputIndex = inputIndex,
                         .StatsLevel = collectStatsLevel,
-                        .TxId = TxId,
+                        .TxId = txId,
                         .TaskId = Task.GetId(),
                         .SecureParams = secureParams,
                         .TaskParams = taskParams,
@@ -2115,7 +2119,7 @@ protected:
                         .InputDesc = inputDesc,
                         .InputIndex = inputIndex,
                         .StatsLevel = collectStatsLevel,
-                        .TxId = TxId,
+                        .TxId = txId,
                         .TaskId = Task.GetId(),
                         .TransformInput = transform.Input,
                         .SecureParams = secureParams,
@@ -2143,7 +2147,7 @@ protected:
                         .OutputDesc = outputDesc,
                         .OutputIndex = outputIndex,
                         .StatsLevel = collectStatsLevel,
-                        .TxId = TxId,
+                        .TxId = txId,
                         .TaskId = Task.GetId(),
                         .TransformOutput = transform.OutputBuffer,
                         .Callback = static_cast<TOutputTransformCallbacks*>(this),
@@ -2171,7 +2175,7 @@ protected:
                         .OutputDesc = outputDesc,
                         .OutputIndex = outputIndex,
                         .StatsLevel = collectStatsLevel,
-                        .TxId = TxId,
+                        .TxId = txId,
                         .TaskId = Task.GetId(),
                         .Callback = static_cast<TSinkCallbacks*>(this),
                         .SecureParams = secureParams,

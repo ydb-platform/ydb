@@ -2681,7 +2681,6 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
 
         FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
 
-        AddQueryPathParam(task, GetMeta().UserRequestContext);
         if (externalSource.GetType() == NYql::PqSource && i == 0) {   // Only first task will check partition count.
             task.Meta.TaskParams.emplace("partition_count_check_enabled", "true");
         }
@@ -3336,7 +3335,6 @@ void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTas
             // "fq.restart_count"
         }
     }
-    AddQueryPathParam(task, GetMeta().UserRequestContext);
 
     auto& output = task.Outputs[sink.GetOutputIndex()];
     output.Type = TTaskOutputType::Sink;
@@ -3640,6 +3638,7 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
                 task.Meta.ExecuterId = GetMeta().ExecuterId;
                 FillSecureParamsFromStage(task.Meta.SecureParams, stage);
                 BuildSinks(stage, stageInfo, task);
+                AddQueryPathParam(task, GetMeta().UserRequestContext);
             }
 
             BuildKqpStageChannels(stageInfo, GetMeta().TxId, GetMeta().AllowWithSpilling, tx.Body->EnableShuffleElimination());

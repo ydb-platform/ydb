@@ -1526,6 +1526,13 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
 
 void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
+    // Data proves the peer is alive just as an ack, a discovery or an update does. Without this a session
+    // which only receives - every channel of it has this node as the receiver - looks idle to HandleCleanup
+    // no matter how much the peer is streaming to it, and gets idle pinged with a fatal deadline attached.
+    // Obsolete data refreshes it as well, on purpose: it comes from a peer which is alive and sending, and
+    // the generations are resynced by its discovery rather than by an idle ping of ours.
+    LastPeerActivity.store(TInstant::Now());
+
     auto& record = ev->Get()->Record;
     auto genMajor = record.GetGenMajor();
     auto genMinor = record.GetGenMinor();

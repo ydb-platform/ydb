@@ -627,6 +627,24 @@ struct TSessionTest : public TLoadTest {
         return bytes;
     }
 
+    static ui64 GetInputPushBytes(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        ui64 bytes = 0;
+        for (const auto& [info, descriptor] : state->InputDescriptors) {
+            bytes += descriptor->PushStats.Bytes.load();
+        }
+        return bytes;
+    }
+
+    static ui64 GetInputPopBytes(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        ui64 bytes = 0;
+        for (const auto& [info, descriptor] : state->InputDescriptors) {
+            bytes += descriptor->PopStats.Bytes.load();
+        }
+        return bytes;
+    }
+
     static TString GetReconciliationLog(const std::shared_ptr<TNodeState>& state) {
         std::lock_guard lock(state->Mutex);
         return state->GetReconciliationLog();
@@ -960,24 +978,6 @@ struct TInboundChannelAbortTest : public TSessionTest {
         settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetReconciliationCount(2);
     }
 
-    static ui64 GetInputPushBytes(const std::shared_ptr<TNodeState>& state) {
-        std::lock_guard lock(state->Mutex);
-        ui64 bytes = 0;
-        for (const auto& [info, descriptor] : state->InputDescriptors) {
-            bytes += descriptor->PushStats.Bytes.load();
-        }
-        return bytes;
-    }
-
-    static ui64 GetInputPopBytes(const std::shared_ptr<TNodeState>& state) {
-        std::lock_guard lock(state->Mutex);
-        ui64 bytes = 0;
-        for (const auto& [info, descriptor] : state->InputDescriptors) {
-            bytes += descriptor->PopStats.Bytes.load();
-        }
-        return bytes;
-    }
-
     // the roles of TSessionTest::StartChannel are reversed here: the peer (node 1) produces and the node
     // under test (node 0) consumes, so that its session holds an input descriptor and an empty out queue
     std::pair<NActors::TActorId, NActors::TActorId> StartInboundChannel(ui32 channelId) {
@@ -1052,6 +1052,72 @@ struct TInboundChannelAbortTest : public TSessionTest {
         // the node session must not outlive the actor system, its destructor logs through it
         session.reset();
         Destroy();
+    }
+};
+
+// LastPeerActivity drives the idle ping of HandleCleanup, whose reconciliation destroys every channel of
+// the session when it fails. Only a discovery, an ack and an update used to refresh it, and a session all
+// of whose channels have this node as the receiver gets none of the three: it sends the acks and the
+// updates itself, and a discovery only arrives when the peer reconciles. Such a session looked idle no
+// matter how much the peer was streaming to it, and was idle pinged with a fatal deadline attached.
+//
+// What is asserted here is the refresh itself, not the absence of the ping. The ping is self-healing: the
+// discovery it sends is answered with an ack, which refreshes the activity in turn, so a session which
+// never pings cannot be told apart from one which has just been answered - unless the traffic is sustained
+// for several idle periods, which no assertion can hold on a loaded machine without going flaky.
+struct TPeerActivityTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetCleanupPeriodMs(50);
+        // long enough for no idle ping to interfere with the sampling below, short enough to keep it honest
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetIdlePingPeriodMs(1000);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 2, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+
+        // the warm up creates the session of the receiving node, the one every channel here sends to
+        StartChannel(1, true);
+        WaitChannel("warm up");
+
+        auto receiver = FindNodeState(Service1, senderNodeId);
+        UNIT_ASSERT_C(receiver, "the receiving node session not found");
+
+        // nothing refreshes the activity of that session while it is idle: it is well under the idle ping
+        // period, so no discovery of its own goes out and no ack comes back
+        Sleep(TDuration::MilliSeconds(200));
+        auto before = receiver->LastPeerActivity.load();
+
+        // the consumer stalls after the 1st message, so the input descriptor is still there to be sampled
+        ProducerSettings = TWorkerSettings{ .MessageCount = 20, .MinMessageSize = 10, .MaxMessageSize = 100 };
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 20, .MinMessageSize = 10, .MaxMessageSize = 100,
+            .PauseMessageIndex = 1, .PauseDelayMs = 1500 };
+        StartChannel(2, true);
+
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInputPushBytes(receiver) > 0; }, TDuration::Seconds(10)),
+            "no data of the peer arrived at the receiving session");
+        auto after = receiver->LastPeerActivity.load();
+
+        auto details = TStringBuilder() << "LastPeerActivity " << before << " -> " << after
+            << ", pushed " << GetInputPushBytes(receiver) << " bytes"
+            << ", reconciliation log: " << GetReconciliationLog(receiver);
+
+        UNIT_ASSERT_C(after > before,
+            TStringBuilder() << "the data of the peer did not refresh the activity of the session, " << details);
+
+        WaitChannel(details);
+
+        // the node session must not outlive the actor system, its destructor logs through it
+        receiver.reset();
+        Destroy();
+        CheckQuota();
     }
 };
 
@@ -1188,6 +1254,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(InflightLeakOnResend) {
         TInflightLeakTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(PeerActivityRefreshedByData) {
+        TPeerActivityTest test;
 
         test.Local = false;
 

@@ -4,6 +4,10 @@
 
 #include "restore_request.h"
 
+<<<<<<< HEAD
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>

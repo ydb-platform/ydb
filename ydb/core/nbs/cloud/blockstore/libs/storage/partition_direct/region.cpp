@@ -24,6 +24,7 @@ size_t VChunkIndexFromHeaders(const TRequestHeaders& headers)
 ////////////////////////////////////////////////////////////////////////////////
 
 TRegion::TRegion(
+    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     IPartitionDirectService* partitionDirectService,
     ui32 regionIndex,
@@ -55,6 +56,7 @@ TRegion::TRegion(
         Y_ABORT_UNLESS(vChunkConfig.GetVChunkIndex() == vChunkIndex);
 
         auto vChunk = std::make_shared<TVChunk>(
+            arenaAllocator,
             ActorSystem,
             partitionDirectService,
             vChunkConfig,

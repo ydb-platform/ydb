@@ -1,5 +1,12 @@
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include "public.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>

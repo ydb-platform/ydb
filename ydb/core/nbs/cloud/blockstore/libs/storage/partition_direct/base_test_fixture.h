@@ -56,7 +56,15 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         new ::NMonitoring::TDynamicCounters()};
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
+<<<<<<< HEAD
     TBlocksDirtyMap DirtyMap{VChunkConfig, BlockSize, VChunkBlockCount};
+=======
+    TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
+        CreateArenaAllocator(),
+        VChunkConfig,
+        BlockSize,
+        VChunkBlockCount);
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
 
     THostIndex ExpectedHost = 0;
     TBlockRange64 ExpectedRange;

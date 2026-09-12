@@ -1,6 +1,13 @@
 #pragma once
 
+<<<<<<< HEAD
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+=======
+#include "public.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>

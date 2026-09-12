@@ -2,6 +2,10 @@
 
 #include "public.h"
 
+<<<<<<< HEAD
+=======
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+>>>>>>> 78a20188184 (Field map set optimization (#52565))
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>

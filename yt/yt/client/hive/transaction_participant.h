@@ -43,7 +43,7 @@ struct ITransactionParticipant
         const std::vector<TCellId>& cellIdsToSyncWith,
         const NRpc::TAuthenticationIdentity& identity,
         NTransactionClient::TTransactionSignature expectedPrepareSignature) = 0;
-    virtual TFuture<void> MakeTransactionReadyToCommit(
+    virtual TFuture<void> RecordCommitTimestamp(
         TTransactionId transactionId,
         TTimestamp commitTimestamp,
         NApi::TClusterTag commitTimestampClusterTag,

@@ -447,7 +447,12 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         info.Sink = CreateYtDataSink(ytState);
         info.SupportFullResultDataSink = true;
         info.OpenSession = [
-            gateway, statWriter, qContext, fullCapture, useSecureTmp = ytState->UseSecureTmp
+            gateway,
+            statWriter,
+            qContext,
+            fullCapture,
+            useSecureTmp = ytState->UseSecureTmp,
+            credentials = typeCtx->Credentials
         ](
             const TString& sessionId, const TString& username,
             const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
@@ -458,6 +463,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
                     .UserName(username)
                     .ProgressWriter(progressWriter)
                     .OperationOptions(operationOptions)
+                    .Credentials(credentials)
                     .RandomProvider(randomProvider)
                     .TimeProvider(timeProvider)
                     .StatWriter(statWriter)
@@ -604,7 +610,7 @@ TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {
             if (!ytName) {
                 ythrow yexception() << "Unknown cluster name: " << cluster;
             }
-            return ytTokenResolver->ResolveClusterToken(ytName);
+            return ytTokenResolver->ResolveClusterToken(ytName, *Types->Credentials);
         }
     }
 

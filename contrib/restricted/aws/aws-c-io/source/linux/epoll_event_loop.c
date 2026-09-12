@@ -321,6 +321,12 @@ static int s_stop(struct aws_event_loop *event_loop) {
 
 static int s_wait_for_stop_completion(struct aws_event_loop *event_loop) {
     struct epoll_loop *epoll_loop = event_loop->impl_data;
+
+    /* s_run() already restores the unjoined-thread count if thread creation fails. */
+    if (aws_thread_get_detach_state(&epoll_loop->thread_created_on) == AWS_THREAD_NOT_CREATED) {
+        return AWS_OP_SUCCESS;
+    }
+
     int result = aws_thread_join(&epoll_loop->thread_created_on);
     aws_thread_decrement_unjoined_count();
     return result;

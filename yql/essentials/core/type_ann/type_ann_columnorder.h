@@ -5,7 +5,6 @@
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 
-
 namespace NYql::NTypeAnnImpl {
 
 TMaybe<TColumnOrder> InferOrderForUnionAll(
@@ -23,4 +22,5 @@ IGraphTransformer::TStatus OrderForCalcOverWindow(const TExprNode::TPtr& node, T
 
 IGraphTransformer::TStatus OrderFromFirst(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
 IGraphTransformer::TStatus OrderFromFirstAndOutputType(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
+
 } // namespace NYql::NTypeAnnImpl

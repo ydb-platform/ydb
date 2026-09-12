@@ -182,6 +182,7 @@ void Serialize(
             .OptionalItem("alert_events", operation.AlertEvents)
             .OptionalItem("task_names", operation.TaskNames)
             .OptionalItem("controller_features", operation.ControllerFeatures)
+            .OptionalItem("cumulative_spec_patch", operation.CumulativeSpecPatch)
             .DoIf(operation.OtherAttributes.operator bool(), [&] (TFluentMap fluent) {
                 for (const auto& [key, value] : operation.OtherAttributes->ListPairs()) {
                     fluent.Item(key).Value(value);
@@ -258,6 +259,7 @@ void Deserialize(TOperation& operation, NYTree::IAttributeDictionaryPtr attribut
     setField(operation.AlertEvents, "alert_events");
     setField(operation.TaskNames, "task_names");
     setField(operation.ControllerFeatures, "controller_features");
+    setField(operation.CumulativeSpecPatch, "cumulative_spec_patch");
 
     operation.OtherAttributes = std::move(attributes);
 }

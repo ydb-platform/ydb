@@ -842,6 +842,20 @@
             "uri": "https://{canondata_backend}/995452/729ad136f3e79b4deca8b619169c8cc70a99a0ed/resource.tar.gz#test.test_list_from_range_decimal-different_types-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[optimizers-pushdown_struct_subset_just_key-default.txt-Debug]": [
+        {
+            "checksum": "3b268142d440e226035f64ff641efbc8",
+            "size": 868,
+            "uri": "https://{canondata_backend}/1903885/748b3fb5c18b691a08e156220f759f3123b6ba27/resource.tar.gz#test.test_optimizers-pushdown_struct_subset_just_key-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[optimizers-pushdown_struct_subset_just_key-default.txt-Results]": [
+        {
+            "checksum": "5b6a5d1d1ebc43b6006b416bb718057c",
+            "size": 1360,
+            "uri": "https://{canondata_backend}/1903885/748b3fb5c18b691a08e156220f759f3123b6ba27/resource.tar.gz#test.test_optimizers-pushdown_struct_subset_just_key-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[optimizers-yql-20126-default.txt-Debug]": [
         {
             "checksum": "35419c7db82a8f464f94dd015de1223d",
@@ -1277,6 +1291,23 @@
             "checksum": "ce3ebe4a2ba8198c413dfdb5a2374106",
             "size": 733,
             "uri": "https://{canondata_backend}/1847551/c9103bf55cc11afa84471242d8aeba02b20d6dea/resource.tar.gz#test.test_select_pg-uncorrelated_asterisk_subquery_scalar-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-ansi_alias_shadowing-default.txt-Debug]": [
+        {
+            "checksum": "73cfdc7663bd341314279200468cfcc2",
+            "size": 1927,
+            "uri": "https://{canondata_backend}/1903885/8f81b060ce05601b75075548daa0509a92f60deb/resource.tar.gz#test.test_select_yql-ansi_alias_shadowing-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-ansi_alias_shadowing-default.txt-Results]": [
+        {
+            "checksum": "d0a79070fc0824ee438eeae4aa637962",
+            "size": 7443,
+            "uri": "https://{canondata_backend}/1903885/8f81b060ce05601b75075548daa0509a92f60deb/resource.tar.gz#test.test_select_yql-ansi_alias_shadowing-default.txt-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_select_yql-ansi_alias_shadowing-default.txt-Results_/extracted"
         }
     ],
     "test.test[select_yql-evaluate_expr_column_type-default.txt-Debug]": [

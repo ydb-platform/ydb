@@ -134,6 +134,7 @@ public:
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableRLSTablesSupport;
     NCommon::TConfSetting<TString, StaticPerCluster> _SecureTmpRoot;
     NCommon::TConfSetting<bool, StaticPerCluster> _EnableQLFilter;
+    NCommon::TConfSetting<ui32, StaticPerCluster> QLFilterDepthLimit;
     NCommon::TConfSetting<ui64, StaticPerCluster> NativeYtTypeCompatibility;
     NCommon::TConfSetting<bool, StaticPerCluster> ApplyMaxJobCountToAll;
 

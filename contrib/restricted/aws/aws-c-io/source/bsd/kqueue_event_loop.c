@@ -431,6 +431,11 @@ static int s_wait_for_stop_completion(struct aws_event_loop *event_loop) {
     aws_mutex_unlock(&impl->cross_thread_data.mutex);
 #endif
 
+    /* s_run() already restores the unjoined-thread count if thread creation fails. */
+    if (aws_thread_get_detach_state(&impl->thread_created_on) == AWS_THREAD_NOT_CREATED) {
+        return AWS_OP_SUCCESS;
+    }
+
     int err = aws_thread_join(&impl->thread_created_on);
     aws_thread_decrement_unjoined_count();
     if (err) {

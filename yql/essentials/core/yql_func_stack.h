@@ -16,4 +16,4 @@ private:
     TStack<std::pair<TStringBuf, bool>> CurrentFunctions_;
 };
 
-}
+} // namespace NYql

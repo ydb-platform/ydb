@@ -2232,7 +2232,15 @@ Y_UNIT_TEST(Analyze) {
         {"analyze table (col1, col2, col3)",
          "ANALYZE table (col1, col2, col3);\n"},
         {"analyze table",
-         "ANALYZE table;\n"}};
+         "ANALYZE table;\n"},
+        {"analyze table (col1,col2) sample 0.05",
+         "ANALYZE table (col1, col2) SAMPLE 0.05;\n"},
+        {"analyze table sample 1",
+         "ANALYZE table SAMPLE 1;\n"},
+        {"analyze table sample (0.1/2)",
+         "ANALYZE table SAMPLE (0.1 / 2);\n"},
+        {"analyze table sample $rate",
+         "ANALYZE table SAMPLE $rate;\n"}};
 
     TSetup setup;
     setup.Run(cases);

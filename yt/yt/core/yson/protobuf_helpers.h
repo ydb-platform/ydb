@@ -10,7 +10,7 @@ namespace NYT::NYson {
 
 void ToProto(TProtobufString* serialized, TYsonStringBuf original);
 void ToProto(TProtobufString* serialized, const TYsonString& original);
-void FromProto(TYsonString* original, const TProtobufString& serialized);
+void FromProto(TYsonString* original, TProtobufString serialized);
 
 ////////////////////////////////////////////////////////////////////////////////
 

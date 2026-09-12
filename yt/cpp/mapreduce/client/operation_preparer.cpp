@@ -232,6 +232,23 @@ TRichYPath TOperationPreparer::LockFile(const TRichYPath& path)
     return result;
 }
 
+void TOperationPreparer::LockCacheDirectory(const TYPath& path)
+{
+    CheckValidity();
+
+    auto fileTx = Client_->AttachTransaction(
+        FileTransaction_->GetId(),
+        TAttachTransactionOptions()
+            .AbortOnTermination(false)
+            .AutoPingable(false));
+
+    fileTx->Lock(path, ELockMode::LM_SHARED);
+
+    YT_LOG_DEBUG("Locked cache directory %v (PreparationId: %v)",
+        path,
+        GetPreparationId());
+}
+
 void TOperationPreparer::CheckValidity() const
 {
     Y_ENSURE(
@@ -490,20 +507,49 @@ TYPath TJobPreparer::GetCachePath() const
         OperationPreparer_.GetContext().Config->Prefix);
 }
 
+bool TJobPreparer::ShouldLockFileStorage() const
+{
+    // NB(achains): The default file storage is never locked.
+    //              It is expected to be protected from cleaning on the cluster side.
+    return OperationPreparer_.GetContext().Config->LockFileStorage
+        && Options_.FileCacheMode_ == TOperationOptions::EFileCacheMode::ApiCommandBased
+        && GetFileStorage() != DefaultRemoteTempFilesDirectory;
+}
+
 void TJobPreparer::CreateStorage() const
 {
-    RequestWithRetry<void>(
-        OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-        [this] (TMutationId& mutationId) {
-            RawClient_->Create(
-                mutationId,
-                Options_.FileStorageTransactionId_,
-                GetCachePath(),
-                NT_MAP,
-                TCreateOptions()
-                    .IgnoreExisting(true)
-                    .Recursive(true));
-        });
+    auto createCacheDirectory = [this] {
+        RequestWithRetry<void>(
+            OperationPreparer_.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
+            [this] (TMutationId& mutationId) {
+                RawClient_->Create(
+                    mutationId,
+                    Options_.FileStorageTransactionId_,
+                    GetCachePath(),
+                    NT_MAP,
+                    TCreateOptions()
+                        .IgnoreExisting(true)
+                        .Recursive(true));
+            });
+    };
+
+    createCacheDirectory();
+
+    if (!ShouldLockFileStorage()) {
+        return;
+    }
+
+    try {
+        OperationPreparer_.LockCacheDirectory(GetCachePath());
+    } catch (const TErrorResponse& e) {
+        if (!e.IsResolveError()) {
+            throw;
+        }
+        // If the directory doesn't exist, it must be removed between Create and Lock.
+        // Let's recreate it and lock again.
+        createCacheDirectory();
+        OperationPreparer_.LockCacheDirectory(GetCachePath());
+    }
 }
 
 int TJobPreparer::GetFileCacheReplicationFactor() const

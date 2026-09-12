@@ -544,9 +544,9 @@ void FromProto(TError* error, const NYT::NProto::TError& protoError)
         for (const auto& protoAttribute : protoError.attributes().attributes()) {
             // NB(arkady-e1ppa): Again for compatibility reasons we have to reconvert stuff
             // here as well.
-            auto key = FromProto<std::string>(protoAttribute.key());
-            auto value = FromProto<std::string>(protoAttribute.value());
-            error->Add(key, TYsonString(value));
+            error->Add(
+                FromProto<std::string>(protoAttribute.key()),
+                FromProto<TYsonString>(protoAttribute.value()));
         }
         error->UpdateOriginAttributes();
     }

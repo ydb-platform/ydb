@@ -56,6 +56,10 @@ typedef struct bitset_container_s bitset_container_t;
 /* Create a new bitset. Return NULL in case of failure. */
 bitset_container_t *bitset_container_create(void);
 
+/* Create a bitset without zeroing the words. Caller must overwrite `words`
+ * before the container is used. Return NULL in case of failure. */
+bitset_container_t *bitset_container_create_uninitialized(void);
+
 /* Free memory. */
 void bitset_container_free(bitset_container_t *bitset);
 

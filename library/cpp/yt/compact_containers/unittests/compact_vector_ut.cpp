@@ -1091,6 +1091,145 @@ TEST(CompactVectorTest, ZeroPaddingOnHeapMeta) {
   }
 }
 
+template <size_t N>
+using TTrivialVector = TCompactVector<int, N>;
+
+static_assert(sizeof(TTrivialVector<0>) == sizeof(TCompactVectorOnHeapStorage<int>*));
+static_assert(sizeof(TTrivialVector<14>) == 64);
+static_assert(sizeof(TTrivialVector<16>) > 64);
+
+template <size_t N>
+void FillTrivialVector(TTrivialVector<N>* vector, size_t size, int firstValue) {
+  for (size_t index = 0; index < size; ++index) {
+    vector->push_back(firstValue + index);
+  }
+}
+
+template <size_t N>
+void ExpectMovedFrom(const TTrivialVector<N>& vector) {
+  EXPECT_TRUE(vector.empty());
+  EXPECT_EQ(N, vector.capacity());
+}
+
+template <size_t N>
+void TestTrivialMoveConstruct() {
+  for (size_t sourceSize : {size_t{0}, N / 2, N + 2}) {
+    TTrivialVector<N> source;
+    FillTrivialVector(&source, sourceSize, 10);
+    std::vector<int> expected(source.begin(), source.end());
+    auto* sourceData = source.data();
+
+    TTrivialVector<N> destination(std::move(source));
+
+    EXPECT_THAT(destination, ::testing::ElementsAreArray(expected));
+    if (sourceSize > N) {
+      EXPECT_EQ(sourceData, destination.data());
+    }
+    ExpectMovedFrom(source);
+    source.push_back(42);
+    EXPECT_THAT(source, ::testing::ElementsAre(42));
+  }
+}
+
+TEST(CompactVectorTest, TrivialMoveConstruct) {
+  TestTrivialMoveConstruct<0>();
+  TestTrivialMoveConstruct<4>();
+  TestTrivialMoveConstruct<14>();
+  TestTrivialMoveConstruct<16>();
+}
+
+template <size_t N>
+void TestTrivialMoveAssign() {
+  for (size_t sourceSize : {size_t{0}, N / 2, N + 2}) {
+    for (size_t destinationSize : {size_t{0}, N / 2, N + 2}) {
+      TTrivialVector<N> source;
+      TTrivialVector<N> destination;
+      FillTrivialVector(&source, sourceSize, 10);
+      FillTrivialVector(&destination, destinationSize, 100);
+      std::vector<int> expected(source.begin(), source.end());
+      auto* sourceData = source.data();
+      auto* destinationData = destination.data();
+      auto destinationCapacity = destination.capacity();
+
+      destination = std::move(source);
+
+      EXPECT_THAT(destination, ::testing::ElementsAreArray(expected));
+      if (sourceSize > N) {
+        EXPECT_EQ(sourceData, destination.data());
+      } else if (destinationSize > N) {
+        EXPECT_EQ(destinationData, destination.data());
+        EXPECT_EQ(destinationCapacity, destination.capacity());
+      } else {
+        EXPECT_EQ(N, destination.capacity());
+      }
+      ExpectMovedFrom(source);
+      source.push_back(42);
+      EXPECT_THAT(source, ::testing::ElementsAre(42));
+    }
+  }
+
+  for (size_t size : {size_t{0}, N / 2, N + 2}) {
+    TTrivialVector<N> vector;
+    FillTrivialVector(&vector, size, 10);
+    std::vector<int> expected(vector.begin(), vector.end());
+    auto* data = vector.data();
+
+    vector = std::move(vector);
+
+    EXPECT_THAT(vector, ::testing::ElementsAreArray(expected));
+    EXPECT_EQ(data, vector.data());
+  }
+}
+
+TEST(CompactVectorTest, TrivialMoveAssign) {
+  TestTrivialMoveAssign<4>();
+  TestTrivialMoveAssign<14>();
+  TestTrivialMoveAssign<16>();
+}
+
+template <size_t N>
+void TestTrivialSwap() {
+  for (size_t lhsSize : {size_t{0}, size_t{1}, N, N + 2}) {
+    for (size_t rhsSize : {size_t{0}, size_t{1}, N, N + 2}) {
+      TTrivialVector<N> lhs;
+      TTrivialVector<N> rhs;
+      FillTrivialVector(&lhs, lhsSize, 10);
+      FillTrivialVector(&rhs, rhsSize, 100);
+      std::vector<int> expectedLhs(rhs.begin(), rhs.end());
+      std::vector<int> expectedRhs(lhs.begin(), lhs.end());
+      auto* lhsData = lhs.data();
+      auto* rhsData = rhs.data();
+
+      lhs.swap(rhs);
+
+      EXPECT_THAT(lhs, ::testing::ElementsAreArray(expectedLhs));
+      EXPECT_THAT(rhs, ::testing::ElementsAreArray(expectedRhs));
+      if (lhsSize > N) {
+        EXPECT_EQ(lhsData, rhs.data());
+      }
+      if (rhsSize > N) {
+        EXPECT_EQ(rhsData, lhs.data());
+      }
+      lhs.push_back(42);
+      rhs.push_back(43);
+      EXPECT_EQ(42, lhs.back());
+      EXPECT_EQ(43, rhs.back());
+    }
+  }
+}
+
+TEST(CompactVectorTest, TrivialSwap) {
+  TestTrivialSwap<0>();
+  TestTrivialSwap<4>();
+  TestTrivialSwap<14>();
+  TestTrivialSwap<16>();
+}
+
+TEST(CompactVectorTest, ConstinitDefaultConstruction) {
+  static constinit TTrivialVector<32> vector;
+  EXPECT_TRUE(vector.empty());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

@@ -282,7 +282,7 @@ public:
 
         TNodePtr item = Y();
         {
-            TNodePtr items = BuildYqlResultItems(*projection);
+            TNodePtr items = BuildYqlResultItems(*projection, ctx);
             if (!items) {
                 return false;
             }
@@ -548,23 +548,26 @@ private:
         }
     }
 
-    TNodePtr BuildYqlResultItems(const TVector<TProjectionItem>& projection) const {
+    TNodePtr BuildYqlResultItems(const TVector<TProjectionItem>& projection, TContext& ctx) const {
         if (projection.empty()) {
-            return BuildYqlResultItems(TPlainAsterisk());
+            return BuildYqlResultItems(TPlainAsterisk(), ctx);
         }
 
         TNodePtr items = Y();
         for (const auto& [term, isSynthetic] : projection) {
-            items->Add(BuildYqlResultItem(term->GetLabel(), isSynthetic, term));
+            items->Add(BuildYqlResultItem(isSynthetic, term, ctx));
         }
         return items;
     }
 
-    TNodePtr BuildYqlResultItems(const TPlainAsterisk&) const {
-        return Y(BuildYqlResultItem(/*name=*/"", /*isSynthetic=*/false, Y("YqlStar")));
+    TNodePtr BuildYqlResultItems(const TPlainAsterisk&, TContext& ctx) const {
+        return Y(BuildYqlResultItem(/*isSynthetic=*/false, Y("YqlStar"), ctx));
     }
 
-    TNodePtr BuildYqlResultItem(TString name, bool isSynthetic, TNodePtr term) const {
+    TNodePtr BuildYqlResultItem(bool isSynthetic, TNodePtr term, TContext& ctx) const {
+        const TString name = term->GetLabel();
+        const bool isImplicitlyLabeled = term->IsImplicitLabel();
+
         TNodePtr nameAtom = BuildQuotedAtom(Pos_, name);
 
         TNodePtr item = Y("YqlResultItem");
@@ -572,6 +575,9 @@ private:
         item = L(std::move(item), Y("Void"));
         if (isSynthetic) {
             item = L(std::move(item), Q(Y(Q(Y(Q("synthetic"))))));
+        }
+        if (isImplicitlyLabeled && ctx.WarnOnAnsiAliasShadowing) {
+            item = L(std::move(item), Q(Y(Q(Y(Q("warnShadow"))))));
         }
         item = L(std::move(item), Y("lambda", Q(Y()), std::move(term)));
         return item;

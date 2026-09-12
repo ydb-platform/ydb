@@ -7,7 +7,14 @@ from typing import TYPE_CHECKING, Any, BinaryIO, Literal
 from zoneinfo import ZoneInfoNotFoundError
 
 from clickhouse_connect.driver import tzutil
-from clickhouse_connect.driver.binding import bind_query
+from clickhouse_connect.driver.binding import (
+    _binding_has_binary_values,
+    _binding_keeps_query_structure,
+    _needs_trailing_semicolon_lexer,
+    _query_is_insert,
+    _strip_trailing_semicolons,
+    bind_query,
+)
 from clickhouse_connect.driver.common import ShowClickHouseErrors, StreamContext, dict_copy, empty_gen, get_rename_method
 from clickhouse_connect.driver.context import BaseQueryContext
 from clickhouse_connect.driver.exceptions import ProgrammingError, StreamClosedError
@@ -32,9 +39,10 @@ commands = "CREATE|ALTER|SYSTEM|GRANT|REVOKE|CHECK|DETACH|ATTACH|DROP|DELETE|KIL
 
 limit_re = re.compile(r"\s+LIMIT($|\s)", re.IGNORECASE)
 select_re = re.compile(r"(^|\s)SELECT\s", re.IGNORECASE)
+leading_select_re = re.compile(r"^\s*SELECT(?:\s|$)", re.IGNORECASE)
 insert_re = re.compile(r"(^|\s)INSERT\s*INTO", re.IGNORECASE)
 command_re = re.compile(r"(^\s*)(" + commands + r")\s", re.IGNORECASE)
-bare_row_policy_show_re = re.compile(r"^\s*SHOW\s+(ROW\s+)?POLICIES\s*$", re.IGNORECASE)
+bare_row_policy_show_re = re.compile(r"^\s*SHOW\s+(ROW\s+)?POLICIES\s*(?:;\s*)*$", re.IGNORECASE)
 
 
 class QueryContext(BaseQueryContext):
@@ -165,7 +173,7 @@ class QueryContext(BaseQueryContext):
 
     @property
     def is_insert(self) -> bool:
-        return insert_re.search(self.uncommented_query) is not None
+        return self._is_insert
 
     @property
     def is_command(self) -> bool:
@@ -266,12 +274,39 @@ class QueryContext(BaseQueryContext):
         )
 
     def _update_query(self):
-        self.final_query, self.bind_params = bind_query(self.query, self.parameters, self.server_tz)
-        if isinstance(self.final_query, bytes):
-            # If we've embedded binary data in the query, all bets are off, and we check the original query for comments
-            self.uncommented_query = remove_sql_comments(self.query)
-        else:
+        query = self.query
+        if isinstance(query, str) and not _binding_keeps_query_structure(query, self.parameters):
+            query_to_bind = query
+            uncommented_template = None
+            if _binding_has_binary_values(self.parameters):
+                uncommented_template = remove_sql_comments(query)
+                # Only a leading-SELECT template is safe to pre-strip. A WITH template can bind
+                # into an insert whose inline data must stay untouched.
+                if leading_select_re.search(uncommented_template) is not None and _needs_trailing_semicolon_lexer(query):
+                    query_to_bind = _strip_trailing_semicolons(query)
+            self.final_query, self.bind_params = bind_query(query_to_bind, self.parameters, self.server_tz)
+            if isinstance(self.final_query, bytes):
+                # Mixed binary and client-side binds cannot be safely classified after binding.
+                self.uncommented_query = uncommented_template or remove_sql_comments(query)
+                self._is_insert = _query_is_insert(query)
+                return
+
             self.uncommented_query = remove_sql_comments(self.final_query)
+            self._is_insert = _query_is_insert(self.final_query)
+            if ";" in self.final_query and not self.is_insert:
+                if _needs_trailing_semicolon_lexer(self.final_query):
+                    self.final_query = _strip_trailing_semicolons(self.final_query)
+                else:
+                    self.final_query = self.final_query.rstrip(";")
+            return
+
+        uncommented_template = remove_sql_comments(query)
+        self.uncommented_query = uncommented_template
+        is_insert_template = _query_is_insert(query)
+        self._is_insert = is_insert_template
+        if not is_insert_template and _needs_trailing_semicolon_lexer(query):
+            query = _strip_trailing_semicolons(query)
+        self.final_query, self.bind_params = bind_query(query, self.parameters, self.server_tz)
 
 
 class QueryResult(Closable):

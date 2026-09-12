@@ -2271,7 +2271,7 @@ IGraphTransformer::TStatus SqlResultItemWrapper(const TExprNode::TPtr& input, TE
         }
 
         const auto validator = [&](TStringBuf name, TExprNode& setting, TExprContext& ctx) -> bool {
-            if (name == "synthetic") {
+            if (name == "synthetic" || name == "warnShadow") {
                 if (setting.ChildrenSize() != 1) {
                     ctx.AddError(TIssue(
                         ctx.GetPosition(setting.Pos()),
@@ -2286,7 +2286,7 @@ IGraphTransformer::TStatus SqlResultItemWrapper(const TExprNode::TPtr& input, TE
             YQL_ENSURE(false, "unreachable: unexpected setting " << name);
         };
 
-        if (!EnsureValidSettings(*settings, {"synthetic"}, validator, ctx.Expr)) {
+        if (!EnsureValidSettings(*settings, {"synthetic", "warnShadow"}, validator, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
     }
@@ -4317,6 +4317,14 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
                         TStringBuilder() << "Unsupported option: " << optionName));
                     return IGraphTransformer::TStatus::Error;
+                }
+            }
+
+            if (isYql && pass == 2) {
+                if (auto status = ValidateYqlWarnShadow(input, output, ctx, joinInputs);
+                    status != IGraphTransformer::TStatus::Ok)
+                {
+                    return status;
                 }
             }
         }

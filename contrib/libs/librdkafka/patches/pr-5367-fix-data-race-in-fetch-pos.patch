@@ -1,0 +1,17 @@
+commit 905f862bd36eb85dc515ec754498bedf0f67f0e6 (HEAD -> fix-YT-27664-fix-data-race-in-rdkafka-client, arcadia/users/panesher/fix-YT-27664-fix-data-race-in-rdkafka-client)
+author: panesher
+date: 2026-03-25T19:57:21+03:00
+
+    fix librdkafka data race
+
+--- contrib/libs/librdkafka/src/rdkafka_partition.c	(1277b64dce5989cc3ea342e6b6b5e6dbe959ee4d)
++++ contrib/libs/librdkafka/src/rdkafka_partition.c	(905f862bd36eb85dc515ec754498bedf0f67f0e6)
+@@ -4631,7 +4631,7 @@ void rd_kafka_partition_leader_destroy_free(void *ptr) {
+ 
+ const char *rd_kafka_fetch_pos2str(const rd_kafka_fetch_pos_t fetchpos) {
+         static RD_TLS char ret[2][64];
+-        static int idx;
++        static RD_TLS int idx;
+ 
+         idx = (idx + 1) % 2;
+ 

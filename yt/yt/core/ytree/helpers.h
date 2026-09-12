@@ -34,6 +34,7 @@ void Serialize(const IAttributeDictionary& attributes, NYson::IYsonConsumer* con
 //! Protobuf conversion methods.
 void ToProto(NProto::TAttributeDictionary* protoAttributes, const IAttributeDictionary& attributes);
 IAttributeDictionaryPtr FromProto(const NProto::TAttributeDictionary& protoAttributes);
+IAttributeDictionaryPtr FromProto(NProto::TAttributeDictionary&& protoAttributes);
 
 //! By-ptr binary serializer.
 //! Supports TIntrusivePtr only.

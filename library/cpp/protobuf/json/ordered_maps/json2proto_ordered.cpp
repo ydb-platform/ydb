@@ -46,7 +46,7 @@ static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
 
     if (config.UseJsonName) {
         Y_ASSERT(!field.json_name().empty());
-        TString name = field.json_name();
+        TString name{field.json_name()};
         if (!field.has_json_name() && !name.empty()) {
             // FIXME: https://st.yandex-team.ru/CONTRIB-139
             name[0] = AsciiToLower(name[0]);
@@ -54,7 +54,7 @@ static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
         return name;
     }
 
-    TString name = field.name();
+    TString name{field.name()};
     switch (config.FieldNameMode) {
         case NProtobufJson::NOrderedJson::TJson2ProtoConfig::FieldNameOriginalCase:
             break;
@@ -364,7 +364,7 @@ SetKey(NProtoBuf::Message& proto,
             reflection->SetBool(&proto, &field, FromString<bool>(key));
             break;
         case FieldDescriptor::CPPTYPE_STRING:
-            reflection->SetString(&proto, &field, key);
+            reflection->SetString(&proto, &field, TProtoStringType{key});
             break;
         default:
             ythrow yexception() << "Unsupported key type.";

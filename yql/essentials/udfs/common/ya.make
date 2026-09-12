@@ -1,33 +1,35 @@
-RECURSE(
-    compress_base
-    datetime2
-    digest
-    file
-    histogram
-    hyperloglog
-    ip_base
-    json
-    json2
-    math
-    pire
-    protobuf
-    python
-    re2
-    reservoir_sampling
-    set
-    stat
-    streaming
-    string
-    top
-    topfreq
-    unicode_base
-    url_base
-    vector
-    yson2
-)
-
-IF (ARCH_X86_64)
+IF (NOT EXPORT_CMAKE)
     RECURSE(
-        hyperscan
+        compress_base
+        datetime2
+        digest
+        file
+        histogram
+        hyperloglog
+        ip_base
+        json
+        json2
+        math
+        pire
+        protobuf
+        python
+        re2
+        reservoir_sampling
+        set
+        stat
+        streaming
+        string
+        top
+        topfreq
+        unicode_base
+        url_base
+        vector
+        yson2
     )
+
+    IF (ARCH_X86_64)
+        RECURSE(
+            hyperscan
+        )
+    ENDIF()
 ENDIF()

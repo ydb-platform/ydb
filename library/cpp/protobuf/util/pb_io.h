@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/protobuf/runtime/nprotobuf.h>
+
 #include <util/generic/fwd.h>
 #include <util/generic/flags.h>
 #include <util/generic/strbuf.h>

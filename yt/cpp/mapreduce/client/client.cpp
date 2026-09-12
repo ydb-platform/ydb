@@ -1800,7 +1800,8 @@ void SetupClusterContext(
     static constexpr char httpsUrlSchema[] = "https://";
 
     if (!context.UseTLS) {
-        context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema);
+        context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema) ||
+                         (context.Config->PreferHttps && !context.ServerName.StartsWith(httpUrlSchema));
     }
 
     if (context.ServerName.StartsWith(httpUrlSchema)) {
@@ -1838,6 +1839,8 @@ TClientContext CreateClientContext(
 
     if (options.UseTLS_) {
         context.UseTLS = *options.UseTLS_;
+    } else {
+        context.UseTLS = context.Config->UseTLS;
     }
 
     SetupClusterContext(context, serverName);

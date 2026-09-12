@@ -243,6 +243,8 @@ void TConfig::Reset()
     ForceIpV4 = GetBool("YT_FORCE_IPV4");
     ForceIpV6 = GetBool("YT_FORCE_IPV6");
     UseHosts = GetBool("YT_USE_HOSTS", true);
+    UseTLS = false;
+    PreferHttps = GetBool("YT_PREFER_HTTPS");
 
     LoadToken();
     LoadSpec();
@@ -421,6 +423,8 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("global_tx_id").Value(config.GlobalTxId)
         .Item("force_ipv4").Value(config.ForceIpV4)
         .Item("force_ipv6").Value(config.ForceIpV6)
+        .Item("use_tls").Value(config.UseTLS)
+        .Item("prefer_https").Value(config.PreferHttps)
         .Item("use_hosts").Value(config.UseHosts)
         .Item("host_list_update_interval").Value(config.HostListUpdateInterval.ToString())
         .Item("spec").Value(config.Spec)
@@ -503,6 +507,8 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("global_tx_id", config.GlobalTxId);
     DESERIALIZE_ITEM("force_ipv4", config.ForceIpV4);
     DESERIALIZE_ITEM("force_ipv6", config.ForceIpV6);
+    DESERIALIZE_ITEM("use_tls", config.UseTLS);
+    DESERIALIZE_ITEM("prefer_https", config.PreferHttps);
     DESERIALIZE_ITEM("use_hosts", config.UseHosts);
     DESERIALIZE_ITEM("host_list_update_interval", config.HostListUpdateInterval);
     DESERIALIZE_ITEM("spec", config.Spec);

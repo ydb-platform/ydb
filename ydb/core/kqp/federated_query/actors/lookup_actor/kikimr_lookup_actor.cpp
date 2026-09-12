@@ -932,6 +932,7 @@ namespace {
             YDB_LOG_TRACE("TEvQueryExecuteQueryResponsePart",
                     COMMON_LOG,
                     {"response", response.DebugString()});
+            Y_VALIDATE(state->StreamProcessor, "TEvQueryExecuteQueryResponsePart: StreamProcessor is unset");
             switch(response.status()) {
                 case Ydb::StatusIds::SUCCESS:
                     break;

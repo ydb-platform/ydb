@@ -933,6 +933,128 @@ struct TInflightLeakTest : public TSessionTest {
     }
 };
 
+// The reconciliation state machine governs the outbound half of a session only: it numbers, resends and
+// acknowledges the messages this node sends. Its give-up path (DoReconciliation, the 'X' symbol) still
+// calls FailDescriptors, which aborts the input descriptors as well - the channels on which this node is
+// the receiver and the peer is the sender. A session whose outbound half is idle and empty therefore
+// destroys perfectly healthy inbound channels, with everything the peer has already delivered, as soon as
+// the peer is too slow to answer a handshake.
+//
+// This is the production failure this whole series started from: an inbound channel holding ~14MB of
+// undelivered data aborted with "OutputNodeActorId=... DO NOT MATCH outputNodeActorId=[0:0:0]" while the
+// peer had never restarted.
+//
+// Here the peer keeps streaming throughout: its channel service is locked, so it cannot answer a
+// discovery, but its already bound channels keep sending. The session under test is the one of node 0,
+// whose outbound half is empty all along.
+//
+// NB: this test is expected to fail until it is decided what a session with a healthy inbound half should
+// do when its outbound handshake times out. Removing the FailDescriptors call alone is not enough: the
+// give-up also frees the session, whose destructor fails the very same descriptors, and the peer's next
+// message would reach a new session which knows nothing about the channel.
+struct TInboundChannelAbortTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        // give up after 2 unanswered discoveries (~3s) instead of the default 3 (~7s)
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetReconciliationCount(2);
+    }
+
+    static ui64 GetInputPushBytes(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        ui64 bytes = 0;
+        for (const auto& [info, descriptor] : state->InputDescriptors) {
+            bytes += descriptor->PushStats.Bytes.load();
+        }
+        return bytes;
+    }
+
+    static ui64 GetInputPopBytes(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        ui64 bytes = 0;
+        for (const auto& [info, descriptor] : state->InputDescriptors) {
+            bytes += descriptor->PopStats.Bytes.load();
+        }
+        return bytes;
+    }
+
+    // the roles of TSessionTest::StartChannel are reversed here: the peer (node 1) produces and the node
+    // under test (node 0) consumes, so that its session holds an input descriptor and an empty out queue
+    std::pair<NActors::TActorId, NActors::TActorId> StartInboundChannel(ui32 channelId) {
+        auto producer = Runtime->Register(new TProducerActor(Service1, channelId, ProducerSettings, OutputQuotaManager), NodeIndex1);
+        auto consumer = Runtime->Register(new TConsumerActor(Service0, channelId, ConsumerSettings, InputQuotaManager), NodeIndex0);
+        Actors.insert(producer);
+        Actors.insert(consumer);
+        Runtime->Send(consumer, Control0, new TEvTestPrivate::TEvStart(producer), NodeIndex0, true);
+        Runtime->Send(producer, Control1, new TEvTestPrivate::TEvStart(consumer), NodeIndex1, true);
+        return {producer, consumer};
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 2, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+
+        auto peerNodeId = Runtime->GetNodeId(1);
+
+        // warm up: both sessions exist and are reconciled afterwards
+        StartChannel(1, true);
+        WaitChannel("warm up");
+
+        auto session = FindNodeState(Service0, peerNodeId);
+        UNIT_ASSERT_C(session, "node session not found");
+        WaitSettled(session);
+
+        // the peer streams to us and stops being consumed after the 1st messages, so the input descriptor
+        // is bound, alive and holding data when the outbound handshake starts to fail
+        ProducerSettings = TWorkerSettings{ .MessageCount = 50, .MinMessageSize = 10, .MaxMessageSize = 100 };
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 50, .MinMessageSize = 10, .MaxMessageSize = 100,
+            .PauseMessageIndex = 2, .PauseDelayMs = 30000 };
+
+        StartInboundChannel(2);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInputPopBytes(session) > 0; }, TDuration::Seconds(10)),
+            "the consumer did not bind and pop");
+        auto pushBytes = GetInputPushBytes(session);
+        auto popBytes = GetInputPopBytes(session);
+        UNIT_ASSERT_C(pushBytes > popBytes, "nothing is left unconsumed in the input descriptor");
+
+        // the peer cannot answer a discovery while its channel service is locked, but the channels it has
+        // already bound keep sending - it is alive and it never restarts
+        std::unique_lock serviceLock(Service1->Mutex);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(GetQueueSize(session), 0, "the outbound half of the session is not empty");
+
+        Runtime->Send(session->NodeActorId, Control0,
+            new NActors::TEvInterconnect::TEvNodeDisconnected(peerNodeId), NodeIndex0, true);
+
+        UNIT_ASSERT_C(WaitFor([&]() { return session->Terminating.load(); }, TDuration::Seconds(20)),
+            TStringBuilder() << "the session did not give up, reconciliation log: " << GetReconciliationLog(session));
+
+        serviceLock.unlock();
+
+        auto details = [&]() {
+            return TStringBuilder() << "inbound channel: pushed " << pushBytes << " bytes, popped " << popBytes
+                << ", outbound queue was empty, reconciliation log: " << GetReconciliationLog(session);
+        };
+
+        // the give-up must not touch the inbound half: the peer is alive and everything it sent is there
+        bool aborted = false;
+        try {
+            auto msg = Runtime->GrabEdgeEvent<TEvTestPrivate::TEvFinished>(Control0, TDuration::Seconds(5));
+            Actors.erase(msg->Sender);
+            aborted = msg->Get()->Error;
+        } catch (NActors::TEmptyEventQueueException&) {
+        }
+        UNIT_ASSERT_C(!aborted, TStringBuilder() << "the inbound channel was aborted by an outbound reconciliation timeout, " << details());
+
+        // the node session must not outlive the actor system, its destructor logs through it
+        session.reset();
+        Destroy();
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
@@ -1071,4 +1193,17 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
         test.Run();
     }
+
+    // Disabled on purpose: it reproduces a defect which is still open, see the comment of
+    // TInboundChannelAbortTest above. Enable it together with the fix. The test body itself is left
+    // compiled, so that it keeps up with any refactoring of the helpers it uses.
+    /*
+    Y_UNIT_TEST(InboundChannelAbortedByOutboundTimeout) {
+        TInboundChannelAbortTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+    */
 }

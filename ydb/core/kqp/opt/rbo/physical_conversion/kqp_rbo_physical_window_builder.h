@@ -38,6 +38,9 @@ private:
     TExprNode::TPtr Member(TExprNode::TPtr from, const TString& name) const;
     TExprNode::TPtr BuildStruct(const TVector<std::pair<TString, TExprNode::TPtr>>& members) const;
     TExprNode::TPtr BuildSumCastTarget(const TInfoUnit& column) const;
+    TExprNode::TPtr BuildAvgAccumulatorDataType(const TInfoUnit& column) const;
+    TExprNode::TPtr BuildAvgAccumulatorType(const TInfoUnit& column) const;
+    TExprNode::TPtr BuildResultFromAccumulator(const TOpWindowFunc& func, TExprNode::TPtr accumulator) const;
     TExprNode::TPtr MakeOptional(TExprNode::TPtr value, bool alreadyOptional) const;
     TExprNode::TPtr BuildUint64(ui64 value) const;
 

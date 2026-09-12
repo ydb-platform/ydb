@@ -401,7 +401,7 @@ def _plan_units(mode, topology):
     return [unit for group in nested for unit in group]
 
 
-def plan_affinity(mode, topology, required_cpus):
+def plan_affinity(mode, topology, required_cpus, excluded_cpus=()):
     if mode == "none":
         return AffinityPlacement(mode=mode, cpus=None)
     if not hasattr(os, "sched_setaffinity"):
@@ -425,8 +425,17 @@ def plan_affinity(mode, topology, required_cpus):
             return _unsupported(mode, "spread-chiplet requires at least two chiplets in a NUMA node")
 
     units = _plan_units(mode, topology)
+    excluded = set(excluded_cpus)
+    units = [unit for unit in units if not excluded.intersection(unit)]
     cpus = _select_units(units, required_cpus)
     if not cpus:
+        if excluded:
+            return _unsupported(
+                mode,
+                "Not enough free CPU placement units for {} CPUs; other nodes reserve the remaining units".format(
+                    required_cpus
+                ),
+            )
         return _unsupported(mode, "{} allowed CPUs are required by this placement".format(required_cpus))
     return AffinityPlacement(mode=mode, cpus=cpus)
 

@@ -4159,6 +4159,62 @@ const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Prom
             any(event.get("fields", {}).get("progress", {}).get("phase") == "resuming-search" for event in events)
         )
 
+    def test_latency_initial_extrapolation_and_guards(self):
+        config = {
+            "parameter": "threads",
+            "search": {"start": 10, "maximum": 100, "multiplier": 2, "resolution_percent": 50},
+            "objective": {"type": "latency-slo", "percentile": "p99", "max_ms": 20, "max_errors": 0},
+        }
+        measured = {10: {"passed": True, "p99_ms": 5}, 20: {"passed": True, "p99_ms": 8}}
+        self.assertEqual(load_control._latency_growth_probe(config, 20, measured, 2), 54)
+        self.assertEqual(load_control._latency_growth_probe(config, 20, measured, 63), 40)
+        for value in (5, 4, 5.01, float("nan"), float("inf"), None):
+            with self.subTest(latency=value):
+                measured[20]["p99_ms"] = value
+                self.assertEqual(load_control._latency_growth_probe(config, 20, measured, 2), 40)
+        measured[20]["p99_ms"] = 6
+        self.assertEqual(load_control._latency_growth_probe(config, 20, measured, 2), 80)
+        config["search"]["maximum"] = 55
+        self.assertEqual(load_control._latency_growth_probe(config, 20, measured, 2), 55)
+        config["objective"]["latency_metric"] = "custom_ms"
+        self.assertEqual(load_control._latency_growth_probe(config, 20, measured, 2), 40)
+        measured[10]["custom_ms"], measured[20]["custom_ms"] = 5, 8
+        self.assertEqual(load_control._latency_growth_probe(config, 20, measured, 2), 54)
+
+    def test_latency_rejected_verification_probes_predecessor_first(self):
+        config = {
+            "parameter": "threads",
+            "search": {"start": 1, "maximum": 256, "multiplier": 2, "resolution_percent": 2},
+            "objective": {"type": "latency-slo", "percentile": "p99", "max_ms": 20, "max_errors": 0},
+        }
+        previous = [
+            {"load": 84, "passed": True, "p99_ms": 19, "errors": 0},
+            {
+                "load": 88,
+                "passed": False,
+                "p99_ms": 20,
+                "verification_rejected": True,
+                "verification_metrics": {"p99_ms": 21, "errors": 0},
+            },
+            {"load": 89, "passed": False, "p99_ms": 21, "errors": 0},
+        ]
+        for boundary in (87, 86, 84):
+            with self.subTest(boundary=boundary):
+                sampled = []
+
+                def measure(load):
+                    sampled.append(load)
+                    return {"throughput": load, "errors": 0, "p99_ms": 20 if load <= boundary else 21}
+
+                result = load_control.search_load(config, measure, previous_attempts=previous)
+                self.assertEqual(sampled[0], 87)
+                self.assertEqual(result.selected_load, boundary)
+                self.assertEqual(result.failing_load, boundary + 1)
+                self.assertTrue(all(84 < load < 88 for load in sampled))
+                self.assertEqual(len(sampled), len(set(sampled)))
+                if boundary == 87:
+                    self.assertEqual(sampled, [87])
+
     def test_latency_prediction_finds_an_exact_boundary_and_reuses_rejected_evidence(self):
         config = {
             "parameter": "threads",

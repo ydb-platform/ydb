@@ -129,12 +129,55 @@ private:
         ctx.IssueManager.RaiseIssue(info);
     }
 
+    bool CheckNodeWithDataSource(const TExprNode& node, TExprContext& ctx) const {
+        bool good = true;
+        auto dataSourceName = node.Child(1)->Child(0)->Content();
+        if (dataSourceName != DqProviderName && !node.IsCallable(ConfigureName)) {
+            auto datasource = State_->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
+            YQL_ENSURE(datasource);
+            auto dqIntegration = (*datasource)->GetDqIntegration();
+            if (dqIntegration) {
+                bool pragmas = dqIntegration->CheckPragmas(node, ctx, false);
+                bool canRead = pragmas && dqIntegration->CanRead(node, ctx, /*skipIssues = */ false);
+
+                if (!pragmas || !canRead) {
+                    good = false;
+                    if (!pragmas) {
+                        State_->TypeCtx->PureResultDataSource.clear();
+                        std::erase_if(State_->TypeCtx->AvailablePureResultDataSources,
+                            [&](const auto& name) { return name == DqProviderName; });
+                    }
+                }
+            } else {
+                AddInfo(ctx, TStringBuilder() << "source '" << dataSourceName << "' is not supported by DQ");
+                good = false;
+            }
+        }
+        return good;
+    }
+
+    bool CheckNodeWithDataSink(const TExprNode& node, TExprContext& ctx) const {
+        bool good = true;
+        auto dataSinkName = node.Child(1)->Child(0)->Content();
+        auto dataSink = State_->TypeCtx->DataSinkMap.FindPtr(dataSinkName);
+        YQL_ENSURE(dataSink);
+        if (auto dqIntegration = dataSink->Get()->GetDqIntegration()) {
+            if (auto canWrite = dqIntegration->CanWrite(node, ctx)) {
+                if (!canWrite.GetRef()) {
+                    good = false;
+                } else if (!State_->Settings->EnableInsert.Get().GetOrElse(false)) {
+                    AddInfo(ctx, TStringBuilder() << "'insert' support is disabled. Use PRAGMA dq.EnableInsert to explicitly enable it");
+                    good = false;
+                }
+            }
+        }
+        return good;
+    }
+
     void Scan(const TExprNode& node, TExprContext& ctx, bool& good, TNodeSet& visited) const {
         if (!visited.insert(&node).second) {
             return;
         }
-
-        TExprBase expr(&node);
 
         if (TCoCommit::Match(&node)) {
             for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
@@ -152,58 +195,49 @@ private:
                 AddInfo(ctx, TStringBuilder() << "sink '" << datasink.Cast().Value() << "' is not supported by DQ");
                 good = false;
             }
-        } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinColumns(expr)) {
+        } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinColumns(TExprBase(&node))) {
             AddInfo(ctx, TStringBuilder() << "unsupported join column");
             good = false;
         } else if (node.ChildrenSize() > 1 && TCoDataSource::Match(node.Child(1))) {
-            auto dataSourceName = node.Child(1)->Child(0)->Content();
-            if (dataSourceName != DqProviderName && !node.IsCallable(ConfigureName)) {
-                auto datasource = State_->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
-                YQL_ENSURE(datasource);
-                auto dqIntegration = (*datasource)->GetDqIntegration();
-                if (dqIntegration) {
-                    bool pragmas = dqIntegration->CheckPragmas(node, ctx, false);
-                    bool canRead = pragmas && dqIntegration->CanRead(node, ctx, /*skipIssues = */ false);
-
-                    if (!pragmas || !canRead) {
-                        good = false;
-                        if (!pragmas) {
-                            State_->TypeCtx->PureResultDataSource.clear();
-                            std::erase_if(State_->TypeCtx->AvailablePureResultDataSources,
-                                          [&](const auto& name) { return name == DqProviderName; });
-                        }
-                    }
-                } else {
-                    AddInfo(ctx, TStringBuilder() << "source '" << dataSourceName << "' is not supported by DQ");
-                    good = false;
-                }
+            if (!CheckNodeWithDataSource(node, ctx)) {
+                good = false;
             }
-
             if (good) {
-                Scan(node.Head(), ctx,good, visited);
+                Scan(node.Head(), ctx, good, visited);
             }
         } else if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World
             && !TCoCommit::Match(&node)
             && node.ChildrenSize() > 1
             && TCoDataSink::Match(node.Child(1))) {
-            auto dataSinkName = node.Child(1)->Child(0)->Content();
-            auto dataSink = State_->TypeCtx->DataSinkMap.FindPtr(dataSinkName);
-            YQL_ENSURE(dataSink);
-            if (auto dqIntegration = dataSink->Get()->GetDqIntegration()) {
-                if (auto canWrite = dqIntegration->CanWrite(node, ctx)) {
-                    if (!canWrite.GetRef()) {
-                        good = false;
-                    } else if (!State_->Settings->EnableInsert.Get().GetOrElse(false)) {
-                        AddInfo(ctx, TStringBuilder() << "'insert' support is disabled. Use PRAGMA dq.EnableInsert to explicitly enable it");
-                        good = false;
-                    }
-                }
+            if (!CheckNodeWithDataSink(node, ctx)) {
+                good = false;
             }
             if (good) {
                 for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
                     Scan(*node.Child(i), ctx, good, visited);
                 }
             }
+        } else if (TCoRight::Match(&node) || TCoLeft::Match(&node)) {
+            if (node.Head().ChildrenSize() > 1) {
+                if (TCoDataSource::Match(node.Head().Child(1))) {
+                    if (!CheckNodeWithDataSource(node.Head(), ctx)) {
+                        good = false;
+                    }
+                    if (good) {
+                        Scan(node.Head().Head(), ctx, good, visited);
+                    }
+                } else if (TCoDataSink::Match(node.Head().Child(1))) {
+                    if (!CheckNodeWithDataSink(node.Head(), ctx)) {
+                        good = false;
+                    }
+                    if (good) {
+                        for (size_t i = 0; i != node.Head().ChildrenSize() && good; ++i) {
+                            Scan(*node.Head().Child(i), ctx, good, visited);
+                        }
+                    }
+                }
+            }
+
         } else if (TCoScriptUdf::Match(&node)) {
             if (node.ChildrenSize() > 4) {
                 for (const auto& setting: node.Child(4)->Children()) {

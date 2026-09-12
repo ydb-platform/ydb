@@ -2011,7 +2011,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
     }
 
-    Y_UNIT_TEST(ShouldReplyUpdateInProgressToNewerVolumeConfig)
+    Y_UNIT_TEST(ShouldReplyOkToNewerVolumeConfig)
     {
         TEnvironmentSetup env{{
             .NodeCount = 8,
@@ -2024,9 +2024,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto volumeConfig = CreateVolumeConfig(32768);
         volumeConfig.SetVersion(1);
         const auto response = SendUpdateVolumeConfig(env, volumeConfig, 2);
-        UNIT_ASSERT(
-            response.GetStatus() ==
-            NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+        UNIT_ASSERT(response.GetStatus() == NKikimrBlockStore::OK);
         UNIT_ASSERT_VALUES_EQUAL(response.GetTxId(), 2);
         UNIT_ASSERT_VALUES_EQUAL(response.GetOrigin(), PartitionTabletId);
     }

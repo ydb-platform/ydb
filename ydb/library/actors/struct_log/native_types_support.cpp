@@ -48,5 +48,27 @@ void TNativeTypeSupport<bool>::AppendToString(const bool& value, TStringBuilder&
     stringBuffer << ToString(value);
 }
 
+void TNativeTypeSupport<TInstant>::Serialize(const TInstant& value, TBinaryData& data) {
+    ui64 microSeconds = value.MicroSeconds();
+    TNativeTypeSupport<ui64>::Serialize(microSeconds, data);
+}
+
+bool TNativeTypeSupport<TInstant>::Deserialize(TInstant& value, const void* data, std::size_t length) {
+    ui64 microSeconds;
+    if (!TNativeTypeSupport<ui64>::Deserialize(microSeconds, data, length)) {
+        return false;
+    }
+    value = TInstant::MicroSeconds(microSeconds);
+    return true;
+}
+
+TString TNativeTypeSupport<TInstant>::ToString(const TInstant& value) {
+    return value.ToString();
+}
+
+void TNativeTypeSupport<TInstant>::AppendToString(const TInstant& value, TStringBuilder& stringBuffer) {
+    stringBuffer << ToString(value);
+}
+
 
 }  // namespace NActors::NStructuredLog

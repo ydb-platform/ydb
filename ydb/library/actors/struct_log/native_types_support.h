@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/datetime/base.h>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
@@ -96,6 +97,19 @@ template<> struct TNativeTypeSupport<bool> : public TNativePlainTypeSupport<bool
     static TString ToString(const bool& value);
 
     static void AppendToString(const bool& value, TStringBuilder& stringBuffer);
+};
+
+template <>
+struct TNativeTypeSupport<TInstant> : public std::true_type {
+    using TLength = std::size_t;
+
+    static void Serialize(const TInstant& value, TBinaryData& data);
+
+    static bool Deserialize(TInstant& value, const void* data, std::size_t length);
+
+    static TString ToString(const TInstant& value);
+
+    static void AppendToString(const TInstant& value, TStringBuilder& stringBuffer);
 };
 
 }  // namespace NActors::NStructuredLog

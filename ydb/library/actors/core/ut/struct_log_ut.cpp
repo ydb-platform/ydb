@@ -50,6 +50,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TestType<float>({1, 2, 3, 4, 5});
         TestType<double>({1, 2, 3, 4, 5});
         TestType<long double>({1, 2, 3, 4, 5});
+        TestType<TInstant>({TInstant::Now()});
     }
 
     #define TEST_MESSAGE_EXTRACT_TO_STRING(M, S)                          \
@@ -82,6 +83,8 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
         ptr = nullptr;
         TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", ptr}), TStringBuilder() << ptr);
+
+        TEST_MESSAGE_EXTRACT_TO_STRING(YDB_LOG_CREATE_MESSAGE({"value", TInstant::MicroSeconds(1789233327128336)}), "2026-09-12T17:15:27.128336Z");
     }
 
     template <typename T, typename A, bool OK>
@@ -279,6 +282,7 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<float>(1.123)}), "value=1.123000");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<double>(1.123)}), "value=1.123000");
         TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", static_cast<long double>(1.123)}), "value=1.123000");
+        TEST_MESSAGE(YDB_LOG_CREATE_MESSAGE({"value", TInstant::MicroSeconds(1789233327128336)}), "value=2026-09-12T17:15:27.128336Z");
 
         int i = 0;
         auto ptr = static_cast<void*>(&i);
@@ -633,6 +637,13 @@ Y_UNIT_TEST_SUITE(StructLog) {
                 {"xvalue", YDB_LOG_CREATE_MESSAGE({"value", 10})}
             ),
             R"({"value":1,"_value":{"value":1},"xvalue":{"value":10}})"
+        );
+
+        TEST_JSON_MESSAGE(
+            YDB_LOG_CREATE_MESSAGE(
+                {"value", TInstant::MicroSeconds(1789233327128336)}
+            ),
+            R"({"value":"2026-09-12T17:15:27.128336Z"})"
         );
     }
 

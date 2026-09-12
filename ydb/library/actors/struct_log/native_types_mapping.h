@@ -25,6 +25,7 @@ enum class TNativeTypeCode : std::uint8_t {
     Double,
     LongDouble,
     Bool,
+    Instant
 };
 
 using TInvoker = std::function<bool(const void* data, std::size_t length)>;
@@ -185,7 +186,8 @@ using TTypesMapping = TNativeTypeCodeMapping<
     TNativeTypeCodePair<bool, TNativeTypeCode::Bool>,
     TNativeTypeCodePair<float, TNativeTypeCode::Float>,
     TNativeTypeCodePair<double, TNativeTypeCode::Double>,
-    TNativeTypeCodePair<long double, TNativeTypeCode::LongDouble>
+    TNativeTypeCodePair<long double, TNativeTypeCode::LongDouble>,
+    TNativeTypeCodePair<TInstant, TNativeTypeCode::Instant>
     >;
 
 }  // namespace NActors::NStructuredLog

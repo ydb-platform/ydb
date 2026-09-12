@@ -14,6 +14,7 @@ SRCS(
     env.h
     huge.cpp
     compaction.cpp
+    space_report.cpp
 )
 
 PEERDIR(

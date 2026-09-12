@@ -721,6 +721,14 @@ NDDisk::TEvSync::TDDiskId MakeSyncSourceId(ui32 pdiskId, ui32 slotId) {
     return std::make_tuple(NodeId, pdiskId, slotId);
 }
 
+TString GetRegistrationToken(TTestContext& ctx, const TActorId& serviceId, const NDDisk::TQueryCredentials& creds) {
+    auto result = SendToDDiskAndWait<NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(ctx, serviceId,
+        new NDDisk::TEvGetPersistentBufferRegistrationToken(creds));
+    AssertStatus(result, TReplyStatus::OK);
+    UNIT_ASSERT(!result->Get()->Record.GetToken().empty());
+    return result->Get()->Record.GetToken();
+}
+
 NDDisk::TQueryCredentials Connect(
         TTestContext& ctx,
         const TActorId& serviceId,
@@ -740,7 +748,7 @@ NDDisk::TQueryCredentials Connect(
     creds.ConnectionToken.emplace(connectResult->Get()->Record.GetConnectionToken());
 
     if (isPersistentBuffer && registerBuffer) {
-        SendToDDisk(ctx, serviceId, new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock()));
+        SendToDDisk(ctx, serviceId, new NDDisk::TEvRegisterPersistentBuffer(creds, GetRegistrationToken(ctx, serviceId, creds)));
         for (;;) {
             auto event = ctx.Runtime.WaitForEdgeActorEvent(ctx.ClientWaitEdges());
             if (event->GetTypeRewrite() == NPDisk::TEvChunkWriteRaw::EventType) {
@@ -942,7 +950,7 @@ std::unique_ptr<IEventHandle> WaitUringOrClient(TTestContext& ctx, const TDiskHa
 NDDisk::TQueryCredentials ConnectPersistentBufferWithUring(TTestContext& ctx,
         const TDiskHandle& disk, TScriptedUringClient& router, ui64 tabletId, ui32 generation) {
     auto creds = Connect(ctx, disk.PBServiceId, tabletId, generation, 0, false);
-    SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock()));
+    SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvRegisterPersistentBuffer(creds, GetRegistrationToken(ctx, disk.PBServiceId, creds)));
     for (;;) {
         auto ev = WaitUringOrClient(ctx, disk, router);
         if (ev->Recipient == router.Edge) {
@@ -1079,7 +1087,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             creds = Connect(ctx, disk.PBServiceId, 913, 1, 0, false);
             // Registration is the first durable request and must wait for readiness.
             SendToDDisk(ctx, disk.PBServiceId,
-                new NDDisk::TEvRegisterPersistentBuffer(*creds, ctx.Runtime.GetClock()), 100);
+                new NDDisk::TEvRegisterPersistentBuffer(*creds, GetRegistrationToken(ctx, disk.PBServiceId, *creds)), 100);
             auto info = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId,
                 new NDDisk::TEvGetPersistentBufferInfo(false, false));
             UNIT_ASSERT_VALUES_EQUAL(info->Get()->PendingEvents, 1);
@@ -2139,7 +2147,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
                 for (ui32 i = 0; i < writes.size(); ++i) {
                     if (registration) {
                         SendToDDisk(ctx, disk.PBServiceId,
-                            new NDDisk::TEvRegisterPersistentBuffer(creds[i], ctx.Runtime.GetClock()), i);
+                            new NDDisk::TEvRegisterPersistentBuffer(creds[i], GetRegistrationToken(ctx, disk.PBServiceId, creds[i])), i);
                     } else {
                         SendToDDisk(ctx, disk.PBServiceId,
                             new NDDisk::TEvErasePersistentBuffer(creds[i % 2], 10 * (i + 1)), i);
@@ -2223,7 +2231,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
                 std::array<NPDisk::TUringOperationBase*, 2> writes;
                 for (ui32 i = 0; i < writes.size(); ++i) {
                     SendToDDisk(ctx, disk.PBServiceId,
-                        new NDDisk::TEvRegisterPersistentBuffer(creds[i], ctx.Runtime.GetClock()), i);
+                        new NDDisk::TEvRegisterPersistentBuffer(creds[i], GetRegistrationToken(ctx, disk.PBServiceId, creds[i])), i);
                     writes[i] = WaitSubmittedUring(ctx, disk, *router);
                 }
                 const std::array<ui32, 2> order = newerFirst ? std::array<ui32, 2>{1, 0} : std::array<ui32, 2>{0, 1};
@@ -2344,6 +2352,107 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             "Persistent buffer must stop after receiving poison");
     }
 
+    Y_UNIT_TEST(PersistentBufferRegistrationTokensExpireWithoutRequests) {
+        for (bool delayExpiryEvent : {false, true}) {
+            TTestContext ctx;
+            NDDisk::TPersistentBufferFormat format;
+            format.RegistrationTimeoutMilliseconds = 100;
+            const auto disk = ctx.CreateDDisk(114, 1, format);
+            const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 0, false);
+            const auto token = GetRegistrationToken(ctx, disk.PBServiceId, creds);
+            const auto otherToken = GetRegistrationToken(ctx, disk.PBServiceId, creds);
+            UNIT_ASSERT_UNEQUAL(token, otherToken);
+            const auto actorId = ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.PBServiceId);
+            auto assertTokenCount = [&](size_t count) {
+                UNIT_ASSERT(ctx.Runtime.WrapInActorContext(actorId, [&](IActor* actor) {
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<NDDisk::TDDiskActor*>(actor)->PersistentBufferRegistrationTokens.size(), count);
+                }));
+            };
+            assertTokenCount(2);
+            ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
+                return !delayExpiryEvent || event->GetTypeRewrite()
+                    != NDDisk::TDDiskActor::TEvPrivate::TEvExpirePersistentBufferRegistrationToken::EventType;
+            };
+            ctx.Runtime.Schedule(TDuration::MilliSeconds(100),
+                new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
+            WaitFromDDisk<TEvents::TEvWakeup>(ctx);
+            // Cleanup happens without registrations. Even if its event is delayed,
+            // the deadline check must reject a token exactly at the timeout.
+            assertTokenCount(delayExpiryEvent ? 2 : 0);
+            AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
+                new NDDisk::TEvRegisterPersistentBuffer(creds, token)), TReplyStatus::OUTDATED);
+            ctx.Runtime.FilterFunction = {};
+        }
+    }
+
+    Y_UNIT_TEST(PersistentBufferRegistrationTokenCannotBeUsedByAnotherOwner) {
+        TTestContext ctx;
+        const auto disk = ctx.CreateDDisk(115, 1);
+        // Isolate token ownership validation from the connection's generation check.
+        const auto creds = NDDisk::TQueryCredentials::ForInternal(100, 1, std::nullopt, 7);
+        const auto token = GetRegistrationToken(ctx, disk.PBServiceId, creds);
+        for (const auto& other : {
+                NDDisk::TQueryCredentials::ForInternal(101, 1, std::nullopt, 7),
+                NDDisk::TQueryCredentials::ForInternal(100, 2, std::nullopt, 7),
+                NDDisk::TQueryCredentials::ForInternal(100, 1, std::nullopt, 8)}) {
+            AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
+                new NDDisk::TEvRegisterPersistentBuffer(other, token)), TReplyStatus::INCORRECT_REQUEST);
+        }
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvRegisterPersistentBuffer(creds, token));
+        auto registration = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
+            new NDDisk::TEvRegisterPersistentBuffer(creds, token)), TReplyStatus::OUTDATED);
+        const auto actorId = ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.PBServiceId);
+        UNIT_ASSERT(ctx.Runtime.WrapInActorContext(actorId, [&](IActor* actor) {
+            UNIT_ASSERT(static_cast<NDDisk::TDDiskActor*>(actor)->PersistentBufferRegistrationTokens.empty());
+        }));
+        ctx.SendPDiskResponse(disk, *registration, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        AssertStatus(WaitFromDDisk<NDDisk::TEvRegisterPersistentBufferResult>(ctx), TReplyStatus::OK);
+        AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
+            new NDDisk::TEvRegisterPersistentBuffer(creds, token)), TReplyStatus::OUTDATED);
+    }
+
+    Y_UNIT_TEST(PersistentBufferQueuedRegistrationTokenExpires) {
+        TTestContext ctx;
+        NDDisk::TPersistentBufferFormat format;
+        format.RegistrationTimeoutMilliseconds = 100;
+        const auto disk = ctx.RegisterDDisk(116, 1, format);
+        ctx.BeforePersistentBufferReady = [&] {
+            const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 0, false);
+            const auto token = GetRegistrationToken(ctx, disk.PBServiceId, creds);
+            SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvRegisterPersistentBuffer(creds, token));
+            auto info = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId,
+                new NDDisk::TEvGetPersistentBufferInfo(false, false));
+            UNIT_ASSERT_VALUES_EQUAL(info->Get()->PendingEvents, 1);
+            ctx.Runtime.Schedule(TDuration::MilliSeconds(100),
+                new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
+            WaitFromDDisk<TEvents::TEvWakeup>(ctx);
+        };
+        ctx.BootstrapDDisk(disk);
+        AssertStatus(WaitFromDDisk<NDDisk::TEvRegisterPersistentBufferResult>(ctx), TReplyStatus::OUTDATED);
+    }
+
+    Y_UNIT_TEST(PersistentBufferRegistrationTokensDoNotSurviveRestart) {
+        TTestContext ctx;
+        // The timeout must not be the reason for rejecting the old token.
+        NDDisk::TPersistentBufferFormat format;
+        format.RegistrationTimeoutMilliseconds = 3600000;
+        const auto disk = ctx.CreateDDisk(117, 1, format);
+        const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 0, false);
+        const auto token = GetRegistrationToken(ctx, disk.PBServiceId, creds);
+        const auto issuedAt = ctx.Runtime.GetClock();
+        const auto warden = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
+        ctx.Runtime.RegisterService(MakeBlobStorageNodeWardenID(NodeId), warden);
+        SendToDDisk(ctx, disk.ServiceId, new TEvents::TEvPoison());
+        ctx.Runtime.WaitForEdgeActorEvent<TEvents::TEvGone>(warden, false);
+        const auto restarted = ctx.CreateDDisk(117, 1, format);
+        const auto newCreds = Connect(ctx, restarted.PBServiceId, 100, 1, 0, false);
+        UNIT_ASSERT(ctx.Runtime.GetClock() - issuedAt < TDuration::MilliSeconds(format.RegistrationTimeoutMilliseconds));
+        AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, restarted.PBServiceId,
+            new NDDisk::TEvRegisterPersistentBuffer(newCreds, token)), TReplyStatus::OUTDATED);
+        UNIT_ASSERT_UNEQUAL(token, GetRegistrationToken(ctx, restarted.PBServiceId, newCreds));
+    }
+
     Y_UNIT_TEST(PersistentBufferRegistrationAndRemovalLifecycle) {
         TTestContext ctx;
         NDDisk::TPersistentBufferFormat format;
@@ -2367,11 +2476,11 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             new NDDisk::TEvBatchErasePersistentBuffer(creds)), TReplyStatus::INCORRECT_REQUEST);
 
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
-            new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock() - TDuration::Seconds(1))), TReplyStatus::OUTDATED);
+            new NDDisk::TEvRegisterPersistentBuffer(creds, "unknown-token")), TReplyStatus::OUTDATED);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
-            new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock() + TDuration::Seconds(1))), TReplyStatus::OUTDATED);
+            new NDDisk::TEvRegisterPersistentBuffer(creds, "")), TReplyStatus::OUTDATED);
 
-        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock()));
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvRegisterPersistentBuffer(creds, GetRegistrationToken(ctx, disk.PBServiceId, creds)));
         auto registration = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         const auto registrationData = registration->Get()->Data.ConvertToString();
         const auto* initial = reinterpret_cast<const NDDisk::TPersistentBufferBarriers*>(registrationData.data());
@@ -2385,14 +2494,14 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         ctx.SendPDiskResponse(disk, *registration, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         AssertStatus(WaitFromDDisk<NDDisk::TEvRegisterPersistentBufferResult>(ctx), TReplyStatus::OK);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
-            new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock())), TReplyStatus::INCORRECT_REQUEST);
+            new NDDisk::TEvRegisterPersistentBuffer(creds, GetRegistrationToken(ctx, disk.PBServiceId, creds))), TReplyStatus::INCORRECT_REQUEST);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvListPersistentBuffer(creds)), TReplyStatus::OK);
         const auto other = NDDisk::TQueryCredentials::ForInternal(100, 1, std::nullopt, 8);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvListPersistentBuffer(other)), TReplyStatus::INCORRECT_REQUEST);
 
-        const auto phantomTimestamp = ctx.Runtime.GetClock();
+        const auto phantomToken = GetRegistrationToken(ctx, disk.PBServiceId, creds);
         SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvUnregisterPersistentBuffer(creds));
         auto close = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         const auto closedData = close->Get()->Data.ConvertToString();
@@ -2404,7 +2513,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvListPersistentBuffer(creds)), TReplyStatus::OUTDATED);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
-            new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock())), TReplyStatus::INCORRECT_REQUEST);
+            new NDDisk::TEvRegisterPersistentBuffer(creds, GetRegistrationToken(ctx, disk.PBServiceId, creds))), TReplyStatus::INCORRECT_REQUEST);
         auto removal = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         UNIT_ASSERT(ctx.Runtime.GetClock() - closeTime >= TDuration::MilliSeconds(200));
         const auto removedData = removal->Get()->Data.ConvertToString();
@@ -2414,7 +2523,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         ctx.SendPDiskResponse(disk, *removal, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         AssertStatus(WaitFromDDisk<NDDisk::TEvUnregisterPersistentBufferResult>(ctx), TReplyStatus::OK);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
-            new NDDisk::TEvRegisterPersistentBuffer(creds, phantomTimestamp)), TReplyStatus::OUTDATED);
+            new NDDisk::TEvRegisterPersistentBuffer(creds, phantomToken)), TReplyStatus::OUTDATED);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvListPersistentBuffer(creds)), TReplyStatus::INCORRECT_REQUEST);
     }
@@ -2427,8 +2536,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         WaitFromDDisk<TEvents::TEvWakeup>(ctx);
         UNIT_ASSERT_VALUES_EQUAL(NDDisk::TPersistentBufferFormat{}.RegistrationTimeoutMilliseconds, 5000);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
-            new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock() - TDuration::Seconds(6))), TReplyStatus::OUTDATED);
-        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock()));
+            new NDDisk::TEvRegisterPersistentBuffer(creds, "unknown-token")), TReplyStatus::OUTDATED);
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvRegisterPersistentBuffer(creds, GetRegistrationToken(ctx, disk.PBServiceId, creds)));
         auto registration = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         bool injected = false;
         ctx.Runtime.FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& event) {
@@ -2998,7 +3107,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         creds.ConnectionToken.emplace(connect->Get()->Record.GetConnectionToken());
 
         SendToDDisk(ctx, disk.PBServiceId,
-            new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock()));
+            new NDDisk::TEvRegisterPersistentBuffer(creds, GetRegistrationToken(ctx, disk.PBServiceId, creds)));
         auto registrationWrite = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
         ctx.SendPDiskResponse(disk, *registrationWrite,
             new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));

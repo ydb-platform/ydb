@@ -298,6 +298,39 @@ void TICStorageTransportActor::CompletePBufferConnection(
     }
 }
 
+void TICStorageTransportActor::HandleGetPersistentBufferRegistrationTokenResult(
+    const NDDisk::TEvGetPersistentBufferRegistrationTokenResult::TPtr& ev,
+    const TActorContext& ctx)
+{
+    if (auto* r = ConnectRequests.FindPtr(ev->Cookie)) {
+        const auto& result = ev->Get()->Record;
+        if (result.GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK)
+        {
+            CompletePBufferConnection(
+                ev->Cookie,
+                result.GetStatus(),
+                result.GetErrorReason());
+            return;
+        }
+        (*r)->RegistrationToken = result.GetToken();
+        SendPBufferRegistration(ev->Cookie, ctx);
+    }
+}
+
+void TICStorageTransportActor::
+    HandleGetPersistentBufferRegistrationTokenUndelivery(
+        const NDDisk::TEvGetPersistentBufferRegistrationToken::TPtr& ev,
+        const TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    NKikimrBlobStorage::NDDisk::TEvConnectResult result;
+    SetUndeliveryError(result);
+    CompletePBufferConnection(
+        ev->Cookie,
+        result.GetStatus(),
+        result.GetErrorReason());
+}
+
 void TICStorageTransportActor::HandleRegisterPersistentBufferUndelivery(
     const NDDisk::TEvRegisterPersistentBuffer::TPtr& ev,
     const TActorContext& ctx)
@@ -322,17 +355,24 @@ void TICStorageTransportActor::SendPBufferRegistration(
             request.ConnectionResult.GetDDiskInstanceGuid();
         credentials.ConnectionToken.emplace(
             request.ConnectionResult.GetConnectionToken());
-        // The registration timestamp must be fixed on the first send and
-        // must not be refreshed on BUSY/OVERLOADED retries.
-        if (!request.RegistrationTimestamp) {
-            request.RegistrationTimestamp = ctx.Now();
+        if (request.RegistrationToken.empty()) {
+            SendWithUndeliveryTracking(
+                ctx,
+                request.ServiceId,
+                std::make_unique<
+                    NDDisk::TEvGetPersistentBufferRegistrationToken>(
+                    credentials),
+                requestId,
+                NWilson::TTraceId(),
+                ESubscribeOnSession::No);
+            return;
         }
         SendWithUndeliveryTracking(
             ctx,
             request.ServiceId,
             std::make_unique<NDDisk::TEvRegisterPersistentBuffer>(
                 credentials,
-                request.RegistrationTimestamp),
+                request.RegistrationToken),
             requestId,
             NWilson::TTraceId(),
             ESubscribeOnSession::No);
@@ -359,20 +399,8 @@ void TICStorageTransportActor::HandleRegisterPersistentBufferResult(
     if (result.GetStatus() == TStatus::BUSY ||
         result.GetStatus() == TStatus::OVERLOADED)
     {
-        // NOTE: the registration timestamp is fixed on the first send (see
-        // SendPBufferRegistration) and never refreshed here, while the DDisk
-        // side rejects any registration whose timestamp is older than
-        // RegistrationTimeoutMilliseconds (default 5000 ms) with OUTDATED. If
-        // BUSY/OVERLOADED persists for longer than that window (e.g. the DDisk
-        // actor is replaying a large PB log, a barrier update is in flight for
-        // a long time, or its pending queue is overfilled), every 100 ms retry
-        // below deterministically fails once the window expires and the connect
-        // completes with OUTDATED instead of succeeding. Refreshing the
-        // timestamp here is not a safe fix on its own: it was deliberately
-        // fixed to avoid reviving/overriding a stale registration's lifecycle.
-        // If a bounded retry with a fresh connect (new timestamp only after a
-        // full reconnect) is required, that needs to be driven by the caller
-        // re-issuing TEvConnect from scratch.
+        // Reuse the issued token. A retry must not extend the registration
+        // lifetime or revive a registration after its removal.
         ctx.Schedule(
             TDuration::MilliSeconds(100),
             new TEvents::TEvWakeup(ev->Cookie));
@@ -1640,6 +1668,12 @@ STFUNC(TICStorageTransportActor::StateWork)
         HFunc(NDDisk::TEvConnect, HandleConnectUndelivery);
         HFunc(NDDisk::TEvConnectResult, HandleConnectResult);
         HFunc(TEvents::TEvWakeup, HandleRegistrationRetry);
+        HFunc(
+            NDDisk::TEvGetPersistentBufferRegistrationTokenResult,
+            HandleGetPersistentBufferRegistrationTokenResult);
+        HFunc(
+            NDDisk::TEvGetPersistentBufferRegistrationToken,
+            HandleGetPersistentBufferRegistrationTokenUndelivery);
         HFunc(
             NDDisk::TEvRegisterPersistentBufferResult,
             HandleRegisterPersistentBufferResult);

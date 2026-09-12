@@ -623,6 +623,8 @@ namespace {
             }
         }
         STRICT_STFUNC_BODY(
+            hFunc(TEvGetPersistentBufferRegistrationToken, Handle)
+            hFunc(TEvPrivate::TEvExpirePersistentBufferRegistrationToken, Handle)
             hFunc(TEvRegisterPersistentBuffer, Handle)
             hFunc(TEvUnregisterPersistentBuffer, Handle)
             hFunc(TEvPrivate::TEvProcessPersistentBufferRemoval, Handle)
@@ -708,6 +710,9 @@ namespace {
             REJECT_QUERY(Write, &Counters.Interface.Write)
             REJECT_QUERY(Read, &Counters.Interface.Read)
             REJECT_QUERY(Sync, &Counters.Interface.Sync)
+            REJECT_QUERY(GetPersistentBufferRegistrationToken, nullptr)
+            REJECT_QUERY(RegisterPersistentBuffer, nullptr)
+            REJECT_QUERY(UnregisterPersistentBuffer, nullptr)
             REJECT_QUERY(DeleteTabletChunks, nullptr)
             REJECT_QUERY(WritePersistentBuffer, &Counters.Interface.WritePersistentBuffer)
             REJECT_QUERY(ReadPersistentBuffer, &Counters.Interface.ReadPersistentBuffer)
@@ -835,6 +840,9 @@ namespace {
             hFunc(TEvWrite, reject)
             hFunc(TEvRead, reject)
             hFunc(TEvSync, reject)
+            hFunc(TEvGetPersistentBufferRegistrationToken, reject)
+            hFunc(TEvRegisterPersistentBuffer, reject)
+            hFunc(TEvUnregisterPersistentBuffer, reject)
             hFunc(TEvDeleteTabletChunks, reject)
             hFunc(TEvWritePersistentBuffer, reject)
             hFunc(TEvReadPersistentBuffer, reject)
@@ -883,6 +891,7 @@ namespace {
             return;
         }
         Stopping = true;
+        PersistentBufferRegistrationTokens.clear();
         Become(&TThis::StateFuncStopping);
         YDB_LOG_NOTICE("DDisk stopping", {"DDiskId", DDiskId}, {"reason", reason});
         if (IsPersistentBufferActor) {

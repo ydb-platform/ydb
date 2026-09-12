@@ -58,6 +58,24 @@ struct TRegistrationFixture
         Runtime.Stop();
     }
 
+    void IssueToken(TStatus::E status = TStatus::OK)
+    {
+        auto request = Runtime.WaitForEdgeActorEvent<
+            NDDisk::TEvGetPersistentBufferRegistrationToken>(Peer, false);
+        UNIT_ASSERT(!Future.HasValue());
+        auto reply = std::make_unique<
+            NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(status);
+        reply->Record.SetToken("test-registration-token");
+        Runtime.Send(
+            new IEventHandle(
+                Transport,
+                Peer,
+                reply.release(),
+                0,
+                request->Cookie),
+            1);
+    }
+
     void Complete(TStatus::E registrationStatus, TStatus::E listStatus)
     {
         auto registration =
@@ -66,8 +84,8 @@ struct TRegistrationFixture
                 false);
         UNIT_ASSERT(!Future.HasValue());
         UNIT_ASSERT_VALUES_EQUAL(
-            registration->Get()->Record.GetTimestampMicroseconds(),
-            Runtime.GetClock().MicroSeconds());
+            registration->Get()->Record.GetToken(),
+            "test-registration-token");
         Runtime.Send(
             new IEventHandle(
                 Transport,
@@ -105,9 +123,18 @@ struct TRegistrationFixture
 
 Y_UNIT_TEST_SUITE(TICStorageTransportRegistrationTest)
 {
+    Y_UNIT_TEST(PropagatesTokenFailure)
+    {
+        TRegistrationFixture fixture;
+        fixture.IssueToken(TStatus::ERROR);
+        fixture.Runtime.Sim([&] { return !fixture.Future.HasValue(); });
+        UNIT_ASSERT(fixture.Future.GetValue().GetStatus() == TStatus::ERROR);
+    }
+
     Y_UNIT_TEST(WaitsForRegistrationAndProbe)
     {
         TRegistrationFixture fixture;
+        fixture.IssueToken();
         fixture.Complete(TStatus::OK, TStatus::OK);
         UNIT_ASSERT(fixture.Future.GetValue().GetStatus() == TStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -119,6 +146,7 @@ Y_UNIT_TEST_SUITE(TICStorageTransportRegistrationTest)
     {
         for (auto status: {TStatus::OK, TStatus::OUTDATED}) {
             TRegistrationFixture fixture;
+            fixture.IssueToken();
             fixture.Complete(TStatus::INCORRECT_REQUEST, status);
             UNIT_ASSERT(fixture.Future.GetValue().GetStatus() == status);
         }
@@ -127,6 +155,7 @@ Y_UNIT_TEST_SUITE(TICStorageTransportRegistrationTest)
     Y_UNIT_TEST(PropagatesRegistrationFailure)
     {
         TRegistrationFixture fixture;
+        fixture.IssueToken();
         fixture.Complete(TStatus::ERROR, TStatus::UNKNOWN);
         UNIT_ASSERT(fixture.Future.GetValue().GetStatus() == TStatus::ERROR);
     }
@@ -134,6 +163,7 @@ Y_UNIT_TEST_SUITE(TICStorageTransportRegistrationTest)
     Y_UNIT_TEST(RetriesBusyRegistrationWithoutReconnecting)
     {
         TRegistrationFixture fixture;
+        fixture.IssueToken();
         auto request =
             fixture.Runtime
                 .WaitForEdgeActorEvent<NDDisk::TEvRegisterPersistentBuffer>(

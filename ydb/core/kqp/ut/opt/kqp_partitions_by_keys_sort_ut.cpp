@@ -7,7 +7,13 @@ using namespace NYdb::NTable;
 
 namespace {
 
-void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitionsByKeys) {
+void CheckWindowFunctionAst(
+    const TString& selectBody,
+    bool useSortForPartitionsByKeys,
+    bool rejectSqueezeToList = false,
+    bool allowSqueezeToDict = false,
+    bool rejectNarrowSort = false)
+{
     TKikimrRunner kikimr;
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -30,10 +36,38 @@ void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitions
         UNIT_ASSERT_C(ast.Contains("WideSort"), ast);
         UNIT_ASSERT_C(ast.Contains("Chopper"), ast);
         UNIT_ASSERT_C(ast.Contains("HashShuffle"), ast);
-        UNIT_ASSERT_C(!ast.Contains("SqueezeToDict"), ast);
+        if (!allowSqueezeToDict) {
+            UNIT_ASSERT_C(!ast.Contains("SqueezeToDict"), ast);
+        }
+        if (rejectSqueezeToList) {
+            UNIT_ASSERT_C(!ast.Contains("SqueezeToList"), ast);
+        }
+        if (rejectNarrowSort) {
+            UNIT_ASSERT_C(!ast.Contains("(Sort "), ast);
+        }
     } else {
         UNIT_ASSERT_C(ast.Contains("SqueezeToDict"), ast);
     }
+}
+
+TString ExtractFirstCallableSexp(const TString& ast, TStringBuf name) {
+    const TString needle = TString("(") + name;
+    const auto pos = ast.find(needle);
+    if (pos == TString::npos) {
+        return {};
+    }
+    int depth = 0;
+    for (size_t i = pos; i < ast.size(); ++i) {
+        if (ast[i] == '(') {
+            ++depth;
+        } else if (ast[i] == ')') {
+            --depth;
+            if (depth == 0) {
+                return ast.substr(pos, i - pos + 1);
+            }
+        }
+    }
+    return {};
 }
 
 void CheckStandardWindowFunctionAst(const TString& projection, bool useSortForPartitionsByKeys) {
@@ -129,6 +163,107 @@ Y_UNIT_TEST_SUITE(KqpPartitionsByKeysSort) {
 
     Y_UNIT_TEST_TWIN(WindowFunctionCumeDistAst, UseSortForPartitionsByKeys) {
         CheckStandardWindowFunctionAst("CUME_DIST() OVER w AS dist", UseSortForPartitionsByKeys);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionFullFrameAfterRowNumbersAst, UseSortForPartitionsByKeys) {
+        CheckWindowFunctionAst(
+            "SELECT Key, Text, Data,\n"
+            "    ROW_NUMBER() OVER (PARTITION BY Text ORDER BY Key) AS rn1,\n"
+            "    ROW_NUMBER() OVER (PARTITION BY Data ORDER BY Key) AS rn2,\n"
+            "    SUM(Data) OVER (PARTITION BY Text) AS total\n"
+            "FROM `/Root/EightShard`;\n",
+            UseSortForPartitionsByKeys,
+            true,
+            true);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionComputedSortKeyWithFullFrameAst, UseSortForPartitionsByKeys) {
+        CheckWindowFunctionAst(
+            "SELECT Key, Text, Data,\n"
+            "    SUM(Data) OVER (PARTITION BY Text) AS total,\n"
+            "    ROW_NUMBER() OVER (PARTITION BY Text ORDER BY Abs(Data) DESC, Key) AS rn\n"
+            "FROM `/Root/EightShard`;\n",
+            UseSortForPartitionsByKeys,
+            true,
+            true);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionFullFrameDropsUnusedSortColumnsAst, UseSortForPartitionsByKeys) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        const TString query = TStringBuilder()
+            << "--!syntax_v1\n"
+            << "PRAGMA ydb.WindowFunctionsV2 = \""
+            << (UseSortForPartitionsByKeys ? "true" : "false") << "\";\n"
+            << "$input = SELECT\n"
+            << "    Key, Text, Data,\n"
+            << "    Unwrap(CAST(Key AS String) || Text || CAST(Data AS String)) AS unused_fat_col\n"
+            << "FROM `/Root/EightShard`;\n"
+            << "SELECT Key, Text, Data, unused_fat_col,\n"
+            << "    SUM(Data) OVER (PARTITION BY Text) AS total\n"
+            << "FROM $input;\n";
+
+        auto explain = session.ExplainDataQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+        const TString ast{explain.GetAst()};
+
+        Cerr << "=== Explain AST, UseSortForPartitionsByKeys="
+             << (UseSortForPartitionsByKeys ? "true" : "false")
+             << " ===\n" << ast << Endl;
+
+        UNIT_ASSERT_C(ast.Contains("unused_fat_col"), ast);
+        if (UseSortForPartitionsByKeys) {
+            UNIT_ASSERT_C(ast.Contains("WideSort"), ast);
+            UNIT_ASSERT_C(!ast.Contains("SqueezeToList"), ast);
+            const auto wideSort = ExtractFirstCallableSexp(ast, "WideSort");
+            UNIT_ASSERT_C(!wideSort.empty(), ast);
+            UNIT_ASSERT_C(!wideSort.Contains("unused_fat_col"), wideSort);
+        }
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 24);
+    }
+
+    Y_UNIT_TEST_TWIN(WindowFunctionRebuildPlanAst, UseSortForPartitionsByKeys) {
+        CheckWindowFunctionAst(
+            "$input = SELECT\n"
+            "    premium.Text AS grp_agr,\n"
+            "    intermediary.Text AS grp_type,\n"
+            "    premium.Key AS grp_id,\n"
+            "    intermediary.Data AS grp_perc,\n"
+            "    intermediary.Key % 3 AS perc_10000,\n"
+            "    CAST(premium.Data AS Int64) AS premium_cents,\n"
+            "    CAST(premium.Key AS Int64) AS wo_cents,\n"
+            "    premium.Text AS pr_nk\n"
+            "FROM `/Root/EightShard` AS premium\n"
+            "JOIN `/Root/EightShard` AS intermediary\n"
+            "ON intermediary.Key = premium.Key;\n"
+            "\n"
+            "SELECT\n"
+            "    input.*,\n"
+            "    SUM(COALESCE(premium_cents, 0)) OVER wgrp AS grp_prem,\n"
+            "    SUM(COALESCE(wo_cents, 0)) OVER wgrp AS grp_fact,\n"
+            "    SUM(IF(wo_cents != 0, wo_cents, 0)) OVER wgrp AS grp_wo_prem,\n"
+            "    SUM(IF(premium_cents != 0, premium_cents, 0)) OVER wgrp AS grp_fact_wo,\n"
+            "    ROW_NUMBER() OVER (\n"
+            "        PARTITION BY grp_agr, grp_type, grp_id, grp_perc\n"
+            "        ORDER BY ABS(COALESCE(premium_cents, 0)) DESC, pr_nk\n"
+            "    ) AS rn,\n"
+            "    ROW_NUMBER() OVER (\n"
+            "        PARTITION BY grp_agr, grp_type, grp_id, grp_perc\n"
+            "        ORDER BY ABS(COALESCE(wo_cents, 0)) DESC, pr_nk\n"
+            "    ) AS rn_off\n"
+            "FROM $input AS input\n"
+            "WINDOW wgrp AS (\n"
+            "    PARTITION BY grp_agr, grp_type, grp_id, grp_perc, perc_10000\n"
+            ");\n",
+            UseSortForPartitionsByKeys,
+            true,
+            true,
+            true);
     }
 }
 

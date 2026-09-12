@@ -13,6 +13,8 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt_stat.h>
 #include <yql/essentials/core/yql_cost_function.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 
 namespace NYql::NDq {
@@ -82,7 +84,13 @@ TMaybeNode<TCoMux> ConvertMuxArgumentsToFlows(TCoMux node, TExprContext& ctx) {
         .Done();
 }
 
-bool PrepareKeySelectorToStage(TCoLambda& keySelector, TCoLambda& stageLambda, TCoLambda& handlerLambda, TExprContext& ctx) {
+bool PrepareKeySelectorToStage(
+    TCoLambda& keySelector,
+    TCoLambda& stageLambda,
+    TCoLambda& handlerLambda,
+    TExprContext& ctx,
+    TStringBuf memberPrefix = "_yql_key_selector_")
+{
     if (keySelector.Body().Ref().IsComplete()) {
         // constant key
         return false;
@@ -109,7 +117,7 @@ bool PrepareKeySelectorToStage(TCoLambda& keySelector, TCoLambda& stageLambda, T
             }
         }
 
-        TString newMemberName = TString("_yql_key_selector_") + ToString(genCount++);
+        TString newMemberName = TString(memberPrefix) + ToString(genCount++);
 
         TCoLambda computeElement = Build<TCoLambda>(ctx, pos)
             .InitFrom(keySelector)
@@ -349,8 +357,154 @@ TExprNode::TPtr MaybeAssumeChopped(TPositionHandle pos, TExprNode::TPtr sorted,
         .Build();
 }
 
+TExprNode::TPtr BuildNarrowSort(
+    TPositionHandle pos,
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr sortDirections,
+    TExprNode::TPtr sortKeySelector,
+    TExprContext& ctx)
+{
+    return ctx.Builder(pos)
+        .Callable("Sort")
+            .Add(0, input)
+            .Add(1, std::move(sortDirections))
+            .Add(2, std::move(sortKeySelector))
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr BuildWideSortForStructFlow(
+    TPositionHandle pos,
+    const TExprNode::TPtr& input,
+    const TExprNode::TPtr& sortDirections,
+    const TExprNode::TPtr& sortKeySelector,
+    const TStructExprType& structType,
+    TExprContext& ctx)
+{
+    constexpr ui32 wideLimit = 101;
+    if (structType.GetSize() == 0 || structType.GetSize() > wideLimit) {
+        return {};
+    }
+
+    const TExprNode& selectorArg = sortKeySelector->Head().Head();
+    TExprNode::TListType keyExprs;
+    if (sortKeySelector->Tail().IsList()) {
+        keyExprs = sortKeySelector->Tail().ChildrenList();
+    } else {
+        keyExprs.push_back(sortKeySelector->TailPtr());
+    }
+    if (keyExprs.empty()) {
+        return {};
+    }
+
+    TVector<TString> columns;
+    columns.reserve(structType.GetSize() + keyExprs.size());
+    for (const auto& item : structType.GetItems()) {
+        columns.emplace_back(item->GetName());
+    }
+
+    TVector<TString> keyColumns;
+    keyColumns.reserve(keyExprs.size());
+    TVector<TString> extraColumns;
+    TExprNode::TPtr mapped = input;
+    if (!mapped->GetTypeAnn() || mapped->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
+        mapped = ctx.NewCallable(pos, "ToFlow", {mapped});
+    }
+
+    TExprNode::TPtr rowArg;
+    TExprNode::TPtr addBody;
+    for (const auto& keyExpr : keyExprs) {
+        if (keyExpr->IsCallable("Member") && &keyExpr->Head() == &selectorArg && keyExpr->Child(1)->IsAtom()) {
+            keyColumns.emplace_back(keyExpr->Child(1)->Content());
+            continue;
+        }
+
+        if (!rowArg) {
+            rowArg = ctx.NewArgument(pos, "row");
+            addBody = rowArg;
+        }
+        TString extraName = TStringBuilder() << "_yql_wide_sort_key_" << extraColumns.size();
+        extraColumns.push_back(extraName);
+        keyColumns.push_back(extraName);
+        columns.push_back(extraName);
+        addBody = ctx.Builder(pos)
+            .Callable("AddMember")
+                .Add(0, std::move(addBody))
+                .Atom(1, extraName)
+                .Add(2, ctx.ReplaceNode(TExprNode::TPtr(keyExpr), selectorArg, rowArg))
+            .Seal()
+            .Build();
+    }
+
+    if (columns.size() > wideLimit) {
+        return {};
+    }
+
+    if (rowArg) {
+        mapped = ctx.Builder(pos)
+            .Callable("OrderedMap")
+                .Add(0, std::move(mapped))
+                .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {std::move(rowArg)}), std::move(addBody)))
+            .Seal()
+            .Build();
+    }
+
+    THashMap<TString, ui32> columnIndex;
+    columnIndex.reserve(columns.size());
+    for (ui32 i = 0; i < columns.size(); ++i) {
+        columnIndex.emplace(columns[i], i);
+    }
+
+    TExprNode::TListType wideKeys;
+    wideKeys.reserve(keyColumns.size());
+    for (ui32 i = 0; i < keyColumns.size(); ++i) {
+        const auto it = columnIndex.find(keyColumns[i]);
+        if (it == columnIndex.end()) {
+            return {};
+        }
+        const auto dir = sortDirections->IsList()
+            ? sortDirections->ChildPtr(Min<ui32>(i, sortDirections->ChildrenSize() - 1))
+            : sortDirections;
+        wideKeys.push_back(ctx.Builder(pos)
+            .List()
+                .Atom(0, ToString(it->second))
+                .Add(1, dir)
+            .Seal()
+            .Build());
+    }
+
+    auto sorted = MakeNarrowMap(pos, columns, ctx.Builder(pos)
+        .Callable("WideSort")
+            .Add(0, MakeExpandMap(pos, columns, mapped, ctx))
+            .List(1).Add(std::move(wideKeys)).Seal()
+        .Seal()
+        .Build(), ctx);
+
+    for (const auto& extraName : extraColumns) {
+        sorted = ctx.Builder(pos)
+            .Callable("OrderedMap")
+                .Add(0, std::move(sorted))
+                .Lambda(1)
+                    .Param("row")
+                    .Callable("RemoveMember")
+                        .Arg(0, "row")
+                        .Atom(1, extraName)
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    return sorted;
+}
+
 template <typename TPartition>
-TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const TExprNode::TPtr& input, TExprContext& ctx) {
+TExprNode::TPtr BuildSortForPartitionsByKeys(
+    const TPartition& partition,
+    const TExprNode::TPtr& input,
+    TExprContext& ctx,
+    const TStructExprType* itemTypeOverride = nullptr)
+{
     const auto pos = partition.Pos();
     const auto& keyExtractor = partition.KeySelectorLambda();
     const bool haveSort = partition.SortKeySelectorLambda().template Maybe<TCoLambda>().IsValid();
@@ -368,17 +522,235 @@ TExprNode::TPtr BuildSortForPartitionsByKeys(const TPartition& partition, const 
         sortKeySelector = ctx.DeepCopyLambda(keyExtractor.Ref());
     }
 
-    auto sorted = ctx.Builder(pos)
-        .Callable("Sort")
-            .Add(0, input)
-            .Add(1, std::move(sortDirections))
-            .Add(2, std::move(sortKeySelector))
-        .Seal()
-        .Build();
+    TExprNode::TPtr sorted;
+    const TTypeAnnotationNode* itemType = itemTypeOverride;
+    if (!itemType) {
+        itemType = GetSeqItemType(partition.Input().Ref().GetTypeAnn());
+    }
+    if (itemType && itemType->GetKind() == ETypeAnnotationKind::Struct)
+    {
+        sorted = BuildWideSortForStructFlow(
+            pos, input, sortDirections, sortKeySelector, *itemType->template Cast<TStructExprType>(), ctx);
+    }
+    if (!sorted) {
+        sorted = BuildNarrowSort(pos, input, std::move(sortDirections), std::move(sortKeySelector), ctx);
+    }
 
     return MaybeAssumeChopped(pos, std::move(sorted),
         keyExtractor.Body().Ref(), keyExtractor.Args().Arg(0).Ref(),
         haveSort ? &partition.SortKeySelectorLambda().Ref() : nullptr, ctx);
+}
+
+void AddInputStructFields(const TTypeAnnotationNode* type, const TStructExprType& inputStruct, THashSet<TStringBuf>& used) {
+    type = RemoveOptionalType(type);
+    if (type && type->GetKind() == ETypeAnnotationKind::Type) {
+        type = type->Cast<TTypeExprType>()->GetType();
+        type = RemoveOptionalType(type);
+    }
+    if (!type || type->GetKind() != ETypeAnnotationKind::Struct) {
+        return;
+    }
+    for (const auto* item : type->Cast<TStructExprType>()->GetItems()) {
+        if (inputStruct.FindItem(item->GetName())) {
+            used.emplace(item->GetName());
+        }
+    }
+}
+
+void AddCastStructInputFields(const TExprNode& cast, const TStructExprType& inputStruct, THashSet<TStringBuf>& used) {
+    AddInputStructFields(cast.GetTypeAnn(), inputStruct, used);
+    if (cast.ChildrenSize() >= 2) {
+        AddInputStructFields(cast.Child(1)->GetTypeAnn(), inputStruct, used);
+    }
+}
+
+bool TryCollectSelectorMembers(
+    const TCoLambda& selector,
+    const TStructExprType& inputStruct,
+    const TParentsMap& parentsMap,
+    THashSet<TStringBuf>& used)
+{
+    TSet<TStringBuf> subset;
+    if (!HaveFieldsSubset(selector.Body().Ptr(), selector.Args().Arg(0).Ref(), subset, parentsMap)) {
+        return false;
+    }
+    for (const auto name : subset) {
+        if (inputStruct.FindItem(name)) {
+            used.emplace(name);
+        }
+    }
+    return true;
+}
+
+bool HandlerLooksLikeFullFrameAggregate(const TCoLambda& handler) {
+    bool hasCondense = false;
+    bool hasChopper = false;
+    VisitExpr(handler.Ptr(), [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable({"Condense1", "WideCondense1"})) {
+            hasCondense = true;
+        } else if (node->IsCallable("Chopper")) {
+            hasChopper = true;
+        }
+        return !hasChopper;
+    });
+    return hasCondense && !hasChopper;
+}
+
+bool TryCollectFullFrameAggregateMembers(
+    const TCoLambda& keySelector,
+    const TExprNode& sortKeySelector,
+    const TCoLambda& handler,
+    const TStructExprType& inputStruct,
+    const TParentsMap& parentsMap,
+    THashSet<TStringBuf>& used)
+{
+    if (!HandlerLooksLikeFullFrameAggregate(handler)) {
+        return false;
+    }
+    if (!TryCollectSelectorMembers(keySelector, inputStruct, parentsMap, used)) {
+        return false;
+    }
+    if (const auto sort = TMaybeNode<TCoLambda>(&sortKeySelector)) {
+        if (!TryCollectSelectorMembers(sort.Cast(), inputStruct, parentsMap, used)) {
+            return false;
+        }
+    }
+
+    VisitExpr(handler.Ptr(), [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable("Member") && node->Tail().IsAtom() && inputStruct.FindItem(node->Tail().Content())) {
+            used.emplace(node->Tail().Content());
+        } else if (node->IsCallable("CastStruct")) {
+            AddCastStructInputFields(*node, inputStruct, used);
+        } else if (node->IsCallable("WindowTraits") && node->ChildrenSize() >= 1) {
+            AddInputStructFields(node->Head().GetTypeAnn(), inputStruct, used);
+        }
+        return true;
+    });
+    return !used.empty();
+}
+
+template <typename TPartition>
+bool TryCollectNarrowPartitionFields(
+    const TPartition& partition,
+    const TParentsMap& parentsMap,
+    TVector<const TItemExprType*>& items)
+{
+    const auto* itemType = GetSeqItemType(partition.Input().Ref().GetTypeAnn());
+    if (!itemType || itemType->GetKind() != ETypeAnnotationKind::Struct) {
+        return false;
+    }
+    const auto& inputStruct = *itemType->template Cast<TStructExprType>();
+    if (inputStruct.GetSize() == 0) {
+        return false;
+    }
+
+    THashSet<TStringBuf> used;
+    if (!TryCollectFullFrameAggregateMembers(
+            partition.KeySelectorLambda(),
+            partition.SortKeySelectorLambda().Ref(),
+            partition.ListHandlerLambda(),
+            inputStruct,
+            parentsMap,
+            used)
+        || used.size() >= inputStruct.GetSize())
+    {
+        return false;
+    }
+
+    THashSet<TStringBuf> keys;
+    if (!TryCollectSelectorMembers(partition.KeySelectorLambda(), inputStruct, parentsMap, keys)) {
+        return false;
+    }
+    bool hasPayload = false;
+    for (const auto name : used) {
+        if (!keys.contains(name)) {
+            hasPayload = true;
+            break;
+        }
+    }
+    if (!hasPayload) {
+        return false;
+    }
+
+    items.clear();
+    items.reserve(used.size());
+    for (const auto* item : inputStruct.GetItems()) {
+        if (used.contains(item->GetName())) {
+            items.push_back(item);
+        }
+    }
+    return !items.empty() && items.size() < inputStruct.GetSize();
+}
+
+template <typename TPartition>
+const TStructExprType* TryNarrowPartitionSortType(
+    const TPartition& partition,
+    const TParentsMap& parentsMap,
+    TExprContext& ctx)
+{
+    TVector<const TItemExprType*> items;
+    if (!TryCollectNarrowPartitionFields(partition, parentsMap, items)) {
+        return nullptr;
+    }
+    return ctx.MakeType<TStructExprType>(items);
+}
+
+template <typename TPartition>
+TMaybeNode<TDqCnUnionAll> TryProjectPartitionConnection(
+    const TPartition& partition,
+    TDqCnUnionAll dqUnion,
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage,
+    TExprContext& ctx,
+    IOptimizationContext& optCtx)
+{
+    TVector<const TItemExprType*> items;
+    if (!TryCollectNarrowPartitionFields(partition, parentsMap, items)) {
+        return {};
+    }
+
+    TExprNode::TListType members;
+    members.reserve(items.size());
+    for (const auto* item : items) {
+        members.push_back(ctx.NewAtom(partition.Pos(), item->GetName()));
+    }
+    const auto membersNode = ctx.NewList(partition.Pos(), std::move(members));
+
+    if (IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
+        if (auto forked = DqBuildPushableStage(dqUnion, ctx)) {
+            dqUnion = TDqCnUnionAll(forked);
+        }
+        auto extractLambda = Build<TCoLambda>(ctx, partition.Pos())
+            .Args({"stream"})
+            .template Body<TCoExtractMembers>()
+                .Input("stream")
+                .Members(membersNode)
+                .Build()
+            .Done();
+        if (auto newConn = DqPushLambdaToStageUnionAll(dqUnion, extractLambda, {}, ctx, optCtx)) {
+            return TDqCnUnionAll(newConn.Cast().Ptr());
+        }
+    }
+
+    auto extractStage = Build<TDqStage>(ctx, partition.Pos())
+        .Inputs()
+            .Add(dqUnion)
+            .Build()
+        .Program()
+            .Args({"arg"})
+            .template Body<TCoExtractMembers>()
+                .Input("arg")
+                .Members(membersNode)
+                .Build()
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, partition.Pos()))
+        .Done();
+    return Build<TDqCnUnionAll>(ctx, partition.Pos())
+        .Output()
+            .Stage(extractStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
 }
 
 template <typename TPartition>
@@ -418,6 +790,7 @@ TExprBase DqBuildPartitionsStageStub(
     TVector<TCoArgument> inputArgs;
     TVector<TExprBase> inputConns;
     TExprNode::TPtr newPartitionsInput = nullptr;
+    const TStructExprType* projectedItemType = nullptr;
     if (isMuxInput) {
         auto maybeMux = ConvertMuxArgumentsToFlows(node.Cast<TPartition>().Input().template Cast<TCoMux>(), ctx);
         if (!maybeMux.IsValid()) {
@@ -490,6 +863,41 @@ TExprBase DqBuildPartitionsStageStub(
                 .Done();
         }
 
+        if constexpr(std::is_base_of<TCoPartitionsByKeys, TPartition>::value) {
+            if (useSortForPartitionsByKeys) {
+                if (auto sortKeyLambda = partition.SortKeySelectorLambda().template Maybe<TCoLambda>()) {
+                    auto preparedSortKeyLambda = sortKeyLambda.Cast();
+                    stageLambda = BuildIdentityLambda(node.Pos(), ctx);
+                    handlerLambda = partition.ListHandlerLambda();
+                    if (PrepareKeySelectorToStage(
+                        preparedSortKeyLambda,
+                        stageLambda,
+                        handlerLambda,
+                        ctx,
+                        "_yql_sort_key_selector_"))
+                    {
+                        auto newConn = DqPushLambdaToStageUnionAll(dqUnion, stageLambda, {}, ctx, optCtx);
+                        if (!newConn) {
+                            return node;
+                        }
+
+                        return Build<TPartition>(ctx, node.Pos())
+                            .InitFrom(partition)
+                            .Input(newConn.Cast())
+                            .SortKeySelectorLambda(preparedSortKeyLambda)
+                            .ListHandlerLambda(handlerLambda)
+                            .Done();
+                    }
+                }
+            }
+        }
+
+        // Drop unused columns before shuffle so WideSort does not spill the full row
+        if (auto projected = TryProjectPartitionConnection(partition, dqUnion, parentsMap, allowStageMultiUsage, ctx, optCtx)) {
+            dqUnion = projected.Cast();
+        }
+        projectedItemType = TryNarrowPartitionSortType(partition, parentsMap, ctx);
+
         TDqConnection newConnection = BuildConnection(node.Pos(), keyLambda, dqUnion, ctx, typeCtx, enableShuffleElimination);
         TCoArgument programArg = Build<TCoArgument>(ctx, node.Pos())
             .Name("arg")
@@ -505,7 +913,7 @@ TExprBase DqBuildPartitionsStageStub(
         if (useSortForPartitionsByKeys) {
             // Sort + AssumeChopped, then apply handler via ForwardList/ToFlow
             const auto pos = node.Pos();
-            auto sorted = BuildSortForPartitionsByKeys(partition, newPartitionsInput, ctx);
+            auto sorted = BuildSortForPartitionsByKeys(partition, newPartitionsInput, ctx, projectedItemType);
 
             auto handlerResult = ctx.ReplaceNode(handler.Body().Ptr(), handler.Args().Arg(0).Ref(),
                 ctx.NewCallable(pos, "ForwardList", {std::move(sorted)}));
@@ -3143,6 +3551,8 @@ TExprBase DqBuildJoin(
     if (joinAlgo == EJoinAlgoType::MapJoin && mapJoinCanBeApplied) {
         hashJoin = EHashJoinMode::Map;
     } else if (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin) {
+        hashJoin = EHashJoinMode::Grace;
+    } else if (joinAlgo == EJoinAlgoType::Undefined && mapJoinCanBeApplied && !streaming) {
         hashJoin = EHashJoinMode::Grace;
     }
 

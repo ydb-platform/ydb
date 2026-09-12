@@ -293,7 +293,7 @@ bool TRBOProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
         }
         */
         case EJoinAlgoType::MapJoin:
-            return joinKind != EJoinKind::OuterJoin && joinKind != EJoinKind::Exclusion && right->Stats.ByteSize < 1e6;
+            return IsMapJoinApplicable(joinKind, right->Stats);
         case EJoinAlgoType::GraceJoin:
             return true;
         case EJoinAlgoType::ReverseBlockJoin:

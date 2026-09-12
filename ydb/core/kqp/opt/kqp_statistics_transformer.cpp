@@ -237,10 +237,13 @@ void InferStatisticsForKqpTable(
     if (nRows == 0 && byteSize != 0) {
         nRows = byteSize / nAttrs / 10.0;
     }
-
-    if (nRows == 0 || byteSize == 0) {
+    if (byteSize == 0 && nRows != 0) {
+        byteSize = nRows * nAttrs * 10.0;
+    }
+    // Unknown size: keep a small row guess for join order, but do not enable MapJoin
+    if (nRows == 0 && byteSize == 0) {
         nRows = 1000.0;
-        byteSize = 100000.0;
+        byteSize = 2e6;
     }
 
 

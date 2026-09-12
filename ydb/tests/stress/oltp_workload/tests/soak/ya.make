@@ -2,15 +2,15 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
-    test_workload.py
+    test_feature_index_soak.py
 )
 
 REQUIREMENTS(ram:32 cpu:4)
+TAG(ya:external)
 
-SIZE(MEDIUM)
-
-DEPENDS(
-)
+SIZE(LARGE)
+TAG(ya:fat)
+TIMEOUT(3600)
 
 PEERDIR(
     ydb/tests/library
@@ -19,9 +19,4 @@ PEERDIR(
     ydb/tests/stress/common
 )
 
-
 END()
-
-RECURSE_FOR_TESTS(
-    soak
-)

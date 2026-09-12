@@ -504,7 +504,9 @@ public:
         TUnboxedValue* const* outputIter = output;
 
         for (const auto& node : Nodes.FinishResultNodes) {
-            *(*outputIter++) = node->GetValue(Ctx);
+            if (const auto out = *outputIter++) {
+                *out = node->GetValue(Ctx);
+            }
         }
 
         ForgetState(rawState);
@@ -1039,7 +1041,9 @@ protected:
         TUnboxedValue* const* outputIter = output;
 
         for (const auto& node : Nodes.FinishResultNodes) {
-            *(*outputIter++) = node->GetValue(Ctx);
+            if (const auto out = *outputIter++) {
+                *out = node->GetValue(Ctx);
+            }
         }
 
         DiscardComputedKey(keyBuf);
@@ -1929,6 +1933,7 @@ public:
 
     void OutputPendingSlicedBlock(NUdf::TUnboxedValue* const* output) {
         MKQL_ENSURE(HasPendingBlocks, "Expected a pending output block but there is none");
+        MKQL_ENSURE(output[OutputColumns], "Block height output must not be null");
 
         // Slice off the smallest chunk
         size_t sliceSize = BlockSizeRemaining;
@@ -1940,14 +1945,19 @@ public:
 
         for (ui32 i = 0; i < OutputColumns; ++i) {
             auto& arr = BlockArrays[i];
-            if (auto& array = arr.front(); ui64(array->length) == sliceSize) {
-                // Pass NYql::EDatumValidationMode::None since we just chop blocks without changing their content.
-                *output[i] = Ctx.HolderFactory.CreateArrowBlock(std::move(array), NYql::EDatumValidationMode::None);
+            if (auto& arrayData = arr.front(); ui64(arrayData->length) == sliceSize) {
+                if (const auto out = output[i]) {
+                    // Pass NYql::EDatumValidationMode::None since we just chop blocks without changing their content.
+                    *out = Ctx.HolderFactory.CreateArrowBlock(std::move(arrayData), NYql::EDatumValidationMode::None);
+                }
                 arr.pop_front();
             }
             else {
-                // Pass NYql::EDatumValidationMode::None since we just chop blocks without changing their content.
-                *output[i] = Ctx.HolderFactory.CreateArrowBlock(NYql::NUdf::Chop(arr.front(), sliceSize), NYql::EDatumValidationMode::None);
+                auto slice = NYql::NUdf::Chop(arr.front(), sliceSize);
+                if (const auto out = output[i]) {
+                    // Pass NYql::EDatumValidationMode::None since we just chop blocks without changing their content.
+                    *out = Ctx.HolderFactory.CreateArrowBlock(std::move(slice), NYql::EDatumValidationMode::None);
+                }
             }
         }
 

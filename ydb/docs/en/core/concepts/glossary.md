@@ -404,6 +404,9 @@ Below are explanations of several terms related to federated queries. How federa
 
 {{ ydb-short-name }} supports [different authentication methods](../security/authentication.md) and various token types.
 
+### User token {#user-token}
+
+**User token** is an internal result of [authentication token](#auth-token) verification. It contains the [SID](#access-sid) of the user and groups and is used for [authorization](../security/authorization.md). The user token is used and stored only on the [node](#node) that created it and is not passed to the client. For more information, see the article [{#T}](../security/caching-authentication-results.md).
 ### mTLS {#mtls}
 
 **mTLS** (mutual TLS) is a [TLS](https://en.wikipedia.org/wiki/Transport_Layer_Security) mode in which not only does the client verify the server certificate, but the server also requests and verifies the client's [client certificate](#client-certificate) when establishing a connection.

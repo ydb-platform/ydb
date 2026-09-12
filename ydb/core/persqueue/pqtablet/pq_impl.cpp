@@ -3459,6 +3459,22 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
                                             ctx);
                 return;
             }
+            // Kafka < 4.0 reuses producerId+epoch across consecutive transactions.
+            // Produce for the next txn may already be queued while the previous WriteId
+            // is gone. Completing this EndTxn as an empty commit would publish offsets
+            // without those writes (Kafka 3.4 returns CONCURRENT_TRANSACTIONS instead).
+            if (KafkaNextTransactionRequests.contains(writeId.GetKafkaProducerInstanceId())) {
+                YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "TxId Kafka commit while previous transaction is still completing",
+                    {"logPrefix", LogPrefix()},
+                    {"txId", event.GetTxId()},
+                    {"writeId", writeId});
+                SendProposeTransactionOverloaded(ActorIdFromProto(event.GetSourceActor()),
+                                                 event.GetTxId(),
+                                                 NKikimrPQ::TError::ERROR,
+                                                 "previous Kafka transaction is still completing",
+                                                 ctx);
+                return;
+            }
             YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "TxId Kafka commit with no writes for WriteId",
                 {"logPrefix", LogPrefix()},
                 {"txId", event.GetTxId()},
@@ -3466,6 +3482,20 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         } else {
             TTxWriteInfo& writeInfo = TxWrites.at(writeId);
             if (writeInfo.Deleting) {
+                // Kafka 3.4: EndTxn while the previous txn is still completing is retryable
+                // CONCURRENT_TRANSACTIONS, not a fatal abort and not an empty success.
+                if (writeId.IsKafkaApiTransaction()) {
+                    YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "TxId Kafka commit while previous transaction is still completing",
+                        {"logPrefix", LogPrefix()},
+                        {"txId", event.GetTxId()},
+                        {"writeId", writeId});
+                    SendProposeTransactionOverloaded(ActorIdFromProto(event.GetSourceActor()),
+                                                     event.GetTxId(),
+                                                     NKikimrPQ::TError::ERROR,
+                                                     "previous Kafka transaction is still completing",
+                                                     ctx);
+                    return;
+                }
                 YDB_LOG_WARN_COMP(NKikimrServices::PQ_TX, "TxId WriteId will be deleted",
                     {"logPrefix", LogPrefix()},
                     {"txId", event.GetTxId()},

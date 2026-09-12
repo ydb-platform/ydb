@@ -125,8 +125,11 @@ namespace NKafka {
             void HandleCommitResponse(const TActorContext& ctx);
             void ReplyPendingEndTxn(EKafkaErrors errorCode, const TString& errorMessage = {});
             // Kafka Java treats BROKER_NOT_AVAILABLE / INVALID_TXN_STATE as fatal on EndTxn.
-            // COORDINATOR_NOT_AVAILABLE is retryable; keep the actor so a retry still sees partitions/offsets.
-            void FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage);
+            // COORDINATOR_NOT_AVAILABLE and CONCURRENT_TRANSACTIONS are retryable; keep the actor
+            // so a retry still sees partitions/offsets. CONCURRENT_TRANSACTIONS matches Kafka 3.4
+            // when the previous transaction is still completing.
+            void FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage,
+                                     EKafkaErrors errorCode = EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
             TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
             TMaybe<TProducerState> ParseProducerState(const NKqp::TEvKqp::TEvQueryResponse& response);
             TMaybe<TString> GetErrorInProducerState(const TMaybe<TProducerState>& producerState);

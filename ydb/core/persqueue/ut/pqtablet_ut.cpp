@@ -311,6 +311,7 @@ protected:
 
     void SendProposeTransactionRequest(const TProposeTransactionParams& params);
     void WaitProposeTransactionResponse(const TProposeTransactionResponseMatcher& matcher = {});
+    NKikimrPQ::TEvProposeTransactionResult::EStatus WaitProposeTransactionStatus(ui64 txId);
 
     void SendPlanStep(const TPlanStepParams& params);
     void WaitPlanStepAck(const TPlanStepAckMatcher& matcher = {});
@@ -362,8 +363,10 @@ protected:
 
     // returns owner cookie for this supportive partition
     TString CreateSupportivePartitionForKafka(const NKafka::TProducerInstanceId& producerInstanceId, const ui32 partitionId = 0);
-    void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId = 0);
-    void CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds = {0});
+    void SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId = 0,
+                                  ui64 seqNo = 0, const TString& data = "123test123", ui64 cookie = 123, bool waitResponse = true);
+    void CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds = {0},
+                                ui64 planStep = 100);
 
     TString CreateSupportivePartitionForDeferredPublication(const TWriteId& writeId, ui32 partitionId = 0);
     void SendDeferredPublicationWriteRequest(const TWriteId& writeId, const TString& ownerCookie, ui32 partitionId = 0);
@@ -601,6 +604,16 @@ void TPQTabletFixture::WaitProposeTransactionResponse(const TProposeTransactionR
                             "expected: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(*matcher.Status) <<
                             ", received " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event->Record.GetStatus()));
     }
+}
+
+NKikimrPQ::TEvProposeTransactionResult::EStatus TPQTabletFixture::WaitProposeTransactionStatus(ui64 txId)
+{
+    auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>();
+    UNIT_ASSERT(event != nullptr);
+    UNIT_ASSERT(event->Record.HasTxId());
+    UNIT_ASSERT_VALUES_EQUAL(txId, event->Record.GetTxId());
+    UNIT_ASSERT(event->Record.HasStatus());
+    return event->Record.GetStatus();
 }
 
 void TPQTabletFixture::SendPlanStep(const TPlanStepParams& params)
@@ -1004,12 +1017,13 @@ TString TPQTabletFixture::CreateSupportivePartitionForKafka(const NKafka::TProdu
     return WaitGetOwnershipResponse({.Cookie=4, .Status=NMsgBusProxy::MSTATUS_OK});
 }
 
-void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId) {
+void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceId& producerInstanceId, const TString& ownerCookie, const ui32 partitionId,
+                                                const ui64 seqNo, const TString& data, const ui64 cookie, const bool waitResponse) {
     auto event = MakeHolder<TEvPersQueue::TEvRequest>();
     auto* request = event->Record.MutablePartitionRequest();
     request->SetTopic("/topic");
     request->SetPartition(partitionId);
-    request->SetCookie(123);
+    request->SetCookie(cookie);
     request->SetOwnerCookie(ownerCookie);
     request->SetMessageNo(0);
 
@@ -1024,8 +1038,7 @@ void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceI
 
     auto cmdWrite = request->AddCmdWrite();
     cmdWrite->SetSourceId(std::to_string(producerInstanceId.Id));
-    cmdWrite->SetSeqNo(0);
-    TString data = "123test123";
+    cmdWrite->SetSeqNo(seqNo);
     cmdWrite->SetData(data);
     cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
     cmdWrite->SetDisableDeduplication(true);
@@ -1035,14 +1048,18 @@ void TPQTabletFixture::SendKafkaTxnWriteRequest(const NKafka::TProducerInstanceI
 
     SendToPipe(Ctx->Edge, event.Release());
 
-    // wait for response
+    if (!waitResponse) {
+        return;
+    }
+
     auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
     UNIT_ASSERT(response != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL((int)NMsgBusProxy::MSTATUS_OK, (int)response->Record.GetStatus());
     UNIT_ASSERT(response->Record.GetPartitionResponse().HasCookie());
-    UNIT_ASSERT_VALUES_EQUAL(123, response->Record.GetPartitionResponse().GetCookie());
+    UNIT_ASSERT_VALUES_EQUAL(cookie, response->Record.GetPartitionResponse().GetCookie());
 }
 
-void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds) {
+void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId producerInstanceId, ui64 txId, const std::vector<ui32>& partitionIds, ui64 planStep) {
     TProposeTransactionParams params;
     params.TxId = txId;
     params.Senders = {Ctx->TabletId};
@@ -1054,11 +1071,11 @@ void TPQTabletFixture::CommitKafkaTransaction(NKafka::TProducerInstanceId produc
     SendProposeTransactionRequest(params);
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
-    SendPlanStep({.Step=100, .TxIds={txId}});
+    SendPlanStep({.Step=planStep, .TxIds={txId}});
     WaitProposeTransactionResponse({.TxId=txId,
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
-    WaitPlanStepAck({.Step=100, .TxIds={txId}}); // TEvPlanStepAck для координатора
-    WaitPlanStepAccepted({.Step=100});
+    WaitPlanStepAck({.Step=planStep, .TxIds={txId}}); // TEvPlanStepAck для координатора
+    WaitPlanStepAccepted({.Step=planStep});
 }
 
 TString TPQTabletFixture::CreateSupportivePartitionForDeferredPublication(const TWriteId& writeId, const ui32 partitionId) {
@@ -4078,6 +4095,113 @@ Y_UNIT_TEST_F(Kafka_Transaction_Incoming_Before_Previous_Is_In_DELETED_State_Sho
     // wait for a deferred response for last GetOwnership request we sent
     TString ownerCookie2 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
     UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
+}
+
+// Kafka Streams EOS undercount (test_kafka_streams.py, target-topic-0):
+// previous txn already returned COMPLETE, next produce is queued on the same
+// producerId+epoch WriteId, and EndTxn is proposed anyway (KQP). An empty COMPLETE
+// here commits source offsets without publishing that produce — the flaky gap of
+// one commit.interval batch. This holds the delete so the race is deterministic.
+Y_UNIT_TEST_F(Kafka_StreamsEos_EndTxnWhileNextProduceQueued_ShouldNotLoseRecords, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    const ui64 nextTxId = 67900;
+    const TString batch1 = "eos-batch-1";
+    const TString batch2 = "eos-batch-2";
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie, 0, 0, batch1, 123);
+    WaitForExactTxWritesCount(1);
+
+    TAutoPtr<TEvKeyValue::TEvResponse> keyValueResponse;
+    bool seenDeletePartitionsDoneEvent = false;
+    bool seenKeyValResponse = false;
+    auto observer = [&](TAutoPtr<IEventHandle>& input) {
+        if (!seenDeletePartitionsDoneEvent && input->CastAsLocal<TEvPQ::TEvDeletePartitionDone>()) {
+            seenDeletePartitionsDoneEvent = true;
+        } else if (seenDeletePartitionsDoneEvent && !seenKeyValResponse && input->CastAsLocal<TEvKeyValue::TEvResponse>()) {
+            keyValueResponse = input->Release<TEvKeyValue::TEvResponse>();
+            seenKeyValResponse = true;
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    Ctx->Runtime->SetObserverFunc(observer);
+
+    CommitKafkaTransaction(producerInstanceId, txId);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&seenKeyValResponse]() { return seenKeyValResponse; };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+
+    // Next Streams commit.interval: GetOwnership for the same producer epoch is queued
+    // because the previous WriteId is still being deleted.
+    SendGetOwnershipRequest({.Partition=0,
+                     .WriteId=TWriteId{producerInstanceId},
+                     .NeedSupportivePartition=true,
+                     .Owner=DEFAULT_OWNER,
+                     .Cookie=5});
+
+    SendProposeTransactionRequest({
+        .TxId=nextTxId,
+        .Senders={Ctx->TabletId},
+        .Receivers={Ctx->TabletId},
+        .TxOps={{.Partition=0, .Path="/topic", .KafkaTransaction=true}},
+        .WriteId=TWriteId(producerInstanceId),
+    });
+    const auto endTxnStatus = WaitProposeTransactionStatus(nextTxId);
+
+    Ctx->Runtime->SendToPipe(Pipe,
+                             Ctx->Edge,
+                             keyValueResponse.Release(),
+                             0, 0);
+
+    TString ownerCookie2 = WaitGetOwnershipResponse({.Cookie=5, .Status=NMsgBusProxy::MSTATUS_OK});
+    UNIT_ASSERT_VALUES_UNEQUAL(ownerCookie2, ownerCookie);
+
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie2, 0, 1, batch2, 200);
+
+    UNIT_ASSERT_EQUAL_C(
+        endTxnStatus,
+        NKikimrPQ::TEvProposeTransactionResult::OVERLOADED,
+        "EndTxn while next produce is queued must be OVERLOADED (Kafka 3.4 "
+        "CONCURRENT_TRANSACTIONS), not empty COMPLETE; got "
+            << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(endTxnStatus));
+    CommitKafkaTransaction(producerInstanceId, nextTxId, {0}, /*planStep=*/200);
+
+    const auto messages = ReadMainPartitionMessages();
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        messages.size(),
+        2u,
+        "queued next-txn produce was not published; EndTxn status="
+            << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(endTxnStatus));
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], batch1);
+    UNIT_ASSERT_VALUES_EQUAL(messages[1], batch2);
+}
+
+// Unknown WriteId with nothing in KafkaNextTransactionRequests is a true empty
+// Kafka 3.4 commit (Streams restore), not the EOS undercount hole.
+Y_UNIT_TEST_F(Kafka_StreamsEos_EmptyEndTxnAfterPreviousTxnFullyDeleted_ShouldSucceed, TPQTabletFixture) {
+    NKafka::TProducerInstanceId producerInstanceId = {1, 0};
+    const ui64 txId = 67890;
+    const ui64 nextTxId = 67900;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+    EnsurePipeExist();
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+    SendKafkaTxnWriteRequest(producerInstanceId, ownerCookie);
+    CommitKafkaTransaction(producerInstanceId, txId);
+    WaitForTheTransactionToBeDeleted(txId);
+
+    CommitKafkaTransaction(producerInstanceId, nextTxId);
+
+    const auto messages = ReadMainPartitionMessages();
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], "123test123");
 }
 
 Y_UNIT_TEST_F(DeferredPublication_Publish_Successful_Commit, TPQTabletFixture) {

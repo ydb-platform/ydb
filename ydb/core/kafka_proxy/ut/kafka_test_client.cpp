@@ -284,12 +284,12 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TTopicPartitio
     return Produce(topicPartition.TopicPath, msgs, transactionalId);
 }
 
-TMessagePtr<TListOffsetsResponseData> TKafkaTestClient::ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic) {
+TMessagePtr<TListOffsetsResponseData> TKafkaTestClient::ListOffsets(std::vector<std::pair<i32,i64>>& partitions, const TString& topic, i8 isolationLevel) {
     Cerr << ">>>>> TListOffsetsRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::LIST_OFFSETS, 4);
     TListOffsetsRequestData request;
-    request.IsolationLevel = 0;
+    request.IsolationLevel = isolationLevel;
     request.ReplicaId = 0;
     NKafka::TListOffsetsRequestData::TListOffsetsTopic newTopic{};
     newTopic.Name = topic;
@@ -588,15 +588,17 @@ TMessagePtr<TFindCoordinatorResponseData> TKafkaTestClient::FindCoordinator(cons
     return WriteAndRead<TFindCoordinatorResponseData>(header, request);
 }
 
-TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset) {
+TMessagePtr<TFetchResponseData> TKafkaTestClient::Fetch(const std::vector<std::pair<TString, std::vector<i32>>>& topics, i64 offset, i8 isolationLevel) {
     Cerr << ">>>>> TFetchRequestData\n";
 
-    TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 3);
+    // IsolationLevel is present only from Fetch v4 (proxy MaxVersion is 4).
+    TRequestHeaderData header = Header(NKafka::EApiKey::FETCH, 4);
 
     TFetchRequestData request;
     request.MaxWaitMs = 1000;
     request.MinBytes = 1;
     request.ReplicaId = -1;
+    request.IsolationLevel = isolationLevel;
 
     for (auto& topic: topics) {
         NKafka::TFetchRequestData::TFetchTopic topicReq {};

@@ -10,6 +10,8 @@ CSS = r"""
 .ct-zone-header{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem}
 .ct-zone-header>strong{min-width:0;overflow-wrap:anywhere}
 .ct-remove{color:#b42332;border:0;background:transparent;font-size:22px;min-width:32px;min-height:32px;padding:0}
+.ct-edit{display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;min-width:32px;min-height:32px;padding:0;color:var(--muted)}
+.ct-edit:hover{color:var(--accent)}
 .ct-node-row{position:relative;margin:7px 0}
 .ct-node-row>.ct-remove{position:absolute;top:4px;right:5px}
 .ct-node{display:block;width:100%;text-align:left;margin:0;padding:10px 12px;overflow-wrap:anywhere}
@@ -48,7 +50,7 @@ overflow:auto;border:1px solid var(--line);border-radius:6px;background:#fff;col
 .ct-scope-bar.ct-double{box-shadow:0 -5px 0 var(--accent);margin-top:12px}
 .ct-pop-footer{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
 .ct-mask{overflow-wrap:anywhere;margin-top:10px}.ct-small-action{padding:2px 6px}
-@media(pointer:coarse){.ct-cpu{min-height:44px}.ct-remove{min-width:44px;min-height:44px}.ct-node-title{padding-right:42px}}
+@media(pointer:coarse){.ct-cpu{min-height:44px}.ct-remove,.ct-edit{min-width:44px;min-height:44px}.ct-node-title{padding-right:42px}}
 """
 
 JS = r"""
@@ -274,7 +276,10 @@ async function renderClusterTemplates(id){
           (record.nodes.some(n=>n.role!=='cli'&&!n.location?.data_center)?zone('Unassigned',['',''],node=>!node.location?.data_center):'');
       }
       if(view==='tenants')layout=record.tenants.map((tenant,i)=>zone(tenant.path,tenant.path,node=>node.role!=='static'&&node.tenant===tenant.path,
-        '<button data-ct-tenant="'+i+'">Edit</button>'+ctRemoveButton('data-ct-delete-tenant="'+i+'"','Remove tenant '+tenant.path),
+        '<button class=ct-edit data-ct-tenant="'+i+'" title="Edit tenant" aria-label="Edit tenant '+esc(tenant.path)+'">'+
+        '<svg width=16 height=16 viewBox="0 0 24 24" fill=none stroke=currentColor stroke-width=1.8 aria-hidden=true focusable=false>'+
+        '<path d="M15 5l4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15z"/></svg></button>'+
+        ctRemoveButton('data-ct-delete-tenant="'+i+'"','Remove tenant '+tenant.path),
         tenant.storage_kind.toUpperCase()+' · '+tenant.storage_groups+' storage groups')).join('')+
         (record.nodes.some(n=>n.role==='dynamic'&&!n.tenant)?zone('Unassigned','',node=>node.role==='dynamic'&&!node.tenant):'')+
         '<section class=ct-host><strong>Shared cluster infrastructure</strong>'+cards(node=>node.role==='static')+'</section>';

@@ -15,9 +15,10 @@ private:
     YDB_READONLY_DEF(std::vector<TPortionInfo::TConstPtr>, Portions);
 
 public:
-    TDataSourceConstructor(const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const std::vector<TPortionInfo::TConstPtr>& portions)
+    TDataSourceConstructor(const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const std::vector<TPortionInfo::TConstPtr>& portions,
+        const ERequestSorting sorting)
         : TBase(tabletId, TSchemaAdapter::GetPKTrivialRow(pathId, tabletId, portions.front()->GetPortionId()),
-              TSchemaAdapter::GetPKTrivialRow(pathId, tabletId, portions.back()->GetPortionId()))
+              TSchemaAdapter::GetPKTrivialRow(pathId, tabletId, portions.back()->GetPortionId()), sorting)
         , PathId(pathId)
         , Portions(portions)
     {

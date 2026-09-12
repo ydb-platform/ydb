@@ -30,12 +30,11 @@ private:
     virtual std::shared_ptr<IScanCursor> DoBuildCursor(
         const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords) const override {
         if (AppDataVerified().ColumnShardConfig.GetEnableCursorV1()) {
-            return std::make_shared<TSimpleScanCursor>(
-                std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch()), source->GetSourceIdx(),
-                readyRecords, source->GetPortionIdOptional());
+            return std::make_shared<TSimpleScanCursor>(std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetFirstPK()),
+                source->GetSourceIdx(), readyRecords, source->GetPortionIdOptional());
         } else {
             return std::make_shared<TDeprecatedSimpleScanCursor>(
-                std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetStartPKRecordBatch()), source->GetDeprecatedPortionId(),
+                std::make_shared<NArrow::TSimpleRow>(source->GetAs<IDataSource>()->GetFirstPK()), source->GetDeprecatedPortionId(),
                 readyRecords);
         }
     }

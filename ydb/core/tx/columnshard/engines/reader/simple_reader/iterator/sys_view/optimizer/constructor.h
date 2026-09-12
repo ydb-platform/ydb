@@ -17,10 +17,10 @@ private:
     ui32 PortionsCount;
 
 public:
-    TDataSourceConstructor(
-        const NColumnShard::TSchemeShardLocalPathId& externalPathId, const ui64 tabletId, const std::shared_ptr<const TGranuleMeta>& granule)
+    TDataSourceConstructor(const NColumnShard::TSchemeShardLocalPathId& externalPathId, const ui64 tabletId,
+        const std::shared_ptr<const TGranuleMeta>& granule, const ERequestSorting sorting)
         : TBase(tabletId, TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId, 0),
-              TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId, Max<ui64>()))
+              TSchemaAdapter::GetPKSimpleRow(externalPathId, tabletId, Max<ui64>()), sorting)
         , Granule(std::move(granule))
         , ExternalPathId(externalPathId)
         , PortionsCount(Granule->GetPortions().size())

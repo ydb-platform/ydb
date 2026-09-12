@@ -13,6 +13,7 @@ private:
     YDB_READONLY(ui64, TabletId, 0);
     const NCommon::TReplaceKeyAdapter Start;
     const NCommon::TReplaceKeyAdapter Finish;
+    const std::shared_ptr<ISnapshotSchema> SourceSchema;
 
     virtual TConclusion<bool> DoStartFetchImpl(const NArrow::NSSA::TProcessorContext& /*context*/,
         const std::vector<std::shared_ptr<NReader::NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
@@ -28,6 +29,7 @@ private:
         return false;
     }
 
+    // sorted scans require every implementation to emit rows ordered by the sys view PK
     virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const = 0;
 
     virtual void DoAssembleColumns(const std::shared_ptr<NReader::NCommon::TColumnsSet>& columns, const bool /*sequential*/) override {
@@ -60,12 +62,21 @@ private:
         return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
 
-    virtual NArrow::TSimpleRow GetStartPKRecordBatch() const override {
-        if (GetContext()->GetReadMetadata()->IsDescSorted()) {
-            return Finish.GetValue();
-        } else {
-            return Start.GetValue();
-        }
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
+        return SourceSchema;
+    }
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const override {
+        return SourceSchema;
+    }
+
+    // Start/Finish already follow scan direction (the constructor swaps them for DESC)
+    virtual NArrow::TSimpleRow GetFirstPK() const override {
+        return Start.GetValue();
+    }
+
+    virtual NArrow::TSimpleRow GetLastPK() const override {
+        return Finish.GetValue();
     }
 
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(
@@ -167,8 +178,9 @@ public:
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
         : TBase(EType::SimpleSysInfo, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false, sourceIdx)
         , TabletId(tabletId)
-        , Start(context->GetReadMetadata()->IsDescSorted() ? std::move(finish) : std::move(start), context->GetReadMetadata()->IsDescSorted())
-        , Finish(context->GetReadMetadata()->IsDescSorted() ? std::move(start) : std::move(finish), context->GetReadMetadata()->IsDescSorted())
+        , Start(std::move(start), context->GetReadMetadata()->IsDescSorted())
+        , Finish(std::move(finish), context->GetReadMetadata()->IsDescSorted())
+        , SourceSchema(context->GetReadMetadata()->GetResultSchema())
     {
     }
 };

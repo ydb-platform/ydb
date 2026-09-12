@@ -18,7 +18,8 @@ void TIndexFetcherLogic::DoStart(TReadActionsCollection& nextRead, NReader::NCom
     TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
     auto source = context.GetSource();
     const auto& portionAccessor = source->GetPortionAccessor();
-    const auto& indexInfo = source->GetSourceSchema()->GetIndexInfo();
+    // YDBBUGS-770: a sys-view source reports the sys-view schema, which carries no indexes
+    const auto& indexInfo = (SourceSchema ? SourceSchema : source->GetSourceSchema())->GetIndexInfo();
     auto indexChunks = portionAccessor.GetIndexChunksPointers(IndexMeta->GetIndexId());
     for (auto&& i : indexChunks) {
         if (i->HasBlobData()) {

@@ -373,6 +373,7 @@ namespace NActors {
             NInterconnect::NRdma::ICq::TPtr Cq;
             NInterconnect::NRdma::TQueuePair::TPtr Qp;
             NInterconnect::NRdma::TMemRegionPtr HandShakeMemRegion;
+            TActorId SyncActor;
             void Clear() noexcept {
                 Cq.reset();
                 Qp.reset();
@@ -441,8 +442,15 @@ namespace NActors {
             } catch (...) {
                 Y_ABORT("unhandled exception");
             }
+            StopRdmaSyncActor();
             if (SubscribedForConnection) {
                 SendToProxy(MakeHolder<TEvSubscribeForConnection>(*HandshakeId, false));
+            }
+        }
+
+        void StopRdmaSyncActor() {
+            if (const TActorId actorId = std::exchange(Rdma.SyncActor, TActorId())) {
+                Send(actorId, new TEvents::TEvPoisonPill);
             }
         }
 
@@ -881,10 +889,11 @@ namespace NActors {
 
         TRdmaPreinitedSessionPtr RunRdmaIncomingHandshakePart() {
             MainChannel.ResetPollerToken();
-            Register(NInterconnect::NRdma::CreateRdmaIncommingSyncActor(
+            Rdma.SyncActor = Register(NInterconnect::NRdma::CreateRdmaIncommingSyncActor(
                 Common, SelfVirtualId, PeerVirtualId, PeerNodeId, MainChannel.GetSocketRef(), Rdma.Qp, Rdma.Cq));
 
             auto ev = WaitForSpecificEvent<TEvRdmaSyncResult>("TEvRdmaSyncResult");
+            Rdma.SyncActor = TActorId();
             MainChannel.RegisterInPoller();
 
             if (auto err = ev->Get()->Error()) {
@@ -926,10 +935,11 @@ namespace NActors {
                     // 2. perform barrier to make sure sessions are ready to handle receive
                     MainChannel.ResetPollerToken();
 
-                    Register(NInterconnect::NRdma::CreateRdmaOutgoingSyncActor(
+                    Rdma.SyncActor = Register(NInterconnect::NRdma::CreateRdmaOutgoingSyncActor(
                         Common, SelfVirtualId, PeerVirtualId, PeerNodeId, MainChannel.GetSocketRef(), Rdma.Qp, Rdma.Cq));
 
                     auto ev = WaitForSpecificEvent<TEvRdmaSyncResult>("TEvRdmaSyncResult");
+                    Rdma.SyncActor = TActorId();
                     MainChannel.RegisterInPoller();
                     if (auto err = ev->Get()->Error()) {
                         LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NLog::PRI_ERROR,

@@ -1712,7 +1712,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             TStringBuilder() << "Too busy to respond forever");
 
         // Check solomon cloud auth
-        constexpr char solomonSourceName[] = "solokeitsu";
+        constexpr char solomonSourceName[] = "solomon";
 
         const TSolomonLocation soLocation = {
             .ProjectId = "cloudId1",

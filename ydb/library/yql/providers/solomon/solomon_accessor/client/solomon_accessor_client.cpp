@@ -401,15 +401,12 @@ public:
             resultPromise.SetValue(ProcessGetLabelsResponse(std::move(result), selectors));
         };
 
-        auto error = DoHttpRequest(
+        DoHttpRequest(
             std::move(cb),
+            resultPromise,
             std::move(url),
             std::move(body)
         );
-
-        if (error) {
-            return NThreading::MakeFuture(TGetLabelsResponse(*error));
-        }
 
         return resultPromise.GetFuture();
     }
@@ -423,15 +420,12 @@ public:
             resultPromise.SetValue(ProcessListMetricsResponse(std::move(result)));
         };
 
-        auto error = DoHttpRequest(
+        DoHttpRequest(
             std::move(cb),
+            resultPromise,
             std::move(url),
             std::move(body)
         );
-
-        if (error) {
-            return NThreading::MakeFuture(TListMetricsResponse(*error));
-        }
 
         return resultPromise.GetFuture();
     }
@@ -445,15 +439,12 @@ public:
             resultPromise.SetValue(ProcessListMetricsLabelsResponse(std::move(result)));
         };
 
-        auto error = DoHttpRequest(
+        DoHttpRequest(
             std::move(cb),
+            resultPromise,
             std::move(url),
             std::move(body)
         );
-
-        if (error) {
-            return NThreading::MakeFuture(TListMetricsLabelsResponse(*error));
-        }
 
         return resultPromise.GetFuture();
     }
@@ -479,16 +470,12 @@ public:
                 resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), downsampledPointsCount));
             };
     
-            auto error = DoHttpRequest(
+            DoHttpRequest(
                 std::move(cb),
+                resultPromise,
                 std::move(url),
                 std::move(body)
             );
-
-            if (error) {
-                return NThreading::MakeFuture(TGetPointsCountResponse(*error));
-            }
-
         } else {
             TGetPointsCountResult result;
             result.PointsCount = downsampledPointsCount;
@@ -515,69 +502,72 @@ public:
     }
 
     NThreading::TFuture<TGetDataResponse> GetData(const TString& program, TInstant from, TInstant to) const override final {
-        const auto request = BuildGetDataRequest(program, from, to);
-
-        NYdbGrpc::TCallMeta callMeta;
-        TString authInfo;
-        if (auto error = GetAuthInfo(authInfo)) {
-            return NThreading::MakeFuture(TGetDataResponse(*error));
-        }
-        if (!authInfo.empty()) {
-            callMeta.Aux.emplace_back("authorization", authInfo);
-        }
-        callMeta.Aux.emplace_back("x-client-id", TString(NConstants::ClientId));
-
         auto resultPromise = NThreading::NewPromise<TGetDataResponse>();
 
-        auto context = GrpcClient->CreateContext();
-        if (!context) {
-            resultPromise.SetValue(TGetDataResponse("Client is being shutted down"));
-            return resultPromise.GetFuture();
-        }
-        
-        // hold context until reply
-        auto cb = [resultPromise, context](NYdbGrpc::TGrpcStatus&& status, ReadResponse&& result) mutable {
-            resultPromise.SetValue(ProcessGetDataResponse(std::move(status), std::move(result)));
-        };
+        GetAuthInfoAsync().Subscribe([
+            request=BuildGetDataRequest(program, from, to),
+            clusterType=Settings.GetClusterType(),
+            grpcClient=GrpcClient,
+            grpcConnection=GrpcConnection,
+            resultPromise
+        ](const NThreading::TFuture<std::string>& future) mutable {
+            try {
+                TString authInfo = GetAuthInfo(future.GetValue(), clusterType);
 
-        GrpcConnection->DoRequest<ReadRequest, ReadResponse>(
-            std::move(request),
-            std::move(cb),
-            &DataService::Stub::AsyncRead,
-            callMeta,
-            context.get()
-        );
+                NYdbGrpc::TCallMeta callMeta;
+                if (!authInfo.empty()) {
+                    callMeta.Aux.emplace_back("authorization", std::move(authInfo));
+                }
+                callMeta.Aux.emplace_back("x-client-id", TString(NConstants::ClientId));
+
+                auto context = grpcClient->CreateContext();
+                if (!context) {
+                    resultPromise.SetValue(TGetDataResponse("Client is being shutted down"));
+                    return;
+                }
+
+                // hold context until reply
+                auto cb = [resultPromise, context](NYdbGrpc::TGrpcStatus&& status, ReadResponse&& result) mutable {
+                    resultPromise.SetValue(ProcessGetDataResponse(std::move(status), std::move(result)));
+                };
+
+                grpcConnection->DoRequest<ReadRequest, ReadResponse>(
+                    std::move(request),
+                    std::move(cb),
+                    &DataService::Stub::AsyncRead,
+                    callMeta,
+                    context.get()
+                );
+            } catch(std::exception& ex) {
+                resultPromise.SetValue(TGetDataResponse(ex.what()));
+            }
+        });
 
         return resultPromise.GetFuture();
     }
 
 private:
-    std::optional<TString> GetAuthInfo(TString& auth) const {
-        auth.clear();
-
+    NThreading::TFuture<std::string> GetAuthInfoAsync() const {
         if (!Settings.GetUseSsl()) {
-            return {};
+            return NThreading::MakeFuture<std::string>("");
         }
+        return CredentialsProvider->GetAuthInfoAsync();
+    }
 
-        TString authToken;
-        try {
-            authToken = CredentialsProvider->GetAuthInfo();
-        } catch (const std::exception& ex) {
-            return TStringBuilder() << "Couldn't get auth info: " << ex.what();
+    static TString GetAuthInfo(const auto& authToken, auto clusterType) {
+        if (authToken.empty()) {
+            return "";
         }
-
-        switch (Settings.GetClusterType()) {
+        switch (clusterType) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
-                auth = TStringBuilder() << "OAuth " << authToken;
+                return TStringBuilder() << "OAuth " << authToken;
                 break;
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
-                auth = TStringBuilder() << "Bearer " << authToken;
+                return TStringBuilder() << "Bearer " << authToken;
                 break;
             default:
-                return TStringBuilder() << "Can't provide auth info for unknown cluster type: " << static_cast<int>(Settings.GetClusterType());
+                return "";
         }
-
-        return {};
     }
 
     TString GetHttpSolomonEndpoint() const {
@@ -588,42 +578,51 @@ private:
         return TStringBuilder() << Settings.GetGrpcEndpoint();
     }
 
-    template <typename TCallback>
-    std::optional<TString> DoHttpRequest(TCallback&& callback, TString&& url, TString&& body = "") const {
-        IHTTPGateway::THeaders headers;
-        TString authInfo;
-        if (auto error = GetAuthInfo(authInfo)) {
-            return *error;
-        }
-        if (!authInfo.empty()) {
-            headers.Fields.emplace_back(TStringBuilder() << "Authorization: " << authInfo);
-        }
-        headers.Fields.emplace_back(TStringBuilder() << "x-client-id: " << NConstants::ClientId);
-        headers.Fields.emplace_back("accept: application/json;charset=UTF-8");
-        headers.Fields.emplace_back("Content-Type: application/json;charset=UTF-8");
+    template <typename TCallback, typename TPromiseValue>
+    void DoHttpRequest(TCallback&& callback, NThreading::TPromise<TPromiseValue> promise, TString&& url, TString&& body = "") const {
+        GetAuthInfoAsync().Subscribe([
+           url=std::move(url),
+           callback=std::move(callback),
+           body=std::move(body),
+           httpGateway=HttpGateway,
+           httpRetryPolicy=HttpRetryPolicy,
+           clusterType=Settings.GetClusterType(),
+           promise=std::move(promise)
+        ](const NThreading::TFuture<std::string>& future) mutable {
+            try {
+                TString authInfo = GetAuthInfo(future.GetValue(), clusterType);
 
-        if (!body.empty()) {
-            HttpGateway->Upload(
-                std::move(url),
-                std::move(headers),
-                std::move(body),
-                std::move(callback),
-                false,
-                HttpRetryPolicy
-            );
-        } else {
-            HttpGateway->Download(
-                std::move(url),
-                std::move(headers),
-                0,
-                NConstants::MaxHttpGetResponseSize,
-                std::move(callback),
-                {},
-                HttpRetryPolicy
-            );
-        }
-
-        return {};
+                IHTTPGateway::THeaders headers;
+                if (!authInfo.empty()) {
+                    headers.Fields.emplace_back(TStringBuilder() << "Authorization: " << authInfo);
+                }
+                headers.Fields.emplace_back(TStringBuilder() << "x-client-id: " << NConstants::ClientId);
+                headers.Fields.emplace_back("accept: application/json;charset=UTF-8");
+                headers.Fields.emplace_back("Content-Type: application/json;charset=UTF-8");
+                if (!body.empty()) {
+                    httpGateway->Upload(
+                        std::move(url),
+                        std::move(headers),
+                        std::move(body),
+                        std::move(callback),
+                        false,
+                        httpRetryPolicy
+                    );
+                } else {
+                    httpGateway->Download(
+                        std::move(url),
+                        std::move(headers),
+                        0,
+                        NConstants::MaxHttpGetResponseSize,
+                        std::move(callback),
+                        {},
+                        httpRetryPolicy
+                    );
+                }
+            } catch(std::exception& ex) {
+                promise.SetValue(TPromiseValue(TStringBuilder() << "Couldn't get auth info: " << ex.what()));
+            }
+        });
     }
 
     std::tuple<TString, TString> BuildGetLabelsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
@@ -821,7 +820,7 @@ private:
     IHTTPGateway::TPtr HttpGateway;
     IHTTPGateway::TRetryPolicy::TPtr HttpRetryPolicy;
     NYdbGrpc::TGRpcClientConfig GrpcConfig;
-    std::unique_ptr<NYdbGrpc::TServiceConnection<DataService>> GrpcConnection;
+    std::shared_ptr<NYdbGrpc::TServiceConnection<DataService>> GrpcConnection;
     std::shared_ptr<NYdbGrpc::TGRpcClientLow> GrpcClient;
 };
 

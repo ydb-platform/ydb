@@ -17,11 +17,13 @@ enum ESimpleDetailedCounters {
     COUNTER_DATASHARD_ROW_COUNT = 0 [(CounterOpts) = {
         Name: "table.datashard.row_count",
         SourceCounters: {Name: "SUM(DbUniqueRowsTotal)", Category: SCC_EXECUTOR},
+        LeaderOnly: true,
     }];
 
     COUNTER_DATASHARD_SIZE_BYTES = 1 [(CounterOpts) = {
         Name: "table.datashard.size_bytes",
         SourceCounters: {Name: "SUM(DbUniqueDataBytes)", Category: SCC_EXECUTOR},
+        LeaderOnly: true,
     }];
 }
 
@@ -32,11 +34,13 @@ enum ECumulativeDetailedCounters {
     COUNTER_DATASHARD_WRITE_ROWS = 0 [(CounterOpts) = {
         Name: "table.datashard.write.rows",
         SourceCounters: {Name: "DataShard/EngineHostRowUpdates", Category: SCC_TABLET},
+        LeaderOnly: true,
     }];
 
     COUNTER_DATASHARD_WRITE_BYTES = 1 [(CounterOpts) = {
         Name: "table.datashard.write.bytes",
         SourceCounters: {Name: "DataShard/EngineHostRowUpdateBytes", Category: SCC_TABLET},
+        LeaderOnly: true,
     }];
 
     COUNTER_DATASHARD_READ_ROWS = 2 [(CounterOpts) = {
@@ -54,21 +58,25 @@ enum ECumulativeDetailedCounters {
     COUNTER_DATASHARD_ERASE_ROWS = 4 [(CounterOpts) = {
         Name: "table.datashard.erase.rows",
         SourceCounters: {Name: "DataShard/EngineHostRowErases", Category: SCC_TABLET},
+        LeaderOnly: true,
     }];
 
     COUNTER_DATASHARD_ERASE_BYTES = 5 [(CounterOpts) = {
         Name: "table.datashard.erase.bytes",
         SourceCounters: {Name: "DataShard/EngineHostRowEraseBytes", Category: SCC_TABLET},
+        LeaderOnly: true,
     }];
 
     COUNTER_DATASHARD_BULK_UPSERT_ROWS = 6 [(CounterOpts) = {
         Name: "table.datashard.bulk_upsert.rows",
         SourceCounters: {Name: "DataShard/UploadRows", Category: SCC_TABLET},
+        LeaderOnly: true,
     }];
 
     COUNTER_DATASHARD_BULK_UPSERT_BYTES = 7 [(CounterOpts) = {
         Name: "table.datashard.bulk_upsert.bytes",
         SourceCounters: {Name: "DataShard/UploadRowsBytes", Category: SCC_TABLET},
+        LeaderOnly: true,
     }];
 
     COUNTER_DATASHARD_SCAN_ROWS = 8 [(CounterOpts) = {

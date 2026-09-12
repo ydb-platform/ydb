@@ -212,8 +212,8 @@ Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "method"), "SendMessage");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "topic"), "topic");
         UNIT_ASSERT(HasLabel(labels, "database_id"));
-        UNIT_ASSERT(HasLabel(labels, "cloud_id"));
-        UNIT_ASSERT(HasLabel(labels, "folder_id"));
+        UNIT_ASSERT(!HasLabel(labels, "cloud_id"));
+        UNIT_ASSERT(!HasLabel(labels, "folder_id"));
     }
 
     Y_UNIT_TEST(IncludesDatabaseIdLabel) {
@@ -225,6 +225,19 @@ Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database_id"), "database4");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database"), "/Root/db");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "name"), "api.sqs.request.count");
+        UNIT_ASSERT(!HasLabel(labels, "cloud_id"));
+        UNIT_ASSERT(!HasLabel(labels, "folder_id"));
+    }
+
+    Y_UNIT_TEST(OmitsCloudIdAndFolderIdWhenEmpty) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
+
+        const auto labels = CollectMetricsLabelsWithIdentity(runtime, "database4", "", "");
+
+        UNIT_ASSERT(!HasLabel(labels, "cloud_id"));
+        UNIT_ASSERT(!HasLabel(labels, "folder_id"));
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database_id"), "database4");
     }
 
     Y_UNIT_TEST(IncludesCloudIdAndFolderIdLabels) {
@@ -238,6 +251,19 @@ Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "folder_id"), "folder4");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database"), "/Root/db");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "name"), "api.sqs.request.count");
+    }
+
+    Y_UNIT_TEST(IncludesBothCloudAndFolderWhenOnlyOneIsSet) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
+
+        const auto cloudOnly = CollectMetricsLabelsWithIdentity(runtime, "database4", "cloud4", "");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(cloudOnly, "cloud_id"), "cloud4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(cloudOnly, "folder_id"), "");
+
+        const auto folderOnly = CollectMetricsLabelsWithIdentity(runtime, "database4", "", "folder4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(folderOnly, "cloud_id"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(folderOnly, "folder_id"), "folder4");
     }
 
     Y_UNIT_TEST(ConvertOldConsumerNameForSharedConsumerInFederation) {

@@ -2326,6 +2326,12 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0
         }];
+        optional uint64 EnableMemoryProfiling = 6 [(ControlOptions) = {
+            Description: "Enable memory allocation tags for KeyValue requests",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
     }
 
     message TKQPSessionControls {

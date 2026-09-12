@@ -334,6 +334,7 @@ protected:
 
     ui64 TotalTrashSize = 0;
 
+    TControlWrapper EnableMemoryProfiling{0, 0, 1};
     TControlWrapper ReadRequestsInFlightLimit_Base;
     TMemorizableControlWrapper ReadRequestsInFlightLimit;
     TControlWrapper UsePayload_Base;
@@ -349,6 +350,11 @@ protected:
 
 public:
     TKeyValueState();
+
+    const TControlWrapper& GetEnableMemoryProfiling() const {
+        return EnableMemoryProfiling;
+    }
+
     void SetTabletInfo(TTabletStorageInfo* tabletInfo);
     void Clear();
     void SetupTabletCounters(TAutoPtr<TTabletCountersBase> counters);

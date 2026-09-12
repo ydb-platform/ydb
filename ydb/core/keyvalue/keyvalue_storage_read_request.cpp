@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -43,6 +44,7 @@ class TKeyValueStorageReadRequest : public TActorBootstrapped<TKeyValueStorageRe
     TString ErrorDescription;
 
     TStackVec<TReadItemInfo, 1> ReadItems;
+    TControlWrapper EnableMemoryProfiling;
     TKeyValueState *State;
     std::weak_ptr<TKeyValueStateLifetimeToken> StateLifetimeToken;
 
@@ -69,6 +71,7 @@ public:
     }
 
     void Bootstrap() {
+        TMemoryProfileGuard mpg("TKeyValueStorageReadRequest::Bootstrap", EnableMemoryProfiling);
         if (IntermediateResult->Deadline != TInstant::Max()) {
             TInstant now = TActivationContext::Now();
             if (IntermediateResult->Deadline <= now) {
@@ -545,6 +548,7 @@ public:
     }
 
     STATEFN(StateWait) {
+        TMemoryProfileGuard mpg("TKeyValueStorageReadRequest::StateWait", EnableMemoryProfiling);
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
         default:
@@ -559,6 +563,7 @@ public:
         : IntermediateResult(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
         , TabletGeneration(tabletGeneration)
+        , EnableMemoryProfiling(state->GetEnableMemoryProfiling())
         , State(state)
         , StateLifetimeToken(std::move(stateLifetimeToken))
         , Span(TWilsonTablet::TabletBasic, IntermediateResult->Span.GetTraceId(), "KeyValue.StorageReadRequest")

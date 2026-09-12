@@ -93,7 +93,26 @@ protected:
 
     std::vector<TKeyName> GetContext(const std::vector<TKeyName>& key);
 
-    void AppendValue(const TString& value);
+    template <typename T>
+    void AppendValue(const T& value) {
+        if constexpr (std::is_same_v<T, TString>) {
+            JsonWriter.WriteString(value);
+        } else if constexpr (std::is_same_v<T, ui8> || std::is_same_v<T, ui16> || std::is_same_v<T, ui32> || std::is_same_v<T, ui64>) {
+            JsonWriter.WriteULongLong(value);
+        } else if constexpr (std::is_same_v<T, i8> || std::is_same_v<T, i16> || std::is_same_v<T, i32> || std::is_same_v<T, i64>) {
+            JsonWriter.WriteLongLong(value);
+        } else if constexpr (std::is_same_v<T, bool>) {
+            JsonWriter.WriteBool(value);
+        } else if constexpr (std::is_same_v<T, float>) {
+            JsonWriter.WriteFloat(value);
+        } else if constexpr (std::is_same_v<T, double>) {
+            JsonWriter.WriteDouble(value);
+        } else if constexpr (std::is_same_v<T, long double> ) {
+            JsonWriter.WriteDouble(static_cast<double>(value));
+        } else {
+            static_assert(false, "Attempt to serialize unsupported type");
+        }
+    }
 };
 
 class TJsonWriter {
@@ -111,7 +130,9 @@ protected:
     struct TValueWriter : public TBaseValueWriter<TJsonWriter> {
         TValueWriter(TJsonWriter& writer);
 
-        void operator()(const TString& value) const;
+        void operator()(const auto& value) const {
+            Writer.KeyValueWriter->AppendKeyValue(*KeyName, value);
+        }
     };
 
     TBaseMessageWriter<TJsonWriter> MessageWriter{*this};

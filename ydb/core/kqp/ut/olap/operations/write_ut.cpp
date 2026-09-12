@@ -1,3 +1,5 @@
+#include "write_log_to_olap.h"
+
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/olap/helpers/get_value.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
@@ -5,7 +7,12 @@
 #include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
+#include <ydb/core/kqp/ut/olap/operations/write_log_to_olap.h>
+
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
@@ -14,6 +21,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {
+
+using namespace NKikimr::NKqp::NLogToDB;
 
 Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(WriteFails) {
@@ -677,6 +686,379 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUint32(), 200);
         }
     }
+}
+
+class TBaseTestExampleLogWriter : public TBaseDBLogWriter {
+public:
+    unsigned WrittenCount{0};
+
+    TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TBaseDBLogColumn>> columns)
+        : TBaseDBLogWriter(runner, component, TBaseDBLogWriter::TDatabaseSettings {
+            .TableName = "olapTable",
+            .StoreName = "olapStore"
+        }, columns)
+    {}
+
+    void Write(const NActors::NStructuredLog::TLogMessage& message) override
+    {
+        TBaseDBLogWriter::Write(message);
+        WrittenCount++;
+    }
+
+    using TQueryResult = std::vector<std::vector<std::string>>;
+    TQueryResult FetchStreamData(NYdb::NTable::TScanQueryPartIterator& it) {
+        TQueryResult rows;
+
+        for (;;) {
+            auto streamPart = it.ReadNext().GetValueSync();
+            if (!streamPart.IsSuccess()) {
+                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                break;
+            }
+
+            if (streamPart.HasResultSet()) {
+                auto resultSet = streamPart.ExtractResultSet();
+                auto columns = resultSet.GetColumnsMeta();
+                NYdb::TResultSetParser parser(resultSet);
+                while (parser.TryNextRow()) {
+                    std::vector<std::string> row;
+                    row.reserve(columns.size());
+                    for (ui32 i = 0; i < columns.size(); ++i) {
+                        const TString value = NYdb::FormatValueYson(parser.GetValue(i));
+                        row.emplace_back(value.data(), value.size());
+                    }
+                    rows.push_back(std::move(row));
+                }
+            }
+        }
+
+        return rows;
+    }
+
+    TString GetFetchQuery() {
+        TStringBuilder selectList;
+        TStringBuilder orderBy;
+        for (const auto& column : Columns) {
+            if (!selectList.empty()) {
+                selectList << ", ";
+            }
+            selectList << "`" << column->Name << "`";
+            if (column->Settings.IsPK) {
+                if (!orderBy.empty()) {
+                    orderBy << ", ";
+                }
+                orderBy << "`" << column->Name << "`";
+            }
+        }
+
+        TStringBuilder query;
+        query << "--!syntax_v1\n";
+        query << "\n";
+        query << "SELECT " << selectList << " FROM `/Root/" << Settings.StoreName << "/" << Settings.TableName << "`";
+        if (!orderBy.empty()) {
+            query << " ORDER BY " << orderBy;
+        }
+        query << "\n";
+        return query;
+    }
+
+    void Dump(const TQueryResult& result) {
+        for (const auto& row : result) {
+            for (size_t i = 0; i < row.size(); ++i) {
+                if (i) {
+                    Cerr << "; ";
+                }
+                Cerr << row[i];
+            }
+            Cerr << Endl;
+        }
+    }
+
+    void CheckWrittenLogContent(const TQueryResult& requiredResult) {
+        // Wait log completely written
+        for(unsigned i=0; WrittenCount < requiredResult.size() && i < 100; i++) {
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT(WrittenCount == requiredResult.size());
+
+        // Build query
+        auto query = GetFetchQuery();
+
+        // Execute query
+        auto client = GetRunner().GetTableClient();
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        // Fetch result
+        auto result = FetchStreamData(it);
+
+        // Dump
+        Cerr << " " << Endl;
+        Cerr << "QUERY:" << Endl << query << Endl;
+
+        Cerr << " " << Endl;
+        Cerr << "RESULT:" << Endl;
+        Dump(result);
+
+        Cerr << " " << Endl;
+        Cerr << "REQUIRED:" << Endl;
+        Dump(requiredResult);
+
+        UNIT_ASSERT_EQUAL(result, requiredResult);
+    }
+};
+
+class TEmitTestLog : public NActors::TActorBootstrapped<TEmitTestLog> {
+public:
+    using TLogWriteFunc = const std::function<void()>;
+
+    TLogWriteFunc WriteFunc;
+    TEmitTestLog(const TLogWriteFunc& writeFunc) : WriteFunc(writeFunc) {}
+
+    void Bootstrap() {
+        if (WriteFunc) {
+            WriteFunc();
+        }
+        PassAway();
+    }
+};
+
+struct TEnvironment {
+
+    TKikimrRunner Kikimr;
+    std::shared_ptr<TBaseTestExampleLogWriter> Writer;
+
+    TEnvironment(const TVector<std::shared_ptr<TBaseDBLogColumn>>& columns): Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
+        Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, NActorsServices::TEST, columns);
+        Writer->CreateStore();
+        Writer->CreateTable();
+        Writer->TableExists = true;
+    }
+
+    void WriteLog(const TEmitTestLog::TLogWriteFunc& writeFunc) {
+        auto* runtime = Kikimr.GetTestServer().GetRuntime();
+        for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
+            runtime->GetLogSettings(i)->Sinks.push_back(Writer);
+        }
+        runtime->SetLogPriority(Writer->Component, NActors::NLog::PRI_TRACE);
+
+        runtime->Register(new TEmitTestLog(writeFunc));
+    }
+};
+
+Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
+    Y_UNIT_TEST(WriteSimple) {
+
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1),
+            std::make_shared<TDBLogMessagePrioColumn>(),
+            std::make_shared<TDBLogMessageTextColumn>(),
+            std::make_shared<TDBLogMessageLocationColumn>(),
+            std::make_shared<TDBLogMessageStringValueColumn>("string_value", std::vector<TKeyName>{"value"}),
+            std::make_shared<TDBLogColumnUint64>("ui64_value", std::vector<TKeyName>{"value"})
+        });
+        env.WriteLog([](){
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Test info message",
+                {"value", 3});
+            YDB_LOG_NOTICE_COMP(NActorsServices::TEST, "Test notice message",
+                {"value", 7});
+            YDB_LOG_WARN_COMP(NActorsServices::TEST, "Test warn message",
+                {"value", "ace"});
+            YDB_LOG_ERROR_COMP(NActorsServices::TEST, "Test error message");
+        });
+
+        // Write data
+        /* NActors::NStructuredLog::TLogMessage message;
+        message.Component = NActorsServices::TEST;
+
+        message.Time = TInstant::MicroSeconds(0);
+        message.Priority = NLog::EPrio::Alert;
+        message.TextMessage = "Alert message";
+        message.FileName = "filename1";
+        message.LineNumber = 1001;
+        writer->Write(message); */
+
+        // Fetch and check data
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "[6u]", R"(["Test info message"])",   R"(["write_ut.cpp:856"])", R"(["3"])",  "[3u]"},
+            {"2u", "[5u]", R"(["Test notice message"])", R"(["write_ut.cpp:858"])", R"(["7"])",   "[7u]"},
+            {"3u", "[4u]", R"(["Test warn message"])",   R"(["write_ut.cpp:860"])", R"(["ace"])", "#"},
+            {"4u", "[3u]", R"(["Test error message"])",  R"(["write_ut.cpp:861"])", R"(#)",       "#"}});
+    }
+
+    Y_UNIT_TEST(WriteVaryValues) {
+
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1),
+            std::make_shared<TDBLogColumnUint64>("value1", std::vector<TKeyName>{"value1"}),
+            std::make_shared<TDBLogColumnUint64>("value2", std::vector<TKeyName>{"value2"}),
+            std::make_shared<TDBLogColumnUint64>("value3", std::vector<TKeyName>{"value3"})});
+        env.WriteLog([](){
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 0 values");
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 1 values",
+                {"value1", 1});
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 2 values",
+                {"value1", 1},
+                {"value2", 2});
+            YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write 3 values",
+                {"value1", 1},
+                {"value2", 2},
+                {"value3", 3});
+        });
+
+        // Fetch and check data
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "#", "#", "#"},
+            {"2u", "[1u]", "#", "#"},
+            {"3u", "[1u]", "[2u]", "#"},
+            {"4u", "[1u]", "[2u]", "[3u]"}});
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpOlapWriteLogSchema) {
+
+    Y_UNIT_TEST(CreateTable) {
+        // @todo
+    }
+
+    Y_UNIT_TEST(ExistsTable) {
+        // @todo
+    }
+
+    Y_UNIT_TEST(AddColumn) {
+        // @todo
+    }
+
+    Y_UNIT_TEST(RemoveColumn) {
+        // @todo
+    }
+}
+
+template <typename T>
+void AppendYdbValue(NYdb::TValueBuilder& builder, const T& value) {
+    if constexpr (std::is_same_v<T, bool>) {
+        builder.Bool(value);
+    } else if constexpr (std::is_same_v<T, i8>) {
+        builder.Int8(value);
+    } else if constexpr (std::is_same_v<T, ui8>) {
+        builder.Uint8(value);
+    } else if constexpr (std::is_same_v<T, i16>) {
+        builder.Int16(value);
+    } else if constexpr (std::is_same_v<T, ui16>) {
+        builder.Uint16(value);
+    } else if constexpr (std::is_same_v<T, i32>) {
+        builder.Int32(value);
+    } else if constexpr (std::is_same_v<T, ui32>) {
+        builder.Uint32(value);
+    } else if constexpr (std::is_same_v<T, i64>) {
+        builder.Int64(value);
+    } else if constexpr (std::is_same_v<T, ui64>) {
+        builder.Uint64(value);
+    } else if constexpr (std::is_same_v<T, float>) {
+        builder.Float(value);
+    } else if constexpr (std::is_same_v<T, double>) {
+        builder.Double(value);
+    } else if constexpr (std::is_same_v<T, TString>) {
+        builder.Utf8(std::string(value.data(), value.size()));
+    } else if constexpr (std::is_same_v<T, TInstant>) {
+        builder.Timestamp(value);
+    } else {
+        static_assert(!sizeof(T*), "Unsupported type for ValueToYson");
+    }
+}
+
+std::string FormatYdbValueToYson(const NYdb::TValue& value) {
+    const TString yson = NYdb::FormatValueYson(value);
+    return std::string(yson.data(), yson.size());
+}
+
+template <typename T>
+std::string ValueToYsonString(const T& value) {
+    NYdb::TValueBuilder builder;
+    AppendYdbValue(builder, value);
+    return FormatYdbValueToYson(builder.Build());
+}
+
+template <typename TValueType, typename TInvalidValueType>
+void TestType(const TValueType& value, const std::optional<TInvalidValueType>& invalidValue = {}) {
+    TEnvironment env({
+        std::make_shared<TDBLogMessageIdColumn>(1),
+        std::make_shared<TDBLogMessageStringValueColumn>("string_value", std::vector<TKeyName>{"value"}),
+        std::make_shared<TDBLogMessageTypedValueColumn<TValueType>>("ui64_value", std::vector<TKeyName>{"value"})
+    });
+    env.WriteLog([&](){
+        YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write valid value",
+            {"value", value});
+        YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write invalid value",
+            {"value", invalidValue});
+        YDB_LOG_INFO_COMP(NActorsServices::TEST, "Write no value");
+    });
+
+    TStringBuilder stringValue;
+    stringValue << TString(R"([")") << TTypesMapping::ToString(value) << TString(R"("])");
+
+    TStringBuilder stringYsonValue;
+    stringYsonValue << TString(R"([)") << ValueToYsonString(value) << TString(R"(])");
+
+    TStringBuilder stringInvalidValue;
+    if (invalidValue.has_value()) {
+        stringInvalidValue << TString(R"([")") << TTypesMapping::ToString(invalidValue.value()) << TString(R"("])");
+    } else {
+        stringInvalidValue << "#";
+    }
+
+    env.Writer->CheckWrittenLogContent(
+        {{"1u", stringValue, stringYsonValue},
+         {"2u", stringInvalidValue, "#"},
+         {"3u", "#", "#"}});
+}
+
+Y_UNIT_TEST_SUITE(KqpOlapWriteLogTypes) {
+
+    Y_UNIT_TEST(Int8) {
+        TestType<i8, TString>(i8(-8), TString("s"));
+    }
+
+    Y_UNIT_TEST(UInt8) {
+        TestType<ui8, TString>(ui8(8), TString("s"));
+    }
+
+    Y_UNIT_TEST(Int16) {
+        TestType<i16, TString>(i16(-16), TString("s"));
+    }
+
+    Y_UNIT_TEST(UInt16) {
+        TestType<ui16, TString>(ui16(16), TString("s"));
+    }
+
+    Y_UNIT_TEST(Int32) {
+        TestType<i32, TString>(-32, TString("s"));
+    }
+
+    Y_UNIT_TEST(UInt32) {
+        TestType<ui32, TString>(32, TString("s"));
+    }
+
+    Y_UNIT_TEST(Int64) {
+        TestType<i64, TString>(i64(-64), TString("s"));
+    }
+
+    Y_UNIT_TEST(UInt64) {
+        TestType<ui64, TString>(1, TString("s"));
+    }
+
+    Y_UNIT_TEST(Float) {
+        TestType<float, TString>(1.5f, TString("s"));
+    }
+
+    Y_UNIT_TEST(Double) {
+        TestType<double, TString>(2.5, TString("s"));
+    }
+
+    Y_UNIT_TEST(String) {
+        TestType<TString, ui64>(TString("s"), 1);
+    }
+
 }
 
 }   // namespace NKikimr::NKqp

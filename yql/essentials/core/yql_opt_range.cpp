@@ -14,6 +14,7 @@ struct TRangeBoundary {
 
 TExprNode::TPtr BuildBoundaryNode(TPositionHandle pos, const TRangeBoundary& boundary, TExprContext& ctx) {
     YQL_ENSURE(boundary.Value);
+    // clang-format off
     return ctx.Builder(pos)
         .List()
             .Add(0, boundary.Value)
@@ -22,6 +23,7 @@ TExprNode::TPtr BuildBoundaryNode(TPositionHandle pos, const TRangeBoundary& bou
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr BuildRange(TPositionHandle pos, const TRangeBoundary& left, const TRangeBoundary& right,
@@ -57,10 +59,12 @@ TExprNode::TPtr MakeNaNBoundary(TPositionHandle pos, const TTypeAnnotationNode* 
     auto baseType = RemoveAllOptionals(keyType);
     auto keySlot = baseType->Cast<TDataExprType>()->GetSlot();
 
+    // clang-format off
     return ctx.Builder(pos)
         .Callable("SafeCast")
             .Callable(0, NUdf::GetDataTypeInfo(keySlot).Name)
             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                // clang-format on
                 parent.Atom(0, "nan", TNodeFlags::Default);
                 if (keySlot == EDataSlot::Decimal) {
                     auto decimalType = baseType->Cast<TDataExprParamsType>();
@@ -68,11 +72,13 @@ TExprNode::TPtr MakeNaNBoundary(TPositionHandle pos, const TTypeAnnotationNode* 
                     parent.Atom(2, decimalType->GetParamTwo());
                 }
                 return parent;
+            // clang-format off
             })
             .Seal()
             .Add(1, ExpandType(pos, *ctx.MakeType<TOptionalExprType>(keyType), ctx))
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr TzRound(const TExprNode::TPtr& key, const TTypeAnnotationNode* keyType, bool down, TExprContext& ctx) {
@@ -89,6 +95,7 @@ TExprNode::TPtr TzRound(const TExprNode::TPtr& key, const TTypeAnnotationNode* k
         }
     }
     YQL_ENSURE(!timeZones[targetTzId].empty());
+    // clang-format off
     return ctx.Builder(pos)
         .Callable("Coalesce")
             .Callable(0, "AddTimezone")
@@ -105,6 +112,7 @@ TExprNode::TPtr TzRound(const TExprNode::TPtr& key, const TTypeAnnotationNode* k
             .Add(1, key)
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TRangeBoundary BuildPlusInf(TPositionHandle pos, const TTypeAnnotationNode* keyType, TExprContext& ctx, bool excludeNaN = true) {
@@ -128,6 +136,7 @@ TRangeBoundary BuildMinusInf(TPositionHandle pos, const TTypeAnnotationNode* key
     auto optBaseKeyTypeNode = ExpandType(pos, *ctx.MakeType<TOptionalExprType>(RemoveAllOptionals(keyType)), ctx);
     TExprNode::TPtr largestNull;
     if (keyType->GetKind() == ETypeAnnotationKind::Pg) {
+        // clang-format off
         largestNull = ctx.Builder(pos)
             .Callable("Just")
                 .Callable(0, "Nothing")
@@ -135,7 +144,9 @@ TRangeBoundary BuildMinusInf(TPositionHandle pos, const TTypeAnnotationNode* key
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     } else {
+        // clang-format off
         largestNull = ctx.Builder(pos)
             .Callable("SafeCast")
                 .Callable(0, "Nothing")
@@ -144,6 +155,7 @@ TRangeBoundary BuildMinusInf(TPositionHandle pos, const TTypeAnnotationNode* key
                 .Add(1, optKeyTypeNode)
             .Seal()
             .Build();
+        // clang-format on
     }
 
     TRangeBoundary result;
@@ -197,13 +209,16 @@ TExprNode::TPtr MakeWidePointRangeLambda(TPositionHandle pos, const TTypeAnnotat
     }
 
     TExprNode::TPtr key = ctx.NewArgument(pos, "optKey");
+    // clang-format off
     TExprNode::TPtr castedKey = ctx.Builder(pos)
         .Callable("SafeCast")
             .Add(0, key)
             .Add(1, ExpandType(pos, *ctx.MakeType<TOptionalExprType>(baseKeyType), ctx))
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     TExprNode::TPtr leftBoundary = ctx.Builder(pos)
         .List()
             .Add(0, key)
@@ -212,7 +227,9 @@ TExprNode::TPtr MakeWidePointRangeLambda(TPositionHandle pos, const TTypeAnnotat
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     auto body = ctx.Builder(pos)
         .Callable("AsRange")
             .List(0)
@@ -244,6 +261,7 @@ TExprNode::TPtr MakeWidePointRangeLambda(TPositionHandle pos, const TTypeAnnotat
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
     return ctx.NewLambda(pos, ctx.NewArguments(pos, { key }), std::move(body));
 }
 
@@ -307,6 +325,7 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
         left.Included = (op == ">=");
     } else if (op == "Exists" || op == "NotExists" ) {
         YQL_ENSURE(keyType->GetKind() == ETypeAnnotationKind::Optional || keyType->GetKind() == ETypeAnnotationKind::Pg);
+        // clang-format off
         auto nullKey = ctx.Builder(pos)
             .Callable("Just")
                 .Callable(0, "Nothing")
@@ -314,6 +333,7 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         if (op == "NotExists") {
             left.Value = right.Value = nullKey;
@@ -388,13 +408,16 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
 
     TExprNode::TPtr result;
     if (op == "Exists" || op == "NotExists") {
+        // clang-format off
         result = ctx.Builder(pos)
             .Apply(BuildNormalRangeLambdaRaw(pos, keyType, op, ctx))
                 .With(0, value) // value is not actually used for Exists/NotExists
             .Seal()
             .Build();
+        // clang-format on
     } else if (op == "==" || op == "!=" || op == "===") {
         YQL_ENSURE(rangeForNullCast);
+        // clang-format off
         result = ctx.Builder(pos)
             .Callable("If")
                 .Callable(0, "HasNull")
@@ -406,6 +429,7 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     } else if (op == "StartsWith" || op == "NotStartsWith") {
         YQL_ENSURE(rangeForNullCast);
 
@@ -416,6 +440,7 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
         TExprNode::TPtr rangeForIfNotNext;
 
         if (op == "StartsWith") {
+            // clang-format off
             const auto geBoundary = ctx.Builder(pos)
                 .Callable("RangeFor")
                     .Atom(0, ">=", TNodeFlags::Default)
@@ -423,7 +448,9 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
                     .Add(2, node->TailPtr())
                 .Seal()
                 .Build();
+            // clang-format on
 
+            // clang-format off
             rangeForIfNext = ctx.Builder(pos)
                 // [boundary, next)
                 .Callable("RangeIntersect")
@@ -435,10 +462,12 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
 
             // [boundary, +inf)
             rangeForIfNotNext = geBoundary;
         } else {
+            // clang-format off
             const auto lessBoundary = ctx.Builder(pos)
                 .Callable("RangeFor")
                     .Atom(0, "<", TNodeFlags::Default)
@@ -446,7 +475,9 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
                     .Add(2, node->TailPtr())
                 .Seal()
                 .Build();
+            // clang-format on
 
+            // clang-format off
             rangeForIfNext = ctx.Builder(pos)
                 // (-inf, boundary) U [next, +inf)
                 .Callable("RangeUnion")
@@ -458,11 +489,13 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
 
             // (-inf, boundary)
             rangeForIfNotNext = lessBoundary;
         }
 
+        // clang-format off
         auto body = ctx.Builder(pos)
             .Callable("If")
                 .Callable(0, "HasNull")
@@ -472,8 +505,10 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
                 .Add(2, rangeForIfNext)
             .Seal()
             .Build();
+        // clang-format on
 
         YQL_ENSURE(rangeForNullCast);
+        // clang-format off
         result = ctx.Builder(pos)
             .Callable("IfPresent")
                 .Callable(0, "StrictCast")
@@ -484,8 +519,10 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
                 .Add(2, rangeForNullCast)
             .Seal()
             .Build();
+        // clang-format on
     } else {
         YQL_ENSURE(op == "<" || op == ">" || op == "<=" || op == ">=");
+        // clang-format off
         result = ctx.Builder(pos)
             .Callable("If")
                 .Callable(0, "HasNull")
@@ -524,6 +561,7 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 
     return result;
@@ -533,6 +571,7 @@ TExprNode::TPtr ExpandRangeToPg(const TExprNode::TPtr& node, TExprContext& ctx) 
     YQL_ENSURE(node->IsCallable("RangeToPg"));
     const size_t numComponents = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->
         Cast<TTupleExprType>()->GetItems().front()->Cast<TTupleExprType>()->GetSize();
+    // clang-format off
     return ctx.Builder(node->Pos())
         .Callable("OrderedMap")
             .Add(0, node->HeadPtr())
@@ -544,14 +583,18 @@ TExprNode::TPtr ExpandRangeToPg(const TExprNode::TPtr& node, TExprContext& ctx) 
                         .Param("boundary")
                         .List()
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                // clang-format on
                                 for (size_t i = 0; i < numComponents; ++i) {
                                     if (i % 2 == 0) {
+                                        // clang-format off
                                         parent
                                             .Callable(i, "Nth")
                                                 .Arg(0, "boundary")
                                                 .Atom(1, i)
                                             .Seal();
+                                        // clang-format on
                                     } else {
+                                        // clang-format off
                                         parent
                                             .Callable(i, "Map")
                                                 .Callable(0, "Nth")
@@ -565,9 +608,11 @@ TExprNode::TPtr ExpandRangeToPg(const TExprNode::TPtr& node, TExprContext& ctx) 
                                                     .Seal()
                                                 .Seal()
                                             .Seal();
+                                        // clang-format on
                                     }
                                 }
                                 return parent;
+                            // clang-format off
                             })
                         .Seal()
                     .Seal()
@@ -575,5 +620,6 @@ TExprNode::TPtr ExpandRangeToPg(const TExprNode::TPtr& node, TExprContext& ctx) 
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 }

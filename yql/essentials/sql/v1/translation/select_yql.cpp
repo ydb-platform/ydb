@@ -4,6 +4,7 @@
 
 #include <util/generic/overloaded.h>
 #include <util/generic/scope.h>
+#include <util/stream/output.h>
 
 namespace NSQLTranslationV1 {
 
@@ -1313,11 +1314,8 @@ TNodePtr BuildYqlStatement(TNodePtr node) {
 
 } // namespace NSQLTranslationV1
 
-template <>
-void Out<NSQLTranslationV1::EYqlSetOp>(
-    IOutputStream& out,
-    NSQLTranslationV1::EYqlSetOp value)
-{
+// TODO(YQL-21521): use GENERATE_ENUM_SERIALIZATION
+Y_DECLARE_OUT_SPEC(, NSQLTranslationV1::EYqlSetOp, out, value) {
     switch (value) {
         case NSQLTranslationV1::EYqlSetOp::Push:
             out << "push";

@@ -7,7 +7,7 @@ PRAGMA AnsiImplicitCrossJoin;
 SELECT
     c_last_name,
     c_first_name,
-    Substring(s_city, 1, 30),
+    Substring(CAST(s_city AS String), 1, 30),
     ss_ticket_number,
     amt,
     profit
@@ -47,6 +47,6 @@ WHERE
 ORDER BY
     c_last_name,
     c_first_name,
-    Substring(s_city, 1, 30),
+    Substring(CAST(s_city AS String), 1, 30),
     profit
 LIMIT 100;

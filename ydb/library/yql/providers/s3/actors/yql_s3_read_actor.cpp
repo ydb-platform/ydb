@@ -54,6 +54,7 @@
 #include <util/system/fstat.h>
 
 #include <algorithm>
+#include <atomic>
 #include <queue>
 
 #undef THROW
@@ -1581,7 +1582,7 @@ public:
 
         // Arrow blocks are currently not limited by mem quoter, so we use rough buffer quotation
         // After exact mem control implementation, this allocation should be deleted
-        if (!MemoryQuotaManager->AllocateQuota(ReadActorFactoryCfg.DataInflight)) {
+        if (!MemoryQuotaManager->AllocateQuota(ReadActorFactoryCfg.DataInflight, /* isOptional = */ false)) {
             TIssues issues;
             issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << ReadActorFactoryCfg.DataInflight << "b read buffer"});
             OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::OVERLOADED);

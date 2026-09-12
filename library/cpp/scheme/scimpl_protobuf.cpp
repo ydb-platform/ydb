@@ -154,7 +154,7 @@ namespace NSc {
     }
 
     void TValue::ValueToField(const TValue& value, Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name();
+        const TStringBuf name = field->name();
         if (value.IsNull()) {
             if (field->is_required() && !field->has_default_value()) {
                 ythrow TSchemeException() << "has no value for required field " << name;
@@ -203,7 +203,7 @@ namespace NSc {
     }
 
     void TValue::ToField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name();
+        const TStringBuf name = field->name();
         const TValue& value = Get(name);
         ValueToField(value, msg, field, opts);
     }
@@ -233,7 +233,7 @@ namespace NSc {
     }
 
     void TValue::ToRepeatedField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name();
+        const TStringBuf name = field->name();
 
         const TValue& fieldValue = Get(name);
         if (fieldValue.IsNull()) {
@@ -291,7 +291,7 @@ namespace NSc {
     }
 
     void TValue::ToMapField(Message& msg, const FieldDescriptor* field, const TProtoOpts& opts) const {
-        const TString& name = field->name();
+        const TStringBuf name = field->name();
 
         const TValue& fieldValue = Get(name);
         if (fieldValue.IsNull()) {

@@ -43,6 +43,41 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::CORE_TYPE_ANN));
     }
 
+    Y_UNIT_TEST(WindowFunctionsV2Override) {
+        for (const bool serviceDefault : {false, true}) {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(serviceDefault);
+
+            TKikimrRunner kikimr(appConfig);
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+            const auto usesV2Plan = [&](TMaybe<bool> pragmaValue) {
+                TStringBuilder query;
+                query << "--!syntax_v1\n";
+                if (pragmaValue) {
+                    query << "PRAGMA ydb.WindowFunctionsV2 = \""
+                          << (*pragmaValue ? "true" : "false") << "\";\n";
+                }
+                query << "SELECT Key, Text,\n"
+                      << "    row_number() OVER (PARTITION BY Text ORDER BY Key) AS rn\n"
+                      << "FROM `/Root/EightShard`\n"
+                      << "WHERE Text = 'Value2';\n";
+
+                auto result = session.ExplainDataQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                const TString ast{result.GetAst()};
+                const bool hasV2 = ast.Contains("WideSort") && ast.Contains("Chopper");
+                const bool hasV1 = ast.Contains("SqueezeToDict");
+                UNIT_ASSERT_C(hasV2 != hasV1, ast);
+                return hasV2;
+            };
+
+            UNIT_ASSERT_VALUES_EQUAL(usesV2Plan(Nothing()), serviceDefault);
+            UNIT_ASSERT_VALUES_EQUAL(usesV2Plan(!serviceDefault), !serviceDefault);
+            UNIT_ASSERT_VALUES_EQUAL(usesV2Plan(Nothing()), serviceDefault);
+        }
+    }
+
     Y_UNIT_TEST(NewRboPhysicalStagePeepholeOverride) {
         for (const bool serviceDefault : {false, true}) {
             NKikimrConfig::TAppConfig appConfig;

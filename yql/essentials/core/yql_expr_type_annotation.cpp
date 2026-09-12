@@ -71,6 +71,7 @@ TDecimalParts GetDecimalPartsForCommonType(const TDataExprType& type) {
 }
 
 TExprNode::TPtr RebuildDict(const TExprNode::TPtr& node, const TExprNode::TPtr& lambda, TExprContext& ctx) {
+    // clang-format off
     auto ret = ctx.Builder(node->Pos())
         .Callable("ToDict")
             .Callable(0, "OrderedMap")
@@ -99,12 +100,14 @@ TExprNode::TPtr RebuildDict(const TExprNode::TPtr& node, const TExprNode::TPtr& 
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
     return ret;
 }
 
 TExprNode::TPtr RebuildVariant(const TExprNode::TPtr& node,
     const THashMap<TString, TExprNode::TPtr>& transforms, TExprContext& ctx) {
+    // clang-format off
     auto ret = ctx.Builder(node->Pos())
         .Callable("Visit")
             .Add(0, node)
@@ -118,6 +121,7 @@ TExprNode::TPtr RebuildVariant(const TExprNode::TPtr& node,
             })
         .Seal()
         .Build();
+    // clang-format on
 
     return ret;
 }
@@ -303,6 +307,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         const auto to = expectedType.Cast<TDataExprType>()->GetSlot();
         const auto fromTag = sourceType.Cast<TResourceExprType>()->GetTag();
         if ((to == EDataSlot::Yson || to == EDataSlot::Json) && fromTag == "Yson2.Node") {
+            // clang-format off
             node = ctx.Builder(node->Pos())
                 .Callable("Apply")
                     .Callable(0, "Udf")
@@ -311,6 +316,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     .Add(1, std::move(node))
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -318,6 +324,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         const auto from = sourceType.Cast<TResourceExprType>()->GetTag();
         const auto to = expectedType.Cast<TResourceExprType>()->GetTag();
         if (from == "DateTime2.TM" && to == "DateTime2.TM64") {
+            // clang-format off
             node = ctx.Builder(node->Pos())
                 .Callable("Apply")
                     .Callable(0, "Udf")
@@ -326,6 +333,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     .Add(1, std::move(node))
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -333,6 +341,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         const auto fromSlot = sourceType.Cast<TDataExprType>()->GetSlot();
         const auto to = expectedType.Cast<TResourceExprType>()->GetTag();
         if ((fromSlot == EDataSlot::Yson || fromSlot == EDataSlot::Json) && to == "Yson2.Node") {
+            // clang-format off
             node = ctx.Builder(node->Pos())
                 .Callable("Apply")
                     .Callable(0, "Udf")
@@ -354,9 +363,11 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     .Add(1, std::move(node))
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         } else if ((fromSlot == EDataSlot::Yson || fromSlot == EDataSlot::Json) && to == "Yson.Node") {
+            // clang-format off
             node = ctx.Builder(node->Pos())
                 .Callable("Apply")
                     .Callable(0, "Udf")
@@ -378,9 +389,11 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     .Add(1, std::move(node))
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         } else if ((GetDataTypeInfo(fromSlot).Features & (NUdf::EDataTypeFeatures::DateType | NUdf::EDataTypeFeatures::TzDateType)) && (to == "DateTime2.TM" || to == "DateTime2.TM64")) {
+            // clang-format off
             node = ctx.Builder(node->Pos())
                 .Callable("Apply")
                     .Callable(0, "Udf")
@@ -402,9 +415,11 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     .Add(1, std::move(node))
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         } else if (fromSlot == EDataSlot::Json && to == "JsonNode") {
+            // clang-format off
             node = ctx.Builder(node->Pos())
                 .Callable("Apply")
                     .Callable(0, "Udf")
@@ -426,6 +441,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     .Add(1, std::move(node))
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -475,14 +491,17 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             allow = true;
             useCast = true;
         } else if ((from == EDataSlot::Yson || from == EDataSlot::Json) && to == EDataSlot::String) {
+            // clang-format off
             node =  ctx.Builder(node->Pos())
                 .Callable("ToBytes")
                     .Add(0, node)
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         } else if (IsDataTypeIntegral(from) && to == EDataSlot::Timestamp) {
+            // clang-format off
             node =  ctx.Builder(node->Pos())
                 .Callable("UnsafeTimestampCast")
                     .Callable(0, "BitCast")
@@ -491,6 +510,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
 
             return IGraphTransformer::TStatus::Repeat;
         } else if (IsDataTypeDecimal(from) && IsDataTypeDecimal(to)) {
@@ -576,25 +596,31 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             if (!pos) {
                 switch (newField->GetItemType()->GetKind()) {
                 case ETypeAnnotationKind::Universal:
+                    // clang-format off
                     field = ctx.Builder(node->Pos())
                         .Callable("InstanceOf")
                             .Callable(0, "UniversalType")
                             .Seal()
                         .Seal()
                         .Build();
+                    // clang-format on
                     break;
                 case ETypeAnnotationKind::Null:
+                    // clang-format off
                     field = ctx.Builder(node->Pos())
                         .Callable(ToString(newField->GetItemType()->GetKind())).Seal()
                         .Build();
+                    // clang-format on
                     break;
                 case ETypeAnnotationKind::Optional:
                 case ETypeAnnotationKind::Pg:
+                    // clang-format off
                     field = ctx.Builder(node->Pos())
                         .Callable(GetEmptyCollectionName(newField->GetItemType()->GetKind()))
                             .Add(0, ExpandType(node->Pos(), *newField->GetItemType(), ctx))
                         .Seal()
                         .Build();
+                    // clang-format on
                     break;
                 default:
                     if (raiseIssues) {
@@ -615,12 +641,14 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     }
                     YQL_ENSURE(field);
                 } else {
+                    // clang-format off
                     field = ctx.Builder(node->Pos())
                         .Callable("Member")
                             .Add(0, node)
                             .Atom(1, newField->GetName())
                             .Seal()
                         .Build();
+                    // clang-format on
                 }
 
                 auto status = TryConvertToImpl(ctx, field, *oldType->GetItemType(), *newField->GetItemType(), flags, raiseIssues, typeCtx);
@@ -702,6 +730,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     }
                 }
 
+                // clang-format off
                 node = ctx.Builder(node->Pos())
                     .Callable("Variant")
                         .Add(0, std::move(targetItem))
@@ -709,6 +738,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                         .Add(2, ExpandType(node->Pos(), *to, ctx))
                     .Seal()
                     .Build();
+                // clang-format on
 
                 break;
             }
@@ -743,6 +773,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     }
                 }
 
+                // clang-format off
                 node = ctx.Builder(node->Pos())
                     .Callable("Variant")
                         .Add(0, std::move(targetItem))
@@ -750,6 +781,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                         .Add(2, ExpandType(node->Pos(), *to, ctx))
                     .Seal()
                     .Build();
+                // clang-format on
 
                 break;
             }
@@ -797,6 +829,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                         return status;
                     }
 
+                    // clang-format off
                     arg = ctx.Builder(node->Pos())
                         .Callable("Variant")
                             .Add(0, std::move(arg))
@@ -804,6 +837,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                             .Add(2, outTypeExpr)
                         .Seal()
                         .Build();
+                    // clang-format on
 
                     auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), {originalArg}), std::move(arg));
 
@@ -832,6 +866,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                         return status;
                     }
 
+                    // clang-format off
                     arg = ctx.Builder(node->Pos())
                         .Callable("Variant")
                             .Add(0, std::move(arg))
@@ -839,6 +874,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                             .Add(2, outTypeExpr)
                         .Seal()
                         .Build();
+                    // clang-format on
 
                     auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), {originalArg}), std::move(arg));
 
@@ -903,12 +939,14 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             for (ui32 i = 0; i < from->GetSize(); ++i) {
                 const auto oldType = from->GetItems()[i];
                 const auto newType = to->GetItems()[i];
+                // clang-format off
                 auto value = ctx.Builder(node->Pos())
                     .Callable("Nth")
                     .Add(0, node)
                     .Atom(1, ToString(i), TNodeFlags::Default)
                     .Seal()
                     .Build();
+                // clang-format on
 
                 if (const auto status = TryConvertToImpl(ctx, value, *oldType, *newType, flags, raiseIssues, typeCtx);
                     status.Level == IGraphTransformer::TStatus::Error) {
@@ -5237,21 +5275,25 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
         if (SilentInferCommonTypeInternal(item1, *item1type, item2, *item2type, ctx, commonItemType, flags, typeCtx)
             != IGraphTransformer::TStatus::Error) {
             if (item1 != arg1) {
+                // clang-format off
                 node1 = ctx.Builder(node1->Pos())
                     .Callable("OrderedMap")
                         .Add(0, node1)
                         .Add(1, ctx.NewLambda(node1->Pos(), ctx.NewArguments(node1->Pos(), { arg1 }), std::move(item1)))
                     .Seal()
                     .Build();
+                // clang-format on
             }
 
             if (item2 != arg2) {
+                // clang-format off
                 node2 = ctx.Builder(node2->Pos())
                     .Callable("OrderedMap")
                         .Add(0, node2)
                         .Add(1, ctx.NewLambda(node2->Pos(), ctx.NewArguments(node2->Pos(), { arg2 }), std::move(item2)))
                     .Seal()
                     .Build();
+                // clang-format on
             }
 
             if (isList) {
@@ -5505,6 +5547,7 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
             commonType = ctx.MakeType<TVariantExprType>(ctx.MakeType<TTupleExprType>(commonItemTypes));
             auto commonTypeExpr = ExpandType(node1->Pos(), *commonType, ctx);
             for (size_t i = 0; i < underlying1->GetSize(); i++) {
+                // clang-format off
                 auto arg1 = ctx.Builder(node1->Pos())
                     .Callable("Variant")
                         .Add(0, std::move(args1[i]))
@@ -5512,10 +5555,12 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
                         .Add(2, commonTypeExpr)
                     .Seal()
                     .Build();
+                // clang-format on
 
                 auto lambda1 = ctx.NewLambda(node1->Pos(), ctx.NewArguments(node1->Pos(), {originalArgs1[i]}), std::move(arg1));
                 transforms1.emplace(ToString(i), std::move(lambda1));
 
+                // clang-format off
                 auto arg2 = ctx.Builder(node2->Pos())
                     .Callable("Variant")
                         .Add(0, std::move(args2[i]))
@@ -5523,6 +5568,7 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
                         .Add(2, commonTypeExpr)
                     .Seal()
                     .Build();
+                // clang-format on
 
                 auto lambda2 = ctx.NewLambda(node2->Pos(), ctx.NewArguments(node2->Pos(), {originalArgs2[i]}), std::move(arg2));
                 transforms2.emplace(ToString(i), std::move(lambda2));
@@ -5594,6 +5640,7 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
                 auto pos1 = underlying1->FindItem(x);
                 auto pos2 = underlying2->FindItem(x);
                 if (pos1) {
+                    // clang-format off
                     auto arg1 = ctx.Builder(node1->Pos())
                         .Callable("Variant")
                             .Add(0, std::move(args1[x]))
@@ -5601,12 +5648,14 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
                             .Add(2, commonTypeExpr)
                         .Seal()
                         .Build();
+                    // clang-format on
 
                     auto lambda1 = ctx.NewLambda(node1->Pos(), ctx.NewArguments(node1->Pos(), {originalArgs1[x]}), std::move(arg1));
                     transforms1.emplace(x, std::move(lambda1));
                 }
 
                 if (pos2) {
+                    // clang-format off
                     auto arg2 = ctx.Builder(node2->Pos())
                         .Callable("Variant")
                             .Add(0, std::move(args2[x]))
@@ -5614,6 +5663,7 @@ IGraphTransformer::TStatus SilentInferCommonTypeInternal(TExprNode::TPtr& node1,
                             .Add(2, commonTypeExpr)
                         .Seal()
                         .Build();
+                    // clang-format on
 
                     auto lambda2 = ctx.NewLambda(node2->Pos(), ctx.NewArguments(node2->Pos(), {originalArgs2[x]}), std::move(arg2));
                     transforms2.emplace(x, std::move(lambda2));
@@ -7351,12 +7401,14 @@ IGraphTransformer::TStatus ExtractPgTypesFromMultiLambda(TExprNode::TPtr& lambda
 
 TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggregateDesc& aggDesc, bool onWindow,
     const TExprNode::TPtr& lambda, const TVector<ui32>& argTypes, const TTypeAnnotationNode* itemType, TExprContext& ctx) {
+    // clang-format off
     auto idLambda = ctx.Builder(pos)
         .Lambda()
             .Param("state")
             .Arg("state")
         .Seal()
         .Build();
+    // clang-format on
 
     auto saveLambda = idLambda;
     auto loadLambda = idLambda;
@@ -7366,6 +7418,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
         const ui32 originalAggResultType = NPg::LookupProc(aggDesc.FinalFuncId).ResultType;
         ui32 aggResultType = originalAggResultType;
         AdjustReturnType(aggResultType, aggDesc.ArgTypes, 0, argTypes);
+        // clang-format off
         finishLambda = ctx.Builder(pos)
             .Lambda()
             .Param("state")
@@ -7374,14 +7427,18 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Atom(1, ToString(aggDesc.FinalFuncId))
                 .List(2)
                     .Do([aggResultType, originalAggResultType](TExprNodeBuilder& builder) -> TExprNodeBuilder& {
+                        // clang-format on
                         if (aggResultType != originalAggResultType) {
+                            // clang-format off
                             builder.List(0)
                                 .Atom(0, "type")
                                 .Atom(1, NPg::LookupType(aggResultType).Name)
                             .Seal();
+                            // clang-format on
                         }
 
                         return builder;
+                    // clang-format off
                     })
                 .Seal()
                 .Arg(3, "state")
@@ -7395,10 +7452,12 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
             .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 
     auto initValue = nullValue;
     if (aggDesc.InitValue) {
+        // clang-format off
         initValue = ctx.Builder(pos)
             .Callable("PgCast")
                 .Callable(0, "PgConst")
@@ -7412,6 +7471,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 
     const auto& transFuncDesc = NPg::LookupProc(aggDesc.TransFuncId);
@@ -7425,6 +7485,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
     TExprNode::TPtr initLambda;
     TExprNode::TPtr updateLambda;
     if (!searchNonNullForState) {
+        // clang-format off
         initLambda = ctx.Builder(pos)
             .Lambda()
                 .Param("row")
@@ -7449,7 +7510,9 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
+        // clang-format off
         updateLambda = ctx.Builder(pos)
             .Lambda()
                 .Param("row")
@@ -7481,7 +7544,9 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     } else {
+        // clang-format off
         initLambda = ctx.Builder(pos)
             .Lambda()
                 .Param("row")
@@ -7490,10 +7555,12 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         if ((lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) ||
             (lambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Pg &&
             lambda->GetTypeAnn()->Cast<TPgExprType>()->GetName() == "unknown")) {
+            // clang-format off
             initLambda = ctx.Builder(pos)
                 .Lambda()
                     .Param("row")
@@ -7507,8 +7574,10 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
+        // clang-format off
         updateLambda = ctx.Builder(pos)
             .Lambda()
                 .Param("row")
@@ -7536,8 +7605,10 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 
+    // clang-format off
     auto mergeLambda = ctx.Builder(pos)
         .Lambda()
             .Param("state1")
@@ -7546,7 +7617,9 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     auto zero = ctx.Builder(pos)
             .Callable("PgConst")
                 .Atom(0, "0")
@@ -7555,11 +7628,13 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Seal()
             .Seal()
             .Build();
+    // clang-format on
 
     auto defaultValue = (aggDesc.Name != "count") ? nullValue : zero;
 
     if (aggDesc.SerializeFuncId) {
         const auto& serializeFuncDesc = NPg::LookupProc(aggDesc.SerializeFuncId);
+        // clang-format off
         saveLambda = ctx.Builder(pos)
             .Lambda()
                 .Param("state")
@@ -7572,10 +7647,12 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 
     if (aggDesc.DeserializeFuncId) {
         const auto& deserializeFuncDesc = NPg::LookupProc(aggDesc.DeserializeFuncId);
+        // clang-format off
         loadLambda = ctx.Builder(pos)
             .Lambda()
                 .Param("state")
@@ -7590,11 +7667,13 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 
     if (aggDesc.CombineFuncId) {
         const auto& combineFuncDesc = NPg::LookupProc(aggDesc.CombineFuncId);
         if (combineFuncDesc.IsStrict) {
+            // clang-format off
             mergeLambda = ctx.Builder(pos)
                 .Lambda()
                     .Param("state1")
@@ -7618,7 +7697,9 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         } else {
+            // clang-format off
             mergeLambda = ctx.Builder(pos)
                 .Lambda()
                     .Param("state1")
@@ -7633,11 +7714,13 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
     }
 
     auto typeNode = ExpandType(pos, *itemType, ctx);
     if (onWindow) {
+        // clang-format off
         return ctx.Builder(pos)
             .Callable("WindowTraits")
                 .Add(0, typeNode)
@@ -7653,7 +7736,9 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Add(5, defaultValue)
             .Seal()
             .Build();
+        // clang-format on
     } else {
+        // clang-format off
         return ctx.Builder(pos)
             .Callable("AggregationTraits")
                 .Add(0, typeNode)
@@ -7666,6 +7751,7 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
                 .Add(7, defaultValue)
             .Seal()
             .Build();
+        // clang-format on
     }
 }
 
@@ -7763,12 +7849,14 @@ TExprNode::TPtr ConvertToMultiLambda(const TExprNode::TPtr& lambda, TExprContext
     auto newBody = ctx.ReplaceNode(lambda->TailPtr(), lambda->Head().Head(), newArg);
     TExprNode::TListType bodies;
     for (ui32 i = 0; i < tupleTypeSize; ++i) {
+        // clang-format off
         bodies.push_back(ctx.Builder(lambda->Pos())
             .Callable("Nth")
                 .Add(0, newBody)
                 .Atom(1, ToString(i))
             .Seal()
             .Build());
+        // clang-format on
     }
 
     return ctx.NewLambda(lambda->Pos(), ctx.NewArguments(lambda->Pos(), { newArg }), std::move(bodies));

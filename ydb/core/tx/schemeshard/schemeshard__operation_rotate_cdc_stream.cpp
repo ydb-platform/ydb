@@ -69,11 +69,11 @@ public:
         context.SS->PersistCreateStep(db, newStreamPathId, step);
 
         context.SS->PersistCdcStream(db, newStreamPathId);
-        context.SS->CdcStreams[newStreamPathId] = newStream->AlterData;
+        context.SS->CdcStreams.Set(newStreamPathId, newStream->AlterData);
         context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Add(1);
 
         context.SS->PersistCdcStream(db, oldStreamPathId);
-        context.SS->CdcStreams[oldStreamPathId]->FinishAlter();
+        context.SS->CdcStreams.at(oldStreamPathId)->FinishAlter();
 
         context.SS->ClearDescribePathCaches(oldStreamPath);
         context.SS->ClearDescribePathCaches(newStreamPath);
@@ -380,7 +380,6 @@ public:
 
         auto newStream = TCdcStreamInfo::Create(newStreamDesc);
         Y_ABORT_UNLESS(newStream);
-        context.SS->CdcStreams[pathId] = newStream;
 
         newStreamPath.MaterializeLeaf(owner, pathId);
         result->SetPathId(pathId.LocalPathId);
@@ -400,7 +399,7 @@ public:
         newStreamPath.Base()->PathType = TPathElement::EPathType::EPathTypeCdcStream;
         newStreamPath.Base()->UserAttrs->AlterData = userAttrs;
 
-        context.SS->IncrementPathDbRefCount(pathId);
+        context.SS->CdcStreams.Set(pathId, newStream);
 
         newStreamPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, tablePath, context); // for correct discard of ChildrenExist prop

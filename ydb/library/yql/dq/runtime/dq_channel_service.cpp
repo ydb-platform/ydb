@@ -1477,6 +1477,38 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
             }
             break;
         }
+        case TEvDqCompute::TEvChannelDiscoveryV2::EventType: {
+            // No reconciliation is started here on purpose, whatever the reason is - the bounce is logged
+            // and nothing else. A discovery is sent by DoReconciliation and by nothing else, so this event
+            // always arrives with a reconciliation already in progress, which owns the retry and has
+            // scheduled it. That is the same rule the data case above follows with its "ignore errors in
+            // recovery" guard, and here it is not a matter of taste:
+            //
+            // the bounce comes back at once, not after a timeout, so reacting to it with another attempt
+            // would make the attempts of a reconciliation follow each other as fast as the interconnect can
+            // return them. The ReconciliationCount of them would be spent in microseconds, the backoff of
+            // DoReconciliation would never get to delay anything and the session would be destroyed, with
+            // every channel of it, the instant the 1st discovery bounced. The delay is the rate limiter of
+            // this loop, not a wait for information which has already arrived.
+            //
+            // ReasonActorUnknown is not a special case of that. It is answered by nobody because there is
+            // no channel service on the peer node to answer it, most often because the node is still
+            // starting up - which is exactly the case which repairs itself if left alone for a second, and
+            // which an immediate retry would turn into an immediate loss of every channel of the session.
+            std::lock_guard lock(Mutex);
+            if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
+                LOG_W(LogPrefix << "UNDELIVERED DISCOVERY/UNKNOWN, no channel service on the peer node, G="
+                    << GenMajor << '.' << GenMinor << ", Log=" << GetReconciliationLog());
+            } else {
+                // Subscribed is left alone: it mirrors the state of the interconnect session, which owns it.
+                // An event carrying FlagSubscribeOnSession is answered with TEvNodeDisconnected whenever it
+                // is dropped (TInterconnectProxyTCP::DropSessionEvent), so HandleDisconnected clears the flag
+                // and restarts the reconciliation on its own.
+                LOG_W(LogPrefix << "UNDELIVERED DISCOVERY/DISCONNECTED, G=" << GenMajor << '.' << GenMinor
+                    << ", Log=" << GetReconciliationLog());
+            }
+            break;
+        }
         case TEvDqCompute::TEvChannelAckV2::EventType: {
             // Ack will be requested by peer with next reconciliation
             LOG_W(LogPrefix << "UNDELIVERED ACK");

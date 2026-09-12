@@ -1448,8 +1448,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         }
     }
 
-    // `KqpOlapJsonValue` kernel differs from `JsonValue` for non-Utf8 RETURNING types (e.g. it does not support dates
-    // and uses lenient `SqlValueConvertToUtf8` for String), so such JSON_VALUE must stay inside `KqpOlapApply` lambda.
+    // `KqpOlapJsonValue` kernel differs from `JsonValue` with an explicit RETURNING type (e.g. it does not support dates
+    // and uses lenient `SqlValueConvertToUtf8` instead of strict `SqlValueUtf8` for Utf8 / String),
+    // so such JSON_VALUE must stay inside `KqpOlapApply` lambda.
     Y_UNIT_TEST(JsonValueWithReturningTypeIsNotPushedIntoOlapApply) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -1471,6 +1472,15 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 R"(
                     SELECT id FROM `/Root/tableWithNulls`
                     WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING String) ILIKE "%1%6%"
+                    ORDER BY id;
+                )",
+                R"([])"
+            },
+            {
+                // Explicit RETURNING Utf8 also means strict `SqlValueUtf8` (unlike JSON_VALUE without RETURNING).
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.obj.obj_col2_int" RETURNING Utf8) ILIKE "%1%6%"
                     ORDER BY id;
                 )",
                 R"([])"

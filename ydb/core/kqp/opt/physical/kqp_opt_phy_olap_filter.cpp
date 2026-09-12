@@ -827,18 +827,11 @@ bool IsSuitableJsonValueForExternalArg(const TCoJsonValue& jsonValue, const TExp
         return false;
     }
 
-    // `KqpOlapJsonValue` kernel differs from `JsonValue` for non-Utf8 RETURNING types: it does not support date types
-    // and uses lenient `SqlValueConvertToUtf8` / `SqlValueInt64` instead of strict `SqlValueUtf8` / `SqlValueNumber`.
+    // `KqpOlapJsonValue` kernel matches `JsonValue` semantics only without RETURNING (lenient `SqlValueConvertToUtf8`).
+    // With an explicit RETURNING type `JsonValue` is stricter (e.g. `SqlValueUtf8` returns NULL for a JSON number even for
+    // RETURNING Utf8, `SqlValueNumber` + cast is used for numeric types) and date types are not supported by the kernel at all.
     // Such JSON_VALUE stays inside the closure and is computed by `KqpOlapApply` over the whole column as before.
-    if (const auto returningType = jsonValue.ReturningType()) {
-        const auto typeAnn = returningType.Cast().Ref().GetTypeAnn();
-        if (!typeAnn || typeAnn->GetKind() != ETypeAnnotationKind::Type) {
-            return false;
-        }
-        const auto type = typeAnn->Cast<TTypeExprType>()->GetType();
-        return type->GetKind() == ETypeAnnotationKind::Data && type->Cast<TDataExprType>()->GetSlot() == EDataSlot::Utf8;
-    }
-    return true;
+    return !jsonValue.ReturningType();
 }
 
 } // anonymous namespace

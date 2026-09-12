@@ -40,6 +40,8 @@ from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES, discover_topology, 
 from ydb.tools.ydb_bench.lib.ydb_telemetry import read_metrics
 from ydb.tools.ydb_bench.lib.hosts import HostDirectory, allowed_path, allowed_post_path, open_peer, request_peer
 from ydb.tools.ydb_bench.lib.federation import Federation, split_reference
+from ydb.tools.ydb_bench.lib.cluster_templates import ClusterTemplateStore
+from ydb.tools.ydb_bench.lib import cluster_templates_ui
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 _STREAM_CHUNK_SIZE = 1024 * 1024
@@ -467,7 +469,8 @@ async function renderHosts(){
 }
 function shell(current,body,breadcrumb=''){
   queueMicrotask(refreshActiveBanner);
-  const navigation=[['runs','Runs'],['topology','System topology'],['comparisons','Comparisons'],['hosts','Hosts']];
+  const navigation=[['runs','Runs'],['topology','System topology'],['comparisons','Comparisons'],['hosts','Hosts'],
+    ['cluster-templates','Cluster templates']];
   const section=current==='new'?'runs':current;
   return '<div class=shell><div class=content><header class=topbar><a class=brand href="#runs">YDB benchmark</a>'+
     '<nav class=primary-nav aria-label="Main navigation">'+navigation.map(([id,label])=>
@@ -3396,7 +3399,8 @@ async function renderComparisons(){
 }
     """
     "async function compose(){if(!location.hash.slice(1))history.replaceState(history.state,'',location.pathname+location.search+'#runs');"
-    "const pieces=routeParts(),current=pieces.join('/');if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
+    "const pieces=routeParts(),current=pieces.join('/');if(pieces[0]==='cluster-templates')return renderClusterTemplates(pieces[1]);"
+    "if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
     "t==='comparisons'||pieces[0]==='comparisons')return renderSavedComparisons();if(pieces[0]==='attempt'&&[4,5].includes(pieces.length))"
     "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4]);if(pieces[0]==='run'){"
@@ -3405,6 +3409,10 @@ async function renderComparisons(){
     "'runs')}\n"
     "addEventListener('hashchange',compose);setInterval(refreshActiveBanner,3000);compose();\n"
 )
+
+
+_CSS += cluster_templates_ui.CSS
+_JS += cluster_templates_ui.JS
 
 
 class _RunServiceHTTPServer(ThreadingHTTPServer):
@@ -4118,6 +4126,7 @@ class RunService:
         self.output = Path(output).resolve()
         self.output.mkdir(parents=True, exist_ok=True)
         self.hosts = HostDirectory(self.output)
+        self.cluster_templates = ClusterTemplateStore(self.output)
         self.executor = executor or self._unsupported_executor
         self.event_limit, self.tail_limit = event_limit, tail_limit
         self.perf_available = perf_available
@@ -4512,9 +4521,9 @@ class RunService:
                 "queued": sum(run["store"].manifest["state"] == "queued" for run in self._queue),
             }
 
-    def topology(self):
+    def topology(self, mode=None, count=None, excluded=()):
         topology = discover_topology()
-        return {
+        result = {
             "topology": topology_record(topology),
             "affinity": [
                 {
@@ -4526,6 +4535,23 @@ class RunService:
                 for mode in AFFINITY_MODES
             ],
         }
+        if mode is not None:
+            if mode not in AFFINITY_MODES or type(count) is not int or not 1 <= count <= 65536:
+                raise BenchmarkError("Invalid affinity mode or CPU count")
+            if len(excluded) > 65536 or any(type(cpu) is not int or not 0 <= cpu <= 1048575 for cpu in excluded):
+                raise BenchmarkError("Invalid excluded CPU list")
+            placement = (
+                plan_affinity(mode, topology, count, excluded_cpus=excluded)
+                if excluded
+                else plan_affinity(mode, topology, count)
+            )
+            result["placement"] = {
+                "supported": placement.supported,
+                "cpus": None if placement.cpus is None else list(placement.cpus),
+                "reason": placement.reason,
+                "excluded_cpus": sorted(set(excluded)),
+            }
+        return result
 
     def cpu_usage(self):
         result = self._cpu_sampler.sample()
@@ -5633,7 +5659,19 @@ def _handler(service):
             if path == "/api/cpu-usage":
                 return self._json(200, service.cpu_usage())
             if path == "/api/system-topology":
-                return self._json(200, service.topology())
+                try:
+                    query = parse_qs(parsed.query)
+                    mode = query.get("mode", [None])[-1]
+                    count = int(query.get("cpus", ["0"])[-1]) if mode is not None else None
+                    excluded = tuple(int(cpu) for cpu in query.get("exclude", [""])[-1].split(",") if cpu)
+                    return self._json(200, service.topology(mode, count, excluded))
+                except (BenchmarkError, ValueError) as error:
+                    return self._json(400, {"error": str(error)})
+            if path == "/api/cluster-templates":
+                try:
+                    return self._json(200, service.cluster_templates.list())
+                except BenchmarkError as error:
+                    return self._json(400, {"error": str(error)})
             if path == "/api/runs":
                 filters = {
                     name: values[-1]
@@ -5838,6 +5876,17 @@ def _handler(service):
                     return self._json(403, {"error": "remote operation is not allowed"})
                 if path == "/api/import":
                     return self._json(201, import_archive(service.output, self._raw_body()))
+                if path in ("/api/cluster-templates", "/api/cluster-templates/delete"):
+                    origin = self.headers.get("Origin")
+                    if self.headers.get("Content-Type", "").split(";")[0] != "application/json" or (
+                        origin and urlparse(origin).netloc != self.headers.get("Host")
+                    ):
+                        return self._json(403, {"error": "same-origin JSON request required"})
+                    value = self._json_body()
+                    if path.endswith("/delete"):
+                        return self._json(200, service.cluster_templates.delete(value))
+                    host_ids = {service.hosts.id} | {host["id"] for host in service.hosts.list()}
+                    return self._json(201, service.cluster_templates.save(value, host_ids))
                 if path == "/api/validate":
                     options = self._options()
                     return self._json(200, service.validate(options["yaml"], options["perf"]))

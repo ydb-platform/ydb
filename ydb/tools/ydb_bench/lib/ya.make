@@ -4,6 +4,8 @@ PY_SRCS(
     __init__.py
     actors_core.py
     cli.py
+    cluster_templates.py
+    cluster_templates_ui.py
     common.py
     config.py
     import_results.py

@@ -50,7 +50,6 @@ public:
 
     TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "PartitionChooser"},
             {"sourceId", SourceId},
             {"preferredPartition", PreferedPartition});
     }

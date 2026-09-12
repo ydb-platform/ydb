@@ -102,8 +102,7 @@ public:
     }
 
     const TStructuredLogPrefix& GetLogPrefix() const {
-        static const TStructuredLogPrefix LogPrefix = YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "MonitoringProxy"});
+        static const TStructuredLogPrefix LogPrefix;
         return LogPrefix;
     }
 

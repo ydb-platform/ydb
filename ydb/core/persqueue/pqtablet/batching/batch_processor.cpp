@@ -22,8 +22,7 @@ void TBatchProcessor::Bootstrap(const NActors::TActorContext&) {
 }
 
 TStructuredLogPrefix TBatchProcessor::BuildLogPrefix() const {
-    return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "BatchProcessor"});
+    return {};
 }
 
 NActors::TActorId TBatchProcessor::GetOrCreateConsumerProcessor(const TString& user) {

@@ -49,7 +49,6 @@ public:
 
     TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "SchemaOperation"},
             {"path", Path});
     }
 

@@ -270,8 +270,7 @@ public:
     }
 
     const TStructuredLogPrefix& GetLogPrefix() const {
-        static const TStructuredLogPrefix LogPrefix = YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "BuilderProxy"});
+        static const TStructuredLogPrefix LogPrefix;
         return LogPrefix;
     }
 
@@ -5576,8 +5575,7 @@ void TPersQueue::BeginDeletePartitions(const TDistributedTransaction& tx)
 }
 
 TStructuredLogPrefix TPersQueue::LogPrefix() const {
-    return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "PQ"});
+    return {};
 }
 
 ui64 TPersQueue::GetGeneration() {

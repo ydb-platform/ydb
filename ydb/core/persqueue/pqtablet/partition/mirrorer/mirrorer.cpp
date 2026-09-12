@@ -724,7 +724,6 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
 
 TStructuredLogPrefix TMirrorer::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "Mirrorer"},
         {"topic", TopicConverter->GetPrintableString()},
         {"partition", Partition});
 }

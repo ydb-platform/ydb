@@ -218,7 +218,6 @@ void TMirrorDescriber::ScheduleDescription(const TActorContext& ctx) {
 
 TStructuredLogPrefix TMirrorDescriber::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "MirrorDescriber"},
         {"topic", TopicName});
 }
 

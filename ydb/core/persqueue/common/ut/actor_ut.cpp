@@ -42,14 +42,14 @@ struct TEvText : TEventLocal<TEvText, EvText> {
 class TPrefixActor : public TBaseActor<TPrefixActor>
                    , public TConstantLogPrefix {
 public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::OTHER;
+    }
+
     explicit TPrefixActor(TActorId parent)
         : TBaseActor<TPrefixActor>(NKikimrServices::PERSQUEUE)
         , Parent(parent)
     {
-    }
-
-    TStructuredLogPrefix BuildLogPrefix() const override {
-        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "prefix"});
     }
 
     void Bootstrap() {
@@ -93,10 +93,6 @@ public:
         : TBaseActor<TExceptionActor>(NKikimrServices::PERSQUEUE)
         , Parent(parent)
     {
-    }
-
-    TStructuredLogPrefix BuildLogPrefix() const override {
-        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "exc"});
     }
 
     void Bootstrap() {
@@ -145,13 +141,13 @@ private:
 class TTabletExceptionActor : public TBaseTabletActor<TTabletExceptionActor>
                             , public TConstantLogPrefix {
 public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::OTHER;
+    }
+
     TTabletExceptionActor(ui64 tabletId, TActorId tabletActorId)
         : TBaseTabletActor<TTabletExceptionActor>(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     {
-    }
-
-    TStructuredLogPrefix BuildLogPrefix() const override {
-        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "tablet"});
     }
 
     void Bootstrap() {
@@ -174,10 +170,6 @@ public:
         , Pipes(this)
         , Parent(parent)
     {
-    }
-
-    TStructuredLogPrefix BuildLogPrefix() const override {
-        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "pipe"});
     }
 
     void Bootstrap() {
@@ -228,7 +220,7 @@ Y_UNIT_TEST(LogPrefixEventStrAndMacros) {
 
     auto prefix = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(prefix);
-    UNIT_ASSERT(prefix->Get()->Value.Contains("actorClassName=prefix"));
+    UNIT_ASSERT(prefix->Get()->Value.Contains("actorActivityType=OTHER"));
     UNIT_ASSERT(prefix->Get()->Value.Contains("selfId="));
 
     runtime.Send(new IEventHandle(actorId, edge, new TEvents::TEvWakeup()), 0, true);
@@ -290,6 +282,7 @@ Y_UNIT_TEST(TabletActorRestartsOnException) {
 
     auto prefix = runtime.GrabEdgeEvent<TEvText>(tablet, TDuration::Seconds(5));
     UNIT_ASSERT(prefix);
+    UNIT_ASSERT(prefix->Get()->Value.Contains("actorActivityType=OTHER"));
     UNIT_ASSERT(prefix->Get()->Value.Contains("tabletId=42"));
     UNIT_ASSERT(prefix->Get()->Value.Contains("selfId="));
 

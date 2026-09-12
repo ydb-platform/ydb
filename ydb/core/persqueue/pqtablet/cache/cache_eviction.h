@@ -260,8 +260,7 @@ namespace NKikimr::NPQ {
         }
 
         TStructuredLogPrefix LogPrefix() const override {
-            return YDB_LOG_CREATE_MESSAGE(
-                {"actorClassName", "IntabletCache"});
+            return {};
         }
 
         ui64 TabletId;

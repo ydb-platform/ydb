@@ -37,8 +37,7 @@ namespace NPQ {
 
         const TStructuredLogPrefix& GetLogPrefix() const
         {
-            static const TStructuredLogPrefix LogPrefix = YDB_LOG_CREATE_MESSAGE(
-                {"actorClassName", "PQCacheProxy"});
+            static const TStructuredLogPrefix LogPrefix;
             return LogPrefix;
         }
 

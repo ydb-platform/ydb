@@ -37,7 +37,6 @@ IEventBase* TReadQuoter::MakeQuotaApprovedEvent(TRequestContext& context) {
 
 TStructuredLogPrefix TReadQuoter::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "ReadQuoter"},
         {"partition", Partition.ToString()});
 }
 

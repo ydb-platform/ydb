@@ -22,7 +22,6 @@ public:
 protected:
     TStructuredLogPrefix BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "MLPReader"},
             {"topic", Settings.TopicName},
             {"consumer", Settings.Consumer});
     }

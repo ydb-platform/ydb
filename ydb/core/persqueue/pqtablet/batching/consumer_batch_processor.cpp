@@ -91,7 +91,6 @@ TConsumerBatchProcessor::TConsumerBatchProcessor(ui64 tabletId, const NActors::T
     : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     , User(std::move(user))
     , LogPrefix_(YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "ConsumerBatchProcessor"},
         {"consumer", User}))
 {
     BatchCutters.emplace(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1, MakeHolder<TKafkaBatchCutter>());

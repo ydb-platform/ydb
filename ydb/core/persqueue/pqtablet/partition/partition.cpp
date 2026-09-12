@@ -206,7 +206,6 @@ TStructuredLogPrefix TPartition::BuildLogPrefix() const {
         state = "Unknown";
     }
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "Partition"},
         {"partition", Partition.ToString()},
         {"actorState", state});
 }

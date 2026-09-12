@@ -38,6 +38,10 @@ public:
 template <typename T>
 TStructuredLogPrefix MakeRuntimeLogPrefix(const T& self) {
     TStructuredLogPrefix prefix;
+    if constexpr (requires { T::ActorActivityType(); }) {
+        prefix.AppendMessage(YDB_LOG_CREATE_MESSAGE(
+            {"actorActivityType", NKikimrServices::TActivity::EType_Name(T::ActorActivityType())}));
+    }
     if constexpr (requires { self.TabletId; }) {
         prefix.AppendMessage(YDB_LOG_CREATE_MESSAGE({"tabletId", self.TabletId}));
     } else if constexpr (requires { self.TabletID(); }) {

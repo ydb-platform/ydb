@@ -2172,6 +2172,7 @@ private:
                 || settingName == "Warning"
                 || settingName == "UseBlocks"
                 || settingName == "BlockEngine"
+                || settingName == "DecimalCommonTypeConversionMode"
                 || settingName == "FilterPushdownOverJoinOptionalSide"
                 || settingName == "DisableFilterPushdownOverJoinOptionalSide"
                 || settingName == "RotateJoinTree"

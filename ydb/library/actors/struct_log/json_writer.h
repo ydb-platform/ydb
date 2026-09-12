@@ -109,6 +109,8 @@ protected:
             JsonWriter.WriteDouble(value);
         } else if constexpr (std::is_same_v<T, long double> ) {
             JsonWriter.WriteDouble(static_cast<double>(value));
+        } else if constexpr (std::is_same_v<T, TInstant> ) {
+            JsonWriter.WriteString(TNativeTypeSupport<TInstant>::ToString(value));
         } else {
             static_assert(false, "Attempt to serialize unsupported type");
         }

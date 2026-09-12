@@ -22,6 +22,7 @@
 #include <memory>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/string_utils/url/url.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -1419,6 +1420,98 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "MessageBody-0");
             UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "");
+        }
+
+        TString FormatCounterLabels(const TVector<std::pair<TString, TString>>& labels) {
+            TStringBuilder out;
+            for (size_t i = 0; i < labels.size(); ++i) {
+                if (i > 0) {
+                    out << ", ";
+                }
+                out << labels[i].first << "=" << labels[i].second;
+            }
+            return out;
+        }
+
+        const NJson::TJsonValue* FindCounterSensor(
+            const NJson::TJsonValue& counters,
+            const TVector<std::pair<TString, TString>>& requiredLabels)
+        {
+            const NJson::TJsonValue* found = nullptr;
+            for (const auto& sensor : counters["sensors"].GetArraySafe()) {
+                if (!sensor.Has("labels") || !sensor["labels"].IsMap()) {
+                    continue;
+                }
+                const auto& labels = sensor["labels"].GetMapSafe();
+                bool match = true;
+                for (const auto& [key, value] : requiredLabels) {
+                    auto it = labels.find(key);
+                    if (it == labels.end() || it->second.GetStringRobust() != value) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) {
+                    UNIT_ASSERT_C(!found, "duplicate sensor for " << FormatCounterLabels(requiredLabels));
+                    found = &sensor;
+                }
+            }
+            return found;
+        }
+
+        TString DumpSqsSensors(const NJson::TJsonValue& counters) {
+            TStringBuilder out;
+            for (const auto& sensor : counters["sensors"].GetArraySafe()) {
+                if (!sensor.Has("labels") || !sensor["labels"].IsMap()) {
+                    continue;
+                }
+                const auto name = sensor["labels"]["name"].GetStringRobust();
+                if (name.StartsWith("api.sqs.")) {
+                    out << NJson::WriteJson(sensor, true, true, true) << "\n";
+                }
+            }
+            return out;
+        }
+
+        void AssertSqsHttpSensor(
+            const NJson::TJsonValue& counters,
+            const TSqsTopicPaths& path,
+            const TString& name,
+            const TString& method,
+            const TVector<std::pair<TString, TString>>& extraLabels = {})
+        {
+            TVector<std::pair<TString, TString>> required{
+                {"name", name},
+                {"method", method},
+                {"cloud_id", "cloud4"},
+                {"folder_id", "folder4"},
+                {"database_id", "database4"},
+                {"database", path.Database},
+                {"topic", path.TopicName},
+                {"consumer", path.ConsumerName},
+            };
+            required.insert(required.end(), extraLabels.begin(), extraLabels.end());
+            const auto* sensor = FindCounterSensor(counters, required);
+            UNIT_ASSERT_C(sensor, "missing sensor " << name << " method=" << method
+                << " extra=[" << FormatCounterLabels(extraLabels) << "]\nSQS sensors:\n"
+                << DumpSqsSensors(counters));
+        }
+
+        Y_UNIT_TEST_F(TestCounters, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            UNIT_ASSERT(CreateTopic(driver, path.TopicName, path.ConsumerName));
+
+            SendMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"MessageBody", "MessageBody-0"},
+            });
+
+            const auto counters = NKikimr::NPersQueueTests::SendQuery(MonPort, "/counters/json");
+            AssertSqsHttpSensor(counters, path, "api.sqs.request.count", "SendMessage");
+            AssertSqsHttpSensor(counters, path, "api.sqs.response.count", "SendMessage", {{"code", "200"}});
+            AssertSqsHttpSensor(counters, path, "api.sqs.response.bytes", "SendMessage", {{"code", "200"}});
+            AssertSqsHttpSensor(counters, path, "api.sqs.response.duration_milliseconds", "SendMessage");
         }
 
         Y_UNIT_TEST_F(TestSendMessageBadQueueUrl, TFixture) {

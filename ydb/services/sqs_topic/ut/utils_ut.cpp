@@ -102,12 +102,16 @@ namespace {
             NActors::TActorId edge,
             TString consumer,
             bool firstClassCitizen,
-            TString databaseId = {}
+            TString databaseId = {},
+            TString cloudId = {},
+            TString folderId = {}
         )
             : Edge_(edge)
             , Consumer_(std::move(consumer))
             , FirstClassCitizen_(firstClassCitizen)
             , DatabaseId_(std::move(databaseId))
+            , CloudId_(std::move(cloudId))
+            , FolderId_(std::move(folderId))
         {
         }
 
@@ -115,14 +119,16 @@ namespace {
             NKikimr::AppData(ctx)->PQConfig.SetTopicsAreFirstClassCitizen(FirstClassCitizen_);
 
             auto* ev = new TEvMetricsLabelsResult;
-            if (DatabaseId_) {
+            if (DatabaseId_ || CloudId_ || FolderId_) {
                 ev->Labels = GetMetricsLabels(
                     "/Root/db",
                     "/Root/db/topic",
                     Consumer_,
                     "SendMessage",
                     {{"name", "api.sqs.request.count"}},
-                    DatabaseId_
+                    DatabaseId_,
+                    CloudId_,
+                    FolderId_
                 );
             } else {
                 ev->Labels = GetRequestMessageCountMetricsLabels(
@@ -141,6 +147,8 @@ namespace {
         TString Consumer_;
         bool FirstClassCitizen_;
         TString DatabaseId_;
+        TString CloudId_;
+        TString FolderId_;
     };
 
     TVector<std::pair<TString, TString>> CollectRequestMessageCountMetricsLabels(
@@ -158,13 +166,15 @@ namespace {
         return ev->Get()->Labels;
     }
 
-    TVector<std::pair<TString, TString>> CollectMetricsLabelsWithDatabaseId(
+    TVector<std::pair<TString, TString>> CollectMetricsLabelsWithIdentity(
         NKikimr::TTestActorRuntime& runtime,
-        const TString& databaseId
+        const TString& databaseId,
+        const TString& cloudId = {},
+        const TString& folderId = {}
     ) {
         const auto edge = runtime.AllocateEdgeActor();
         runtime.Register(
-            new TMetricsLabelsTestActor(edge, "ydb_sqs_consumer", true, databaseId),
+            new TMetricsLabelsTestActor(edge, "ydb_sqs_consumer", true, databaseId, cloudId, folderId),
             0,
             runtime.GetAppData().SystemPoolId
         );
@@ -202,17 +212,58 @@ Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "method"), "SendMessage");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "topic"), "topic");
         UNIT_ASSERT(HasLabel(labels, "database_id"));
+        UNIT_ASSERT(!HasLabel(labels, "cloud_id"));
+        UNIT_ASSERT(!HasLabel(labels, "folder_id"));
     }
 
     Y_UNIT_TEST(IncludesDatabaseIdLabel) {
         NKikimr::TTestActorRuntime runtime(1, false);
         InitRuntime(runtime);
 
-        const auto labels = CollectMetricsLabelsWithDatabaseId(runtime, "database4");
+        const auto labels = CollectMetricsLabelsWithIdentity(runtime, "database4");
 
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database_id"), "database4");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database"), "/Root/db");
         UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "name"), "api.sqs.request.count");
+        UNIT_ASSERT(!HasLabel(labels, "cloud_id"));
+        UNIT_ASSERT(!HasLabel(labels, "folder_id"));
+    }
+
+    Y_UNIT_TEST(OmitsCloudIdAndFolderIdWhenEmpty) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
+
+        const auto labels = CollectMetricsLabelsWithIdentity(runtime, "database4", "", "");
+
+        UNIT_ASSERT(!HasLabel(labels, "cloud_id"));
+        UNIT_ASSERT(!HasLabel(labels, "folder_id"));
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database_id"), "database4");
+    }
+
+    Y_UNIT_TEST(IncludesCloudIdAndFolderIdLabels) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
+
+        const auto labels = CollectMetricsLabelsWithIdentity(runtime, "database4", "cloud4", "folder4");
+
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database_id"), "database4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "cloud_id"), "cloud4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "folder_id"), "folder4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "database"), "/Root/db");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "name"), "api.sqs.request.count");
+    }
+
+    Y_UNIT_TEST(IncludesBothCloudAndFolderWhenOnlyOneIsSet) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
+
+        const auto cloudOnly = CollectMetricsLabelsWithIdentity(runtime, "database4", "cloud4", "");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(cloudOnly, "cloud_id"), "cloud4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(cloudOnly, "folder_id"), "");
+
+        const auto folderOnly = CollectMetricsLabelsWithIdentity(runtime, "database4", "", "folder4");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(folderOnly, "cloud_id"), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(folderOnly, "folder_id"), "folder4");
     }
 
     Y_UNIT_TEST(ConvertOldConsumerNameForSharedConsumerInFederation) {

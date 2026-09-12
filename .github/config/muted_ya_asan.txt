@@ -297,6 +297,8 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.XdcDisabledStaysOnMain
 ydb/library/actors/interconnect/ut InterconnectSessionV2.XdcPayloadRoundTrip
 ydb/library/actors/interconnect/ut unittest.sole chunk
 ydb/library/yql/providers/generic/actors/ut unittest.sole chunk
+ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.SimpleHandlers
+ydb/public/sdk/cpp/src/client/federated_topic/ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_CloseTimeout
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.Producer_TimeoutError
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut BasicUsage.ReadWithRestartsAndLargeData

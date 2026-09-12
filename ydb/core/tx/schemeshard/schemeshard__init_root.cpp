@@ -437,6 +437,9 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         if (processingParams.HasBackupController()) {
             RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetBackupController()}, TTabletTypes::BackupController);
         }
+        if (processingParams.HasWasmCompileController()) {
+            RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetWasmCompileController()}, TTabletTypes::WasmCompileController);
+        }
 
         subdomain->Initialize(Self->ShardInfos);
 

@@ -386,4 +386,8 @@ message TFeatureFlags {
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
     optional bool EnableStreamingAggregation = 328 [default = false];
     optional bool EnableTableBackupAsSql = 329 [default = false];
+    // Creates the per-tenant WasmCompileController tablet for new and migrated
+    // databases. Whether dinodes actually route compiles through it is a
+    // separate switch, UdfStoreConfig.EnableWasmCompileController.
+    optional bool EnableWasmCompileController = 330 [default = false];
 }

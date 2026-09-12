@@ -179,6 +179,7 @@ PEERDIR(
     ydb/services/metadata
     ydb/services/metadata/ds_table
     ydb/services/udf_store
+    ydb/services/udf_store/compile_controller
     ydb/services/monitoring
     ydb/services/persqueue_cluster_discovery
     ydb/services/persqueue_v1

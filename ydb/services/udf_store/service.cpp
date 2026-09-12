@@ -41,6 +41,8 @@ TUdfStoreService::TUdfStoreService(
     , EnableUnsafeNativeUdfFlag(config.GetEnableUnsafeNativeUdf())
     , UnsafeNativeUdfDir(config.GetUnsafeNativeUdfDir())
     , EnableWasmUdfFlag(config.GetEnableWasmUdf())
+    , EnableCompileControllerFlag(config.GetEnableWasmCompileController())
+    , CompileCapacity(Max<ui32>(1, config.GetWasmCompileMaxPerDinode()))
     , WasmCpuSpecOverride(config.GetWasmCpuSpecOverride())
     , LocalCpuSpec(DetectLocalCpuSpec(WasmCpuSpecOverride))
 {}
@@ -153,6 +155,13 @@ void TUdfStoreService::EnqueueWasmCompileIfNeeded(const TUdfModule& udf, const T
     if (IsNamePending(udf.GetName(), EUdfType::WASM)) {
         return;
     }
+    if (EnableCompileControllerFlag) {
+        // Under the controller this node does not decide to compile anything on
+        // its own: it reports the gap and waits to be assigned, so that all the
+        // nodes of a platform do not start the same LLVM run at once.
+        RequestArtifact(udf.GetName(), udf.GetUid(), false);
+        return;
+    }
     PendingWasmCompile.push_back(TPendingUdf{
         .Name = udf.GetName(),
         .Uid = udf.GetUid(),
@@ -165,12 +174,18 @@ void TUdfStoreService::EnqueueWasmCompileIfNeeded(const TUdfModule& udf, const T
     });
 }
 
-void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf) {
+void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf, const TSnapshot* snapshot) {
     if (udf.GetCompileStatus() != ECompileStatus::Ready) {
         return;
     }
     const TString& name = udf.GetName();
     if (LoadedUdfs.contains(name) || IsNamePending(name, EUdfType::WASM)) {
+        return;
+    }
+    // Same snapshot the refresh is applying: CurrentSnapshot is still the previous
+    // one until the handler finishes, and on a cold start it is null. Looking
+    // there would leave LibraryUids empty even when sdk is Ready in this refresh.
+    if (!AreLibraryDependenciesReady(udf.GetManifest(), snapshot)) {
         return;
     }
     try {
@@ -200,7 +215,7 @@ void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf) {
         .Type = EUdfType::WASM,
         .Manifest = udf.GetManifest(),
         .ModuleExtension = GetModuleExtensionFromManifest(udf.GetManifest()),
-        .LibraryUids = CollectLibraryUids(udf.GetManifest()),
+        .LibraryUids = CollectLibraryUids(udf.GetManifest(), snapshot),
     });
 }
 
@@ -211,6 +226,10 @@ void TUdfStoreService::EnqueueLibraryCompileIfNeeded(const TUdfModule& library) 
         return;
     }
     if (IsLibraryPending(library.GetName())) {
+        return;
+    }
+    if (EnableCompileControllerFlag) {
+        RequestArtifact(library.GetName(), library.GetUid(), true);
         return;
     }
     PendingLibraryCompile.push_back(TPendingLibrary{
@@ -305,6 +324,10 @@ void TUdfStoreService::Handle(TEvArtifactTableInitialized::TPtr& ev) {
     ArtifactTablePath = ev->Get()->ArtifactTablePath;
     ALS_INFO(NKikimrServices::METADATA_PROVIDER)
         << "TUdfStoreService: artifact table ready at " << ArtifactTablePath;
+    if (EnableCompileControllerFlag) {
+        ResolveCompileController();
+        ScheduleControllerTick();
+    }
     Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
         new NMetadata::NProvider::TEvSubscribeExternal(std::make_shared<TSnapshotsFetcher>()));
 }
@@ -352,7 +375,9 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
                 << ", old_md5=" << existing->GetMd5()
                 << ", new_md5=" << library.GetMd5();
             UnloadWasmUdfsDependingOnLibrary(name);
-            if (!IsLibraryPending(name)) {
+            if (EnableCompileControllerFlag) {
+                RequestArtifact(name, library.GetUid(), true);
+            } else if (!IsLibraryPending(name)) {
                 PendingLibraryCompile.push_back(TPendingLibrary{.Name = name});
             }
         } else {
@@ -438,7 +463,7 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
                 if (udf.GetCompileStatus() != ECompileStatus::Ready) {
                     EnqueueWasmCompileIfNeeded(udf, snapshot.get());
                 } else {
-                    EnqueueWasmLoadIfNeeded(udf);
+                    EnqueueWasmLoadIfNeeded(udf, snapshot.get());
                 }
                 break;
             case EUdfType::LIBRARY:
@@ -484,11 +509,15 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
     if (!NativeFetchInProgress) {
         FetchNextNativeBody();
     }
-    if (!LibraryCompileInProgress) {
-        FetchNextLibraryCompile();
-    }
-    if (!WasmCompileInProgress) {
-        FetchNextWasmCompile();
+    // Under the controller the compile queues are only ever filled by an
+    // assignment, so a snapshot refresh must not start anything itself.
+    if (!EnableCompileControllerFlag) {
+        if (!LibraryCompileInProgress) {
+            FetchNextLibraryCompile();
+        }
+        if (!WasmCompileInProgress) {
+            FetchNextWasmCompile();
+        }
     }
     if (!WasmLoadInProgress) {
         FetchNextWasmLoad();
@@ -596,7 +625,11 @@ void TUdfStoreService::Handle(TEvLibraryCompileResponse::TPtr& ev) {
     PendingLibraryCompile.pop_front();
     LibraryCompileInProgress = false;
 
-    if (ev->Get()->Success) {
+    if (ev->Get()->Deferred) {
+        ALS_INFO(NKikimrServices::METADATA_PROVIDER)
+            << "TUdfStoreService: deferred library '" << libraryName
+            << "': " << ev->Get()->ErrorMessage;
+    } else if (ev->Get()->Success) {
         ALS_INFO(NKikimrServices::METADATA_PROVIDER)
             << "TUdfStoreService: library '" << libraryName
             << "' compiled for cpu_spec " << LocalCpuSpec;
@@ -606,6 +639,16 @@ void TUdfStoreService::Handle(TEvLibraryCompileResponse::TPtr& ev) {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
             << "TUdfStoreService: failed to compile library '" << libraryName
             << "': " << ev->Get()->ErrorMessage;
+    }
+
+    const auto assignmentIt = LibraryAssignments.find(libraryName);
+    if (assignmentIt != LibraryAssignments.end()) {
+        ReportCompileResult(
+            assignmentIt->second,
+            ev->Get()->Success,
+            ev->Get()->Deferred,
+            ev->Get()->ErrorMessage);
+        LibraryAssignments.erase(assignmentIt);
     }
 
     FetchNextLibraryCompile();
@@ -624,17 +667,26 @@ void TUdfStoreService::Handle(TEvWasmCompileResponse::TPtr& ev) {
     PendingWasmCompile.pop_front();
     WasmCompileInProgress = false;
 
+    const TString& name = ev->Get()->Name;
+    const auto assignmentIt = ModuleAssignments.find(name);
+    const bool assigned = assignmentIt != ModuleAssignments.end();
+
     if (ev->Get()->Deferred) {
         ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-            << "TUdfStoreService: deferred WASM UDF '" << ev->Get()->Name
+            << "TUdfStoreService: deferred WASM UDF '" << name
             << "': " << ev->Get()->ErrorMessage;
     } else if (ev->Get()->Success) {
         PendingWasmLoad.push_back(std::move(pending));
         ALS_INFO(NKikimrServices::METADATA_PROVIDER)
-            << "TUdfStoreService: WASM UDF '" << ev->Get()->Name << "' compiled for cpu_spec "
+            << "TUdfStoreService: WASM UDF '" << name << "' compiled for cpu_spec "
             << LocalCpuSpec;
+    } else if (assigned) {
+        // The controller owns the retry budget for an assigned compile; a local
+        // retry here would race with whatever it decides to do next.
+        ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
+            << "TUdfStoreService: failed to compile assigned WASM UDF '" << name
+            << "': " << ev->Get()->ErrorMessage;
     } else {
-        const TString& name = ev->Get()->Name;
         ui32& retryCount = FetchRetryCounts[name];
         if (retryCount < MaxFetchRetries) {
             ++retryCount;
@@ -648,6 +700,15 @@ void TUdfStoreService::Handle(TEvWasmCompileResponse::TPtr& ev) {
                 << "TUdfStoreService: giving up on WASM UDF '" << name
                 << "' after " << MaxFetchRetries << " compile retries: " << ev->Get()->ErrorMessage;
         }
+    }
+
+    if (assigned) {
+        ReportCompileResult(
+            assignmentIt->second,
+            ev->Get()->Success,
+            ev->Get()->Deferred,
+            ev->Get()->ErrorMessage);
+        ModuleAssignments.erase(assignmentIt);
     }
 
     FetchNextWasmCompile();

@@ -134,6 +134,7 @@ public:
         Tenant->IsExternalStatisticsAggregator = Self->FeatureFlags.GetEnableStatistics();
         Tenant->IsExternalBackupController = false;
         Tenant->IsGraphShardEnabled = Self->FeatureFlags.GetEnableGraphShard();
+        Tenant->IsWasmCompileControllerEnabled = Self->FeatureFlags.GetEnableWasmCompileController();
 
         if (rec.options().disable_external_subdomain()) {
             Tenant->IsExternalSubdomain = false;
@@ -266,6 +267,9 @@ public:
 
                     Tenant->IsExternalHive = false;
                     Tenant->IsGraphShardEnabled = false;
+                    // Serverless databases run on the shared database's dinodes,
+                    // so its controller is the one that schedules their compiles.
+                    Tenant->IsWasmCompileControllerEnabled = false;
                     Tenant->SlotsAllocationConfirmed = true;
                 } else {
                     return Error(Ydb::StatusIds::BAD_REQUEST,

@@ -251,6 +251,50 @@ bool ParseArtifactResponse(const Ydb::Table::ExecuteDataQueryResponse& response,
     return row.ObjectCodeChunkCount > 0;
 }
 
+TString BuildSelectArtifactKeysQuery(const TString& tablePath) {
+    return TStringBuilder()
+        << "SELECT id, kind, uid FROM `"
+        << EscapeTablePath(tablePath)
+        << "` WHERE object_code_chunk_count > 0;";
+}
+
+bool ParseArtifactKeysResponse(
+    const Ydb::Table::ExecuteDataQueryResponse& response,
+    TVector<TArtifactKeyRow>& rows)
+{
+    Ydb::Table::ExecuteQueryResult result;
+    if (!ExtractQueryResult(response, result)) {
+        return false;
+    }
+    const auto& resultSet = result.result_sets(0);
+    const i32 idCol = FindColumnIndex(resultSet, "id");
+    const i32 kindCol = FindColumnIndex(resultSet, "kind");
+    const i32 uidCol = FindColumnIndex(resultSet, "uid");
+    if (idCol < 0 || kindCol < 0 || uidCol < 0) {
+        return false;
+    }
+
+    rows.clear();
+    rows.reserve(resultSet.rows().size());
+    for (const auto& row : resultSet.rows()) {
+        if (idCol >= row.items_size() || kindCol >= row.items_size() || uidCol >= row.items_size()) {
+            return false;
+        }
+        const auto& id = row.items(idCol);
+        const auto& kind = row.items(kindCol);
+        const auto& uid = row.items(uidCol);
+        if (!id.has_text_value() || !kind.has_text_value() || !uid.has_text_value()) {
+            return false;
+        }
+        rows.push_back(TArtifactKeyRow{
+            .Id = id.text_value(),
+            .Kind = kind.text_value(),
+            .Uid = uid.text_value(),
+        });
+    }
+    return true;
+}
+
 TString BuildSelectArtifactChunksQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $id AS Utf8; "

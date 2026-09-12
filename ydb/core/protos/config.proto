@@ -3501,6 +3501,29 @@ message TUdfStoreConfig {
     optional string UnsafeNativeUdfDir = 4;
     optional bool EnableWasmUdf = 5 [default = false];
     optional string WasmCpuSpecOverride = 6;
+
+    // Orchestration of AOT compiles by the per-tenant WasmCompileController
+    // tablet. While disabled, every dinode starts its own compile straight from
+    // the metadata snapshot, as it did before the controller existed.
+    optional bool EnableWasmCompileController = 7 [default = false];
+    optional uint32 WasmCompileMaxPerDinode = 8 [default = 1];
+    optional uint32 WasmCompileMaxPerCpuSpec = 9 [default = 1];
+    // 0 means no tenant-wide ceiling: different cpu_spec produce different
+    // artifacts and have no reason to serialize against each other.
+    optional uint32 WasmCompileMaxPerTenant = 10 [default = 0];
+    optional uint32 WasmCompileAssignmentTimeoutSeconds = 11 [default = 900];
+    optional uint32 WasmCompileHeartbeatTimeoutSeconds = 12 [default = 60];
+    optional uint32 WasmMaxCompileAttempts = 13 [default = 3];
+    // How long an assignment is protected from being reclaimed as "not claimed
+    // by the worker": a heartbeat already on the wire when it was issued cannot
+    // possibly mention it yet.
+    optional uint32 WasmCompileAssignGraceSeconds = 14 [default = 30];
+    // How often the controller re-reads artifacts/{cpu_spec} of every platform
+    // it knows. Each pass is a full scan, so this is the leader's main load knob.
+    optional uint32 WasmCompileReconcileIntervalSeconds = 15 [default = 30];
+    // When a node that stopped registering is forgotten, together with the
+    // platform it was the last representative of.
+    optional uint32 WasmCompileWorkerRetentionSeconds = 16 [default = 86400];
 }
 
 message TAppConfig {

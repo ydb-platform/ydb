@@ -203,6 +203,7 @@ struct TKikimrEvents : TEvents {
         ES_PQ_DEFERRED_PUBLISH = 4280,
         ES_WORKLOAD_MANAGER = 4281,
         ES_FLOW_CONTROL_MANAGER = 4282,
+        ES_WASM_COMPILE_CTL = 4283,
     };
 };
 

@@ -441,6 +441,7 @@ void TSchemeShard::InitializeTabletMigrations() {
         bool createSVP = false;
         bool createSA = false;
         bool createBCT = false;
+        bool createWCC = false;
 
         if (subdomain->GetTenantSysViewProcessorID() == InvalidTabletId) {
             createSVP = true;
@@ -457,13 +458,22 @@ void TSchemeShard::InitializeTabletMigrations() {
         // It is a placeholder with no real functionality, and its eager creation
         // blocks tenant databases in PENDING state during initial configuration.
 
-        if (!createSVP && !createSA && !createBCT) {
+        // Serverless databases share the resource database's dinodes, so the
+        // compile controller belongs to that database, not to them.
+        if (EnableWasmCompileController &&
+            !IsServerlessDomainGlobal(pathId, subdomain) &&
+            subdomain->GetTenantWasmCompileControllerID() == InvalidTabletId)
+        {
+            createWCC = true;
+        }
+
+        if (!createSVP && !createSA && !createBCT && !createWCC) {
             continue;
         }
 
         auto workingDir = path.Parent().PathString();
         auto dbName = path.LeafName();
-        TMigrationInfo migration{workingDir, dbName, createSVP, createSA, createBCT};
+        TMigrationInfo migration{workingDir, dbName, createSVP, createSA, createBCT, createWCC};
         migrations.push(std::move(migration));
 
         LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -473,6 +483,7 @@ void TSchemeShard::InitializeTabletMigrations() {
             << ", create SVP: " << createSVP
             << ", create SA: " << createSA
             << ", create BCT: " << createBCT
+            << ", create WCC: " << createWCC
             << ", at schemeshard: " << TabletID());
     }
 
@@ -5812,6 +5823,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableMoveIndex = appData->FeatureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
+    EnableWasmCompileController = appData->FeatureFlags.GetEnableWasmCompileController();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
@@ -8835,6 +8847,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableMoveIndex = featureFlags.GetEnableMoveIndex();
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnableStatistics = featureFlags.GetEnableStatistics();
+    EnableWasmCompileController = featureFlags.GetEnableWasmCompileController();
     EnableServerlessExclusiveDynamicNodes = featureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();
     EnableTempTables = featureFlags.GetEnableTempTables();

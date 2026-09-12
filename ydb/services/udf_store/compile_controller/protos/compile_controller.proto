@@ -1,0 +1,84 @@
+package NKikimrUdfStore;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+//! Which row of `modules` the artifact is built from. Libraries and modules
+//! share the artifact tables and are told apart by this, exactly as the `kind`
+//! column of `artifacts/{cpu_spec}` does.
+enum EArtifactKind {
+    ARTIFACT_KIND_UNSPECIFIED = 0;
+    ARTIFACT_KIND_MODULE = 1;
+    ARTIFACT_KIND_LIBRARY = 2;
+}
+
+//! Identity of one compilable unit on one platform. `Uid` is the upload this
+//! key belongs to, so an assignment issued before a re-upload can be told from
+//! the one issued after it.
+message TArtifactKey {
+    optional string Name = 1;
+    optional EArtifactKind Kind = 2;
+    optional string Uid = 3;
+    optional string CpuSpec = 4;
+}
+
+message TLibraryUid {
+    optional string Name = 1;
+    optional string Uid = 2;
+}
+
+message TEvRegister {
+    optional string CpuSpec = 1;
+    optional uint32 NodeId = 2;
+    optional uint32 Capacity = 3;
+}
+
+message TEvRegisterResult {
+    optional uint64 ControllerGeneration = 1;
+}
+
+//! Also re-confirms the assignments this worker believes it is still running,
+//! so that a leader that came up after a tablet move does not re-issue them.
+message TEvHeartbeat {
+    optional string CpuSpec = 1;
+    optional uint32 NodeId = 2;
+    optional uint32 Inflight = 3;
+    optional uint32 Capacity = 4;
+    repeated uint64 ActiveAssignmentIds = 5;
+}
+
+//! A hint that some node noticed a gap. The leader reconciles on its own too,
+//! so losing this event only costs latency.
+message TEvNeedArtifact {
+    optional TArtifactKey Key = 1;
+}
+
+//! Exclusive right to compile `Key` until Done, Failed or deadline.
+//! `Manifest` and `LibraryUids` travel with the assignment rather than being
+//! re-read from the local snapshot: the worker must compile the upload the
+//! controller decided on, not whatever its own snapshot happens to show.
+message TEvAssignCompile {
+    optional TArtifactKey Key = 1;
+    optional uint64 AssignmentId = 2;
+    optional uint64 ControllerGeneration = 3;
+    optional uint64 DeadlineSeconds = 4;
+    optional string Manifest = 5;
+    repeated TLibraryUid LibraryUids = 6;
+}
+
+message TEvCompileDone {
+    optional uint64 AssignmentId = 1;
+    optional TArtifactKey Key = 2;
+}
+
+//! `Stale` separates "this upload was replaced while we compiled" from a real
+//! compile failure. Only the latter counts towards the poison pill.
+message TEvCompileFailed {
+    optional uint64 AssignmentId = 1;
+    optional TArtifactKey Key = 2;
+    optional string Error = 3;
+    optional bool Stale = 4;
+}
+
+message TEvArtifactReady {
+    optional TArtifactKey Key = 1;
+}

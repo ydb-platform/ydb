@@ -122,6 +122,7 @@
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/statistics/service/service.h>
+#include <ydb/services/udf_store/compile_controller/compile_controller.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/blob_depot/blob_depot.h>
 #include <ydb/core/test_tablet/test_tablet.h>
@@ -1213,6 +1214,10 @@ namespace Tests {
         localConfig.TabletClassInfo[TTabletTypes::StatisticsAggregator] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NStat::CreateStatisticsAggregator, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::WasmCompileController] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NUdfStore::CreateWasmCompileController, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
     }
 

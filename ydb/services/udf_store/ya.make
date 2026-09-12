@@ -3,6 +3,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     service.cpp
+    controller_client.cpp
     store_initializer.cpp
     artifact_table_initializer.cpp
     kv_body_store.cpp
@@ -22,6 +23,7 @@ PEERDIR(
     ydb/core/tx/scheme_cache
     ydb/library/aclib
     ydb/library/table_creator
+    ydb/services/udf_store/compile_controller/protos
     ydb/services/udf_store/metadata_subscription
     ydb/services/udf_store/wasm
     ydb/services/metadata/request
@@ -36,9 +38,11 @@ PEERDIR(
 END()
 
 RECURSE(
+    compile_controller
     wasm
 )
 
 RECURSE_FOR_TESTS(
     ut
+    ut_orchestration
 )

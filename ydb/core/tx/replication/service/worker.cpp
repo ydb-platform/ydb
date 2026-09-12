@@ -41,6 +41,28 @@ TString TEvWorker::TEvCommit::ToString() const {
     << " }";
 }
 
+TEvWorker::TEvCommitResult::TEvCommitResult(size_t offset)
+    : Offset(offset)
+{
+}
+
+TString TEvWorker::TEvCommitResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " Offset: " << Offset
+    << " }";
+}
+
+TEvWorker::TEvReaderStarted::TEvReaderStarted(ui64 committedOffset)
+    : CommittedOffset(committedOffset)
+{
+}
+
+TString TEvWorker::TEvReaderStarted::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " CommittedOffset: " << CommittedOffset
+    << " }";
+}
+
 TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, const TVector<TTopicMessage>& records)
     : PartitionId(partitionId)
     , Source(source)

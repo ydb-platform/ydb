@@ -1,4 +1,5 @@
 #include "kikimr_lookup_actor.h"
+#include "kikimr_lookup_session_pool_service.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
@@ -65,8 +66,7 @@ void Backtick(IOutputStream& os, const std::string_view s) {
 }
 } // namespace {
 
-namespace NYql::NDq {
-
+namespace NYql::NDq::NDqSourceLookup {
 namespace {
     // TODO consider moving to lookup parameters (...but likely not)
     constexpr ui32 RetriesLimit = 22;
@@ -74,6 +74,7 @@ namespace {
     constexpr TDuration MaxRetryDelay = TDuration::Seconds(30);
     // = retry for at most 6 minutes
     constexpr ui64 ChannelBufferSize = 1_MB;
+    constexpr ui64 SessionPoolLimit = 100; // arbitrary
 
     const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
         Y_ABORT_UNLESS(t1);
@@ -104,40 +105,42 @@ namespace {
         return NKikimr::NMiniKQL::TListType::Create(rowType, env);
     }
 
-    class TDqSourceKikimrLookupActor
-        : public NYql::NDq::IDqAsyncLookupSource,
-          public NActors::TActorBootstrapped<TDqSourceKikimrLookupActor> {
-        using TBase = NActors::TActorBootstrapped<TDqSourceKikimrLookupActor>;
+    struct TSessionInfoDeleter;
+    struct TSessionInfo {
+        using TPtr = std::unique_ptr<TSessionInfo, TSessionInfoDeleter>;
+        TString Database;
+        TString SessionId;
+        bool Invalidate = false;
+    };
 
-        struct TSessionState;
+    struct TSessionInfoDeleter {
+        explicit TSessionInfoDeleter(NActors::TActorSystem* actorSystem = TActivationContext::ActorSystem())
+            : ActorSystem(actorSystem)
+        {
+        }
 
-        struct TLookupState {
-            using TPtr = std::shared_ptr<TLookupState>;
-            std::weak_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
-            // ^^^ must not be lock()ed without bound mkql allocator
-            // ^^^ (and allocator must not be bound outside actor context)
-            TBackoff Backoff;
-            TInstant SentTime;
-            size_t FullscanLimit = 0;
-            size_t ResultRows = 0;
-            // Query
-            std::shared_ptr<TSessionState> SessionState; // avoid circular ownership
-            std::shared_ptr<arrow::Schema> Schema;
-            NRpcService::TStreamReadProcessorPtr<Ydb::Query::ExecuteQueryResponsePart> StreamProcessor;
-        };
+        NActors::TActorSystem* ActorSystem;
+        void operator()(TSessionInfo* sessionInfo);
+    };
 
-        struct TSessionState {
-            using TPtr = std::shared_ptr<TSessionState>;
-            TString SessionId;
-            NRpcService::TStreamReadProcessorPtr<Ydb::Query::SessionState> StreamProcessor;
-            TLookupState::TPtr PendingLookup; // avoid circular ownership, either PendingLookup or PendingLookup->SessionState must be nullptr
-        };
-
+    namespace {
         // Event ids
         enum EEventIds: ui32 {
             EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-            EvQueryCreateSessionResponse = EvBegin,
+            // TQuerySessionPoolServiceActor
+            // public
+            EvAcquireSession = EvBegin,
+            EvReleaseSession,
+            // internal/private
+            EvQueryCreateSessionResponse,
             EvQuerySessionState,
+            EvDatabaseStatesCleanup,
+
+            // TKikimrLookupActor
+            // public
+            EvSessionAcquired,
+            EvSessionError,
+            // internal/private
             EvQueryExecuteQueryResponsePart,
             EvError,
             EvRetry,
@@ -145,26 +148,6 @@ namespace {
         };
 
         static_assert(EEventIds::EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-        // Beware: destroys future value
-        template <typename TResponse, enum EEventIds EvId>
-        struct TEvQueryResponse: NActors::TEventLocal<TEvQueryResponse<TResponse, EvId>, EvId> {
-            explicit TEvQueryResponse(const NThreading::TFuture<TResponse>& responseFuture, TLookupState::TPtr state)
-                : State(std::move(state))
-            {
-                try {
-                    Response = ExtractFromConstFuture(responseFuture);
-                } catch(std::exception& ex) {
-                    Response.set_status(Ydb::StatusIds::INTERNAL_ERROR);
-                    auto& issue = *Response.add_issues();
-                    issue.set_message(TStringBuilder() << "Got unexpected exception: " << ex.what());
-                    // severity is FATAL by default
-                }
-            }
-
-            TLookupState::TPtr State;
-            TResponse Response;
-        };
 
         template <typename TResponse, typename TEvState, enum EEventIds EvId>
         struct TEvStreamResponse: NActors::TEventLocal<TEvStreamResponse<TResponse, TEvState, EvId>, EvId> {
@@ -177,8 +160,441 @@ namespace {
             TEvState State;
             TResponse Response;
         };
-        using TEvQueryCreateSessionResponse = TEvQueryResponse<Ydb::Query::CreateSessionResponse, EvQueryCreateSessionResponse>;
+    }
+
+    class TQuerySessionPoolServiceActor
+        : public NActors::TActorBootstrapped<TQuerySessionPoolServiceActor> {
+        using TBase = NActors::TActorBootstrapped<TQuerySessionPoolServiceActor>;
+
+        public:
+        struct TSessionState {
+            using TPtr = std::shared_ptr<TSessionState>;
+            explicit TSessionState(NActors::TActorId sender, const TString& database)
+                : Sender(sender)
+                , Database(database)
+            {}
+            NActors::TActorId Sender; // set from CreateSession and until first reply in AttachSession
+            TString Database; // must match key in DatabaseStates
+            TString SessionId; // empty when session does not exists
+            NRpcService::TStreamReadProcessorPtr<Ydb::Query::SessionState> StreamProcessor;
+        };
+
+        struct TEvReleaseSession : NActors::TEventLocal<TEvReleaseSession, EvReleaseSession> {
+            explicit TEvReleaseSession(TSessionInfo&& sessionInfo)
+                : SessionInfo(std::move(sessionInfo))
+            {
+            }
+
+            TSessionInfo SessionInfo;
+        };
+
+        struct TEvAcquireSession : NActors::TEventLocal<TEvAcquireSession, EvAcquireSession> {
+            TEvAcquireSession(const TString& database)
+                : Database(database)
+            {}
+            TString Database;
+        };
+
+        struct TEvSessionAcquired : NActors::TEventLocal<TEvSessionAcquired, EvSessionAcquired> {
+            explicit TEvSessionAcquired(TSessionInfo::TPtr sessionInfo)
+                : SessionInfo(std::move(sessionInfo))
+            {}
+            TSessionInfo::TPtr SessionInfo;
+        };
+
+        struct TEvSessionError : NActors::TEventLocal<TEvSessionError, EvSessionError> {
+            explicit TEvSessionError(Ydb::StatusIds::StatusCode status, NYql::TIssues issues)
+                : Status(status)
+                , Issues(std::move(issues))
+            {}
+            Ydb::StatusIds::StatusCode Status;
+            NYql::TIssues Issues;
+        };
+
+        void Bootstrap() {
+            Become(&TQuerySessionPoolServiceActor::StateFunc);
+            Schedule(DatabaseStatesCleanupPeriod, new TEvDatabaseStatesCleanup());
+        }
+
+        private:
+
+        // Beware: destroys future value
+        template <typename TResponse, enum EEventIds EvId, typename TStatePtr>
+        struct TEvQueryResponse: NActors::TEventLocal<TEvQueryResponse<TResponse, EvId, TStatePtr>, EvId> {
+            explicit TEvQueryResponse(const NThreading::TFuture<TResponse>& responseFuture, TStatePtr state)
+                : State(std::move(state))
+            {
+                try {
+                    Response = ExtractFromConstFuture(responseFuture);
+                } catch(std::exception& ex) {
+                    Response.set_status(Ydb::StatusIds::INTERNAL_ERROR);
+                    auto& issue = *Response.add_issues();
+                    issue.set_message(TStringBuilder() << "Got unexpected exception: " << ex.what());
+                    // severity is FATAL by default
+                }
+            }
+
+            TStatePtr State;
+            TResponse Response;
+        };
+
+        using TEvQueryCreateSessionResponse = TEvQueryResponse<Ydb::Query::CreateSessionResponse, EvQueryCreateSessionResponse, TSessionState::TPtr>;
         using TEvQuerySessionState = TEvStreamResponse<Ydb::Query::SessionState, TSessionState::TPtr, EvQuerySessionState>;
+
+        struct TEvDatabaseStatesCleanup : NActors::TEventLocal<TEvDatabaseStatesCleanup, EvDatabaseStatesCleanup> {
+        };
+
+        struct TDatabaseSessionState {
+            std::deque<NActors::TActorId> WaitingQueue;
+            TVector<TSessionState::TPtr> ReadySessions;
+            // when entry removed from BusySessions or InflightCreateSessions decremented, we should call TryEnqueueWaiting() or directly create/reuse session
+            std::unordered_map<TString, TSessionState::TPtr> BusySessions;
+            ui64 InflightCreateSessions = 0;
+            TInstant ExpireTime;
+        };
+
+        STRICT_STFUNC_EXC(StateFunc,
+            hFunc(TEvAcquireSession, Handle)
+            hFunc(TEvReleaseSession, Handle)
+            hFunc(TEvQueryCreateSessionResponse, Handle)
+            hFunc(TEvQuerySessionState, Handle)
+            hFunc(TEvDatabaseStatesCleanup, Handle)
+            sFunc(NActors::TEvents::TEvPoison, PassAway)
+            , ExceptionFunc(std::exception, HandleException)
+        )
+
+        void HandleException(const std::exception& ex) {
+            YDB_LOG_ERROR("Got unexpected exception",
+                    {"exception", ex.what()});
+            // TODO what can we do here? Except Y_ABORT?
+        }
+
+        void SendCreateSession(TSessionState::TPtr state) {
+            ++DatabaseStates[state->Database].InflightCreateSessions;
+
+            using TRequest = Ydb::Query::CreateSessionRequest;
+            using TResponse = Ydb::Query::CreateSessionResponse;
+            using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
+
+            TRequest request;
+            auto actorSystem = TActivationContext::ActorSystem();
+            auto selfId = SelfId();
+            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), state->Database, /*token=*/Nothing(), actorSystem);
+            result.Subscribe([actorSystem, selfId, state = std::move(state)](const NThreading::TFuture<TResponse>& future) mutable {
+                actorSystem->Send(selfId, new TEvQueryCreateSessionResponse(future, std::move(state)));
+            });
+        }
+
+        void Handle(TEvAcquireSession::TPtr ev) {
+            auto& sender = ev->Sender;
+            auto& database = ev->Get()->Database;
+            auto& databaseState = DatabaseStates[database];
+            databaseState.WaitingQueue.push_back(sender);
+            TryEnqueueWaiting(databaseState, database);
+        }
+
+        void TryEnqueueWaiting(TDatabaseSessionState& databaseState, const TString& database) {
+            // we have some ready session, serve from them
+            while (!databaseState.ReadySessions.empty() && !databaseState.WaitingQueue.empty()) {
+                auto session = std::move(databaseState.ReadySessions.back());
+                databaseState.ReadySessions.pop_back();
+                auto& sessionId = session->SessionId;
+                if (sessionId.empty()) { // drop session from Ready
+                    continue;
+                }
+                auto sender = databaseState.WaitingQueue.front();
+                databaseState.WaitingQueue.pop_front();
+                SendSession(sender, std::move(session));
+            }
+
+            while (!databaseState.WaitingQueue.empty()) {
+                // too many sessions: wait until some session released
+                if (databaseState.BusySessions.size() + databaseState.InflightCreateSessions >= SessionPoolLimit) {
+                    YDB_LOG_TRACE("Reached pool limit",
+                            {"busySessionSize", databaseState.BusySessions.size()},
+                            {"inflightCreateSessions", databaseState.InflightCreateSessions},
+                            {"limit", SessionPoolLimit},
+                            {"senderId", databaseState.WaitingQueue.front()},
+                            {"database", database}
+                    );
+                    return;
+                }
+
+                // create new session
+                auto sender = databaseState.WaitingQueue.front();
+                databaseState.WaitingQueue.pop_front();
+                SendCreateSession(std::make_shared<TSessionState>(sender, database));
+            }
+        }
+
+        void SendSession(const NActors::TActorId& sender, TSessionState::TPtr session) {
+            const auto& sessionId = session->SessionId;
+            YDB_LOG_TRACE("Sent waiting session",
+                    {"senderId", sender},
+                    {"sessionId", sessionId},
+                    {"database", session->Database});
+            const auto& database = session->Database;
+            auto& databaseState = DatabaseStates[database];
+            databaseState.ExpireTime = TInstant::Now() + DatabaseStatesCleanupPeriod;
+            auto [_, inserted] = databaseState.BusySessions.emplace(sessionId, std::move(session));
+            if (!inserted) {
+                Send(sender, new TEvSessionError(Ydb::StatusIds::INTERNAL_ERROR, TIssues()));
+                Y_VALIDATE(inserted, "BusySession already contains session " << sessionId);
+            }
+            Send(sender, new TEvSessionAcquired(TSessionInfo::TPtr(new TSessionInfo {
+                .Database = database,
+                .SessionId = sessionId,
+            })));
+        }
+
+        void Handle(TEvReleaseSession::TPtr ev) {
+            auto& sessionInfo = ev->Get()->SessionInfo;
+            auto dbIt = DatabaseStates.find(sessionInfo.Database);
+            Y_VALIDATE(dbIt != DatabaseStates.end(), "Releasing session " << sessionInfo.SessionId << " from unknown database " << sessionInfo.Database);
+            auto& databaseState = dbIt->second;
+            databaseState.ExpireTime = TInstant::Now() + DatabaseStatesCleanupPeriod;
+            auto it = databaseState.BusySessions.find(sessionInfo.SessionId);
+            Y_VALIDATE(it != databaseState.BusySessions.end(), "Releasing unknown session " << sessionInfo.SessionId);
+            auto& session = it->second;
+            if (!databaseState.WaitingQueue.empty() && !sessionInfo.Invalidate && !session->SessionId.empty()) {
+                // fastpath: reuse/serve session and keep in BusySession
+                auto sender = std::move(databaseState.WaitingQueue.front());
+                databaseState.WaitingQueue.pop_front();
+                YDB_LOG_TRACE("Transfer ready session to waiting",
+                        {"senderId", sender},
+                        {"sessionId", session->SessionId},
+                        {"database", session->Database});
+                Send(sender, new TEvSessionAcquired(TSessionInfo::TPtr(new TSessionInfo {
+                    .Database = session->Database,
+                    .SessionId = session->SessionId,
+                })));
+                return;
+            }
+            if (sessionInfo.Invalidate) {
+                CleanupStreamProcessor(session);
+                if (session->SessionId) {
+                    SendDeleteSession(std::move(session->SessionId), sessionInfo.Database);
+                    session->SessionId.clear();
+                }
+            } else if (!session->SessionId.empty()) {
+                YDB_LOG_TRACE("Return session to ready pool",
+                        {"sessionId", session->SessionId},
+                        {"database", session->Database});
+                databaseState.ReadySessions.push_back(std::move(session));
+            }
+            databaseState.BusySessions.erase(it);
+            TryEnqueueWaiting(databaseState, sessionInfo.Database);
+        }
+
+        void Handle(TEvQueryCreateSessionResponse::TPtr ev) {
+            auto session = std::move(ev->Get()->State);
+            auto& response = ev->Get()->Response;
+            YDB_LOG_DEBUG("TEvQueryCreateSessionResponse",
+                    {"database", session->Database},
+                    {"response", response.DebugString()});
+            auto& databaseState = DatabaseStates[session->Database];
+            databaseState.ExpireTime = TInstant::Now() + DatabaseStatesCleanupPeriod;
+            if (auto status = response.status(); status != Ydb::StatusIds::SUCCESS) {
+                if (auto sender = session->Sender) {
+                    session->Sender = {};
+                    Send(sender, new TEvSessionError(status, IssuesFromProtoMessage(response)));
+                }
+                Y_DEBUG_ABORT_UNLESS(databaseState.InflightCreateSessions > 0);
+                --databaseState.InflightCreateSessions;
+                TryEnqueueWaiting(databaseState, session->Database);
+                return;
+            }
+            session->SessionId = std::move(*response.mutable_session_id());
+            SendAttachSession(std::move(session));
+        }
+
+        void SendDeleteSession(TString sessionId, const TString& database) {
+            using TRequest = Ydb::Query::DeleteSessionRequest;
+            using TResponse = Ydb::Query::DeleteSessionResponse;
+            using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
+
+            TRequest request;
+            request.set_session_id(std::move(sessionId));
+            auto actorSystem = TActivationContext::ActorSystem();
+            [[maybe_unused]]
+            auto selfId = SelfId();
+            [[maybe_unused]]
+            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), database, /*token=*/Nothing(), actorSystem);
+            // don't wait for results
+        }
+
+        void SendAttachSession(TSessionState::TPtr session) {
+            using TRequest = Ydb::Query::AttachSessionRequest;
+            using TResponse = Ydb::Query::SessionState;
+            using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
+            TRequest request;
+            YDB_LOG_TRACE("Attach session",
+                    {"sessionId", session->SessionId},
+                    {"database", session->Database});
+            request.set_session_id(session->SessionId);
+            session->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(std::move(request), session->Database, /*token*/Nothing(), ActorContext(), false, ChannelBufferSize);
+            ReadNextSessionState(std::move(session));
+        }
+
+        void ReadNextSessionState(TSessionState::TPtr session) {
+            auto actorSystem = TActivationContext::ActorSystem();
+            auto selfId = SelfId();
+            Y_ABORT_UNLESS(session->StreamProcessor && session->StreamProcessor->HasData());
+            session->StreamProcessor->Read([actorSystem, selfId, session = std::move(session)](Ydb::Query::SessionState&& response) mutable {
+                actorSystem->Send(selfId, new TEvQuerySessionState(std::move(response), std::move(session)));
+            });
+        }
+
+        void Handle(TEvQuerySessionState::TPtr ev) {
+            auto session = std::move(ev->Get()->State);
+            auto& response = ev->Get()->Response;
+            YDB_LOG_TRACE("TEvQuerySessionState",
+                    {"sessionId", session->SessionId},
+                    {"response", response.DebugString()});
+            if (!session->StreamProcessor) {
+                // it is possible that TEvRelease with Invalidate was processed before
+                YDB_LOG_DEBUG("Ydb::Query::SessionState for already terminated stream");
+                Y_VALIDATE(session->SessionId.empty(), "SessionId is not empty for terminated session: " << session->SessionId);
+                Y_VALIDATE(!session->Sender, "Sender is set for terminated session: " << session->Sender); // TEvRelease cannot be sent between session creation and first successful attach (which will clear Sender)
+                return;
+            }
+            auto status = response.status();
+            if (response.has_session_shutdown()) {
+                status = Ydb::StatusIds::SESSION_EXPIRED;
+            }
+            if (response.has_node_shutdown()) {
+                status = Ydb::StatusIds::SESSION_EXPIRED; // XXX
+            }
+            auto& databaseState = DatabaseStates[session->Database];
+            databaseState.ExpireTime = TInstant::Now() + DatabaseStatesCleanupPeriod;
+            switch(status) {
+                case Ydb::StatusIds::SUCCESS:
+                    break;
+
+                case Ydb::StatusIds::SESSION_EXPIRED:
+                case Ydb::StatusIds::BAD_SESSION:
+                    session->SessionId.clear();
+                    [[fallthrough]];
+                default:
+                    if (!session->SessionId.empty()) {
+                        SendDeleteSession(std::move(session->SessionId), session->Database);
+                        session->SessionId.clear();
+                    }
+                    CleanupStreamProcessor(session);
+                    if (auto sender = session->Sender) {
+                        session->Sender = {};
+                        Send(sender, new TEvSessionError(status, IssuesFromProtoMessage(response)));
+                        Y_DEBUG_ABORT_UNLESS(databaseState.InflightCreateSessions > 0);
+                        --databaseState.InflightCreateSessions;
+                        TryEnqueueWaiting(databaseState, session->Database);
+                    }
+                    return;
+            }
+            if (auto sender = session->Sender) {
+                session->Sender = {};
+
+                Y_DEBUG_ABORT_UNLESS(databaseState.InflightCreateSessions > 0);
+                --databaseState.InflightCreateSessions;
+                SendSession(sender, session);
+            }
+            if (session->StreamProcessor->HasData()) {
+                ReadNextSessionState(std::move(session));
+            } else {
+                FinalizeSession(std::move(session));
+            }
+        }
+
+        void FinalizeSession(TSessionState::TPtr session) {
+            Y_DEBUG_ABORT_UNLESS(!session->Sender);
+            YDB_LOG_DEBUG("FinalizeSession",
+                    {"sessionId", session->SessionId});
+            session->SessionId.clear();
+            CleanupStreamProcessor(session);
+        }
+
+        void CleanupStreamProcessor(TSessionState::TPtr& session) {
+            if (auto& streamProcessor = session->StreamProcessor) {
+                if (!streamProcessor->IsFinished()) {
+                    streamProcessor->Cancel();
+                }
+                streamProcessor.Reset();
+            }
+        }
+
+        void PassAway() override {
+            for (auto& [database, databaseState]: DatabaseStates) {
+                for (auto sender: databaseState.WaitingQueue) {
+                    TIssues issues;
+                    issues.AddIssue(TIssue("QuerySessionPool actor was terminated"));
+                    Send(sender, new TEvSessionError(Ydb::StatusIds::CANCELLED, issues));
+                }
+                for (auto& session: databaseState.ReadySessions) {
+                    if (!session->SessionId.empty()) {
+                        SendDeleteSession(std::move(session->SessionId), database);
+                        session->SessionId.clear();
+                    }
+                    CleanupStreamProcessor(session);
+                }
+                for (auto& [_, session]: databaseState.BusySessions) {
+                    if (!session->SessionId.empty()) {
+                        SendDeleteSession(std::move(session->SessionId), database);
+                        session->SessionId.clear();
+                    }
+                    CleanupStreamProcessor(session);
+                }
+            }
+            TBase::PassAway();
+        }
+
+        static constexpr TDuration DatabaseStatesCleanupPeriod = TDuration::Hours(1);
+
+        void Handle(TEvDatabaseStatesCleanup::TPtr /*ev*/) {
+            auto now = TInstant::Now();
+            for (auto it = DatabaseStates.begin(); it != DatabaseStates.end(); ) {
+                auto& [database, databaseState] = *it;
+                if (databaseState.ExpireTime <= now && databaseState.BusySessions.size() + databaseState.InflightCreateSessions + databaseState.WaitingQueue.size() == 0) {
+                    for (auto session: databaseState.ReadySessions) {
+                        CleanupStreamProcessor(session);
+                        if (session->SessionId) {
+                            SendDeleteSession(std::move(session->SessionId), database);
+                            session->SessionId.clear();
+                        }
+                    }
+                    it = DatabaseStates.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            Schedule(DatabaseStatesCleanupPeriod, new TEvDatabaseStatesCleanup());
+        }
+
+        private:
+        std::unordered_map<TString, TDatabaseSessionState> DatabaseStates;
+    };
+
+    void TSessionInfoDeleter::operator()(TSessionInfo* sessionInfo) {
+        ActorSystem->Send(QuerySessionPoolServiceActorId(), new TQuerySessionPoolServiceActor::TEvReleaseSession(std::move(*sessionInfo)));
+        delete sessionInfo;
+    }
+
+    class TKikimrLookupActor
+        : public NYql::NDq::IDqAsyncLookupSource,
+          public NActors::TActorBootstrapped<TKikimrLookupActor> {
+        using TBase = NActors::TActorBootstrapped<TKikimrLookupActor>;
+
+        struct TLookupState {
+            using TPtr = std::shared_ptr<TLookupState>;
+            std::weak_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
+            // ^^^ must not be lock()ed without bound mkql allocator
+            // ^^^ (and allocator must not be bound outside actor context)
+            TBackoff Backoff;
+            TInstant SentTime;
+            size_t FullscanLimit = 0;
+            size_t ResultRows = 0;
+            TSessionInfo::TPtr SessionInfo;
+            std::shared_ptr<arrow::Schema> Schema;
+            NRpcService::TStreamReadProcessorPtr<Ydb::Query::ExecuteQueryResponsePart> StreamProcessor;
+        };
         using TEvQueryExecuteQueryResponsePart = TEvStreamResponse<Ydb::Query::ExecuteQueryResponsePart, TLookupState::TPtr, EvQueryExecuteQueryResponsePart>;
 
     private:
@@ -191,8 +607,30 @@ namespace {
             TLookupState::TPtr State;
         };
 
+        // SessionInfo::TPtr is std::unique_ptr<TSessionInfo, [actorSystem]() {
+        //      actorSystem->Send(ServiceActorId(), TEvRelease);
+        // }
+        //
+        // LookupActor
+        //              PoolActor
+        // SendRequest->EvAcquireSession
+        //              Handle(AcquireSession):
+        //              1) has session in pool: move to BusySessions & <- EvSessionAcquired with TSessionInfo
+        //              2) reached limit: return; Puts sender to WaitingQueue
+        //              3) Rpc<Create> -> EvCreated(TState { empty, Sender })
+        //
+        //              Handle(EvCreate): fill State->Id, attach it
+        //              Handle(EvSessionInfo): if State->Sender is not false, <- EvSessionAcquired, put to BusySession, clear State->Sender
+        //
+        // Handle(EvSessionAcquired): keep SessionInfo in State, start request, etc;
+        //  1) Finished: release SessionInfo (will call back Send(TEvRelease))
+        //  2) Error: release SessionInfo, optionally set Invalidate on *SESSION* errors (will call back Send(TEvRelease))
+        //  3) Something happens in-transmit: event destroyed, SessionInfo destroyed (will call back Send(TEvRelease))
+        //               Handle(TEvRelease):
+        //               1) if invalidate - destroy session
+        //               2) if not invalidate - serve WaitingQueue or return session to pool if empty
     public:
-        TDqSourceKikimrLookupActor(
+        TKikimrLookupActor(
             NActors::TActorId&& parentId,
             ::NMonitoring::TDynamicCounterPtr taskCounters,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
@@ -226,7 +664,7 @@ namespace {
             Pickle.emplace(/*stable=*/false, MakePickleType(typeEnv, keyType));
         }
 
-        ~TDqSourceKikimrLookupActor() {
+        ~TKikimrLookupActor() {
             Free();
         }
 
@@ -250,7 +688,6 @@ namespace {
             AnswerTime = component->GetCounter("AnswerUs", true);
             CpuTime = component->GetCounter("CpuUs", true);
             InFlight = component->GetCounter("InFlight");
-            ActiveSessions = component->GetCounter("Sessions");
         }
     public:
 
@@ -262,10 +699,10 @@ namespace {
                     COMMON_LOG,
                     {"database", LookupSource.GetDatabase()},
                     {"parentId", ParentId});
-            Become(&TDqSourceKikimrLookupActor::StateFunc);
+            Become(&TKikimrLookupActor::StateFunc);
         }
 
-        static constexpr char ActorName[] = "KIKIMR_PROVIDER_LOOKUP_ACTOR";
+        static constexpr char ActorName[] = "DQ_SOURCE_KIKIMR_LOOKUP_ACTOR";
 
     private: // IDqAsyncLookupSource
         size_t GetMaxSupportedKeysInRequest() const override {
@@ -283,37 +720,17 @@ namespace {
         void PassAway() override {
             YDB_LOG_DEBUG("PassAway",
                     COMMON_LOG,
-                    {"sessions", Sessions.size()},
                     {"requests", InflightRequests.size()},
             );
-            for (auto&& session: Sessions) {
-                CleanupStreamProcessor(session);
-                if (auto& sessionId = session->SessionId) {
-                    SendDeleteSession(std::move(sessionId));
-                    sessionId.clear();
-                }
-            }
-            Sessions.clear();
             if (InFlight) {
                 // If request fails on (unrecoverable) error or cancelled, we may end up with non-zero InFlight
                 InFlight->Sub(InflightRequests.size());
             }
             for (auto state: InflightRequests) {
-                if (auto& session = state->SessionState) {
-                    CleanupStreamProcessor(session);
-                    if (auto& sessionId = session->SessionId) {
-                        SendDeleteSession(std::move(sessionId));
-                        sessionId.clear();
-                    }
-                }
+                state->SessionInfo.reset();
                 CleanupStreamProcessor(state);
             }
             InflightRequests.clear();
-            PendingPassAway = true;
-            if (InflightCreateSession != 0) {
-                // we must receive reply and delete session first
-                return;
-            }
             Free();
             TBase::PassAway();
         }
@@ -322,10 +739,11 @@ namespace {
         STRICT_STFUNC_EXC(StateFunc,
             hFunc(TEvLookupRequest, Handle)
             hFunc(TEvQueryExecuteQueryResponsePart, Handle)
-            hFunc(TEvQueryCreateSessionResponse, Handle)
-            hFunc(TEvQuerySessionState, Handle)
+            hFunc(TQuerySessionPoolServiceActor::TEvSessionAcquired, Handle)
+            hFunc(TQuerySessionPoolServiceActor::TEvSessionError, Handle)
             hFunc(TEvLookupRetry, Handle)
             sFunc(NActors::TEvents::TEvPoison, PassAway)
+            hFunc(NActors::TEvents::TEvUndelivered, Handle)
             , ExceptionFunc(std::exception, HandleException)
         )
 
@@ -340,9 +758,6 @@ namespace {
                 if (auto request = state->Request.lock()) {
                     request->erase(request->begin(), request->end());
                 } else {
-                    if (state->SessionState) {
-                        Sessions.push_back(std::exchange(state->SessionState, {}));
-                    }
                     YDB_LOG_DEBUG("Retry: parent MIA", COMMON_LOG);
                     return;
                 }
@@ -352,9 +767,6 @@ namespace {
                         value = NUdf::TUnboxedValue();
                     }
                 } else {
-                    if (state->SessionState) {
-                        Sessions.push_back(std::exchange(state->SessionState, {}));
-                    }
                     YDB_LOG_DEBUG("Retry: parent MIA", COMMON_LOG);
                     return;
                 }
@@ -364,11 +776,6 @@ namespace {
         }
 
         void Handle(IDqAsyncLookupSource::TEvLookupRequest::TPtr ev) {
-            if (PendingPassAway) {
-                YDB_LOG_DEBUG("TEvLookupRequest after PassAway", COMMON_LOG);
-                SendError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Request received after PassAway");
-                return;
-            }
             auto guard = Guard(*Alloc);
             CreateRequest(ev->Get()->Request.lock(), ev->Get()->FullscanLimit);
         }
@@ -391,6 +798,8 @@ namespace {
         }
 
         void SendRetryOrError(TLookupState::TPtr state, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
+            CleanupStreamProcessor(state);
+            state->SessionInfo.reset();
             if (IsRetryableError(status) && state->Backoff.HasMore()) {
                 auto delay = state->Backoff.Next();
                 YDB_LOG_WARN("Retrievable error",
@@ -406,15 +815,16 @@ namespace {
                 InFlight->Sub(removed);
                 AnswerTime->Add((TInstant::Now() - state->SentTime).MicroSeconds());
             }
-            CleanupStreamProcessor(state);
-            if (auto& session = state->SessionState) {
-                CleanupStreamProcessor(session);
-                if (session->SessionId) {
-                    SendDeleteSession(session->SessionId);
-                }
-                session.reset();
-            }
             SendError(status, std::move(issues));
+        }
+
+        void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+            SendError(Ydb::StatusIds::INTERNAL_ERROR,
+                    TStringBuilder() << "TDqSourceKikimrLookupSource: "
+                    << "Undelivered Event " << ev->Get()->SourceType
+                    << " from " << SelfId() << " (Self) to " << ev->Sender
+                    << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie
+                    << " (service was not started or failed, check logs)");
         }
 
         void HandleException(const std::exception& ex) {
@@ -470,20 +880,24 @@ namespace {
 
         // must be called in actor context
         void SendRequest(TLookupState::TPtr state) {
-            auto startCycleCount = GetCycleCountFast();
+            Y_DEBUG_ABORT_UNLESS(!state->SessionInfo);
+            Pending.push_back(std::move(state));
+            Send(QuerySessionPoolServiceActorId(), new TQuerySessionPoolServiceActor::TEvAcquireSession(LookupSource.GetDatabase()), NActors::IEventHandle::FlagTrackDelivery);
+        }
 
-            while (!state->SessionState) { // reuse or create session
-                if (Sessions.empty()) {
-                    ++InflightCreateSession;
-                    SendCreateSession(std::move(state));
-                    return;
-                }
-                auto sessionState = std::move(Sessions.back());
-                Sessions.pop_back();
-                if (!sessionState->SessionId.empty()) {
-                    state->SessionState = std::move(sessionState);
-                }
-            }
+        void Handle(TQuerySessionPoolServiceActor::TEvSessionError::TPtr& ev) {
+            Y_VALIDATE(!Pending.empty(), "Error on unrequested session");
+            auto state = std::move(Pending.front());
+            Pending.pop_front();
+            SendRetryOrError(std::move(state), ev->Get()->Status, ev->Get()->Issues);
+        }
+
+        void Handle(TQuerySessionPoolServiceActor::TEvSessionAcquired::TPtr& ev) {
+            auto startCycleCount = GetCycleCountFast();
+            Y_VALIDATE(!Pending.empty(), "Acquired unrequested session");
+            auto state = std::move(Pending.front());
+            Pending.pop_front();
+            state->SessionInfo = std::move(ev->Get()->SessionInfo);
 
             using TRequest = Ydb::Query::ExecuteQueryRequest;
             using TResponse = Ydb::Query::ExecuteQueryResponsePart;
@@ -509,7 +923,7 @@ namespace {
         }
 
         void Handle(TEvQueryExecuteQueryResponsePart::TPtr ev) {
-            if (PendingPassAway) { // already passed away
+            if (InflightRequests.empty()) { // already passed away
                 YDB_LOG_DEBUG("TEvQueryExecuteQueryResponsePart after PassAway", COMMON_LOG);
                 return;
             }
@@ -518,17 +932,18 @@ namespace {
             YDB_LOG_TRACE("TEvQueryExecuteQueryResponsePart",
                     COMMON_LOG,
                     {"response", response.DebugString()});
+            Y_VALIDATE(state->StreamProcessor, "TEvQueryExecuteQueryResponsePart: StreamProcessor is unset");
             switch(response.status()) {
                 case Ydb::StatusIds::SUCCESS:
                     break;
 
                 case Ydb::StatusIds::SESSION_EXPIRED:
                 case Ydb::StatusIds::BAD_SESSION:
-                    if (auto& sessionState = state->SessionState) {
-                        CleanupStreamProcessor(sessionState);
-                        sessionState.reset();
+                    if (state->SessionInfo) {
+                        state->SessionInfo->Invalidate = true;
                     }
                     [[fallthrough]];
+
                 default:
                     SendRetryOrError(std::move(state), response.status(), IssuesFromProtoMessage(response));
                     return;
@@ -541,105 +956,6 @@ namespace {
             }
         }
 
-        void SendAttachSession(TSessionState::TPtr session) {
-            using TRequest = Ydb::Query::AttachSessionRequest;
-            using TResponse = Ydb::Query::SessionState;
-            using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
-            TRequest request;
-            request.set_session_id(session->SessionId);
-            session->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(std::move(request), LookupSource.GetDatabase(), Token, ActorContext(), false, ChannelBufferSize);
-            if (ActiveSessions) {
-                ActiveSessions->Inc();
-            }
-            ReadNextSessionState(std::move(session));
-        }
-
-        void ReadNextSessionState(TSessionState::TPtr session) {
-            auto actorSystem = TActivationContext::ActorSystem();
-            auto selfId = SelfId();
-            Y_ABORT_UNLESS(session->StreamProcessor && session->StreamProcessor->HasData());
-            session->StreamProcessor->Read([actorSystem, selfId, session = std::move(session)](Ydb::Query::SessionState&& response) mutable {
-                actorSystem->Send(selfId, new TEvQuerySessionState(std::move(response), std::move(session)));
-            });
-        }
-
-        void Handle(TEvQuerySessionState::TPtr ev) {
-            auto session = std::move(ev->Get()->State);
-            if (session->PendingLookup) {
-                --InflightCreateSession;
-                if (Y_UNLIKELY(PendingPassAway)) {
-                    SendDeleteSession(session->SessionId);
-                    CleanupStreamProcessor(session);
-                    PassAway();
-                    return;
-                }
-            }
-            if (Y_UNLIKELY(PendingPassAway)) {
-                return;
-            }
-            auto& response = ev->Get()->Response;
-            YDB_LOG_TRACE("TEvQuerySessionState",
-                    COMMON_LOG,
-                    {"sessionId", session->SessionId},
-                    {"response", response.DebugString()});
-            auto status = response.status();
-            if (response.has_session_shutdown()) {
-                status = Ydb::StatusIds::SESSION_EXPIRED;
-            }
-            if (response.has_node_shutdown()) {
-                status = Ydb::StatusIds::SESSION_EXPIRED; // XXX
-            }
-            switch(status) {
-                case Ydb::StatusIds::SUCCESS:
-                    if (auto& lookup = session->PendingLookup) {
-                        // send request (once) upon successful attach
-                        lookup->SessionState = session;
-                        SendRequest(std::exchange(lookup, {}));
-                    }
-                    break;
-
-                case Ydb::StatusIds::SESSION_EXPIRED:
-                case Ydb::StatusIds::BAD_SESSION:
-                    session->SessionId.clear();
-                    [[fallthrough]];
-                default:
-                    if (session->SessionId) {
-                        SendDeleteSession(std::move(session->SessionId));
-                        session->SessionId.clear();
-                    }
-                    CleanupStreamProcessor(session);
-                    if (auto& lookup = session->PendingLookup) {
-                        SendRetryOrError(std::exchange(lookup, {}), status, IssuesFromProtoMessage(response));
-                    }
-                    return;
-            }
-            if (session->StreamProcessor->HasData()) {
-                ReadNextSessionState(std::move(session));
-            } else {
-                FinalizeSession(std::move(session));
-            }
-        }
-
-        void FinalizeSession(TSessionState::TPtr state) {
-            YDB_LOG_DEBUG("FinalizeSession",
-                    COMMON_LOG,
-                    {"sessionId", state->SessionId});
-            CleanupStreamProcessor(state);
-            state->SessionId.clear();
-        }
-
-        void CleanupStreamProcessor(TSessionState::TPtr& session) {
-            if (auto& streamProcessor = session->StreamProcessor) {
-                if (!streamProcessor->IsFinished()) {
-                    streamProcessor->Cancel();
-                }
-                streamProcessor.Reset();
-                if (ActiveSessions) {
-                    ActiveSessions->Dec();
-                }
-            }
-        }
-
         void CleanupStreamProcessor(TLookupState::TPtr& state) {
             if (auto& streamProcessor = state->StreamProcessor) {
                 if(!streamProcessor->IsFinished()) {
@@ -647,66 +963,6 @@ namespace {
                 }
                 streamProcessor.Reset();
             }
-        }
-
-        void SendCreateSession(TLookupState::TPtr state) {
-            using TRequest = Ydb::Query::CreateSessionRequest;
-            using TResponse = Ydb::Query::CreateSessionResponse;
-            using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
-
-            TRequest request;
-            auto actorSystem = TActivationContext::ActorSystem();
-            auto selfId = SelfId();
-            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), LookupSource.GetDatabase(), Token, actorSystem);
-            result.Subscribe([actorSystem, selfId, state = std::move(state)](const NThreading::TFuture<TResponse>& future) mutable {
-                actorSystem->Send(selfId, new TEvQueryCreateSessionResponse(future, std::move(state)));
-            });
-        }
-
-        void Handle(TEvQueryCreateSessionResponse::TPtr ev) {
-            auto state = std::move(ev->Get()->State);
-            Y_ENSURE(!state->SessionState);
-            auto& response = ev->Get()->Response;
-            YDB_LOG_DEBUG("TEvQueryCreateSessionResponse",
-                    COMMON_LOG,
-                    {"response", response.DebugString()});
-            if (response.status() != Ydb::StatusIds::SUCCESS) {
-                --InflightCreateSession;
-                if (PendingPassAway) {
-                    PassAway();
-                    return;
-                }
-                SendRetryOrError(std::move(state), response.status(), IssuesFromProtoMessage(response));
-                return;
-            }
-            if (Y_UNLIKELY(PendingPassAway)) {
-                SendDeleteSession(response.session_id());
-                --InflightCreateSession;
-                PassAway();
-                return;
-            }
-            auto sessionState = std::make_shared<TSessionState>();
-            sessionState->SessionId = std::move(*response.mutable_session_id());
-            sessionState->PendingLookup = std::move(state);
-            SendAttachSession(std::move(sessionState));
-        }
-
-        void SendDeleteSession(TString sessionId) {
-            YDB_LOG_DEBUG("DeleteSession",
-                    COMMON_LOG,
-                    {"sessionId", sessionId});
-            using TRequest = Ydb::Query::DeleteSessionRequest;
-            using TResponse = Ydb::Query::DeleteSessionResponse;
-            using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
-
-            TRequest request;
-            request.set_session_id(std::move(sessionId));
-            auto actorSystem = TActivationContext::ActorSystem();
-            [[maybe_unused]]
-            auto selfId = SelfId();
-            [[maybe_unused]]
-            auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), LookupSource.GetDatabase(), Token, actorSystem);
-            // don't wait for results
         }
 
         // must be called in actor context
@@ -819,17 +1075,7 @@ namespace {
             YDB_LOG_TRACE("AnswerTime",
                     {"duration", (TInstant::Now() - state->SentTime)});
             auto* ev = new IDqAsyncLookupSource::TEvLookupResult(std::move(state->Request), state->ResultRows, state->FullscanLimit);
-            if (auto& session = state->SessionState) {
-                if (session->SessionId) {
-                    YDB_LOG_TRACE("Return session to pool",
-                            COMMON_LOG,
-                            {"sessionId", session->SessionId});
-                    Sessions.push_back(std::move(session));
-                } else {
-                    CleanupStreamProcessor(session);
-                }
-                session.reset();
-            }
+            state->SessionInfo.reset(); // return session to pool
             state.reset();
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
         }
@@ -964,8 +1210,9 @@ namespace {
                 FillKeyTupleList(keyTupleList, state);
                 request.mutable_query_content()->set_text(SelectWithKeys);
             }
-            Y_ENSURE(state->SessionState);
-            request.set_session_id(state->SessionState->SessionId);
+            Y_ENSURE(state->SessionInfo);
+            Y_ENSURE(state->SessionInfo->SessionId);
+            request.set_session_id(state->SessionInfo->SessionId);
             request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
             request.set_result_set_format(Ydb::ResultSet::FORMAT_ARROW);
             request.mutable_arrow_format_settings()->mutable_compression_codec()->set_type(Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_NONE); // local RPC, avoid compression
@@ -1007,10 +1254,8 @@ namespace {
         NYql::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper = new NKikimr::NMiniKQL::TTypeInfoHelper();
         const TString SelectBody;
         const TString SelectWithKeys;
-        TVector<TSessionState::TPtr> Sessions;
-        TSet<TLookupState::TPtr> InflightRequests;
-        ui64 InflightCreateSession = 0;
-        bool PendingPassAway = false;
+        TSet<TLookupState::TPtr> InflightRequests; // all active (unanswered) requests
+        std::deque<TLookupState::TPtr> Pending; // requests pending receiving SessionInfo
 
         ::NMonitoring::TDynamicCounters::TCounterPtr Count;
         ::NMonitoring::TDynamicCounters::TCounterPtr Fullscans;
@@ -1021,13 +1266,12 @@ namespace {
         ::NMonitoring::TDynamicCounters::TCounterPtr AnswerTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
-        ::NMonitoring::TDynamicCounters::TCounterPtr ActiveSessions;
         static constexpr size_t MaxSupportedFullscanRequest = 20000;
     };
 
     } // namespace
 
-    std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateDqSourceKikimrLookupActor(
+    std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateKikimrLookupActor(
         NActors::TActorId parentId,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
@@ -1042,7 +1286,7 @@ namespace {
     )
     {
         auto guard = Guard(*alloc);
-        const auto actor = new TDqSourceKikimrLookupActor(
+        const auto actor = new TKikimrLookupActor(
             std::move(parentId),
             taskCounters,
             alloc,
@@ -1057,4 +1301,10 @@ namespace {
         return {actor, actor};
     }
 
-} // namespace NYql::NDq
+    NActors::IActor* CreateQuerySessionPoolActor() {
+        return new TQuerySessionPoolServiceActor();
+    }
+    NActors::TActorId QuerySessionPoolServiceActorId() {
+        return NActors::TActorId(0, "kqp_fq_qspsa");
+    }
+} // namespace NYql::NDq::NDqSourceLookup

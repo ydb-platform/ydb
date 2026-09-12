@@ -6,6 +6,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
+ydb/core/external_sources/s3/ut unittest.sole chunk
 ydb/core/kafka_proxy/ut/protocol KafkaProtocol.TopicsCompactionGapFromRetention
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ut TOracle.ShouldPersistHostHealthIfChangesToOnline

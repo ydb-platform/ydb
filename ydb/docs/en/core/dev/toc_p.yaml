@@ -11,6 +11,8 @@ items:
   include:
     mode: link
     path: example-app/toc_p.yaml
+- name: Generate code from YQL (sqlc-ydb)
+  href: sqlc-ydb.md
 - name: YQL tutorial
   href: yql-tutorial/index.md
   include:

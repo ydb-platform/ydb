@@ -75,7 +75,7 @@ namespace NKikimr::NHttpProxy {
             {
             }
 
-            NPQ::TStructuredLogPrefix BuildLogPrefix() const override {
+            NPQ::TStructuredMessage BuildLogPrefix() const override {
                 return HttpContext.LogPrefix();
             }
 

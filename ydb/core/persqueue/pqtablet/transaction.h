@@ -106,7 +106,7 @@ struct TDistributedTransaction : TLogPrefix {
     template<class E>
     void OnPartitionResult(const E& event, TMaybe<EDecision> decision);
 
-    TStructuredLogPrefix LogPrefix() const override;
+    TStructuredMessage LogPrefix() const override;
 
     THashMap<ui64, TVector<NKikimrTx::TEvReadSet>> OutputMsgs;
 

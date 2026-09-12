@@ -20,7 +20,7 @@ public:
     void PassAway() override;
     void OnException(const std::exception& exc) override;
 
-    TStructuredLogPrefix BuildLogPrefix() const override;
+    TStructuredMessage BuildLogPrefix() const override;
 
     ui64 TabletId;
 

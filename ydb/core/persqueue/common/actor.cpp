@@ -6,7 +6,7 @@
 
 namespace NKikimr::NPQ {
 
-void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStructuredLogPrefix& prefix, const std::exception& exc) {
+void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStructuredMessage& prefix, const std::exception& exc) {
     YDB_LOG_CRIT("Unhandled exception",
         prefix,
         {"exceptionType", TypeName(exc)},
@@ -16,13 +16,6 @@ void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStr
 
 void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, TStringBuf prefix, const std::exception& exc) {
     DoLogUnhandledException(service, YDB_LOG_CREATE_MESSAGE({"prefix", TString(prefix)}), exc);
-}
-
-const TStructuredLogPrefix& TConstantLogPrefix::GetLogPrefix() const {
-    if (!LogPrefix_.Defined()) {
-        LogPrefix_ = BuildLogPrefix();
-    }
-    return *LogPrefix_;
 }
 
 void NPrivate::IncrementUnhandledExceptionCounter(const NActors::TActorContext& ctx) {

@@ -155,7 +155,7 @@ public:
         }
     }
 
-    TStructuredLogPrefix BuildLogPrefix() const override {
+    TStructuredMessage BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"database", Settings.Database},
             {"consumer", Settings.Consumer});

@@ -4,6 +4,8 @@
 #include <ydb/library/actors/struct_log/text_writer.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <util/generic/maybe.h>
+
 #include <type_traits>
 
 #define NPQ_LOG_PREFIX ::NKikimr::NPQ::MakeRuntimeLogPrefix(*this)
@@ -19,7 +21,7 @@
 
 namespace NKikimr::NPQ {
 
-using TStructuredLogPrefix = NActors::NStructuredLog::TStructuredMessage;
+using NActors::NStructuredLog::TStructuredMessage;
 
 class TLogPrefix {
 public:
@@ -30,15 +32,44 @@ public:
 
     virtual ~TLogPrefix() = default;
 
-    virtual TStructuredLogPrefix LogPrefix() const = 0;
+    virtual TStructuredMessage LogPrefix() const = 0;
 
 public:
     NKikimrServices::EServiceKikimr Service;
 };
 
+namespace NPrivate {
+    class ILogPrefixBase {
+    public:
+        virtual const TStructuredMessage& GetLogPrefix() const {
+            static const TStructuredMessage empty;
+            return empty;
+        }
+    protected:
+        ~ILogPrefixBase() = default;
+    };
+} // namespace NPrivate
+
+class TConstantLogPrefix: virtual public NPrivate::ILogPrefixBase {
+public:
+    const TStructuredMessage& GetLogPrefix() const final {
+        if (!LogPrefix_.Defined()) {
+            LogPrefix_ = BuildLogPrefix();
+        }
+        return *LogPrefix_;
+    }
+
+    virtual TStructuredMessage BuildLogPrefix() const {
+        return {};
+    }
+
+private:
+    mutable TMaybe<TStructuredMessage> LogPrefix_;
+};
+
 template <typename T>
-TStructuredLogPrefix MakeRuntimeLogPrefix(const T& self) {
-    TStructuredLogPrefix prefix;
+TStructuredMessage MakeRuntimeLogPrefix(const T& self) {
+    TStructuredMessage prefix;
     if constexpr (requires { T::ActorActivityType(); }) {
         prefix.AppendMessage(YDB_LOG_CREATE_MESSAGE(
             {"actorActivityType", NKikimrServices::TActivity::EType_Name(T::ActorActivityType())}));
@@ -50,8 +81,6 @@ TStructuredLogPrefix MakeRuntimeLogPrefix(const T& self) {
     }
     if constexpr (requires { self.SelfId(); }) {
         prefix.AppendMessage(YDB_LOG_CREATE_MESSAGE({"selfId", self.SelfId()}));
-    } else if constexpr (requires { self.SelfID; }) {
-        prefix.AppendMessage(YDB_LOG_CREATE_MESSAGE({"selfId", self.SelfID}));
     }
     if constexpr (std::is_base_of_v<TLogPrefix, T>) {
         prefix.AppendMessage(static_cast<const TLogPrefix&>(self).LogPrefix());
@@ -61,7 +90,7 @@ TStructuredLogPrefix MakeRuntimeLogPrefix(const T& self) {
     return prefix;
 }
 
-inline TString StructuredLogPrefixText(const TStructuredLogPrefix& prefix) {
+inline TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
     TStringBuilder out;
     NActors::NStructuredLog::TTextWriter writer;
     writer.Write(out, prefix);

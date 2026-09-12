@@ -24,7 +24,7 @@ TWriteQuoter::TWriteQuoter(
 {
 }
 
-TStructuredLogPrefix TWriteQuoter::BuildLogPrefix() const {
+TStructuredMessage TWriteQuoter::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"partition", Partition.ToString()});
 }

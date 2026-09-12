@@ -22,7 +22,7 @@ public:
     void Bootstrap();
     void PassAway() override;
 
-    TStructuredLogPrefix BuildLogPrefix() const override {
+    TStructuredMessage BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"partition", PartitionId},
             {"consumer", ConsumerName});

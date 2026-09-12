@@ -4,12 +4,8 @@
 #include "read_init_auth_actor.h"
 
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
-
-#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -22,6 +18,7 @@ TCommitOffsetActor::TCommitOffsetActor(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
 )
     : TBase(request)
+    , TLogPrefix(NKikimrServices::PQ_READ_PROXY)
     , SchemeCache(schemeCache)
     , NewSchemeCache(newSchemeCache)
     , AuthInitActor()
@@ -33,6 +30,7 @@ TCommitOffsetActor::TCommitOffsetActor(
 
 TCommitOffsetActor::TCommitOffsetActor(NKikimr::NGRpcService::IRequestOpCtx * ctx)
     : TBase(ctx)
+    , TLogPrefix(NKikimrServices::PQ_READ_PROXY)
     , SchemeCache(NMsgBusProxy::CreatePersQueueMetaCacheV2Id())
     , NewSchemeCache(MakeSchemeCacheID())
     , AuthInitActor()
@@ -96,7 +94,7 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
 }
 
 bool TCommitOffsetActor::OnUnhandledException(const std::exception& exc) {
-    NPQ::DoLogUnhandledException(NKikimrServices::PQ_READ_PROXY, "[CommitOffsetActor]", exc);
+    NPQ::DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
 
     Ydb::Topic::CommitOffsetResult result;
     Request().SendResult(result, Ydb::StatusIds::INTERNAL_ERROR);
@@ -116,7 +114,7 @@ void TCommitOffsetActor::Die(const TActorContext& ctx) {
 }
 
 void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_DEBUG_CTX(ctx, "CommitOffset auth ok, got topics",
+    LOG_D("CommitOffset auth ok, got topics",
         {"topicAndTabletsSize", ev->Get()->TopicAndTablets.size()});
     TopicAndTablets = std::move(ev->Get()->TopicAndTablets);
     if (TopicAndTablets.empty()) {
@@ -191,7 +189,7 @@ void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev
 void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        YDB_LOG_DEBUG_CTX(ctx, "Strict CommitOffset failed. Kqp",
+        LOG_D("Strict CommitOffset failed. Kqp",
             {"error", ev->Get()->Record});
 
         Ydb::Topic::CommitOffsetResult result;
@@ -221,7 +219,7 @@ void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActo
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
     AFL_ENSURE(!partitionResult.HasCmdReadResult());
 
-    YDB_LOG_DEBUG_CTX(ctx, "CommitOffset, commit done");
+    LOG_D("CommitOffset, commit done");
 
     Ydb::Topic::CommitOffsetResult result;
     Request().SendResult(result, Ydb::StatusIds::SUCCESS);
@@ -256,7 +254,7 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
         commit->SetSessionId(commitRequest->read_session_id());
     }
 
-    YDB_LOG_DEBUG_CTX(ctx, "Strict CommitOffset, partition committing to position prev end by cookie",
+    LOG_D("Strict CommitOffset, partition committing to position prev end by cookie",
         {"partitionId", commitRequest->partition_id()},
         {"offset", commitRequest->offset()});
 

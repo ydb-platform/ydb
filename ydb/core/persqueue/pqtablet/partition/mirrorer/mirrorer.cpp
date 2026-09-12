@@ -722,7 +722,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
 }
 
-TStructuredLogPrefix TMirrorer::BuildLogPrefix() const {
+TStructuredMessage TMirrorer::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"topic", TopicConverter->GetPrintableString()},
         {"partition", Partition});

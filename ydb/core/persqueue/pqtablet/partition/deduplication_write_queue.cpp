@@ -71,7 +71,7 @@ public:
         Become(&TThis::StateWork);
     }
 
-    TStructuredLogPrefix BuildLogPrefix() const override {
+    TStructuredMessage BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"topic", TopicName},
             {"partition", PartitionId});

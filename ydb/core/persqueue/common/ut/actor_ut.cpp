@@ -62,8 +62,8 @@ public:
         LOG_E("error");
         LOG_C("crit");
         LOG_A("alert");
-        const TStructuredLogPrefix& first = GetLogPrefix();
-        const TStructuredLogPrefix& second = GetLogPrefix();
+        const TStructuredMessage& first = GetLogPrefix();
+        const TStructuredMessage& second = GetLogPrefix();
         Y_UNUSED(first);
         Y_UNUSED(second);
         Send(Parent, new TEvText(StructuredLogPrefixText(NPQ_LOG_PREFIX)));
@@ -111,6 +111,39 @@ public:
 
 private:
     const TActorId Parent;
+};
+
+class TRebuildActor : public TBaseActor<TRebuildActor> {
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::OTHER;
+    }
+
+    explicit TRebuildActor(TActorId parent)
+        : TBaseActor<TRebuildActor>(NKikimrServices::PERSQUEUE)
+        , Parent(parent)
+    {
+    }
+
+    TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE({"tag", Tag});
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        Send(Parent, new TEvText(StructuredLogPrefixText(NPQ_LOG_PREFIX)));
+        Tag = "second";
+        Send(Parent, new TEvText(StructuredLogPrefixText(NPQ_LOG_PREFIX)));
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateWork,
+        cFunc(TEvents::TEvPoison::EventType, PassAway);
+    )
+
+private:
+    const TActorId Parent;
+    TString Tag = "first";
 };
 
 class TDefaultHooksActor : public TBaseActor<TDefaultHooksActor>
@@ -231,6 +264,21 @@ Y_UNIT_TEST(LogPrefixEventStrAndMacros) {
     UNIT_ASSERT(eventStr->Get()->Value.Contains("Cookie"));
 
     runtime.Send(new IEventHandle(actorId, edge, new TEvents::TEvPoison()), 0, true);
+}
+
+Y_UNIT_TEST(RebuildLogPrefix) {
+    NActors::TTestBasicRuntime runtime(1, false);
+    InitRuntime(runtime, false);
+    auto edge = runtime.AllocateEdgeActor();
+    runtime.Register(new TRebuildActor(edge));
+
+    auto first = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
+    UNIT_ASSERT(first);
+    UNIT_ASSERT(first->Get()->Value.Contains("tag=first"));
+
+    auto second = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
+    UNIT_ASSERT(second);
+    UNIT_ASSERT(second->Get()->Value.Contains("tag=second"));
 }
 
 Y_UNIT_TEST(UnhandledExceptionDisabled) {

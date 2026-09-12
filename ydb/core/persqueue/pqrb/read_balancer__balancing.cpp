@@ -175,7 +175,7 @@ ui32 TPartitionFamily::NextStep() {
     return Consumer.NextStep();
 }
 
-TStructuredLogPrefix TPartitionFamily::LogPrefix() const {
+TStructuredMessage TPartitionFamily::LogPrefix() const {
     if (Session) {
         return YDB_LOG_CREATE_MESSAGE(
             Consumer.LogPrefix(),
@@ -1287,7 +1287,7 @@ bool TConsumer::ScalingSupport() const {
     return Balancer.ScalingSupport();
 }
 
-TStructuredLogPrefix TConsumer::LogPrefix() const {
+TStructuredMessage TConsumer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         Balancer.LogPrefix(),
         {"consumer", ConsumerName});
@@ -2303,7 +2303,7 @@ void TBalancer::Notify(const TActorId subscriber, const TString& consumer, NKiki
     ctx.Send(subscriber, new TEvPersQueue::TEvBalancingSubscribeNotify(TabletGeneration(), ++NotifyCookie, TopicPath(), consumer, status));
 }
 
-TStructuredLogPrefix TBalancer::LogPrefix() const {
+TStructuredMessage TBalancer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"tabletId", TopicActor.TabletID()},
         {"topic", Topic()});

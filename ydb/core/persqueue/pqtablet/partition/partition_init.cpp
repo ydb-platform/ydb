@@ -89,7 +89,7 @@ void TInitializer::DoNext(const TActorContext& ctx) {
     CurrentStep->Get()->Execute(ctx);
 }
 
-TStructuredLogPrefix TInitializer::LogPrefix() const {
+TStructuredMessage TInitializer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"className", "Initializer"},
         {"topic", Partition->TopicName()},
@@ -142,7 +142,7 @@ TInitializionContext& TInitializerStep::GetContext() {
     return Initializer->Ctx;
 }
 
-TStructuredLogPrefix TInitializerStep::LogPrefix() const {
+TStructuredMessage TInitializerStep::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"className", Name},
         {"topic", Partition()->TopicName()},

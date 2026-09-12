@@ -60,7 +60,7 @@ namespace NKikimr::NHttpProxy {
         {
         }
 
-        NPQ::TStructuredLogPrefix BuildLogPrefix() const override {
+        NPQ::TStructuredMessage BuildLogPrefix() const override {
             return YDB_LOG_CREATE_MESSAGE(
                 Prefix,
                 {"component", "auth"});

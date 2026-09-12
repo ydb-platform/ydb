@@ -22,7 +22,7 @@ class TGRpcRequestActor : public NPQ::TBaseActor<TGRpcRequestActor>
 public:
     using TBase = NPQ::TBaseActor<TGRpcRequestActor>;
 
-    NPQ::TStructuredLogPrefix BuildLogPrefix() const override {
+    NPQ::TStructuredMessage BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"requestId", RequestId});
         // << ReqCtx->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER)

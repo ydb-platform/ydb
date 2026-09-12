@@ -144,7 +144,7 @@ public:
 
     }
 
-    TStructuredLogPrefix LogPrefix() const override {
+    TStructuredMessage LogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"topicName", TopicName},
             {"partition", Partition},
@@ -269,8 +269,8 @@ public:
         ctx.Schedule(TOTAL_TIMEOUT, new TEvents::TEvWakeup());
     }
 
-    const TStructuredLogPrefix& GetLogPrefix() const {
-        static const TStructuredLogPrefix LogPrefix;
+    const TStructuredMessage& GetLogPrefix() const {
+        static const TStructuredMessage LogPrefix;
         return LogPrefix;
     }
 
@@ -5574,7 +5574,7 @@ void TPersQueue::BeginDeletePartitions(const TDistributedTransaction& tx)
     BeginDeletePartitions(*tx.WriteId, writeInfo);
 }
 
-TStructuredLogPrefix TPersQueue::LogPrefix() const {
+TStructuredMessage TPersQueue::LogPrefix() const {
     return {};
 }
 

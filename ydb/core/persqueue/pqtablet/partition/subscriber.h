@@ -97,7 +97,7 @@ struct TReadInfo : TLogPrefix {
         return LastOffset != 0 && Offset >= LastOffset;
     }
 
-    TStructuredLogPrefix LogPrefix() const override {
+    TStructuredMessage LogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"className", "TReadInfo"},
             {"user", User},

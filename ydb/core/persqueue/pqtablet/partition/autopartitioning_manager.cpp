@@ -93,7 +93,7 @@ public:
         RecreateSumMetric();
     }
 
-    TStructuredLogPrefix LogPrefix() const override {
+    TStructuredMessage LogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"className", "TAutopartitioningManager"},
             {"partition", PartitionId});

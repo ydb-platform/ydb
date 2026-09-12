@@ -101,8 +101,8 @@ public:
         ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
-    const TStructuredLogPrefix& GetLogPrefix() const {
-        static const TStructuredLogPrefix LogPrefix;
+    const TStructuredMessage& GetLogPrefix() const {
+        static const TStructuredMessage LogPrefix;
         return LogPrefix;
     }
 

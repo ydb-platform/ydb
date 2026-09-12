@@ -9,19 +9,12 @@
 
 namespace NKikimr::NPQ {
 
-void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStructuredLogPrefix& prefix, const std::exception& exc);
+void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStructuredMessage& prefix, const std::exception& exc);
 void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, TStringBuf prefix, const std::exception& exc);
 
 namespace NPrivate {
-    class ILogPrefixBase {
-    public:
-        virtual const TStructuredLogPrefix& GetLogPrefix() const = 0;
-    protected:
-        ~ILogPrefixBase() = default;
-    };
-
     void IncrementUnhandledExceptionCounter(const NActors::TActorContext& ctx);
-};
+} // namespace NPrivate
 
 template<typename TDerived>
 class TBaseActor : public NActors::TActorBootstrapped<TDerived>
@@ -56,7 +49,7 @@ public:
         Y_UNUSED(exc);
     }
 
-    TStructuredLogPrefix LogPrefix() const override {
+    TStructuredMessage LogPrefix() const override {
         return GetLogPrefix();
     }
 
@@ -102,17 +95,6 @@ protected:
     const NActors::TActorId TabletActorId;
 };
 
-
-class TConstantLogPrefix: virtual public NPrivate::ILogPrefixBase {
-public:
-    const TStructuredLogPrefix& GetLogPrefix() const final;
-    virtual TStructuredLogPrefix BuildLogPrefix() const {
-        return {};
-    }
-
-private:
-    mutable TMaybe<TStructuredLogPrefix> LogPrefix_;
-};
 
 class TPipeCacheClient {
 public:

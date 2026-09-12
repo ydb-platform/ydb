@@ -42,21 +42,21 @@ const char* CompactionStepName(TPartitionCompaction::EStep step) {
 
 } // namespace
 
-TStructuredLogPrefix TPartitionCompaction::MakeLogPrefix(const TPartition* actor, const char* compactionStep) {
-    TStructuredLogPrefix prefix = MakeRuntimeLogPrefix(*actor);
+TStructuredMessage TPartitionCompaction::MakeLogPrefix(const TPartition* actor, const char* compactionStep) {
+    TStructuredMessage prefix = MakeRuntimeLogPrefix(*actor);
     prefix.AppendMessage(YDB_LOG_CREATE_MESSAGE({"compactionStep", compactionStep}));
     return prefix;
 }
 
-TStructuredLogPrefix TPartitionCompaction::LogPrefix() const {
+TStructuredMessage TPartitionCompaction::LogPrefix() const {
     return MakeLogPrefix(PartitionActor, CompactionStepName(Step));
 }
 
-TStructuredLogPrefix TPartitionCompaction::TReadState::LogPrefix() const {
+TStructuredMessage TPartitionCompaction::TReadState::LogPrefix() const {
     return MakeLogPrefix(PartitionActor, "reading");
 }
 
-TStructuredLogPrefix TPartitionCompaction::TCompactState::LogPrefix() const {
+TStructuredMessage TPartitionCompaction::TCompactState::LogPrefix() const {
     return MakeLogPrefix(PartitionActor, "compacting");
 }
 

@@ -259,7 +259,7 @@ namespace NKikimr::NPQ {
         {
         }
 
-        TStructuredLogPrefix LogPrefix() const override {
+        TStructuredMessage LogPrefix() const override {
             return {};
         }
 

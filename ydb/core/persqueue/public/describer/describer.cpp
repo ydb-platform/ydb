@@ -43,7 +43,7 @@ public:
     {
     }
 
-    TStructuredLogPrefix BuildLogPrefix() const override {
+    TStructuredMessage BuildLogPrefix() const override {
         return {};
     }
 

@@ -196,7 +196,7 @@ const TString& TPartition::TopicName() const {
     return TopicConverter->GetClientsideName();
 }
 
-TStructuredLogPrefix TPartition::BuildLogPrefix() const {
+TStructuredMessage TPartition::BuildLogPrefix() const {
     TString state;
     if (CurrentStateFunc() == &TThis::StateInit) {
         state = "StateInit";
@@ -210,8 +210,8 @@ TStructuredLogPrefix TPartition::BuildLogPrefix() const {
         {"actorState", state});
 }
 
-const TStructuredLogPrefix& TPartition::GetLogPrefix() const {
-    TMaybe<TStructuredLogPrefix>* logPrefix = &UnknownLogPrefix;
+const TStructuredMessage& TPartition::GetLogPrefix() const {
+    TMaybe<TStructuredMessage>* logPrefix = &UnknownLogPrefix;
     if (CurrentStateFunc() == &TThis::StateInit) {
         logPrefix = &InitLogPrefix;
     } else if (CurrentStateFunc() == &TThis::StateIdle) {

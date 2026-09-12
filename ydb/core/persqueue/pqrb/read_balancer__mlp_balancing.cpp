@@ -45,7 +45,7 @@ const TPartitionGraph& TMLPConsumer::GetPartitionGraph() const {
     return Balancer.GetPartitionGraph();
 }
 
-TStructuredLogPrefix TMLPConsumer::LogPrefix() const {
+TStructuredMessage TMLPConsumer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         Balancer.LogPrefix(),
         {"consumer", ConsumerName});
@@ -224,7 +224,7 @@ TMLPBalancer::TMLPBalancer(TPersQueueReadBalancer& topicActor)
     , TopicActor(topicActor) {
 }
 
-TStructuredLogPrefix TMLPBalancer::LogPrefix() const {
+TStructuredMessage TMLPBalancer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"tabletId", TopicActor.TabletID()},
         {"topic", TopicActor.Topic});

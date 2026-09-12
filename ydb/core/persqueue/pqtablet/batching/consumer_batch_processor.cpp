@@ -29,7 +29,7 @@ namespace {
 
     void LogKafkaBatchUserError(
         TStringBuf message,
-        const TStructuredLogPrefix& logPrefix,
+        const TStructuredMessage& logPrefix,
         ui32 partition,
         ui64 offset,
         const TString& error,
@@ -48,7 +48,7 @@ namespace {
         const IBatchCutter& cutter,
         const TBatchCutterData& data,
         ui64 readStartOffset,
-        const TStructuredLogPrefix& logPrefix,
+        const TStructuredMessage& logPrefix,
         const TString& user,
         ui32 partition)
     {
@@ -70,7 +70,7 @@ namespace {
         const IBatchCutter& cutter,
         const TBatchCutterData& data,
         ui64 readStartOffset,
-        const TStructuredLogPrefix& logPrefix,
+        const TStructuredMessage& logPrefix,
         ui32 partition)
     {
         auto outcome = cutter.GetKeys(data, readStartOffset);
@@ -96,7 +96,7 @@ TConsumerBatchProcessor::TConsumerBatchProcessor(ui64 tabletId, const NActors::T
     BatchCutters.emplace(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1, MakeHolder<TKafkaBatchCutter>());
 }
 
-const TStructuredLogPrefix& TConsumerBatchProcessor::GetLogPrefix() const {
+const TStructuredMessage& TConsumerBatchProcessor::GetLogPrefix() const {
     return LogPrefix_;
 }
 

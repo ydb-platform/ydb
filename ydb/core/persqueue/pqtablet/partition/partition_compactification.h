@@ -47,11 +47,11 @@ struct TKeyCompactionCounters {
 };
 
 class TPartitionCompaction : public TLogPrefix {
-    static TStructuredLogPrefix MakeLogPrefix(const TPartition* actor, const char* compactionStep);
+    static TStructuredMessage MakeLogPrefix(const TPartition* actor, const char* compactionStep);
 
 public:
     TPartitionCompaction(ui64 lastCompactedOffset, ui64 partReqestCookie, TPartition* partitionActor);
-    TStructuredLogPrefix LogPrefix() const override;
+    TStructuredMessage LogPrefix() const override;
 
     enum class EStep {
         PENDING,
@@ -77,7 +77,7 @@ public:
 
     public:
         TReadState(ui64 firstOffset, TPartition* partitionActor);
-        TStructuredLogPrefix LogPrefix() const override;
+        TStructuredMessage LogPrefix() const override;
 
         bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);
         void ProcessResponse(NBatching::TEvProcessBatchKeysResult::TPtr& ev);
@@ -129,7 +129,7 @@ public:
         TKeyCompactionCounters* Counters;
 
         TCompactState(THashMap<TString, ui64>&& data, ui64 firstUncompactedOffset, ui64 maxOffset, TPartition* partitionActor, TKeyCompactionCounters* counters);
-        TStructuredLogPrefix LogPrefix() const override;
+        TStructuredMessage LogPrefix() const override;
 
         bool ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev);
         bool ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev);

@@ -203,7 +203,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat, public TLogPrefix {
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
 
-    TStructuredLogPrefix LogPrefix() const override;
+    TStructuredMessage LogPrefix() const override;
 
     static constexpr const char * KeyConfig() { return "_config"; }
     static constexpr const char * KeyState() { return "_state"; }

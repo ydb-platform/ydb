@@ -112,7 +112,7 @@ private:
 
     bool TryRewindCommittedOffset(const TActorContext& ctx);
 
-    TStructuredLogPrefix BuildLogPrefix() const override;
+    TStructuredMessage BuildLogPrefix() const override;
 
     TString GetCurrentState() const;
 

@@ -86,7 +86,7 @@ struct THttpRequestContext : public NPQ::TLogPrefix {
     TString SerializedUserToken;
     TString UserName;
 
-    NPQ::TStructuredLogPrefix LogPrefix() const override {
+    NPQ::TStructuredMessage LogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"methodName", MethodName},
             {"requestId", RequestId});

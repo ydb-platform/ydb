@@ -46,7 +46,7 @@ namespace NKikimr::NHttpProxy {
             TBase::Become(&TDiscoveryActor::StateWork);
         }
 
-        NPQ::TStructuredLogPrefix BuildLogPrefix() const override {
+        NPQ::TStructuredMessage BuildLogPrefix() const override {
             return YDB_LOG_CREATE_MESSAGE(
                 {"database", Settings.Database},
                 {"endpoint", Settings.DiscoveryEndpoint});

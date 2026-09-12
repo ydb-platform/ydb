@@ -4,6 +4,6 @@
 
 namespace NKikimr::NPQ {
 
-inline TStructuredLogPrefix LogPrefix() { return {}; }
+inline TStructuredMessage LogPrefix() { return {}; }
 
 } // namespace NKikimr::NPQ

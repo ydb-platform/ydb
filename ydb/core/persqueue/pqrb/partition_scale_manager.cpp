@@ -30,7 +30,7 @@ TPartitionScaleManager::TPartitionScaleManager(
     , MirroredFromSomewhere(MirroringEnabled(config)) {
     }
 
-TStructuredLogPrefix TPartitionScaleManager::LogPrefix() const {
+TStructuredMessage TPartitionScaleManager::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"className", "TPartitionScaleManager"},
         {"topic", TopicName});

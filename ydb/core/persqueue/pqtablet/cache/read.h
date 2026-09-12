@@ -35,9 +35,9 @@ namespace NPQ {
             Become(&TThis::StateFunc);
         }
 
-        const TStructuredLogPrefix& GetLogPrefix() const
+        const TStructuredMessage& GetLogPrefix() const
         {
-            static const TStructuredLogPrefix LogPrefix;
+            static const TStructuredMessage LogPrefix;
             return LogPrefix;
         }
 

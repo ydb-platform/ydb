@@ -6,8 +6,6 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/persqueue/public/utils.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
-
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -18,7 +16,8 @@ TReadInitAndAuthActor::TReadInitAndAuthActor(
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TIntrusiveConstPtr<NACLib::TUserToken> token,
         const NPersQueue::TTopicsToConverter& topics, const TString& localCluster, bool skipReadRuleCheck
 )
-    : ParentId(parentId)
+    : TBase(NKikimrServices::PQ_READ_PROXY)
+    , ParentId(parentId)
     , Cookie(cookie)
     , Session(session)
     , MetaCacheId(metaCache)
@@ -40,8 +39,7 @@ TReadInitAndAuthActor::~TReadInitAndAuthActor() = default;
 
 
 void TReadInitAndAuthActor::Bootstrap(const TActorContext &ctx) {
-    YDB_LOG_DEBUG_CTX(ctx, "Auth",
-        {PQ_LOG_PREFIX},
+    LOG_D("Auth",
         {"clientId", ClientId});
     Become(&TThis::StateFunc);
     DoCheckACL = AppData(ctx)->PQConfig.GetCheckACL() && Token;
@@ -55,7 +53,6 @@ void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bo
         AFL_ENSURE(topic.second.DiscoveryConverter->IsValid());
     }
 
-    //LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " describe topics: " << JoinSeq(", ", topicNames));
     ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topics, true, showPrivate));
 }
 
@@ -69,16 +66,14 @@ void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
             holder.DiscoveryConverter->RestorePrimaryPath();
     }
 
-    YDB_LOG_DEBUG_CTX(ctx, "Auth is DEAD",
-        {PQ_LOG_PREFIX});
+    LOG_D("Auth is DEAD");
 
-    TActorBootstrapped<TReadInitAndAuthActor>::Die(ctx);
+    TBase::Die(ctx);
 }
 
 bool TReadInitAndAuthActor::OnUnhandledException(const std::exception& exc) {
     auto ctx = *NActors::TlsActivationContext;
-    YDB_LOG_CRIT_CTX(ctx, "Unhandled exception",
-        {PQ_LOG_PREFIX},
+    LOG_C("Unhandled exception",
         {"typeName", TypeName(exc)},
         {"exception", exc.what()},
         {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
@@ -103,8 +98,7 @@ void TReadInitAndAuthActor::SendCacheNavigateRequest(const TActorContext& ctx, c
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     schemeCacheRequest->ResultSet.emplace_back(entry);
     schemeCacheRequest->DatabaseName = AppData(ctx)->PQConfig.GetDatabase();
-    YDB_LOG_DEBUG_CTX(ctx, "Send client acl request",
-        {PQ_LOG_PREFIX});
+    LOG_D("Send client acl request");
     ctx.Send(NewSchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));
 }
 
@@ -147,8 +141,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
 
 
 void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_DEBUG_CTX(ctx, "Handle describe topics response",
-        {PQ_LOG_PREFIX});
+    LOG_D("Handle describe topics response");
 
     bool reDescribe = false;
     auto i = 0u;

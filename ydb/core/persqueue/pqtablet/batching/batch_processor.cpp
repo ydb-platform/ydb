@@ -21,7 +21,7 @@ void TBatchProcessor::Bootstrap(const NActors::TActorContext&) {
     Become(&TThis::StateWork);
 }
 
-TStructuredLogPrefix TBatchProcessor::BuildLogPrefix() const {
+TStructuredMessage TBatchProcessor::BuildLogPrefix() const {
     return {};
 }
 

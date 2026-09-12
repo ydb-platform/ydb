@@ -54,7 +54,7 @@ private:
     }
     void SendProposeRequest(const NActors::TActorContext &ctx);
     void FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction& proposal, const NActors::TActorContext &ctx);
-    TStructuredLogPrefix LogPrefix() const override;
+    TStructuredMessage LogPrefix() const override;
     bool IsOurPipe(const TActorId& clientId) const;
     void ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, const TActorContext& ctx);
 

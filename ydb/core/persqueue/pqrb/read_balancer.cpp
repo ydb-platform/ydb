@@ -419,7 +419,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 }
 
 
-TStructuredLogPrefix TPersQueueReadBalancer::LogPrefix() const {
+TStructuredMessage TPersQueueReadBalancer::LogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"topic", Topic});
 }

@@ -46,7 +46,7 @@ protected:
 private:
     void DoNext(const TActorContext& ctx);
 
-    TStructuredLogPrefix LogPrefix() const override;
+    TStructuredMessage LogPrefix() const override;
 
     TPartition* Partition;
 
@@ -82,7 +82,7 @@ public:
 protected:
     void Done(const TActorContext& ctx);
 
-    TStructuredLogPrefix LogPrefix() const override;
+    TStructuredMessage LogPrefix() const override;
 
 private:
     TInitializer* Initializer;

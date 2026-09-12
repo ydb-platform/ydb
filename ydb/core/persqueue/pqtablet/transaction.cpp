@@ -92,7 +92,7 @@ TDistributedTransaction::TDistributedTransaction(const NKikimrPQ::TTransaction& 
     }
 }
 
-TStructuredLogPrefix TDistributedTransaction::LogPrefix() const
+TStructuredMessage TDistributedTransaction::LogPrefix() const
 {
     return YDB_LOG_CREATE_MESSAGE(
         {"txId", TxId});

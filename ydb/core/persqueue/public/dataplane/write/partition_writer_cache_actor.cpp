@@ -27,7 +27,7 @@ void TPartitionWriterCacheActor::Bootstrap(const TActorContext& ctx)
     this->Become(&TPartitionWriterCacheActor::StateWork);
 }
 
-TStructuredLogPrefix TPartitionWriterCacheActor::BuildLogPrefix() const {
+TStructuredMessage TPartitionWriterCacheActor::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
         {"partition", Partition});
 }

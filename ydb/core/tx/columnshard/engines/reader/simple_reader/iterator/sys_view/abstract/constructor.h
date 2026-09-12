@@ -12,11 +12,11 @@ class TDataSourceConstructor: public NCommon::TDataSourceConstructor {
 private:
     YDB_READONLY_DEF(ui64, TabletId);
 
-    virtual ui64 DoGetEntityRecordsCount() const override {
+    virtual ui64 DoGetSourceRecordsCount() const override {
         return 0;
     }
 
-    virtual ui64 DoGetDeprecatedPortionId() const override {
+    virtual ui64 DoGetSourceId() const override {
         return TabletId;
     }
 
@@ -71,8 +71,8 @@ protected:
     const ui64 TabletId;
 
 public:
-    TConstructor(const ERequestSorting sorting, const ui64 tabletId)
-        : Constructors(sorting)
+    TConstructor(const ESourcesSorting sourcesSorting, const ui64 tabletId)
+        : Constructors(sourcesSorting)
         , TabletId(tabletId)
     {
     }

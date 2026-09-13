@@ -18,10 +18,6 @@ CHECK_DEPENDENT_DIRS(
 
 END()
 
-RECURSE(
-    benchmark
-)
-
 RECURSE_FOR_TESTS(
     unittests
 )

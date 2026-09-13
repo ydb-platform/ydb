@@ -4,13 +4,15 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 from pathlib import Path
 
 import yaml
 
 from ydb.tools.ydb_bench.lib.config import load_config
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
-from ydb.tools.ydb_bench.lib import distributed_builder_ui, web
+from ydb.tools.ydb_bench.lib import distributed_builder_ui, distributed_runtime, distributed_workload, web
 
 
 class DistributedBuilderTest(unittest.TestCase):
@@ -69,7 +71,7 @@ class DistributedBuilderTest(unittest.TestCase):
 
     def test_shared_dataset_rejects_incompatible_options(self):
         self.raw["cli-nodes"]["c2"]["workload"]["options"]["columns"] = 3
-        with self.assertRaisesRegex(BenchmarkError, "identical KV options"):
+        with self.assertRaisesRegex(BenchmarkError, "identical workload type and options"):
             self.load()
         self.raw["cli-nodes"]["c2"]["dataset"] = "independent"
         self.load()
@@ -89,6 +91,68 @@ class DistributedBuilderTest(unittest.TestCase):
         with self.assertRaisesRegex(BenchmarkError, "at most one CLI"):
             self.load()
 
+    def search(self):
+        self.raw['cli-nodes']['c2']['load'] = {
+            'parameter': 'threads',
+            'search': {'start': 2, 'maximum': 32},
+            'objective': {'type': 'latency-slo', 'percentile': 'p99', 'max-ms': 20},
+        }
+
+    def test_stock_and_search_select_the_second_cli(self):
+        client = self.raw['cli-nodes']['c2']
+        client['dataset'] = 'stock'
+        client['workload'] = {'type': 'stock', 'operation': 'put-rand-order'}
+        self.search()
+        self.raw['measurement']['verification-repetitions'] = 2
+        profile = self.load().runs[0].parameters['local_ydb']
+        self.assertEqual('c2', profile['distributed']['search_cli'])
+        self.assertEqual('stock', profile['workload']['type'])
+        self.assertEqual(32, profile['load']['search']['maximum'])
+        self.assertEqual([4], profile['distributed']['cli_nodes']['c1']['load']['values'])
+        self.assertEqual(2, profile['measurement']['verification_repetitions'])
+
+    def test_stock_table_names_prevent_independent_datasets_in_one_tenant(self):
+        for name, client in self.raw['cli-nodes'].items():
+            client['workload'] = {'type': 'stock', 'operation': 'put-rand-order'}
+            client['dataset'] = name
+        with self.assertRaisesRegex(BenchmarkError, 'fixed table names'):
+            self.load()
+        self.raw['cli-nodes']['c2']['dataset'] = 'c1'
+        self.load()
+
+    def test_worker_changes_only_search_cli_load(self):
+        self.search()
+        profile = self.load().runs[0].parameters['local_ydb']
+        worker = distributed_workload.MultiWorkerWorkload.__new__(distributed_workload.MultiWorkerWorkload)
+        worker.single = None
+        worker.clients = profile['distributed']['cli_nodes']
+        worker.workloads = {
+            name: SimpleNamespace(perform=mock.Mock(return_value={'artifacts': []})) for name in worker.clients
+        }
+        worker.perform('sample', {'load': 17})
+        self.assertEqual(4, worker.workloads['c1'].perform.call_args.args[1]['load'])
+        self.assertEqual(17, worker.workloads['c2'].perform.call_args.args[1]['load'])
+
+    def test_search_uses_selected_cli_metrics_not_aggregate(self):
+        self.search()
+        configuration = self.load().runs[0]
+        clients = {
+            name: {'metrics': {'throughput': value, 'p99_ms': value}, 'commands': [], 'artifacts': []}
+            for name, value in [('c1', 999), ('c2', 7)]
+        }
+        lifecycle = distributed_runtime.RemoteWorkloadLifecycle.__new__(distributed_runtime.RemoteWorkloadLifecycle)
+        lifecycle.configuration = configuration
+        lifecycle.output = self.root
+        lifecycle.sequence = 0
+        lifecycle.multiple = True
+        lifecycle.cluster = SimpleNamespace(
+            cli_hosts=['host'], reference={}, operation=mock.Mock(return_value={'host': {'clients': clients}})
+        )
+        with mock.patch.object(distributed_runtime, 'copy_results'):
+            result = lifecycle._perform('sample', {'directory': self.root, 'load': 17})
+        self.assertEqual(clients['c2'], result)
+        self.assertEqual(set(clients), set(json.loads((self.root / 'cli-results.json').read_text())))
+
     @unittest.skipUnless(shutil.which("node"), "Node.js is required")
     def test_builder_yaml_and_views(self):
         loaded = self.load()
@@ -104,8 +168,9 @@ assert.deepStrictEqual(Object.keys(draft['cli-nodes']),['c1','c2']);
 assert.equal(draft['cli-nodes'].c1.workload.options['init-upserts'],1000);
 for(const tab of ['Cluster','Storage','Tenants','Load generators','Run policy']){
   distributedView.set(profile.key,{tab,item:''});
-  globalThis.localYdbWorkloadDefinition=()=>({options:[]});
+  globalThis.localYdbWorkloadDefinition=()=>({options:[],operations:['upsert'],slo_metrics:{p99:'p99_ms'}});
   const html=distributedProfileEditor(profile);assert(!html.includes('>YAML<'));
+  assert(html.includes('id=delete-profile>Delete profile</button>'));
   assert(html.includes('<div class=tabs>'));
   assert(html.includes('class="active" data-distributed-tab="'+tab+'"'));
   assert(!html.includes('class=view-tabs'));
@@ -115,6 +180,31 @@ for(const tab of ['Cluster','Storage','Tenants','Load generators','Run policy'])
   }
   if(tab==='Load generators'){assert(html.includes('Dataset'));assert(html.includes('c1'));assert(html.includes('c2'))}
 }
+distributedSetLoadMode(draft,'c2','latency-slo');
+assert.equal(draft['cli-nodes'].c2.load.objective.type,'latency-slo');
+assert.throws(()=>distributedSetLoadMode(draft,'c1','maximize-throughput'),/Only one CLI/);
+assert.deepStrictEqual(draft['cli-nodes'].c1.load.values,[1]);
+const searchProfile={...profile,distributed_config:draft};
+distributedView.set(profile.key,{tab:'Load generators',item:'c2'});
+assert(distributedProfileEditor(searchProfile).includes('Maximum latency (ms)'));
+distributedSetLoadMode(draft,'c2','fixed');
+assert(!draft['cli-nodes'].c2.load.search);
+const legacy={...profile,distributed_config:{}};
+assert(distributedProfileEditor(legacy).includes('id=delete-profile'));
+let saved=0,rendered=0;const removeButton={};
+globalThis.document={querySelector:s=>s==='#delete-profile'?removeButton:null,querySelectorAll:()=>[]};
+globalThis.serializeConfig=model=>JSON.stringify(model.profiles);
+globalThis.saveDraft=()=>saved++;
+globalThis.renderNew=()=>rendered++;
+const other={key:'other'};
+editor.model={profiles:[profile,other]};
+bindDistributedEditor(profile);removeButton.onclick();
+assert.deepStrictEqual(editor.model.profiles,[other]);assert.equal(editor.selected,'other');
+assert.equal(editor.yaml,JSON.stringify([other]));assert(!distributedView.has(profile.key));
+editor.model.profiles=[legacy];
+bindDistributedEditor(legacy);removeButton.onclick();
+assert.deepStrictEqual(editor.model.profiles,[]);assert.equal(editor.selected,null);
+assert.equal(editor.yaml,'[]');assert.equal(saved,2);assert.equal(rendered,2);
 process.stdout.write('distributed-ydb:\\n  test:\\n'+lines.join('\\n'));
 """
         result = subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10)

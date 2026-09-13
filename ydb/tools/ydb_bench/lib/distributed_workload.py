@@ -267,7 +267,7 @@ class WorkerWorkload:
 
 
 class ExternalDatasetLifecycle(WorkloadLifecycle):
-    """KV data is owned by the coordinator, not by individual CLI samples."""
+    """Dataset lifecycle is coordinated once, not by individual CLI samples."""
 
     def _prepare_dataset(self, state):
         pass
@@ -330,7 +330,7 @@ class MultiWorkerWorkload:
                 local["table_path"] = "ydb_bench_" + token
             if "dynamic_nodes" in local:
                 local["dynamic_nodes"] = workload.dynamic_nodes
-            if action == "sample":
+            if action == "sample" and "search" not in client["load"]:
                 local["load"] = client["load"]["values"][0]
             return name, workload.perform(action, local)
 

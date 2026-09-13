@@ -1052,21 +1052,22 @@ def _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enab
             common["timeout"] = value["timeout"]
         parsed = _parse_local_ydb_profile(benchmark, profile_name, common, perf_enabled, perf_frequency)
         profile = parsed.parameters["local_ydb"]
-        if profile["workload"]["type"] != "kv":
-            _config_error(where + ".workload", "multi-generator profiles currently support KV only")
-        if len(profile["load"].get("values", [])) != 1:
-            _config_error(
-                where + ".load", "requires one fixed load value per CLI; search uses the legacy single-CLI format"
-            )
-        if profile["measurement"]["verification_repetitions"]:
+        if "search" in profile["load"] and name not in search_clients:
+            _config_error(where + ".load", "use explicit search and objective for a CLI search strategy")
+        if profile["workload"]["type"] not in ("kv", "stock"):
+            _config_error(where + ".workload", "multi-generator profiles support KV and stock")
+        if "search" not in profile["load"] and len(profile["load"].get("values", [])) != 1:
+            _config_error(where + ".load", "requires one fixed load value for a non-search CLI")
+        if not search_clients and profile["measurement"]["verification_repetitions"]:
             _config_error(
                 location + ".measurement", "fixed multi-generator profiles require verification-repetitions: 0"
             )
         key = (raw["tenant"], dataset)
-        options = profile["workload"]["options"]
+        options = (profile["workload"]["type"], profile["workload"]["options"])
         if key in datasets and datasets[key] != options:
             _config_error(
-                where + ".workload.options", "CLI nodes sharing a tenant/dataset must use identical KV options"
+                where + ".workload.options",
+                "CLI nodes sharing a tenant/dataset must use identical workload type and options",
             )
         datasets[key] = options
         normalized[name] = {
@@ -1075,7 +1076,16 @@ def _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enab
             **{key: profile[key] for key in ("workload", "client", "load", "geometry")},
         }
         configurations.append(parsed)
-    configuration = configurations[0]
+    selected = search_clients[0] if search_clients else next(iter(normalized))
+    configuration = configurations[list(normalized).index(selected)]
+    stock_datasets = {}
+    for client in normalized.values():
+        if client["workload"]["type"] == "stock":
+            previous = stock_datasets.setdefault(client["tenant"], client["dataset"])
+            if previous != client["dataset"]:
+                _config_error(
+                    location + ".cli-nodes", "stock uses fixed table names; use one shared stock dataset per tenant"
+                )
     if len({c["load"]["allow_errors"] for c in normalized.values()}) > 1:
         _config_error(location + ".cli-nodes", "allow-errors must be the same for all generators")
     profile = configuration.parameters["local_ydb"]
@@ -1106,19 +1116,21 @@ def _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enab
     profile["actor_system"] = {**storage, "tenants": tenant_settings}
     profile["distributed"] = {
         "template": template,
-        "tenant": next(iter(normalized.values()))["tenant"],
+        "tenant": normalized[selected]["tenant"],
         "cli_nodes": normalized,
+        "search_cli": search_clients[0] if search_clients else None,
     }
-    profile["load"] = {
-        "parameter": "threads",
-        "values": [
-            sum(
-                c["client"]["threads"] if c["load"]["parameter"] == "rate" else c["load"]["values"][0]
-                for c in normalized.values()
-            )
-        ],
-        "allow_errors": all(c["load"]["allow_errors"] for c in normalized.values()),
-    }
+    if not search_clients:
+        profile["load"] = {
+            "parameter": "threads",
+            "values": [
+                sum(
+                    c["client"]["threads"] if c["load"]["parameter"] == "rate" else c["load"]["values"][0]
+                    for c in normalized.values()
+                )
+            ],
+            "allow_errors": all(c["load"]["allow_errors"] for c in normalized.values()),
+        }
     profile.pop("affinity")
     profile["geometry"].pop("disk_size_gb")
     profile["geometry"].pop("storage_groups")

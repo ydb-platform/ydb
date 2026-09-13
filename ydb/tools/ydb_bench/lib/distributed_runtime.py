@@ -71,6 +71,11 @@ class RemoteWorkloadLifecycle:
                 if set(clients) != expected:
                     raise BenchmarkError("Incomplete distributed CLI results")
                 atomic_write_json(directory / "cli-results.json", clients)
+                search_cli = self.configuration.parameters["local_ydb"]["distributed"].get("search_cli")
+                if search_cli is not None:
+                    # Optimize only the selected CLI; background load must not
+                    # inflate its throughput or substitute another percentile.
+                    return clients[search_cli]
                 # Percentiles cannot be merged without distributions. Preserve
                 # individual latency values in cli-results.json, never average p99.
                 return {
@@ -205,7 +210,13 @@ class RemoteWorkloadLifecycle:
             )
             hosts[host] = json.loads((destination / "cpu-samples.json").read_text())
             artifacts[host] = destination.relative_to(directory).as_posix()
-        report = summarize_hosts(hosts, self.cluster.cli_host, result.get("measurement_clock"), before, after)
+        search_cli = self.configuration.parameters["local_ydb"]["distributed"].get("search_cli")
+        clock_host = (
+            next(node["host_id"] for node in self.cluster.template["nodes"] if node["name"] == search_cli)
+            if search_cli is not None
+            else self.cluster.cli_host
+        )
+        report = summarize_hosts(hosts, clock_host, result.get("measurement_clock"), before, after)
         report.update(
             sample_id=sample_id, artifact_directories=artifacts, clock_probes={"before": before, "after": after}
         )

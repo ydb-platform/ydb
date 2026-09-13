@@ -309,10 +309,11 @@ Launch through the web coordinator, not the standalone `run` command.
 
 #### Multi-generator Builder
 
-The Builder also supports fixed KV workloads with up to 32 CLI generators.
+The Builder supports KV and stock workloads with up to 32 CLI generators,
+with fixed loads or search assigned to one generator.
 Its sections are Cluster, Storage, Tenants, Load generators and Run policy;
 YAML remains a separate top-level tab. Each CLI has its own target tenant,
-dataset, operation, client threads and one fixed thread/rate load. Storage and
+dataset, operation, client threads and thread/rate load. Storage and
 each tenant have separate actor-system flags and per-node `cpu-count` values.
 Placement and affinity remain in the template snapshot.
 
@@ -345,7 +346,7 @@ distributed-ydb:
 
 Every CLI in the template must have an entry. Dataset identity is the pair
 `(tenant, dataset)`: matching pairs share one initialization and cleanup, while
-different pairs are independent. Shared KV options must match, including
+different pairs are independent for KV. Shared workload types and options must match, including
 `init-upserts`; operations and loads can differ. Builder edits to shared dataset
 options apply to all generators using that pair.
 
@@ -354,15 +355,37 @@ concurrently, including multiple CLI nodes on the same host. Per-CLI results,
 latencies and measurement clocks are stored in `cli-results.json` beside each
 sample's host metrics; complete individual artifacts are in CLI-named directories.
 All generators currently must use the same `allow-errors` policy.
-Summary throughput is the sum of individual rates. Percentiles are not merged;
+For fixed load, summary throughput is the sum of individual rates. Percentiles are not merged;
 whole-cluster CPU aggregation is unavailable for these separate measurement
 windows. This is concurrent fixed load, not clock-synchronized traffic replay.
 
 The legacy single-CLI YAML and its search/verification remain supported.
 Conversion to the fixed-load Builder is explicit and replaces load settings
-with defaults. Multi-generator search and verification are not supported yet.
-Search ownership is exclusive: at most one CLI may own a search strategy;
-other generators must remain fixed-load when that mode is introduced.
+with defaults. At most one CLI may own `load.search` and `load.objective`;
+all other generators must have one fixed load value. The selected CLI uses the
+same latency-SLO or maximize-throughput search and verification as local-ydb.
+Search decisions and headline workload metrics describe that CLI only, not the
+sum of foreground and background throughput. Individual results remain available
+in `cli-results.json`. Background generators run at their fixed load in each
+sample; this is not a continuous or clock-synchronized background workload.
+
+Both KV and stock are supported. Stock uses fixed table names, so all stock
+generators targeting one tenant must share the same dataset and options. Separate
+stock datasets require separate tenants. Initialization and cleanup run once per
+shared dataset, before and after the measurements.
+
+For example, replace one CLI's fixed `load` with:
+
+```yaml
+load:
+  parameter: threads
+  search: {start: 1, maximum: 256, multiplier: 2}
+  objective: {type: latency-slo, percentile: p99, max-ms: 20}
+```
+
+Use `measurement.verification-repetitions` to enable final verification. In the
+Builder, choose the workload and search objective under **Load generators**;
+verification is configured in **Run policy**. YAML remains a separate top-level tab.
 All participant servers must use the same distributed protocol version (2).
 
 Each worker freezes the selected binaries, resolves placement from its own

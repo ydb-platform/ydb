@@ -16,6 +16,18 @@ JS = r"""
 const distributedView=new Map();
 const distributedHosts=new Map();
 const hostRecord=id=>({name:distributedHosts.get(id)||id});
+function distributedSetLoadMode(raw,name,mode){
+  raw.measurement??={};
+  const clients=raw['cli-nodes'],client=clients[name];
+  if(mode!=='fixed'&&Object.entries(clients).some(([n,c])=>n!==name&&c.load.search))
+    throw Error('Only one CLI may own search. Set the current search CLI to fixed load first.');
+  const parameter=client.load.parameter,allow=client.load['allow-errors']??false;
+  client.load=mode==='fixed'?{parameter,values:[client.load.search?.start??1],'allow-errors':allow}:
+    {parameter,'allow-errors':allow,search:{start:1,maximum:256,multiplier:2,'resolution-percent':2},
+      objective:mode==='latency-slo'?{type:mode,percentile:'p99','max-ms':20,'max-errors':0,'min-achieved-rate-ratio':0.98}:
+        {type:mode,'target-role':'dynamic','plateau-gain-percent':2,'plateau-points':2,'cpu-saturation-percent':95}};
+  if(!Object.values(clients).some(c=>c.load.search))raw.measurement['verification-repetitions']=0;
+}
 function distributedDefault(template,tenant){
   const clients={};
   for(const node of template.nodes.filter(n=>n.role==='cli')){
@@ -77,8 +89,9 @@ function serializeDistributedYdb(lines,profile){
 }
 function distributedProfileEditor(profile){
   const raw=profile.distributed_config;
+  const actions='<div class=toolbar><button type=button class=danger id=delete-profile>Delete profile</button></div>';
   if(!raw?.['cli-nodes'])return '<div class=notice>This profile uses the legacy single-CLI load controller. Its YAML is preserved.</div>'+
-    '<button type=button id=distributed-convert>Convert to fixed-load Builder</button>';
+    '<button type=button id=distributed-convert>Convert to fixed-load Builder</button>'+actions;
   const view=distributedView.get(profile.key)||{tab:'Cluster',item:''};distributedView.set(profile.key,view);
   const template=raw['cluster-template'],clients=raw['cli-nodes'];
   const tabs=['Cluster','Storage','Tenants','Load generators','Run policy'];
@@ -95,7 +108,7 @@ function distributedProfileEditor(profile){
     object=clients[view.item];path=['cli-nodes',view.item];
   }
   const input=(label,keys,value,type='text')=>'<div class=field><label>'+esc(label)+
-    '<input data-distributed-path="'+esc(JSON.stringify(keys))+'" type="'+type+'" value="'+esc(value??'')+'"></label></div>';
+    '<input data-distributed-path="'+esc(JSON.stringify(keys))+'" type="'+type+'" '+(type==='number'?'step=any ':'')+'value="'+esc(value??'')+'"></label></div>';
   const select=(label,keys,value,values)=>'<div class=field><label>'+esc(label)+
     '<select data-distributed-path="'+esc(JSON.stringify(keys))+'">'+
     values.map(v=>'<option '+(v===value?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label></div>';
@@ -110,20 +123,38 @@ function distributedProfileEditor(profile){
         esc(JSON.stringify([...path,k]))+'" '+((object[k]??(k==='use-ring-queue'))?'checked':'')+'> '+esc(k)+'</label></div>').join('')+'</div>';
   }else if(view.tab==='Load generators'){
     const node=template.nodes.find(n=>n.name===view.item),peers=Object.entries(clients).filter(([name,c])=>c.tenant===object.tenant&&c.dataset===object.dataset);
+    const definition=localYdbWorkloadDefinition(object.workload.type),load=object.load,mode=load.search?load.objective.type:'fixed';
+    const searchOwner=Object.entries(clients).find(([name,c])=>name!==view.item&&c.load.search)?.[0];
     content='<div class=distributed-summary>'+esc(node?.name)+' · '+esc(hostRecord(node?.host_id)?.name||node?.host_id)+' · affinity from template</div><div class=form-grid>'+
       select('Target tenant',[...path,'tenant'],object.tenant,template.tenants.map(t=>t.path))+input('Dataset',[...path,'dataset'],object.dataset)+'</div>'+
-      '<div class=distributed-summary>KV · '+(peers.length>1?
+      '<div class=distributed-summary>'+esc(object.workload.type)+' · '+(peers.length>1?
         'Shared with '+peers.filter(([n])=>n!==view.item).map(([n])=>esc(n)).join(', '):'Independent dataset')+
       ' · initialize once</div><div class=form-grid>'+
-      select('Operation',[...path,'workload','operation'],object.workload.operation,['upsert','select','read-rows','mixed'])+
+      select('Workload',[...path,'workload','type'],object.workload.type,['kv','stock'])+
+      select('Operation',[...path,'workload','operation'],object.workload.operation,definition.operations)+
       input('Client threads',[...path,'client','threads'],object.client?.threads??1,'number')+
       select('Load parameter',[...path,'load','parameter'],object.load.parameter,['threads','rate'])+
-      input('Fixed load',[...path,'load','values',0],object.load.values[0],'number')+'</div>'+
-      '<h3>Dataset options</h3><div class=muted>Changes apply to '+peers.map(([n])=>esc(n)).join(', ')+'.</div><div class=form-grid>'+
-      localYdbWorkloadDefinition('kv').options.map(o=>input(o.name,[...path,'workload','options',o.name],object.workload.options?.[o.name]??o.default,'number')).join('')+'</div>';
+      select('Objective',[...path,'load-mode'],mode,searchOwner?['fixed']:['fixed','latency-slo','maximize-throughput'])+
+      (mode==='fixed'?input('Fixed load',[...path,'load','values',0],load.values[0],'number'):
+        [['start','Start',1],['maximum','Maximum',256],['multiplier','Growth multiplier',2],['resolution-percent','Resolution (%)',2]]
+          .map(([k,label,d])=>input(label,[...path,'load','search',k],load.search[k]??d,'number')).join(''))+'</div>'+
+      (searchOwner?'<div class=muted>Search is controlled by '+esc(searchOwner)+'.</div>':'')+
+      (mode==='latency-slo'?'<h3>Latency SLO</h3><div class=form-grid>'+
+        select('Percentile',[...path,'load','objective','percentile'],load.objective.percentile??'p99',Object.keys(definition.slo_metrics||{}))+
+        [['max-ms','Maximum latency (ms)',20],['max-errors','Maximum errors',0],['min-achieved-rate-ratio','Minimum achieved rate ratio',0.98]]
+          .map(([k,label,d])=>input(label,[...path,'load','objective',k],load.objective[k]??d,'number')).join('')+'</div>':'')+
+      (mode==='maximize-throughput'?'<div class=form-grid>'+
+        select('Target role',[...path,'load','objective','target-role'],load.objective['target-role']??'dynamic',['static','dynamic','total'])+
+        [['plateau-gain-percent','Plateau gain (%)',2],['plateau-points','Plateau comparisons',2],['cpu-saturation-percent','CPU saturation (%)',95]]
+          .map(([k,label,d])=>input(label,[...path,'load','objective',k],load.objective[k]??d,'number')).join('')+'</div>':'')+
+      '<h3>Dataset options</h3><div class=muted>Workload type and options apply to '+peers.map(([n])=>esc(n)).join(', ')+'.</div>'+
+      (object.workload.type==='stock'?'<div class=muted>Stock uses one shared dataset per tenant (fixed table names).</div>':'')+'<div class=form-grid>'+
+      definition.options.map(o=>input(o.name,[...path,'workload','options',o.name],object.workload.options?.[o.name]??o.default,'number')).join('')+'</div>';
   }else{
-    content='<div class=distributed-summary>Simultaneous fixed load · '+Object.keys(clients).length+' CLI generators</div><div class=form-grid>'+
+    const owner=Object.entries(clients).find(([name,c])=>c.load.search)?.[0];
+    content='<div class=distributed-summary>'+(owner?'Search: '+esc(owner):'Simultaneous fixed load')+' · '+Object.keys(clients).length+' CLI generators</div><div class=form-grid>'+
       [['warmup','Warm-up, s',2],['duration','Duration, s',10],['repetitions','Repetitions',1]].map(([k,label,d])=>input(label,['measurement',k],raw.measurement?.[k]??d,'number')).join('')+
+      (owner?input('Verification repetitions',['measurement','verification-repetitions'],raw.measurement?.['verification-repetitions']??0,'number'):'')+
       select('Allow failed requests (all CLI)', ['cli-nodes',Object.keys(clients)[0],'load','allow-errors'],
         String(Object.values(clients)[0].load['allow-errors']??false),['false','true'])+'</div>';
   }
@@ -131,9 +162,15 @@ function distributedProfileEditor(profile){
     '<button type=button class="'+(view.tab===t?'active':'')+'" data-distributed-tab="'+t+'" aria-pressed="'+(view.tab===t)+'">'+t+'</button>').join('')+
     '</div><div class="'+(items.length?'distributed-layout':'')+'">'+(items.length?'<div class=distributed-items>'+items.map(([key,label])=>
       '<button type=button data-distributed-item="'+esc(key)+'" aria-pressed="'+(view.item===key)+'">'+esc(label)+'</button>').join('')+
-    '</div>':'')+'<section>'+content+'</section></div></div>';
+    '</div>':'')+'<section>'+content+'</section></div>'+actions+'</div>';
 }
 function bindDistributedEditor(profile){
+  document.querySelector('#delete-profile').onclick=()=>{
+    editor.model.profiles=editor.model.profiles.filter(item=>item.key!==profile.key);
+    distributedView.delete(profile.key);
+    editor.selected=editor.model.profiles[0]?.key||null;editor.yaml=serializeConfig(editor.model);
+    saveDraft();renderNew();
+  };
   const convert=document.querySelector('#distributed-convert');
   if(convert){convert.onclick=async()=>{
     if(!confirm('Replace the legacy workload/search settings with fixed-load defaults? The placement snapshot is retained.'))return;
@@ -148,9 +185,18 @@ function bindDistributedEditor(profile){
     let target=raw;for(const key of path.slice(0,-1))target=target[key]??=(typeof key==='number'?[]:{});
     const key=path.at(-1),value=input.type==='checkbox'?input.checked:
       input.type==='number'?Number(input.value):(key==='allow-errors'?input.value==='true':input.value);
-    if(input.type==='number'&&(!input.value.trim()||!Number.isSafeInteger(value)||value<0)){
-      document.querySelector('#editor-message').innerHTML=displayError(Error('Enter a non-negative integer.'));return}
+    if(input.type==='number'&&(!input.value.trim()||!Number.isFinite(value)||value<0)){
+      document.querySelector('#editor-message').innerHTML=displayError(Error('Enter a non-negative number.'));return}
+    if(key==='load-mode'){
+      try{distributedSetLoadMode(raw,path[1],value)}catch(error){document.querySelector('#editor-message').innerHTML=displayError(error);return}
+      await commitDistributed(profile,raw);return;
+    }
     target[key]=value;
+    if(path[0]==='cli-nodes'&&path[2]==='workload'&&key==='type'){
+      const selected=raw['cli-nodes'][path[1]],definition=localYdbWorkloadDefinition(value);
+      for(const client of Object.values(raw['cli-nodes']))if(client.tenant===selected.tenant&&client.dataset===selected.dataset)
+        client.workload={type:value,operation:definition.default_operation,options:Object.fromEntries(definition.options.map(o=>[o.name,o.default]))};
+    }
     if(path[0]==='cli-nodes'&&path[2]==='load'&&key==='allow-errors'){
       for(const client of Object.values(raw['cli-nodes']))client.load['allow-errors']=value;
     }

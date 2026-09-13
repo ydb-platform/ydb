@@ -714,6 +714,8 @@ public:
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
     void SendFromWaiters();
+    // releases what a message leaving the Queue held, under Mutex, and returns what was actually released
+    ui64 ReleaseInflight(const TOutputItem& item);
     void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor);
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
@@ -1309,6 +1311,7 @@ public:
             hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
             hFunc(NActors::TEvents::TEvUndelivered, Handle);
             hFunc(NActors::TEvents::TEvWakeup, Handle);
+            hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(TEvDqCompute::TEvChannelDiscoveryV2, Handle);
             hFunc(TEvDqCompute::TEvChannelDataV2, Handle);
             hFunc(TEvDqCompute::TEvChannelAckV2, Handle);
@@ -1363,16 +1366,18 @@ public:
         DeliverChannelAck(ev);
     }
 
-    void DeliverChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
+    // whether the message was delivered: the one named by DropDataSeqNo is lost instead
+    bool DeliverChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         if (auto seqNo = NodeState->DropDataSeqNo.load(); seqNo && ev->Get()->Record.GetSeqNo() == seqNo) {
             NodeState->DropDataSeqNo.store(0);
-            return; // lost on the wire
+            return false;
         }
         if (NodeState->IsNullMode()) {
             NodeState->HandleNullMode(ev);
         } else {
             NodeState->HandleData(ev);
         }
+        return true;
     }
 
     void DeliverChannelAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
@@ -1404,13 +1409,15 @@ public:
         auto maxCount = ev->Get()->MaxCount;
 
         // An exact count ignores the pause on purpose - reaching one state and stopping there is what a
-        // test needs - and counts data alone, as the acks have a queue and a pause of their own.
+        // test needs - and counts delivered data alone: not a message lost to DropDataSeqNo, and not the
+        // acks, which have a queue and a pause of their own. It stops where it is told only while the
+        // session is paused; a running queue drains its remainder below.
         if (maxCount || !NodeState->ChannelDataPaused.load()) {
             while (!PendingChannelData.empty()) {
-                DeliverChannelData(PendingChannelData.front());
+                auto delivered = DeliverChannelData(PendingChannelData.front());
                 PendingChannelData.pop();
                 NodeState->PendingDataCount--;
-                if (maxCount && --maxCount == 0) {
+                if (delivered && maxCount && --maxCount == 0) {
                     break;
                 }
             }

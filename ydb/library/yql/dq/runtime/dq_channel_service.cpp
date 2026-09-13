@@ -1730,6 +1730,23 @@ now may need to send very last msg from terminated descriptor
 
 }
 
+ui64 TNodeState::ReleaseInflight(const TOutputItem& item) {
+    // Unsigned: releasing more than it holds would wrap it and the session would stop sending for good.
+    // The sensor loses the same amount, or it goes negative where the counter is clamped.
+    Y_DEBUG_ABORT_UNLESS(InflightBytes.load() >= item.Data.Bytes,
+        "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
+        LogPrefix.c_str(), InflightBytes.load(), item.Data.Bytes, item.SeqNo);
+    auto released = std::min<ui64>(InflightBytes.load(), item.Data.Bytes);
+    if (released != item.Data.Bytes) {
+        LOG_E(LogPrefix << "INFLIGHT UNDERFLOW, InflightBytes=" << InflightBytes.load()
+            << ", item.Bytes=" << item.Data.Bytes << ", item.SeqNo=" << item.SeqNo);
+    }
+    InflightBytes -= released;
+    *OutputBufferInflightBytes -= released;
+    (*OutputBufferInflightMessages)--;
+    return released;
+}
+
 void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
     LastPeerActivity.store(TInstant::Now());
@@ -1785,16 +1802,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             if (item->Descriptor->GenMajor.load() != GenMajor) {
                 item->Descriptor->AbortChannel(TStringBuilder() << "By Outdated GenMajor " << item->Descriptor->GenMajor.load() << " vs " << GenMajor);
             }
-            deltaBytes += item->Data.Bytes;
-            // Unsigned: releasing more than it holds would wrap it and the session would stop sending for
-            // good. The sensor loses the same amount, or it goes negative where the counter is clamped.
-            Y_DEBUG_ABORT_UNLESS(InflightBytes.load() >= item->Data.Bytes,
-                "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
-                LogPrefix.c_str(), InflightBytes.load(), item->Data.Bytes, item->SeqNo);
-            auto released = std::min<ui64>(InflightBytes.load(), item->Data.Bytes);
-            InflightBytes -= released;
-            *OutputBufferInflightBytes -= released;
-            (*OutputBufferInflightMessages)--;
+            deltaBytes += ReleaseInflight(*item);
             Queue.pop_front();
             LastQueueProgress.store(TInstant::Now());
         }
@@ -1812,14 +1820,16 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             // queue from 1 while the peer still reports its own ConfirmedSeqNo: the block below resends it.
             if (item->SeqNo == seqNo) {
                 if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
-                    if (Reconciliation.load() == 0) {
-                        // the peer found a gap and this item is the 1st missing one
+                    // The 2 senders of a RESEND are told apart by the cookie they echo: a gap answer echoes
+                    // the SeqNo of the data it answers, never 0, and asks to resend from this item; a
+                    // discovery reply echoes the 0 of SendDiscovery and reports this item as the last one
+                    // confirmed.
+                    if (ev->Cookie != 0) {
                         LOG_W(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo);
                         StartReconciliation(false, 'R');
                         return;
                     }
-                    // A discovery reply carries the last confirmed SeqNo, not the 1st missing one: nothing
-                    // has been sent at this GenMinor, so a gap RESEND could not have passed the check above.
+                    Y_DEBUG_ABORT_UNLESS(Reconciliation.load() != 0, "%s, a discovery reply outside a reconciliation", LogPrefix.c_str());
                     LOG_D(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by discovery");
                 }
 
@@ -1842,15 +1852,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                     }
                 }
 
-                deltaBytes += item->Data.Bytes;
-                // unsigned, as the sibling release above
-                Y_DEBUG_ABORT_UNLESS(InflightBytes.load() >= item->Data.Bytes,
-                    "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
-                    LogPrefix.c_str(), InflightBytes.load(), item->Data.Bytes, item->SeqNo);
-                auto released = std::min<ui64>(InflightBytes.load(), item->Data.Bytes);
-                InflightBytes -= released;
-                *OutputBufferInflightBytes -= released;
-                (*OutputBufferInflightMessages)--;
+                deltaBytes += ReleaseInflight(*item);
                 Queue.pop_front();
                 LastQueueProgress.store(TInstant::Now());
             }
@@ -2082,9 +2084,9 @@ void TNodeState::TerminateOutputDescriptor(const std::shared_ptr<TOutputDescript
         << ", Push=" << descriptor->PushBytes.load()
         << ", RPop=" << descriptor->RemotePopBytes.load()
     );
-    // FailOutputs erases the descriptor of an aborted channel while its buffer lives on, and the peer
-    // resending the leading message creates another under the same Info: erasing by key would drop that
-    // live one and take the sensor down for a descriptor this call does not own.
+    // FailOutputs erases the descriptor of an aborted channel while its buffer lives on, and an update of
+    // the peer reporting an early finish creates another under the same Info (HandleUpdate): erasing by
+    // key would drop that live one and take the sensor down for a descriptor this call does not own.
     if (auto it = OutputDescriptors.find(descriptor->Info); it != OutputDescriptors.end() && it->second == descriptor) {
         OutputDescriptors.erase(it);
         (*OutputBufferCount)--;
@@ -2103,7 +2105,8 @@ void TNodeState::TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor
         << ", EarlyFinished=" << descriptor->EarlyFinished.load() << ", PopBytes=" << descriptor->PopStats.Bytes.load()
         << ", Finishing=" << descriptor->Finishing.load() << ", Finished=" << descriptor->Finished.load()
     );
-    // Erased by FailInputs or by the ID ERASE/GEN path, and matched by identity as for outputs above.
+    // Erased by FailInputs or by the ID ERASE/GEN path, and matched by identity as for outputs above; here
+    // it is the peer resending the leading message of the channel which creates another under the Info.
     if (auto it = InputDescriptors.find(descriptor->Info); it != InputDescriptors.end() && it->second == descriptor) {
         InputDescriptors.erase(it);
         (*InputBufferCount)--;
@@ -2258,9 +2261,6 @@ void TNodeState::DoReconciliation(char logSymbol) {
             << ", WQ=" << WaitersQueueSize.load() << ", Log=" << reconciliationLog);
     }
 
-    ui64 delta = 0;
-    ui64 dropped = 0;
-
     if (GenMinor == 1) { // => major reconciliation
         // Every attempt of one major reconciliation numbers the queue the same way: nothing is sent while
         // it runs, the peer is back at ConfirmedSeqNo 0, and the items dropped below would leave gaps.
@@ -2285,19 +2285,13 @@ void TNodeState::DoReconciliation(char logSymbol) {
                 item->SeqNo = ++SeqNo;
                 RebuiltQueue.push_back(std::move(item));
             } else {
-                delta += item->Data.Bytes;
-                dropped++;
+                ReleaseInflight(*item);
             }
 
             Queue.pop_front();
         }
         Queue.swap(RebuiltQueue);
     }
-
-    InflightBytes -= delta;
-    // ~TNodeState settles the gauges from InflightBytes and Queue.size(), which exclude the dropped items
-    *OutputBufferInflightBytes -= delta;
-    *OutputBufferInflightMessages -= dropped;
 
     SendDiscovery();
     ReconSent.store(TInstant::Now());
@@ -2317,7 +2311,8 @@ void TNodeState::SendDiscovery() {
         flags |=  NActors::IEventHandle::FlagSubscribeOnSession;
     }
 
-    ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeId), NodeActorId, evDiscovery.Release(), flags));
+    // the cookie 0 is what the reply echoes, and how HandleAck tells it from a gap RESEND
+    ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeId), NodeActorId, evDiscovery.Release(), flags, 0));
 }
 
 TString TNodeState::GetDebugInfo() {
@@ -3018,6 +3013,11 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
 
 void TNodeSessionActor::Handle(NActors::TEvents::TEvPoison::TPtr&) {
     LOGA_D(NodeState->LogPrefix << "PASS AWAY");
+    PassAway();
+}
+
+void TDebugNodeSessionActor::Handle(NActors::TEvents::TEvPoison::TPtr&) {
+    LOGA_D(NodeState->LogPrefix << "PASS AWAY/DEBUG");
     PassAway();
 }
 

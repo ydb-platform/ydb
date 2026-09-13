@@ -154,6 +154,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             {"ev", ev->Get()->ToString()});
 
         ReadSessionId = ev->Get()->Result.ReadSessionId;
+        Send(Worker, new TEvWorker::TEvReaderStarted(ev->Get()->Result.CommittedOffset));
     }
 
     void Handle(TEvWorker::TEvCommit::TPtr& ev) {
@@ -164,7 +165,26 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         }
 
-        CommittedOffset = ev->Get()->Offset;
+        if (CommitInFlight.Defined()) {
+            if (ev->Get()->Offset > *CommitInFlight
+                && (!PendingCommit || ev->Get()->Offset > *PendingCommit)) {
+                PendingCommit = ev->Get()->Offset;
+            }
+            YDB_LOG_DEBUG("Commit queued while another commit is in flight",
+                {"offset", ev->Get()->Offset},
+                {"inFlightOffset", *CommitInFlight},
+                {"pendingOffset", PendingCommit.GetOrElse(*CommitInFlight)});
+            return;
+        }
+
+        StartCommit(ev->Get()->Offset);
+    }
+
+    void StartCommit(ui64 offset) {
+        Y_ABORT_UNLESS(!CommitInFlight);
+
+        CommittedOffset = offset;
+        CommitInFlight = CommittedOffset;
         Send(YdbProxy, CreateCommitOffsetRequest().release());
     }
 
@@ -179,6 +199,14 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
                 {"ev", ev->Get()->ToString()});
             if (CommittedOffset) {
                 Send(ReadSession, CreateCommitOffsetRequest().release());
+            }
+            const auto committedOffset = *CommitInFlight;
+            Send(Worker, new TEvWorker::TEvCommitResult(committedOffset));
+            CommitInFlight.Clear();
+            if (PendingCommit) {
+                const auto pendingOffset = *PendingCommit;
+                PendingCommit.Clear();
+                StartCommit(pendingOffset);
             }
         }
     }
@@ -309,6 +337,8 @@ private:
     TActorId ReadSession;
     TString ReadSessionId;
     ui64 CommittedOffset = 0;
+    TMaybe<ui64> CommitInFlight;
+    TMaybe<ui64> PendingCommit;
 
     bool CreatingReadSessionInProgress = false;
     bool StoppingInProgress = false;

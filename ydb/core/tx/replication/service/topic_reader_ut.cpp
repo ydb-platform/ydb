@@ -138,6 +138,45 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
             env.GetRuntime().template GrabEdgeEvents<TEvents::TEvPoison>(ev);
         } while (ev->Sender != reader && ev->Recipient != topicReader);
     }
+
+    Y_UNIT_TEST(QueuesCommitWhileAnotherCommitIsInFlight) {
+        TEnv env;
+
+        const auto ydbProxy = env.GetRuntime().AllocateEdgeActor();
+        const auto readSession = env.GetRuntime().AllocateEdgeActor();
+        const auto settings = TEvYdbProxy::TTopicReaderSettings()
+            .ConsumerName("consumer")
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings()
+                .Path("/Root/topic")
+                .AppendPartitionIds(0));
+
+        const auto reader = env.GetRuntime().Register(CreateRemoteTopicReader(ydbProxy, settings));
+        env.SendAsync(reader, new TEvWorker::TEvHandshake());
+        env.GetRuntime().GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicReaderRequest>(ydbProxy);
+        env.GetRuntime().Send(reader, ydbProxy,
+            new TEvYdbProxy::TEvCreateTopicReaderResponse(readSession));
+        env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvHandshake>(env.GetSender());
+        env.GetRuntime().Send(reader, readSession,
+            new TEvYdbProxy::TEvStartTopicReadingSession(TString("read-session")));
+        env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvReaderStarted>(env.GetSender());
+
+        env.SendAsync(reader, new TEvWorker::TEvCommit(10));
+        env.SendAsync(reader, new TEvWorker::TEvCommit(20));
+
+        auto request = env.GetRuntime().GrabEdgeEvent<TEvYdbProxy::TEvCommitOffsetRequest>(ydbProxy);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<3>(request->Get()->GetArgs()), 10);
+        env.GetRuntime().Send(reader, ydbProxy,
+            new TEvYdbProxy::TEvCommitOffsetResponse(NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+        auto result = env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvCommitResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Offset, 10);
+
+        request = env.GetRuntime().GrabEdgeEvent<TEvYdbProxy::TEvCommitOffsetRequest>(ydbProxy);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<3>(request->Get()->GetArgs()), 20);
+        env.GetRuntime().Send(reader, ydbProxy,
+            new TEvYdbProxy::TEvCommitOffsetResponse(NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+        result = env.GetRuntime().GrabEdgeEvent<TEvWorker::TEvCommitResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Offset, 20);
+    }
 }
 
 }

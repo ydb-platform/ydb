@@ -1,4 +1,5 @@
 #include "base_table_writer.h"
+#include "json_change_record.h"
 #include "service.h"
 #include "worker.h"
 
@@ -343,7 +344,15 @@ class TLocalTableWriter
             return;
         }
 
-        if (TableVersion && TableVersion == entry.Self->Info.GetVersion().GetGeneralVersion()) {
+        const auto generalVersion = entry.Self->Info.GetVersion().GetGeneralVersion();
+        if (RefreshingSchema && SchemaRefreshBaseVersion && generalVersion <= SchemaRefreshBaseVersion) {
+            // A delayed scheme-cache response can describe the old table
+            // schema. Never acknowledge the barrier until a newer snapshot
+            // has actually been observed.
+            return Retry();
+        }
+
+        if (TableVersion && TableVersion == generalVersion) {
             Y_ABORT_UNLESS(Initialized);
             Resolving = false;
             return CreateSenders();
@@ -367,6 +376,38 @@ class TLocalTableWriter
                     .Type = column.PType,
                 });
                 Y_ABORT_UNLESS(res.second);
+            }
+        }
+
+        if (RefreshingSchema) {
+            Y_ABORT_UNLESS(PendingSchemaChange);
+
+            THashMap<TString, TString> expectedColumns;
+            for (const auto& column : PendingSchemaChange->Schema.GetColumns()) {
+                expectedColumns.emplace(column.GetName(), column.GetType());
+            }
+
+            TVector<TString> actualPrimaryKey(schema->KeyColumns.size());
+            for (const auto& [_, column] : entry.Columns) {
+                const auto expected = expectedColumns.find(column.Name);
+                if (expected == expectedColumns.end()
+                    || expected->second != NScheme::TypeName(column.PType, column.PTypeMod)) {
+                    return LogWarnAndRetry("Refreshed table schema does not match CDC schema record");
+                }
+                expectedColumns.erase(expected);
+
+                if (column.KeyOrder >= 0) {
+                    actualPrimaryKey[column.KeyOrder] = column.Name;
+                }
+            }
+
+            const auto& expectedPrimaryKey = PendingSchemaChange->Schema.GetPrimaryKeyColumnNames();
+            bool samePrimaryKey = actualPrimaryKey.size() == static_cast<size_t>(expectedPrimaryKey.size());
+            for (size_t i = 0; samePrimaryKey && i < actualPrimaryKey.size(); ++i) {
+                samePrimaryKey = actualPrimaryKey[i] == expectedPrimaryKey[i];
+            }
+            if (expectedColumns || !samePrimaryKey) {
+                return LogWarnAndRetry("Refreshed table schema does not match CDC schema record");
             }
         }
 
@@ -431,6 +472,14 @@ class TLocalTableWriter
         }
 
         Resolving = false;
+
+        if (RefreshingSchema) {
+            RefreshingSchema = false;
+            Y_ABORT_UNLESS(PendingSchemaChange);
+            Send(Worker, new TEvWorker::TEvSchemaChangeApplied(PendingSchemaChange->Schema));
+            LastAppliedSchema = MakeHolder<NKikimrReplication::TSchemaChange>(PendingSchemaChange->Schema);
+            PendingSchemaChange.Reset();
+        }
     }
 
     IActor* CreateSender(ui64 partitionId) const override {
@@ -450,8 +499,24 @@ class TLocalTableWriter
         for (auto& r : ev->Get()->Records) {
             auto offset = r.GetOffset();
             auto& data = r.GetData();
-
             auto record = Parser->Parse(ev->Get()->Source, offset, std::move(data));
+
+            TString error;
+            NKikimrReplication::TSchemaChange schema;
+            switch (Parser->ParseSchemaChange(*record, schema, error)) {
+            case IChangeRecordParser::ESchemaChangeResult::Error:
+                return LogCritAndLeave(TStringBuilder() << "Malformed CDC record: " << error);
+            case IChangeRecordParser::ESchemaChangeResult::SchemaChange:
+                // The worker must replay the schema record after the barrier
+                // is released.  Keep its raw topic payload in InFlightData;
+                PendingSchemaChange = MakeHolder<TEvWorker::TEvSchemaChange>(schema, offset);
+                break;
+            case IChangeRecordParser::ESchemaChangeResult::NotSchemaChange:
+                break;
+            }
+            if (PendingSchemaChange) {
+                break;
+            }
 
             if (Mode == EWriteMode::Consistent) {
                 const auto version = TRowVersion(record->GetStep(), record->GetTxId());
@@ -490,12 +555,7 @@ class TLocalTableWriter
         } else if (PendingTxId.empty()) {
             Y_ABORT_UNLESS(PendingRecords.empty());
 
-            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
-                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
-                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
-            }
-
-            Send(Worker, new TEvWorker::TEvPoll());
+            FinishBatch();
         }
     }
 
@@ -600,13 +660,54 @@ class TLocalTableWriter
         }
 
         if (PendingRecords.empty() && PendingTxId.empty()) {
-            if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
-                TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
-                Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
-            }
+            FinishBatch();
+        }
+    }
 
+    void FinishBatch() {
+        if (const auto maxVersion = std::exchange(PendingHeartbeat, TRowVersion::Min())) {
+            TxIds.erase(TxIds.begin(), TxIds.upper_bound(maxVersion));
+            Send(Worker, new TEvService::TEvHeartbeat(maxVersion));
+        }
+        if (PendingSchemaChange) {
+            Send(Worker, new TEvWorker::TEvSchemaChange(PendingSchemaChange->Schema, PendingSchemaChange->Offset));
+        } else {
             Send(Worker, new TEvWorker::TEvPoll());
         }
+    }
+
+    void Handle(TEvService::TEvSchemaChangeResult::TPtr& ev) {
+        if (!ev->Get()->Record.HasSchema()) {
+            return LogCritAndLeave("Unexpected schema change result");
+        }
+
+        const auto& schema = ev->Get()->Record.GetSchema();
+        if (!PendingSchemaChange) {
+            if (LastAppliedSchema && schema.SerializeAsString() == LastAppliedSchema->SerializeAsString()) {
+                return;
+            }
+            return LogCritAndLeave("Unexpected schema change result");
+        }
+
+        if (schema.SerializeAsString() != PendingSchemaChange->Schema.SerializeAsString()) {
+            return LogCritAndLeave("Unexpected schema change result");
+        }
+
+        if (RefreshingSchema) {
+            return; // duplicate controller release while the refresh is in flight
+        }
+
+        RefreshingSchema = true;
+        // A restarted worker may already have the post-DDL destination
+        // version. Exact schema verification below is then the safety check;
+        // requiring a newer version would park replay forever.
+        SchemaRefreshBaseVersion = PendingSchemaChange ? 0 : TableVersion;
+        TableVersion = 0;
+        Schema = {};
+        Parser->SetSchema({});
+        KeyDesc.Reset();
+        KillSenders();
+        ResolveTable();
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
@@ -683,6 +784,7 @@ public:
             hFunc(TEvWorker::TEvData, Handle);
             hFunc(TEvWorker::TEvTerminateWriter, Handle);
             hFunc(TEvService::TEvTxIdResult, Handle);
+            hFunc(TEvService::TEvSchemaChangeResult, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRemoveRecords, Handle);
             hFunc(NChangeExchange::TEvChangeExchangePrivate::TEvReady, Handle);
@@ -710,12 +812,16 @@ private:
     bool Resolving = false;
     bool Initialized = false;
     bool Terminating = false;
+    bool RefreshingSchema = false;
+    ui64 SchemaRefreshBaseVersion = 0;
 
     THashMap<ui64, NChangeExchange::IChangeRecord::TPtr> PendingRecords;
     TMap<TRowVersion, ui64> TxIds; // key is non-inclusive right hand edge
     TSet<ui64> PendingTxId;
     TSet<ui64> BlockedRecords;
     TRowVersion PendingHeartbeat = TRowVersion::Min();
+    THolder<TEvWorker::TEvSchemaChange> PendingSchemaChange;
+    THolder<NKikimrReplication::TSchemaChange> LastAppliedSchema;
 
 }; // TLocalTableWriter
 

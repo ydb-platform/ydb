@@ -554,6 +554,32 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             DropColumns { Name: "value" }
         )");
         env.TestWaitNotification(runtime, txId);
+
+        // A schema-aware asynchronous replication stream may consume the
+        // ADD/DROP records it causes, unlike the legacy stream above.
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "SchemaStream"
+              Mode: ECdcStreamModeUpdate
+              Format: ECdcStreamFormatJson
+              SchemaChanges: true
+              UserAttributes { Key: "__async_replication" Value: "%s" }
+            }
+        )", EscapeC(jsonString).c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "schema_extra" Type: "Uint64" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DropColumns { Name: "schema_extra" }
+        )");
+        env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST(DocApi) {

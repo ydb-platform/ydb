@@ -386,4 +386,7 @@ message TFeatureFlags {
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
     optional bool EnableStreamingAggregation = 328 [default = false];
     optional bool EnableTableBackupAsSql = 329 [default = false];
+    // Enables CDC schema records for newly created asynchronous replication streams.
+    // Existing streams deliberately keep their legacy data-only protocol.
+    optional bool EnableAsyncReplicationSchemaChanges = 330 [default = false];
 }

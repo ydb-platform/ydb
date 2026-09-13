@@ -1,4 +1,5 @@
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/tx/replication/common/worker_id.h>
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -16,6 +17,25 @@ class TMockService: public TActorBootstrapped<TMockService> {
         TActorBootstrapped<TMockService>::PassAway();
     }
 
+    void Handle(TEvService::TEvHandshake::TPtr& ev) {
+        // Mirror the real service handshake: the controller does not boot
+        // registered workers until the service session reports itself ready.
+        // Keeping this in the shared mock makes controller tests exercise the
+        // normal worker-registration path rather than hand-assembling session
+        // state.
+        auto status = MakeHolder<TEvService::TEvStatus>();
+        for (const auto& worker : Workers) {
+            worker.Serialize(*status->Record.AddWorkers());
+        }
+        Send(ev->Sender, status.Release());
+        Forward(ev);
+    }
+
+    void Handle(TEvService::TEvRunWorker::TPtr& ev) {
+        Workers.insert(TWorkerId::Parse(ev->Get()->Record.GetWorker()));
+        Forward(ev);
+    }
+
 public:
     explicit TMockService(const TActorId& edge)
         : Edge(edge)
@@ -28,9 +48,10 @@ public:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvService::TEvHandshake, Forward);
-            hFunc(TEvService::TEvRunWorker, Forward);
+            hFunc(TEvService::TEvHandshake, Handle);
+            hFunc(TEvService::TEvRunWorker, Handle);
             hFunc(TEvService::TEvStopWorker, Forward);
+            hFunc(TEvService::TEvSchemaChangeResult, Forward);
             hFunc(TEvService::TEvTxIdResult, Forward);
             sFunc(TEvents::TEvPoison, PassAway);
         }
@@ -39,6 +60,7 @@ public:
 private:
     const TActorId Edge;
     TActorId BoardPublisher;
+    THashSet<TWorkerId> Workers;
 };
 
 IActor* CreateReplicationMockService(const TActorId& edge) {

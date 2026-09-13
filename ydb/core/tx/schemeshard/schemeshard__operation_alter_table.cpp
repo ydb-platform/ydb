@@ -720,7 +720,8 @@ public:
             return result;
         }
 
-        bool isReplicated = false;
+        bool hasLegacyReplicationStream = false;
+        bool hasSchemaReplicationStream = false;
         if (path.Base()->GetAliveChildren()) {
             for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
@@ -730,9 +731,24 @@ public:
                     continue;
                 }
 
-                if (isReplicated = childPath->AsyncReplication.IsDefined()) {
-                    break;
+                if (!childPath->AsyncReplication.IsDefined()) {
+                    continue;
                 }
+
+                Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
+                const auto& stream = context.SS->CdcStreams.at(childPathId);
+
+                // A legacy asynchronous-replication stream does not receive CDC
+                // schema records. Do not permit a column DDL until every such
+                // stream has opted into the schema-record protocol.
+                if (!stream->SchemaChanges) {
+                    hasLegacyReplicationStream = true;
+                    // Keep scanning: a table may have both legacy and
+                    // schema-aware streams, and metadata admission must not
+                    // depend on the child-path iteration order.
+                    continue;
+                }
+                hasSchemaReplicationStream = true;
             }
         }
 
@@ -752,7 +768,7 @@ public:
             return result;
         }
 
-        if (isReplicated) {
+        if (hasLegacyReplicationStream) {
             for (const auto& [id, column] : alterData->Columns) {
                 if (column.CreateVersion == alterData->AlterVersion) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot add columns to replicated table");
@@ -760,6 +776,34 @@ public:
                 }
                 if (column.DeleteVersion == alterData->AlterVersion) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot drop columns of replicated table");
+                    return result;
+                }
+            }
+        }
+
+        // CDC schema records carry only the resulting name/type/key snapshot.
+        // Defaults and NOT NULL semantics are not representable at the
+        // destination, so keep those source DDLs rejected even for streams
+        // that support ordinary ADD/DROP column replication.
+        if (hasSchemaReplicationStream) {
+            for (const auto& column : alter.GetColumns()) {
+                const bool altersExistingColumn = table->GetColumnIdByNameSlow(column.GetName())
+                    != TTableInfo::InvalidColumnId;
+                if (column.HasDefaultFromLiteral() || column.HasDefaultFromSequence()
+                    || column.HasDefaultFromExpression() || column.HasEmptyDefault()
+                    // SET NOT NULL is a two-phase internal operation. Its
+                    // first phase starts rejecting null writes with this
+                    // flag, but emits no CDC schema record; reject that
+                    // phase before it can leave the replica divergent.
+                    || (column.HasSetNotNullInProgress() && column.GetSetNotNullInProgress())
+                    // SQL/SDK conversion explicitly writes NotNull=false for
+                    // a normal nullable ADD COLUMN.  That representation is
+                    // safe for CDC, while either value on an existing column
+                    // changes unreplicated constraint metadata.
+                    || (column.HasNotNull() && (column.GetNotNull() || altersExistingColumn)))
+                {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "Cannot alter column defaults or NOT NULL on replicated table");
                     return result;
                 }
             }

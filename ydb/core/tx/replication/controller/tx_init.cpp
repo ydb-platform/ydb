@@ -201,15 +201,125 @@ class TController::TTxInit: public TTxBase {
             );
 
             auto* worker = Self->GetOrCreateWorker(id);
-            worker->SetHeartbeat(version);
-            Self->WorkersWithHeartbeat.insert(id);
-            Self->WorkersByHeartbeat[version].insert(id);
+            // Zero is the durable "awaiting a post-schema heartbeat" marker.
+            // It must not participate in the global-consistency quorum after
+            // a schema operation or after recovery.
+            if (version != TRowVersion::Min()) {
+                worker->SetHeartbeat(version);
+                Self->WorkersWithHeartbeat.insert(id);
+                Self->WorkersByHeartbeat[version].insert(id);
+            }
 
             if (!rowset.Next()) {
                 return false;
             }
         }
 
+        return true;
+    }
+
+    bool LoadSchemaBarriers(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::SchemaBarriers>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        while (!rowset.EndOfSet()) {
+            const auto key = std::make_pair(
+                rowset.GetValue<Schema::SchemaBarriers::ReplicationId>(),
+                rowset.GetValue<Schema::SchemaBarriers::TargetId>()
+            );
+            auto& barrier = Self->SchemaBarriers[key];
+            barrier.Phase = static_cast<TController::ESchemaBarrierPhase>(
+                rowset.GetValue<Schema::SchemaBarriers::Phase>());
+            Y_ABORT_UNLESS(barrier.Schema.ParseFromString(
+                rowset.GetValue<Schema::SchemaBarriers::Schema>()));
+            barrier.DstAlterTxId = rowset.GetValue<Schema::SchemaBarriers::DstAlterTxId>();
+
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+
+        auto workers = db.Table<Schema::SchemaBarrierWorkers>().Select();
+        if (!workers.IsReady()) {
+            return false;
+        }
+
+        while (!workers.EndOfSet()) {
+            const auto key = std::make_pair(
+                workers.GetValue<Schema::SchemaBarrierWorkers::ReplicationId>(),
+                workers.GetValue<Schema::SchemaBarrierWorkers::TargetId>()
+            );
+            auto it = Self->SchemaBarriers.find(key);
+            Y_ABORT_UNLESS(it != Self->SchemaBarriers.end(), "Barrier member without barrier");
+
+            const auto id = TWorkerId(key.first, key.second,
+                workers.GetValue<Schema::SchemaBarrierWorkers::WorkerId>());
+            it->second.ExpectedWorkers.insert(id);
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Reported>()) {
+                it->second.ReportedWorkers.insert(id);
+            }
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Applied>()) {
+                it->second.AppliedWorkers.insert(id);
+            }
+            if (workers.GetValue<Schema::SchemaBarrierWorkers::Completed>()) {
+                it->second.CompletedWorkers.insert(id);
+            }
+            it->second.WorkerOffsets[id] = workers.GetValue<Schema::SchemaBarrierWorkers::Offset>();
+
+            if (!workers.Next()) {
+                return false;
+            }
+        }
+
+        auto flushes = db.Table<Schema::SchemaBarrierFlushes>().Select();
+        if (!flushes.IsReady()) {
+            return false;
+        }
+        while (!flushes.EndOfSet()) {
+            const auto key = std::make_pair(
+                flushes.GetValue<Schema::SchemaBarrierFlushes::ReplicationId>(),
+                flushes.GetValue<Schema::SchemaBarrierFlushes::TargetId>());
+            auto it = Self->SchemaBarriers.find(key);
+            Y_ABORT_UNLESS(it != Self->SchemaBarriers.end(), "Flush snapshot without barrier");
+            it->second.TargetFlushTxIds.push_back(
+                flushes.GetValue<Schema::SchemaBarrierFlushes::WriteTxId>());
+            if (!flushes.Next()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool LoadWorkerSnapshots(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::WorkerSnapshots>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            Self->WorkerSnapshots.insert({
+                rowset.GetValue<Schema::WorkerSnapshots::ReplicationId>(),
+                rowset.GetValue<Schema::WorkerSnapshots::TargetId>()});
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool LoadDeferredAlters(NIceDb::TNiceDb& db) {
+        auto rowset = db.Table<Schema::DeferredAlters>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            Self->DeferredAlters.insert(rowset.GetValue<Schema::DeferredAlters::ReplicationId>());
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
         return true;
     }
 
@@ -220,7 +330,10 @@ class TController::TTxInit: public TTxBase {
             && LoadTargets(db)
             && LoadSrcStreams(db)
             && LoadTxIds(db)
-            && LoadWorkers(db);
+            && LoadWorkers(db)
+            && LoadWorkerSnapshots(db)
+            && LoadSchemaBarriers(db)
+            && LoadDeferredAlters(db);
     }
 
     inline bool Load(NTable::TDatabase& toughDb) {

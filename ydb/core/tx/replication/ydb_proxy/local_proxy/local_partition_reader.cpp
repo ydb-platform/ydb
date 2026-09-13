@@ -136,7 +136,9 @@ private:
         Offset = resp.GetOffset();
         SentOffset = Offset;
 
-        Send(Parent, new TEvYdbProxy::TEvStartTopicReadingSession(TStringBuilder() << "Session_" << SelfId()));
+        auto session = MakeHolder<TEvYdbProxy::TEvStartTopicReadingSession>(TStringBuilder() << "Session_" << SelfId());
+        session->Result.CommittedOffset = Offset;
+        Send(Parent, session.Release());
 
         DoWork();
     }

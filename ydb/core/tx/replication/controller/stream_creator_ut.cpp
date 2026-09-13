@@ -117,6 +117,32 @@ Y_UNIT_TEST_SUITE(StreamCreator) {
         TopicAutoPartitioning(true);
         TopicAutoPartitioning(false);
     }
+
+    Y_UNIT_TEST(SchemaChangesDisableAutoPartitioning) {
+        TEnv env;
+        env.CreateTable("/Root", *MakeTableDescription(TTestTableDescription{
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        env.GetRuntime().Register(CreateStreamCreator(
+            env.GetSender(), env.GetYdbProxy(), 1, 1,
+            std::make_shared<TTargetTable::TTableConfig>("/Root/Table", "/Root/Replica"),
+            "Stream", "replicationConsumer", TDuration::Hours(1), std::nullopt,
+            true, true, true));
+        auto request = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvRequestCreateStream>(env.GetSender());
+        env.GetRuntime().Send(request->Sender, env.GetSender(), new TEvPrivate::TEvAllowCreateStream());
+        UNIT_ASSERT(env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateStreamResult>(env.GetSender())->Get()->IsSuccess());
+
+        const auto desc = env.GetDescription("/Root/Table/Stream/streamImpl");
+        const auto tableDescription = env.GetDescription("/Root/Table");
+        const auto& stream = tableDescription.GetPathDescription().GetTable().GetCdcStreams().at(0);
+        UNIT_ASSERT(stream.GetSchemaChanges());
+        UNIT_ASSERT_EQUAL(desc.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig()
+            .GetPartitionStrategy().GetPartitionStrategyType(), NKikimrPQ::TPQTabletConfig::DISABLED);
+    }
 }
 
 }

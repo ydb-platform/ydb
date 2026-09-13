@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/vector.h>
@@ -42,8 +43,12 @@ struct TEvWorker {
         EvStatus,
         EvDataEnd,
         EvCommit,
+        EvCommitResult,
+        EvSchemaChange,
+        EvSchemaChangeApplied,
         EvTerminateWriter,
         EvStatsWakeup,
+        EvReaderStarted,
         EvEnd,
     };
 
@@ -62,6 +67,48 @@ struct TEvWorker {
         size_t Offset;
 
         explicit TEvCommit(size_t offset);
+        TString ToString() const override;
+    };
+
+    // Sent by a reader only after the explicit consumer-offset commit has
+    // completed successfully.  The offset is also the correlation key for a
+    // schema barrier: it is the first uncommitted message in the batch.
+    struct TEvCommitResult: public TEventLocal<TEvCommitResult, EvCommitResult> {
+        size_t Offset;
+
+        explicit TEvCommitResult(size_t offset);
+        TString ToString() const override;
+    };
+
+    // The topic SDK reports the durable consumer offset when it assigns a
+    // partition session. This is needed to recover a schema completion that
+    // was checkpointed just before the worker process died.
+    struct TEvReaderStarted: public TEventLocal<TEvReaderStarted, EvReaderStarted> {
+        ui64 CommittedOffset;
+
+        explicit TEvReaderStarted(ui64 committedOffset)
+            : CommittedOffset(committedOffset)
+        {}
+    };
+
+    // The writer has drained every old-schema record before Offset and has
+    // validated the schema record at Offset.  The worker must checkpoint that
+    // prefix before it can report the barrier to the controller.
+    struct TEvSchemaChange: public TEventLocal<TEvSchemaChange, EvSchemaChange> {
+        NKikimrReplication::TSchemaChange Schema;
+        size_t Offset;
+
+        TEvSchemaChange(const NKikimrReplication::TSchemaChange& schema, size_t offset);
+        TString ToString() const override;
+    };
+
+    // The writer has re-resolved the destination following a controller
+    // release. The worker may discard the retained schema record and feed its
+    // raw suffix back to the writer.
+    struct TEvSchemaChangeApplied: public TEventLocal<TEvSchemaChangeApplied, EvSchemaChangeApplied> {
+        NKikimrReplication::TSchemaChange Schema;
+
+        explicit TEvSchemaChangeApplied(const NKikimrReplication::TSchemaChange& schema);
         TString ToString() const override;
     };
 

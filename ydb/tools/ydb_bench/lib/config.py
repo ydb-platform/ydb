@@ -28,6 +28,7 @@ from ydb.tools.ydb_bench.lib.load_control import (
     validate_search_attempt_bound,
 )
 from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
+from ydb.tools.ydb_bench.lib.distributed_plan import execution_template
 
 PROFILE_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
 _PROFILE_NAME_RE = re.compile(PROFILE_NAME_PATTERN)
@@ -100,6 +101,18 @@ def _parameter_schema(parameter):
 
 
 def _profile_schema(benchmark):
+    if benchmark.profile_kind == "distributed-ydb":
+        schema = _profile_schema(BENCHMARKS.get("local-ydb"))
+        for field in ("geometry", "affinity", "ydbd-binary"):
+            schema["properties"].pop(field, None)
+        schema["properties"]["cluster-template"] = {
+            "type": "object",
+            "required": ["name", "host_ids", "nodes"],
+            "description": "Immutable cluster placement snapshot, including hosts, DC/racks and tenants.",
+        }
+        schema["properties"]["tenant"] = {"type": "string", "pattern": "^/Root/"}
+        schema["required"] += ["cluster-template", "tenant"]
+        return schema
     if benchmark.profile_kind == "local-ydb":
         role_affinity = {
             "type": "object",
@@ -917,7 +930,46 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
     )
 
 
+def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
+    location = "{}.{}".format(benchmark.name, profile_name)
+    value = _mapping(
+        value,
+        location,
+        ("cluster-template", "tenant", "workload", "actor-system", "client", "load", "measurement", "timeout"),
+    )
+    snapshot = value.get("cluster-template")
+    if not isinstance(snapshot, dict):
+        _config_error(location + ".cluster-template", "requires a placement snapshot")
+    hosts = snapshot.get("host_ids")
+    if not isinstance(hosts, list) or any(not isinstance(host, str) for host in hosts):
+        _config_error(location + ".cluster-template.host_ids", "must be an array of host IDs")
+    try:
+        template = execution_template(snapshot, set(hosts), value.get("tenant"))
+    except BenchmarkError as error:
+        _config_error(location + ".cluster-template", str(error))
+    dynamics = sum(node["role"] == "dynamic" and node["tenant"] == value["tenant"] for node in template["nodes"])
+    common = {key: item for key, item in value.items() if key not in ("cluster-template", "tenant")}
+    common["geometry"] = {
+        "preset": "custom",
+        "static-nodes": sum(node["role"] == "static" for node in template["nodes"]),
+        "dynamic-nodes": dynamics,
+        "max-dynamic-nodes": dynamics,
+    }
+    common["affinity"] = {role: {"mode": "none"} for role in ("static-nodes", "dynamic-nodes", "ydb-cli")}
+    configuration = _parse_local_ydb_profile(benchmark, profile_name, common, perf_enabled, perf_frequency)
+    profile = configuration.parameters["local_ydb"]
+    profile["distributed"] = {"template": template, "tenant": value["tenant"]}
+    # These values come from individual template nodes/tenants, not the local
+    # executor's defaults. Do not publish fictitious 64 GiB disks or no affinity.
+    profile.pop("affinity")
+    profile["geometry"].pop("disk_size_gb")
+    profile["geometry"].pop("storage_groups")
+    return configuration
+
+
 def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
+    if benchmark.profile_kind == "distributed-ydb":
+        return _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     if benchmark.profile_kind == "local-ydb":
         return _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     location = "{}.{}".format(benchmark.name, profile_name)

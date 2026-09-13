@@ -9,12 +9,13 @@ build types store stripped server and CLI binaries to keep the bundle compact:
 ./ya make --build=profile ydb/tools/ydb_bench
 ```
 
-The tool provides four benchmarks:
+The tool provides five benchmarks:
 
 - `ping-bench`: pairwise actor ping throughput;
 - `star-ping-bench`: star-topology actor ping throughput.
 - `memory-bandwidth-bench`: mixed sequential-copy and random copy/write memory workload.
 - `local-ydb`: a local static/dynamic YDB cluster driven by the `kv` or `stock` YDB CLI workload.
+- `distributed-ydb`: an experimental fixed multi-host YDB cluster driven by one CLI generator.
 
 Inspect them and print the standard JSON Schema for the YAML configuration:
 
@@ -271,6 +272,57 @@ is pinned to one chiplet by default and its mask stays fixed throughout the
 search. The web UI Builder edits workload, geometry, load controller,
 measurement, and per-role affinity settings; the YAML tab exposes the same
 portable configuration directly.
+
+### Distributed YDB (experimental)
+
+`distributed-ydb` runs one fixed YDB cluster across the hosts in a placement
+template. All participating benchmark servers must run a compatible distributed
+peer protocol on Linux and be registered with the coordinator. The coordinator
+checks every host's identity and protocol before reserving any participant.
+Peer HTTP requests go server-to-server; the browser only talks to its own server.
+YDB nodes and the CLI also need direct network connectivity to the advertised
+hostnames and dynamically allocated gRPC, interconnect and monitoring ports.
+
+In **Cluster templates**, choose **New run**, select the workload's target tenant,
+then confirm **Prepare run**. This copies the current placement (including unsaved
+edits) into the New run YAML draft; it neither saves the template nor launches
+processes. The confirmation explicitly replaces any previous New run draft.
+Review the generated configuration, validate it, and use **Start run** separately.
+The initial draft uses the `kv` upsert workload, thread loads `[1, 2, 4]`, 4 vCPU
+per static/dynamic node, and one verification repetition. These are editable
+starting values, not recommendations for a particular machine.
+
+The first version uses the YAML editor for distributed profiles. Its
+`cluster-template` field contains the complete placement snapshot, and `tenant`
+selects a database from that snapshot. `workload`, `actor-system`, `client`,
+`load`, `measurement`, and `timeout` reuse the local-YDB configuration contract.
+Actor-system vCPU is independent of affinity. Binary selection, node counts,
+logical locations, tenant assignments and CPU masks come from the template;
+there is no separate run-level geometry or affinity override.
+
+Supported initial scope is SectorMap SSD storage with erasure `NONE`, one CLI
+generator, at least one static node, and a target tenant with dynamic nodes.
+Other tenant definitions are allowed, but only the selected tenant receives
+the workload. Geometry is fixed during search and verification. This is not a
+multi-generator throughput test or a durability/failure-tolerance benchmark.
+Launch through the web coordinator, not the standalone `run` command.
+
+Each worker freezes the selected binaries, resolves placement from its own
+topology and reserves ports. The coordinator retains that execution plan,
+binary checksums, results and host-qualified telemetry in one canonical run.
+Counters are viewed per host, without merging unrelated wall clocks. Aggregate
+CPU metrics require sufficient common measurement coverage and bounded clock
+uncertainty; missing coverage is not reported as zero utilization.
+
+Workers hold renewable leases. Cancellation or lease expiry stops their managed
+processes; stale requests cannot reopen a finished generation. Temporary binary
+copies are deleted after stopping, while original binaries remain unchanged.
+The coordinator downloads bounded diagnostic log tails and configurations after
+release. Unconfirmed cleanup is reported as `recovery_required`, not success.
+After a worker server restart, unfinished sessions conservatively require manual
+resource recovery; this version does not automatically take over an orphaned run.
+
+### Other benchmark profiles and CLI execution
 
 The memory benchmark runs every matrix combination in a separate process. Each
 worker owns and first-touches its private buffer after process affinity has been

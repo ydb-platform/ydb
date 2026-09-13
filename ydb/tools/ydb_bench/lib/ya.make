@@ -8,6 +8,15 @@ PY_SRCS(
     cluster_templates_ui.py
     common.py
     config.py
+    distributed_sessions.py
+    distributed_plan.py
+    distributed_worker.py
+    distributed_workload.py
+    distributed_artifacts.py
+    distributed_runtime.py
+    distributed_telemetry.py
+    distributed_reports.py
+    distributed_coordinator.py
     import_results.py
     hosts.py
     federation.py

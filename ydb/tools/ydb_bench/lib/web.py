@@ -41,6 +41,11 @@ from ydb.tools.ydb_bench.lib.ydb_telemetry import read_metrics
 from ydb.tools.ydb_bench.lib.hosts import HostDirectory, allowed_path, allowed_post_path, open_peer, request_peer
 from ydb.tools.ydb_bench.lib.federation import Federation, split_reference
 from ydb.tools.ydb_bench.lib.cluster_templates import ClusterTemplateStore
+from ydb.tools.ydb_bench.lib.distributed_sessions import HostSessions
+from ydb.tools.ydb_bench.lib.distributed_worker import DistributedWorker
+from ydb.tools.ydb_bench.lib.distributed_coordinator import DistributedCleanupError
+from ydb.tools.ydb_bench.lib.distributed_runtime import DistributedRuntime
+from ydb.tools.ydb_bench.lib.distributed_reports import attempt_counters
 from ydb.tools.ydb_bench.lib import cluster_templates_ui
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
@@ -372,8 +377,8 @@ function hostApiPath(path){
   const match=/^[/]api[/]runs[/]([^/?]+)(.*)$/.exec(path),ref=match&&splitRunRef(decodeURIComponent(match[1]));
   if(ref)return '/api/hosts/'+enc(ref.host)+'/api/runs/'+enc(ref.id)+match[2];
   const routeRef=splitRunRef(decodeURIComponent(location.hash.split('/')[1]||''));
-  if(match&&routeRef&&/^#(?:run|attempt)[/]/.test(location.hash))return '/api/hosts/'+enc(routeRef.host)+path;
-  return viewedHost&&(/#(?:run|attempt)[/]/.test(location.hash)||path==='/api/system-topology'||path==='/api/cpu-usage')?
+  if(match&&routeRef&&/^#(?:run|attempt|distributed-attempt)[/]/.test(location.hash))return '/api/hosts/'+enc(routeRef.host)+path;
+  return viewedHost&&(/#(?:run|attempt|distributed-attempt)[/]/.test(location.hash)||path==='/api/system-topology'||path==='/api/cpu-usage')?
     '/api/hosts/'+enc(viewedHost)+path:path
 }
 function federationErrors(errors){return (errors||[]).map(item=>'<div class=notice>'+esc(item.host_name)+': '+esc(item.error)+'</div>').join('')}
@@ -477,7 +482,7 @@ function shell(current,body,breadcrumb=''){
       '<a href="'+(id==='hosts'?'/?#hosts':'#'+id)+'"'+(section===id?' aria-current="page"':'')+'>'+label+'</a>').join('')+
     '</nav><span class=active-run>'+(activeRun?'<a href="#run/'+enc(activeRun)+'">Active run: '+esc(activeRun)+'</a>':
       'No active run')+'</span></header><main>'+
-      (viewedHost&&/^#(?:run|attempt)[/]/.test(location.hash)?
+      (viewedHost&&/^#(?:run|attempt|distributed-attempt)[/]/.test(location.hash)?
         '<p class=muted>Remote host · '+esc(viewedHost)+' · <a href="/?#hosts">Back to hosts</a></p>':'')+
       breadcrumb+body+'</main></div></div>'
 }
@@ -1179,6 +1184,9 @@ function bindProfileEditor(profile){
 """
     """
 function addProfile(){
+  if(editor.model.profiles.some(profile=>!editor.model.benchmarks.find(item=>item.name===profile.benchmark)?.builder_supported)){
+    location.hash='#new/yaml';return
+  }
   const selectedBenchmark=document.querySelector('#add-benchmark')?.value;
   const benchmark=editor.model.benchmarks.find(item=>item.name===selectedBenchmark)||editor.model.benchmarks[0];
   let suffix=1,name='profile';
@@ -1282,8 +1290,11 @@ async function refreshActiveBanner(){
     activeRun=value.active_run_id||'';
     sessionStorage.setItem('ydb-bench-active-run',activeRun);
     const banner=document.querySelector('.active-run');
-    if(banner)banner.innerHTML=(activeRun?'<a href="#run/'+enc(activeRun)+'">Running: '+esc(activeRun)+'</a>':'No active run')+
-      (value.queued?' · Queue: '+esc(value.queued):'');
+    const label=value.distributed_session?.recovery_required?'Recovery required: ':'Running: ';
+    if(banner)banner.innerHTML=(activeRun?'<a href="#run/'+enc(activeRun)+'">'+label+esc(activeRun)+'</a>':'No active run')+
+      (value.queued?' · Queue: '+esc(value.queued):'')+
+      ((value.recovery_run_ids||[]).length?' · Recovery required: '+value.recovery_run_ids.map(id=>
+        '<a href="#run/'+enc(id)+'">'+esc(id)+'</a>').join(', '):'');
   }catch(error){
     const banner=document.querySelector('.active-run');
     if(banner)banner.textContent='Run status unavailable';
@@ -1497,7 +1508,8 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "if(benchmark)query.set('benchmark',benchmark);return api((ref?'/api/hosts/'+enc(ref.host):'')+'/api/chart-data?'+query)}\n"
     "async function loadLocalYdbComparison(runIds){const query=new URLSearchParams;for(const run of runIds)query.append('run',run);"
     "const result=await api('/api/federation/profiles?'+query);if(result.errors?.length)throw Error(result.errors.map(e=>e.host_name+': '+e.error).join('; '));return result}\n"
-    "async function loadLocalYdbActivity(runId,profile,after){const query=new URLSearchParams({profile,after:String(after)});return api('/api/runs/'+enc(runId)+'/local-ydb-activity?'+query)}\n"
+    "async function loadLocalYdbActivity(runId,profile,after,benchmark='local-ydb'){"
+    "const query=new URLSearchParams({profile,after:String(after),benchmark});return api('/api/runs/'+enc(runId)+'/local-ydb-activity?'+query)}\n"
     "function chartMetricTitle(data,metric){const metadata=data.metric_metadata?.[metric]||{};return metadata.unit?metric+' ('+metadata.unit+')':metric}\n"
     "function globLabelMatch(value,pattern){value=String(value);pattern=String(pattern||'*');return pattern.split('|').map(it"
     "em=>item.trim()).filter(Boolean).some(mask=>{if(mask==='*')return true;const parts=mask.split('*');let offset=0;if(parts"
@@ -2389,7 +2401,8 @@ function localYdbDiscoveryLabel(data){
 }
 function localYdbViewHref(container,view){
   const runId=container.dataset.localYdbRunId,profile=container.dataset.localYdbProfile;
-  return runId&&profile?'#run/'+enc(runId)+'/profile/'+enc('local-ydb/'+profile+'/view/'+view):'#'
+  const benchmark=container.dataset.ydbBenchmark||'local-ydb';
+  return runId&&profile?'#run/'+enc(runId)+'/profile/'+enc(benchmark+'/'+profile+'/view/'+view):'#'
 }
 function localYdbViewTabs(container,data,selected){
   const view=localResultViewModel(data),result=data.result||{};
@@ -2677,7 +2690,7 @@ function renderLocalYdbProfile(container,data){
       '<table class="local-attempts discovery-attempts"><thead><tr><th>#</th><th>'+esc(searchAxisLabel)+'</th>'+
       workloadHeaders+'<th>Verdict</th><th>Duration</th></tr></thead><tbody>'+
       attempts.map(item=>{
-        const href=esc(localAttemptHref(container.dataset.localYdbRunId,container.dataset.localYdbProfile,item.attempt));
+        const href=esc(localAttemptHref(container.dataset.localYdbRunId,container.dataset.localYdbProfile,item.attempt,container.dataset.ydbBenchmark));
         return '<tr data-attempt-href="'+href+'"><td><a href="'+href+'">'+esc(item.attempt)+
         '</a></td><td>'+esc(metricLabel(item.load))+'</td>'+
         displayedMetrics.map(metric=>'<td>'+esc(metricLabel(
@@ -2689,10 +2702,10 @@ function renderLocalYdbProfile(container,data){
     'No completed search attempts yet. The timeline will appear after the first measurement.':
     'No completed measurements were recorded.')+'</div>';
   if(profileActive&&data.progress?.attempt)html+='<p><a href="'+esc(localAttemptHref(
-    container.dataset.localYdbRunId,container.dataset.localYdbProfile,data.progress.attempt
+    container.dataset.localYdbRunId,container.dataset.localYdbProfile,data.progress.attempt,container.dataset.ydbBenchmark
   ))+'">Current attempt metrics</a></p>';
   if(data.verification?.configured_repetitions)html+='<p><a href="'+esc(localAttemptHref(
-    container.dataset.localYdbRunId,container.dataset.localYdbProfile,'verification'
+    container.dataset.localYdbRunId,container.dataset.localYdbProfile,'verification',container.dataset.ydbBenchmark
   ))+'">Verification metrics</a></p>';
   container.innerHTML=failure+localYdbViewTabs(container,data,selectedView)+
     '<section class=local-profile-view data-local-ydb-panel=result'+
@@ -2712,23 +2725,35 @@ function renderLocalYdbProfile(container,data){
     Object.keys(chartBinding.series),chartColors,true
   )
 }
-async function mountLocalYdbProfile(container,runId,profile,runState,requestedView=''){
+async function mountLocalYdbProfile(container,runId,profile,runState,requestedView='',benchmark='local-ydb',onProgress=()=>{}){
   container.dataset.localYdbRunId=runId;container.dataset.localYdbProfile=profile;
+  container.dataset.ydbBenchmark=benchmark;
   if(['result','discovery'].includes(requestedView)){
     container.dataset.localYdbView=requestedView;container.dataset.localYdbViewExplicit='true'
   }else container.dataset.localYdbViewExplicit='false';
-  let loading=false,terminal=false,observedActive=false,activity=[],activityAfter=0,activityTruncated=false;
+  let loading=false,terminal=false,activity=[],activityAfter=0,activityTruncated=false;
   const profileSelection=()=>container.dataset.localYdbViewExplicit==='true'?
-    'local-ydb/'+profile+'/view/'+container.dataset.localYdbView:'local-ydb/'+profile;
+    benchmark+'/'+profile+'/view/'+container.dataset.localYdbView:benchmark+'/'+profile;
   const scheduleRunRefresh=()=>{if(['running','queued'].includes(runState)&&!refreshTimer){
-    refreshTimer=setTimeout(()=>renderRun(runId,profileSelection()),700)
+    const poll=async()=>{
+      if(!container.isConnected)return;
+      try{
+        const run=await api('/api/runs/'+enc(runId));
+        if(!container.isConnected)return;
+        if(!['running','queued'].includes(run.state)){
+          refreshTimer=null;renderRun(runId,profileSelection());return
+        }
+      }catch(error){/* Keep the last report visible and retry transient errors. */}
+      if(container.isConnected)refreshTimer=setTimeout(poll,1000)
+    };
+    refreshTimer=setTimeout(poll,700)
   }};
   const refresh=async()=>{
     if(loading)return;loading=true;
     try{
       const [data,activityUpdate]=await Promise.all([
-        api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile)),
-        loadLocalYdbActivity(runId,profile,activityAfter).catch(error=>({error:error.message}))
+        api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile)+'&benchmark='+enc(benchmark)),
+        loadLocalYdbActivity(runId,profile,activityAfter,benchmark).catch(error=>({error:error.message}))
       ]);
       if(activityUpdate.error)data.activity_error='Recent activity could not be loaded: '+activityUpdate.error;
       else{
@@ -2739,17 +2764,18 @@ async function mountLocalYdbProfile(container,runId,profile,runState,requestedVi
         activityTruncated=activityTruncated||Boolean(activityUpdate.truncated);
         if(Number.isSafeInteger(activityUpdate.after))activityAfter=Math.max(activityAfter,activityUpdate.after)
       }
+      if(!container.isConnected)return;
+      onProgress();
       data.activity=activity;data.activity_truncated=activityTruncated;
       renderLocalYdbProfile(container,data);terminal=!['running','preparing'].includes(data.state);
       if(terminal&&refreshTimer){clearInterval(refreshTimer);refreshTimer=null}
-      if(terminal&&observedActive)scheduleRunRefresh();
-      observedActive=!terminal
+      if(terminal)scheduleRunRefresh()
     }catch(error){container.innerHTML=displayError(error)}finally{loading=false}
   };
   await refresh();if(!terminal&&['running','queued','recovery_required'].includes(runState)&&!refreshTimer)refreshTimer=setInterval(refresh,1000)
 }
-function localAttemptHref(runId,profile,attempt){
-  return '#attempt/'+enc(runId)+'/'+enc(profile)+'/'+enc(attempt)
+function localAttemptHref(runId,profile,attempt,benchmark='local-ydb'){
+  return (benchmark==='distributed-ydb'?'#distributed-attempt/':'#attempt/')+enc(runId)+'/'+enc(profile)+'/'+enc(attempt)
 }
 function localCounterCharts(samples,repetition,nodeKey,raw){
   const selected=samples.filter(item=>String(item.context?.repetition)===String(repetition));
@@ -2824,11 +2850,13 @@ function localAttemptCommands(context){
     '<div class=empty>No recorded commands for this attempt.</div>'
 }
 function localAttemptView(value){return ['summary','counters','commands'].includes(value)?value:'summary'}
-async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summary'){
+async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summary',benchmark='local-ydb'){
   clearRefresh();
+  const hostDirectory=benchmark==='distributed-ydb'?api('/api/hosts').catch(()=>null):Promise.resolve(null);
+  const hostNames=new Map();
   let selectedView=localAttemptView(requestedView);
-  const attemptHref=localAttemptHref(runId,profile,attempt);
-  const discovery='#run/'+enc(runId)+'/profile/'+enc('local-ydb/'+profile+'/view/discovery');
+  const attemptHref=localAttemptHref(runId,profile,attempt,benchmark);
+  const discovery='#run/'+enc(runId)+'/profile/'+enc(benchmark+'/'+profile+'/view/discovery');
   app.innerHTML=shell('runs','<div class=attempt-page><div class=breadcrumbs><a href="'+esc(discovery)+'">'+
     esc(runId+' / '+profile)+' / Discovery</a></div><div class=run-header><h1 class=page-title>'+
     (attempt==='verification'?'Verification':'Attempt '+esc(attempt))+
@@ -2839,6 +2867,7 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
       '<a class=local-profile-tab data-attempt-view="'+view+'" href="'+esc(attemptHref+'/'+view)+'">'+label+'</a>'
     ).join('')+'</nav><section data-attempt-panel=summary id=attempt-summary></section>'+
     '<section data-attempt-panel=counters><div class=toolbar>'+
+    '<label id=counter-host-label hidden>Host <select id=counter-host></select></label>'+
     '<label id=counter-repetition-label>Repetition <select id=counter-repetition></select></label>'+
     '<span id=counter-single-repetition class=muted></span>'+
     '<label>Node <select id=counter-node></select></label>'+
@@ -2847,6 +2876,7 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
     '<section data-attempt-panel=commands id=attempt-commands></section></div>');
   const target=document.querySelector('#counter-charts'),summary=document.querySelector('#attempt-summary');
   const repetition=document.querySelector('#counter-repetition'),node=document.querySelector('#counter-node');
+  const host=document.querySelector('#counter-host');
   const raw=document.querySelector('#counter-raw');
   let samples=[],loading=false;
   const options=(select,values)=>{
@@ -2856,14 +2886,18 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
     if(values.map(String).includes(previous))select.value=previous
   };
   const draw=()=>{
-    options(repetition,[...new Set(samples.map(item=>item.context?.repetition).filter(Number.isFinite))].sort((a,b)=>a-b));
+    options(host,[...new Set(samples.map(item=>item.host_id).filter(Boolean))].sort());
+    for(const option of host.options)option.textContent=hostNames.get(option.value)||option.value;
+    document.querySelector('#counter-host-label').hidden=!host.options.length;
+    const hostSamples=host.options.length?samples.filter(item=>item.host_id===host.value):samples;
+    options(repetition,[...new Set(hostSamples.map(item=>item.context?.repetition).filter(Number.isFinite))].sort((a,b)=>a-b));
     document.querySelector('#counter-repetition-label').hidden=repetition.options.length<2;
     document.querySelector('#counter-single-repetition').textContent=repetition.options.length===1?
       'Repetition '+repetition.value:'';
-    const selected=samples.filter(item=>String(item.context?.repetition)===repetition.value);
+    const selected=hostSamples.filter(item=>String(item.context?.repetition)===repetition.value);
     options(node,[...new Set(selected.flatMap(item=>item.nodes.map(value=>value.role+' '+value.index)))].sort());
     if(!selected.length){target.innerHTML='<div class=empty>No YDB counter samples for this attempt.</div>';return}
-    const {xValues,series}=localCounterCharts(samples,repetition.value,node.value,raw.checked);
+    const {xValues,series}=localCounterCharts(hostSamples,repetition.value,node.value,raw.checked);
     const unit=raw.checked?'µs':'µs/s';
     target.innerHTML=['Current','Default','Max','PossibleMax','PotentialMax'].map(name=>
       localChart(name+' threads',name,'Time (s)',xValues,series[name])
@@ -2887,26 +2921,31 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
     history.pushState(null,'',attemptHref+'/'+selectedView);applyView()
   };
   applyView();
-  for(const select of [repetition,node,raw])select.onchange=draw;
+  for(const select of [host,repetition,node,raw])select.onchange=draw;
   const refresh=async()=>{
     if(loading||!target.isConnected)return;loading=true;
     try{
-      const [data,metrics]=await Promise.all([
-        api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile)),
-        api('/api/runs/'+enc(runId)+'/local-ydb-metrics?profile='+enc(profile)+'&attempt='+enc(attempt)).catch(
+      const [data,metrics,directory]=await Promise.all([
+        api('/api/runs/'+enc(runId)+'/local-ydb-profile?profile='+enc(profile)+'&benchmark='+enc(benchmark)),
+        api('/api/runs/'+enc(runId)+'/local-ydb-metrics?profile='+enc(profile)+'&attempt='+enc(attempt)+'&benchmark='+enc(benchmark)).catch(
           error=>({samples:[],error:String(error)})
-        )
+        ),hostDirectory
       ]);
       if(!target.isConnected)return;
+      for(const value of [directory?.local,...(directory?.hosts||[])]){
+        if(value?.id&&value.name)hostNames.set(value.id,value.name)
+      }
       const item=attempt==='verification'?data.verification:(data.attempts||[]).find(value=>String(value.attempt)===attempt);
       const context=item||data.progress||{};
       document.querySelector('#attempt-error').innerHTML='';
       document.querySelector('#attempt-header').innerHTML=localAttemptHeader(data,item,context);
       summary.innerHTML=localAttemptReport(data,item);
       document.querySelector('#attempt-commands').innerHTML=localAttemptCommands(context);
-      document.querySelector('#attempt-downloads').hidden=!metrics.artifact;
-      document.querySelector('#attempt-artifacts').innerHTML=metrics.artifact?'<a href="'+esc(hostApiPath(metrics.artifact))+
-        '">Profile YDB counters (JSONL)</a>':'';
+      const downloads=metrics.artifacts||[];
+      document.querySelector('#attempt-downloads').hidden=!metrics.artifact&&!downloads.length;
+      document.querySelector('#attempt-artifacts').innerHTML=(metrics.artifact?'<a href="'+esc(hostApiPath(metrics.artifact))+
+        '">Profile YDB counters (JSONL)</a>':'')+downloads.map(item=>'<a href="'+esc(hostApiPath(item.url))+'">'+
+          esc(hostNames.get(item.host_id)||item.host_id)+' · '+esc(item.url.split('/').slice(-4,-2).join('/'))+' (JSONL)</a>').join('');
       samples=metrics.samples||[];
       const errors=[...new Set(samples.flatMap(sample=>[
         sample.error,...sample.nodes.map(value=>value.error?value.role+' '+value.index+': '+value.error:null)
@@ -2927,7 +2966,7 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
     """
 function parseLocalYdbProfileSelection(groups,selected){
   if(groups[selected])return {profile:selected,view:''};
-  const match=new RegExp('^(local-ydb/.+)/view/(result|discovery)$').exec(selected);
+  const match=new RegExp('^((?:local-ydb|distributed-ydb)/.+)/view/(result|discovery)$').exec(selected);
   return match&&groups[match[1]]?{profile:match[1],view:match[2]}:{profile:'',view:''}
 }
     """
@@ -2957,11 +2996,14 @@ function configurationLabel(key){
   return labels[key]||key.replaceAll('-',' ').replaceAll('_',' ').replace(/^./,letter=>letter.toUpperCase())
 }
 function configurationFields(value){
+  if(Array.isArray(value)&&value.some(item=>item&&typeof item==='object'))return value.map((item,index)=>
+    '<div class=configuration-subgroup><h4>'+esc(item?.name||item?.path||'#'+(index+1))+'</h4>'+configurationFields(item)+'</div>'
+  ).join('');
   const scalar=item=>Array.isArray(item)?item.map(scalar).join(', '):item===null?'—':String(item);
   if(!value||typeof value!=='object'||Array.isArray(value))return '<p>'+esc(scalar(value))+'</p>';
   const fields=[],groups=[];
   for(const [key,item] of Object.entries(value)){
-    if(item&&typeof item==='object'&&!Array.isArray(item))groups.push(
+    if(item&&typeof item==='object'&&(!Array.isArray(item)||item.some(entry=>entry&&typeof entry==='object')))groups.push(
       '<div class=configuration-subgroup><h4>'+esc(configurationLabel(key))+'</h4>'+configurationFields(item)+'</div>'
     );
     else fields.push('<div><dt>'+esc(configurationLabel(key))+'</dt><dd>'+esc(scalar(item))+'</dd></div>')
@@ -3042,7 +3084,7 @@ function bindRunConfiguration(container,id){
     ":'')+'<button id=repeat-run>Repeat with this YAML</button><details class=downloads><summary>Downloads</summary><div cla"
     "ss=actions><a href=\"'+runHref(id,'config')+'\">YAML</a><a href=\"'+runHref(id,'manifest')+'\">run.json</a><a href=\"'+r"
     "unHref(id,'archive')+'\">Archive.zip</a></div></details></div></div><p class=muted>'+esc(hostName)+' · '+status(run.status)+' · '+"
-    "esc(humanTime(run.started_at))+' · Run duration '+duration(run)+' · '+run.finished_steps+' / '+run.steps.length+"
+    "esc(humanTime(run.started_at))+' · Run duration <span id=run-duration>'+duration(run)+'</span> · '+run.finished_steps+' / '+run.steps.length+"
     "' steps</p><div class=grid>';\n"
     "    if(run.state==='recovery_required')content+='<div class=\"notice error\"><strong>Interrupted.</strong> The web servi"
     "ce restarted while this run was active. Verify that the previous benchmark process stopped before repeating it.</div>'"
@@ -3059,7 +3101,7 @@ function bindRunConfiguration(container,id){
     "ter(step=>!['pending','running'].includes(step.state)).length,affinities=new Set(steps.map(step=>step.affinity)).size;re"
     "turn '<tr><td><a href=\"#run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a></td><td>'+done+' / '+steps.length+'</td"
     "><td>'+status(aggregateState(steps))+'</td><td>'+affinities+'</td></tr>'}).join('')+'</table></section>';\n"
-    "    if(activeProfile)content+=activeBenchmark==='local-ydb'?'<section class=\"card local-result-container\"><div id=local-ydb-result>Loading profile data…</div>"
+    "    if(activeProfile)content+=['local-ydb','distributed-ydb'].includes(activeBenchmark)?'<section class=\"card local-result-container\"><div id=local-ydb-result>Loading profile data…</div>"
     "</section>':'<section class=card><div class=run-section-title><h2>Results</h2><strong>'+esc(activeProfile)+'</strong>"
     "</div><p class=muted>Affinity variants are lines. Choose a common X axis, one or more Y metrics, and fixed values for "
     "the remaining dimensions.</p><div id=run-chart>Loading summary data…</div></section>';\n"
@@ -3067,15 +3109,15 @@ function bindRunConfiguration(container,id){
     "card run-tree\"><details'+open+'><summary><strong>Execution details</strong> — affinity, cases and artifacts</summary><"
     "table><tr><th>Affinity</th><th>Runs</th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details></section>'}\n"
     "    const running=(run.steps||[]).find(step=>step.state==='running'),live=['running','queued','failed','recovery_requir"
-    "ed'].includes(run.state),showLiveOutput=activeBenchmark!=='local-ydb';\n"
-    "    if(live&&!runView)content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+e"
+    "ed'].includes(run.state),showLiveOutput=!['local-ydb','distributed-ydb'].includes(activeBenchmark);\n"
+    "    if(live&&!runView&&showLiveOutput)content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+e"
     "sc(running.profile)+'</strong>, '+esc(running.affinity)+', '+esc(running.threads??'—')+' threads, repeat '+running.repe"
     "at+', elapsed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+(showLiveOutput"
     "?'<h3>Live stdout</h3><pre class=log>'+esc(run.tail?.stdout||'No stdout captured yet.')+'</pre><h3>Live stderr</h3><p"
     "re class=log>'+esc(run.tail?.stderr||'No stderr captured yet.')+'</pre>':'')+'</section>';content+='</div>';\n"
     "    app.innerHTML=shell('runs',content);\n"
     "    if(runView==='configuration')bindRunConfiguration(document.querySelector('#run-configuration-view'),id);\n"
-    "    const selectedRoute=()=>{const local=document.querySelector('#local-ydb-result');return activeBenchmark==='local-ydb'&&"
+    "    const selectedRoute=()=>{const local=document.querySelector('#local-ydb-result');return ['local-ydb','distributed-ydb'].includes(activeBenchmark)&&"
     "local?.dataset.localYdbViewExplicit==='true'?activeProfile+'/view/'+local.dataset.localYdbView:activeProfile};\n"
     "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedRoute(),runView);\n"
     "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
@@ -3083,7 +3125,9 @@ function bindRunConfiguration(container,id){
     "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',jsonOptions({}));renderRun(id,sele"
     'ctedRoute(),runView)}catch(error){alert(error.message)}};\n'
     "    if(activeProfile){const pieces=activeProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');if("
-    "benchmark==='local-ydb')await mountLocalYdbProfile(document.querySelector('#local-ydb-result'),id,profile,run.state,requestedLocalView);"
+    "['local-ydb','distributed-ydb'].includes(benchmark))await mountLocalYdbProfile(document.querySelector('#local-ydb-result'),"
+    "id,profile,run.state,requestedLocalView,benchmark,()=>{const clock=document.querySelector('#run-duration');"
+    "if(clock)clock.textContent=duration(run)});"
     "else try{mountChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile,"
     "singleProfile:true})}catch(error){document.querySelector('#run-chart').innerHTML=displayError(error)}}\n"
     "  }catch(error){app.innerHTML=shell('runs',breadcrumbs([{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:id}])+di"
@@ -3402,8 +3446,8 @@ async function renderComparisons(){
     "const pieces=routeParts(),current=pieces.join('/');if(pieces[0]==='cluster-templates')return renderClusterTemplates(pieces[1]);"
     "if(current==='hosts')return renderHosts();if(current==='runs')return renderRuns();if(current==='new')return renderN"
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
-    "t==='comparisons'||pieces[0]==='comparisons')return renderSavedComparisons();if(pieces[0]==='attempt'&&[4,5].includes(pieces.length))"
-    "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4]);if(pieces[0]==='run'){"
+    "t==='comparisons'||pieces[0]==='comparisons')return renderSavedComparisons();if(['attempt','distributed-attempt'].includes(pieces[0])&&[4,5].includes(pieces.length))"
+    "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4],pieces[0]==='distributed-attempt'?'distributed-ydb':'local-ydb');if(pieces[0]==='run'){"
     "if(pieces.length===3&&pieces[2]==='configuration')return renderRun(pieces[1],'','configuration');if(pieces[2]"
     "==='profile')return renderRun(pieces[1],pieces.slice(3).join('/'));return renderRun(pieces.slice(1).join('/'))}setRoute("
     "'runs')}\n"
@@ -3426,9 +3470,11 @@ class _RunServiceHTTPServer(ThreadingHTTPServer):
 
     def server_close(self):
         service = getattr(self, "service", None)
-        if service is not None:
-            service.shutdown()
-        super().server_close()
+        try:
+            if service is not None:
+                service.shutdown()
+        finally:
+            super().server_close()
 
 
 class _IPv6ThreadingHTTPServer(_RunServiceHTTPServer):
@@ -3594,7 +3640,7 @@ def editor_model(loaded, output):
             "affinity": list(configuration.affinity_modes),
             "background_load": list(configuration.background_load_modes),
         }
-        if benchmark.profile_kind == "local-ydb":
+        if benchmark.profile_kind in ("local-ydb", "distributed-ydb"):
             profile["local_ydb"] = configuration.parameters["local_ydb"]
         else:
             profile["parameters"] = {name: list(values) for name, values in configuration.parameters.items()}
@@ -4121,7 +4167,14 @@ class RunService:
     """
 
     def __init__(
-        self, output, executor=None, event_limit=256, tail_limit=65536, perf_available=True, binaries_dir="bin"
+        self,
+        output,
+        executor=None,
+        event_limit=256,
+        tail_limit=65536,
+        perf_available=True,
+        binaries_dir="bin",
+        resource_loader=None,
     ):
         self.output = Path(output).resolve()
         self.output.mkdir(parents=True, exist_ok=True)
@@ -4132,6 +4185,7 @@ class RunService:
         self.perf_available = perf_available
         self.binaries_dir = Path(binaries_dir).resolve()
         self._runs, self._lock = {}, threading.RLock()
+        self._admission = threading.Condition(self._lock)
         self._cpu_sampler = LogicalCpuSampler()
         self._accepting_runs = True
         self._queue = deque()
@@ -4139,8 +4193,67 @@ class RunService:
         self._dispatcher_thread = None
         self._selection_path = self.output / ".comparison-selection.json"
         self._recover()
+        self.distributed_sessions = HostSessions(
+            self.output, self._lock, self._distributed_busy, self._cleanup_distributed
+        )
+        self.distributed_worker = DistributedWorker(
+            self.hosts.id, self.output, self.distributed_sessions, self.binaries_dir, resource_loader
+        )
+
+    def _distributed_busy(self, reference):
+        if self._recovery_runs:
+            raise BenchmarkError(
+                "Host {} requires recovery for runs: {}".format(self.hosts.id, ", ".join(sorted(self._recovery_runs)))
+            )
+        run = self._runs.get(reference["run_id"])
+        own_generation = (
+            run is not None
+            and reference["coordinator_id"] == self.hosts.id
+            and reference["run_id"] == self._active_run_id
+            and reference["session_id"] == run.get("distributed_generation")
+        )
+        return (
+            not self._accepting_runs
+            or bool(self._recovery_runs)
+            or (
+                not own_generation
+                and (
+                    self._active_run_id is not None
+                    or any(run["store"].manifest["state"] == "queued" for run in self._queue)
+                )
+            )
+        )
+
+    def _cleanup_distributed(self, record):
+        self.distributed_worker.cleanup(record)
+
+    def distributed_operation(self, operation, value):
+        handlers = {
+            "capabilities": self.distributed_worker.capabilities,
+            "reserve": self.distributed_sessions.reserve,
+            "renew": self.distributed_sessions.renew,
+            "release": self.distributed_sessions.release,
+            "prepare": self.distributed_worker.prepare,
+            "configure": self.distributed_worker.configure,
+            "status": self.distributed_worker.status,
+            "start-static": lambda value: self.distributed_worker.start_nodes(value, "static"),
+            "start-dynamic": lambda value: self.distributed_worker.start_nodes(value, "dynamic"),
+            "bootstrap": lambda value: self.distributed_worker.cluster_operation(value, "bootstrap"),
+            "create-tenants": lambda value: self.distributed_worker.cluster_operation(value, "create-tenants"),
+            "ready": lambda value: self.distributed_worker.cluster_operation(value, "ready"),
+            "workload": self.distributed_worker.workload,
+            "read-result": self.distributed_worker.read_result,
+            "telemetry": self.distributed_worker.telemetry,
+            "clock": self.distributed_worker.clock,
+            "diagnostics": self.distributed_worker.diagnostics,
+            "read-diagnostic": self.distributed_worker.read_diagnostic,
+        }
+        if operation not in handlers:
+            raise BenchmarkError("Unknown distributed operation")
+        return handlers[operation](value)
 
     def _recover(self):
+        self._recovery_runs = set()
         for run_id, manifest in _manifests(self.output):
             # A process may still be live after a server restart. Never restart
             # it without an adapter-specific proof that it is gone.
@@ -4148,6 +4261,8 @@ class RunService:
                 manifest["status"] = "recovery_required"
                 manifest["state"] = "recovery_required"
                 atomic_write_json(self.output / run_id / "run.json", manifest)
+            if manifest.get("state") == "recovery_required":
+                self._recovery_runs.add(run_id)
 
     def _load(self, yaml_text, perf=False):
         if perf and not self.perf_available:
@@ -4211,6 +4326,8 @@ class RunService:
         with self._lock:
             if not self._accepting_runs:
                 raise BenchmarkError("web run service is shutting down")
+            if self.distributed_sessions.status() is not None:
+                raise BenchmarkError("Host is reserved by a distributed benchmark")
         plan_result = self.plan(yaml_text, perf)
         if not plan_result["valid"]:
             raise BenchmarkError(plan_result["error"])
@@ -4222,6 +4339,8 @@ class RunService:
             # with its worker before shutdown takes its active-run snapshot.
             if not self._accepting_runs:
                 raise BenchmarkError("web run service is shutting down")
+            if self.distributed_sessions.status() is not None:
+                raise BenchmarkError("Host is reserved by a distributed benchmark")
             run_id = "{}-web".format(datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"))
             while (self.output / run_id).exists():
                 run_id = "{}-{}".format(run_id, uuid.uuid4().hex[:6])
@@ -4248,6 +4367,8 @@ class RunService:
             }
             run = {
                 "id": run_id,
+                "service": self,
+                "distributed_generation": None,
                 "root": root,
                 "loaded": loaded,
                 "store": ResultStore(root / "run.json", manifest),
@@ -4280,6 +4401,8 @@ class RunService:
     def _dispatch(self):
         while True:
             with self._lock:
+                while self._queue and self.distributed_sessions.status() is not None:
+                    self._admission.wait(0.1)
                 while self._queue:
                     run = self._queue.popleft()
                     with run["lock"]:
@@ -4301,6 +4424,8 @@ class RunService:
                     return
             self._run(run)
             with self._lock:
+                if run["store"].manifest["state"] == "recovery_required":
+                    self._recovery_runs.add(run["id"])
                 if self._active_run_id == run["id"]:
                     self._active_run_id = None
 
@@ -4402,7 +4527,10 @@ class RunService:
             run["finished"].set()
 
     def _finalize_locked(self, run, error=None):
-        if run["cancel"].is_set():
+        if isinstance(error, DistributedCleanupError):
+            self._cancel_unfinished(run)
+            state, status = "recovery_required", "recovery_required"
+        elif run["cancel"].is_set():
             self._cancel_unfinished(run)
             state, status = "cancelled", "cancelled"
         elif error is not None:
@@ -4483,6 +4611,7 @@ class RunService:
             dispatcher = self._dispatcher_thread
         for run in runs:
             self.cancel(run["id"])
+        self.distributed_sessions.close()
         if dispatcher is not None:
             dispatcher.join(timeout)
         timed_out = []
@@ -4516,9 +4645,17 @@ class RunService:
 
     def activity_status(self):
         with self._lock:
+            session = self.distributed_sessions.status()
+            participant_run = None
+            if session:
+                participant_run = session["run_id"]
+                if session["coordinator_id"] != self.hosts.id:
+                    participant_run = session["coordinator_id"] + ":" + participant_run
             return {
-                "active_run_id": self._active_run_id,
+                "active_run_id": self._active_run_id or participant_run,
                 "queued": sum(run["store"].manifest["state"] == "queued" for run in self._queue),
+                **({"recovery_run_ids": sorted(self._recovery_runs)} if self._recovery_runs else {}),
+                **({"distributed_session": session} if session else {}),
             }
 
     def topology(self, mode=None, count=None, excluded=()):
@@ -4635,23 +4772,34 @@ class RunService:
     def chart_data(self, run_ids, benchmark_filter=None):
         return chart_data(self.output, run_ids, benchmark_filter)
 
-    def local_ydb_metrics(self, run_id, profile, attempt):
+    def local_ydb_metrics(self, run_id, profile, attempt, benchmark="local-ydb"):
         if attempt != "verification" and not re.fullmatch(r"[1-9][0-9]{0,8}", str(attempt)):
             raise BenchmarkError("attempt must be a positive integer or verification")
-        self.local_ydb_profile(run_id, profile)
+        projected = self.local_ydb_profile(run_id, profile, benchmark)
         root = _run_directory(self.output, run_id)
         manifest = load_manifest(root / "run.json")
         record = next(
             (
                 item
                 for item in manifest.get("runs", [])
-                if item.get("benchmark") == "local-ydb" and item.get("profile") == profile
+                if item.get("benchmark") == benchmark and item.get("profile") == profile
             ),
             None,
         )
         if record is None:
             return {"samples": [], "truncated": False}
         relative = record.get("manifest") or str(Path(record.get("directory", "")) / "run.json")
+        if benchmark == "distributed-ydb":
+            profile_root = (root / relative).resolve().parent
+            if root not in profile_root.parents:
+                raise BenchmarkError("distributed-ydb profile escapes the run directory")
+            value = attempt_counters(profile_root, projected, attempt)
+            for artifact in value.get("artifacts", []):
+                artifact["url"] = "/api/runs/{}/artifact/{}".format(
+                    quote(run_id, safe=""),
+                    quote(str((profile_root / artifact.pop("path")).relative_to(root)), safe="/"),
+                )
+            return value
         unresolved = (root / relative).parent / "ydb-metrics.jsonl"
         candidate = unresolved.resolve()
         if root not in candidate.parents or unresolved.is_symlink():
@@ -4666,19 +4814,21 @@ class RunService:
         except OSError as error:
             raise BenchmarkError("cannot read local-ydb metrics: {}".format(error)) from error
 
-    def local_ydb_profile(self, run_id, profile):
+    def local_ydb_profile(self, run_id, profile, benchmark="local-ydb"):
+        if benchmark not in ("local-ydb", "distributed-ydb"):
+            raise BenchmarkError("unsupported YDB profile benchmark")
         root = _run_directory(self.output, run_id)
         manifest = load_manifest(root / "run.json")
         steps = [
             item
             for item in manifest.get("steps", [])
-            if item.get("benchmark") == "local-ydb" and item.get("profile") == profile
+            if item.get("benchmark") == benchmark and item.get("profile") == profile
         ]
         record = next(
             (
                 item
                 for item in manifest.get("runs", [])
-                if item.get("benchmark") == "local-ydb" and item.get("profile") == profile
+                if item.get("benchmark") == benchmark and item.get("profile") == profile
             ),
             None,
         )
@@ -4713,7 +4863,7 @@ class RunService:
                 status = manifest.get("status") or state
 
             value = {
-                "benchmark": "local-ydb",
+                "benchmark": benchmark,
                 "profile": profile,
                 "status": status,
                 "state": state,
@@ -4764,6 +4914,8 @@ class RunService:
             "binaries",
             "platform",
             "cpu_topology",
+            "distributed",
+            "coordinator_hardware",
             "progress",
             "attempts",
             "searches",
@@ -4773,7 +4925,9 @@ class RunService:
         )
         return {name: value[name] for name in fields if name in value}
 
-    def local_ydb_activity(self, run_id, profile, after=0):
+    def local_ydb_activity(self, run_id, profile, after=0, benchmark="local-ydb"):
+        if benchmark not in ("local-ydb", "distributed-ydb"):
+            raise BenchmarkError("unsupported YDB profile benchmark")
         if not isinstance(profile, str) or not profile:
             raise BenchmarkError("local-ydb profile is required")
         if isinstance(after, bool) or not isinstance(after, int) or after < 0 or after > _MAX_SAFE_JSON_INTEGER:
@@ -4784,10 +4938,10 @@ class RunService:
         matching_steps = [
             item
             for item in manifest.get("steps", [])
-            if item.get("benchmark") == "local-ydb" and item.get("profile") == profile
+            if item.get("benchmark") == benchmark and item.get("profile") == profile
         ]
         profile_exists = bool(matching_steps) or any(
-            item.get("benchmark") == "local-ydb" and item.get("profile") == profile for item in manifest.get("runs", [])
+            item.get("benchmark") == benchmark and item.get("profile") == profile for item in manifest.get("runs", [])
         )
         if not profile_exists:
             raise BenchmarkError("local-ydb profile not found: {}".format(profile))
@@ -5390,8 +5544,11 @@ def production_executor(resource_loader, tool_revision):
             if any("none" != mode for config in run["loaded"].runs for mode in config.background_load_modes):
                 background_binary = extract_executable(resource_loader("background_load"), work, "background_load")
             for configuration in run["loaded"].runs:
-                profile_binaries = load_profile_binaries(configuration, resource_loader, work, binaries)
-                binary = profile_binaries[configuration.benchmark.resource_name]
+                distributed = configuration.benchmark.executor == "distributed-ydb"
+                profile_binaries = (
+                    {} if distributed else load_profile_binaries(configuration, resource_loader, work, binaries)
+                )
+                binary = None if distributed else profile_binaries[configuration.benchmark.resource_name]
                 if cancelled.is_set():
                     return
                 relative = Path(configuration.benchmark.name) / configuration.profile
@@ -5430,7 +5587,7 @@ def production_executor(resource_loader, tool_revision):
                         emit(item)
 
                 try:
-                    if configuration.benchmark.executor == "local-ydb":
+                    if configuration.benchmark.executor in ("local-ydb", "distributed-ydb"):
                         profile = run_local_ydb(
                             profile_binaries,
                             configuration,
@@ -5439,6 +5596,9 @@ def production_executor(resource_loader, tool_revision):
                             work_dir_hint=work,
                             event_sink=event,
                             cancel_event=cancelled,
+                            runtime=(
+                                DistributedRuntime(run, configuration, directory, cancelled) if distributed else None
+                            ),
                         )
                     else:
                         profile = run_benchmark(
@@ -5483,7 +5643,7 @@ def production_executor(resource_loader, tool_revision):
                                     }
                                 )
                         run["store"].write()
-                    if not run["continue_on_error"]:
+                    if isinstance(error, DistributedCleanupError) or not run["continue_on_error"]:
                         raise
                     with run["lock"]:
                         run["failed"] = True
@@ -5705,7 +5865,9 @@ def _handler(service):
                 except ValueError:
                     return self._json(400, {"error": "activity cursor must be a non-negative integer"})
                 try:
-                    value = service.local_ydb_activity(run_id, profile, after)
+                    value = service.local_ydb_activity(
+                        run_id, profile, after, query.get("benchmark", ["local-ydb"])[-1]
+                    )
                 except BenchmarkError as error:
                     return self._json(400, {"error": str(error)})
                 return self._json(200, value)
@@ -5714,18 +5876,22 @@ def _handler(service):
                 query = parse_qs(parsed.query)
                 try:
                     value = service.local_ydb_metrics(
-                        run_id, query.get("profile", [""])[-1], query.get("attempt", [""])[-1]
+                        run_id,
+                        query.get("profile", [""])[-1],
+                        query.get("attempt", [""])[-1],
+                        query.get("benchmark", ["local-ydb"])[-1],
                     )
                 except BenchmarkError as error:
                     return self._json(400, {"error": str(error)})
                 return self._json(200, value)
             if path.startswith("/api/runs/") and path.endswith("/local-ydb-profile"):
                 run_id = unquote(path[len("/api/runs/") : -len("/local-ydb-profile")])
-                profile = parse_qs(parsed.query).get("profile", [""])[-1]
+                query = parse_qs(parsed.query)
+                profile = query.get("profile", [""])[-1]
                 if not profile:
                     return self._json(400, {"error": "local-ydb profile is required"})
                 try:
-                    value = service.local_ydb_profile(run_id, profile)
+                    value = service.local_ydb_profile(run_id, profile, query.get("benchmark", ["local-ydb"])[-1])
                 except BenchmarkError as error:
                     return self._json(400, {"error": str(error)})
                 return self._json(202 if value.get("state") == "preparing" else 200, value)
@@ -5788,6 +5954,17 @@ def _handler(service):
         def do_POST(self):
             path = urlparse(self.path).path
             try:
+                if path.startswith('/peer/distributed/'):
+                    if not service.hosts.authorized(self.headers.get('Authorization')):
+                        return self._json(401, {'error': 'peer authentication required'})
+                    if (
+                        self.headers.get('Origin')
+                        or self.headers.get('Content-Type', '').split(';')[0] != 'application/json'
+                    ):
+                        return self._json(403, {'error': 'server-to-server JSON request required'})
+                    return self._json(
+                        200, service.distributed_operation(path[len('/peer/distributed/') :], self._json_body())
+                    )
                 if path.startswith('/peer/api/'):
                     if not service.hosts.authorized(self.headers.get('Authorization')):
                         return self._json(401, {'error': 'peer authentication required'})
@@ -5922,11 +6099,26 @@ def _handler(service):
     return Handler
 
 
-def make_server(listen, port, output, allow_remote=False, executor=None, perf_available=True, binaries_dir="bin"):
+def make_server(
+    listen,
+    port,
+    output,
+    allow_remote=False,
+    executor=None,
+    perf_available=True,
+    binaries_dir="bin",
+    resource_loader=None,
+):
     if not _is_loopback(listen) and not allow_remote:
         raise BenchmarkError("non-loopback --listen requires --allow-remote")
     server_class = _IPv6ThreadingHTTPServer if ":" in listen else _RunServiceHTTPServer
-    service = RunService(output, executor=executor, perf_available=perf_available, binaries_dir=binaries_dir)
+    service = RunService(
+        output,
+        executor=executor,
+        perf_available=perf_available,
+        binaries_dir=binaries_dir,
+        resource_loader=resource_loader,
+    )
     server = server_class((listen, port), _handler(service))
     peer_host = socket.getfqdn() if listen in ('0.0.0.0', '::') else listen
     service.hosts.port = server.server_port
@@ -5938,9 +6130,17 @@ def make_server(listen, port, output, allow_remote=False, executor=None, perf_av
 
 
 def serve(
-    listen, port, output, no_open=False, allow_remote=False, executor=None, perf_available=True, binaries_dir="bin"
+    listen,
+    port,
+    output,
+    no_open=False,
+    allow_remote=False,
+    executor=None,
+    perf_available=True,
+    binaries_dir="bin",
+    resource_loader=None,
 ):
-    server = make_server(listen, port, output, allow_remote, executor, perf_available, binaries_dir)
+    server = make_server(listen, port, output, allow_remote, executor, perf_available, binaries_dir, resource_loader)
     url_host = "[{}]".format(listen) if ":" in listen else listen
     url = "http://{}:{}/".format(url_host, server.server_port)
     print(url)

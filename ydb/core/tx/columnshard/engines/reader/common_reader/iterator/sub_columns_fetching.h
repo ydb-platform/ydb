@@ -268,14 +268,8 @@ private:
                             const ui32 colIndex = i.GetPartialArray()->GetHeader().GetColumnStats().GetKeyIndexVerified(subColName);
                             const ui64 rawBytes = i.GetPartialArray()->GetHeader().GetColumnStats().GetColumnSize(colIndex);
                             LWTRACK(SubColumnsDataRead, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(),
-<<<<<<< HEAD
-                                source->GetTxId(), source->GetDeprecatedPortionId(), GetEntityId(), columnName, dataDuration, subColName,
-                                chunkIndex, blobBytes, rawBytes);
-=======
-                                source->GetTxId(), source->GetSourceId(), GetEntityId(), columnName, dataDuration,
-                                i.GetPartialArray()->GetHeader().GetColumnStats().GetColumnNameString(columnIndex), chunkIndex, blobBytes,
-                                rawBytes);
->>>>>>> 1cf2a32d756 (Sort columshards out (#51902))
+                                source->GetTxId(), source->GetSourceId(), GetEntityId(), columnName, dataDuration, subColName, chunkIndex,
+                                blobBytes, rawBytes);
                             source->AddBytesRead(blobBytes);
                         }
                     }

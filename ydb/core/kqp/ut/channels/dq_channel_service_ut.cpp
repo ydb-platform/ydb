@@ -14,7 +14,7 @@
 
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <util/random/random.h>
-#include <util/system/datetime.h>
+#include <util/datetime/base.h>
 
 #include <atomic>
 

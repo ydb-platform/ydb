@@ -1265,15 +1265,24 @@ void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 out
         if (!descriptor->IsFinished() && descriptor->OutputNodeGenMajor) {
             if (descriptor->OutputNodeActorId != outputNodeActorId || descriptor->OutputNodeGenMajor != outputNodeGenMajor) {
                 TStringBuilder message;
-                message << reason
-                    << ", OutputNodeActorId=" << descriptor->OutputNodeActorId
-                    << ", OutputNodeGenMajor=" << descriptor->OutputNodeGenMajor;
-                // there is something to compare with only when a peer session has replaced the one this
-                // channel belongs to: the session teardown passes no peer at all and an empty id there
-                // reads as a generation mismatch which never happened
                 if (outputNodeActorId) {
-                    message << " DO NOT MATCH outputNodeActorId=" << outputNodeActorId
+                    // The comparison itself says what happened, and the 2 cases it covers are not the same
+                    // thing: the session of the peer may have been replaced by another one, or that very
+                    // session may have moved on to a new generation through a reconciliation of its own,
+                    // no restart involved.
+                    message << (descriptor->OutputNodeActorId != outputNodeActorId
+                            ? "Peer node session has been replaced"
+                            : "Peer node session has advanced its generation")
+                        << ", OutputNodeActorId=" << descriptor->OutputNodeActorId
+                        << ", OutputNodeGenMajor=" << descriptor->OutputNodeGenMajor
+                        << " DO NOT MATCH outputNodeActorId=" << outputNodeActorId
                         << ", outputNodeGenMajor=" << outputNodeGenMajor;
+                } else {
+                    // The session teardown has no peer to name, and an empty id in a comparison reads as a
+                    // generation mismatch which never happened - say why the channel dies instead.
+                    message << reason
+                        << ", OutputNodeActorId=" << descriptor->OutputNodeActorId
+                        << ", OutputNodeGenMajor=" << descriptor->OutputNodeGenMajor;
                 }
                 message << ", Session=" << LogPrefix << ", Log=" << GetReconciliationLog();
                 descriptor->AbortChannel(message);
@@ -1532,7 +1541,7 @@ void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 g
         LOG_D(LogPrefix << "RECONNECTED, OutputNodeActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
     }
     OutputNodeGenMinor.store(genMinor);
-    FailInputs(OutputNodeActorId, OutputNodeGenMajor.load(), "Peer node session has been replaced");
+    FailInputs(OutputNodeActorId, OutputNodeGenMajor.load());
 }
 
 void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) {
@@ -1801,7 +1810,9 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             Y_DEBUG_ABORT_UNLESS(InflightBytes.load() >= item->Data.Bytes,
                 "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
                 LogPrefix.c_str(), InflightBytes.load(), item->Data.Bytes, item->SeqNo);
-            InflightBytes -= item->Data.Bytes;
+            // clamped on purpose: a release build has no assert to stop on and a wrapped counter would
+            // leave the session unable to send anything ever again, which is far worse than losing count
+            InflightBytes -= std::min<ui64>(InflightBytes.load(), item->Data.Bytes);
             *OutputBufferInflightBytes -= item->Data.Bytes;
             (*OutputBufferInflightMessages)--;
             Queue.pop_front();
@@ -1860,7 +1871,8 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 Y_DEBUG_ABORT_UNLESS(InflightBytes.load() >= item->Data.Bytes,
                     "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
                     LogPrefix.c_str(), InflightBytes.load(), item->Data.Bytes, item->SeqNo);
-                InflightBytes -= item->Data.Bytes;
+                // clamped on purpose, see the sibling release above
+                InflightBytes -= std::min<ui64>(InflightBytes.load(), item->Data.Bytes);
                 *OutputBufferInflightBytes -= item->Data.Bytes;
                 (*OutputBufferInflightMessages)--;
                 Queue.pop_front();
@@ -2256,6 +2268,7 @@ void TNodeState::DoReconciliation(char logSymbol) {
     // the bytes of the dropped items, TDataChunk::Bytes wide: a narrower accumulator would wrap and
     // corrupt InflightBytes once the queued bytes of a session pass its range
     ui64 delta = 0;
+    ui64 dropped = 0;
 
     if (GenMinor == 1) { // => major reconciliation
         // Nothing is sent while the reconciliation is in progress and the peer is at ConfirmedSeqNo == 0
@@ -2283,6 +2296,7 @@ void TNodeState::DoReconciliation(char logSymbol) {
                 RebuiltQueue.push_back(std::move(item));
             } else {
                 delta += item->Data.Bytes;
+                dropped++;
             }
 
             Queue.pop_front();
@@ -2291,6 +2305,10 @@ void TNodeState::DoReconciliation(char logSymbol) {
     }
 
     InflightBytes -= delta;
+    // the sensors are settled from InflightBytes and from Queue.size() by ~TNodeState, and both of them
+    // exclude the dropped items by now - without this the 2 gauges drift up for the life of the process
+    *OutputBufferInflightBytes -= delta;
+    *OutputBufferInflightMessages -= dropped;
 
     SendDiscovery();
     ReconSent.store(TInstant::Now());

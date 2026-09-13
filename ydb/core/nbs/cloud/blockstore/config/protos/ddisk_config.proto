@@ -16,6 +16,10 @@ message TDDiskConfig
     // How long (in microseconds) the DDisk io_uring thread busy-polls before
     // parking when idle. Defaults to 10.
     optional uint32 IdleSpinUs = 7;
+
+    // Maximum memory used by the integrity checksum cache, in bytes.
+    // Defaults to 64 MiB per DDisk.
+    optional uint64 IntegrityChecksumCacheBytes = 8;
 }
 
 message TPBufferConfig
@@ -76,4 +80,7 @@ message TPBufferConfig
     optional uint32 ListPersistentBufferMaxRetries = 16;
     optional uint32 ListPersistentBufferRetryPeriodMilliseconds = 17;
     optional bool EnableChecksums = 18;
+    // Maximum registration timestamp age. Retirement waits twice this interval.
+    // Default 5000 milliseconds.
+    optional uint32 RegistrationTimeoutMilliseconds = 19;
 }

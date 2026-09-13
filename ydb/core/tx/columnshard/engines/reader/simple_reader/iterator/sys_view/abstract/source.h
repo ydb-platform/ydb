@@ -176,7 +176,8 @@ public:
     TSourceData(const ui32 sourceIdx, const ui64 tabletId, const NOlap::TSnapshot& minSnapshot, const NOlap::TSnapshot& maxSnapshot,
         NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const std::optional<ui32> recordsCount,
         const std::shared_ptr<NReader::NCommon::TSpecialReadContext>& context)
-        : TBase(EType::SimpleSysInfo, sourceIdx, context, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false, sourceIdx)
+        : TBase(EType::SimpleSysInfo, sourceIdx, context, /*isConflicting*/ false, minSnapshot, maxSnapshot, recordsCount, std::nullopt, false,
+              sourceIdx)
         , TabletId(tabletId)
         , Start(std::move(start), context->GetReadMetadata()->IsDescSorted())
         , Finish(std::move(finish), context->GetReadMetadata()->IsDescSorted())

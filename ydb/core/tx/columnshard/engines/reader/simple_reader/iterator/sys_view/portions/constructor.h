@@ -16,9 +16,9 @@ private:
 
 public:
     TDataSourceConstructor(const NColumnShard::TUnifiedPathId& pathId, const ui64 tabletId, const std::vector<TPortionInfo::TConstPtr>& portions,
-        const ERequestSorting sorting)
+        const ESourcesSorting sourcesSorting)
         : TBase(tabletId, TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portions.front()->GetPortionId()),
-              TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portions.back()->GetPortionId()), sorting)
+              TSchemaAdapter::GetPKSimpleRow(pathId, tabletId, portions.back()->GetPortionId()), sourcesSorting)
         , PathId(pathId)
         , Portions(portions)
     {
@@ -45,6 +45,6 @@ private:
 public:
     TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId, const IColumnEngine& engine,
         const ui64 tabletId, const TSnapshot reqSnapshot, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
-        const ERequestSorting sorting);
+        const ESourcesSorting sourcesSorting);
 };
 }   // namespace NKikimr::NOlap::NReader::NSimple::NSysView::NPortions

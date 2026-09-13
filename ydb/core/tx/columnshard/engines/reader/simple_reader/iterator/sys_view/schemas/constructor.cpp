@@ -4,9 +4,9 @@
 
 namespace NKikimr::NOlap::NReader::NSimple::NSysView::NSchemas {
 
-TConstructor::TConstructor(
-    const IColumnEngine& engine, const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting)
-    : TBase(sorting, tabletId)
+TConstructor::TConstructor(const IColumnEngine& engine, const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
+    const ESourcesSorting sourcesSorting)
+    : TBase(sourcesSorting, tabletId)
 {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     std::vector<ISnapshotSchema::TPtr> schemasAll;
@@ -23,7 +23,7 @@ TConstructor::TConstructor(
     std::deque<TDataSourceConstructor> constructors;
     for (auto&& i : schemasAll) {
         if (current.size() && current.back()->GetIndexInfo().GetPresetId() != i->GetIndexInfo().GetPresetId()) {
-            constructors.emplace_back(TabletId, std::move(current), sorting);
+            constructors.emplace_back(TabletId, std::move(current), sourcesSorting);
             if (!constructors.back().IsUsedBy(*pkFilter)) {
                 constructors.pop_back();
             }
@@ -32,7 +32,7 @@ TConstructor::TConstructor(
         current.emplace_back(i);
     }
     if (current.size()) {
-        constructors.emplace_back(TabletId, std::move(current), sorting);
+        constructors.emplace_back(TabletId, std::move(current), sourcesSorting);
         if (!constructors.back().IsUsedBy(*pkFilter)) {
             constructors.pop_back();
         }

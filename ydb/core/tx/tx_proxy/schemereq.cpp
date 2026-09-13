@@ -14,6 +14,7 @@
 #include <ydb/core/security/sasl/events.h>
 #include <ydb/core/security/sasl/hasher.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_operation_registry.h>
 
 #include <ydb/library/login/login.h>
 #include <ydb/library/login/protos/login.pb.h>
@@ -409,19 +410,19 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return *modifyScheme.MutableCreateExternalTable()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
-            Y_ABORT("no implementation for ESchemeOpAlterExternalTable");
+            NSchemeShard::AbortUnimplementedSchemeOperation<NKikimrSchemeOp::ESchemeOpAlterExternalTable>();
 
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
             return *modifyScheme.MutableCreateExternalDataSource()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
-            Y_ABORT("no implementation for ESchemeOpAlterExternalDataSource");
+            NSchemeShard::AbortUnimplementedSchemeOperation<NKikimrSchemeOp::ESchemeOpAlterExternalDataSource>();
 
         case NKikimrSchemeOp::ESchemeOpCreateView:
             return *modifyScheme.MutableCreateView()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterView:
-            Y_ABORT("no implementation for ESchemeOpAlterView");
+            NSchemeShard::AbortUnimplementedSchemeOperation<NKikimrSchemeOp::ESchemeOpAlterView>();
 
         case NKikimrSchemeOp::ESchemeOpCreateContinuousBackup:
             return *modifyScheme.MutableCreateContinuousBackup()->MutableTableName();

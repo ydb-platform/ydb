@@ -11,32 +11,33 @@ namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NAbstract {
 class TDataSourceConstructor: public NCommon::TDataSourceConstructor {
 private:
     YDB_READONLY_DEF(ui64, TabletId);
-    ERequestSorting Sorting;
+    ESourcesSorting SourcesSorting;
 
-    virtual ui64 DoGetEntityRecordsCount() const override {
+    virtual ui64 DoGetSourceRecordsCount() const override {
         return 0;
     }
 
-    virtual ui64 DoGetDeprecatedPortionId() const override {
+    virtual ui64 DoGetSourceId() const override {
         return TabletId;
     }
 
 public:
     // DESC orders by the finish key in reverse, like the portion constructor, so sources are extracted in scan direction
-    TDataSourceConstructor(const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const ERequestSorting sorting)
+    TDataSourceConstructor(const ui64 tabletId, NArrow::TSimpleRow&& start, NArrow::TSimpleRow&& finish, const ESourcesSorting sourcesSorting)
         : NCommon::TDataSourceConstructor(
-              TReplaceKeyAdapter((sorting == ERequestSorting::DESC) ? std::move(finish) : std::move(start), sorting == ERequestSorting::DESC),
-              TReplaceKeyAdapter((sorting == ERequestSorting::DESC) ? std::move(start) : std::move(finish), sorting == ERequestSorting::DESC),
-              false)
+              TReplaceKeyAdapter((sourcesSorting == ESourcesSorting::LastPkDesc) ? std::move(finish) : std::move(start),
+                  sourcesSorting == ESourcesSorting::LastPkDesc),
+              TReplaceKeyAdapter((sourcesSorting == ESourcesSorting::LastPkDesc) ? std::move(start) : std::move(finish),
+                  sourcesSorting == ESourcesSorting::LastPkDesc), false)
         , TabletId(tabletId)
-        , Sorting(sorting)
+        , SourcesSorting(sourcesSorting)
     {
     }
 
     // the PK filter wants the range in key order; Start/Finish are swapped for DESC, so undo that here
     bool IsUsedBy(const NOlap::TPKRangesFilter& filter) const {
-        const auto& lo = (Sorting == ERequestSorting::DESC) ? GetFinish() : GetStart();
-        const auto& hi = (Sorting == ERequestSorting::DESC) ? GetStart() : GetFinish();
+        const auto& lo = (SourcesSorting == ESourcesSorting::LastPkDesc) ? GetFinish() : GetStart();
+        const auto& hi = (SourcesSorting == ESourcesSorting::LastPkDesc) ? GetStart() : GetFinish();
         return filter.IsUsed(lo.GetValue().BuildSortablePosition(), hi.GetValue().BuildSortablePosition());
     }
 };
@@ -84,8 +85,8 @@ protected:
     const ui64 TabletId;
 
 public:
-    TConstructor(const ERequestSorting sorting, const ui64 tabletId)
-        : Constructors(sorting)
+    TConstructor(const ESourcesSorting sourcesSorting, const ui64 tabletId)
+        : Constructors(sourcesSorting)
         , TabletId(tabletId)
     {
     }

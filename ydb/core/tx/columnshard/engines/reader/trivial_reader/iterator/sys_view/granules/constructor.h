@@ -18,9 +18,9 @@ private:
 
 public:
     TDataSourceConstructor(const NColumnShard::TSchemeShardLocalPathId& externalPathId, const ui64 tabletId,
-        const std::shared_ptr<const TGranuleMeta>& granule, const ERequestSorting sorting)
+        const std::shared_ptr<const TGranuleMeta>& granule, const ESourcesSorting sourcesSorting)
         : TBase(tabletId, TSchemaAdapter::GetPKTrivialRow(externalPathId, tabletId), TSchemaAdapter::GetPKTrivialRow(externalPathId, tabletId),
-              sorting)
+              sourcesSorting)
         , Granule(granule)
         , ExternalPathId(externalPathId)
         , PortionsCount(Granule->GetPortions().size())
@@ -47,6 +47,6 @@ private:
 
 public:
     TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId, const IColumnEngine& engine,
-        const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ERequestSorting sorting);
+        const ui64 tabletId, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter, const ESourcesSorting sourcesSorting);
 };
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NSysView::NGranules

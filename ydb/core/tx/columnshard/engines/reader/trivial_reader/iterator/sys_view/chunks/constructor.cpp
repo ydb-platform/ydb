@@ -25,8 +25,8 @@ std::shared_ptr<NCommon::IDataSource> TConstructor::DoExtractNextImpl(const std:
 
 TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnShard::TUnifiedOptionalPathId& unifiedPathId,
     const IColumnEngine& engine, const ui64 tabletId, const TSnapshot reqSnapshot, const std::shared_ptr<NOlap::TPKRangesFilter>& pkFilter,
-    const ERequestSorting sorting)
-    : TBase(sorting)
+    const ESourcesSorting sourcesSorting)
+    : TBase(sourcesSorting)
 {
     const TColumnEngineForLogs* engineImpl = dynamic_cast<const TColumnEngineForLogs*>(&engine);
     const TVersionedIndex& originalSchemaInfo = engineImpl->GetVersionedIndex();
@@ -46,7 +46,7 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
             if (unifiedPathId.HasInternalPathId()) {
                 constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(
                                               unifiedPathId.GetInternalPathIdVerified(), unifiedPathId.GetSchemeShardLocalPathIdVerified()),
-                    tabletId, portionInfo, portionInfo->GetSchema(originalSchemaInfo), sorting);
+                    tabletId, portionInfo, portionInfo->GetSchema(originalSchemaInfo), sourcesSorting);
                 if (!constructors.back().IsUsedBy(*pkFilter)) {
                     constructors.pop_back();
                 }
@@ -54,7 +54,7 @@ TConstructor::TConstructor(const IPathIdTranslator& translator, const NColumnSha
             }
             for (const auto& schemeShardLocalPathId : translator.ResolveSchemeShardLocalPathIdsVerified(granuleMeta->GetPathId())) {
                 constructors.emplace_back(NColumnShard::TUnifiedPathId::BuildValid(granuleMeta->GetPathId(), schemeShardLocalPathId), tabletId,
-                    portionInfo, portionInfo->GetSchema(originalSchemaInfo), sorting);
+                    portionInfo, portionInfo->GetSchema(originalSchemaInfo), sourcesSorting);
                 if (!constructors.back().IsUsedBy(*pkFilter)) {
                     constructors.pop_back();
                 }

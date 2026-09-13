@@ -484,7 +484,9 @@ namespace NKikimr::NStorage {
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
         Cfg->PDiskKey.Initialize();
-        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey,
+        auto* subsystem = ActorContext().ActorSystem()->GetSubSystem<IPDiskSubsystem>();
+        Y_ABORT_UNLESS(subsystem, "IPDiskSubsystem is not registered");
+        subsystem->Start(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey,
             blobStorageExecutorPoolId, LocalNodeId);
         if (!temporary) {
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));

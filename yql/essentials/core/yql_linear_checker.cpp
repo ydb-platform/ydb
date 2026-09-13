@@ -42,23 +42,25 @@ bool ValidateLinearTypeAnn(TPositionHandle pos, const TTypeAnnotationNode& type,
     }
 
     if (hasError) {
+        // clang-format off
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() <<
             "Linear types can be used either directly or via Struct/Tuple (non-recursive), but got type " <<
             type << "\nConsider using ToDynamicLinear function"));
+        // clang-format on
     }
 
     return !hasError;
 }
 
-class TUsageVisitor
-{
+class TUsageVisitor {
 public:
     // length = 1 for Linear, N for Struct/Tuple
     using TUsage = TStackVec<TMaybe<TPositionHandle>, 1>;
 
     explicit TUsageVisitor(TExprContext& ctx)
         : Ctx_(ctx)
-    {}
+    {
+    }
 
     void Visit(const TExprNode& node, const TExprNode* parent, const bool noSecondUsageCheck = false) {
         auto [it, inserted] = Visited_.emplace(&node, TUsage{});
@@ -189,8 +191,7 @@ public:
                 Visit(*node.Child(2), &node, /*noSecondUsageCheck=*/true);
                 Visit(*node.Child(0), &node);
                 HandleIfNode(node, parent);
-            }
-            else {
+            } else {
                 for (const auto& child : node.Children()) {
                     Visit(*child, &node, noSecondUsageCheck);
                 }
@@ -199,7 +200,6 @@ public:
     }
 
     bool GetLinearObjects(const TExprNode& node, TNodeMap<TUsage>& result) {
-
         const bool isLiteral = (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple && node.IsList()) ||
                                node.IsCallable("AsStruct");
 
@@ -220,7 +220,6 @@ public:
         }
 
         return true;
-
     }
 
     void HandleIfNode(const TExprNode& node, const TExprNode* /*parent*/) {
@@ -277,7 +276,7 @@ public:
 
                     if (!usage[i].Defined()) {
                         AddError(node->Pos(), TStringBuilder() << "Element #" << i
-                            << " is not consumed, type: " << *tupleType->GetItems()[i]);
+                                                               << " is not consumed, type: " << *tupleType->GetItems()[i]);
                     }
                 }
             } else if (node->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
@@ -290,7 +289,7 @@ public:
 
                     if (!usage[i].Defined()) {
                         AddError(node->Pos(), TStringBuilder() << "Member '" << structType->GetItems()[i]->GetName()
-                            << "' is not consumed, type: " << *structType->GetItems()[i]->GetItemType());
+                                                               << "' is not consumed, type: " << *structType->GetItems()[i]->GetItemType());
                     }
                 }
             }
@@ -333,13 +332,12 @@ private:
         Ctx_.AddError(TIssue(Ctx_.GetPosition(pos), message));
     }
 
-
     TExprContext& Ctx_;
     bool HasErrors_ = false;
     TNodeMap<TUsage> Visited_;
 };
 
-}
+} // namespace
 
 bool ValidateLinearTypes(const TExprNode& root, TExprContext& ctx) {
     bool hasErrors = false;
@@ -377,4 +375,4 @@ bool ValidateLinearTypes(const TExprNode& root, TExprContext& ctx) {
     return !visitor.HasErrors();
 }
 
-}
+} // namespace NYql

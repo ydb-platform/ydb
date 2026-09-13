@@ -476,6 +476,8 @@ struct TMinHashDigestConfig
     int WriteTimestampCount;
     int DeleteTimestampCount;
 
+    i64 GetTotalTimestampCount() const;
+
     REGISTER_YSON_STRUCT(TMinHashDigestConfig);
 
     static void Register(TRegistrar registrar);

@@ -104,5 +104,15 @@ void CalculateCountersDiff(NKikimrSysView::TDbTabletCounters* diff,
     const NKikimrSysView::TDbTabletCounters& current,
     NKikimrSysView::TDbTabletCounters* prev = nullptr);
 
+// Both inputs contain encoded deltas. Add pending Cumulative/HIST increments
+// modulo 2^64 into current, retaining current's latest Simple values.
+// The result remains encoded; pending is unchanged.
+void MergeCounterDeltas(NKikimrSysView::TDbCounters& current,
+    const NKikimrSysView::TDbCounters& pending);
+
+// Merge only Executor/App increments; retain current's Type and MAX fields.
+void MergeCounterDeltas(NKikimrSysView::TDbTabletCounters& current,
+    const NKikimrSysView::TDbTabletCounters& pending);
+
 } // NSysView
 } // NKikimr

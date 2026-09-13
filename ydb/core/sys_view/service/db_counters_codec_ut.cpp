@@ -75,6 +75,117 @@ Y_UNIT_TEST_SUITE(TDbCountersCodecTest) {
         TAggregateCumulative<true>::Apply(&restored, wire.GetMaxExecutorCounters());
         UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(0), 2);
     }
+
+    Y_UNIT_TEST(MergedSparseDeltasRestoreMultiplePendingReports) {
+        NKikimrSysView::TDbCounters pending, additional, current;
+        pending.AddSimple(9);
+        pending.AddSimple(99);
+        pending.SetCumulativeCount(4);
+        for (ui64 value : {0, 10, 2, 20}) {
+            pending.AddCumulative(value);
+        }
+        additional.SetCumulativeCount(4);
+        for (ui64 value : {0, 2, 3, 5}) {
+            additional.AddCumulative(value);
+        }
+        current.AddSimple(0);
+        current.AddSimple(5);
+        current.SetCumulativeCount(4);
+        for (ui64 value : {0, 3, 1, 7}) {
+            current.AddCumulative(value);
+        }
+        const auto pendingBefore = pending.SerializeAsString();
+        const auto additionalBefore = additional.SerializeAsString();
+
+        MergeCounterDeltas(current, pending);
+        MergeCounterDeltas(current, additional);
+
+        NKikimrSysView::TDbCounters restored;
+        for (ui64 value : {100, 200, 300, 400}) {
+            restored.AddCumulative(value);
+        }
+        TAggregateSimple<false>::Apply(&restored, current);
+        TAggregateCumulative<false>::Apply(&restored, current);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSimple(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetSimple(1), 5);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(0), 115);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(1), 207);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(2), 320);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(3), 405);
+        UNIT_ASSERT_VALUES_EQUAL(pending.SerializeAsString(), pendingBefore);
+        UNIT_ASSERT_VALUES_EQUAL(additional.SerializeAsString(), additionalBefore);
+    }
+
+    Y_UNIT_TEST(MergedRetirementAndRecreationRestoreHistogram) {
+        NKikimrSysView::TDbCounters pending, current, restored;
+        auto* previousHistogram = restored.AddHistogram();
+        for (ui64 value : {2, 5, 7}) {
+            previousHistogram->AddBuckets(value);
+        }
+
+        // Retirement cancels all observations from the receiver's previous snapshot.
+        auto* retiredHistogram = pending.AddHistogram();
+        retiredHistogram->SetBucketsCount(3);
+        for (ui64 index = 0; index < 3; ++index) {
+            retiredHistogram->AddBuckets(index);
+            retiredHistogram->AddBuckets(ui64(0) - previousHistogram->GetBuckets(index));
+        }
+        auto* recreatedHistogram = current.AddHistogram();
+        recreatedHistogram->SetBucketsCount(3);
+        for (ui64 value : {0, 3, 1, 5}) {
+            recreatedHistogram->AddBuckets(value);
+        }
+        const auto pendingBefore = pending.SerializeAsString();
+
+        MergeCounterDeltas(current, pending);
+        TAggregateCumulative<false>::Apply(&restored, current);
+
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetHistogram(0).GetBuckets(0), 3);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetHistogram(0).GetBuckets(1), 5);
+        UNIT_ASSERT_VALUES_EQUAL(restored.GetHistogram(0).GetBuckets(2), 0);
+        UNIT_ASSERT_VALUES_EQUAL(current.GetHistogram(0).GetBucketsCount(), 3);
+        // The unchanged middle bucket has no entry in the merged delta.
+        UNIT_ASSERT_VALUES_EQUAL(current.GetHistogram(0).BucketsSize(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(pending.SerializeAsString(), pendingBefore);
+    }
+
+    Y_UNIT_TEST(MergedTabletDeltasKeepLatestStatefulCounters) {
+        const auto setCounters = [](NKikimrSysView::TDbCounters& counters, ui64 simple, ui64 cumulative) {
+            counters.AddSimple(simple);
+            counters.AddCumulative(cumulative);
+        };
+        NKikimrSysView::TDbTabletCounters pendingSnapshot, currentSnapshot, pending, current;
+        setCounters(*pendingSnapshot.MutableExecutorCounters(), 80, 10);
+        setCounters(*pendingSnapshot.MutableAppCounters(), 90, 20);
+        setCounters(*pendingSnapshot.MutableMaxExecutorCounters(), 70, 30);
+        setCounters(*pendingSnapshot.MutableMaxAppCounters(), 100, 40);
+        currentSnapshot.SetType(TTabletTypes::DataShard);
+        setCounters(*currentSnapshot.MutableExecutorCounters(), 0, 3);
+        setCounters(*currentSnapshot.MutableAppCounters(), 5, 7);
+        setCounters(*currentSnapshot.MutableMaxExecutorCounters(), 2, 11);
+        setCounters(*currentSnapshot.MutableMaxAppCounters(), 0, 13);
+        CalculateCountersDiff(&pending, pendingSnapshot);
+        CalculateCountersDiff(&current, currentSnapshot);
+        const auto pendingBefore = pending.SerializeAsString();
+        const auto maxExecutorBefore = current.GetMaxExecutorCounters().SerializeAsString();
+        const auto maxAppBefore = current.GetMaxAppCounters().SerializeAsString();
+
+        MergeCounterDeltas(current, pending);
+
+        NKikimrSysView::TDbCounters executor, app;
+        TAggregateSimple<false>::Apply(&executor, current.GetExecutorCounters());
+        TAggregateCumulative<false>::Apply(&executor, current.GetExecutorCounters());
+        TAggregateSimple<false>::Apply(&app, current.GetAppCounters());
+        TAggregateCumulative<false>::Apply(&app, current.GetAppCounters());
+        UNIT_ASSERT_VALUES_EQUAL(executor.GetSimple(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(executor.GetCumulative(0), 13);
+        UNIT_ASSERT_VALUES_EQUAL(app.GetSimple(0), 5);
+        UNIT_ASSERT_VALUES_EQUAL(app.GetCumulative(0), 27);
+        UNIT_ASSERT_VALUES_EQUAL(current.GetType(), TTabletTypes::DataShard);
+        UNIT_ASSERT_VALUES_EQUAL(current.GetMaxExecutorCounters().SerializeAsString(), maxExecutorBefore);
+        UNIT_ASSERT_VALUES_EQUAL(current.GetMaxAppCounters().SerializeAsString(), maxAppBefore);
+        UNIT_ASSERT_VALUES_EQUAL(pending.SerializeAsString(), pendingBefore);
+    }
 }
 
 } // namespace NKikimr::NSysView

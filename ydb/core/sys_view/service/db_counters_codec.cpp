@@ -168,5 +168,22 @@ void CalculateCountersDiff(NKikimrSysView::TDbTabletCounters* diff,
     CalculateCountersDiff(diff->MutableMaxAppCounters(), current.GetMaxAppCounters());
 }
 
+void MergeCounterDeltas(NKikimrSysView::TDbCounters& current,
+    const NKikimrSysView::TDbCounters& pending)
+{
+    NKikimrSysView::TDbCounters combined;
+    TAggregateCumulative<false>::Apply(&combined, pending);
+    TAggregateCumulative<false>::Apply(&combined, current);
+    combined.MutableSimple()->Swap(current.MutableSimple());
+    CalculateCountersDiff(&current, combined);
+}
+
+void MergeCounterDeltas(NKikimrSysView::TDbTabletCounters& current,
+    const NKikimrSysView::TDbTabletCounters& pending)
+{
+    MergeCounterDeltas(*current.MutableExecutorCounters(), pending.GetExecutorCounters());
+    MergeCounterDeltas(*current.MutableAppCounters(), pending.GetAppCounters());
+}
+
 } // NSysView
 } // NKikimr

@@ -115,6 +115,7 @@ public:
 
     // Append a snapshot: Simple/MAX absolute, Cumulative/HIST deltas since the
     // previous Pack. Call once per new request; transport retries reuse that request.
+    // Retired buckets emit their final delta once, then disappear from later reports.
     virtual void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) = 0;
 };
 

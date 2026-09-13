@@ -6,6 +6,7 @@
 #include <ydb/core/tablet/private/aggregated_tablet_counters.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 #include <util/string/cast.h>
 #include <util/system/mutex.h>
@@ -42,6 +43,8 @@ const TString APP_CATEGORY = "app";
  * A single tablet (a leader or a follower) within a table.
  */
 using TTabletKey = std::pair<ui64, ui32>;
+using TBucketKey = TMaybe<TTabletKey>; // Empty identifies the TABLE partial.
+using TContributionKey = std::pair<TString, TBucketKey>;
 
 struct TTabletInfo {
     TString RelativePath;
@@ -372,6 +375,7 @@ public:
 
     void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) override {
         TGuard<TMutex> guard(DetailedMetricsLock());
+        const int firstAppendedTableIndex = out.size();
 
         for (auto& [_, entry] : Tables) {
             if (entry.TableBucket) {
@@ -394,9 +398,69 @@ public:
                 }
             }
         }
+
+        if (!PendingCounters.empty()) {
+            AppendPendingCounters(out, firstAppendedTableIndex);
+        }
     }
 
 private:
+    void RetireBucket(const TString& tablePath, const TBucketKey& key, TCountersBucket& bucket) {
+        // Forget has removed the last source. Pack retains unsent cumulative history
+        // and cancels the old live histogram before its baseline is destroyed.
+        NKikimrSysView::TDbTabletCounters final;
+        bucket.Pack(final);
+        auto [it, inserted] = PendingCounters.try_emplace(TContributionKey{tablePath, key});
+        if (!inserted) {
+            NSysView::MergeCounterDeltas(final, it->second);
+        }
+        it->second.Swap(&final);
+    }
+
+    void AppendPendingCounters(
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out, int firstAppendedTableIndex)
+    {
+        using TTableKey = std::pair<TString, EDetailedMetricsLevel>;
+        THashMap<TTableKey, NKikimrSysView::TDetailedTableCounters*> tables;
+        THashMap<TContributionKey, NKikimrSysView::TDbTabletCounters*> buckets;
+        // Index only this call's output: Pack appends to a caller-owned report.
+        for (int i = firstAppendedTableIndex; i < out.size(); ++i) {
+            auto* table = out.Mutable(i);
+            tables.emplace(TTableKey{table->GetTablePath(), table->GetLevel()}, table);
+            if (table->HasTableCounters()) {
+                buckets.emplace(TContributionKey{table->GetTablePath(), Nothing()}, table->MutableTableCounters());
+            }
+            for (auto& leaf : *table->MutableLeaves()) {
+                buckets.emplace(TContributionKey{table->GetTablePath(), TTabletKey{leaf.GetTabletId(), leaf.GetFollowerId()}},
+                    leaf.MutableCounters());
+            }
+        }
+
+        for (auto& [contribution, pending] : PendingCounters) {
+            if (auto it = buckets.find(contribution); it != buckets.end()) {
+                NSysView::MergeCounterDeltas(*it->second, pending);
+                continue;
+            }
+            const auto& [path, key] = contribution;
+            const auto level = key ? TDetailedMetricsSettings::MetricsLevelPartition : TDetailedMetricsSettings::MetricsLevelTable;
+            auto& table = tables[TTableKey{path, level}];
+            if (!table) {
+                table = out.Add();
+                table->SetTablePath(path);
+                table->SetLevel(level);
+            }
+            if (key) {
+                auto* leaf = table->AddLeaves();
+                leaf->SetTabletId(key->first);
+                leaf->SetFollowerId(key->second);
+                leaf->MutableCounters()->Swap(&pending);
+            } else {
+                table->MutableTableCounters()->Swap(&pending);
+            }
+        }
+        PendingCounters.clear();
+    }
+
     /**
      * Assert that this instance is only ever handed the tablets of its own role.
      *
@@ -525,6 +589,7 @@ private:
         }
 
         const TTabletTypes::EType tabletType = entry.RegisteredTabletType;
+        RetireBucket(entry.TablePath, Nothing(), *entry.TableBucket);
         entry.TableBucket.Reset();
 
         TargetCounterGroup->RemoveSubgroupChain({
@@ -546,6 +611,7 @@ private:
         it->second->Forget(tablet);
         Y_DEBUG_ABORT_UNLESS(it->second->IsEmpty());
 
+        RetireBucket(entry.TablePath, tablet, *it->second);
         entry.Leaves.erase(it);
 
         const auto& [tabletId, followerId] = tablet;
@@ -612,6 +678,9 @@ private:
      * entry, which is exactly what the shared group already does.
      */
     THashMap<TString, TTableEntry> Tables;
+
+    // Outlives the live tree until a report carries each retired bucket's final delta.
+    THashMap<TContributionKey, NKikimrSysView::TDbTabletCounters> PendingCounters;
 };
 
 } // namespace <anonymous>

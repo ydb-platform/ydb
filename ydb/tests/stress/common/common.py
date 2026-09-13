@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import ydb
-import os
 import threading
 import multiprocessing
 import logging

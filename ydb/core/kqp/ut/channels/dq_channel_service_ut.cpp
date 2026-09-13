@@ -654,6 +654,14 @@ struct TSessionTest : public TLoadTest {
         return result;
     }
 
+    static ui64 CountPings(const std::shared_ptr<TNodeState>& state) {
+        ui64 count = 0;
+        for (auto symbol : GetReconciliationLog(state)) {
+            count += (symbol == 'I');
+        }
+        return count;
+    }
+
     static TString GetReconciliationLog(const std::shared_ptr<TNodeState>& state) {
         std::lock_guard lock(state->Mutex);
         return state->GetReconciliationLog();
@@ -1243,31 +1251,29 @@ struct TOutboundStallTest : public TSessionTest {
         settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetIdlePingPeriodMs(200);
     }
 
-    static ui64 CountPings(const std::shared_ptr<TNodeState>& state) {
-        ui64 count = 0;
-        for (auto symbol : GetReconciliationLog(state)) {
-            count += (symbol == 'I');
-        }
-        return count;
-    }
-
     void Run() override {
         Prepare();
         Init();
 
+        auto senderNodeId = Runtime->GetNodeId(0);
         auto peerNodeId = Runtime->GetNodeId(1);
 
         // the session under test sends on one channel and receives on another, as a session of a pair of
-        // nodes which run stages of the same query does
+        // nodes which run stages of the same query does; both sides are registered before either of them
+        // discovers the other
         auto session = Service0->CreateDebugNodeState(peerNodeId);
+        auto peer = Service1->CreateDebugNodeState(senderNodeId);
         session->StartSession();
+        peer->StartSession();
 
         // the inbound channel is delivered by the test alone, at a cadence it controls
         session->PauseChannelData();
+        // Nothing the session sends reaches the peer, so nothing can ever confirm it and the queue cannot
+        // drain until this test says so. Losing the acks instead would leave the reply to a discovery to
+        // recover the queue - it carries the SeqNo the peer confirmed - and the stall would then be gone
+        // before this test could sample it, whenever the machine delayed it past an idle period.
+        peer->PauseChannelData();
 
-        // The inbound traffic is staged first and the queue of the session is left empty until it is: a
-        // session which is already stalled while the test is still setting up would be pinged, recovered
-        // and stalled no more by the time the part which matters begins.
         ProducerSettings = TWorkerSettings{ .MessageCount = 200, .MinMessageSize = 10, .MaxMessageSize = 100 };
         ConsumerSettings = ProducerSettings;
         StartInboundChannel(2, true);
@@ -1277,51 +1283,45 @@ struct TOutboundStallTest : public TSessionTest {
         // whatever the session has done with itself so far is history, only a ping after this line counts
         auto pingsBefore = CountPings(session);
 
-        // now it has something of its own to send, and every confirmation of it is lost - the acks of the
-        // protocol itself carry no ChannelId and are kept, so its handshakes still work
-        session->DropDataAcks.store(true);
+        // now it has something of its own to send, and no confirmation of it will ever come back
         ProducerSettings = TWorkerSettings{ .MessageCount = 5, .MinMessageSize = 10, .MaxMessageSize = 100 };
         ConsumerSettings = ProducerSettings;
         StartChannel(1, true);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(session) > 0; }, TDuration::Seconds(10)),
+            "the session never had anything queued");
 
-        ui64 maxQueueSize = 0;
+        // the peer keeps sending all along, 1 message every 50ms against the 200ms idle period, so the
+        // session never looks idle and the liveness probe cannot be what fires below
         bool pinged = false;
-        bool recovered = false;
-        TInstant queuedAt;
-        TDuration stalledFor;
         auto deadline = TInstant::Now() + TDuration::Seconds(5);
         while (TInstant::Now() < deadline) {
-            session->ProcessPending(1); // the peer keeps sending all along
-            auto queueSize = GetQueueSize(session);
-            if (queueSize && !queuedAt) {
-                queuedAt = TInstant::Now();
-            }
-            maxQueueSize = std::max(maxQueueSize, queueSize);
-            if (!pinged && CountPings(session) > pingsBefore) {
+            session->ProcessPending(1);
+            if (CountPings(session) > pingsBefore) {
                 pinged = true;
-                stalledFor = TInstant::Now() - queuedAt;
-            }
-            // the queue is not sampled between the ping and the recovery on purpose: the reply to the
-            // discovery follows it by less than the interval of this loop and drains the queue at once
-            if (pinged && maxQueueSize > 0 && queueSize == 0) {
-                recovered = true;
                 break;
             }
             Sleep(TDuration::MilliSeconds(50));
         }
 
-        auto details = TStringBuilder() << "the queue held " << maxQueueSize << " message(s) at most and "
-            << GetQueueSize(session) << " now, it had been stalled for " << stalledFor << " when it was pinged"
-            << ", inbound traffic left: " << session->PendingDataCount.load()
-            << ", reconciliation log: " << GetReconciliationLog(session);
+        auto queueWhenPinged = GetQueueSize(session);
+        auto details = [&]() {
+            return TStringBuilder() << "the queue holds " << GetQueueSize(session) << " message(s), "
+                << queueWhenPinged << " of them when it was pinged"
+                << ", inbound traffic left: " << session->PendingDataCount.load()
+                << ", reconciliation log: " << GetReconciliationLog(session);
+        };
 
-        UNIT_ASSERT_C(maxQueueSize > 0, TStringBuilder() << "the session never had anything queued, " << details);
-        UNIT_ASSERT_C(pinged, TStringBuilder() << "the stalled outbound queue was never pinged, " << details);
-        UNIT_ASSERT_C(recovered, TStringBuilder() << "the ping did not recover the queue, " << details);
+        UNIT_ASSERT_C(pinged, TStringBuilder() << "the stalled outbound queue was never pinged, " << details());
+        UNIT_ASSERT_C(queueWhenPinged > 0, TStringBuilder() << "the queue was not stalled, " << details());
 
-        session->DropDataAcks.store(false);
+        // the peer receives at last: the reconciliation of the ping completes and the queue drains
+        peer->ResumeChannelData();
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(session) == 0; }, TDuration::Seconds(10)),
+            TStringBuilder() << "the ping did not recover the queue, " << details());
+
         session->ResumeChannelData();
         session.reset();
+        peer.reset();
         Destroy();
     }
 };
@@ -1357,10 +1357,17 @@ struct TLivenessProbeTest : public TSessionTest {
         // the watchdog of the queue has nothing to watch here
         UNIT_ASSERT_VALUES_EQUAL_C(GetQueueSize(session), 0, "the session has something queued");
 
-        auto pinged = WaitFor([&]() { return GetReconciliationLog(session).find('I') != TString::npos; },
-            TDuration::Seconds(5));
-
+        // The ping of either session counts. Both go idle within microseconds of each other, both run the
+        // same timers, and whichever asks first refreshes the other and can keep it from asking at all -
+        // and the session of the peer is in the same state, channels and an empty queue, so its ping is
+        // the same branch of HandleCleanup. This side does go stale first, by the ack round trip, but the
+        // 50ms of a cleanup tick is far longer than that.
         auto peer = FindNodeState(Service1, Runtime->GetNodeId(0));
+        auto pingsBefore = CountPings(session) + (peer ? CountPings(peer) : 0);
+        auto pinged = WaitFor([&]() {
+            return CountPings(session) + (peer ? CountPings(peer) : 0) > pingsBefore;
+        }, TDuration::Seconds(5));
+
         auto details = TStringBuilder() << "the session holds " << GetInputCount(session)
             << " inbound channel(s) and an empty queue, its log: " << GetReconciliationLog(session)
             << ", the log of the peer: " << (peer ? GetReconciliationLog(peer) : "no session");

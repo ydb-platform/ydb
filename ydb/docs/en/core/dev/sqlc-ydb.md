@@ -41,7 +41,13 @@ The `-- name:` comment sets the generated method name. `:exec` executes a statem
 
 ## 1. Generator configuration in sqlc.yaml {#configuration}
 
-Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the `out` directory are resolved relative to this file.
+Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the `out` directory are resolved relative to this file. To list the languages and frameworks available in your installed version, run:
+
+```bash
+sqlc-ydb init --help
+```
+
+Each tab includes a help command below its configuration to describe the selected generator's additional options, their types, defaults, and purpose.
 
 {% list tabs group=sqlc-language %}
 
@@ -64,6 +70,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language cpp --runtime ydb --help
+    ```
+
   - userver {#cpp-userver}
 
     ```yaml
@@ -77,6 +87,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             out: "cpp/userver"
             namespace: "authors"
             runtime: "userver"
+    ```
+
+    ```bash
+    sqlc-ydb init --language cpp --runtime userver --help
     ```
 
   {% endlist %}
@@ -100,6 +114,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             sql_package: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language go --runtime ydb --help
+    ```
+
   - database/sql {#go-sql}
 
     ```yaml
@@ -113,6 +131,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             out: "go/sql"
             package: "authors"
             sql_package: "database/sql"
+    ```
+
+    ```bash
+    sqlc-ydb init --language go --runtime database/sql --help
     ```
 
   {% endlist %}
@@ -136,6 +158,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language java --runtime ydb --help
+    ```
+
   - JDBC {#java-jdbc}
 
     ```yaml
@@ -151,6 +177,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             runtime: "jdbc"
     ```
 
+    ```bash
+    sqlc-ydb init --language java --runtime jdbc --help
+    ```
+
   - jOOQ {#java-jooq}
 
     ```yaml
@@ -164,6 +194,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             out: "java/jooq"
             package: "authors"
             runtime: "jooq"
+    ```
+
+    ```bash
+    sqlc-ydb init --language java --runtime jooq --help
     ```
 
   {% endlist %}
@@ -186,6 +220,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language python --runtime ydb --help
+    ```
+
   - DB-API {#python-dbapi}
 
     ```yaml
@@ -200,6 +238,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             runtime: "dbapi"
     ```
 
+    ```bash
+    sqlc-ydb init --language python --runtime dbapi --help
+    ```
+
   - SQLAlchemy {#python-sqlalchemy}
 
     ```yaml
@@ -212,6 +254,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
           python:
             out: "python/sqlalchemy"
             runtime: "sqlalchemy"
+    ```
+
+    ```bash
+    sqlc-ydb init --language python --runtime sqlalchemy --help
     ```
 
   {% endlist %}
@@ -235,6 +281,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             runtime: "adonet"
     ```
 
+    ```bash
+    sqlc-ydb init --language csharp --runtime adonet --help
+    ```
+
   - Dapper {#csharp-dapper}
 
     ```yaml
@@ -248,6 +298,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             out: "csharp/dapper"
             namespace: "Authors"
             runtime: "dapper"
+    ```
+
+    ```bash
+    sqlc-ydb init --language csharp --runtime dapper --help
     ```
 
   {% endlist %}
@@ -270,6 +324,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language typescript --runtime ydb --help
+    ```
+
   {% endlist %}
 
 - Rust {#lang-rust}
@@ -288,6 +346,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
           rust:
             out: "rust"
             runtime: "ydb"
+    ```
+
+    ```bash
+    sqlc-ydb init --language rust --runtime ydb --help
     ```
 
   {% endlist %}
@@ -311,6 +373,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language php --runtime ydb --help
+    ```
+
   {% endlist %}
 
 - Kotlin {#lang-kotlin}
@@ -332,6 +398,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language kotlin --runtime ydb --help
+    ```
+
   - JDBC {#kotlin-jdbc}
 
     ```yaml
@@ -347,6 +417,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             runtime: "jdbc"
     ```
 
+    ```bash
+    sqlc-ydb init --language kotlin --runtime jdbc --help
+    ```
+
   - Exposed {#kotlin-exposed}
 
     ```yaml
@@ -360,6 +434,10 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
             out: "kotlin/exposed"
             package: "authors"
             runtime: "exposed"
+    ```
+
+    ```bash
+    sqlc-ydb init --language kotlin --runtime exposed --help
     ```
 
   {% endlist %}

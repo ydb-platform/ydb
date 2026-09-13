@@ -41,7 +41,13 @@ SELECT id, name FROM authors WHERE id = $author_id;
 
 ## 1. Настройка генератора в sqlc.yaml {#configuration}
 
-Сохраните конфигурацию из выбранной вкладки в `sqlc.yaml`. Пути входных файлов и каталога `out` вычисляются относительно этого файла.
+Сохраните конфигурацию из выбранной вкладки в `sqlc.yaml`. Пути входных файлов и каталога `out` вычисляются относительно этого файла. Список языков и фреймворков, доступных в установленной версии, показывает команда:
+
+```bash
+sqlc-ydb init --help
+```
+
+Под конфигурацией каждой вкладки приведена команда справки по дополнительным параметрам выбранного генератора: их типам, значениям по умолчанию и назначению.
 
 {% list tabs group=sqlc-language %}
 
@@ -64,6 +70,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language cpp --runtime ydb --help
+    ```
+
   - userver {#cpp-userver}
 
     ```yaml
@@ -77,6 +87,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             out: "cpp/userver"
             namespace: "authors"
             runtime: "userver"
+    ```
+
+    ```bash
+    sqlc-ydb init --language cpp --runtime userver --help
     ```
 
   {% endlist %}
@@ -100,6 +114,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             sql_package: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language go --runtime ydb --help
+    ```
+
   - database/sql {#go-sql}
 
     ```yaml
@@ -113,6 +131,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             out: "go/sql"
             package: "authors"
             sql_package: "database/sql"
+    ```
+
+    ```bash
+    sqlc-ydb init --language go --runtime database/sql --help
     ```
 
   {% endlist %}
@@ -136,6 +158,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language java --runtime ydb --help
+    ```
+
   - JDBC {#java-jdbc}
 
     ```yaml
@@ -151,6 +177,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             runtime: "jdbc"
     ```
 
+    ```bash
+    sqlc-ydb init --language java --runtime jdbc --help
+    ```
+
   - jOOQ {#java-jooq}
 
     ```yaml
@@ -164,6 +194,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             out: "java/jooq"
             package: "authors"
             runtime: "jooq"
+    ```
+
+    ```bash
+    sqlc-ydb init --language java --runtime jooq --help
     ```
 
   {% endlist %}
@@ -186,6 +220,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language python --runtime ydb --help
+    ```
+
   - DB-API {#python-dbapi}
 
     ```yaml
@@ -200,6 +238,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             runtime: "dbapi"
     ```
 
+    ```bash
+    sqlc-ydb init --language python --runtime dbapi --help
+    ```
+
   - SQLAlchemy {#python-sqlalchemy}
 
     ```yaml
@@ -212,6 +254,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
           python:
             out: "python/sqlalchemy"
             runtime: "sqlalchemy"
+    ```
+
+    ```bash
+    sqlc-ydb init --language python --runtime sqlalchemy --help
     ```
 
   {% endlist %}
@@ -235,6 +281,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             runtime: "adonet"
     ```
 
+    ```bash
+    sqlc-ydb init --language csharp --runtime adonet --help
+    ```
+
   - Dapper {#csharp-dapper}
 
     ```yaml
@@ -248,6 +298,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             out: "csharp/dapper"
             namespace: "Authors"
             runtime: "dapper"
+    ```
+
+    ```bash
+    sqlc-ydb init --language csharp --runtime dapper --help
     ```
 
   {% endlist %}
@@ -270,6 +324,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language typescript --runtime ydb --help
+    ```
+
   {% endlist %}
 
 - Rust {#lang-rust}
@@ -288,6 +346,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
           rust:
             out: "rust"
             runtime: "ydb"
+    ```
+
+    ```bash
+    sqlc-ydb init --language rust --runtime ydb --help
     ```
 
   {% endlist %}
@@ -311,6 +373,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language php --runtime ydb --help
+    ```
+
   {% endlist %}
 
 - Kotlin {#lang-kotlin}
@@ -332,6 +398,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             runtime: "ydb"
     ```
 
+    ```bash
+    sqlc-ydb init --language kotlin --runtime ydb --help
+    ```
+
   - JDBC {#kotlin-jdbc}
 
     ```yaml
@@ -347,6 +417,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             runtime: "jdbc"
     ```
 
+    ```bash
+    sqlc-ydb init --language kotlin --runtime jdbc --help
+    ```
+
   - Exposed {#kotlin-exposed}
 
     ```yaml
@@ -360,6 +434,10 @@ SELECT id, name FROM authors WHERE id = $author_id;
             out: "kotlin/exposed"
             package: "authors"
             runtime: "exposed"
+    ```
+
+    ```bash
+    sqlc-ydb init --language kotlin --runtime exposed --help
     ```
 
   {% endlist %}

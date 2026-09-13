@@ -1138,6 +1138,80 @@ struct TPeerActivityTest : public TSessionTest {
     }
 };
 
+// TerminateInputDescriptor erased the descriptor by key and decremented InputBuffer/Count whatever the
+// erase did. The descriptor of an aborted channel is erased and accounted for where it is aborted - by
+// FailInputs, or by the ID ERASE/GEN path of HandleChannelData - while the buffer of that channel lives on
+// until its actor lets go of it and terminates it here. The same descriptor was then taken off the sensor
+// twice, once per aborted inbound channel, and since the sensor is a plain gauge shared by every session
+// of the node, the drift accumulates for the life of the process and eventually goes below zero.
+//
+// Staged through a peer session which is replaced: the node under test keeps its session and its consumer,
+// the peer frees its own, and the discovery of the session which takes its place makes ConnectSession
+// abort every input descriptor which belonged to the session before it.
+struct TBufferCountTest : public TSessionTest {
+
+    static i64 GetCounter(const std::shared_ptr<TDqChannelService>& service, const TString& name) {
+        return service->Counters->GetCounter(name, false)->Val();
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto peerNodeId = Runtime->GetNodeId(1);
+
+        // the consumer stalls after the 1st message, so the channel is neither finished nor let go of when
+        // it is aborted below - a finished descriptor would not be failed at all
+        ProducerSettings = TWorkerSettings{ .MessageCount = 20, .MinMessageSize = 10, .MaxMessageSize = 100 };
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 20, .MinMessageSize = 10, .MaxMessageSize = 100,
+            .PauseMessageIndex = 1, .PauseDelayMs = 30000 };
+        StartChannel(1, true);
+
+        // both sessions are created by the traffic of the channel, not by the test
+        std::shared_ptr<TNodeState> receiver;
+        UNIT_ASSERT_C(WaitFor([&]() { return (receiver = FindNodeState(Service1, senderNodeId)) != nullptr; },
+            TDuration::Seconds(10)), "the receiving node session not found");
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInputPopBytes(receiver) > 0; }, TDuration::Seconds(10)),
+            "the consumer did not bind and pop");
+        UNIT_ASSERT_VALUES_EQUAL_C(GetCounter(Service1, "InputBuffer/Count"), 1,
+            "the inbound channel is not on the sensor");
+
+        // the peer frees its session and another one takes its place, exactly as the service does it after
+        // an idle destroy or a reconciliation failure
+        std::shared_ptr<TNodeState> sender;
+        UNIT_ASSERT_C(WaitFor([&]() { return (sender = FindNodeState(Service0, peerNodeId)) != nullptr; },
+            TDuration::Seconds(10)), "the sending node session not found");
+        sender->Terminating.store(true);
+        Service0->FreeNodeSession(peerNodeId, sender->NodeActorId);
+        sender.reset();
+        {
+            std::lock_guard lock(Service0->Mutex);
+            Service0->GetOrCreateNodeState(peerNodeId);
+        }
+
+        // its discovery aborts the descriptor of the channel and takes it off the sensor, then the consumer
+        // is aborted in turn and lets go of its buffer, which terminates a descriptor which is gone. The
+        // 2 of them are not sampled apart on purpose: the 2nd follows the 1st closely enough to race a poll
+        try {
+            auto msg = Runtime->GrabEdgeEvent<TEvTestPrivate::TEvFinished>(Control1, TDuration::Seconds(10));
+            Actors.erase(msg->Sender);
+            UNIT_ASSERT_C(msg->Get()->Error, "the consumer of an aborted channel finished without an error");
+        } catch (NActors::TEmptyEventQueueException&) {
+            UNIT_ASSERT_C(false, "the consumer of the aborted channel did not finish");
+        }
+
+        auto negative = WaitFor([&]() { return GetCounter(Service1, "InputBuffer/Count") < 0; }, TDuration::Seconds(3));
+        auto details = TStringBuilder() << "InputBuffer/Count=" << GetCounter(Service1, "InputBuffer/Count")
+            << ", OutputBuffer/Count=" << GetCounter(Service0, "OutputBuffer/Count");
+        UNIT_ASSERT_C(!negative, TStringBuilder() << "the descriptor of the aborted channel was counted off twice, " << details);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetCounter(Service1, "InputBuffer/Count"), 0, details);
+
+        receiver.reset();
+        Destroy();
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
@@ -1279,6 +1353,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(PeerActivityRefreshedByData) {
         TPeerActivityTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(BufferCountOfAnAbortedChannel) {
+        TBufferCountTest test;
 
         test.Local = false;
 

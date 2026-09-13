@@ -2104,8 +2104,12 @@ void TNodeState::TerminateOutputDescriptor(const std::shared_ptr<TOutputDescript
         << ", Push=" << descriptor->PushBytes.load()
         << ", RPop=" << descriptor->RemotePopBytes.load()
     );
-    OutputDescriptors.erase(descriptor->Info);
-    (*OutputBufferCount)--;
+    // FailOutputs erases the descriptor of an aborted channel and accounts for it there, while the buffer
+    // of that channel lives on until its actor lets go of it and terminates it here. Counting an erase
+    // which removed nothing would take the very same descriptor off the sensor twice.
+    if (OutputDescriptors.erase(descriptor->Info)) {
+        (*OutputBufferCount)--;
+    }
     if (Limits.IdleDestroyPeriod == TDuration::Zero() && InputDescriptors.empty() && OutputDescriptors.empty()) {
         Terminating.store(true);
         ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
@@ -2120,8 +2124,13 @@ void TNodeState::TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor
         << ", EarlyFinished=" << descriptor->EarlyFinished.load() << ", PopBytes=" << descriptor->PopStats.Bytes.load()
         << ", Finishing=" << descriptor->Finishing.load() << ", Finished=" << descriptor->Finished.load()
     );
-    InputDescriptors.erase(descriptor->Info);
-    (*InputBufferCount)--;
+    // FailInputs and the ID ERASE/GEN path erase the descriptor of an aborted channel and account for it
+    // there, while the buffer of that channel lives on until its actor lets go of it and terminates it
+    // here. Counting an erase which removed nothing would take the very same descriptor off the sensor
+    // twice, which is what drove InputBuffer/Count negative.
+    if (InputDescriptors.erase(descriptor->Info)) {
+        (*InputBufferCount)--;
+    }
     if (Limits.IdleDestroyPeriod == TDuration::Zero() && InputDescriptors.empty() && OutputDescriptors.empty()) {
         Terminating.store(true);
         ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
@@ -2164,7 +2173,7 @@ void TNodeState::HandleCleanup() {
         if (auto it = OutputDescriptors.find(front.first); it != OutputDescriptors.end()) {
             if (!it->second->IsBound) {
                 OutputDescriptors.erase(it);
-                (*OutputBufferCount)++;
+                (*OutputBufferCount)--;
             }
         }
         UnboundOutputs.pop();

@@ -991,7 +991,8 @@ public:
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
                 RetryResolve();
             } else if (AttachWriteSeqNum && Mode == EMode::WRITE) {
-                // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs
+                // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs.
+                // Retries are bounded in RetryShard before the write re-resolves and then fails.
                 RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
             } else {
                 UpdateStats(ev->Get()->Record.GetTxStats());
@@ -1193,6 +1194,7 @@ public:
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result) {
             YQL_ENSURE(result->IsShardEmpty);
+            RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
             Callbacks->OnPrepared(std::move(preparedInfo), result->DataSize);
         }
     }
@@ -1214,6 +1216,7 @@ public:
 
         if (Mode == EMode::COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
+            RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0, ExtractCommitTimestamp(ev->Get()->Record));
             return;
         }
@@ -1229,6 +1232,8 @@ public:
                 {"cookie", ev->Cookie});
             return;
         }
+
+        RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
 
         // Only collect locks in WRITE mode (COLLECTING state required by AddLock)
         if (Mode == EMode::WRITE) {
@@ -1500,6 +1505,43 @@ public:
             return;
         }
 
+        if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
+            // The resend budget for this shard is exhausted. Re-resolve to pick up the new shard
+            // map after a split/merge; do it at most MaxRetryResolvesPerShard consecutive times per
+            // shard, otherwise fail with UNAVAILABLE instead of looping or stalling forever.
+            YDB_LOG_WARN("Shard write retry limit exceeded; re-resolving the table.",
+                {"logPrefix", this->LogPrefix},
+                {"shardID", shardId},
+                {"attempts", metadata->SendAttempts},
+                {"tablePath", TablePath});
+
+            auto& resolveCount = RetryResolveByShard[shardId];
+            if (resolveCount >= MessageSettings.MaxRetryResolvesPerShard) {
+                YDB_LOG_ERROR("Too many consecutive re-resolves caused by a shard; failing the write.",
+                    {"logPrefix", this->LogPrefix},
+                    {"shardID", shardId},
+                    {"resolves", resolveCount},
+                    {"tablePath", TablePath});
+                TxManager->SetError(shardId);
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::UNAVAILABLE,
+                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                    TStringBuilder()
+                        << "Failed to deliver write to shard " << shardId
+                        << " after " << MessageSettings.MaxWriteAttempts * MessageSettings.MaxRetryResolvesPerShard
+                        << " attempts. Table `" << TablePath << "`.");
+                return;
+            }
+            ++resolveCount;
+            // Reset the send attempts so the pending batches are picked up again by the
+            // next FlushToShards() once the re-resolve finishes (a same-shard-set resolve has
+            // no re-route, so without this the batch would never be re-sent and the query would stall).
+            ResetShardRetries(shardId, metadata->Cookie);
+            // Re-resolve immediately; the per-shard counter bounds the total number of rounds.
+            RetryResolve();
+            return;
+        }
+
         YDB_LOG_DEBUG("Retry Next",
             {"logPrefix", this->LogPrefix},
             {"shardID", shardId},
@@ -1541,8 +1583,9 @@ public:
         const auto state = TxManager->GetState(ev->Get()->TabletId);
 
         // A moved/restarted tablet keeps its id. During WRITE mode the in-flight
-        // batch is resent; retries are bounded by MaxWriteAttempts in SendDataToShard,
-        // and the new tablet generation restores the writer chain and answers once.
+        // batch is resent; retries are bounded by MaxWriteAttempts in RetryShard,
+        // which then re-resolves and eventually fails with UNAVAILABLE. The new
+        // tablet generation restores the writer chain and answers once.
         if (AttachWriteSeqNum && Mode == EMode::WRITE) {
             // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs
             RetryShard(ev->Get()->TabletId, std::nullopt);
@@ -1765,6 +1808,7 @@ private:
     TPartitioning::TCPtr Partitioning;
     ui64 ResolveAttempts = 0;
     bool ResolvingInProgress = false;
+    THashMap<ui64, ui32> RetryResolveByShard;
 
     IKqpTransactionManagerPtr TxManager;
     bool Closed = false;

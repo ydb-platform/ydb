@@ -11,8 +11,6 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/data_events/events.h>
-#include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -885,6 +883,82 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
     Y_UNIT_TEST(UncommittedWriteSeqNumRebootBetweenFlushes) {
         TUncommittedWriteSeqNumRebootBetweenFlushes tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // A consistent (seq-num) write whose batch is permanently rejected by one shard must not
+    // retry forever: KQP resends a bounded number of times per resolve round, re-resolves with
+    // backoff, and after a bounded number of consecutive re-resolves caused by that shard fails
+    // the query with UNAVAILABLE (deterministic) instead of hanging the transaction.
+    class TUncommittedWriteSeqNumPersistentWrongShardState : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
+        }
+
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto edgeActor = runtime.AllocateEdgeActor();
+            const auto shards = GetTableShards(&Kikimr->GetTestServer(), edgeActor, "/Root/KV");
+            UNIT_ASSERT_C(!shards.empty(), "expected /Root/KV to have shards");
+            // Key 10 is in the first uniform partition.
+            const ui64 stuckShard = shards[0];
+
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto tx = Kikimr->RunCall([&] {
+                return session.BeginTransaction(TTxSettings::SerializableRW()).ExtractValueSync().GetTransaction(); });
+
+            // Permanently rewrite COMPLETED results from the stuck shard into WRONG_SHARD_STATE,
+            // so every resend is rejected again and the shard never acknowledges the batch.
+            std::atomic<size_t> rejected{0};
+            auto rejectResult = [&](TAutoPtr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWriteResult::EventType) {
+                    auto& record = ev->Get<NEvents::TDataEvents::TEvWriteResult>()->Record;
+                    if (record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED
+                        && record.GetOrigin() == stuckShard)
+                    {
+                        record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE);
+                        ++rejected;
+                    }
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+            auto saveObserver = runtime.SetObserverFunc(rejectResult);
+
+            // The flush to the stuck shard is rejected on every resend; the write actor retries a
+            // bounded number of attempts per resolve round and then fails the query with UNAVAILABLE.
+            // The SELECT after the UPSERT forces the flush inside the same query.
+            auto future = Kikimr->RunInThreadPool([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/KV` (Key, Value) VALUES (10u, "Ten");
+                    SELECT Key, Value FROM `/Root/KV` WHERE Key = 10u ORDER BY Key;
+                )"), TTxControl::Tx(tx)).ExtractValueSync(); });
+            auto result = runtime.WaitFuture(future, TDuration::Seconds(120));
+
+            runtime.SetObserverFunc(saveObserver);
+            UNIT_ASSERT_C(rejected.load() >= 5,
+                "expected several rejected resends before the retry bound was exhausted");
+            UNIT_ASSERT_C(result.GetStatus() == EStatus::UNAVAILABLE || result.GetStatus() == EStatus::GENERIC_ERROR,
+                TStringBuilder() << result.GetStatus() << ": " << result.GetIssues().ToString());
+            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE),
+                result.GetIssues().ToString());
+
+            // The cluster stays usable: a fresh session read succeeds.
+            auto checkSession = Kikimr->RunCall([&] {
+                return client.GetSession().GetValueSync().GetSession(); });
+            auto check = Kikimr->RunCall([&] {
+                return checkSession.ExecuteQuery(Q_(R"(
+                    SELECT Key, Value FROM `/Root/KV` WHERE Key = 10u;
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(check.GetStatus(), EStatus::SUCCESS, check.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST(UncommittedWriteSeqNumPersistentWrongShardState) {
+        TUncommittedWriteSeqNumPersistentWrongShardState tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();

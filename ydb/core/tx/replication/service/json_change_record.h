@@ -14,6 +14,10 @@ namespace NKikimrTxDataShard {
     class TEvApplyReplicationChanges_TChange;
 }
 
+namespace NKikimrReplication {
+    class TSchemaChange;
+}
+
 namespace NKikimr::NReplication::NService {
 
 class TChangeRecordBuilder;
@@ -27,6 +31,8 @@ public:
     ui64 GetTxId() const override;
     EKind GetKind() const override;
 
+    bool IsValidJson(TString& error) const;
+
     void Serialize(NKikimrTxDataShard::TEvApplyReplicationChanges_TChange& record, TMemoryPool& pool) const;
 
     TConstArrayRef<TCell> GetKey(TMemoryPool& pool) const;
@@ -35,8 +41,15 @@ public:
     void Accept(NChangeExchange::IVisitor& visitor) const override;
     void RewriteTxId(ui64 value) override;
 
+    // Parses the complete snapshot in a CDC schema record. Unlike the row-data
+    // parser this is fallible: malformed control records must put replication
+    // into an error state, never terminate an actor process.
+    bool TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema, TString& error) const;
+
 private:
     NJson::TJsonValue JsonBody;
+    bool JsonParsed = false;
+    TString JsonError;
     TLightweightSchema::TCPtr Schema;
     ui64 WriteTxId = 0;
 
@@ -55,8 +68,11 @@ public:
 
     template <typename T>
     TSelf& WithBody(T&& body) {
-        auto res = NJson::ReadJsonTree(body, &GetRecord()->JsonBody);
-        Y_ABORT_UNLESS(res);
+        auto* record = GetRecord();
+        record->JsonParsed = NJson::ReadJsonTree(body, &record->JsonBody);
+        if (!record->JsonParsed) {
+            record->JsonError = "cannot parse JSON";
+        }
         return static_cast<TBase*>(this)->WithBody(std::forward<T>(body));
     }
 

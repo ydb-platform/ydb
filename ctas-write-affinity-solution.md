@@ -544,18 +544,35 @@ TDqSink → WriteActor → ColumnShard[i] (локально)
 |------------|------|----------------------|---------------------|----------|
 | `TKqpPhyCnHashShuffle.ColumnShardHashV1` | нет HashShuffle | нет HashShuffle (`Map`) | `oneof HashKind = ColumnShardHashV1` | Оптимизатор (раздел 2.2.3) |
 | `TKqpPhyCnHashShuffle.KeyColumns` | не заполняется | не заполняется | `["Col1", ...]` | `CtasShardingColumns` из Rewrite-фазы (раздел 2.1.1) |
+| `TKqpPhyCnHashShuffle.ColumnShardHashV1.KeyColumnTypes` | не заполняется | не заполняется | `[typeId(Col1), ...]` | Query compiler: типы резолвятся из struct-типа соединения (типы колонок SELECT известны на этапе компиляции) |
+
+**Типы ключевых колонок.** Имена sharding-колонок (`KeyColumns`) и их типы (`KeyColumnTypes`) доносятся до физического плана **одновременно и тем же механизмом**: query compiler в [`FillConnection()`](ydb/core/kqp/query_compiler/kqp_query_compiler.cpp:2689) для каждого `ColumnShardHashV1`-shuffle резолвит тип каждой key-колонки из struct-типа соединения (типы колонок SELECT известны на этапе компиляции) и заполняет [`TColumnShardHashV1.KeyColumnTypes`](ydb/core/protos/kqp_physical.proto:260). Исполнитель читает типы из proto — runtime-вывод типов из `ResolvedSinkSettings` не требуется (раздел 2.3.5).
 
 
 ### 2.3 Executor
 
 **Вход:** `TKqpPhyTx` proto — физический план, сериализованный компилятором (описание полей — раздел 2.2.4).
 
+**Различия между CS Write Affinity и Shuffle Elimination в Executor:**
+
+| Аспект | CS Write Affinity | Shuffle Elimination |
+|--------|-------------------|---------------------|
+| **Цель** | Маршрутизация строк в целевую таблицу (запись) | Сохранение партиционирования при чтении из источника |
+| **Таблица** | Целевая (куда пишем) | Источниковая (откуда читаем) |
+| **`orderedShardIds`** | `GetCsWriteAffinityShardIds()` → `ShardKey->GetPartitions()` | `GetShuffleEliminationShardIds()` → `ColumnTableInfoPtr->Description.GetSharding().GetColumnShards()` |
+| **`shardToTaskIdx`** | Из `task.Meta.Writes` (1 task = 1 shard) | Из `task.Meta.Reads` (1 task может читать K shards) |
+| **`SourceShardCount`** | N (число shards целевой таблицы) | N (число shards источниковой таблицы) или `stageInfo.Tasks.size()` (identity) |
+| **`TaskIndexByHash`** | `BuildTaskIndexByHash(orderedShardIds, shardToTaskIdx)` | `BuildTaskIndexByHash(orderedShardIds, shardToTaskIdx)` или identity |
+| **Когда вызывается** | `BuildKqpStageChannels` (обработка HashShuffle) | `BuildScanTasksFromShards` (построение scan tasks) или `BuildKqpStageChannels` (identity) |
+| **Общие helpers** | `BuildTaskIndexByHash`, `ReadColumnShardHashV1KeyColumnTypes` | `BuildTaskIndexByHash`, `ReadColumnShardHashV1KeyColumnTypes` |
+
 Ключевые поля, используемые исполнителем:
 - `Stages[].Inputs[].HashShuffle` — наличие `HashShuffle` с `ColumnShardHashV1` определяет, что план построен с affinity (раздел 2.2.3)
 - `Stages[].Inputs[].HashShuffle.KeyColumns` — sharding columns (заполняются `FillStages()`)
+- `Stages[].Inputs[].HashShuffle.ColumnShardHashV1.KeyColumnTypes` — типы sharding-колонок (заполняются query compiler'ом, раздел 2.2.4)
 - `Stages[].Sinks[].InternalSink` — настройки sink (заполняются Table Resolver'ом)
 
-**Детекция affinity:** Исполнитель определяет, что запрос скомпилирован с аффинити, по наличию `ColumnShardHashV1`-входа в DQ-графе. Если оптимизатор построил план с `ColumnShardHashV1` (раздел 2.2.3), исполнитель активирует affinity-путь.
+**Детекция affinity:** выполняется **по стадиям** и **один раз** — в `FillStages()` (раздел 2.3.1). Статическая функция [`IsCsWriteAffinitySinkStage(stage)`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1416) проверяет форму стадии по raw proto — ровно один вход `HashShuffle(ColumnShardHashV1)` + ровно один internal sink `TKqpTableSinkSettings(MODE_FILL)`. Такая стадия однозначно является sink-стадией affinity-плана (раздел 2.2.3): не-affinity CTAS использует Map-вход, а shuffle-eliminated планы чтения/записи не имеют MODE_FILL sink'а. При прохождении проверки `FillStages()` заполняет `meta.CsShardingColumns` из `KeyColumns` shuffle — **непустой `CsShardingColumns` и есть маркер affinity**, который все четыре точки читают через [`TStageInfoMeta::IsCsWriteAffinitySink()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.h) (`!CsShardingColumns.empty()`): сбор шардов в `HandleResolve` (раздел 2.3.2.1), per-shard задачи в `CountComputeTasks` (раздел 2.3.3), `TargetShardIds` в `BuildInternalSinks` (раздел 2.3.4) и skip shuffle elimination в `BuildKqpStageChannels` (раздел 2.3.5) — поэтому сбор шардов и активация affinity-пути всегда согласованы. Запрос-level флага нет: в одном запросе могут соседствовать affinity-стадии (CTAS sink) и обычные стадии.
 
 KqpExecuter превращает физический план (`TKqpPhyTx`) в исполняемые задачи и маршрутизирует данные к целевым ColumnShard'ам. Для CTAS с write affinity ключевая задача — создать **N per-shard задач** (по одной на шард), пиннить каждую к ноде своего шарда и настроить HashShuffle-маршрутизацию, чтобы каждая строка попала в задачу, владеющую её шардом.
 
@@ -614,15 +631,17 @@ Stage 3: (дополнительная стадия для table creation в CTA
 - Остальные поля — как в "Было": `ColumnTableInfoPtr=nullptr`, `ShardKey=nullptr`, `ResolvedSinkSettings=nullopt`
 
 **Стало (с аффинити):**
-- `CsShardingColumns` заполняется из `KeyColumns` proto HashShuffle-входа ([`kqp_tasks_graph.cpp:733`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:733)):
+- `CsShardingColumns` заполняется из `KeyColumns` proto HashShuffle-входа **только** если стадия проходит проверку affinity-формы `IsCsWriteAffinitySinkStage(stage)` ([`kqp_tasks_graph.cpp:744`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:744)):
   ```cpp
   if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kHashShuffle
-          && input.GetHashShuffle().GetHashKindCase() == NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1) {
+          && input.GetHashShuffle().GetHashKindCase() == NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1
+          && IsCsWriteAffinitySinkStage(stage)) {
       for (const auto& col : input.GetHashShuffle().GetKeyColumns()) {
           meta.CsShardingColumns.push_back(col);
       }
   }
   ```
+  Непустой `CsShardingColumns` — маркер affinity: `Meta.IsCsWriteAffinitySink()` возвращает `!CsShardingColumns.empty()`, и все последующие этапы (2.3.2.1–2.3.5) читают этот helper. Для не-affinity стадий с `ColumnShardHashV1`-входом (shuffle elimination) `CsShardingColumns` остаётся пустым.
 - Остальные поля (`TableId`, `TableConstInfo`, `ColumnTableInfoPtr`, `ShardKey`, `ResolvedSinkSettings`) по-прежнему пусты — они заполняются позже Table Resolver'ом.
 
 #### 2.3.2 `ResolveShards()` — разрешение шардов на ноды
@@ -657,11 +676,10 @@ Executer → TableResolver → (схемы) → TEvTableResolveStatus
    |-----------|---------|-------------------|
    | Read source | `Sources(0).Type == kReadRangesSource` | `PartitionPruner->Prune()` → `PrunedPartitions` → `shardId` |
    | Scan / OLAP | `IsScan() \|\| IsOlap()` | `PartitionPruner->Prune()` для каждого `TableOp` → `shardId` |
-   | **Sink (CTAS)** | `else` (нет sources, не scan) | **Только при `ColumnShardHashV1`-входе:** [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1401) — унифицированный источник: `ColumnTableInfoPtr->Description.GetSharding()` (канонический порядок) → fallback `ShardKey->GetPartitions()` |
 
-   Для sink-стадий (CTAS) в [`CollectFillSinkShards()`](ydb/core/kqp/executer_actor/kqp_executer_impl.h:224) дополнительно проверяются:
-   - `sink.HasInternalSink()` и настройки типа `TKqpTableSinkSettings`
-   - `sinkSettings.GetType() == MODE_FILL`
+   **Важно:** CTAS sink-стадия классифицируется Table Resolver'ом как `IsOlap()` (`TableKind=Olap`, [`kqp_table_resolver.cpp:108`](ydb/core/kqp/executer_actor/kqp_table_resolver.cpp:108)) и проходит через ветку Scan/OLAP, которая для неё ничего не собирает (у sink-стадии нет `TableOps`). Поэтому сбор шардов целевой таблицы выполнен отдельным блоком **на уровне цикла по стадиям** (после всей цепочки веток, [`kqp_executer_impl.h:336`](ydb/core/kqp/executer_actor/kqp_executer_impl.h:336)) — он выполняется для каждой стадии и читает маркер affinity, вычисленный один раз в `FillStages()` (раздел 2.3.1):
+   - Условие: `stageInfo.Meta.IsCsWriteAffinitySink()` (непустой `CsShardingColumns`) — тот же маркер, что читают `CountComputeTasks`, `BuildInternalSinks` и `BuildKqpStageChannels`
+   - Шарды: [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1356) — `ShardKey->GetPartitions()` (заполняется Table Resolver'ом)
 
 3. Если `shardIds` не пуст → создаёт `TKqpShardsResolver` (шаг 2.3.2.2). Если пуст → сразу вызывает `TasksGraph.ResolveShards({})` и продолжает.
 
@@ -683,7 +701,7 @@ Executer → TableResolver → (схемы) → TEvTableResolveStatus
 - Node affinity: недостижим
 
 **Стало (с аффинити):**
-- Sink-стадии (CTAS): `GetCsWriteAffinityShardIds()` → `shardIds` (условие: есть `ColumnShardHashV1`-вход)
+- Sink-стадии (CTAS): `GetCsWriteAffinityShardIds()` → `shardIds` (условие: `IsCsWriteAffinitySink()`)
 - `ShardIdToNodeId`: шарды read-таблиц **+ шарды целевой таблицы**
 - Node affinity: достижим (задача пиннится к ноде своего шарда)
 
@@ -691,63 +709,54 @@ Executer → TableResolver → (схемы) → TEvTableResolveStatus
 
 [`BuildAllTasks()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4187) вызывает `CountComputeTasks` для COMPUTE_TASKS стадий.
 
-**Вход:** `TasksGraph` с заполненными `ShardIdToNodeId` (раздел 2.3.2) и `CsShardingColumns` (раздел 2.3.1). Для affinity-стадий: `ColumnTableInfoPtr` (если доступен) или `ShardKey` (fallback для CTAS).
+**Вход:** `TasksGraph` с заполненными `ShardIdToNodeId` (раздел 2.3.2) и `CsShardingColumns` (раздел 2.3.1). Для affinity-стадий: `ShardKey` (заполняется Table Resolver'ом).
 
 **Было:**
 - CTAS sink-стадия классифицируется как `COMPUTE_TASKS` (т.к. `ShardOperations` не пуст и есть sink)
 - `CountComputeTasks` создаёт 1 задачу (стандартный путь): `partitionsCount` определяется по upstream-стадии (Map-соединение → COPY)
 - Задача размещается на executer-ноде (`StageNeedsLocalPlacement`)
 - `TasksType` = `COMPUTE_TASKS`
-- `task.Meta.TaskParams` — пустой (нет `CsWriteAffinityShardId`)
+- `task.Meta.Writes` — не заполнен
 
 **Стало (без аффинити):**
 - CTAS sink-стадия классифицируется как `COMPUTE_TASKS` (то же условие)
-- Нет affinity-плана (оптимизатор построил `Map`) → `IsCsWriteAffinitySinkStage=false` → условие affinity-блока не выполняется
+- Нет affinity-плана (оптимизатор построил `Map`) → `CsShardingColumns` пуст → `Meta.IsCsWriteAffinitySink()=false` → условие affinity-блока не выполняется
 - Создаётся 1 задача (стандартный путь), как в "Было"
-- `task.Meta.TaskParams` — пустой
+- `task.Meta.Writes` — не заполнен
 
 **Стало (с аффинити):**
 - CTAS sink-стадия классифицируется как `COMPUTE_TASKS` (то же условие)
-- Условие affinity-блока: `!isPureStage && IsCsWriteAffinitySinkStage(stageInfo)` → true
-- Создаются **per-shard задачи** ([`kqp_tasks_graph.cpp:4886`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4886)):
+- Условие affinity-блока: `stageInfo.Meta.IsCsWriteAffinitySink()` → true (маркер подразумевает ровно один вход, т.е. стадия не pure)
+- Создаются **per-shard задачи** ([`kqp_tasks_graph.cpp:4417`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4417)):
   ```cpp
   MaxTasksGraph->AddStage(stageInfo, TMaxTasksGraph::FIXED, inputs);
   for (const auto& [shardId, nodeId] : shardNodes) {
       auto& task = AddTask(stageInfo, TTask::UNKNOWN);
-      task.Meta.TaskParams["CsWriteAffinityShardId"] = ToString(shardId);
+      task.Meta.Writes.ConstructInPlace();
+      task.Meta.Writes->emplace_back(TTaskMeta::TShardInfo{.ShardId = shardId});
       MaxTasksGraph->AddTask(task, nodeId);
   }
   ```
-- Источник `shardNodes` — [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1401) (унифицированный helper, объявлен в [`kqp_tasks_graph.h:204`](ydb/core/kqp/executer_actor/kqp_tasks_graph.h:204)):
-  - `ColumnTableInfoPtr->Description.GetSharding()` → `GetCsShardingOrderedShardIds()` (если доступен)
-  - `ShardKey->GetPartitions()` (fallback для CTAS, заполняется Table Resolver'ом)
-  - Тот же helper используется в `CollectFillSinkShards` (раздел 2.3.2.1), `BuildInternalSinks` (раздел 2.3.4) и `BuildColumnShardHashV1ForWriteAffinity` (раздел 2.3.5) — все этапы видят одинаковый набор и порядок шардов
-- Каждая задача получает `CsWriteAffinityShardId` в `TaskParams`
+- Источник `shardNodes` — [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1356) (объявлен в [`kqp_tasks_graph.h:197`](ydb/core/kqp/executer_actor/kqp_tasks_graph.h:197)): `ShardKey->GetPartitions()` (заполняется Table Resolver'ом). Тот же helper используется при сборе shardIds в `HandleResolve` (раздел 2.3.2.1), в `BuildInternalSinks` (раздел 2.3.4) и `BuildColumnShardHashV1ForWriteAffinity` (раздел 2.3.5) — все этапы видят одинаковый набор и порядок шардов
+- Каждая задача получает `TShardInfo{.ShardId = shardId}` в `task.Meta.Writes`
 - `stageType` = `FIXED` (количество задач = количество шардов, не зависит от upstream)
 - **Инварианты** (нарушение → `YQL_ENSURE` с ошибкой):
   - Каждый shardId должен присутствовать в `ShardIdToNodeId` (заполняется `ResolveShards`)
-  - Хотя бы один источник шардов должен быть доступен (`ColumnTableInfoPtr` или `ShardKey`)
+  - `ShardKey` должен быть заполнен (Table Resolver)
 - После создания per-shard задач — **early return** (стандартный путь не выполняется)
-- Последующий `PlaceTasks()` (`max_tasks_graph.cpp`, не изменяется в этой ветке) переупорядочивает задачи по нодам — позиционный индекс больше не соответствует шарду, поэтому связь задачи с шардом хранится в `TaskParams["CsWriteAffinityShardId"]` и используется в `BuildInternalSinks` (раздел 2.3.4) и `BuildColumnShardHashV1ForWriteAffinity` (раздел 2.3.5). `BuildComputeTasks()` (не изменяется) далее вызывает `BuildSinks` для каждой задачи.
+- Последующий `PlaceTasks()` (`max_tasks_graph.cpp`, не изменяется в этой ветке) переупорядочивает задачи по нодам — позиционный индекс больше не соответствует шарду, поэтому связь задачи с шардом хранится в `task.Meta.Writes` и используется в `BuildInternalSinks` (раздел 2.3.4) и `BuildColumnShardHashV1ForWriteAffinity` (раздел 2.3.5). `BuildComputeTasks()` (не изменяется) далее вызывает `BuildSinks` для каждой задачи.
 
-Логика выбора источника sharding columns инкапсулирована в [`GetEffectiveShardingColumns()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1368), который вызывается в `CountComputeTasks`, `BuildInternalSinks` и `BuildColumnShardHashV1ForWriteAffinity`:
-```cpp
-if (!stageInfo.Meta.CsShardingColumns.empty()) {
-    return stageInfo.Meta.CsShardingColumns;
-}
-fallbackBuffer = ExtractShardingColumnsFromHashShuffle(stageInfo);
-return fallbackBuffer;
-```
+Sharding columns для affinity-стадий всегда берутся из `stageInfo.Meta.CsShardingColumns` (заполняется `FillStages()` из `KeyColumns` HashShuffle proto, раздел 2.3.1).
 
-**Почему для CTAS используется HashShuffle proto?** CTAS создаёт новую таблицу — Table Resolver не может заполнить `ColumnTableInfoPtr`. Компилятор знает sharding columns из CREATE TABLE (PARTITION BY или PRIMARY KEY) и записывает их в `KeyColumns`. `FillStages()` извлекает эти `KeyColumns` и заполняет `CsShardingColumns`, поэтому `GetEffectiveShardingColumns` находит их в `CsShardingColumns` и не требует fallback.
+**Почему для CTAS используется HashShuffle proto?** CTAS создаёт новую таблицу — Table Resolver не может заполнить `ColumnTableInfoPtr`. Компилятор знает sharding columns из CREATE TABLE (PARTITION BY или PRIMARY KEY) и записывает их в `KeyColumns`. `FillStages()` извлекает эти `KeyColumns` и заполняет `CsShardingColumns`.
 
-**CTAS fallback**: когда `ColumnTableInfoPtr == nullptr` (таблица ещё не существует на момент компиляции), `GetCsWriteAffinityShardIds()` использует `ShardKey->GetPartitions()` (заполняется Table Resolver'ом из `GetColumnShards()`). Если и `ShardKey` пуст — `YQL_ENSURE(false)` с ошибкой (оба источника недоступны — это баг). Порядок задач совпадает с порядком [`GetCsShardingOrderedShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1383) — критично для `TaskIndexByHash`.
+**Шарды**: `GetCsWriteAffinityShardIds()` использует `ShardKey->GetPartitions()` (заполняется Table Resolver'ом). Если `ShardKey` пуст — `YQL_ENSURE(false)` с ошибкой. Порядок задач совпадает с порядком `ShardKey->GetPartitions()` — критично для `TaskIndexByHash`.
 
 #### 2.3.4 `BuildSinks()` → `BuildInternalSinks()` — заполнение TargetShardIds
 
 [`BuildInternalSinks()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4022) заполняет `TargetShardIds` в sink settings.
 
-**Вход:** `stageInfo.Tasks` с `CsWriteAffinityShardId` в `TaskParams` (раздел 2.3.3). `effectiveShardingColumns` из [`GetEffectiveShardingColumns()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1368). `IsCsWriteAffinitySinkStage(stageInfo)` — признак affinity (строже, чем `HasColumnShardHashV1Input`: дополнительно проверяет, что стадия — OLAP-sink и ключевые колонки совпадают с sharding-колонками целевой таблицы, чтобы не принять shuffle-eliminated OLAP-read за affinity). `ColumnTableInfoPtr` или `ShardKey` — источники `resolvedShardIds`.
+**Вход:** `stageInfo.Tasks` с `Writes` (раздел 2.3.3). `stageInfo.Meta.IsCsWriteAffinitySink()` — признак affinity (вычислен один раз в `FillStages()`, раздел 2.3.1). `ShardKey` — источник `resolvedShardIds`.
 
 **Было:**
 - `TargetShardIds` остаётся пустым
@@ -755,30 +764,29 @@ return fallbackBuffer;
 - 1 задача пишет все шарды
 
 **Стало (без аффинити):**
-- `TargetShardIds` остаётся пустым — условие `!effectiveShardingColumns.empty() && IsCsWriteAffinitySinkStage` не выполняется (нет affinity-плана: оптимизатор построил `Map`, а не `HashShuffle(ColumnShardHashV1)`)
+- `TargetShardIds` остаётся пустым — `Meta.IsCsWriteAffinitySink()` false (нет affinity-плана: оптимизатор построил `Map`, а не `HashShuffle(ColumnShardHashV1)`, `CsShardingColumns` не заполнен)
 - WriteActor обрабатывает все шарды (без фильтрации) — как в "Было"
 - 1 задача пишет все шарды
 
 **Стало (с аффинити):**
-- При `!effectiveShardingColumns.empty() && IsCsWriteAffinitySinkStage(stageInfo)`:
-  - `resolvedShardIds` заполняется из `ColumnTableInfoPtr` или `ShardKey->GetPartitions()`
-  - **Multi-task path** (N > 1): каждая задача получает ровно 1 шард:
+- При `stageInfo.Meta.IsCsWriteAffinitySink()`:
+  - `resolvedShardIds` заполняется из `ShardKey->GetPartitions()`
+  - Каждая задача получает ровно 1 шард (из `task.Meta.Writes`):
     ```cpp
-    auto it = task.Meta.TaskParams.find("CsWriteAffinityShardId");
-    shardId = std::stoull(it->second);
+    ui64 shardId = task.Meta.Writes->front().ShardId;
+    YQL_ENSURE(std::find(resolvedShardIds.begin(), resolvedShardIds.end(), shardId) != resolvedShardIds.end(), ...);
     settings.AddTargetShardIds(shardId);
     ```
-  - **Single-task path** (N = 1): единственная задача получает все шарды
 - WriteActor фильтрует строки по `TargetShardIds` (отбрасывает строки для чужих шардов)
 
-При N>1 задач: `TargetShardIds = {shard_i}` для задачи i. `resolvedShardIds` получается через унифицированный helper [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1401) (тот же источник и порядок, что в `CollectFillSinkShards` и `CountComputeTasks`): `ColumnTableInfoPtr` → [`GetCsShardingOrderedShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1383), fallback `ShardKey->GetPartitions()` для CTAS. Если оба источника пусты — `resolvedShardIds` остаётся пустым, `TargetShardIds` не заполняется.
+`TargetShardIds = {shard_i}` для задачи i. `resolvedShardIds` получается через [`GetCsWriteAffinityShardIds()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1356) (тот же источник и порядок, что при сборе shardIds в `HandleResolve` и в `CountComputeTasks`).
 
 #### 2.3.5 `BuildKqpStageChannels()` → `BuildColumnShardHashV1ForWriteAffinity()` — построение hash routing
 
-[`BuildKqpStageChannels()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1890) строит каналы между стадиями.
-[`BuildColumnShardHashV1ForWriteAffinity()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1548) настраивает ColumnShardHashV1 routing.
+[`BuildKqpStageChannels()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1522) строит каналы между стадиями.
+[`BuildColumnShardHashV1ForWriteAffinity()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1463) настраивает ColumnShardHashV1 routing.
 
-**Вход:** `stageInfo` с заполненными задачами (раздел 2.3.3) и `TargetShardIds` (раздел 2.3.4). `effectiveShardingColumns` из [`GetEffectiveShardingColumns()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1368). `TaskParams["CsWriteAffinityShardId"]` — маппинг задач на шарды. `sinkSettings` (KeyColumns, Columns) — из `ResolvedSinkSettings` или raw proto.
+**Вход:** `stageInfo` с заполненными задачами (раздел 2.3.3) и `TargetShardIds` (раздел 2.3.4). `effectiveShardingColumns` из `stageInfo.Meta.CsShardingColumns`. `task.Meta.Writes` — маппинг задач на шарды. `KeyColumns` и `KeyColumnTypes` — из proto (заполняются query compiler'ом, раздел 2.2.4).
 
 **Было:**
 - Соединение между Transform и Sink — `Map` (не HashShuffle)
@@ -793,32 +801,41 @@ return fallbackBuffer;
 **Стало (с аффинити):**
 - Соединение — `HashShuffle` с `kColumnShardHashV1`
 - `BuildColumnShardHashV1ForWriteAffinity` вызывается и:
-  1. Получает `effectiveShardingColumns` через `GetEffectiveShardingColumns()` (из `CsShardingColumns`, заполненного `FillStages()` из HashShuffle proto)
-  2. Проверяет `sinkSettings` (KeyColumns, Columns) — из `ResolvedSinkSettings` или raw proto
-  3. Строит `shardToTaskIdx` из `TaskParams["CsWriteAffinityShardId"]` (включая shard ID 0)
-  4. Строит `orderedShardIds` (канонический порядок `GetOrderedShardIds()`, fallback на отсортированные shard IDs из task params)
-  5. Строит `taskIndexByHash[bucket]` = индекс задачи, владеющей шардом bucket'а
+  1. Получает `effectiveShardingColumns` из `stageInfo.Meta.CsShardingColumns` (заполнено `FillStages()` из HashShuffle proto)
+  2. Строит `shardToTaskIdx` из `task.Meta.Writes` (включая shard ID 0)
+  3. Строит `orderedShardIds` через `GetCsWriteAffinityShardIds()` (`ShardKey->GetPartitions()`)
+  4. Строит `taskIndexByHash[bucket]` = индекс задачи, владеющей шардом bucket'а (через общий helper [`BuildTaskIndexByHash()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1366), используемый также shuffle elimination)
+  5. Читает `KeyColumnTypes` из proto через [`ReadColumnShardHashV1KeyColumnTypes()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1381) (общий helper, используемый также shuffle elimination)
   6. Заполняет `ColumnShardHashV1Params` на Transform-стадии:
      - `SourceShardCount` = N
      - `TaskIndexByHash` = mapping
-     - `SourceTableKeyColumnTypes` = типы ключевых колонок
-  7. Возвращает `hashShuffleKeyColumns` (числовые индексы для широких каналов, имена для узких)
+     - `SourceTableKeyColumnTypes` = типы ключевых колонок (из proto)
 - Канал: HashShuffle → строки маршрутизируются по hash(sharding_key) → bucket → task
 
-В case `kColumnShardHashV1` вызывается [`BuildColumnShardHashV1ForWriteAffinity`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1548). `TaskIndexByHash[bucket]` = индекс задачи, владеющей шардом bucket'а.
+В case `kColumnShardHashV1` вызывается [`BuildColumnShardHashV1ForWriteAffinity`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1463). `TaskIndexByHash[bucket]` = индекс задачи, владеющей шардом bucket'а.
 
 **Shuffle Elimination skip:** Для CTAS sink с `ColumnShardHashV1`-входом shuffle elimination отключён. Причина: shuffle elimination использует `stageInfo.Tasks.size()` (количество задач Transform-стадии) как `SourceShardCount`, что отражает количество шардов *источника*, а не *целевой* таблицы. Это вызывает несоответствие hash bucket'ов между DQ `ColumnShardHashV1` routing и runtime `TConsistencySharding64`. В коде это реализовано добавлением условия `!isCsWriteAffinitySink` в два места [`BuildKqpStageChannels`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1922) (строки 1923 и 1948):
 ```cpp
-const bool isCsWriteAffinitySink = IsCsWriteAffinitySinkStage(stageInfo);
+const bool isCsWriteAffinitySink = stageInfo.Meta.IsCsWriteAffinitySink();
 if (enableShuffleElimination && !isCsWriteAffinitySink && !isFusedWithScanStage) { ... }
 if (enableShuffleElimination && !isCsWriteAffinitySink && !hasMap && !isFusedWithScanStage && ...) { ... }
 ```
 
-**Обработка числовых индексов**: `BuildColumnShardHashV1ForWriteAffinity` получает `effectiveShardingColumns` через [`GetEffectiveShardingColumns()`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:1368), который возвращает `CsShardingColumns` (заполнено `FillStages()` из HashShuffle proto для CTAS, или Table Resolver'ом для существующих таблиц). В ветке `useNumericIndices` (широкие каналы) каждая запись интерпретируется как:
-1. Имя колонки → поиск в `columnNameToIndex` (из `sinkSettings.GetColumns()`)
-2. Числовой индекс → проверка диапазона и использование как есть
+**Key columns**: `BuildHashShuffleChannels()` получает `KeyColumns` **напрямую из proto** (`input.GetHashShuffle().GetKeyColumns()`) — идентично shuffle elimination, без какой-либо конвертации. Это работает, потому что канал Transform→Sink для CTAS — узкий (`Struct`), и runtime [`FindColumnInfo()`](ydb/library/yql/dq/runtime/dq_columns_resolve.cpp:9) резолвит колонки **по имени** (`Struct.FindMemberIndex`). Для широких (`Multi`) каналов runtime ожидает числовые индексы, но CTAS sink всегда получает узкий канал, поэтому имена из proto (из `CtasShardingColumns`) используются как есть. Оба пути (write affinity и shuffle elimination) вызывают `BuildHashShuffleChannels` одинаково.
 
-В узкой ветке (Struct) числовые индексы конвертируются обратно в имена колонок.
+**Почему `BuildColumnShardHashV1ForWriteAffinity` — отдельная функция:**
+
+Функция нужна, потому что логика построения `TaskIndexByHash` принципиально разная для write affinity и shuffle elimination:
+
+| | Write Affinity | Shuffle Elimination (scan) | Shuffle Elimination (non-scan) |
+|---|---|---|---|
+| **`shardToTaskIdx`** | из `task.Meta.Writes` (1 task = 1 shard) | из `task.Meta.Reads` (1 task может читать K shards) | не нужен (identity) |
+| **`orderedShardIds`** | `ShardKey->GetPartitions()` | `ColumnTableInfoPtr->Description.GetSharding().GetColumnShards()` | не нужен |
+| **`SourceShardCount`** | N (число shards) | N (число shards) | `stageInfo.Tasks.size()` (число tasks) |
+| **`TaskIndexByHash`** | `BuildTaskIndexByHash(orderedShardIds, shardToTaskIdx)` | `BuildTaskIndexByHash(orderedShardIds, shardToTaskIdx)` | identity: `TaskIndexByHash[i] = i` |
+| **Когда вызывается** | `BuildKqpStageChannels` (строка 1567) | `BuildScanTasksFromShards` (строка 2746) | `BuildKqpStageChannels` (identity mapping) |
+
+Общая часть (`BuildTaskIndexByHash`, `ReadColumnShardHashV1KeyColumnTypes`) вынесена в shared helpers. Оставшаяся специфика — в источниках данных для `shardToTaskIdx` и `orderedShardIds`, которые по природе разные: write affinity строит маппинг из `Writes` (запись), shuffle elimination — из `Reads` (чтение) или использует identity.
 
 ### 2.4 Runtime
 
@@ -835,7 +852,7 @@ if (enableShuffleElimination && !isCsWriteAffinitySink && !hasMap && !isFusedWit
 **Стало (без аффинити):**
 - 1 задача вычисляет все строки и пишет во все шарды (как в "Было")
 - WriteActor: `TColumnShardPayloadSerializer` обрабатывает все шарды
-- `ShardAndFlushBatch()`: нет проверки `TargetShardIds` (поле пустое)
+- `TargetShardIds` = `nullopt` → `SplitByShards()` всегда выполняет реальное hash-разделение (как в "Было")
 - Node affinity: нет (всё на executer-ноде)
 
 **Стало (с аффинити):**
@@ -843,17 +860,23 @@ if (enableShuffleElimination && !isCsWriteAffinitySink && !hasMap && !isFusedWit
 - Transform-стадия: `ColumnShardHashV1` hash-функция маршрутизирует строки по bucket'ам
 - Каждая sink-задача получает только строки для своего шарда (через HashShuffle routing)
 - WriteActor: `TargetShardIds` содержит ровно 1 шард
-- `ShardAndFlushBatch()`: `AFL_VERIFY(TargetShardIds->contains(shardId))` — каждая строка попадает в нужный шард
+- `SplitByShards()`: fast path — при `TargetShardIds->size() == 1` весь batch передаётся этому шарду без hash-разделения (routing уже доставил строки в правильную задачу)
 - Node affinity: каждая задача на ноде своего шарда → данные не пересекают ноды
 
-Инварианты в [`kqp_write_table.cpp`](ydb/core/kqp/runtime/kqp_write_table.cpp):
-- [`ShardAndFlushBatch()`](ydb/core/kqp/runtime/kqp_write_table.cpp:576): `AFL_VERIFY(TargetShardIds->contains(shardId))` — каждая строка попадает в нужный шард
-- Конструктор ([`kqp_write_table.cpp:446`](ydb/core/kqp/runtime/kqp_write_table.cpp:446)): `GetColumnShards()[i] == OrderedShardIds[i]`
-- Деструктор ([`kqp_write_table.cpp:511`](ydb/core/kqp/runtime/kqp_write_table.cpp:511)): `ActualShardIds ⊆ TargetShardIds`
+Изменения в [`kqp_write_table.cpp`](ydb/core/kqp/runtime/kqp_write_table.cpp) (`TColumnShardPayloadSerializer`):
+- Конструктор ([`446`](ydb/core/kqp/runtime/kqp_write_table.cpp:446)): новый параметр `targetShardIds` → член `TargetShardIds` (`std::optional<THashSet<ui64>>`)
+- [`SplitByShards()`](ydb/core/kqp/runtime/kqp_write_table.cpp:525): single-shard fast path (см. выше)
+- [`ShardAndFlushBatch()`](ydb/core/kqp/runtime/kqp_write_table.cpp:541): не изменяется — вызывает `SplitByShards()` и накапливает батчи per-shard
+
+Отладочная валидация корректности routing'а — compile-time флаг `KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK` (включается `./ya make -D KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK=yes`, см. [`runtime/ya.make`](ydb/core/kqp/runtime/ya.make)):
+- Конструктор: `AFL_VERIFY(TargetShardIds.has_value())`; при `KQP_WRITE_TABLE_TARGET_SHARD_IDS_EXPECTED_COUNT` — `AFL_VERIFY(TargetShardIds->size() == 1)`
+- `SplitByShards()`: вместо fast path — проверяет, что реальное hash-разделение даёт ровно 1 шард
+- Деструктор ([`484`](ydb/core/kqp/runtime/kqp_write_table.cpp:484)): `AFL_VERIFY(ShardIds ⊆ TargetShardIds)` — сериализатор не писал в чужие шарды
+- WriteActor ([`kqp_write_actor.cpp:919`](ydb/core/kqp/runtime/kqp_write_actor.cpp:919)): `AFL_VERIFY(ev->Sender.NodeId() == SelfId().NodeId())` — ответ на запись пришёл от локального ColumnShard
 
 #### 2.4.2 Proto поля: `TargetShardIds`, `ExpectedNodeId`
 
-Поля в `TKqpTableSinkSettings` ([`kqp.proto:934-938`](ydb/core/protos/kqp.proto:933)):
+Поля в `TKqpTableSinkSettings` ([`kqp.proto:934-939`](ydb/core/protos/kqp.proto:934)):
 ```protobuf
 message TKqpTableSinkSettings {
     // Target shard IDs for per-shard write affinity.
@@ -867,42 +890,34 @@ message TKqpTableSinkSettings {
 
 **`TargetShardIds` (repeated uint64, field #31)**
 
-Назначение: список shard ID, которые эта задача WriteActor должна записывать. Каждая задача владеет ровно одним шардом.
+Назначение: список shard ID, которые эта задача WriteActor должна записывать. В multi-task случае каждая задача владеет ровно одним шардом; в single-task случае единственная задача получает все шарды (раздел 2.3.4).
 
-Где задаётся: [`kqp_tasks_graph.cpp:4018`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4018) в `BuildInternalSinks()`:
+Где задаётся: [`kqp_tasks_graph.cpp:4022`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp:4022) в `BuildInternalSinks()`:
 ```cpp
 settings.AddTargetShardIds(shardId);
 ```
 
 Как используется:
-- [`kqp_write_actor.cpp:2948`](ydb/core/kqp/runtime/kqp_write_actor.cpp:2948) — `TargetShardIdsFromSettings()` читает proto, создаёт `THashSet<ui64>`
-- [`kqp_write_table.cpp:577`](ydb/core/kqp/runtime/kqp_write_table.cpp:577) — `AFL_VERIFY(TargetShardIds->contains(shardId))` проверяет, что строка адресована правильному шарду
-- [`kqp_write_table.cpp:511`](ydb/core/kqp/runtime/kqp_write_table.cpp:511) — destructor проверяет `ActualShardIds ⊆ TargetShardIds`
+- [`kqp_write_actor.cpp:2948`](ydb/core/kqp/runtime/kqp_write_actor.cpp:2948) — `TargetShardIdsFromSettings()` читает proto, создаёт `THashSet<ui64>`; передаётся через `TShardedWriteControllerSettings.TargetShardIds` ([`kqp_write_table.h:266`](ydb/core/kqp/runtime/kqp_write_table.h:266)) в `TColumnShardPayloadSerializer`
+- [`kqp_write_table.cpp:525`](ydb/core/kqp/runtime/kqp_write_table.cpp:525) — `SplitByShards()`: single-shard fast path
+- Под флагом `KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK` — валидация в конструкторе/деструкторе и в WriteActor (раздел 2.4.1)
 
 **`ExpectedNodeId` (optional uint64, field #32)**
 
-Назначение: node ID, на котором должна выполняться задача. Обеспечивает node affinity — задача запускается на той же ноде, что и ColumnShard.
-
-Где задаётся: [`kqp_tasks_graph.cpp`](ydb/core/kqp/executer_actor/kqp_tasks_graph.cpp) при построении графа задач, используя `ShardIdToNodeId` маппинг.
-
-Как используется:
-- [`kqp_planner.cpp:349`](ydb/core/kqp/executer_actor/kqp_planner.cpp:349) — задачи с `ExpectedNodeId` исключаются из общего планирования (уже назначены)
-- [`kqp_data_executer.cpp:1143`](ydb/core/kqp/executer_actor/kqp_data_executer.cpp:1143) — используется для сопоставления задач с нодами при исполнении
+Поле объявлено в proto, но **в текущей ветке не используется** (нигде не заполняется и не читается) — зарезервировано. Фактический пиннинг задач к нодам выполняется существующим in-memory механизмом (не изменяется в этой ветке): `CountComputeTasks` вызывает `MaxTasksGraph->AddTask(task, nodeId)` (раздел 2.3.3) → `PlaceTasks()` проставляет `task.Meta.ExpectedNodeId` (`TTaskMeta`, [`max_tasks_graph.cpp:543`](ydb/core/kqp/executer_actor/max_tasks_graph.cpp:543)) → `TKqpPlanner` размещает задачи с установленным `ExpectedNodeId` напрямую на этой ноде ([`kqp_planner.cpp:349`](ydb/core/kqp/executer_actor/kqp_planner.cpp:349)).
 
 **Было (origin/main):**
-- Поля `TargetShardIds` и `ExpectedNodeId` отсутствуют в `TKqpTableSinkSettings`
+- Поле `TargetShardIds` отсутствует в `TKqpTableSinkSettings`
 - WriteActor обрабатывает все шарды без фильтрации
-- Node affinity не поддерживается
+- Single-shard fast path в `SplitByShards()` отсутствует
 
 **Стало (без аффинити):**
-- Поля `TargetShardIds` и `ExpectedNodeId` существуют в proto, но не заполняются (пустые)
+- Поле `TargetShardIds` существует в proto, но не заполняется → `TargetShardIdsFromSettings()` возвращает `nullopt`
 - WriteActor обрабатывает все шарды без фильтрации (как в "Было")
-- Node affinity не поддерживается
 
 **Стало (с аффинити):**
-- `TargetShardIds` заполняется в `BuildInternalSinks()`: каждая задача получает ровно 1 shard ID
-- `ExpectedNodeId` заполняется при построении графа задач: задача пиннится к ноде своего шарда
-- WriteActor фильтрует строки по `TargetShardIds` (отбрасывает строки для чужих шардов)
-- Node affinity: задача выполняется на ноде своего ColumnShard → запись локально
+- `TargetShardIds` заполняется в `BuildInternalSinks()`: каждая задача получает свой шард
+- WriteActor: single-shard fast path в `SplitByShards()`; под отладочным флагом — валидация, что запись не ушла в чужие шарды и что шард локален
+- Node affinity: задача выполняется на ноде своего ColumnShard (через `TTaskMeta::ExpectedNodeId`) → запись локально
 
 

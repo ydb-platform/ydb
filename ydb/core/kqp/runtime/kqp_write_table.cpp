@@ -479,33 +479,6 @@ public:
         }
         AFL_ENSURE(shardingConclusion.GetResult() != nullptr);
         Sharding = shardingConclusion.DetachResult();
-
-#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
-        // Invariant: IShardingBase::OrderedShardIds must match GetColumnShards() order.
-        // kqp_tasks_graph.cpp assigns TargetShardIds[task_i] = GetColumnShards()[i],
-        // and IShardingBase::MakeSharding maps bucket i → OrderedShardIds[i].
-        // A mismatch means rows for the wrong shard arrive at this task and the
-        // AFL_VERIFY in ShardAndFlushBatch fires. Catch it here at construction time
-        // to get a clear early-failure message.
-        {
-            const auto& columnShards = sharding.GetColumnShards();
-            AFL_VERIFY((ui32)columnShards.size() == Sharding->GetShardsCount())
-                ("column_shards_size", columnShards.size())
-                ("sharding_shard_count", Sharding->GetShardsCount())
-                ("msg", "shard count mismatch between GetColumnShards() and IShardingBase");
-            for (ui32 i = 0; i < (ui32)columnShards.size(); ++i) {
-                const ui64 fromColumnShards = columnShards[i];
-                const ui64 fromOrderedShardIds = Sharding->GetShardIdByOrderIdx(i);
-                AFL_VERIFY(fromColumnShards == fromOrderedShardIds)
-                    ("idx", i)
-                    ("from_column_shards", fromColumnShards)
-                    ("from_ordered_shard_ids", fromOrderedShardIds)
-                    ("msg", "GetColumnShards()[i] != OrderedShardIds[i];"
-                            " kqp_tasks_graph.cpp TargetShardIds assignment uses GetColumnShards() order"
-                            " but IShardingBase::MakeSharding uses OrderedShardIds order; routing is broken");
-            }
-        }
-#endif
     }
 
     ~TColumnShardPayloadSerializer() {
@@ -568,23 +541,6 @@ public:
     void ShardAndFlushBatch(TRecordBatchPtr&& unshardedBatch, bool force) {
         auto splitResult = SplitByShards(unshardedBatch);
         for (auto [shardId, shardBatch] : splitResult) {
-#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
-            if (TargetShardIds.has_value()) {
-                AFL_VERIFY(TargetShardIds->contains(shardId))
-                    ("shard_id", shardId)
-                    ("target_shard_ids", GetTargetShardIdsDebugString())
-                    ("shards_count", Sharding->GetShardsCount())
-                    ("ordered_shard_ids", [&]() {
-                        TString s;
-                        const ui32 count = Sharding->GetShardsCount();
-                        for (ui32 i = 0; i < count; ++i) {
-                            s += ToString(i) + ":" + ToString(Sharding->GetShardIdByOrderIdx(i)) + ",";
-                        }
-                        return s;
-                    }())
-                    ("msg", "row routed to wrong task — shard not in TargetShardIds");
-            }
-#endif
             const i64 shardBatchMemory = NArrow::GetBatchDataSize(shardBatch);
             AFL_ENSURE(shardBatchMemory != 0);
 

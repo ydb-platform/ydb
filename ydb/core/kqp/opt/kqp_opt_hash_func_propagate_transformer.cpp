@@ -109,16 +109,7 @@ TMaybeNode<TKqpPhysicalTx> PropogateHashFuncToHashShuffles(
                         .UseSpilling().Build(false);
                 }
 
-                // Preserve ColumnShardHashV1 if already set by the optimizer
-                // (e.g. CTAS write affinity). Only overwrite if the hash func
-                // is unset or is a generic hash type (HashV1/HashV2).
-                const auto& existingHashFunc = hashShuffle.HashFunc();
-                if (existingHashFunc.IsValid()
-                        && existingHashFunc.Cast().StringValue() == ToString(NDq::EHashShuffleFuncType::ColumnShardHashV1)) {
-                    withHashFunc
-                        .HashFunc()
-                            .Build(ToString(NDq::EHashShuffleFuncType::ColumnShardHashV1));
-                } else {
+                if (!hashShuffle.HashFunc()) {
                     withHashFunc
                         .HashFunc()
                             .Build(ToString(hashTypeByStageID[stageID]));

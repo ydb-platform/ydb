@@ -1484,7 +1484,7 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
                             THashMap<ui64 /* shardId */, ui32 /* taskIdx */> shardToTaskIdx;
                             for (ui32 ti = 0; ti < stageInfo.Tasks.size(); ++ti) {
                                 const auto& task = GetTask(stageInfo.Tasks[ti]);
-                                if (task.Meta.Writes && !task.Meta.Writes->empty()) {
+                                if (task.Meta.Writes && task.Meta.Writes->size() == 1) {
                                     shardToTaskIdx[task.Meta.Writes->front().ShardId] = ti;
                                 }
                             }
@@ -3468,8 +3468,8 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         if (stageInfo.Meta.IsCsWriteAffinitySink()) {
             TVector<ui64> resolvedShardIds = stageInfo.Meta.GetColumnShardIds();
 
-            YQL_ENSURE(task.Meta.Writes && !task.Meta.Writes->empty(),
-                "CS Write Affinity: task has no Writes (stage "
+            YQL_ENSURE(task.Meta.Writes && task.Meta.Writes->size() == 1,
+                "CS Write Affinity: task has no Writes or multiple Writes (stage "
                 << stageInfo.Id << ")");
             ui64 shardId = task.Meta.Writes->front().ShardId;
             YQL_ENSURE(std::find(resolvedShardIds.begin(), resolvedShardIds.end(), shardId) != resolvedShardIds.end(),
@@ -4145,6 +4145,44 @@ void TKqpTasksGraph::CountSysViewScanTasks(TStageInfo& stageInfo) {
 void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCount) {
     const auto& stageId = stageInfo.Id;
     const auto& stage = stageInfo.Meta.GetStage(stageId);
+
+    if (stageInfo.Meta.IsCsWriteAffinitySink()) {
+        TVector<std::pair<ui64 /* shardId */, ui64 /* nodeId */>> shardNodes;
+
+        const auto orderedShardIds = stageInfo.Meta.GetColumnShardIds();
+        YQL_ENSURE(!orderedShardIds.empty(),
+            "CS Write Affinity: no shard source available for OLAP sink stage "
+            << stageId << ". ColumnTableInfoPtr and ShardKey are both null.");
+        for (const auto& shardId : orderedShardIds) {
+            auto it = GetMeta().ShardIdToNodeId.find(shardId);
+            YQL_ENSURE(it != GetMeta().ShardIdToNodeId.end(),
+                "CS Write Affinity: shard " << shardId
+                << " not found in ShardIdToNodeId (stage " << stageId
+                << ", ShardIdToNodeId size=" << GetMeta().ShardIdToNodeId.size()
+                << "). ResolveShards must include target table shards.");
+            shardNodes.emplace_back(shardId, it->second);
+        }
+
+        YDB_LOG_DEBUG("CS Write Affinity: creating per-shard tasks",
+            {"stageId", stageId}
+            , {"shardCount", shardNodes.size()});
+
+        std::list<TStageId> inputs;
+        for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
+            inputs.push_back(MakeStageId(stageId.TxId, stage.GetInputs(inputIndex).GetStageIndex()));
+        }
+
+        MaxTasksGraph->AddStage(stageInfo, TMaxTasksGraph::FIXED, inputs);
+        for (const auto& [shardId, nodeId] : shardNodes) {
+            auto& task = AddTask(stageInfo, TTask::UNKNOWN);
+            task.Meta.Writes.ConstructInPlace();
+            task.Meta.Writes->emplace_back(TTaskMeta::TShardInfo{.ShardId = shardId});
+            MaxTasksGraph->AddTask(task, nodeId);
+        }
+
+        return;
+    }
+
     ui32 partitionsCount = 1;
     ui32 inputTasks = 0;
     bool isShuffle = false;
@@ -4246,40 +4284,6 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         } else {
             auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount);
             partitionsCount = std::max(newPartitionCount, partitionsCount);
-        }
-    }
-
-    {
-        if (stageInfo.Meta.IsCsWriteAffinitySink()) {
-            TVector<std::pair<ui64 /* shardId */, ui64 /* nodeId */>> shardNodes;
-
-            const auto orderedShardIds = stageInfo.Meta.GetColumnShardIds();
-            YQL_ENSURE(!orderedShardIds.empty(),
-                "CS Write Affinity: no shard source available for OLAP sink stage "
-                << stageId << ". ColumnTableInfoPtr and ShardKey are both null.");
-            for (const auto& shardId : orderedShardIds) {
-                auto it = GetMeta().ShardIdToNodeId.find(shardId);
-                YQL_ENSURE(it != GetMeta().ShardIdToNodeId.end(),
-                    "CS Write Affinity: shard " << shardId
-                    << " not found in ShardIdToNodeId (stage " << stageId
-                    << ", ShardIdToNodeId size=" << GetMeta().ShardIdToNodeId.size()
-                    << "). ResolveShards must include target table shards.");
-                shardNodes.emplace_back(shardId, it->second);
-            }
-
-            YDB_LOG_DEBUG("CS Write Affinity: creating per-shard tasks",
-                {"stageId", stageId}
-                , {"shardCount", shardNodes.size()});
-
-            MaxTasksGraph->AddStage(stageInfo, TMaxTasksGraph::FIXED, inputs);
-            for (const auto& [shardId, nodeId] : shardNodes) {
-                auto& task = AddTask(stageInfo, TTask::UNKNOWN);
-                task.Meta.Writes.ConstructInPlace();
-                task.Meta.Writes->emplace_back(TTaskMeta::TShardInfo{.ShardId = shardId});
-                MaxTasksGraph->AddTask(task, nodeId);
-            }
-
-            return;
         }
     }
 

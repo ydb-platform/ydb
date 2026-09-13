@@ -10,7 +10,7 @@ using namespace NYql::NDq;
 
 class TKqpTaskRunnerExecutionContext : public TDqTaskRunnerExecutionContext {
 public:
-    TKqpTaskRunnerExecutionContext(ui64 txId, bool withSpilling, TMaybe<ui8> minFillPercentage, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback)
+    TKqpTaskRunnerExecutionContext(TTxId txId, bool withSpilling, TMaybe<ui8> minFillPercentage, TWakeUpCallback&& wakeUpCallback, TErrorCallback&& errorCallback)
         : TDqTaskRunnerExecutionContext(txId, std::move(wakeUpCallback), std::move(errorCallback))
         , WithSpilling_(withSpilling)
         , MinFillPercentage_(minFillPercentage)

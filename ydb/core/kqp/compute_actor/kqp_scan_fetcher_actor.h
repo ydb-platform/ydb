@@ -80,7 +80,7 @@ public:
         YDB_LOG_CREATE_CONTEXT(
             {"selfId", SelfId()},
             {"scanId", ScanId},
-            {"txId", std::get<ui64>(TxId)});
+            {"txId", TxId});
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);

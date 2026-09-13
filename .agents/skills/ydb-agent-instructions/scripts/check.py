@@ -361,11 +361,6 @@ def check_skill(path, root, report):
     claude_md = os.path.join(owner_dir, "CLAUDE.md")
     if not os.path.isfile(claude_md):
         report.warn(claude_md, 0, "missing; Claude Code reads CLAUDE.md, create it with %s, the line %r and one line per skill" % (CLAUDE_INCLUDE, CLAUDE_SKILLS_HEADER))
-    claude_dir = os.path.join(owner_dir, ".claude")
-    if os.path.islink(claude_dir):
-        report.error(claude_dir, 0, "is a symlink; symlinks are not used, Claude Code reaches the skill through CLAUDE.md")
-    elif os.path.isdir(os.path.join(claude_dir, "skills")):
-        report.error(claude_dir, 0, "holds skills; skills live only in .agents/skills")
 
     for reference in sorted(glob_files(os.path.join(skill_dir, "references"), ".md")):
         reference_text = load_text(reference, report)

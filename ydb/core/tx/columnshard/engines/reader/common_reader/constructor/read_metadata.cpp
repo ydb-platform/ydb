@@ -15,7 +15,7 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& read, const EReaderClass readerClass) {
     SetPKRangesFilter(read.PKRangesFilter);
-    InitShardingInfo(read.TableMetadataAccessor);
+    InitShardingInfo(read.GetTableMetadataAccessor());
     TxId = read.TxId;
     LockId = read.LockId;
     auto lockNodeId = read.LockNodeId;
@@ -45,10 +45,10 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
 
     ITableMetadataAccessor::TSelectMetadataContext context(
         owner->GetTablesManager(), owner->GetIndexVerified(), read.Orbit, owner->GetDataLocksManager());
-    SourcesConstructor = read.TableMetadataAccessor->SelectMetadata(context, read, readerClass);
+    SourcesConstructor = read.GetTableMetadataAccessor()->SelectMetadata(context, read, readerClass);
 
     if (!SourcesConstructor) {
-        return TConclusionStatus::Fail("cannot build sources constructor for " + read.TableMetadataAccessor->GetTablePath());
+        return TConclusionStatus::Fail("cannot build sources constructor for " + read.GetTableMetadataAccessor()->GetTablePath());
     }
 
     SourcesConstructor->InitCursor(read.GetScanCursorVerified());
@@ -90,10 +90,11 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
 }
 
 TReadMetadata::TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read)
-    : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
+    : TBase(schemaIndex, read.GetRequestSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
           read.GetScanCursorVerified(), read.GetTabletId())
     , DuplicateFilteringNeeded(read.NeedDuplicateFiltering())
-    , TableMetadataAccessor(read.TableMetadataAccessor)
+    , TableMetadataAccessor(read.GetTableMetadataAccessor())
+    , SourcesSorting(read.GetSourcesSorting())
     , ReadStats(std::make_shared<TReadStats>())
 {
 }
@@ -132,21 +133,30 @@ void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {
         return;
     }
 
-    const ui64 lock = *GetLockId();
-    if (GetBreakLockOnReadFinished()) {
-        owner.GetOperationsManager().GetLockVerified(lock).SetBroken();
-    } else {
-        NOlap::NTxInteractions::TTxConflicts conflicts;
-        for (auto&& lockIdToCommit : GetConflictingLockIds()) {
-            // if lockIdToCommit commits, lock must be broken
-            conflicts.Add(lockIdToCommit, lock);
-        }
-        if (!conflicts.IsEmpty()) {
-            auto writer = std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(
-                TableMetadataAccessor->GetPathIdVerified().InternalPathId, conflicts);
-            owner.GetOperationsManager().AddEventForLock(owner, lock, writer);
-        }
+    // Already broken, nothing left to arrange.
+    if (LockSharingInfo->IsBroken()) {
+        return;
     }
+
+    // The scan saw writes that only conflict if they commit. Remember them: break this lock if they commit.
+    const ui64 lock = *GetLockId();
+    NOlap::NTxInteractions::TTxConflicts conflicts;
+    for (auto&& lockIdToCommit : GetConflictingLockIds()) {
+        conflicts.Add(lockIdToCommit, lock);
+    }
+    if (!conflicts.IsEmpty()) {
+        auto writer = std::make_shared<NOlap::NTxInteractions::TEvReadFinishedWriter>(
+            TableMetadataAccessor->GetPathIdVerified().InternalPathId, conflicts);
+        owner.GetOperationsManager().AddEventForLock(owner, lock, writer);
+    }
+}
+
+void TReadMetadata::BreakLock() const {
+    LockSharingInfo->SetBroken();
+}
+
+bool TReadMetadata::HasWritesAndBroken() const {
+    return LockSharingInfo && LockSharingInfo->IsBroken() && LockSharingInfo->HasWrites();
 }
 
 void TReadMetadata::DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const {

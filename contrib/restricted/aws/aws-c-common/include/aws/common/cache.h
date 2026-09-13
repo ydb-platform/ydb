@@ -21,7 +21,7 @@ struct aws_cache_vtable {
 };
 
 /**
- * Base stucture for caches, used the linked hash table implementation.
+ * Base structure for caches, used the linked hash table implementation.
  */
 struct aws_cache {
     struct aws_allocator *allocator;

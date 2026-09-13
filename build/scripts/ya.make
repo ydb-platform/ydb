@@ -42,6 +42,7 @@ ELSEIF (PYTHON3)
         build_java_codenav_index.py
         build_java_with_error_prone2.py
         bundle_output.py
+        canonicalize_java_abi_jar.py
         cat.py
         cgo1_wrapper.py
         check_config_h.py

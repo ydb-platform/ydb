@@ -47,6 +47,35 @@ namespace NKikimr::NDDisk {
         }
 
         creds.SerializeResolvedForRequest(record.MutableCredentials());
+        const auto ownershipStatus = IsBroken() ? NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR
+            : !PersistentBufferReady ? NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY
+            : CheckPersistentBufferOwnership(creds);
+        if (ownershipStatus != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+            const TStringBuf errorReason = [&] {
+                switch (ownershipStatus) {
+                    case TStatus::ERROR:
+                        return TStringBuf("persistent buffer is broken");
+                    case TStatus::BUSY:
+                        return TStringBuf("persistent buffer is not ready yet");
+                    case TStatus::OUTDATED:
+                        return TStringBuf("persistent buffer registration is being retired");
+                    case TStatus::INCORRECT_REQUEST:
+                        return TStringBuf("persistent buffer is not registered");
+                    default:
+                        return TStringBuf("persistent buffer registration is not ready, registered, or active");
+                }
+            }();
+            auto result = std::make_unique<TEvWritePersistentBuffersResult>();
+            for (const auto& id : record.GetPersistentBufferIds()) {
+                auto* item = result->Record.AddResult();
+                item->MutablePersistentBufferId()->CopyFrom(id);
+                item->MutableResult()->SetStatus(ownershipStatus);
+                item->MutableResult()->SetErrorReason(errorReason.data(), errorReason.size());
+            }
+            SendReply(*ev, std::move(result));
+            return;
+        }
         if constexpr (requires { record.ChecksumsSize(); record.GetSelector(); }) {
             if (!Config.EnableChecksums) {
                 // Do not forward sender-supplied checksums into the checksum-less PB v0 format.
@@ -594,6 +623,9 @@ namespace {
             }
         }
         STRICT_STFUNC_BODY(
+            hFunc(TEvRegisterPersistentBuffer, Handle)
+            hFunc(TEvUnregisterPersistentBuffer, Handle)
+            hFunc(TEvPrivate::TEvProcessPersistentBufferRemoval, Handle)
             hFunc(TEvConnect, Handle)
             hFunc(TEvDisconnect, Handle)
             hFunc(TEvWritePersistentBuffer, Handle)

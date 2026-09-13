@@ -355,7 +355,7 @@ void TICStorageTransportActor::SendPBufferRegistration(
             request.ConnectionResult.GetDDiskInstanceGuid();
         credentials.ConnectionToken.emplace(
             request.ConnectionResult.GetConnectionToken());
-        if (request.RegistrationToken.empty()) {
+        if (!request.RegistrationToken) {
             SendWithUndeliveryTracking(
                 ctx,
                 request.ServiceId,

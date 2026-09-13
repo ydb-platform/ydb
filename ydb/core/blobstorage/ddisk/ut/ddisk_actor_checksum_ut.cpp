@@ -1,3 +1,5 @@
+#include "ddisk_actor_test_helpers.h"
+
 // Contract tests for sender-supplied 4 KiB checksums on direct DDisk and persistent-buffer writes,
 // and for pure-checksum propagation on direct DDisk reads (see RFC 006).
 //
@@ -590,13 +592,7 @@ TRope MakeAlignedRope(const TString& data) {
     return TRope(std::move(buf));
 }
 
-TString GetRegistrationToken(TTestContext& ctx, const TActorId& serviceId, const NDDisk::TQueryCredentials& creds) {
-    auto result = SendToDDiskAndWait<NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(ctx, serviceId,
-        new NDDisk::TEvGetPersistentBufferRegistrationToken(creds));
-    AssertStatus(result, TReplyStatus::OK);
-    UNIT_ASSERT(!result->Get()->Record.GetToken().empty());
-    return result->Get()->Record.GetToken();
-}
+using NDDisk::NTesting::GetRegistrationToken;
 
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, const TActorId& serviceId, ui64 tabletId, ui32 generation) {
     const bool isPersistentBuffer = serviceId.IsService() && serviceId.ServiceId().StartsWith("NPB_");

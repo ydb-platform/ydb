@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
             return response->Get()->Record;
         }
 
-        TString GetRegistrationToken(const NDDisk::TQueryCredentials& creds) {
+        ui64 GetRegistrationToken(const NDDisk::TQueryCredentials& creds) {
             Env.Runtime->Send(new IEventHandle(PBServiceId, Edge,
                 new NDDisk::TEvGetPersistentBufferRegistrationToken(creds)), Edge.NodeId());
             auto result = Env.WaitForEdgeActorEvent<NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(Edge, false);

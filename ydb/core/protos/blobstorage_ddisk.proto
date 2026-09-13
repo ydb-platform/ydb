@@ -254,7 +254,7 @@ message TEvGetPersistentBufferRegistrationToken {
 message TEvGetPersistentBufferRegistrationTokenResult {
     TReplyStatus.E Status = 1;
     optional string ErrorReason = 2;
-    string Token = 3;
+    uint64 Token = 3;
 }
 
 // A durable registration of (TabletId, DirectBlockGroupIndex), independent of connections.
@@ -262,7 +262,9 @@ message TEvGetPersistentBufferRegistrationTokenResult {
 // does not consume it; retries must reuse the token without extending its lifetime.
 message TEvRegisterPersistentBuffer {
     TRequestCredentials Credentials = 1;
-    string Token = 2;
+    reserved 2; // former TimestampMicroseconds
+    reserved "TimestampMicroseconds";
+    uint64 Token = 3;
 }
 
 message TEvRegisterPersistentBufferResult {

@@ -65,7 +65,7 @@ struct TRegistrationFixture
         UNIT_ASSERT(!Future.HasValue());
         auto reply = std::make_unique<
             NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(status);
-        reply->Record.SetToken("test-registration-token");
+        reply->Record.SetToken(42);
         Runtime.Send(
             new IEventHandle(
                 Transport,
@@ -83,9 +83,7 @@ struct TRegistrationFixture
                 Peer,
                 false);
         UNIT_ASSERT(!Future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(
-            registration->Get()->Record.GetToken(),
-            "test-registration-token");
+        UNIT_ASSERT_VALUES_EQUAL(registration->Get()->Record.GetToken(), 42);
         Runtime.Send(
             new IEventHandle(
                 Transport,

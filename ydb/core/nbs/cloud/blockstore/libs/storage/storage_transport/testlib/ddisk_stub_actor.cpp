@@ -212,7 +212,7 @@ void TDDiskStubActor::HandleGetPersistentBufferRegistrationToken(
     auto reply =
         std::make_unique<NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(
             TReplyStatus::OK);
-    reply->Record.SetToken("stub-registration-token");
+    reply->Record.SetToken(1);
     ctx.Send(ev->Sender, reply.release(), 0, ev->Cookie);
 }
 

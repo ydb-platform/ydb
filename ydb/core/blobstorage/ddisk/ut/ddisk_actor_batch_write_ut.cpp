@@ -1,3 +1,5 @@
+#include "ddisk_actor_test_helpers.h"
+
 // Tests for ProcessPersistentBufferBatchWrite:
 // verifies that data is written and restored correctly with a unified header sector.
 //
@@ -350,13 +352,7 @@ TString MakeData(char ch, ui32 size) {
     return data;
 }
 
-TString GetRegistrationToken(TTestContext& ctx, const TActorId& serviceId, const NDDisk::TQueryCredentials& creds) {
-    auto result = SendToDDiskAndWait<NDDisk::TEvGetPersistentBufferRegistrationTokenResult>(ctx, serviceId,
-        new NDDisk::TEvGetPersistentBufferRegistrationToken(creds));
-    AssertStatus(result, TReplyStatus::OK);
-    UNIT_ASSERT(!result->Get()->Record.GetToken().empty());
-    return result->Get()->Record.GetToken();
-}
+using NDDisk::NTesting::GetRegistrationToken;
 
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, const TActorId& serviceId, ui64 tabletId, ui32 generation) {
     const bool isPersistentBuffer = serviceId.IsService() && serviceId.ServiceId().StartsWith("NPB_");

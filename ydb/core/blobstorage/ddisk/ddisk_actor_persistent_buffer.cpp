@@ -1,8 +1,6 @@
 #include "ddisk_actor.h"
 #include "direct_io_op.h"
 
-#include <util/generic/guid.h>
-
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/util/hp_timer_helpers.h>
@@ -1888,29 +1886,61 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::Handle(TEvGetPersistentBufferRegistrationToken::TPtr ev) {
         using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
-        if (!CheckQuery(*ev, nullptr)) {
+        auto& counters = Counters.Interface.GetPersistentBufferRegistrationToken;
+        if (!CheckQuery(*ev, &counters)) {
             return;
         }
+        counters.Request();
+        auto reply = [&](TStatus::E status, const TString& reason = {}, ui64 token = 0) {
+            counters.Reply(status == TStatus::OK);
+            auto result = std::make_unique<TEvGetPersistentBufferRegistrationTokenResult>(status, reason);
+            result->Record.SetToken(token);
+            SendReply(*ev, std::move(result));
+        };
         const TQueryCredentials creds(ev->Get()->Record.GetCredentials());
         if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
-            SendReply(*ev, std::make_unique<TEvGetPersistentBufferRegistrationTokenResult>(
-                TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration"));
+            reply(TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration");
             return;
         }
-        const auto token = CreateGuidAsString();
+        if (PersistentBufferRegistrationTokens.size() >= PersistentBufferFormat.MaxRegistrationTokens) {
+            reply(TStatus::OVERLOADED, "registration token limit reached");
+            return;
+        }
+        // Keep numbers unique across PB actor restarts within this process.
+        // A process restart invalidates the connection credentials checked above.
+        static std::atomic<ui64> nextToken{0};
+        const ui64 token = nextToken.fetch_add(1, std::memory_order_relaxed) + 1;
+        Y_ABORT_UNLESS(token, "registration token counter overflow");
         PersistentBufferRegistrationTokens.emplace(token, TPersistentBufferRegistrationToken{
             TActivationContext::Monotonic(),
             {creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)},
             creds.Generation});
-        Schedule(TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds),
-            new TEvPrivate::TEvExpirePersistentBufferRegistrationToken(token));
-        auto reply = std::make_unique<TEvGetPersistentBufferRegistrationTokenResult>(TStatus::OK);
-        reply->Record.SetToken(token);
-        SendReply(*ev, std::move(reply));
+        // Consumed tokens free their slots immediately, without accumulating expiry timers.
+        if (!PersistentBufferRegistrationTokenExpiryScheduled) {
+            PersistentBufferRegistrationTokenExpiryScheduled = true;
+            Schedule(TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds),
+                new TEvPrivate::TEvExpirePersistentBufferRegistrationToken);
+        }
+        reply(TStatus::OK, {}, token);
     }
 
-    void TDDiskActor::Handle(TEvPrivate::TEvExpirePersistentBufferRegistrationToken::TPtr ev) {
-        PersistentBufferRegistrationTokens.erase(ev->Get()->Token);
+    void TDDiskActor::Handle(TEvPrivate::TEvExpirePersistentBufferRegistrationToken::TPtr) {
+        const auto now = TActivationContext::Monotonic();
+        const auto timeout = TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds);
+        auto nextExpiry = TMonotonic::Max();
+        for (auto it = PersistentBufferRegistrationTokens.begin(); it != PersistentBufferRegistrationTokens.end();) {
+            const auto expiry = it->second.IssuedAt + timeout;
+            if (expiry <= now) {
+                PersistentBufferRegistrationTokens.erase(it++);
+            } else {
+                nextExpiry = Min(nextExpiry, expiry);
+                ++it;
+            }
+        }
+        PersistentBufferRegistrationTokenExpiryScheduled = !PersistentBufferRegistrationTokens.empty();
+        if (PersistentBufferRegistrationTokenExpiryScheduled) {
+            Schedule(nextExpiry - now, new TEvPrivate::TEvExpirePersistentBufferRegistrationToken);
+        }
     }
 
     void TDDiskActor::Handle(TEvRegisterPersistentBuffer::TPtr ev) {
@@ -1920,6 +1950,10 @@ namespace NKikimr::NDDisk {
         }
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
+        if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
+            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration"));
+            return;
+        }
         const auto tokenIt = PersistentBufferRegistrationTokens.find(record.GetToken());
         if (tokenIt == PersistentBufferRegistrationTokens.end()
                 || TActivationContext::Monotonic() - tokenIt->second.IssuedAt
@@ -1934,10 +1968,6 @@ namespace NKikimr::NDDisk {
                 || token.Generation != creds.Generation) {
             SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(
                 TStatus::INCORRECT_REQUEST, "registration token belongs to another tablet, generation or DBG"));
-            return;
-        }
-        if (!creds.TabletId || creds.DirectBlockGroupIndex > Max<ui8>()) {
-            SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration"));
             return;
         }
         if (!PersistentBufferReady) {

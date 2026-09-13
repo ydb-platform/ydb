@@ -31,7 +31,7 @@ struct TEvTransportPrivate
         NThreading::TPromise<ui32> DisconnectPromise =
             NThreading::NewPromise<ui32>();
         // Issued by the PB once; reuse on BUSY/OVERLOADED retries.
-        TString RegistrationToken;
+        ui64 RegistrationToken = 0;
 
         TConnect(
             const NActors::TActorId& serviceId,

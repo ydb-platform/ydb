@@ -710,7 +710,7 @@ namespace {
             REJECT_QUERY(Write, &Counters.Interface.Write)
             REJECT_QUERY(Read, &Counters.Interface.Read)
             REJECT_QUERY(Sync, &Counters.Interface.Sync)
-            REJECT_QUERY(GetPersistentBufferRegistrationToken, nullptr)
+            REJECT_QUERY(GetPersistentBufferRegistrationToken, &Counters.Interface.GetPersistentBufferRegistrationToken)
             REJECT_QUERY(RegisterPersistentBuffer, nullptr)
             REJECT_QUERY(UnregisterPersistentBuffer, nullptr)
             REJECT_QUERY(DeleteTabletChunks, nullptr)

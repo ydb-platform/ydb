@@ -123,7 +123,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
                 rawPathId = internalPathId.GetRawValue();
                 Self->Counters.GetColumnTablesCounters()->GetPathIdCounter(internalPathId)->OnReadEvent();
             }
-            LWTRACK(StartScan, *orbit, rawPathId, Self->TabletID(), request.GetTxId(), request.GetScanId());
+            LWTRACK(StartScan, *orbit, rawPathId, Self->TabletID(), txId, request.GetScanId());
         }
 
         const TString defaultReader = [&]() {

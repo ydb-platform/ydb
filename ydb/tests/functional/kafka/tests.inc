@@ -17,6 +17,7 @@ SRCS(
     transactions_ut.cpp
     admin_ut.cpp
     groups_offsets_ut.cpp
+    protocol_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

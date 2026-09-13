@@ -321,7 +321,7 @@ protected:
             }
 
             if (stageInfo.Meta.IsCsWriteAffinitySink()) {
-                for (const auto& shardId : GetCsWriteAffinityShardIds(stageInfo.Meta)) {
+                for (const auto& shardId : stageInfo.Meta.GetColumnShardIds()) {
                     shardIds.insert(shardId);
                 }
             }

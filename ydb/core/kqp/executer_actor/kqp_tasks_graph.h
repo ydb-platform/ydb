@@ -205,8 +205,19 @@ struct TStageInfoMeta {
     bool IsCsWriteAffinitySink() const {
         return IsCsWriteAffinity;
     }
+
+    TVector<ui64> GetColumnShardIds() const {
+        YQL_ENSURE(ColumnTableInfoPtr != nullptr,
+            "GetColumnShardIds: ColumnTableInfoPtr is nullptr");
+        const auto& sharding = ColumnTableInfoPtr->Description.GetSharding();
+        TVector<ui64> shardIds;
+        shardIds.reserve(sharding.ColumnShardsSize());
+        for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
+            shardIds.push_back(sharding.GetColumnShards(si));
+        }
+        return shardIds;
+    }
 };
-TVector<ui64> GetCsWriteAffinityShardIds(const TStageInfoMeta& meta);
 
 // things which are common for all tasks in the graph.
 struct TGraphMeta {

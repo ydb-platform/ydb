@@ -639,6 +639,20 @@ static bool IsCsWriteAffinitySinkStage(const NKqpProto::TKqpPhyStage& stage) {
     return sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL;
 }
 
+static std::shared_ptr<TVector<NScheme::TTypeInfo>> ReadColumnShardHashV1KeyColumnTypes(
+    const NKqpProto::TKqpPhyCnHashShuffle& hashShuffle)
+{
+    const auto& columnShardHashV1 = hashShuffle.GetColumnShardHashV1();
+    auto keyTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
+    keyTypes->reserve(columnShardHashV1.KeyColumnTypesSize());
+    for (const auto& keyColumnType : columnShardHashV1.GetKeyColumnTypes()) {
+        auto typeId = static_cast<NScheme::TTypeId>(keyColumnType);
+        auto typeInfo =
+            typeId == NScheme::NTypeIds::Decimal? NScheme::TTypeInfo(NKikimr::NScheme::TDecimalType::Default()): NScheme::TTypeInfo(typeId);
+        keyTypes->push_back(typeInfo);
+    }
+    return keyTypes;
+}
 } // anonymous namespace
 
 void TKqpTasksGraph::FillStages() {
@@ -1346,96 +1360,6 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     }
 }
 
-// Get the canonical ordered shard IDs for a CS write-affinity OLAP sink,
-// matching the order used by IShardingBase::BuildFromProto/GetOrderedShardIds()
-// which is the same order used by SplitByShardsToArrowBatches at runtime.
-// When ShardsInfo is present, shards are sorted by SequenceIdx.
-
-static std::shared_ptr<TVector<ui64>> BuildTaskIndexByHash(
-    const TVector<ui64>& orderedShardIds,
-    const THashMap<ui64, ui32>& shardToTaskIdx)
-{
-    const ui32 N = orderedShardIds.size();
-    auto taskIndexByHash = std::make_shared<TVector<ui64>>(N, 0);
-    for (ui32 i = 0; i < N; ++i) {
-        (*taskIndexByHash)[i] = shardToTaskIdx.at(orderedShardIds[i]);
-    }
-    return taskIndexByHash;
-}
-
-// Key column types are resolved at compile time (the query compiler fills
-// TColumnShardHashV1.KeyColumnTypes from the connection row type) and stored
-// in the physical plan; convert them to runtime TTypeInfo.
-static std::shared_ptr<TVector<NScheme::TTypeInfo>> ReadColumnShardHashV1KeyColumnTypes(
-    const NKqpProto::TColumnShardHashV1& columnShardHashV1)
-{
-    auto keyTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
-    keyTypes->reserve(columnShardHashV1.KeyColumnTypesSize());
-    for (const auto& keyColumnType : columnShardHashV1.GetKeyColumnTypes()) {
-        auto typeId = static_cast<NScheme::TTypeId>(keyColumnType);
-        auto typeInfo =
-            typeId == NScheme::NTypeIds::Decimal? NScheme::TTypeInfo(NKikimr::NScheme::TDecimalType::Default()): NScheme::TTypeInfo(typeId);
-        keyTypes->push_back(typeInfo);
-    }
-    return keyTypes;
-}
-
-// Build ColumnShardHashV1 params for a CS write-affinity Sink Stage.
-//
-// This is used by kColumnShardHashV1 for CTAS write affinity:
-// the optimizer emits TDqCnHashShuffle with ColumnShardHashV1, and this
-// function builds the runtime params (TaskIndexByHash, etc). Key columns and
-// their types are resolved at compile time and taken from the physical plan
-// proto (same as shuffle elimination).
-//
-TVector<ui64> GetCsWriteAffinityShardIds(const TStageInfoMeta& meta) {
-    YQL_ENSURE(meta.ColumnTableInfoPtr != nullptr,
-        "CS Write Affinity: ColumnTableInfoPtr is nullptr");
-    const auto& sharding = meta.ColumnTableInfoPtr->Description.GetSharding();
-
-    TVector<ui64> shardIds;
-    shardIds.reserve(sharding.ColumnShardsSize());
-    for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
-        shardIds.push_back(sharding.GetColumnShards(si));
-    }
-    return shardIds;
-}
-
-static std::shared_ptr<TVector<ui64>> BuildColumnShardHashV1TaskIndexByHash(
-    const TStageInfo& stageInfo,
-    const THashMap<ui64 /* shardId */, ui32 /* taskIdx */>& shardToTaskIdx)
-{
-    TVector<ui64> orderedShardIds = GetCsWriteAffinityShardIds(stageInfo.Meta);
-    return BuildTaskIndexByHash(orderedShardIds, shardToTaskIdx);
-}
-
-static void BuildColumnShardHashV1ForWriteAffinity(
-    TKqpTasksGraph& graph,
-    const TStageInfo& stageInfo,
-    TStageInfo& inputStageInfo,
-    ui32 outputIdx,
-    std::shared_ptr<TVector<NScheme::TTypeInfo>> keyTypes)
-{
-    THashMap<ui64 /* shardId */, ui32 /* taskIdx */> shardToTaskIdx;
-    for (ui32 ti = 0; ti < stageInfo.Tasks.size(); ++ti) {
-        const auto& task = graph.GetTask(stageInfo.Tasks[ti]);
-        if (task.Meta.Writes && !task.Meta.Writes->empty()) {
-            shardToTaskIdx[task.Meta.Writes->front().ShardId] = ti;
-        }
-    }
-
-    AFL_VERIFY(shardToTaskIdx.size() == stageInfo.Tasks.size())
-        ("stageId", stageInfo.Id)
-        ("shardToTaskIdxSize", shardToTaskIdx.size())
-        ("tasksCount", stageInfo.Tasks.size())
-        ("msg", "Not all tasks have Writes");
-
-    auto& params = inputStageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
-    params.TaskIndexByHash = BuildColumnShardHashV1TaskIndexByHash(stageInfo, shardToTaskIdx);
-    params.SourceShardCount = shardToTaskIdx.size();
-    params.SourceTableKeyColumnTypes = std::move(keyTypes);
-}
-
 void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination) {
     const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
@@ -1463,11 +1387,6 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
     bool hasMap = false;
     auto& columnShardHashV1Params = stageInfo.Meta.ColumnShardHashV1Params;
     bool isFusedWithScanStage = (stageInfo.Meta.TableConstInfo != nullptr);
-    // Skip shuffle elimination for CS Write Affinity sink stages:
-    // shuffle elimination uses stageInfo.Tasks.size() (Transform Stage task count)
-    // as SourceShardCount, which reflects the upstream source table's shard count,
-    // not the destination table's shard count. This causes hash bucket mismatch
-    // between DQ ColumnShardHashV1 routing and runtime TConsistencySharding64.
     const bool isCsWriteAffinitySink = stageInfo.Meta.IsCsWriteAffinitySink();
     if (enableShuffleElimination && !isCsWriteAffinitySink && !isFusedWithScanStage) { // taskIdHash can be already set if it is a fused stage, so hashpartition will derive columnv1 parameters from there
         for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
@@ -1515,14 +1434,12 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
             // ^ if the flag if false, and kColumnShardHashV1 detected - then the data which would be returned - would be incorrect,
             // because we didn't save partitioning in the BuildScanTasksFromShards.
 
-            columnShardHashV1Params.SourceTableKeyColumnTypes =
-                ReadColumnShardHashV1KeyColumnTypes(hashShuffle.GetColumnShardHashV1());
+            columnShardHashV1Params.SourceTableKeyColumnTypes = ReadColumnShardHashV1KeyColumnTypes(hashShuffle);
             break;
         }
     }
 
     ui64 nextOriginTaskId = 0;
-
     for (const auto& input : stage.GetInputs()) {
         ui32 inputIdx = input.GetInputIndex();
         auto& inputStageInfo = GetStageInfo(MakeStageId(stageInfo.Id.TxId, input.GetStageIndex()));
@@ -1545,13 +1462,54 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
                         break;
                     }
                     case NKqpProto::TKqpPhyCnHashShuffle::kColumnShardHashV1: {
+                        auto keyTypes = ReadColumnShardHashV1KeyColumnTypes(input.GetHashShuffle());
+
+                        YDB_LOG_DEBUG("Propagating column shard hash v1 params to input stage",
+                            {"inputStageTxId", inputStageInfo.Id.TxId},
+                            {"inputStageId", inputStageInfo.Id.StageId},
+                            {"stageTxId", stageInfo.Id.TxId},
+                            {"stageId", stageInfo.Id.StageId},
+                            {"columnShardHashKeyTypes", columnShardHashV1Params.KeyTypesToString()},
+                            {"keyColumns", JoinSeq(",", input.GetHashShuffle().GetKeyColumns())});
+
+                        Y_ENSURE(
+                            keyTypes->size() == input.GetHashShuffle().KeyColumnsSize(),
+                            TStringBuilder{}
+                                << "Hashshuffle keycolumns and keytypes args count mismatch during executer stage, types: "
+                                << columnShardHashV1Params.KeyTypesToString() << " for the columns: "
+                                << "[" << JoinSeq(",", input.GetHashShuffle().GetKeyColumns()) << "]"
+                        );
+
                         if (isCsWriteAffinitySink) {
-                            BuildColumnShardHashV1ForWriteAffinity(
-                                *this, stageInfo, inputStageInfo, outputIdx,
-                                ReadColumnShardHashV1KeyColumnTypes(input.GetHashShuffle().GetColumnShardHashV1()));
-                        } else {
-                            Y_ENSURE(enableShuffleElimination, "OptShuffleElimination wasn't turned on, but ColumnShardHashV1 detected!");
+                            THashMap<ui64 /* shardId */, ui32 /* taskIdx */> shardToTaskIdx;
+                            for (ui32 ti = 0; ti < stageInfo.Tasks.size(); ++ti) {
+                                const auto& task = GetTask(stageInfo.Tasks[ti]);
+                                if (task.Meta.Writes && !task.Meta.Writes->empty()) {
+                                    shardToTaskIdx[task.Meta.Writes->front().ShardId] = ti;
+                                }
+                            }
+
+                            AFL_VERIFY(shardToTaskIdx.size() == stageInfo.Tasks.size())
+                                ("stageId", stageInfo.Id)
+                                ("shardToTaskIdxSize", shardToTaskIdx.size())
+                                ("tasksCount", stageInfo.Tasks.size())
+                                ("msg", "Not all tasks have Writes");
+
+                            auto& params = inputStageInfo.Meta.GetColumnShardHashV1Params(outputIdx);
+                            const TVector<ui64> orderedShardIds = stageInfo.Meta.GetColumnShardIds();
+                            const ui32 N = orderedShardIds.size();
+                            auto taskIndexByHash = std::make_shared<TVector<ui64>>(N, 0);
+                            for (ui32 i = 0; i < N; ++i) {
+                                (*taskIndexByHash)[i] = shardToTaskIdx.at(orderedShardIds[i]);
+                            }
+                            params.TaskIndexByHash = taskIndexByHash;
+                            params.SourceShardCount = shardToTaskIdx.size();
+                            params.SourceTableKeyColumnTypes = std::move(keyTypes);
+                        } else if (enableShuffleElimination) {
+                            columnShardHashV1Params.SourceTableKeyColumnTypes = keyTypes;
                             inputStageInfo.Meta.HashParamsByOutput[outputIdx] = columnShardHashV1Params;
+                        } else {
+                            Y_ENSURE(false, "Unexpected ColumnShardHashV1 detected!");
                         }
                         hashKind = EHashShuffleFuncType::ColumnShardHashV1;
                         break;
@@ -1562,8 +1520,6 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
                 }
 
                 Y_ENSURE(hashKind.has_value(), "HashKind wasn't set!");
-                // Key columns are taken from the physical plan proto directly, the same
-                // way for write affinity and shuffle elimination.
                 BuildHashShuffleChannels(
                     *this,
                     stageInfo,
@@ -2652,12 +2608,29 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
             }
         }
     } else if (shuffleEliminated /* save partitioning for shuffle elimination */) {
-        THashMap<ui64 /* taskId */, ui32 /* position in stageInfo.Tasks */> taskPositionInStage;
+        columnShardHashV1Params.TaskIndexByHash = std::make_shared<TVector<ui64>>();
+        columnShardHashV1Params.TaskIndexByHash->resize(columnShardHashV1Params.SourceShardCount);
+
+        // in runtime we calc hash, which will be in [0; shardcount]
+        // so we merge two mappings: hash -> shardID and shardID -> channelID for runtime
+        THashMap<ui64, ui64> hashByShardId;
+        Y_ENSURE(stageInfo.Meta.ColumnTableInfoPtr != nullptr, "ColumnTableInfoPtr is nullptr, maybe information about shards haven't been delivered yet.");
+        const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
+        const auto& sharding = tableDesc.GetSharding();
+        for (std::size_t si = 0; si < sharding.ColumnShardsSize(); ++si) {
+            hashByShardId.insert({sharding.GetColumnShards(si), si});
+        }
+
+        // The shuffling stage creates one output channel per task of this stage, walking stageInfo.Tasks in order
+        // (BuildHashShuffleChannels), and at runtime TaskIndexByHash is used as an index into that channel vector
+        // (TColumnShardHashV1::Finish). So a task must be addressed by its position in the placed stageInfo.Tasks,
+        // not by its position in the nodeShards traversal below: tasksByNode preserves the order inside a node, but
+        // nodeShards is a hash map, so the per-node blocks come in an order unrelated to the placed one.
+        THashMap<ui64 /* taskId */, ui64 /* position in stageInfo.Tasks */> taskPositionInStage;
         for (std::size_t i = 0; i < stageInfo.Tasks.size(); ++i) {
             taskPositionInStage[stageInfo.Tasks[i]] = i;
         }
 
-        THashMap<ui64 /* shardId */, ui32 /* taskIdx */> shardToTaskIdx;
         for (auto&& [nodeId, shardsInfo] : nodeShards) {
             auto& nodeTasks = tasksByNode.at(nodeId);
             const ui32 tasksPerNode = nodeTasks.size();
@@ -2689,14 +2662,13 @@ void TKqpTasksGraph::BuildScanTasksFromShards(TStageInfo& stageInfo, bool enable
                 task.Meta.ScanTask = true;
                 task.SetMetaId(t);
 
-                const ui32 stageInternalTaskId = taskPositionInStage.at(nodeTasks[t]);
+                const ui64 stageInternalTaskId = taskPositionInStage.at(nodeTasks[t]);
                 for (const auto& readInfo: *task.Meta.Reads) {
-                    shardToTaskIdx[readInfo.ShardId] = stageInternalTaskId;
+                    Y_ENSURE(hashByShardId.contains(readInfo.ShardId));
+                    (*columnShardHashV1Params.TaskIndexByHash)[hashByShardId[readInfo.ShardId]] = stageInternalTaskId;
                 }
             }
         }
-
-        columnShardHashV1Params.TaskIndexByHash = BuildColumnShardHashV1TaskIndexByHash(stageInfo, shardToTaskIdx);
     } else {
         ui32 metaId = 0;
         for (auto& [nodeId, shardsInfo] : nodeShards) {
@@ -3494,7 +3466,7 @@ void TKqpTasksGraph::BuildInternalSinks(const NKqpProto::TKqpSink& sink, const T
         FillKqpTableSinkSettings(settings, internalSinksOrder, task);
 
         if (stageInfo.Meta.IsCsWriteAffinitySink()) {
-            TVector<ui64> resolvedShardIds = GetCsWriteAffinityShardIds(stageInfo.Meta);
+            TVector<ui64> resolvedShardIds = stageInfo.Meta.GetColumnShardIds();
 
             YQL_ENSURE(task.Meta.Writes && !task.Meta.Writes->empty(),
                 "CS Write Affinity: task has no Writes (stage "
@@ -4281,7 +4253,7 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         if (stageInfo.Meta.IsCsWriteAffinitySink()) {
             TVector<std::pair<ui64 /* shardId */, ui64 /* nodeId */>> shardNodes;
 
-            const auto orderedShardIds = GetCsWriteAffinityShardIds(stageInfo.Meta);
+            const auto orderedShardIds = stageInfo.Meta.GetColumnShardIds();
             YQL_ENSURE(!orderedShardIds.empty(),
                 "CS Write Affinity: no shard source available for OLAP sink stage "
                 << stageId << ". ColumnTableInfoPtr and ShardKey are both null.");

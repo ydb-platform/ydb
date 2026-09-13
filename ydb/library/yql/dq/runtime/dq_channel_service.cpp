@@ -1252,6 +1252,7 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     }
 #endif
     item->State.store(TOutputItem::EState::Sent);
+    item->SentAt = TInstant::Now();
 }
 
 void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason) {
@@ -2182,15 +2183,29 @@ void TNodeState::HandleCleanup() {
     auto idlePeriod = now - LastPeerActivity.load();
 
     if (OutputDescriptors.empty() && InputDescriptors.empty()) {
+        // Whether the session is still in use is a question about the peer, and any traffic of the peer
+        // answers it - its data as much as its acks.
         if (idlePeriod > Limits.IdleDestroyPeriod) {
             Terminating.store(true);
             ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
                 new TEvPrivate::TEvFreeNodeSession(NodeId)));
         }
-    } else {
-        if (idlePeriod > Limits.IdlePingPeriod) {
-            StartReconciliation(false, 'I');
-        }
+    } else if (!Queue.empty() && now - Queue.front()->SentAt > Limits.IdlePingPeriod) {
+        // Whether our own sending has stalled is a different question, and the traffic of the peer does not
+        // answer it: one session covers both directions of a node pair, so data arriving on a channel this
+        // node receives says nothing about a queue stuck on a channel it sends. The front of the Queue is
+        // the oldest message the peer has not confirmed and it is the thing which stalls, so the watchdog
+        // asks about it directly.
+        //
+        // It has to exist: the receiver drops data silently when the generation is stale and when the SeqNo
+        // is at or below the confirmed one, neither of which answers or bounces, and every other trigger of
+        // a reconciliation needs an ack to arrive, a delivery to bounce or the link to drop.
+        //
+        // A session with nothing queued is not pinged at all any more. There is nothing to recover there,
+        // and the only thing such a ping ever achieved was to destroy healthy channels when the peer was
+        // too slow to answer it. A peer which dies still announces itself, by a disconnect or by the next
+        // send bouncing. (No check of Reconciliation here: the early return above covers it.)
+        StartReconciliation(false, 'I');
     }
 
 }
@@ -2507,6 +2522,9 @@ std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 no
     // The session discovers its peer only when TDebugNodeState::StartSession is called. Discovering it here
     // would make the service of the peer create a session of its own before a test has registered the debug
     // session it means to use there, and the Y_ENSURE above would then fail on that peer.
+    if (!CleanupScheduled.exchange(true)) { // as GetOrCreateNodeState does, or this session gets no cleanup
+        ActorSystem->Schedule(Limits.CleanupPeriod, new NActors::IEventHandle(ServiceActorId, ServiceActorId, new TEvPrivate::TEvCleanup()));
+    }
     return nodeState;
 }
 

@@ -466,6 +466,9 @@ public:
     ui64 SeqNo = 0;
     bool Leading = false;
     ui64 ChannelSeqNo = 0;
+    // when the message was last put on the wire, stamped by TNodeState::SendMessage for a send and for a
+    // resend alike; the front of the Queue carries the age of the oldest message the peer has not confirmed
+    TInstant SentAt;
 };
 
 class TOutputBuffer : public IChannelBuffer {
@@ -830,6 +833,10 @@ public:
     // Lose the acks which confirm up to this SeqNo, 0 for none. Only an OK ack is ever dropped: a RESEND
     // is the answer the peer is waiting for and dropping it would stall the session instead of the channel.
     std::atomic<ui64> DropOkAckUpToSeqNo = 0;
+    // Lose every OK ack which confirms channel data, i.e. the ones sent by HandleChannelData, and keep the
+    // ones the protocol itself runs on - the reply to a discovery carries no ChannelId. It stalls the queue
+    // of the session without breaking its handshakes.
+    std::atomic<bool> DropDataAcks = false;
     // Data which has arrived and has not been delivered to the session yet, for a test to wait on.
     std::atomic<ui64> PendingDataCount = 0;
     std::atomic<double> DataLossProbability;
@@ -1379,6 +1386,10 @@ public:
         if (auto seqNo = NodeState->DropOkAckUpToSeqNo.load(); seqNo && record.GetSeqNo() <= seqNo
             && record.GetStatus() == NYql::NDqProto::TEvChannelAckV2::OK) {
             return; // lost on the wire, a RESEND is never dropped
+        }
+        if (NodeState->DropDataAcks.load() && record.GetChannelId()
+            && record.GetStatus() == NYql::NDqProto::TEvChannelAckV2::OK) {
+            return; // lost on the wire, the acks of the protocol itself carry no ChannelId and stay
         }
         NodeState->HandleAck(ev);
     }

@@ -694,6 +694,20 @@ struct TSessionTest : public TLoadTest {
         Runtime->Send(channel.second, Control1, new TEvTestPrivate::TEvStart(channel.first), NodeIndex1, true);
     }
 
+    // the peer (node 1) produces and the node under test (node 0) consumes, the other way round from
+    // StartChannel, so that the session of node 0 holds an input descriptor
+    std::pair<NActors::TActorId, NActors::TActorId> StartInboundChannel(ui32 channelId, bool startConsumer) {
+        auto producer = Runtime->Register(new TProducerActor(Service1, channelId, ProducerSettings, OutputQuotaManager), NodeIndex1);
+        auto consumer = Runtime->Register(new TConsumerActor(Service0, channelId, ConsumerSettings, InputQuotaManager), NodeIndex0);
+        Actors.insert(producer);
+        Actors.insert(consumer);
+        if (startConsumer) {
+            Runtime->Send(consumer, Control0, new TEvTestPrivate::TEvStart(producer), NodeIndex0, true);
+        }
+        Runtime->Send(producer, Control1, new TEvTestPrivate::TEvStart(consumer), NodeIndex1, true);
+        return {producer, consumer};
+    }
+
     // details are collected at failure time, the reconciliation log is most useful then
     void WaitChannel(const std::function<TString()>& details) {
         try {
@@ -995,18 +1009,6 @@ struct TInboundChannelAbortTest : public TSessionTest {
         settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetReconciliationCount(2);
     }
 
-    // the roles of TSessionTest::StartChannel are reversed here: the peer (node 1) produces and the node
-    // under test (node 0) consumes, so that its session holds an input descriptor and an empty out queue
-    std::pair<NActors::TActorId, NActors::TActorId> StartInboundChannel(ui32 channelId) {
-        auto producer = Runtime->Register(new TProducerActor(Service1, channelId, ProducerSettings, OutputQuotaManager), NodeIndex1);
-        auto consumer = Runtime->Register(new TConsumerActor(Service0, channelId, ConsumerSettings, InputQuotaManager), NodeIndex0);
-        Actors.insert(producer);
-        Actors.insert(consumer);
-        Runtime->Send(consumer, Control0, new TEvTestPrivate::TEvStart(producer), NodeIndex0, true);
-        Runtime->Send(producer, Control1, new TEvTestPrivate::TEvStart(consumer), NodeIndex1, true);
-        return {producer, consumer};
-    }
-
     void Run() override {
         Prepare();
         Init();
@@ -1030,7 +1032,7 @@ struct TInboundChannelAbortTest : public TSessionTest {
         ConsumerSettings = TWorkerSettings{ .MessageCount = 50, .MinMessageSize = 10, .MaxMessageSize = 100,
             .PauseMessageIndex = 2, .PauseDelayMs = 30000 };
 
-        StartInboundChannel(2);
+        StartInboundChannel(2, true);
         UNIT_ASSERT_C(WaitFor([&]() { return GetInputPopBytes(session) > 0; }, TDuration::Seconds(10)),
             "the consumer did not bind and pop");
         auto pushBytes = GetInputPushBytes(session);
@@ -1212,6 +1214,95 @@ struct TBufferCountTest : public TSessionTest {
     }
 };
 
+// The idle ping of HandleCleanup is the only thing which starts a reconciliation of its own accord: every
+// other trigger needs an ack to arrive, a delivery to bounce or the link to drop. It is therefore the only
+// watchdog the outbound half of a session has, and the receiver drops data silently in 2 places - an
+// obsolete generation and a SeqNo at or below the confirmed one - so an outbound queue really can stall
+// with nothing else to rescue it.
+//
+// One TNodeState covers both directions of a node pair, and since LastPeerActivity is refreshed by the
+// traffic of the peer, a session which receives on one channel is never idle, however long its queue on
+// another channel has been stuck. The watchdog has to key on the outbound half itself - the age of the
+// oldest unacknowledged message - rather than on the liveness of the peer.
+//
+// Staged with the confirmations of the outbound channel lost while the peer keeps streaming on an inbound
+// one. The inbound traffic is replayed by the test, one message at a time, so its cadence is known and no
+// gap in it can let the ping through by accident.
+struct TOutboundStallTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetCleanupPeriodMs(50);
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetIdlePingPeriodMs(200);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto peerNodeId = Runtime->GetNodeId(1);
+
+        // the session under test sends on one channel and receives on another, as a session of a pair of
+        // nodes which run stages of the same query does
+        auto session = Service0->CreateDebugNodeState(peerNodeId);
+        session->StartSession();
+
+        // every confirmation of the outbound channel is lost, so its queue stalls; the acks of the protocol
+        // itself carry no ChannelId and are kept, so the handshakes of the session still work
+        session->DropDataAcks.store(true);
+        // the inbound channel is delivered by the test alone, at a cadence it controls
+        session->PauseChannelData();
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 20, .MinMessageSize = 10, .MaxMessageSize = 100 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(1, true);
+
+        auto inboundProducer = ProducerSettings;
+        inboundProducer.MessageCount = 200;
+        auto inboundConsumer = ConsumerSettings;
+        inboundConsumer.MessageCount = 200;
+        std::swap(ProducerSettings, inboundProducer);
+        std::swap(ConsumerSettings, inboundConsumer);
+        StartInboundChannel(2, true);
+
+        // the outbound channel runs to its end - its descriptor finishes on the progress updates of the
+        // peer, which need no ack - and leaves every message of it unacknowledged in the queue of the
+        // session. Waiting for it also means the updates of that channel have stopped, so from here on the
+        // only thing which reaches this session is the inbound traffic replayed below.
+        WaitChannel("the outbound channel did not finish");
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(session) > 0; }, TDuration::Seconds(5)),
+            "the queue of the session is empty, nothing is stalled");
+        auto stalledSeqNo = GetFrontSeqNo(session);
+        auto stalledSize = GetQueueSize(session);
+
+        UNIT_ASSERT_C(WaitFor([&]() { return session->PendingDataCount.load() >= 60; }, TDuration::Seconds(10)),
+            "the peer did not fill the inbound channel");
+
+        // 1 message of the peer every 50ms, well inside the 200ms idle period, for 10 idle periods
+        auto deadline = TInstant::Now() + TDuration::Seconds(2);
+        bool pinged = false;
+        while (TInstant::Now() < deadline) {
+            session->ProcessPending(1);
+            Sleep(TDuration::MilliSeconds(50));
+            if (GetReconciliationLog(session).find('I') != TString::npos) {
+                pinged = true;
+                break;
+            }
+        }
+
+        auto details = TStringBuilder() << "the queue has been stalled at SeqNo " << stalledSeqNo
+            << " with " << stalledSize << " messages in it all along"
+            << ", inbound traffic left: " << session->PendingDataCount.load()
+            << ", reconciliation log: " << GetReconciliationLog(session);
+        UNIT_ASSERT_C(pinged, TStringBuilder() << "the stalled outbound queue was never pinged, " << details);
+
+        session->DropDataAcks.store(false);
+        session->ResumeChannelData();
+        session.reset();
+        Destroy();
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
@@ -1361,6 +1452,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(BufferCountOfAnAbortedChannel) {
         TBufferCountTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(OutboundStallPingedWhilePeerStreams) {
+        TOutboundStallTest test;
 
         test.Local = false;
 

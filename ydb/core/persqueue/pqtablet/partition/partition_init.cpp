@@ -1204,6 +1204,12 @@ void TInitFieldsStep::Execute(const TActorContext &ctx) {
 
     Partition()->CreateCompacter();
 
+    if (Partition()->EndWriteTimestamp != TInstant::Zero()) {
+        Partition()->WriteTimestamp = Partition()->EndWriteTimestamp;
+    } else {
+        Partition()->WriteTimestamp = ctx.Now();
+    }
+
     return Done(ctx);
 }
 
@@ -1239,7 +1245,6 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     TotalPartitionWriteSpeed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
     TotalPartitionWriteSpeedInMessages = Config.GetPartitionConfig().GetWriteSpeedInMessagesPerSecond();
-    WriteTimestamp = ctx.Now();
     LastUsedStorageMeterTimestamp = ctx.Now();
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
 

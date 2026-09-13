@@ -1811,10 +1811,13 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             Y_DEBUG_ABORT_UNLESS(InflightBytes.load() >= item->Data.Bytes,
                 "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
                 LogPrefix.c_str(), InflightBytes.load(), item->Data.Bytes, item->SeqNo);
-            // clamped on purpose: a release build has no assert to stop on and a wrapped counter would
-            // leave the session unable to send anything ever again, which is far worse than losing count
-            InflightBytes -= std::min<ui64>(InflightBytes.load(), item->Data.Bytes);
-            *OutputBufferInflightBytes -= item->Data.Bytes;
+            // Clamped on purpose: a release build has no assert to stop on and a wrapped counter would
+            // leave the session unable to send anything ever again, which is far worse than losing count.
+            // The sensor loses exactly what the counter did - subtracting the unclamped size there would
+            // trade a wedged session for a gauge which goes negative, shared by every session of the node.
+            auto released = std::min<ui64>(InflightBytes.load(), item->Data.Bytes);
+            InflightBytes -= released;
+            *OutputBufferInflightBytes -= released;
             (*OutputBufferInflightMessages)--;
             Queue.pop_front();
         }
@@ -1873,8 +1876,9 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                     "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
                     LogPrefix.c_str(), InflightBytes.load(), item->Data.Bytes, item->SeqNo);
                 // clamped on purpose, see the sibling release above
-                InflightBytes -= std::min<ui64>(InflightBytes.load(), item->Data.Bytes);
-                *OutputBufferInflightBytes -= item->Data.Bytes;
+                auto released = std::min<ui64>(InflightBytes.load(), item->Data.Bytes);
+                InflightBytes -= released;
+                *OutputBufferInflightBytes -= released;
                 (*OutputBufferInflightMessages)--;
                 Queue.pop_front();
             }

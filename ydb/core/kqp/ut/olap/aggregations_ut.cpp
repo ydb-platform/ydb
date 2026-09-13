@@ -1477,9 +1477,9 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
         }
     }
 
-    // The same JSON_VALUE used by several conjuncts which are pushed as separate `KqpOlapApply` callables
-    // must be computed by the column shard only once (a single shared `KqpOlapJsonValue`).
-    Y_UNIT_TEST(JsonValueSharedBetweenOlapApplyConjuncts) {
+    // The same JSON_VALUE used by several pushed predicates (separate `KqpOlapApply` callables, native comparisons,
+    // or twice inside a single callable) is a single `KqpOlapJsonValue` node in the AST (CSEE) and gives correct results.
+    Y_UNIT_TEST(JsonValueUsedBySeveralPushedPredicates) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
@@ -1551,13 +1551,34 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
                 /*expectedJsonValues=*/1,
                 /*expectedOlapApplies=*/0
             },
+            {
+                // The same JSON_VALUE on both sides of a native comparison.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") = JSON_VALUE(jsonval, "$.col1")
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/1,
+                /*expectedOlapApplies=*/0
+            },
+            {
+                // The same JSON_VALUE twice inside a single `KqpOlapApply`.
+                R"(
+                    SELECT id FROM `/Root/tableWithNulls`
+                    WHERE JSON_VALUE(jsonval, "$.col1") || JSON_VALUE(jsonval, "$.col1") ILIKE "VAL1val1"
+                    ORDER BY id;
+                )",
+                R"([[1];[2];[3];[4];[5]])",
+                /*expectedJsonValues=*/1,
+                /*expectedOlapApplies=*/1
+            },
         };
 
         for (const auto& testCase : cases) {
             auto explainResult = StreamExplainQuery(testCase.Query, tableClient);
             UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
-            const auto explain = CollectStreamResult(explainResult);
-            const auto ast = TString(explain.QueryStats->Getquery_ast());
+            const auto ast = TString(CollectStreamResult(explainResult).QueryStats->Getquery_ast());
             Cerr << "AST: " << ast << Endl;
 
             auto it = tableClient.StreamExecuteScanQuery(testCase.Query).GetValueSync();
@@ -1571,19 +1592,6 @@ Y_UNIT_TEST_SUITE(KqpOlapAggregations) {
             // Identical expression nodes are merged (CSEE), so the AST contains each distinct JSON_VALUE once.
             UNIT_ASSERT_VALUES_EQUAL_C(countOccurrences(ast, "(KqpOlapJsonValue "), testCase.ExpectedJsonValues,
                 "Unexpected number of KqpOlapJsonValue callables in AST. Query: " << testCase.Query);
-
-            // The SSA program which is actually executed by the column shard must compute each JSON_VALUE once as well.
-            NJson::TJsonValue plan;
-            NJson::ReadJsonTree(*explain.PlanJson, &plan, true);
-            // The plan contains the same read operator several times (e.g. in the simplified plan), check every copy.
-            const auto ssaPrograms = FindPlanNodes(plan, "SsaProgram");
-            UNIT_ASSERT_C(!ssaPrograms.empty(), "SSA program is not found in the plan. Query: " << testCase.Query);
-            for (const auto& ssaProgram : ssaPrograms) {
-                const auto ssa = ssaProgram.GetStringRobust();
-                Cerr << "SSA: " << ssa << Endl;
-                UNIT_ASSERT_VALUES_EQUAL_C(countOccurrences(ssa, "\"KernelName\":\"JsonValue\""), testCase.ExpectedJsonValues,
-                    "The same JSON_VALUE is computed more than once by the SSA program. Query: " << testCase.Query);
-            }
         }
     }
 

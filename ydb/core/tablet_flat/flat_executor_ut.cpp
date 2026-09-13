@@ -8165,7 +8165,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
 
-    Y_UNIT_TEST(RestartAfterMoveDataCutsReassignedHistory) {
+    void CheckRestartAfterMoveDataCutsReassignedHistory(bool writeRows) {
         struct TReassignedStarter : NFake::TStarter {
             NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
                 auto *info = TStarter::MakeTabletInfo(tablet, channels);
@@ -8196,7 +8196,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
 
         fire(nullptr);
         env.SendSync(data.MakeScheme(new TCompactionPolicy()));
-        env.SendSync(data.MakeRows(1000));
+        if (writeRows) {
+            env.SendSync(data.MakeRows(1000));
+        }
         env.SendSync(new TEvents::TEvPoison, false, true);
 
         // Hive reassigns the channels and asks for MoveData as soon as the tablet is back.
@@ -8215,6 +8217,15 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         }
         UNIT_ASSERT_C(cutChannels == (std::set<ui32>{1}), "channels cut: " << cut);
         env.SendSync(new TEvents::TEvPoison, false, true);
+    }
+
+    Y_UNIT_TEST(RestartAfterMoveDataCutsReassignedHistory) {
+        CheckRestartAfterMoveDataCutsReassignedHistory(true);
+    }
+
+    // Without rows the schema never reaches a snapshot, so boot finds it only in redo.
+    Y_UNIT_TEST(SchemaOnlyRestartAfterMoveDataCutsReassignedHistory) {
+        CheckRestartAfterMoveDataCutsReassignedHistory(false);
     }
 }
 

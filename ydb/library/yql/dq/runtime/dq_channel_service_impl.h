@@ -466,8 +466,8 @@ public:
     ui64 SeqNo = 0;
     bool Leading = false;
     ui64 ChannelSeqNo = 0;
-    // when the message was last put on the wire, stamped by TNodeState::SendMessage for a send and for a
-    // resend alike; the front of the Queue carries the age of the oldest message the peer has not confirmed
+    // stamped by SendMessage, for a resend as much as a send, so the front of the Queue carries the age of
+    // the oldest message the peer has not confirmed
     TInstant SentAt;
 };
 
@@ -709,7 +709,7 @@ public:
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
     void HandleCleanup();
-    // the reason is only needed when there is no peer to compare against, i.e. for the session teardown
+    // the reason is needed only where there is no peer to compare against, i.e. for the session teardown
     void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason = {});
     void FailOutputs(const TString& reason);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
@@ -807,9 +807,7 @@ public:
 
     void HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
 
-    // A debug session is created quiescent and discovers its peer only when this is called, so that every
-    // debug session of a test can be registered first. A discovery makes the service of the peer create a
-    // session of its own, and CreateDebugNodeState refuses to replace one.
+    // A debug session discovers its peer only here, so that a test can register every one it needs first
     void StartSession();
 
     void PauseChannelData();
@@ -825,13 +823,11 @@ public:
 
     std::atomic<bool> ChannelDataPaused;
     std::atomic<bool> ChannelAckPaused;
-    // Lose exactly the data message with this SeqNo and nothing else, 0 for none. Unlike DataLossProbability
-    // it is applied when the message would be delivered to the session rather than when it arrives, so a
-    // message which is already waiting in the pending queue can still be named - which is what makes the
-    // injection independent of how fast the peer happened to deliver it.
+    // Lose the data message with this SeqNo, 0 for none. Applied where the message would be delivered
+    // rather than where it arrives, so one already pending can be named and the loss owes nothing to timing
     std::atomic<ui64> DropDataSeqNo = 0;
-    // Lose the acks which confirm up to this SeqNo, 0 for none. Only an OK ack is ever dropped: a RESEND
-    // is the answer the peer is waiting for and dropping it would stall the session instead of the channel.
+    // Lose the acks confirming up to this SeqNo, 0 for none. Only an OK one: a RESEND is what the peer is
+    // waiting for, and losing it would stall the session rather than the channel
     std::atomic<ui64> DropOkAckUpToSeqNo = 0;
     // Data which has arrived and has not been delivered to the session yet, for a test to wait on.
     std::atomic<ui64> PendingDataCount = 0;
@@ -1344,8 +1340,8 @@ public:
         if (NodeState->ShouldLooseData()) {
             return;
         }
-        // anything which arrives while something is still pending is pending too, or a message would
-        // overtake the ones which arrived before it and a replay of an exact count would be bypassed
+        // pending too, or it would overtake what arrived before it and a replay would deliver more than
+        // it was asked for
         if (NodeState->ChannelDataPaused.load() || !PendingChannelData.empty()) {
             PendingChannelData.emplace(ev.Release());
             NodeState->PendingDataCount++;
@@ -1405,11 +1401,8 @@ public:
     void Handle(TEvPrivate::TEvProcessPending::TPtr& ev) {
         auto maxCount = ev->Get()->MaxCount;
 
-        // A replay of an exact count (maxCount != 0) ignores the pause on purpose: replaying a known number
-        // of messages while the session stays paused is what lets a test reach one state and stop there. It
-        // counts data alone and never spills into the acks, which are a queue of their own with a pause of
-        // their own - "replay 1 message" must not deliver an ack, least of all a paused one, just because
-        // the data queue happened to be empty. Draining everything (maxCount == 0) is what a resume does.
+        // An exact count ignores the pause on purpose - reaching one state and stopping there is what a
+        // test needs - and counts data alone, as the acks have a queue and a pause of their own.
         if (maxCount || !NodeState->ChannelDataPaused.load()) {
             while (!PendingChannelData.empty()) {
                 DeliverChannelData(PendingChannelData.front());
@@ -1419,9 +1412,8 @@ public:
                     break;
                 }
             }
-            // Whatever is left of a running queue has to be drained by something: an arrival joins the
-            // pending ones to keep the order, so with nothing scheduled here every later message would
-            // park behind this remainder for good, with no pause set to explain it.
+            // an arrival joins the pending ones to keep the order, so without this every later message
+            // would park behind the remainder for good, with no pause set to explain it
             if (!PendingChannelData.empty() && !NodeState->ChannelDataPaused.load()) {
                 NodeState->ProcessPending(0);
             }

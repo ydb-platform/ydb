@@ -1,8 +1,8 @@
-# sqlc-ydb: typed code from YQL
+# Generate code from YQL (sqlc-ydb)
 
 [sqlc-ydb](https://github.com/ydb-platform/sqlc-ydb) generates typed code for {{ ydb-short-name }} from a schema and [YQL](../yql/reference/index.md) queries. You write SQL; the tool creates methods that bind parameters and read results through the selected SDK or driver. It is an independent project following the familiar [sqlc](https://sqlc.dev/) workflow.
 
-This guide takes a schema and two queries through code generation and execution in an application. Select your language and framework once: the selection is synchronized across all four tabbed sections.
+This guide takes a schema and two queries through code generation and execution in an application.
 
 ## Installation {#install}
 

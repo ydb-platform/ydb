@@ -1,10 +1,12 @@
 LIBRARY()
 
 SRCS(
-    mon_render.cpp
     mon_render_chaos.cpp
+    mon_render_dbg.cpp
     mon_render_memory.cpp
     mon_render_overview.cpp
+    mon_render.cpp
+    mon_util.cpp
 )
 
 PEERDIR(

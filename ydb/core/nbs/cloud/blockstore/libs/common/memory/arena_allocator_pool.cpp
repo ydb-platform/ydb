@@ -10,6 +10,17 @@ namespace NYdb::NBS::NBlockStore {
 
 //////////////////////////////////////////////////////////////////////////////
 
+// TODO: Move this implementation back to arena_allocator.cpp after fixing
+// the final static link order for users of TArenaPoolStats.
+void TArenaPoolStats::Aggregate(const TArenaPoolStats& stats)
+{
+    ReservedSize += stats.ReservedSize;
+    UsedSize += stats.UsedSize;
+    AllocationCount += stats.AllocationCount;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
 namespace {
 constexpr size_t DefaultSlotSize = 4096;
 }   // namespace

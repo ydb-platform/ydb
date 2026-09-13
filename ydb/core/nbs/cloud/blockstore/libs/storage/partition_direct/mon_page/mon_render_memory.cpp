@@ -191,6 +191,15 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                     TABLEH () {
                         str << "Count";
                     }
+                    TABLEH () {
+                        str << "DDiskState<br>Reserved";
+                    }
+                    TABLEH () {
+                        str << "DDiskState<br>Used";
+                    }
+                    TABLEH () {
+                        str << "DDiskState<br>Count";
+                    }
                 }
             }
             TABLEBODY () {
@@ -213,6 +222,19 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                         TABLED () {
                             str << dbg.MemoryStats.AllocationCount;
                         }
+                        TABLED () {
+                            str << FormatByteSize(
+                                dbg.DirtyMapStats.DDisksMemoryStats
+                                    .ReservedSize);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(
+                                dbg.DirtyMapStats.DDisksMemoryStats.UsedSize);
+                        }
+                        TABLED () {
+                            str << dbg.DirtyMapStats.DDisksMemoryStats
+                                       .AllocationCount;
+                        }
                     }
                 }
                 TABLER () {
@@ -227,6 +249,17 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                     }
                     TABLED () {
                         str << totalMemoryStats.AllocationCount;
+                    }
+                    TABLED () {
+                        str << FormatByteSize(
+                            dirtyMapStats.DDisksMemoryStats.ReservedSize);
+                    }
+                    TABLED () {
+                        str << FormatByteSize(
+                            dirtyMapStats.DDisksMemoryStats.UsedSize);
+                    }
+                    TABLED () {
+                        str << dirtyMapStats.DDisksMemoryStats.AllocationCount;
                     }
                 }
             }

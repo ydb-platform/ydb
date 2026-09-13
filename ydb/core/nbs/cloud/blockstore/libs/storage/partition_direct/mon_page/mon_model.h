@@ -59,6 +59,9 @@ struct TTabletInfo
     ui64 TabletId = 0;
     ui32 Generation = 0;
     ui32 BlockSize = 0;
+    ui64 BlockCount = 0;
+    ui64 VChunkBlockCount = 0;
+    ui64 RegionBlockCount = 0;
     TString DiskId;
     TString State;   // "INIT" / "WORK"
 };

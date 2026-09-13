@@ -2176,16 +2176,13 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         }
     }
 
-    auto memStats = ArenaAllocatorPool->GetMemoryStats();
-    memStats.Aggregate(dirtyMapStats.DDisksMemoryStats);
-
     return {
         .Index = DirectBlockGroupIndex,
         .VChunkCount = VChunks.size(),
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
         .VChunkConfigs = std::move(vChunkConfigs),
-        .MemoryStats = memStats,
+        .MemoryStats = ArenaAllocatorPool->GetMemoryStats(),
         .DirtyMapStats = dirtyMapStats,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };

@@ -162,8 +162,6 @@ void BM_DirtyMapInflightMemory(benchmark::State& state)
     }
 }
 
-}   // namespace
-
 struct TCompactInflightInfo
 {
     IReadyQueue* ReadyQueue = nullptr;
@@ -174,6 +172,11 @@ struct TCompactInflightInfo
     ui64 Mask = 0;
 };
 
+}   // namespace
+
+BENCHMARK(BM_BlockRangeMapMemory<TPBufferKey, 120>)
+    ->Args({100'000 * 15})
+    ->Iterations(1);
 BENCHMARK(BM_BlockRangeMapMemory<TPBufferKey, sizeof(TInflightInfo)>)
     ->Args({100'000 * 15})
     ->Iterations(1);

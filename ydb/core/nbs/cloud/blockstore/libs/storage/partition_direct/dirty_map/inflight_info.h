@@ -210,12 +210,19 @@ private:
 
     [[nodiscard]] TPBufferKey GetPBufferKey() const;
 
+    // EState has 7 values, so 3 bits are enough to store it. The rest of the
+    // ui32 word is given to PBuffersLockCount to maximize its capacity.
+    static constexpr ui32 StateBits = 3;
+    static_assert(
+        static_cast<ui32>(EState::PBufferErased) < (1U << StateBits),
+        "EState values do not fit into the State bit width");
+
     IReadyQueue* ReadyQueue = nullptr;
     TInstant StartAt;
     NThreading::TPromise<void> QuorumReadyPromise;
     ui32 PersistGeneration = 0;
-    ui32 PBuffersLockCount : 24 = 0;
-    EState State : 8 = EState::PBufferPendingWrite;
+    ui32 PBuffersLockCount : 32 - StateBits = 0;
+    EState State: StateBits = EState::PBufferPendingWrite;
 
     THostMask DesiredDDisks;
     THostMask Disabled;

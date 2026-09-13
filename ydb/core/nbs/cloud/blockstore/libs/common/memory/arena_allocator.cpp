@@ -384,13 +384,6 @@ size_t RoundAllocationSize(size_t size)
 
 //////////////////////////////////////////////////////////////////////////////
 
-void TArenaPoolStats::Aggregate(const TArenaPoolStats& stats)
-{
-    ReservedSize += stats.ReservedSize;
-    UsedSize += stats.UsedSize;
-    AllocationCount += stats.AllocationCount;
-}
-
 //////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore

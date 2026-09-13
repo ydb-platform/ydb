@@ -10,6 +10,7 @@ PY_SRCS(
     config.py
     distributed_sessions.py
     distributed_plan.py
+    distributed_builder_ui.py
     distributed_worker.py
     distributed_workload.py
     distributed_artifacts.py

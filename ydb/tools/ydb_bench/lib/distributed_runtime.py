@@ -9,6 +9,7 @@ from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_json
 from ydb.tools.ydb_bench.lib.distributed_artifacts import copy_results
 from ydb.tools.ydb_bench.lib.distributed_coordinator import DistributedCluster, request_operation
 from ydb.tools.ydb_bench.lib.distributed_telemetry import estimate_clock, summarize_hosts
+from ydb.tools.ydb_bench.lib.distributed_sessions import PROTOCOL_VERSION
 from ydb.tools.ydb_bench.lib.linux_telemetry import CPU_METRIC_NAMES
 
 
@@ -21,6 +22,7 @@ class RemoteWorkloadLifecycle:
         self._closed = False
         self.profile_commands = ()
         self.geometry_commands = ()
+        self.multiple = "cli_nodes" in configuration.parameters["local_ydb"]["distributed"]
         self._perform("initialize", {"config_yaml": config_yaml})
 
     def _perform(self, action, arguments):
@@ -40,14 +42,54 @@ class RemoteWorkloadLifecycle:
             phase = value.pop("phase")
             self.progress(phase, **value)
 
-        result = self.cluster.operation(
-            [self.cluster.cli_host],
+        results = self.cluster.operation(
+            self.cluster.cli_hosts if self.multiple else [self.cluster.cli_host],
             "workload",
             {"job_id": job_id, "action": action, "arguments": arguments},
             timeout=max(300, 4 * self.configuration.timeout_seconds + 60),
             job_id=job_id,
             on_progress=publish,
-        )[self.cluster.cli_host]
+        )
+        if self.multiple:
+            clients = {}
+            for host, response in results.items():
+                if not isinstance(response, dict):
+                    raise BenchmarkError("Invalid distributed workload result")
+                for name, item in response.get("clients", {}).items():
+                    clients[name] = item
+                    if directory is not None:
+                        copy_results(
+                            lambda operation, value, host=host: self.cluster.call(host, operation, value),
+                            self.cluster.reference,
+                            job_id,
+                            item.get("artifacts"),
+                            remote + "/" + name,
+                            directory / name,
+                        )
+            if action == "sample":
+                expected = set(self.configuration.parameters["local_ydb"]["distributed"]["cli_nodes"])
+                if set(clients) != expected:
+                    raise BenchmarkError("Incomplete distributed CLI results")
+                atomic_write_json(directory / "cli-results.json", clients)
+                # Percentiles cannot be merged without distributions. Preserve
+                # individual latency values in cli-results.json, never average p99.
+                return {
+                    "metrics": {
+                        "load": arguments["load"],
+                        "dynamic_nodes": arguments["dynamic_nodes"],
+                        "repetition": arguments["repetition"],
+                        **{
+                            key: sum(item["metrics"][key] for item in clients.values())
+                            for key in ("throughput", "transactions", "errors", "retries")
+                        },
+                    },
+                    "commands": [command for item in clients.values() for command in item["commands"]],
+                    "measurement_clock": {
+                        "error": "Multi-CLI samples have separate measurement windows; see CLI results"
+                    },
+                }
+            return {}
+        result = results[self.cluster.cli_host]
         if not isinstance(result, dict):
             raise BenchmarkError("Invalid distributed workload result")
         if directory is not None:
@@ -64,6 +106,8 @@ class RemoteWorkloadLifecycle:
         return result
 
     def open_profile(self, directory, table_path, purpose="profile", progress_fields=None):
+        if self.multiple:
+            self._perform("prepare-datasets", {"directory": Path(directory) / "datasets"})
         self._perform(
             "open-profile",
             {
@@ -96,6 +140,8 @@ class RemoteWorkloadLifecycle:
         self._closed = True
         if primary_error is None:
             self._perform("close-profile", {})
+            if self.multiple:
+                self._perform("cleanup-datasets", {"directory": self.output / "workload" / "datasets"})
 
     def run_sample(
         self, load, dynamic_nodes, repetition, repetitions, directory, table_path, progress_fields, purpose="search"
@@ -180,7 +226,7 @@ class DistributedRuntime:
         )
         self.service = run["service"]
         self.profile = configuration.parameters["local_ydb"]
-        self.metadata = {"protocol_version": 1, "clusters": []}
+        self.metadata = {"protocol_version": PROTOCOL_VERSION, "clusters": []}
         document = yaml.safe_load(run["store"].manifest["config"]["snapshot"])
         self.config_yaml = yaml.safe_dump(
             {

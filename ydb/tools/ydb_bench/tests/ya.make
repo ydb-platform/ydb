@@ -11,6 +11,7 @@ TEST_SRCS(
     test_cluster_templates.py
     test_distributed_sessions.py
     test_distributed_plan.py
+    test_distributed_builder.py
     test_distributed_worker.py
     test_distributed_coordinator.py
     test_distributed_telemetry.py

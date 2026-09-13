@@ -71,6 +71,7 @@ class DistributedCluster:
         self.directory, self.call, self.cancelled, self.progress = directory, call, cancelled, progress
         self.host_ids = list(dict.fromkeys(node["host_id"] for node in template["nodes"]))
         self.cli_host = next(node["host_id"] for node in template["nodes"] if node["role"] == "cli")
+        self.cli_hosts = list(dict.fromkeys(node["host_id"] for node in template["nodes"] if node["role"] == "cli"))
         self.static_host = next(node["host_id"] for node in template["nodes"] if node["role"] == "static")
         self.dynamic_nodes = [
             node for node in template["nodes"] if node["role"] == "dynamic" and node["tenant"] == tenant
@@ -219,7 +220,7 @@ class DistributedCluster:
         self.progress("starting-dynamic-nodes")
         self.operation(self.host_ids, "start-dynamic")
         self.progress("waiting-for-client-endpoints")
-        self.operation([self.cli_host], "ready")
+        self.operation(self.cli_hosts, "ready")
         self.ready = True
         self.progress("cluster-ready", dynamic_nodes=len(self.dynamic_nodes))
 

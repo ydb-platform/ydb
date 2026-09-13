@@ -188,13 +188,7 @@ function ctRunDraft(record,tenant){
     throw Error('Select a tenant with at least one dynamic node')
   }
   // JSON is also valid YAML. Keep a detached snapshot, not a mutable template ID.
-  return JSON.stringify({'distributed-ydb':{cluster:{
-    'cluster-template':record,tenant,
-    workload:{type:'kv',operation:'upsert'},
-    'actor-system':{'static-nodes':{'cpu-count':4},'dynamic-nodes':{'cpu-count':4}},
-    load:{parameter:'threads',values:[1,2,4]},
-    measurement:{warmup:2,duration:10,repetitions:1,'verification-repetitions':1}
-  }}},null,2)+'\n'
+  return JSON.stringify({'distributed-ydb':{cluster:distributedDefault(record,tenant)}},null,2)+'\n'
 }
 async function renderClusterTemplates(id){
   clearRefresh();const generation=(renderClusterTemplates.version||0)+1,current=location.hash;

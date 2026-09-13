@@ -30,7 +30,7 @@ from ydb.tools.ydb_bench.lib.common import (
     extract_executable,
 )
 from ydb.tools.ydb_bench.lib.distributed_plan import execution_template, resolve_host_placement
-from ydb.tools.ydb_bench.lib.distributed_workload import WorkerWorkload, result_path
+from ydb.tools.ydb_bench.lib.distributed_workload import MultiWorkerWorkload, result_path
 from ydb.tools.ydb_bench.lib.distributed_artifacts import RESULT_CHUNK_BYTES, snapshot_diagnostics
 from ydb.tools.ydb_bench.lib.distributed_telemetry import WorkerTelemetry
 from ydb.tools.ydb_bench.lib.distributed_sessions import PROTOCOL_VERSION
@@ -50,7 +50,7 @@ def _digest(value):
 
 
 def _actor_system(value):
-    allowed = {"use_shared_threads", "use_united_pool", "use_ring_queue", "static_nodes", "dynamic_nodes"}
+    allowed = {"use_shared_threads", "use_united_pool", "use_ring_queue", "static_nodes", "dynamic_nodes", "tenants"}
     if not isinstance(value, dict) or set(value) - allowed:
         raise BenchmarkError("Invalid distributed actor-system configuration")
     result = {}
@@ -70,6 +70,13 @@ def _actor_system(value):
             ):
                 raise BenchmarkError("Actor-system CPU count must be between 1 and 32767")
             result[role] = dict(setting)
+    if "tenants" in value:
+        tenants = value["tenants"]
+        if not isinstance(tenants, dict) or any(
+            not isinstance(item, dict) or "tenants" in item for item in tenants.values()
+        ):
+            raise BenchmarkError("Invalid per-tenant actor-system settings")
+        result["tenants"] = {name: _actor_system(item) for name, item in tenants.items()}
     return result
 
 
@@ -165,7 +172,7 @@ class DistributedWorker:
             host_ids = template_value.get("host_ids")
             if not isinstance(host_ids, list) or any(not isinstance(host, str) for host in host_ids):
                 raise BenchmarkError("Template host IDs must be a list of strings")
-            template = execution_template(template_value, set(host_ids), value.get("tenant"))
+            template = execution_template(template_value, set(host_ids), value.get("tenant"), multiple_cli=True)
             local = [node for node in template["nodes"] if node["host_id"] == self.host_id]
             if not local:
                 raise BenchmarkError("This host has no nodes in the execution template")
@@ -348,7 +355,13 @@ class DistributedWorker:
             if node["role"] == "cli":
                 continue
             current = copy.deepcopy(config)
-            cpu_count = state["actor_system"].get(node["role"] + "_nodes", {}).get("cpu_count")
+            actor_system = state["actor_system"]
+            if node["role"] == "dynamic":
+                actor_system = actor_system.get("tenants", {}).get(node["tenant"], actor_system)
+            current["config"]["actor_system_config"] = _cluster_config(
+                [item["ports"] for item in static], 1, actor_system=actor_system
+            )["config"]["actor_system_config"]
+            cpu_count = actor_system.get(node["role"] + "_nodes", {}).get("cpu_count")
             if cpu_count is not None:
                 current["config"]["actor_system_config"]["cpu_count"] = cpu_count
             directory = state["root"] / "nodes" / str(node["node_id"])
@@ -519,14 +532,21 @@ class DistributedWorker:
             )
         return {"tenants": [tenant["path"] for tenant in state["template"]["tenants"]]}
 
-    def _cli_node(self, state):
-        node = next((node for node in state["prepared"]["nodes"] if node["role"] == "cli"), None)
+    def _cli_node(self, state, cli_name=None):
+        node = next(
+            (
+                node
+                for node in state["prepared"]["nodes"]
+                if node["role"] == "cli" and (cli_name is None or node["name"] == cli_name)
+            ),
+            None,
+        )
         if node is None:
             raise BenchmarkError("This operation must run on the CLI host")
         return node
 
-    def _run_cli(self, state, name, command, timeout, on_process_started=None):
-        node = self._cli_node(state)
+    def _run_cli(self, state, name, command, timeout, on_process_started=None, cli_name=None):
+        node = self._cli_node(state, cli_name)
         directory = state["root"] / "cli" / name
         directory.mkdir(parents=True, exist_ok=True)
         stdout, stderr = directory / "stdout.txt", directory / "stderr.txt"
@@ -597,7 +617,7 @@ class DistributedWorker:
                 if action == "initialize":
                     if "workload" in state or not isinstance(arguments, dict) or set(arguments) != {"config_yaml"}:
                         raise BenchmarkError("Invalid or repeated workload initialization")
-                    workload = WorkerWorkload(self, state, arguments["config_yaml"])
+                    workload = MultiWorkerWorkload(self, state, arguments["config_yaml"])
                     with self.sessions.lock:
                         self._check(state)
                         state["workload"] = workload
@@ -703,15 +723,17 @@ class DistributedWorker:
             return self._start_job(state, name, {"sample_id": sample_id, "action": action, "context": context}, execute)
 
     def _ready(self, state):
+        tenants = sorted({node["tenant"] for node in state["cluster_nodes"].values() if node["role"] == "dynamic"})
+        return {tenant: self._ready_tenant(state, tenant) for tenant in tenants}
+
+    def _ready_tenant(self, state, tenant):
         cli = self._cli_node(state)
         targets = [
-            node
-            for node in state["cluster_nodes"].values()
-            if node["role"] == "dynamic" and node["tenant"] == state["tenant"]
+            node for node in state["cluster_nodes"].values() if node["role"] == "dynamic" and node["tenant"] == tenant
         ]
         for node in targets:
             request = msgbus_pb2.TSchemeDescribe()
-            request.Path = state["tenant"]
+            request.Path = tenant
             self._rpc(
                 state,
                 "ready-{}".format(node["node_id"]),
@@ -735,7 +757,7 @@ class DistributedWorker:
                     "--endpoint",
                     "grpc://" + endpoint,
                     "--database",
-                    state["tenant"],
+                    tenant,
                     "discovery",
                     "list",
                 ],

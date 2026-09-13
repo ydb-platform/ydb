@@ -12,6 +12,6 @@ DISTRIBUTED_YDB_BENCHMARK = BENCHMARKS.register(
         description="fixed multi-host YDB cluster driven by one YDB CLI generator",
         profile_kind="distributed-ydb",
         executor="distributed-ydb",
-        builder_supported=False,
+        builder_supported=True,
     )
 )

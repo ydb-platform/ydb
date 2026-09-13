@@ -111,7 +111,36 @@ def _profile_schema(benchmark):
             "description": "Immutable cluster placement snapshot, including hosts, DC/racks and tenants.",
         }
         schema["properties"]["tenant"] = {"type": "string", "pattern": "^/Root/"}
-        schema["required"] += ["cluster-template", "tenant"]
+        schema["required"] = ["cluster-template"]
+        schema["anyOf"] = [{"required": ["tenant", "workload", "load"]}, {"required": ["cli-nodes"]}]
+        actor = {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "cpu-count": {"type": "integer", "minimum": 1, "maximum": 32767},
+                **{name: {"type": "boolean"} for name in ("use-shared-threads", "use-united-pool", "use-ring-queue")},
+            },
+        }
+        schema["properties"].update(
+            {
+                "storage": actor,
+                "tenants": {"type": "object", "additionalProperties": actor},
+                "cli-nodes": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["tenant", "dataset", "workload", "load"],
+                        "properties": {
+                            "tenant": {"type": "string"},
+                            "dataset": {"type": "string", "pattern": PROFILE_NAME_PATTERN},
+                            **{key: schema["properties"][key] for key in ("workload", "client", "load")},
+                        },
+                    },
+                },
+            }
+        )
         return schema
     if benchmark.profile_kind == "local-ydb":
         role_affinity = {
@@ -931,6 +960,8 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
 
 
 def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
+    if isinstance(value, dict) and "cli-nodes" in value:
+        return _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     location = "{}.{}".format(benchmark.name, profile_name)
     value = _mapping(
         value,
@@ -961,6 +992,133 @@ def _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled,
     profile["distributed"] = {"template": template, "tenant": value["tenant"]}
     # These values come from individual template nodes/tenants, not the local
     # executor's defaults. Do not publish fictitious 64 GiB disks or no affinity.
+    profile.pop("affinity")
+    profile["geometry"].pop("disk_size_gb")
+    profile["geometry"].pop("storage_groups")
+    return configuration
+
+
+def _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
+    location = "{}.{}".format(benchmark.name, profile_name)
+    value = _mapping(value, location, ("cluster-template", "storage", "tenants", "cli-nodes", "measurement", "timeout"))
+    snapshot = value.get("cluster-template")
+    if (
+        not isinstance(snapshot, dict)
+        or not isinstance(snapshot.get("host_ids"), list)
+        or any(not isinstance(host, str) for host in snapshot["host_ids"])
+    ):
+        _config_error(location + ".cluster-template", "requires a placement snapshot")
+    if not isinstance(snapshot.get("nodes"), list) or any(not isinstance(node, dict) for node in snapshot["nodes"]):
+        _config_error(location + ".cluster-template.nodes", "requires a list of nodes")
+    if any(not isinstance(node.get("name"), str) for node in snapshot["nodes"]):
+        _config_error(location + ".cluster-template.nodes", "node names must be strings")
+    names = {node["name"] for node in snapshot["nodes"] if node.get("role") == "cli"}
+    clients = _mapping(value["cli-nodes"], location + ".cli-nodes", names)
+    if len(clients) > 32:
+        _config_error(location + ".cli-nodes", "supports at most 32 simultaneous generators")
+    if not names or set(clients) != names:
+        _config_error(location + ".cli-nodes", "configure every CLI node in the template exactly once")
+    search_clients = [
+        name
+        for name, raw in clients.items()
+        if isinstance(raw, dict) and isinstance(raw.get("load"), dict) and "search" in raw["load"]
+    ]
+    if len(search_clients) > 1:
+        _config_error(location + ".cli-nodes", "a search strategy may be assigned to at most one CLI node")
+    normalized, configurations, datasets = {}, [], {}
+    for name, raw in clients.items():
+        where = location + ".cli-nodes." + name
+        raw = _mapping(raw, where, ("tenant", "dataset", "workload", "client", "load"))
+        dataset = raw.get("dataset")
+        if not isinstance(dataset, str) or not _PROFILE_NAME_RE.fullmatch(dataset):
+            _config_error(where + ".dataset", "use 1–64 letters, digits, dots, underscores or hyphens")
+        try:
+            template = execution_template(snapshot, set(snapshot["host_ids"]), raw.get("tenant"), multiple_cli=True)
+        except BenchmarkError as error:
+            _config_error(where, str(error))
+        dynamics = sum(n["role"] == "dynamic" and n["tenant"] == raw["tenant"] for n in template["nodes"])
+        common = {key: raw[key] for key in ("workload", "client", "load") if key in raw}
+        common.update(
+            geometry={
+                "preset": "custom",
+                "static-nodes": sum(n["role"] == "static" for n in template["nodes"]),
+                "dynamic-nodes": dynamics,
+                "max-dynamic-nodes": dynamics,
+            },
+            measurement=value.get("measurement", {}),
+            affinity={role: {"mode": "none"} for role in ("static-nodes", "dynamic-nodes", "ydb-cli")},
+        )
+        if "timeout" in value:
+            common["timeout"] = value["timeout"]
+        parsed = _parse_local_ydb_profile(benchmark, profile_name, common, perf_enabled, perf_frequency)
+        profile = parsed.parameters["local_ydb"]
+        if profile["workload"]["type"] != "kv":
+            _config_error(where + ".workload", "multi-generator profiles currently support KV only")
+        if len(profile["load"].get("values", [])) != 1:
+            _config_error(
+                where + ".load", "requires one fixed load value per CLI; search uses the legacy single-CLI format"
+            )
+        if profile["measurement"]["verification_repetitions"]:
+            _config_error(
+                location + ".measurement", "fixed multi-generator profiles require verification-repetitions: 0"
+            )
+        key = (raw["tenant"], dataset)
+        options = profile["workload"]["options"]
+        if key in datasets and datasets[key] != options:
+            _config_error(
+                where + ".workload.options", "CLI nodes sharing a tenant/dataset must use identical KV options"
+            )
+        datasets[key] = options
+        normalized[name] = {
+            "tenant": raw["tenant"],
+            "dataset": dataset,
+            **{key: profile[key] for key in ("workload", "client", "load", "geometry")},
+        }
+        configurations.append(parsed)
+    configuration = configurations[0]
+    if len({c["load"]["allow_errors"] for c in normalized.values()}) > 1:
+        _config_error(location + ".cli-nodes", "allow-errors must be the same for all generators")
+    profile = configuration.parameters["local_ydb"]
+    tenant_names = {t["path"] for t in template["tenants"]}
+    tenants = _mapping(value.get("tenants"), location + ".tenants", tenant_names)
+
+    def actor(raw, where, role):
+        raw = _mapping(raw, where, ("cpu-count", "use-shared-threads", "use-united-pool", "use-ring-queue"))
+        count = _positive_integer(raw.get("cpu-count", 4), where + ".cpu-count")
+        if count > 32767:
+            _config_error(where + ".cpu-count", "must be at most 32767")
+        return {
+            role: {"cpu_count": count},
+            **{
+                key.replace("-", "_"): _boolean(raw.get(key, default), where + "." + key)
+                for key, default in (
+                    ("use-shared-threads", False),
+                    ("use-united-pool", False),
+                    ("use-ring-queue", True),
+                )
+            },
+        }
+
+    storage = actor(value.get("storage"), location + ".storage", "static_nodes")
+    tenant_settings = {
+        name: actor(tenants.get(name), location + ".tenants." + name, "dynamic_nodes") for name in tenant_names
+    }
+    profile["actor_system"] = {**storage, "tenants": tenant_settings}
+    profile["distributed"] = {
+        "template": template,
+        "tenant": next(iter(normalized.values()))["tenant"],
+        "cli_nodes": normalized,
+    }
+    profile["load"] = {
+        "parameter": "threads",
+        "values": [
+            sum(
+                c["client"]["threads"] if c["load"]["parameter"] == "rate" else c["load"]["values"][0]
+                for c in normalized.values()
+            )
+        ],
+        "allow_errors": all(c["load"]["allow_errors"] for c in normalized.values()),
+    }
     profile.pop("affinity")
     profile["geometry"].pop("disk_size_gb")
     profile["geometry"].pop("storage_groups")

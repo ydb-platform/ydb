@@ -12,7 +12,7 @@ import uuid
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_json
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 LEASE_SECONDS = 30
 TERMINAL_STATES = ("released", "expired")
 

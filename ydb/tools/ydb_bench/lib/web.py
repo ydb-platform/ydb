@@ -46,7 +46,7 @@ from ydb.tools.ydb_bench.lib.distributed_worker import DistributedWorker
 from ydb.tools.ydb_bench.lib.distributed_coordinator import DistributedCleanupError
 from ydb.tools.ydb_bench.lib.distributed_runtime import DistributedRuntime
 from ydb.tools.ydb_bench.lib.distributed_reports import attempt_counters
-from ydb.tools.ydb_bench.lib import cluster_templates_ui
+from ydb.tools.ydb_bench.lib import cluster_templates_ui, distributed_builder_ui
 
 _CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
 _STREAM_CHUNK_SIZE = 1024 * 1024
@@ -384,6 +384,7 @@ function hostApiPath(path){
 function federationErrors(errors){return (errors||[]).map(item=>'<div class=notice>'+esc(item.host_name)+': '+esc(item.error)+'</div>').join('')}
 async function hostChoices(selected='',all=true){
   const value=await api('/api/hosts'),hosts=[value.local,...value.hosts];
+  for(const host of hosts)distributedHosts.set(host.id,host.name);
   return (all?'<option value="">All hosts</option>':'')+hosts.map(host=>'<option value="'+esc(host.id===value.local.id&&!all?'':host.id)+'" '+
     ((selected||value.local.id)===host.id&&!all||selected===host.id?'selected':'')+'>'+esc(host.name)+(host.id===value.local.id?' (this host)':'')+'</option>').join('')
 }
@@ -626,7 +627,9 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "ut)}\n"
     'function serializeConfig(model){let lines=[];for(const benchmark of model.benchmarks||[]){const entries=(model.profiles|'
     "|[]).filter(profile=>profile.benchmark===benchmark.name);if(!entries.length)continue;lines.push(benchmark.name+':');for("
-    "const profile of entries){lines.push('  '+profile.name+':');if(benchmark.profile_kind==='local-ydb'){serializeLocalYdb"
+    "const profile of entries){lines.push('  '+profile.name+':');"
+    "if(benchmark.profile_kind==='distributed-ydb'){serializeDistributedYdb(lines,profile);continue}"
+    "if(benchmark.profile_kind==='local-ydb'){serializeLocalYdb"
     "(lines,profile);continue}lines.push('    threads: '+yamlArray(profile.threads));for(c"
     "onst parameter of benchmark.parameters)lines.push('    '+parameter.name+': '+yamlArray(profile.parameters[parameter.name"
     "]||parameter.default));lines.push('    duration: '+profile.duration);lines.push('    repetitions: '+profile.repetitions)"
@@ -907,6 +910,7 @@ function bindLocalYdbEditor(profile){
     ))throw Error('A profile with this benchmark and name already exists.');
     if(benchmarkName!==profile.benchmark){
       const benchmark=editor.model.benchmarks.find(item=>item.name===benchmarkName);
+      if(benchmark.profile_kind==='distributed-ydb'){chooseDistributedProfile(profile,name);return}
       profile.benchmark=benchmarkName;profile.name=name;profile.key=benchmarkName+'/'+name;
       delete profile.local_ydb;
       profile.parameters=Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default]));
@@ -1082,6 +1086,7 @@ function bindLocalYdbEditor(profile){
 """
     'function profileEditor(profile){\n'
     '  const benchmark=(editor.model.benchmarks||[]).find(item=>item.name===profile.benchmark);\n'
+    "  if(benchmark.profile_kind==='distributed-ydb')return distributedProfileEditor(profile);\n"
     "  if(benchmark.profile_kind==='local-ydb')return localYdbProfileEditor(profile);\n"
     "  if(!benchmark.builder_supported)return '<h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+"
     "'</h2><div class=notice>Edit this benchmark in the YAML tab; its nested cluster, workload, load controller, and role "
@@ -1139,6 +1144,7 @@ function bindProfileEditor(profile){
     if(editor.model.profiles.some(item=>
       item.key!==profile.key&&item.benchmark===benchmarkName&&item.name===name
     ))throw Error('A profile with this benchmark and name already exists.');
+    if(benchmarkChanged&&benchmark.profile_kind==='distributed-ydb'){chooseDistributedProfile(profile,name);return}
     updateProfile(profile.key,item=>{
       item.benchmark=benchmarkName;item.name=name;item.key=benchmarkName+'/'+name;
       if(benchmarkChanged&&benchmark.profile_kind==='local-ydb'){
@@ -1191,6 +1197,7 @@ function addProfile(){
   const benchmark=editor.model.benchmarks.find(item=>item.name===selectedBenchmark)||editor.model.benchmarks[0];
   let suffix=1,name='profile';
   while((editor.model.profiles||[]).some(item=>item.benchmark===benchmark.name&&item.name===name))name='profile-'+suffix++;
+  if(benchmark.profile_kind==='distributed-ydb'){chooseDistributedProfile(null,name);return}
   const profile={
     key:benchmark.name+'/'+name,benchmark:benchmark.name,name,threads:[1],
     parameters:Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default])),
@@ -1249,7 +1256,8 @@ async function renderNew(tab){
     "'</section>'+editorRunOptions()+'</div>';app.innerHTML=shell('new',content);restoreEditorDetails();bindEditorControls();document.querySelector('#add-profile').onclic"
     "k=addProfile;for(const button of document.querySelectorAll('[data-profile]'))button.onclick=()=>{editor.selected=button."
     "dataset.profile;renderNew()};if(selected){const benchmark=editor.model.benchmarks.find(item=>item.name===selected.bench"
-    "mark);if(benchmark?.profile_kind==='local-ydb')bindLocalYdbEditor(selected);else if(benchmark?.builder_supported)bindPro"
+    "mark);if(benchmark?.profile_kind==='distributed-ydb')bindDistributedEditor(selected);"
+    "else if(benchmark?.profile_kind==='local-ydb')bindLocalYdbEditor(selected);else if(benchmark?.builder_supported)bindPro"
     "fileEditor(selected)}}\n"
     'function clearRefresh(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null}}\n'
     "function runFilters(){return '<div class=filters><div class=field><label>Status</label><select id=f-status><option value"
@@ -3457,6 +3465,8 @@ async function renderComparisons(){
 
 _CSS += cluster_templates_ui.CSS
 _JS += cluster_templates_ui.JS
+_CSS += distributed_builder_ui.CSS
+_JS += distributed_builder_ui.JS
 
 
 class _RunServiceHTTPServer(ThreadingHTTPServer):
@@ -3623,7 +3633,7 @@ def benchmark_catalog():
     ]
 
 
-def editor_model(loaded, output):
+def editor_model(loaded, output, source=None):
     """Return the validated YAML as the Builder's non-lossy editable model."""
     profiles = []
     for configuration in loaded.runs:
@@ -3642,6 +3652,10 @@ def editor_model(loaded, output):
         }
         if benchmark.profile_kind in ("local-ydb", "distributed-ydb"):
             profile["local_ydb"] = configuration.parameters["local_ydb"]
+            if benchmark.profile_kind == "distributed-ydb":
+                if source is None:
+                    source = yaml.safe_load(loaded.path.read_text())
+                profile["distributed_config"] = source[benchmark.name][configuration.profile]
         else:
             profile["parameters"] = {name: list(values) for name, values in configuration.parameters.items()}
         profiles.append(profile)
@@ -4314,11 +4328,12 @@ class RunService:
                 "benchmarks": benchmark_catalog(),
                 "affinity_modes": list(AFFINITY_MODES),
                 "background_load_modes": list(BACKGROUND_LOAD_MODES),
+                "local_ydb_workloads": web_workload_catalog(),
                 "profiles": [],
             }
         else:
             loaded = self._load(yaml_text, perf)
-            model = editor_model(loaded, self.output)
+            model = editor_model(loaded, self.output, source=yaml.safe_load(yaml_text))
         model["binary_catalog"] = binary_catalog(self.binaries_dir)
         return model
 

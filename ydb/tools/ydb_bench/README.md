@@ -15,7 +15,7 @@ The tool provides five benchmarks:
 - `star-ping-bench`: star-topology actor ping throughput.
 - `memory-bandwidth-bench`: mixed sequential-copy and random copy/write memory workload.
 - `local-ydb`: a local static/dynamic YDB cluster driven by the `kv` or `stock` YDB CLI workload.
-- `distributed-ydb`: an experimental fixed multi-host YDB cluster driven by one CLI generator.
+- `distributed-ydb`: an experimental fixed multi-host YDB cluster with configurable CLI generators.
 
 Inspect them and print the standard JSON Schema for the YAML configuration:
 
@@ -287,12 +287,12 @@ In **Cluster templates**, choose **New run**, select the workload's target tenan
 then confirm **Prepare run**. This copies the current placement (including unsaved
 edits) into the New run YAML draft; it neither saves the template nor launches
 processes. The confirmation explicitly replaces any previous New run draft.
-Review the generated configuration, validate it, and use **Start run** separately.
-The initial draft uses the `kv` upsert workload, thread loads `[1, 2, 4]`, 4 vCPU
-per static/dynamic node, and one verification repetition. These are editable
+Review the generated configuration in Builder or YAML, validate it, and use **Start run** separately.
+The initial draft uses the `kv` upsert workload, one thread per CLI, 4 vCPU
+per static/dynamic node, and no verification repetition. These are editable
 starting values, not recommendations for a particular machine.
 
-The first version uses the YAML editor for distributed profiles. Its
+The legacy single-generator format uses the YAML editor. Its
 `cluster-template` field contains the complete placement snapshot, and `tenant`
 selects a database from that snapshot. `workload`, `actor-system`, `client`,
 `load`, `measurement`, and `timeout` reuse the local-YDB configuration contract.
@@ -300,12 +300,70 @@ Actor-system vCPU is independent of affinity. Binary selection, node counts,
 logical locations, tenant assignments and CPU masks come from the template;
 there is no separate run-level geometry or affinity override.
 
-Supported initial scope is SectorMap SSD storage with erasure `NONE`, one CLI
+Supported legacy scope is SectorMap SSD storage with erasure `NONE`, one CLI
 generator, at least one static node, and a target tenant with dynamic nodes.
 Other tenant definitions are allowed, but only the selected tenant receives
 the workload. Geometry is fixed during search and verification. This is not a
 multi-generator throughput test or a durability/failure-tolerance benchmark.
 Launch through the web coordinator, not the standalone `run` command.
+
+#### Multi-generator Builder
+
+The Builder also supports fixed KV workloads with up to 32 CLI generators.
+Its sections are Cluster, Storage, Tenants, Load generators and Run policy;
+YAML remains a separate top-level tab. Each CLI has its own target tenant,
+dataset, operation, client threads and one fixed thread/rate load. Storage and
+each tenant have separate actor-system flags and per-node `cpu-count` values.
+Placement and affinity remain in the template snapshot.
+
+The new format uses `cli-nodes` instead of the legacy profile-level
+`tenant`, `workload`, `client`, `actor-system` and `load` fields:
+
+```yaml
+distributed-ydb:
+  baseline:
+    cluster-template: # complete placement snapshot, supplied by the Builder
+      # ...
+    storage: {cpu-count: 8, use-shared-threads: true}
+    tenants:
+      /Root/bench: {cpu-count: 16, use-united-pool: true}
+    cli-nodes:
+      cli-write:
+        tenant: /Root/bench
+        dataset: shared-kv
+        workload: {type: kv, operation: upsert, options: {init-upserts: 1000}}
+        client: {threads: 32}
+        load: {parameter: threads, values: [32]}
+      cli-read:
+        tenant: /Root/bench
+        dataset: shared-kv
+        workload: {type: kv, operation: select, options: {init-upserts: 1000}}
+        client: {threads: 64}
+        load: {parameter: threads, values: [64]}
+    measurement: {warmup: 2, duration: 30, repetitions: 1, verification-repetitions: 0}
+```
+
+Every CLI in the template must have an entry. Dataset identity is the pair
+`(tenant, dataset)`: matching pairs share one initialization and cleanup, while
+different pairs are independent. Shared KV options must match, including
+`init-upserts`; operations and loads can differ. Builder edits to shared dataset
+options apply to all generators using that pair.
+
+All datasets are initialized before any generator runs. CLI samples run
+concurrently, including multiple CLI nodes on the same host. Per-CLI results,
+latencies and measurement clocks are stored in `cli-results.json` beside each
+sample's host metrics; complete individual artifacts are in CLI-named directories.
+All generators currently must use the same `allow-errors` policy.
+Summary throughput is the sum of individual rates. Percentiles are not merged;
+whole-cluster CPU aggregation is unavailable for these separate measurement
+windows. This is concurrent fixed load, not clock-synchronized traffic replay.
+
+The legacy single-CLI YAML and its search/verification remain supported.
+Conversion to the fixed-load Builder is explicit and replaces load settings
+with defaults. Multi-generator search and verification are not supported yet.
+Search ownership is exclusive: at most one CLI may own a search strategy;
+other generators must remain fixed-load when that mode is introduced.
+All participant servers must use the same distributed protocol version (2).
 
 Each worker freezes the selected binaries, resolves placement from its own
 topology and reserves ports. The coordinator retains that execution plan,

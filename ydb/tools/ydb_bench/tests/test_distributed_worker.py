@@ -240,6 +240,15 @@ class DistributedWorkerTest(unittest.TestCase):
             distributed_workload.result_path(root, "escape/outside")
 
     def test_shared_search_and_verification_execute_through_two_workers(self):
+        self._run_control_plane_integration(False)
+
+    def test_multiple_cli_share_one_dataset_and_run_concurrently(self):
+        self._run_control_plane_integration(True)
+
+    def test_multiple_cli_failure_releases_every_host(self):
+        self._run_control_plane_integration(True, fail_sample=True)
+
+    def _run_control_plane_integration(self, multiple, fail_sample=False):
         # Control-plane integration, with native YDB processes/RPCs substituted.
         # The real parser, leases, workers, workload lifecycle, search, artifact
         # transfer and verification remain in the exercised path.
@@ -247,7 +256,43 @@ class DistributedWorkerTest(unittest.TestCase):
             worker.sessions.release(self.reference)
         output = self.root / "coordinator"
         config = self.root / "distributed.yaml"
-        config.write_text(self.workload_config())
+        if multiple:
+            self.template["nodes"].extend([self.node("cli2", "cli", "a"), self.node("cli3", "cli", "b")])
+            config.write_text(
+                yaml.safe_dump(
+                    {
+                        "distributed-ydb": {
+                            "test": {
+                                "cluster-template": self.template,
+                                "storage": {"cpu-count": 2},
+                                "tenants": {"/Root/bench": {"cpu-count": 3, "use-united-pool": True}},
+                                "cli-nodes": {
+                                    name: {
+                                        "tenant": "/Root/bench",
+                                        "dataset": "shared",
+                                        "workload": {
+                                            "type": "kv",
+                                            "operation": "select" if name == "cli2" else "upsert",
+                                            "options": {"init-upserts": 1000},
+                                        },
+                                        "client": {"threads": 2},
+                                        "load": {"parameter": "threads", "values": [2]},
+                                    }
+                                    for name in ("cli", "cli2", "cli3")
+                                },
+                                "measurement": {
+                                    "warmup": 0,
+                                    "duration": 1,
+                                    "repetitions": 1,
+                                    "verification-repetitions": 0,
+                                },
+                            }
+                        }
+                    }
+                )
+            )
+        else:
+            config.write_text(self.workload_config())
         configuration = load_config(config).runs[0]
         self.assertNotIn("affinity", configuration.parameters["local_ydb"])
         self.assertNotIn("disk_size_gb", configuration.parameters["local_ydb"]["geometry"])
@@ -274,6 +319,8 @@ class DistributedWorkerTest(unittest.TestCase):
 
         runtime.call = call
         processes = []
+        commands = []
+        barrier = threading.Barrier(3) if multiple else None
 
         def start(*_args, **_kwargs):
             process = mock.Mock(pid=1000000000 + len(processes))
@@ -283,6 +330,11 @@ class DistributedWorkerTest(unittest.TestCase):
             return process
 
         def command(_worker, _state, _name, argv, _timeout, **_kwargs):
+            commands.append(tuple(argv))
+            if barrier is not None and "run" in argv:
+                barrier.wait(timeout=10)
+                if fail_sample and _kwargs.get("cli_name") == "cli2":
+                    raise BenchmarkError("injected CLI failure")
             return runner.CommandResult(
                 tuple(map(str, argv)),
                 "Total Txs Txs/Sec Retries Errors p50(ms) p95(ms) p99(ms) pMax(ms)\n100 100 0 0 1 2 3 4\n",
@@ -306,9 +358,25 @@ class DistributedWorkerTest(unittest.TestCase):
         ):
             cpu.return_value.stop.return_value = {"static_cpu_mean": 1.0, "cli_cpu_mean": 2.0}
             cpu.return_value.records = ()
+            if fail_sample:
+                with self.assertRaises(BenchmarkError):
+                    local_ydb.run_local_ydb({}, configuration, output, "test", runtime=runtime)
+                self.assertTrue(all(worker.sessions.status() is None for worker in self.workers))
+                self.assertTrue(all(process.poll() == 0 for process in processes))
+                return
             result = local_ydb.run_local_ydb({}, configuration, output, "test", runtime=runtime)
         self.assertEqual("completed", result["status"])
         self.assertEqual(1, len(result["attempts"]))
+        if multiple:
+            self.assertEqual(300, result["attempts"][0]["throughput"])
+            self.assertNotIn("p99_ms", result["attempts"][0])
+            self.assertEqual(1, sum("init" in command for command in commands))
+            self.assertEqual(1, sum("clean" in command for command in commands))
+            records = list(output.rglob("cli-results.json"))
+            self.assertEqual(1, len(records))
+            self.assertEqual({"cli", "cli2", "cli3"}, set(json.loads(records[0].read_text())))
+            self.assertTrue(all(worker.sessions.status() is None for worker in self.workers))
+            return
         self.assertEqual("completed", result["verification"]["status"])
         self.assertEqual(100, result["attempts"][0]["throughput"])
         self.assertNotIn("static_cpu_mean", result["attempts"][0])  # Never label one worker as whole-cluster CPU.

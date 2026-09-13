@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
-from ydb.tools.ydb_bench.lib.distributed_sessions import HostSessions, LEASE_SECONDS
+from ydb.tools.ydb_bench.lib.distributed_sessions import HostSessions, LEASE_SECONDS, PROTOCOL_VERSION
 from ydb.tools.ydb_bench.lib.web import RunService, make_server
 
 
@@ -150,7 +150,7 @@ class DistributedAdmissionTest(unittest.TestCase):
         self.addCleanup(service.shutdown)
         value = service.distributed_operation("capabilities", {})
         self.assertEqual(service.hosts.id, value["host_id"])
-        self.assertEqual(1, value["protocol_version"])
+        self.assertEqual(PROTOCOL_VERSION, value["protocol_version"])
         self.assertIsNone(service.distributed_sessions.status())
         self.assertEqual([], list((self.output / ".distributed-sessions").glob("*.json")))
 

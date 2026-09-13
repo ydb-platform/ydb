@@ -9,10 +9,11 @@ from ydb.tools.ydb_bench.lib.common import BenchmarkError
 from ydb.tools.ydb_bench.lib.topology import plan_affinity
 
 
-def execution_template(value, host_ids, target_tenant):
+def execution_template(value, host_ids, target_tenant, multiple_cli=False):
     template = validate_template(value, host_ids)
     nodes = template["nodes"]
-    if sum(node["role"] == "cli" for node in nodes) != 1:
+    cli_count = sum(node["role"] == "cli" for node in nodes)
+    if not cli_count or (not multiple_cli and cli_count != 1):
         raise BenchmarkError("Distributed YDB requires exactly one CLI generator")
     if not any(node["role"] == "static" for node in nodes):
         raise BenchmarkError("Distributed YDB requires at least one static node")

@@ -7,6 +7,9 @@ commands. Executable paths and command plans are resolved on the leased worker.
 import re
 import json
 import time
+import copy
+import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -14,7 +17,7 @@ from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_text
 from ydb.tools.ydb_bench.lib.config import load_config
 from ydb.tools.ydb_bench.lib.distributed_artifacts import snapshot_results
 from ydb.tools.ydb_bench.lib.distributed_telemetry import CLOCK_DRIFT_TOLERANCE
-from ydb.tools.ydb_bench.lib.local_ydb import WorkloadLifecycle
+from ydb.tools.ydb_bench.lib.local_ydb import WorkloadLifecycle, _DatasetState
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import WorkloadCli
 from ydb.tools.ydb_bench.lib.topology import discover_topology
 
@@ -33,14 +36,15 @@ def result_path(root, value):
 
 
 class WorkerWorkloadCluster:
-    def __init__(self, worker, state, timeout):
+    def __init__(self, worker, state, timeout, cli_name=None, tenant=None):
         self.worker, self.state, self.timeout = worker, state, timeout
         self.sequence = 0
         self.measurement_clock = None
-        self.ydb_cli = worker._cli_node(state)["executable"]["path"]
+        self.cli_name = cli_name
+        self.ydb_cli = worker._cli_node(state, cli_name)["executable"]["path"]
         _, endpoint = worker._static_endpoint(state)
         self.client_endpoint = "grpc://" + endpoint
-        self.database = state["tenant"]
+        self.database = tenant or state["tenant"]
 
     def _pids(self, role):
         # Monitor callbacks must not acquire the admission lock: cancellation
@@ -95,10 +99,11 @@ class WorkerWorkloadCluster:
 
         result = self.worker._run_cli(
             self.state,
-            "workload-{:06d}".format(self.sequence),
+            "{}workload-{:06d}".format((self.cli_name + "-") if self.cli_name else "", self.sequence),
             command,
             timeout,
             on_process_started=started if started_callback is not None else None,
+            cli_name=self.cli_name,
         )
         if started_callback is not None:
             drift = (time.time() - before_unix) - (time.monotonic() - before_monotonic)
@@ -130,7 +135,7 @@ class WorkerWorkloadCluster:
 
 
 class WorkerWorkload:
-    def __init__(self, worker, state, config_yaml):
+    def __init__(self, worker, state, config_yaml, cli_name=None):
         if not isinstance(config_yaml, str) or len(config_yaml.encode()) > 1024 * 1024:
             raise BenchmarkError("Distributed workload configuration must be YAML of at most 1 MiB")
         path = state["root"] / "control" / "workload.yaml"
@@ -141,23 +146,32 @@ class WorkerWorkload:
         configuration = loaded.runs[0]
         profile = configuration.parameters["local_ydb"]
         if (
-            profile["distributed"] != {"template": state["template"], "tenant": state["tenant"]}
+            profile["distributed"]["template"] != state["template"]
+            or profile["distributed"]["tenant"] != state["tenant"]
             or profile["actor_system"] != state["actor_system"]
         ):
             raise BenchmarkError("Workload configuration differs from the prepared cluster")
         self.worker, self.state = worker, state
         self.root = state["root"] / "results"
-        self.cluster = WorkerWorkloadCluster(worker, state, configuration.timeout_seconds)
+        tenant = state["tenant"]
+        if cli_name is not None:
+            profile = copy.deepcopy(profile)
+            client = profile["distributed"]["cli_nodes"][cli_name]
+            profile.update({key: client[key] for key in ("workload", "client", "load", "geometry")})
+            tenant = client["tenant"]
+        self.cluster = WorkerWorkloadCluster(worker, state, configuration.timeout_seconds, cli_name, tenant)
         topology = discover_topology()
         affinities = {}
         for role, field in (("static", "static_nodes"), ("dynamic", "dynamic_nodes"), ("cli", "ydb_cli")):
             nodes = [node for node in state["prepared"]["nodes"] if node["role"] == role]
+            if role == "cli" and cli_name is not None:
+                nodes = [node for node in nodes if node["name"] == cli_name]
             affinities[field] = (
                 None
                 if any(node["placement"]["cpus"] is None for node in nodes)
                 else tuple(sorted({cpu for node in nodes for cpu in node["placement"]["cpus"]}))
             )
-        self.lifecycle = WorkloadLifecycle(
+        self.lifecycle = (ExternalDatasetLifecycle if cli_name is not None else WorkloadLifecycle)(
             self.cluster,
             WorkloadCli(self.cluster.ydb_cli, self.cluster.client_endpoint, self.cluster.database),
             profile["workload"],
@@ -248,4 +262,90 @@ class WorkerWorkload:
             "artifacts": snapshot_results(self.root, arguments["directory"]) if "directory" in arguments else [],
             "profile_commands": list(self.lifecycle.profile_commands),
             "geometry_commands": list(self.lifecycle.geometry_commands),
+        }
+
+
+class ExternalDatasetLifecycle(WorkloadLifecycle):
+    """KV data is owned by the coordinator, not by individual CLI samples."""
+
+    def _prepare_dataset(self, state):
+        pass
+
+    def _cleanup_dataset(self, state, primary_error=None):
+        pass
+
+
+class MultiWorkerWorkload:
+    """One serialized worker job, with concurrent CLI processes inside a sample."""
+
+    def __init__(self, worker, state, config_yaml):
+        first = WorkerWorkload(worker, state, config_yaml)
+        path = state["root"] / "control" / "workload.yaml"
+        profile = load_config(path).runs[0].parameters["local_ydb"]
+        self.single = first if "cli_nodes" not in profile["distributed"] else None
+        self.workloads = {}
+        self.datasets = {}
+        if self.single is not None:
+            return
+        self.clients = profile["distributed"]["cli_nodes"]
+        local = {n["name"] for n in state["prepared"]["nodes"] if n["role"] == "cli"}
+        self.workloads = {
+            name: WorkerWorkload(worker, state, config_yaml, name) for name in self.clients if name in local
+        }
+        self.owners = {}
+        for name, client in self.clients.items():
+            self.owners.setdefault((client["tenant"], client["dataset"]), name)
+
+    def perform(self, action, arguments):
+        if self.single is not None:
+            return self.single.perform(action, arguments)
+        if action in ("prepare-datasets", "cleanup-datasets"):
+            if not isinstance(arguments, dict) or set(arguments) != {"directory"}:
+                raise BenchmarkError("Invalid dataset lifecycle arguments")
+            for key, owner in self.owners.items():
+                if owner not in self.workloads:
+                    continue
+                workload = self.workloads[owner]
+                token = hashlib.sha256(json.dumps(key).encode()).hexdigest()[:24]
+                if action == "prepare-datasets":
+                    directory = result_path(workload.root, arguments["directory"]) / token
+                    directory.mkdir(parents=True)
+                    dataset = _DatasetState(directory, "ydb_bench_" + token, "profile", None, {})
+                    self.datasets[key] = dataset
+                    WorkloadLifecycle._prepare_dataset(workload.lifecycle, dataset)
+                else:
+                    dataset = self.datasets.get(key)
+                    if dataset is not None:
+                        WorkloadLifecycle._cleanup_dataset(workload.lifecycle, dataset)
+            return {}
+
+        def perform_one(name):
+            workload, client = self.workloads[name], self.clients[name]
+            local = dict(arguments)
+            if "directory" in local:
+                local["directory"] += "/" + name
+            if "table_path" in local:
+                token = hashlib.sha256(json.dumps((client["tenant"], client["dataset"])).encode()).hexdigest()[:24]
+                local["table_path"] = "ydb_bench_" + token
+            if "dynamic_nodes" in local:
+                local["dynamic_nodes"] = workload.dynamic_nodes
+            if action == "sample":
+                local["load"] = client["load"]["values"][0]
+            return name, workload.perform(action, local)
+
+        # Threads remain alive until every managed CLI has exited. A failure
+        # cancels siblings before waiting, preserving generation cleanup.
+        if action == "sample":
+            with ThreadPoolExecutor(max_workers=len(self.workloads)) as pool:
+                futures = [pool.submit(perform_one, name) for name in self.workloads]
+                try:
+                    results = dict(future.result() for future in as_completed(futures))
+                except BaseException:
+                    next(iter(self.workloads.values())).state["cancel"].set()
+                    raise
+        else:
+            results = dict(perform_one(name) for name in self.workloads)
+        return {
+            "clients": results,
+            "artifacts": [artifact for result in results.values() for artifact in result["artifacts"]],
         }

@@ -74,7 +74,13 @@ class ClusterTemplatesTest(unittest.TestCase):
             }
         )
         template = self.store.save(self.value, {"amd", "sas"})
-        script = cluster_templates_ui.JS.split("async function renderClusterTemplates")[0] + r"""
+        from ydb.tools.ydb_bench.lib import distributed_builder_ui
+
+        script = (
+            distributed_builder_ui.JS
+            + "\nconst defaultLocalYdbWorkload=()=>({options:{}});\n"
+            + cluster_templates_ui.JS.split("async function renderClusterTemplates")[0]
+            + r"""
 const assert=require('assert');
 const template=JSON.parse(require('fs').readFileSync(0,'utf8'));
 const original=JSON.stringify(template),draft=ctRunDraft(template,'/Root/bench');
@@ -84,13 +90,16 @@ template.nodes[0].name='changed later';
 assert.notEqual(JSON.parse(draft)['distributed-ydb'].cluster['cluster-template'].nodes[0].name,template.nodes[0].name);
 process.stdout.write(draft);
 """
+        )
         draft = subprocess.check_output([shutil.which("node"), "-e", script], input=json.dumps(template), text=True)
         path = self.root / "draft.yaml"
         path.write_text(draft)
         profile = load_config(path).runs[0]
         self.assertEqual("distributed-ydb", profile.benchmark.name)
-        self.assertEqual([1, 2, 4], profile.parameters["local_ydb"]["load"]["values"])
-        self.assertEqual(4, profile.parameters["local_ydb"]["actor_system"]["dynamic_nodes"]["cpu_count"])
+        self.assertEqual([1], profile.parameters["local_ydb"]["load"]["values"])
+        self.assertEqual(
+            4, profile.parameters["local_ydb"]["actor_system"]["tenants"]["/Root/bench"]["dynamic_nodes"]["cpu_count"]
+        )
         self.assertEqual("/Root/bench", profile.parameters["local_ydb"]["distributed"]["tenant"])
         self.assertEqual([template], self.store.list())
 

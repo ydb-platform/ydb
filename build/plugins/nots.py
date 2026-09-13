@@ -875,6 +875,9 @@ def _TS_PROTO_AUTO_CONFIGURE(unit: ymake.Unit) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
+    if unit.get("TS_PROTO_PREPARE_DEPS") == "yes" and unit.get("_TS_PROTO_NON_RECURSIVE") == "yes":
+        unit.onpeerdir(sorted(set((unit.get_subst("_TS_PROTO_PEERS") or "").split())))
+
     if _is_ts_proto_auto(unit):
         unit.on_ts_proto_auto_prepare_deps_configure()
         return
@@ -944,12 +947,17 @@ def _TS_PROTO_AUTO_PREPARE_DEPS_CONFIGURE(unit: ymake.Unit) -> None:
     __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
 
     package_name = unit.get("_TS_PROTO_AUTO_PACKAGE_NAME")
+    proto_peers = (
+        sorted(set((unit.get("_TS_PROTO_PEERS") or "").split())) if unit.get("_TS_PROTO_NON_RECURSIVE") == "yes" else []
+    )
+    proto_peers_flag = f" --ts-proto-workspace-peers {' '.join(proto_peers)}" if proto_peers else ""
     unit.set(
         [
             "_PREPARE_DEPS_TS_PROTO_AUTO_FLAG",
-            f"--ts-proto-auto-deps-path {deps_path} --ts-proto-auto-package-name {package_name}",
+            f"--ts-proto-auto-deps-path {deps_path} --ts-proto-auto-package-name {package_name}{proto_peers_flag}",
         ]
     )
+    __set_append(unit, "_PREPARE_DEPS_INOUTS", "${hide:PEERS} ${hide:PEERS_LATE_OUTS}")
 
 
 def _node_modules_bundle_needed(unit: ymake.Unit, arc_path: str) -> bool:

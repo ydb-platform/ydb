@@ -47,7 +47,15 @@ Save the configuration from the selected tab as `sqlc.yaml`. Input paths and the
 sqlc-ydb init --help
 ```
 
-Each tab includes a help command below its configuration to describe the selected generator's additional options, their types, defaults, and purpose.
+Choose a language and runtime from that output, then request help for the generator's options:
+
+```text
+sqlc-ydb init --language <language> --runtime <runtime> --help
+```
+
+Replace `<language>` and `<runtime>` with values from the help output. The command describes each option's purpose, type, allowed values, and default. Omitting `--runtime` selects the language's default runtime. Calls with `--help` do not create files.
+
+The tabs below illustrate configuration examples. For the current list of supported languages, runtimes, and options, consult the help provided by your installed sqlc-ydb version.
 
 {% list tabs group=sqlc-language %}
 
@@ -70,10 +78,6 @@ Each tab includes a help command below its configuration to describe the selecte
             runtime: "ydb"
     ```
 
-    ```bash
-    sqlc-ydb init --language cpp --runtime ydb --help
-    ```
-
   - userver {#cpp-userver}
 
     ```yaml
@@ -87,10 +91,6 @@ Each tab includes a help command below its configuration to describe the selecte
             out: "cpp/userver"
             namespace: "authors"
             runtime: "userver"
-    ```
-
-    ```bash
-    sqlc-ydb init --language cpp --runtime userver --help
     ```
 
   {% endlist %}
@@ -114,10 +114,6 @@ Each tab includes a help command below its configuration to describe the selecte
             sql_package: "ydb"
     ```
 
-    ```bash
-    sqlc-ydb init --language go --runtime ydb --help
-    ```
-
   - database/sql {#go-sql}
 
     ```yaml
@@ -131,10 +127,6 @@ Each tab includes a help command below its configuration to describe the selecte
             out: "go/sql"
             package: "authors"
             sql_package: "database/sql"
-    ```
-
-    ```bash
-    sqlc-ydb init --language go --runtime database/sql --help
     ```
 
   {% endlist %}
@@ -158,10 +150,6 @@ Each tab includes a help command below its configuration to describe the selecte
             runtime: "ydb"
     ```
 
-    ```bash
-    sqlc-ydb init --language java --runtime ydb --help
-    ```
-
   - JDBC {#java-jdbc}
 
     ```yaml
@@ -177,10 +165,6 @@ Each tab includes a help command below its configuration to describe the selecte
             runtime: "jdbc"
     ```
 
-    ```bash
-    sqlc-ydb init --language java --runtime jdbc --help
-    ```
-
   - jOOQ {#java-jooq}
 
     ```yaml
@@ -194,10 +178,6 @@ Each tab includes a help command below its configuration to describe the selecte
             out: "java/jooq"
             package: "authors"
             runtime: "jooq"
-    ```
-
-    ```bash
-    sqlc-ydb init --language java --runtime jooq --help
     ```
 
   {% endlist %}
@@ -220,10 +200,6 @@ Each tab includes a help command below its configuration to describe the selecte
             runtime: "ydb"
     ```
 
-    ```bash
-    sqlc-ydb init --language python --runtime ydb --help
-    ```
-
   - DB-API {#python-dbapi}
 
     ```yaml
@@ -238,10 +214,6 @@ Each tab includes a help command below its configuration to describe the selecte
             runtime: "dbapi"
     ```
 
-    ```bash
-    sqlc-ydb init --language python --runtime dbapi --help
-    ```
-
   - SQLAlchemy {#python-sqlalchemy}
 
     ```yaml
@@ -254,10 +226,6 @@ Each tab includes a help command below its configuration to describe the selecte
           python:
             out: "python/sqlalchemy"
             runtime: "sqlalchemy"
-    ```
-
-    ```bash
-    sqlc-ydb init --language python --runtime sqlalchemy --help
     ```
 
   {% endlist %}
@@ -281,10 +249,6 @@ Each tab includes a help command below its configuration to describe the selecte
             runtime: "adonet"
     ```
 
-    ```bash
-    sqlc-ydb init --language csharp --runtime adonet --help
-    ```
-
   - Dapper {#csharp-dapper}
 
     ```yaml
@@ -298,10 +262,6 @@ Each tab includes a help command below its configuration to describe the selecte
             out: "csharp/dapper"
             namespace: "Authors"
             runtime: "dapper"
-    ```
-
-    ```bash
-    sqlc-ydb init --language csharp --runtime dapper --help
     ```
 
   {% endlist %}
@@ -324,10 +284,6 @@ Each tab includes a help command below its configuration to describe the selecte
             runtime: "ydb"
     ```
 
-    ```bash
-    sqlc-ydb init --language typescript --runtime ydb --help
-    ```
-
   {% endlist %}
 
 - Rust {#lang-rust}
@@ -346,10 +302,6 @@ Each tab includes a help command below its configuration to describe the selecte
           rust:
             out: "rust"
             runtime: "ydb"
-    ```
-
-    ```bash
-    sqlc-ydb init --language rust --runtime ydb --help
     ```
 
   {% endlist %}
@@ -373,10 +325,6 @@ Each tab includes a help command below its configuration to describe the selecte
             runtime: "ydb"
     ```
 
-    ```bash
-    sqlc-ydb init --language php --runtime ydb --help
-    ```
-
   {% endlist %}
 
 - Kotlin {#lang-kotlin}
@@ -398,10 +346,6 @@ Each tab includes a help command below its configuration to describe the selecte
             runtime: "ydb"
     ```
 
-    ```bash
-    sqlc-ydb init --language kotlin --runtime ydb --help
-    ```
-
   - JDBC {#kotlin-jdbc}
 
     ```yaml
@@ -417,10 +361,6 @@ Each tab includes a help command below its configuration to describe the selecte
             runtime: "jdbc"
     ```
 
-    ```bash
-    sqlc-ydb init --language kotlin --runtime jdbc --help
-    ```
-
   - Exposed {#kotlin-exposed}
 
     ```yaml
@@ -434,10 +374,6 @@ Each tab includes a help command below its configuration to describe the selecte
             out: "kotlin/exposed"
             package: "authors"
             runtime: "exposed"
-    ```
-
-    ```bash
-    sqlc-ydb init --language kotlin --runtime exposed --help
     ```
 
   {% endlist %}

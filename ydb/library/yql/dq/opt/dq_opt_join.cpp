@@ -1391,6 +1391,10 @@ TVector<ui32> CollectEqualNullsKeys(const TDqJoin& join, ui32 keyCount) {
             if (opt.Name().Value() != "EqualNulls") {
                 continue;
             }
+            if (const auto num = opt.Value().Maybe<TCoUint32>()) {
+                keys.push_back(FromString<ui32>(num.Cast().Literal().Value()));
+                continue;
+            }
             if (const auto atom = opt.Value().Maybe<TCoAtom>()) {
                 const auto value = atom.Cast().Value();
                 // Parse an index first: TryFromString<bool> also accepts "0"/"1".
@@ -1434,7 +1438,9 @@ TVector<TCoNameValueTuple> BuildBlockHashJoinSettings(
         joinSettings.push_back(
             Build<TCoNameValueTuple>(ctx, join.Pos())
                 .Name().Build("EqualNulls")
-                .Value<TCoAtom>().Build(ToString(keyIndex))
+                .Value<TCoUint32>()
+                    .Literal().Build(ToString(keyIndex))
+                    .Build()
                 .Done());
     }
     return joinSettings;

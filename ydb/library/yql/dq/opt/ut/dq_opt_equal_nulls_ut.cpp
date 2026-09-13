@@ -62,11 +62,18 @@ TDqJoin MakeDqJoin(
         .Done();
 }
 
+TString SettingValue(const TCoNameValueTuple& setting) {
+    if (const auto atom = setting.Value().Maybe<TCoAtom>()) {
+        return TString(atom.Cast().Value());
+    }
+    return TString(setting.Value().Cast<TCoUint32>().Literal().Value());
+}
+
 TVector<std::pair<TString, TString>> SettingPairs(const TVector<TCoNameValueTuple>& settings) {
     TVector<std::pair<TString, TString>> pairs;
     pairs.reserve(settings.size());
     for (const auto& setting : settings) {
-        pairs.emplace_back(TString(setting.Name().Value()), TString(setting.Value().Cast<TCoAtom>().Value()));
+        pairs.emplace_back(TString(setting.Name().Value()), SettingValue(setting));
     }
     return pairs;
 }
@@ -102,17 +109,54 @@ Y_UNIT_TEST(CollectKeysFromIndexOption) {
     UNIT_ASSERT_VALUES_EQUAL(CollectEqualNullsKeys(join, 2), (TVector<ui32>{1}));
 }
 
+Y_UNIT_TEST(CollectKeysFromUint32Option) {
+    TExprContext ctx;
+    const auto pos = ctx.AppendPosition({});
+    const auto dummy = Build<TCoVoid>(ctx, pos).Done();
+    const auto dummyList = Build<TCoAtomList>(ctx, pos).Done();
+    const auto joinKeys = Build<TDqJoinKeyTupleList>(ctx, pos).Done();
+    const auto join = Build<TDqJoin>(ctx, pos)
+        .LeftInput(dummy)
+        .RightInput(dummy)
+        .LeftLabel(ctx.NewAtom(pos, "L"))
+        .RightLabel(ctx.NewAtom(pos, "R"))
+        .JoinType().Build("Inner")
+        .JoinKeys(joinKeys)
+        .LeftJoinKeyNames(dummyList)
+        .RightJoinKeyNames(dummyList)
+        .JoinAlgo().Build("GraceJoin")
+        .ShuffleLeftSideBy()
+            .Build()
+        .ShuffleRightSideBy()
+            .Build()
+        .JoinAlgoOptions()
+            .Add(Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build("EqualNulls")
+                .Value<TCoUint32>()
+                    .Literal().Build("1")
+                    .Build()
+                .Done())
+            .Build()
+        .Done();
+    UNIT_ASSERT_VALUES_EQUAL(CollectEqualNullsKeys(join, 2), (TVector<ui32>{1}));
+}
+
 Y_UNIT_TEST(BuildSettingsForPhyBlockHashJoin) {
     TExprContext ctx;
     const auto join = MakeDqJoin(ctx, {}, {{"EqualNulls", "0"}});
 
+    const auto graceSettings = BuildBlockHashJoinSettings(join, EJoinAlgoType::GraceJoin, 1, ctx);
     UNIT_ASSERT_VALUES_EQUAL(
-        SettingPairs(BuildBlockHashJoinSettings(join, EJoinAlgoType::GraceJoin, 1, ctx)),
+        SettingPairs(graceSettings),
         (TVector<std::pair<TString, TString>>{{"EqualNulls", "0"}}));
+    UNIT_ASSERT(graceSettings[0].Value().Maybe<TCoUint32>());
 
+    const auto reverseSettings = BuildBlockHashJoinSettings(join, EJoinAlgoType::ReverseBlockJoin, 1, ctx);
     UNIT_ASSERT_VALUES_EQUAL(
-        SettingPairs(BuildBlockHashJoinSettings(join, EJoinAlgoType::ReverseBlockJoin, 1, ctx)),
+        SettingPairs(reverseSettings),
         (TVector<std::pair<TString, TString>>{{"BuildSide", "Left"}, {"EqualNulls", "0"}}));
+    UNIT_ASSERT(reverseSettings[0].Value().Maybe<TCoAtom>());
+    UNIT_ASSERT(reverseSettings[1].Value().Maybe<TCoUint32>());
 }
 
 Y_UNIT_TEST(OptimizerCreatesPhyBlockHashJoinWithEqualNulls) {
@@ -140,12 +184,15 @@ Y_UNIT_TEST(OptimizerCreatesPhyBlockHashJoinWithEqualNulls) {
         {"EqualNulls", "0"},
         {"EqualNulls", "1"},
     }));
+    for (const auto& setting : settings) {
+        UNIT_ASSERT(setting.Value().Maybe<TCoUint32>());
+    }
 
     const auto ast = NCommon::ExprToPrettyString(ctx, phyJoin.Ref());
     UNIT_ASSERT_C(ast.Contains("DqPhyBlockHashJoin"), ast);
     UNIT_ASSERT_C(ast.Contains("EqualNulls"), ast);
-    UNIT_ASSERT_C(ast.Contains(R"("EqualNulls" '"0")"), ast);
-    UNIT_ASSERT_C(ast.Contains(R"("EqualNulls" '"1")"), ast);
+    UNIT_ASSERT_C(ast.Contains(R"("EqualNulls" (Uint32 '"0"))"), ast);
+    UNIT_ASSERT_C(ast.Contains(R"("EqualNulls" (Uint32 '"1"))"), ast);
 }
 
 } // DqOptEqualNulls

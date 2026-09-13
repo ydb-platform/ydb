@@ -55,7 +55,7 @@ NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mod
 // Sources: TDqJoin.Flags "EqualNulls" (all keys) or JoinAlgoOptions EqualNulls=true / EqualNulls=<index>.
 TVector<ui32> CollectEqualNullsKeys(const NNodes::TDqJoin& join, ui32 keyCount);
 
-// Settings emitted on TDqPhyBlockHashJoin: optional BuildSide=Left plus one EqualNulls tuple per key.
+// Settings emitted on TDqPhyBlockHashJoin: optional BuildSide=Left plus one EqualNulls Uint32 per key.
 TVector<NNodes::TCoNameValueTuple> BuildBlockHashJoinSettings(
     const NNodes::TDqJoin& join,
     EJoinAlgoType joinAlgo,

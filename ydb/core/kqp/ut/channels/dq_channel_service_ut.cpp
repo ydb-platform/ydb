@@ -1109,6 +1109,13 @@ struct TPeerActivityTest : public TSessionTest {
         auto receiver = FindNodeState(Service1, senderNodeId);
         UNIT_ASSERT_C(receiver, "the receiving node session not found");
 
+        // The descriptor of the warm up channel goes when its consumer lets go of the buffer, which happens
+        // after the TEvFinished of it has been grabbed. Waiting for it to go is what makes the wait below
+        // mean the data of the 2nd channel: pushed bytes are summed over every input descriptor there, and
+        // the one of the warm up carries some.
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInputCount(receiver) == 0; }, TDuration::Seconds(10)),
+            "the input descriptor of the warm up channel is still there");
+
         // nothing refreshes the activity of that session while it is idle: it is well under the idle ping
         // period, so no discovery of its own goes out and no ack comes back
         Sleep(TDuration::MilliSeconds(200));

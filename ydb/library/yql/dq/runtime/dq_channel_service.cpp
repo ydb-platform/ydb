@@ -2110,9 +2110,12 @@ void TNodeState::TerminateOutputDescriptor(const std::shared_ptr<TOutputDescript
         << ", RPop=" << descriptor->RemotePopBytes.load()
     );
     // FailOutputs erases the descriptor of an aborted channel and accounts for it there, while the buffer
-    // of that channel lives on until its actor lets go of it and terminates it here. Counting an erase
-    // which removed nothing would take the very same descriptor off the sensor twice.
-    if (OutputDescriptors.erase(descriptor->Info)) {
+    // of that channel lives on until its actor lets go of it and terminates it here. By then the map may
+    // hold a descriptor of its own for that very Info - the peer resending the leading message of the
+    // channel creates one - so erasing by key would take the sensor down twice and drop a live descriptor
+    // with it, leaving the next message of its channel with nothing to be delivered to.
+    if (auto it = OutputDescriptors.find(descriptor->Info); it != OutputDescriptors.end() && it->second == descriptor) {
+        OutputDescriptors.erase(it);
         (*OutputBufferCount)--;
     }
     if (Limits.IdleDestroyPeriod == TDuration::Zero() && InputDescriptors.empty() && OutputDescriptors.empty()) {
@@ -2131,9 +2134,12 @@ void TNodeState::TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor
     );
     // FailInputs and the ID ERASE/GEN path erase the descriptor of an aborted channel and account for it
     // there, while the buffer of that channel lives on until its actor lets go of it and terminates it
-    // here. Counting an erase which removed nothing would take the very same descriptor off the sensor
-    // twice, which is what drove InputBuffer/Count negative.
-    if (InputDescriptors.erase(descriptor->Info)) {
+    // here. Erasing by key would take the sensor down twice for it, which is what drove InputBuffer/Count
+    // negative, and worse: by then the map may hold a descriptor of its own for that very Info, created by
+    // the peer resending the leading message of the channel, and that live one would be dropped instead,
+    // leaving the next message of the channel to be answered with NOT FOUND ID.
+    if (auto it = InputDescriptors.find(descriptor->Info); it != InputDescriptors.end() && it->second == descriptor) {
+        InputDescriptors.erase(it);
         (*InputBufferCount)--;
     }
     if (Limits.IdleDestroyPeriod == TDuration::Zero() && InputDescriptors.empty() && OutputDescriptors.empty()) {

@@ -2190,21 +2190,31 @@ void TNodeState::HandleCleanup() {
             ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
                 new TEvPrivate::TEvFreeNodeSession(NodeId)));
         }
-    } else if (!Queue.empty() && now - Queue.front()->SentAt > Limits.IdlePingPeriod) {
-        // Whether our own sending has stalled is a different question, and the traffic of the peer does not
-        // answer it: one session covers both directions of a node pair, so data arriving on a channel this
-        // node receives says nothing about a queue stuck on a channel it sends. The front of the Queue is
-        // the oldest message the peer has not confirmed and it is the thing which stalls, so the watchdog
-        // asks about it directly.
+    } else if ((!Queue.empty() && now - Queue.front()->SentAt > Limits.IdlePingPeriod)
+        || idlePeriod > Limits.IdlePingPeriod) {
+        // 2 separate reasons to ping, and a session needs both of them.
         //
-        // It has to exist: the receiver drops data silently when the generation is stale and when the SeqNo
-        // is at or below the confirmed one, neither of which answers or bounces, and every other trigger of
-        // a reconciliation needs an ack to arrive, a delivery to bounce or the link to drop.
+        // The 1st is the watchdog of the outbound half. The traffic of the peer cannot answer for it: one
+        // session covers both directions of a node pair, so data arriving on a channel this node receives
+        // says nothing about a queue stuck on a channel it sends. The front of the Queue is the oldest
+        // message the peer has not confirmed and it is the thing which stalls, so it is asked directly.
+        // It has to exist, because the receiver drops data silently when the generation is stale and when
+        // the SeqNo is at or below the confirmed one, and neither answers nor bounces, while every other
+        // trigger of a reconciliation needs an ack to arrive, a delivery to bounce or the link to drop.
         //
-        // A session with nothing queued is not pinged at all any more. There is nothing to recover there,
-        // and the only thing such a ping ever achieved was to destroy healthy channels when the peer was
-        // too slow to answer it. A peer which dies still announces itself, by a disconnect or by the next
-        // send bouncing. (No check of Reconciliation here: the early return above covers it.)
+        // The 2nd is the liveness probe of a session which has channels but nothing queued - every channel
+        // of it inbound, say. Its peer may have freed its own session while the link stayed up, in which
+        // case no disconnect arrives, the acks this node sends bounce into a log line and its inbound
+        // channels would hang for as long as the query lets them. The discovery of the probe makes the
+        // service of the peer create a session, which announces itself, which brings ConnectSession here
+        // to fail those channels - an error instead of a hang.
+        //
+        // The probe is the ping this series started from, and what made it harmful was answering the
+        // question with LastPeerActivity while data did not refresh it: a session streaming from its peer
+        // looked idle and was pinged with a fatal deadline attached. Data refreshes it now, so the probe
+        // only fires when the peer really has gone quiet, which is when it is wanted.
+        //
+        // (No check of Reconciliation here: the early return above covers it.)
         StartReconciliation(false, 'I');
     }
 

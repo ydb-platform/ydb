@@ -107,6 +107,9 @@ namespace NYql::NGenericPushDown {
             }
             auto leastTimestamp = TInstant::FromValue(least.value().int64_value() * multiplier);
             auto greatestTimestamp = TInstant::FromValue(greatest.value().int64_value() * multiplier);
+            if (leastTimestamp > greatestTimestamp) {
+                return Triple::False;
+            }
             return timestampStatistics.lowValue <= greatestTimestamp && timestampStatistics.highValue >= leastTimestamp ? Triple::True : Triple::False;
         }
 

@@ -947,7 +947,7 @@ Call the generated method for author 42:
         cancellationToken);
     ```
 
-    Requires .NET 8, Ydb.Sdk, a configured `YdbDataSource dataSource`, and a `CancellationToken cancellationToken`. `ExecuteAsync` retries the whole callback according to the data source policy. Commit is explicit; `await using` rolls back an unfinished transaction on an exception. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/csharp/adonet/Smoke.cs). `GetAuthorAsync` throws `InvalidOperationException` when no row is found.
+    Requires .NET 8, Ydb.Sdk, a configured `YdbDataSource dataSource`, and a `CancellationToken cancellationToken`. `ExecuteAsync` retries the whole callback according to the data source policy. For multiple calls in one transaction, use `ExecuteInTransactionAsync`: the provider manages commit, rollback and whole-transaction retries. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/csharp/adonet/Smoke.cs). `GetAuthorAsync` throws `InvalidOperationException` when no row is found.
 
   - Dapper {#csharp-dapper}
 
@@ -957,7 +957,7 @@ Call the generated method for author 42:
         cancellationToken);
     ```
 
-    Requires .NET 8, Ydb.Sdk and Dapper, a configured `YdbDataSource dataSource`, and a `CancellationToken cancellationToken`. `ExecuteAsync` retries the whole callback according to the data source policy. Commit is explicit; `await using` rolls back an unfinished transaction on an exception. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/main/tests/examples/csharp/Program.cs). `GetAuthorAsync` throws `InvalidOperationException` when no row is found.
+    Requires .NET 8, Ydb.Sdk and Dapper, a configured `YdbDataSource dataSource`, and a `CancellationToken cancellationToken`. `ExecuteAsync` retries the whole callback according to the data source policy. For multiple calls in one transaction, use `ExecuteInTransactionAsync`: the provider manages commit, rollback and whole-transaction retries. [Complete example](https://github.com/ydb-platform/sqlc-ydb/blob/main/tests/examples/csharp/Program.cs). `GetAuthorAsync` throws `InvalidOperationException` when no row is found.
 
   {% endlist %}
 
@@ -1256,29 +1256,23 @@ In each example, two generated methods execute two YQL queries in one transactio
   - ADO.NET {#csharp-adonet}
 
     ```csharp
-    var author = await dataSource.ExecuteAsync(async (connection, ct) =>
+    var author = await dataSource.ExecuteInTransactionAsync(async (connection, ct) =>
     {
-        await using var transaction = (YdbTransaction)await connection.BeginTransactionAsync(ct);
-        var queries = new Authors.Queries(connection, transaction);
+        var queries = new Authors.Queries(connection);
         await queries.UpsertAuthorAsync(new Authors.UpsertAuthorParams(42UL, "Alice"), ct);
-        var row = await queries.GetAuthorAsync(42UL, ct);
-        await transaction.CommitAsync(ct);
-        return row;
-    }, cancellationToken);
+        return await queries.GetAuthorAsync(42UL, ct);
+    }, cancellationToken: cancellationToken);
     ```
 
   - Dapper {#csharp-dapper}
 
     ```csharp
-    var author = await dataSource.ExecuteAsync(async (connection, ct) =>
+    var author = await dataSource.ExecuteInTransactionAsync(async (connection, ct) =>
     {
-        await using var transaction = (YdbTransaction)await connection.BeginTransactionAsync(ct);
-        var queries = new Authors.Queries(connection, transaction);
+        var queries = new Authors.Queries(connection);
         await queries.UpsertAuthorAsync(new Authors.UpsertAuthorParams(42UL, "Alice"), ct);
-        var row = await queries.GetAuthorAsync(42UL, ct);
-        await transaction.CommitAsync(ct);
-        return row;
-    }, cancellationToken);
+        return await queries.GetAuthorAsync(42UL, ct);
+    }, cancellationToken: cancellationToken);
     ```
 
   {% endlist %}
@@ -1403,4 +1397,4 @@ In each example, two generated methods execute two YQL queries in one transactio
 
 {% endlist %}
 
-The current set of supported commands, configuration options, and YQL constructs is maintained in the [upstream sqlc compatibility contract](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/compatibility.md). If a query is unsupported or generated code is awkward to use, open an [issue](https://github.com/ydb-platform/sqlc-ydb/issues) with a minimal schema, query, configuration and the output of `sqlc-ydb version --verbose`.
+The current set of supported commands, configuration options, and YQL constructs is maintained in the [sqlc-ydb compatibility contract](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/compatibility.md). If a query is unsupported or generated code is awkward to use, open an [issue](https://github.com/ydb-platform/sqlc-ydb/issues) with a minimal schema, query, configuration and the output of `sqlc-ydb version --verbose`.

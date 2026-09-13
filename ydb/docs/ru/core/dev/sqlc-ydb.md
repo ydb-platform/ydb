@@ -947,7 +947,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
         cancellationToken);
     ```
 
-    Нужны .NET 8, Ydb.Sdk, настроенный `YdbDataSource dataSource` и `CancellationToken cancellationToken`. `ExecuteAsync` повторяет весь callback согласно политике data source. Транзакция коммитится явно; `await using` откатывает незавершённую транзакцию при исключении. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/csharp/adonet/Smoke.cs). Если строка не найдена, `GetAuthorAsync` выбрасывает `InvalidOperationException`.
+    Нужны .NET 8, Ydb.Sdk, настроенный `YdbDataSource dataSource` и `CancellationToken cancellationToken`. `ExecuteAsync` повторяет весь callback согласно политике data source. Для нескольких вызовов в одной транзакции используйте `ExecuteInTransactionAsync`: провайдер управляет коммитом, откатом и повтором всей транзакции. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/examples/authors/csharp/adonet/Smoke.cs). Если строка не найдена, `GetAuthorAsync` выбрасывает `InvalidOperationException`.
 
   - Dapper {#csharp-dapper}
 
@@ -957,7 +957,7 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
         cancellationToken);
     ```
 
-    Нужны .NET 8, Ydb.Sdk и Dapper, настроенный `YdbDataSource dataSource` и `CancellationToken cancellationToken`. `ExecuteAsync` повторяет весь callback согласно политике data source. Транзакция коммитится явно; `await using` откатывает незавершённую транзакцию при исключении. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/tests/examples/csharp/Program.cs). Если строка не найдена, `GetAuthorAsync` выбрасывает `InvalidOperationException`.
+    Нужны .NET 8, Ydb.Sdk и Dapper, настроенный `YdbDataSource dataSource` и `CancellationToken cancellationToken`. `ExecuteAsync` повторяет весь callback согласно политике data source. Для нескольких вызовов в одной транзакции используйте `ExecuteInTransactionAsync`: провайдер управляет коммитом, откатом и повтором всей транзакции. [Полный пример](https://github.com/ydb-platform/sqlc-ydb/blob/main/tests/examples/csharp/Program.cs). Если строка не найдена, `GetAuthorAsync` выбрасывает `InvalidOperationException`.
 
   {% endlist %}
 
@@ -1256,29 +1256,23 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
   - ADO.NET {#csharp-adonet}
 
     ```csharp
-    var author = await dataSource.ExecuteAsync(async (connection, ct) =>
+    var author = await dataSource.ExecuteInTransactionAsync(async (connection, ct) =>
     {
-        await using var transaction = (YdbTransaction)await connection.BeginTransactionAsync(ct);
-        var queries = new Authors.Queries(connection, transaction);
+        var queries = new Authors.Queries(connection);
         await queries.UpsertAuthorAsync(new Authors.UpsertAuthorParams(42UL, "Alice"), ct);
-        var row = await queries.GetAuthorAsync(42UL, ct);
-        await transaction.CommitAsync(ct);
-        return row;
-    }, cancellationToken);
+        return await queries.GetAuthorAsync(42UL, ct);
+    }, cancellationToken: cancellationToken);
     ```
 
   - Dapper {#csharp-dapper}
 
     ```csharp
-    var author = await dataSource.ExecuteAsync(async (connection, ct) =>
+    var author = await dataSource.ExecuteInTransactionAsync(async (connection, ct) =>
     {
-        await using var transaction = (YdbTransaction)await connection.BeginTransactionAsync(ct);
-        var queries = new Authors.Queries(connection, transaction);
+        var queries = new Authors.Queries(connection);
         await queries.UpsertAuthorAsync(new Authors.UpsertAuthorParams(42UL, "Alice"), ct);
-        var row = await queries.GetAuthorAsync(42UL, ct);
-        await transaction.CommitAsync(ct);
-        return row;
-    }, cancellationToken);
+        return await queries.GetAuthorAsync(42UL, ct);
+    }, cancellationToken: cancellationToken);
     ```
 
   {% endlist %}
@@ -1403,4 +1397,4 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
 
 {% endlist %}
 
-Актуальный состав поддерживаемых команд, конфигурации и конструкций YQL приведён в [описании совместимости с upstream sqlc](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/compatibility.md). Если ваш запрос не поддерживается или сгенерированный код неудобен, создайте [issue](https://github.com/ydb-platform/sqlc-ydb/issues) с минимальными схемой, запросом, конфигурацией и выводом `sqlc-ydb version --verbose`.
+Актуальный состав поддерживаемых команд, конфигурации и конструкций YQL приведён в [контракте совместимости sqlc-ydb](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/compatibility.md). Если ваш запрос не поддерживается или сгенерированный код неудобен, создайте [issue](https://github.com/ydb-platform/sqlc-ydb/issues) с минимальными схемой, запросом, конфигурацией и выводом `sqlc-ydb version --verbose`.

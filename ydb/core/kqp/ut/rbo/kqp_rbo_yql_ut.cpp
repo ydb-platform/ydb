@@ -6285,6 +6285,47 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 )
                 ORDER BY a;
             )"},
+            {"range whole partition frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS partition_sum,
+                    Max(e) OVER w AS partition_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range default frame written out", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS range_sum,
+                    Min(e) OVER w AS range_min
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"range default frame implied", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS range_sum,
+                    Min(e) OVER w AS range_min
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                )
+                ORDER BY a;
+            )"},
             {"range frame with ties", R"(
                 PRAGMA YqlSelect = "force";
 
@@ -6488,9 +6529,6 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         "centred frame",
         "forward looking frame",
         "trailing frame",
-        // A RANGE frame runs to the last peer row, which a per-row chain cannot express.
-        "range frame with ties",
-        "named window shared by several functions over aggregates",
     };
 
     Y_UNIT_TEST_TWIN(WindowFunctions, ColumnStore) {

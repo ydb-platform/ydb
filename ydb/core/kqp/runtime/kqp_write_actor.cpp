@@ -484,8 +484,7 @@ public:
         , AttachWriteSeqNum(
               AppData()->FeatureFlags.GetEnableDataShardUncommittedWriteSeqNum()
               && !inconsistentTx
-              && !isOlap
-              && lockTxId != 0)
+              && !isOlap)
         , KeyColumnTypes(std::move(keyColumnTypes))
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
@@ -493,12 +492,16 @@ public:
         , UserCtx(userCtx)
     {
         AFL_ENSURE(lockMode == NKikimrDataEvents::OPTIMISTIC_SNAPSHOT_ISOLATION || !CommitMvccSnapshot);
+        // A non-inconsistent write always has a lock id (assigned by the executer).
+        AFL_ENSURE(inconsistentTx || lockTxId != 0);
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                 .ColumnShardMaxOperationBytes = MessageSettings.ColumnShardMaxOperationBytes,
                 .Inconsistent = InconsistentTx,
+                .EnableWriteSeqNum = AttachWriteSeqNum,
+                .WriterIndex = WriterIndex,
             },
             Alloc);
 
@@ -702,7 +705,6 @@ public:
 
     void Resolve() {
         ResolvingInProgress = true;
-        AFL_ENSURE(InconsistentTx || IsOlap);
         TableWriteActorSpan = NWilson::TSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(ParentTraceId),
             "WaitForTableResolve", NWilson::EFlags::AUTO_END);
 
@@ -801,7 +803,9 @@ public:
             {"logPrefix", this->LogPrefix},
             {"tableId", TableId});
 
-        AFL_ENSURE(InconsistentTx); // Only for CTAS
+        // CTAS (inconsistent) may stream to either row or column tables, and the
+        // consistent row-table move-retry resolves this way too.
+        AFL_ENSURE(InconsistentTx || !IsOlap);
 
         const TVector<TCell> minKey(KeyColumnTypes.size());
         const TTableRange range(minKey, true, {}, false, false);
@@ -855,6 +859,10 @@ public:
             {"partitionsCount", Partitioning->Size()});
 
         Prepare();
+
+        // Flush old data to new shards
+        UpdateShards();
+        FlushToShards();
     }
 
     void OnOverloadReady(const ui64 shardId, const ui64 seqNo) {
@@ -911,7 +919,7 @@ public:
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
 
         if (ev->Get()->Record.HasOverloadSubscribed() && handleOverload) {
-            YDB_LOG_INFO("Received EvWriteResult with overload subscription.",
+            YDB_LOG_DEBUG("Received EvWriteResult with overload subscription.",
                 {"logPrefix", this->LogPrefix},
                 {"tablePath", TablePath},
                 {"shardID", ev->Get()->Record.GetOrigin()},
@@ -920,9 +928,12 @@ public:
 
             const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
             if (metadata && ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
-                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                YDB_LOG_INFO("Waiting for overloaded shard.",
+                    {"logPrefix", this->LogPrefix},
+                    {"tablePath", TablePath},
+                    {"shardID", ev->Get()->Record.GetOrigin()},
+                    {"sink", this->SelfId()});
             }
-
             return;
         }
 
@@ -979,6 +990,9 @@ public:
             if (InconsistentTx) {
                 ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
                 RetryResolve();
+            } else if (AttachWriteSeqNum && Mode == EMode::WRITE) {
+                // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs
+                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
             } else {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
@@ -1104,11 +1118,8 @@ public:
                 {"shardID", ev->Get()->Record.GetOrigin()},
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
-            // Resolve does not refresh the baked-in schema version: fail to recompile instead of retrying forever.
-            if (!InconsistentTx) {
-                UpdateStats(ev->Get()->Record.GetTxStats());
-                TxManager->SetError(ev->Get()->Record.GetOrigin());
-            }
+            UpdateStats(ev->Get()->Record.GetTxStats());
+            TxManager->SetError(ev->Get()->Record.GetOrigin());
             RuntimeError(
                 NYql::NDqProto::StatusIds::SCHEME_ERROR,
                 NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH,
@@ -1219,9 +1230,6 @@ public:
             return;
         }
 
-        // The batch is applied, so the next one to this shard gets a fresh write seq num
-        InFlightWriteSeqNum.erase(ev->Get()->Record.GetOrigin());
-
         // Only collect locks in WRITE mode (COLLECTING state required by AddLock)
         if (Mode == EMode::WRITE) {
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
@@ -1323,8 +1331,10 @@ public:
 
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         YQL_ENSURE(metadata);
-        YQL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx);
-        if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
+        // A resend is safe when the shard deduplicates by uncommitted write seq num
+        // (AttachWriteSeqNum) or when the write is inconsistent.
+        YQL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
+        if (InconsistentTx && metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
             YDB_LOG_WARN("Write retry limit exceeded for table.",
                 {"logPrefix", this->LogPrefix},
                 {"shardId", shardId},
@@ -1385,30 +1395,8 @@ public:
 
         evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
 
-        const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite);
+        const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite, isPrepare || isImmediateCommit);
         YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
-
-        // Set per-operation WriteSeqNum for uncommitted writes
-        if (AttachWriteSeqNum && !isPrepare && !isImmediateCommit && !InconsistentTx) {
-            const size_t opCount = evWrite->Record.OperationsSize();
-            auto [it, allocated] = InFlightWriteSeqNum.try_emplace(shardId);
-            if (allocated) {
-                // First send: allocate a new WriteSeqNum for each operation
-                it->second.reserve(opCount);
-                for (size_t i = 0; i < opCount; ++i) {
-                    it->second.push_back(TxManager->NextWriteSeqNum(WriterIndex, shardId));
-                }
-            }
-            // On resend: reuse the previously allocated seq nums
-            YQL_ENSURE(it->second.size() == opCount,
-                "Operation count mismatch on resend: stored " << it->second.size()
-                << " operations, got " << opCount);
-            for (size_t i = 0; i < opCount; ++i) {
-                auto* writeSeqNum = evWrite->Record.MutableOperations(i)->MutableWriteSeqNum();
-                writeSeqNum->SetWriterIndex(WriterIndex);
-                writeSeqNum->SetWriteSeqNum(it->second[i]);
-            }
-        }
 
         if (metadata->SendAttempts == 0) {
             if (!isPrepare) {
@@ -1502,6 +1490,7 @@ public:
     }
 
     void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
+        AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (!metadata || (ifCookieEqual && metadata->Cookie != ifCookieEqual)) {
             YDB_LOG_INFO("Shard retry skipped because metadata was not found for the given cookie.",
@@ -1549,9 +1538,19 @@ public:
             return;
         }
 
+        const auto state = TxManager->GetState(ev->Get()->TabletId);
+
+        // A moved/restarted tablet keeps its id. During WRITE mode the in-flight
+        // batch is resent; retries are bounded by MaxWriteAttempts in SendDataToShard,
+        // and the new tablet generation restores the writer chain and answers once.
+        if (AttachWriteSeqNum && Mode == EMode::WRITE) {
+            // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs
+            RetryShard(ev->Get()->TabletId, std::nullopt);
+            return;
+        }
+
         const auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
 
-        const auto state = TxManager->GetState(ev->Get()->TabletId);
         if ((state == IKqpTransactionManager::PREPARED
                     || state == IKqpTransactionManager::EXECUTING)
                 && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
@@ -1660,6 +1659,7 @@ public:
             YQL_ENSURE(SchemeEntry);
             ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
         } else {
+            YQL_ENSURE(Partitioning);
             ShardedWriteController->OnPartitioningChanged(Partitioning);
             Partitioning.reset();
         }
@@ -1756,9 +1756,7 @@ private:
     const bool IsOlap;
     const bool AttachWriteSeqNum;
     // This writer's id in the uncommitted write chain; one write actor per table today.
-    static constexpr ui64 WriterIndex = 0;
-    // Seq nums of the batch in flight at each shard, reused on resend until the shard acks it.
-    THashMap<ui64, TVector<ui64>> InFlightWriteSeqNum;
+    const ui64 WriterIndex = 0;
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     IKqpTableWriterCallbacks* Callbacks;

@@ -493,8 +493,7 @@ TInternalPathId TTablesManager::GetOrCreateInternalPathId(const TSchemeShardLoca
     }
 }
 
-NKikimrTxColumnShard::TTableVersionInfo TTablesManager::LoadLastTableVersionInfo(
-    const TInternalPathId pathId, NIceDb::TNiceDb& db) const {
+NKikimrTxColumnShard::TTableVersionInfo TTablesManager::LoadLastTableVersionInfo(const TInternalPathId pathId, NIceDb::TNiceDb& db) const {
     const auto* table = Tables.FindPtr(pathId);
     AFL_VERIFY(table)("path_id", pathId);
     AFL_VERIFY(!table->GetVersions().empty())("path_id", pathId);
@@ -979,7 +978,7 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
         addrPred = addr;
         if (ignoreToVersion) {
             AFL_VERIFY(*ignoreToVersion == i.second->GetIndexInfo().GetVersion())("ignore_to", *ignoreToVersion)(
-                                              "next_version", i.second->GetIndexInfo().GetVersion());
+                                             "next_version", i.second->GetIndexInfo().GetVersion());
         }
         if (auto ignoreToVersion = index.MutableVersionedIndex().ExtractIgnoreSchemaVersionFor(i.second->GetIndexInfo().GetVersion())) {
             YDB_LOG_WARN("",

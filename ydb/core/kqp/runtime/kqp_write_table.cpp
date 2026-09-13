@@ -2266,6 +2266,9 @@ private:
     // tablet ids were removed by a split/merge, so their pending batches must be
     // re-routed to the shards that now cover their key ranges.
     TVector<ui64> GetDeletedShards() const {
+        if (IsOlap) {
+            return {};
+        }
         AFL_ENSURE(Partitioning);
         THashSet<ui64> resolvedShards;
         resolvedShards.reserve(Partitioning->Size());

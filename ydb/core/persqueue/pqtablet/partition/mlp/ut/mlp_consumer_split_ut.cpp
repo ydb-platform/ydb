@@ -40,11 +40,11 @@ namespace {
     // TAppData::TimeProvider is a process-global TIntrusivePtr. Actor threads
     // (coordinator, metadata, pingers) read it without synchronization.
     // Swapping it after the actor system has started is a TSAN data race
-    // (YDBBUGS-508 / #40339). Install once per process before CreateSetup() and
-    // never restore: TTestActorRuntime also skips the global reset under real
-    // threads. Add()/Reset() are atomic; Offset=0 matches the wall clock.
-    // Reset in the destructor so later tests without this guard see wall time
-    // (setup is declared after the guard, so actors have already stopped).
+    // (YDBBUGS-508 / #40339). CreateSetup uses UseRealThreads; TTestActorRuntime
+    // never restores the global in that mode, even after CleanupNodes. Same
+    // policy here and in blobstorage env / ydb_table_split_ut: install once
+    // before CreateSetup and never swap back. Add()/Reset() are atomic;
+    // Offset=0 is the wall clock.
     class TScopedLeapTimeProvider: TNonCopyable {
     public:
         TScopedLeapTimeProvider()
@@ -56,10 +56,6 @@ namespace {
                 TIntrusivePtr<ITimeProvider> previous = Leap_;
                 DoSwap(TAppData::TimeProvider, previous);
             }
-            Leap_->Reset();
-        }
-
-        ~TScopedLeapTimeProvider() {
             Leap_->Reset();
         }
 

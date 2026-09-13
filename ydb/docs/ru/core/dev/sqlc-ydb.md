@@ -1318,7 +1318,21 @@ UPSERT INTO authors (id, name) VALUES (42, "Alice");
 
   - YDB SDK {#php-ydb}
 
-    Не поддерживается: каждый helper открывает и завершает собственную транзакцию. В SDK нет публичного API, который одновременно присоединяется к существующей транзакции и возвращает необработанные результаты, нужные для точного декодирования. Обёртка `retryTransaction()` не объединяет эти вызовы. [Контракт PHP](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/php.md).
+    ```php
+    use Authors\Queries;
+    use Authors\UpsertAuthorParams;
+
+    $session = $table->session();
+    $txId = $session->beginTransaction();
+    $queries = (new Queries($table))->withTx($session, $txId);
+
+    $queries->upsertAuthor(new UpsertAuthorParams('42', 'Alice'));
+    $author = $queries->getAuthor('42');
+
+    $session->commitTransaction();
+    ```
+
+    Оба запроса выполняются в одной транзакции. `$table` — настроенный `YdbPlatform\Ydb\Table`, сгенерированные классы доступны через автозагрузку. Обработка ошибок опущена: при ошибке приложение должно вызвать `$session->rollbackTransaction()`. Связанный helper не выполняет повторные попытки отдельных запросов; повторять нужно всю транзакцию. После коммита или отката сессия возвращается в пул, а для следующей транзакции нужно получить сессию заново и создать новый связанный helper. [Контракт PHP](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/php.md#caller-owned-transactions).
 
   {% endlist %}
 

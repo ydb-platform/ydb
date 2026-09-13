@@ -1318,7 +1318,21 @@ In each example, two generated methods execute two YQL queries in one transactio
 
   - YDB SDK {#php-ydb}
 
-    Unsupported: each helper opens and commits its own transaction. The SDK has no public API that both joins an existing transaction and returns the raw results needed for lossless decoding. Wrapping these calls in `retryTransaction()` does not combine them. [PHP contract](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/php.md).
+    ```php
+    use Authors\Queries;
+    use Authors\UpsertAuthorParams;
+
+    $session = $table->session();
+    $txId = $session->beginTransaction();
+    $queries = (new Queries($table))->withTx($session, $txId);
+
+    $queries->upsertAuthor(new UpsertAuthorParams('42', 'Alice'));
+    $author = $queries->getAuthor('42');
+
+    $session->commitTransaction();
+    ```
+
+    Both queries execute in the same transaction. `$table` is an initialized `YdbPlatform\Ydb\Table`, and generated classes are available through autoload. Error handling is omitted: on failure, the application must call `$session->rollbackTransaction()`. The bound helper does not retry individual queries; retries must repeat the entire transaction. After commit or rollback, the session returns to the pool; acquire a session again and create a new bound helper for the next transaction. [PHP contract](https://github.com/ydb-platform/sqlc-ydb/blob/main/docs/php.md#caller-owned-transactions).
 
   {% endlist %}
 

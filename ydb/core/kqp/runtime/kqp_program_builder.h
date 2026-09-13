@@ -71,7 +71,9 @@ public:
         const TUnaryLambda& init,
         const TBinaryLambda& update,
         const TBinaryLambda& finish,
-        TRuntimeNode stateTablePath);
+        TRuntimeNode stateTablePath,
+        const TUnaryLambda& save = {},
+        const TUnaryLambda& load = {});
 };
 
 } // namespace NMiniKQL

@@ -372,7 +372,9 @@ TRuntimeNode TKqpProgramBuilder::StreamingAggregation(TRuntimeNode flow,
                                                    const TUnaryLambda& init,
                                                    const TBinaryLambda& update,
                                                    const TBinaryLambda& finish,
-                                                   TRuntimeNode stateTablePath)
+                                                   TRuntimeNode stateTablePath,
+                                                   const TUnaryLambda& save,
+                                                   const TUnaryLambda& load)
 {
     auto flowType = AS_TYPE(TFlowType, flow);
     auto itemType = flowType->GetItemType();
@@ -391,6 +393,12 @@ TRuntimeNode TKqpProgramBuilder::StreamingAggregation(TRuntimeNode flow,
     MKQL_ENSURE(outUpdate.GetStaticType()->IsSameType(*stateType),
                 "StreamingAggregation: update lambda must produce the same state type as init");
 
+    auto outSave = save ? save(stateArg) : stateArg;
+    auto savedStateArg = Arg(outSave.GetStaticType());
+    auto outLoad = load ? load(savedStateArg) : savedStateArg;
+    MKQL_ENSURE(outLoad.GetStaticType()->IsSameType(*stateType),
+                "StreamingAggregation: load lambda must produce the same state type as init");
+
     auto outFinish = finish(keyArg, stateArg);
     auto resultType = TFlowType::Create(outFinish.GetStaticType(), GetTypeEnvironment());
 
@@ -404,6 +412,9 @@ TRuntimeNode TKqpProgramBuilder::StreamingAggregation(TRuntimeNode flow,
     callableBuilder.Add(outUpdate);
     callableBuilder.Add(outFinish);
     callableBuilder.Add(stateTablePath);
+    callableBuilder.Add(savedStateArg);
+    callableBuilder.Add(outSave);
+    callableBuilder.Add(outLoad);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

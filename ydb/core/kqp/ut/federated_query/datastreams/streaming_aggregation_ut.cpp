@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/tx/datashard/const.h>
 
@@ -24,6 +25,7 @@ namespace {
 struct TAggregationSettings {
     ui32 Tasks = 1;
     ui32 Partitions = 1;
+    bool DisableCheckpoints = true;
     TString Prelude;
     TString ExpectedError;
 };
@@ -81,7 +83,7 @@ public:
 
         ExecQuery(fmt::format(R"sql(
             CREATE STREAMING QUERY aggregation AS DO BEGIN
-                PRAGMA ydb.DisableCheckpoints = "TRUE";
+                PRAGMA ydb.DisableCheckpoints = "{disable_checkpoints}";
                 PRAGMA ydb.MaxTasksPerStage = "{tasks}";
                 PRAGMA ydb.StreamingAggregationStateTablePath = "{state_table}";
                 {planner}
@@ -105,6 +107,7 @@ public:
             "filter"_a = filter,
             "state_table"_a = HasStateTable ? "/Root/aggregationState" : "",
             "tasks"_a = settings.Tasks,
+            "disable_checkpoints"_a = settings.DisableCheckpoints ? "TRUE" : "FALSE",
             "planner"_a = planner,
             "prelude"_a = settings.Prelude),
             settings.ExpectedError ? EStatus::GENERIC_ERROR : EStatus::SUCCESS,
@@ -358,6 +361,88 @@ public:
         nextReadSession->ExpectSessionClosed();
         nextWriteSession->ExpectSessionClosed();
         nextWriteSession->EnsureEmpty();
+    }
+
+    void WaitAggregationCheckpoint() {
+        // Avoid SQL aggregation here: the feature flag rewrites metadata queries too.
+        const auto latest = ExecQuery(R"(
+            SELECT coordinator_generation, seq_no
+            FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
+            WHERE graph_id LIKE "%/Root/aggregation"
+            ORDER BY coordinator_generation DESC, seq_no DESC LIMIT 1;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(latest.size(), 1);
+        NFq::TCheckpointId bound(0, 0);
+        TResultSetParser latestRows(latest[0]);
+        if (latestRows.TryNextRow()) {
+            bound = {*latestRows.ColumnParser("coordinator_generation").GetOptionalUint64(),
+                *latestRows.ColumnParser("seq_no").GetOptionalUint64()};
+        }
+
+        // Wait for a checkpoint started after the preceding batch was processed,
+        // so an older in-flight checkpoint cannot satisfy the wait.
+        NTestUtils::WaitFor(TEST_OPERATION_TIMEOUT, "streaming aggregation checkpoint", [&](TString& error) {
+            const auto result = ExecQuery(fmt::format(R"(
+                SELECT coordinator_generation, seq_no
+                FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
+                WHERE graph_id LIKE "%/Root/aggregation" AND status = {}ut
+                ORDER BY coordinator_generation DESC, seq_no DESC LIMIT 1;
+            )", static_cast<ui8>(NFq::ECheckpointStatus::Completed)));
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            TResultSetParser rows(result[0]);
+            if (!rows.TryNextRow()) {
+                error = "No completed checkpoints";
+                return false;
+            }
+            const NFq::TCheckpointId current(*rows.ColumnParser("coordinator_generation").GetOptionalUint64(),
+                *rows.ColumnParser("seq_no").GetOptionalUint64());
+            error = TStringBuilder() << "Last completed checkpoint " << current.CoordinatorGeneration << "." << current.SeqNo;
+            return bound < current;
+        });
+    }
+
+    struct TCheckpointBatch {
+        std::vector<TString> Input;
+        std::vector<TString> Output;
+    };
+
+    void CheckCheckpointRecovery(const TString& columns, const TString& result, const TString& keys,
+                                 const std::vector<TCheckpointBatch>& batches, bool injectFailure = true) {
+        const auto pqGateway = SetupMockPqGateway();
+        StartAggregation(false, columns, result, keys, "", {.DisableCheckpoints = false});
+        auto readSession = pqGateway->WaitReadSession(InputTopic);
+        auto writeSession = pqGateway->WaitWriteSession(OutputTopic);
+        ui64 offset = 0;
+        for (size_t i = 0; i < batches.size(); ++i) {
+            for (const auto& input : batches[i].Input) {
+                readSession->AddDataReceivedEvent(offset++, input);
+            }
+            writeSession->ExpectMessages(batches[i].Output, true);
+            WaitAggregationCheckpoint();
+            writeSession->EnsureEmpty();
+            if (i + 1 == batches.size()) {
+                break;
+            }
+
+            if (injectFailure) {
+                readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Aggregation checkpoint recovery test")});
+            } else {
+                ExecQuery("ALTER STREAMING QUERY aggregation SET (RUN = FALSE);");
+                readSession->ExpectSessionClosed();
+                writeSession->ExpectSessionClosed();
+                ExecQuery("ALTER STREAMING QUERY aggregation SET (RUN = TRUE);");
+            }
+            readSession->ExpectSessionClosed();
+            writeSession->ExpectSessionClosed();
+            writeSession->EnsureEmpty();
+            readSession = pqGateway->WaitReadSession(InputTopic);
+            writeSession = pqGateway->WaitWriteSession(OutputTopic);
+            WaitStreamingQueryStatus("aggregation");
+        }
+        FinishAggregation();
+        readSession->ExpectSessionClosed();
+        writeSession->ExpectSessionClosed();
+        writeSession->EnsureEmpty();
     }
 
     void CheckAlterAggregation(bool useStateTable) {
@@ -774,6 +859,58 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
             Sort(actual);
             UNIT_ASSERT_VALUES_EQUAL(actual, (Enabled ? std::vector<std::string>{"2", "5"} : std::vector<std::string>{"5"}));
         }
+    }
+
+    Y_UNIT_TEST_TWIN_F(CheckpointRecovery, InjectFailure, TStreamingAggregationTestFixture) {
+        CheckCheckpointRecovery("key String NOT NULL, value Int64 NOT NULL",
+            R"(key || ":" || CAST(COUNT(*) AS String) || ":" || CAST(SUM(value) AS String))", "key", {
+                {{R"({"key":"a","value":5})", R"({"key":"a","value":2})", R"({"key":"b","value":10})"},
+                    {"a:1:5", "a:2:7", "b:1:10"}},
+                {{R"({"key":"a","value":-2})", R"({"key":"b","value":3})", R"({"key":"c","value":1})"},
+                    {"a:3:5", "b:2:13", "c:1:1"}},
+                // Save and restart restored state without consuming any new input.
+                {{}, {}},
+                {{R"({"key":"a","value":1})", R"({"key":"b","value":-3})", R"({"key":"c","value":4})"},
+                    {"a:4:6", "b:3:10", "c:2:5"}},
+            }, InjectFailure);
+    }
+
+    Y_UNIT_TEST_F(CheckpointKeylessRecovery, TStreamingAggregationTestFixture) {
+        CheckCheckpointRecovery("value Int64 NOT NULL",
+            R"(CAST(COUNT(*) AS String) || ":" || CAST(SUM(value) AS String))", "", {
+                {{R"({"value":5})", R"({"value":3})"}, {"1:5", "2:8"}},
+                {{R"({"value":-2})"}, {"3:6"}},
+            });
+    }
+
+    Y_UNIT_TEST_F(CheckpointEmptyStateRecovery, TStreamingAggregationTestFixture) {
+        CheckCheckpointRecovery("key String NOT NULL, value Int64 NOT NULL",
+            R"(key || ":" || CAST(SUM(value) AS String))", "key", {
+                {{}, {}},
+                {{R"({"key":"a","value":5})"}, {"a:5"}},
+                {{R"({"key":"a","value":-2})"}, {"a:3"}},
+            });
+    }
+
+    Y_UNIT_TEST_F(CheckpointResourceStateRecovery, TStreamingAggregationTestFixture) {
+        // AGGREGATE_LIST has a resource state and needs the trait's save/load handlers.
+        CheckCheckpointRecovery("key String, subkey Uint64 NOT NULL, value Int64", R"(
+            COALESCE(key, "null") || ":" || CAST(subkey AS String) || ":[" || String::JoinFromList(
+                ListMap(ListSort(AGGREGATE_LIST(value)), ($v) -> (CAST($v AS String))), ",") || "]"
+        )", "key, subkey", {
+            {{R"({"key":null,"subkey":1,"value":5})", R"({"key":null,"subkey":1,"value":null})",
+                R"({"key":"a","subkey":2,"value":3})"}, {"null:1:[5]", "null:1:[5]", "a:2:[3]"}},
+            {{R"({"key":null,"subkey":1,"value":-2})", R"({"key":"a","subkey":2,"value":7})",
+                R"({"key":null,"subkey":2,"value":1})"}, {"null:1:[-2,5]", "a:2:[3,7]", "null:2:[1]"}},
+            {{R"({"key":null,"subkey":1,"value":4})", R"({"key":"a","subkey":2,"value":null})"},
+                {"null:1:[-2,4,5]", "a:2:[3,7]"}},
+        });
+    }
+
+    Y_UNIT_TEST_F(CheckpointsWithStateTableRejected, TStreamingAggregationTestFixture) {
+        StartAggregation(true, "key String NOT NULL, value Int64 NOT NULL", R"(CAST(SUM(value) AS String))", "key", "",
+            {.DisableCheckpoints = false,
+             .ExpectedError = "Checkpoints are not supported for streaming aggregation with a state table"});
     }
 
     Y_UNIT_TEST_F(KeylessAggregation, TStreamingAggregationTestFixture) {

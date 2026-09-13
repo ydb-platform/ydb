@@ -6,6 +6,7 @@
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
@@ -23,9 +24,9 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
-template <typename TDerived>
-class TStreamingAggregationFlowWrapperBase : public TStatefulFlowComputationNode<TDerived> {
-    using TBaseComputation = TStatefulFlowComputationNode<TDerived>;
+template <typename TDerived, bool SerializableState = false>
+class TStreamingAggregationFlowWrapperBase : public TStatefulFlowComputationNode<TDerived, SerializableState> {
+    using TBaseComputation = TStatefulFlowComputationNode<TDerived, SerializableState>;
 
 public:
     TStreamingAggregationFlowWrapperBase(
@@ -39,7 +40,10 @@ public:
         IComputationNode* const outInit,
         IComputationNode* const outUpdate,
         IComputationNode* const outFinish,
-        TType* const keyType)
+        TType* const keyType,
+        IComputationExternalNode* const savedStateArg = nullptr,
+        IComputationNode* const outSave = nullptr,
+        IComputationNode* const outLoad = nullptr)
         : TBaseComputation(mutables, flow, kind, EValueRepresentation::Boxed)
         , Flow(flow)
         , ItemArg(itemArg)
@@ -51,6 +55,9 @@ public:
         , OutFinish(outFinish)
         , KeyType(keyType)
         , KeyPacker(mutables)
+        , SavedStateArg(savedStateArg)
+        , OutSave(outSave)
+        , OutLoad(outLoad)
     {}
 
     bool IsSuitableForCache() const final {
@@ -67,6 +74,11 @@ private:
             this->DependsOn(flow, OutInit);
             this->DependsOn(flow, OutUpdate);
             this->DependsOn(flow, OutFinish);
+            if (SavedStateArg) {
+                this->Own(flow, SavedStateArg);
+                this->DependsOn(flow, OutSave);
+                this->DependsOn(flow, OutLoad);
+            }
         }
     }
 
@@ -81,12 +93,15 @@ protected:
     IComputationNode* const OutFinish;
     TType* const KeyType;
     TMutableObjectOverBoxedValue<TValuePackerBoxed> KeyPacker;
+    IComputationExternalNode* const SavedStateArg;
+    IComputationNode* const OutSave;
+    IComputationNode* const OutLoad;
 };
 
 class TInMemoryStreamingAggregationFlowWrapper final
-    : public TStreamingAggregationFlowWrapperBase<TInMemoryStreamingAggregationFlowWrapper>
+    : public TStreamingAggregationFlowWrapperBase<TInMemoryStreamingAggregationFlowWrapper, true>
 {
-    using TBase = TStreamingAggregationFlowWrapperBase<TInMemoryStreamingAggregationFlowWrapper>;
+    using TBase = TStreamingAggregationFlowWrapperBase<TInMemoryStreamingAggregationFlowWrapper, true>;
 
     class TState final : public TComputationValue<TState> {
         using TMap = std::unordered_map<
@@ -94,18 +109,73 @@ class TInMemoryStreamingAggregationFlowWrapper final
             TMKQLAllocator<std::pair<const TString, NUdf::TUnboxedValue>>>;
 
     public:
-        using TBase = TComputationValue<TState>;
-        using TBase::TBase;
+        TState(TMemoryUsageInfo* memInfo, const TInMemoryStreamingAggregationFlowWrapper& self, TComputationContext& ctx)
+            : TComputationValue<TState>(memInfo)
+            , Self(self)
+            , Ctx(ctx)
+        {}
 
         TMap Map;
+
+    private:
+        static constexpr ui32 StateVersion = 1;
+
+        bool HasListItems() const override {
+            return false;
+        }
+
+        NUdf::TUnboxedValue Save() const override {
+            TOutputSerializer out(EMkqlStateType::SIMPLE_BLOB, StateVersion, Ctx);
+            out.Write<ui64>(Map.size());
+            const auto& packer = Self.StatePacker.RefMutableObject(Ctx, false, Self.SavedStateType);
+            for (const auto& [key, value] : Map) {
+                out(key);
+                Self.StateArg->SetValue(Ctx, NUdf::TUnboxedValue(value));
+                out.WriteUnboxedValue(packer, Self.OutSave->GetValue(Ctx));
+            }
+            return out.MakeState();
+        }
+
+        bool Load2(const NUdf::TUnboxedValue& state) override {
+            TInputSerializer in(state, EMkqlStateType::SIMPLE_BLOB);
+            MKQL_ENSURE(in.GetStateVersion() == StateVersion, "Unsupported streaming aggregation checkpoint version");
+            const auto size = in.Read<ui64>();
+            Map.clear();
+            const auto& packer = Self.StatePacker.RefMutableObject(Ctx, false, Self.SavedStateType);
+            for (ui64 i = 0; i < size; ++i) {
+                auto key = in.Read<TString>();
+                Self.SavedStateArg->SetValue(Ctx, in.ReadUnboxedValue(packer, Ctx));
+                const auto [it, inserted] = Map.emplace(std::move(key), Self.OutLoad->GetValue(Ctx));
+                MKQL_ENSURE(inserted, "Duplicate key in streaming aggregation checkpoint");
+            }
+            MKQL_ENSURE(in.Empty(), "Unexpected trailing data in streaming aggregation checkpoint");
+            return true;
+        }
+
+        const TInMemoryStreamingAggregationFlowWrapper& Self;
+        TComputationContext& Ctx;
     };
 
 public:
-    using TBase::TBase;
+    TInMemoryStreamingAggregationFlowWrapper(
+        TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow,
+        IComputationExternalNode* itemArg, IComputationExternalNode* stateArg, IComputationExternalNode* keyArg,
+        IComputationNode* outKey, IComputationNode* outInit, IComputationNode* outUpdate, IComputationNode* outFinish,
+        TType* keyType, IComputationExternalNode* savedStateArg,
+        IComputationNode* outSave, IComputationNode* outLoad, TType* savedStateType)
+        : TBase(mutables, kind, flow, itemArg, stateArg, keyArg, outKey, outInit, outUpdate, outFinish,
+            keyType, savedStateArg, outSave, outLoad)
+        , SavedStateType(savedStateType)
+        , StatePacker(mutables)
+    {}
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& stateValue, TComputationContext& ctx) const {
-        if (!stateValue.HasValue()) {
-            stateValue = ctx.HolderFactory.Create<TState>();
+        if (stateValue.IsInvalid()) {
+            stateValue = ctx.HolderFactory.Create<TState>(*this, ctx);
+        } else if (stateValue.HasListItems()) {
+            auto restored = ctx.HolderFactory.Create<TState>(*this, ctx);
+            restored.Load2(stateValue);
+            stateValue = std::move(restored);
         }
         auto& state = *static_cast<TState*>(stateValue.AsBoxed().Get());
 
@@ -133,6 +203,10 @@ public:
         KeyArg->SetValue(ctx, std::move(key));
         return OutFinish->GetValue(ctx);
     }
+
+private:
+    TType* const SavedStateType;
+    TMutableObjectOverBoxedValue<TValuePackerBoxed> StatePacker;
 };
 
 class TTableStreamingAggregationFlowWrapper final
@@ -476,19 +550,23 @@ private:
 IComputationNode* WrapStreamingAggregation(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     const TKqpComputeContextBase& computeCtx)
 {
-    MKQL_ENSURE(callable.GetInputsCount() == 9, "StreamingAggregation expected 9 args, got " << callable.GetInputsCount());
+    MKQL_ENSURE(callable.GetInputsCount() == 12, "StreamingAggregation expected 12 args, got " << callable.GetInputsCount());
 
     const auto returnType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(returnType->IsFlow(), "StreamingAggregation expects flow return type");
 
+    // Locate lambda bodies before popping their arguments: identity handlers
+    // refer to the argument node directly.
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
-    const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1);
-    const auto stateArg = LocateExternalNode(ctx.NodeLocator, callable, 2);
-    const auto keyArg = LocateExternalNode(ctx.NodeLocator, callable, 3);
     const auto outKey = LocateNode(ctx.NodeLocator, callable, 4);
     const auto outInit = LocateNode(ctx.NodeLocator, callable, 5);
     const auto outUpdate = LocateNode(ctx.NodeLocator, callable, 6);
     const auto outFinish = LocateNode(ctx.NodeLocator, callable, 7);
+    const auto outSave = LocateNode(ctx.NodeLocator, callable, 10);
+    const auto outLoad = LocateNode(ctx.NodeLocator, callable, 11);
+    const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1);
+    const auto stateArg = LocateExternalNode(ctx.NodeLocator, callable, 2);
+    const auto keyArg = LocateExternalNode(ctx.NodeLocator, callable, 3);
 
     const auto keyType = callable.GetInput(3).GetStaticType();
     const auto stateValueType = callable.GetInput(2).GetStaticType();
@@ -497,10 +575,12 @@ IComputationNode* WrapStreamingAggregation(TCallable& callable, const TComputati
     const TString stateTablePath(stateTablePathLiteral->AsValue().AsStringRef());
 
     if (stateTablePath.empty()) {
+        auto savedStateArg = LocateExternalNode(ctx.NodeLocator, callable, 9);
+        auto savedStateType = callable.GetInput(9).GetStaticType();
         return new TInMemoryStreamingAggregationFlowWrapper(
             ctx.Mutables, GetValueRepresentation(returnType), flow,
             itemArg, stateArg, keyArg,
-            outKey, outInit, outUpdate, outFinish, keyType);
+            outKey, outInit, outUpdate, outFinish, keyType, savedStateArg, outSave, outLoad, savedStateType);
     }
 
     return new TTableStreamingAggregationFlowWrapper(

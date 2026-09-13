@@ -240,6 +240,11 @@ protected:
         auto outputColumnsSetting = GetSetting(aggregate.Settings().Ref(), "output_columns");
         auto cleanedSettings = RemoveSetting(aggregate.Settings().Ref(), "output_columns", ctx);
         if (const auto stateTablePath = KqpCtx.Config->StreamingAggregationStateTablePath.Get()) {
+            if (*stateTablePath && KqpCtx.UserRequestContext && KqpCtx.UserRequestContext->IsStreamingQuery
+                && !KqpCtx.Config->DisableCheckpoints.Get().GetOrElse(false)) {
+                ctx.AddError(TIssue(ctx.GetPosition(pos), "Checkpoints are not supported for streaming aggregation with a state table"));
+                return {};
+            }
             cleanedSettings = AddSetting(*cleanedSettings, pos, "state_table_path", ctx.NewAtom(pos, *stateTablePath), ctx);
         }
         const auto projectOutput = [&](TExprBase result) -> TExprBase {

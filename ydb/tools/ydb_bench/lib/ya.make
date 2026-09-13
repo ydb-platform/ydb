@@ -27,6 +27,7 @@ PY_SRCS(
     linux_telemetry.py
     ydb_telemetry.py
     runner.py
+    process_recovery.py
     results.py
     system_info.py
     topology.py

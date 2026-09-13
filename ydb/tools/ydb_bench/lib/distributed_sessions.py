@@ -11,6 +11,7 @@ import time
 import uuid
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_json
+from ydb.tools.ydb_bench.lib import process_recovery
 
 PROTOCOL_VERSION = 2
 LEASE_SECONDS = 30
@@ -114,6 +115,7 @@ class HostSessions:
         finally:
             self.cleanup(dict(self.active))
         terminal = {**self.active, "state": self.active["finish_state"]}
+        terminal.pop("recovery_required", None)
         self._write(terminal)
         self.active = None
 
@@ -138,6 +140,7 @@ class HostSessions:
             if self.active or self.busy(reference):
                 raise BenchmarkError("Host is busy with another benchmark")
             record = {**reference, "state": "reserved"}
+            process_recovery.prepare(self.root / "data" / reference["session_id"])
             self._write(record)
             self.active = record
             self.deadline = self.clock() + LEASE_SECONDS

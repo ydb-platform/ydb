@@ -21,6 +21,7 @@ import yaml
 from ydb.core.protos import grpc_pb2_grpc, msgbus_pb2
 from ydb.public.api.grpc import ydb_cms_v1_pb2_grpc, ydb_config_v1_pb2_grpc
 from ydb.public.api.protos import ydb_status_codes_pb2
+from ydb.tools.ydb_bench.lib import process_recovery
 from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
     BenchmarkInterrupted,
@@ -116,6 +117,7 @@ class DistributedWorker:
             self.sessions.require(state["reference"])
 
     def _start_job(self, state, name, payload, action):
+        process_recovery.prepare(state["root"])
         digest = _digest(payload)
         previous = state["jobs"].get(name)
         if previous:
@@ -132,7 +134,8 @@ class DistributedWorker:
 
         def run():
             try:
-                result = action()
+                with process_recovery.scope(state["root"]):
+                    result = action()
                 with self.sessions.lock:
                     self._check(state)
                     job.update(state="completed", result=result)
@@ -783,7 +786,8 @@ class DistributedWorker:
         # Called while the admission lock is held. Never join a job here: its
         # final publication also takes that lock. The lease watcher retries.
         if record.get("recovery_required"):
-            raise BenchmarkError("Distributed session requires resource recovery")
+            process_recovery.cleanup(self.root / record["session_id"])
+            return
         state = self.state
         if state is None:
             return

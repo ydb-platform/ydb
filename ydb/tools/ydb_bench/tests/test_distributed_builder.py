@@ -106,6 +106,13 @@ for(const tab of ['Cluster','Storage','Tenants','Load generators','Run policy'])
   distributedView.set(profile.key,{tab,item:''});
   globalThis.localYdbWorkloadDefinition=()=>({options:[]});
   const html=distributedProfileEditor(profile);assert(!html.includes('>YAML<'));
+  assert(html.includes('<div class=tabs>'));
+  assert(html.includes('class="active" data-distributed-tab="'+tab+'"'));
+  assert(!html.includes('class=view-tabs'));
+  if(tab==='Storage'||tab==='Tenants'){
+    assert.equal((html.match(/type=checkbox/g)||[]).length,3);
+    assert(!html.includes('<select'));
+  }
   if(tab==='Load generators'){assert(html.includes('Dataset'));assert(html.includes('c1'));assert(html.includes('c2'))}
 }
 process.stdout.write('distributed-ydb:\\n  test:\\n'+lines.join('\\n'));

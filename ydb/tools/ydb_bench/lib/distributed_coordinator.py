@@ -200,6 +200,9 @@ class DistributedCluster:
         return statuses
 
     def start(self):
+        # Persist participants before the first request can reserve resources.
+        self.directory.mkdir(parents=True, exist_ok=True)
+        atomic_write_json(self.directory / "execution-plan.json", self.metadata)
         self.progress("reserving-hosts", hosts=self.host_ids)
         self._reserve()
         self.progress("preparing-cluster", hosts=self.host_ids)

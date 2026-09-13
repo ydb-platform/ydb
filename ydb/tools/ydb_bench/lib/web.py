@@ -43,7 +43,8 @@ from ydb.tools.ydb_bench.lib.federation import Federation, split_reference
 from ydb.tools.ydb_bench.lib.cluster_templates import ClusterTemplateStore
 from ydb.tools.ydb_bench.lib.distributed_sessions import HostSessions
 from ydb.tools.ydb_bench.lib.distributed_worker import DistributedWorker
-from ydb.tools.ydb_bench.lib.distributed_coordinator import DistributedCleanupError
+from ydb.tools.ydb_bench.lib.distributed_coordinator import DistributedCleanupError, request_operation
+from ydb.tools.ydb_bench.lib import process_recovery
 from ydb.tools.ydb_bench.lib.distributed_runtime import DistributedRuntime
 from ydb.tools.ydb_bench.lib.distributed_reports import attempt_counters
 from ydb.tools.ydb_bench.lib import cluster_templates_ui, distributed_builder_ui
@@ -97,8 +98,9 @@ _CSS = (
     'm}.run-tree details{padding:.45rem 0;border-bottom:1px solid #e4e7ec}.run-tree summary{cursor:pointer}.log{white-space:p'
     're-wrap;overflow:auto;max-height:20rem;background:#101828;color:#e4e7ec;border-radius:5px;padding:.7rem;font-family:ui-m'
     'onospace,SFMono-Regular,Menlo,monospace}.metric{font-size:1.1rem;font-weight:650}.actions{display:flex;gap:.35rem;flex-w'
-    'rap:wrap}.tabs{display:flex;gap:.2rem;border-bottom:1px solid #d0d5dd;margin-bottom:1rem}.tabs a{padding:.55rem .85rem}.'
-    'tabs a.active{color:var(--text);border-bottom:3px solid var(--accent);font-weight:650}.empty{padding:2rem;text-align:cen'
+    'rap:wrap}.tabs{display:flex;gap:.2rem;border-bottom:1px solid #d0d5dd;margin-bottom:1rem}.tabs :is(a,button){padding:.55rem .85rem}'
+    '.tabs button{border:0;border-radius:0;background:transparent;color:var(--accent)}'
+    '.tabs :is(a,button).active{color:var(--text);border-bottom:3px solid var(--accent);font-weight:650}.empty{padding:2rem;text-align:cen'
     'ter;color:var(--muted);border:1px dashed #98a2b3;border-radius:7px}.topology-summary{display:grid;grid-template-columns:'
     'minmax(12rem,18rem) minmax(0,1fr);gap:1rem;align-items:center}.cpu-ranges{font-family:ui-monospace,SFMono-Regular,Menlo,'
     'monospace;overflow-wrap:anywhere}.topology-map{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap'
@@ -1300,9 +1302,7 @@ async function refreshActiveBanner(){
     const banner=document.querySelector('.active-run');
     const label=value.distributed_session?.recovery_required?'Recovery required: ':'Running: ';
     if(banner)banner.innerHTML=(activeRun?'<a href="#run/'+enc(activeRun)+'">'+label+esc(activeRun)+'</a>':'No active run')+
-      (value.queued?' · Queue: '+esc(value.queued):'')+
-      ((value.recovery_run_ids||[]).length?' · Recovery required: '+value.recovery_run_ids.map(id=>
-        '<a href="#run/'+enc(id)+'">'+esc(id)+'</a>').join(', '):'');
+      (value.queued?' · Queue: '+esc(value.queued):'');
   }catch(error){
     const banner=document.querySelector('.active-run');
     if(banner)banner.textContent='Run status unavailable';
@@ -4213,6 +4213,77 @@ class RunService:
         self.distributed_worker = DistributedWorker(
             self.hosts.id, self.output, self.distributed_sessions, self.binaries_dir, resource_loader
         )
+        self._recovery_stop = threading.Event()
+        self._recovery_thread = None
+        self._start_recovery()
+
+    def _start_recovery(self):
+        with self._lock:
+            if self._recovery_thread is not None or self._recovery_stop.is_set():
+                return
+            if not self._recovery_runs and not self.distributed_sessions.status():
+                return
+            self._recovery_thread = threading.Thread(target=self._watch_recovery, daemon=True)
+            self._recovery_thread.start()
+
+    def _watch_recovery(self):
+        while not self._recovery_stop.is_set():
+            self.recover_once()
+            if self._recovery_stop.wait(10):
+                return
+
+    def recover_once(self):
+        session = self.distributed_sessions.status()
+        if session and session.get("recovery_required"):
+            try:
+                self.distributed_sessions.release(session)
+            except (BenchmarkError, OSError, ValueError):
+                pass
+        with self._lock:
+            candidates = tuple(self._recovery_runs)
+        for run_id in candidates:
+            root = _run_directory(self.output, run_id)
+            try:
+                current = self._runs.get(run_id)
+                process_recovery.cleanup(root, allow_live_owner=bool(current and current["finalized"]))
+                # New journals guarantee this plan was written before reserve.
+                for path in root.rglob("execution-plan.json"):
+                    plan = json.loads(path.read_text())
+                    reference = plan["reference"]
+                    if reference["coordinator_id"] != self.hosts.id or reference["run_id"] != run_id:
+                        raise BenchmarkError("Recovery plan belongs to another coordinator/run")
+                    for host in plan["template"]["host_ids"]:
+                        if host == self.hosts.id:
+                            result = self.distributed_sessions.release(reference)
+                        else:
+                            result = request_operation(self.hosts.get(host), "release", reference)
+                        if result.get("state") not in ("released", "expired") or any(
+                            result.get(key) != value for key, value in reference.items()
+                        ):
+                            raise BenchmarkError("Participant cleanup is not confirmed")
+                with self._lock:
+                    manifest = json.loads((root / "run.json").read_text())
+                    if manifest.get("state") != "recovery_required":
+                        continue
+                    for step in manifest.get("steps", []):
+                        if step.get("state") in ("running", "pending"):
+                            step.update(state="cancelled", error="Interrupted by controller restart")
+                    manifest.update(
+                        state="failed",
+                        status="failed",
+                        finished_at=_utc_now(),
+                        error="Interrupted run automatically recovered; process cleanup confirmed",
+                        recovery={"state": "completed", "at": _utc_now()},
+                    )
+                    atomic_write_json(root / "run.json", manifest)
+                    if run_id in self._runs:
+                        self._runs[run_id]["store"].manifest.update(manifest)
+                    self._recovery_runs.discard(run_id)
+                    self._admission.notify_all()
+            except (BenchmarkError, OSError, ValueError, KeyError, TypeError):
+                # Unreachable peers, unknown ownership and failed durable writes
+                # retain the admission fence and are retried on the next pass.
+                continue
 
     def _distributed_busy(self, reference):
         if self._recovery_runs:
@@ -4397,6 +4468,7 @@ class RunService:
                 "continue_on_error": bool(continue_on_error),
                 "failed": False,
             }
+            process_recovery.prepare(root)
             run["store"].write()
             self._runs[run_id] = run
             self._queue.append(run)
@@ -4441,6 +4513,7 @@ class RunService:
             with self._lock:
                 if run["store"].manifest["state"] == "recovery_required":
                     self._recovery_runs.add(run["id"])
+                    self._start_recovery()
                 if self._active_run_id == run["id"]:
                     self._active_run_id = None
 
@@ -4531,7 +4604,8 @@ class RunService:
     def _run(self, run):
         error = None
         try:
-            self.executor(run, lambda event: self._emit(run, event), run["cancel"])
+            with process_recovery.scope(run["root"]):
+                self.executor(run, lambda event: self._emit(run, event), run["cancel"])
         except Exception as caught:
             error = caught
         try:
@@ -4620,6 +4694,9 @@ class RunService:
         """
         if timeout is not None:
             timeout = max(0.0, float(timeout))
+        self._recovery_stop.set()
+        if self._recovery_thread is not None:
+            self._recovery_thread.join(timeout=6)
         with self._lock:
             self._accepting_runs = False
             runs = list(self._runs.values())

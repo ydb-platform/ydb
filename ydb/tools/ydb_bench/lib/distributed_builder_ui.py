@@ -1,6 +1,7 @@
 """Distributed run editor. Placement stays in the detached template snapshot."""
 
 CSS = """
+.distributed-editor>.tabs{flex-wrap:wrap}
 .distributed-editor .distributed-layout{display:grid;grid-template-columns:13rem minmax(0,1fr);gap:1.5rem;margin-top:1rem}
 .distributed-editor .distributed-items{display:flex;flex-direction:column;gap:.4rem;align-self:start}
 .distributed-editor .distributed-items button{text-align:left;overflow-wrap:anywhere}
@@ -105,7 +106,8 @@ function distributedProfileEditor(profile){
   }else if(view.tab==='Storage'||view.tab==='Tenants'){
     content='<div class=distributed-summary>'+template.nodes.filter(n=>view.tab==='Storage'?n.role==='static':n.role==='dynamic'&&n.tenant===view.item)
       .map(n=>esc(n.name)).join(' · ')+'</div><div class=form-grid>'+input('vCPU per node',[...path,'cpu-count'],object['cpu-count']??4,'number')+
-      ['use-shared-threads','use-united-pool','use-ring-queue'].map(k=>select(k,[...path,k],String(object[k]??(k==='use-ring-queue')),['false','true'])).join('')+'</div>';
+      ['use-shared-threads','use-united-pool','use-ring-queue'].map(k=>'<div class=field><label><input type=checkbox data-distributed-path="'+
+        esc(JSON.stringify([...path,k]))+'" '+((object[k]??(k==='use-ring-queue'))?'checked':'')+'> '+esc(k)+'</label></div>').join('')+'</div>';
   }else if(view.tab==='Load generators'){
     const node=template.nodes.find(n=>n.name===view.item),peers=Object.entries(clients).filter(([name,c])=>c.tenant===object.tenant&&c.dataset===object.dataset);
     content='<div class=distributed-summary>'+esc(node?.name)+' · '+esc(hostRecord(node?.host_id)?.name||node?.host_id)+' · affinity from template</div><div class=form-grid>'+
@@ -125,8 +127,8 @@ function distributedProfileEditor(profile){
       select('Allow failed requests (all CLI)', ['cli-nodes',Object.keys(clients)[0],'load','allow-errors'],
         String(Object.values(clients)[0].load['allow-errors']??false),['false','true'])+'</div>';
   }
-  return '<div class=distributed-editor><div class=view-tabs>'+tabs.map(t=>
-    '<button type=button data-distributed-tab="'+t+'" aria-pressed="'+(view.tab===t)+'">'+t+'</button>').join('')+
+  return '<div class=distributed-editor><div class=tabs>'+tabs.map(t=>
+    '<button type=button class="'+(view.tab===t?'active':'')+'" data-distributed-tab="'+t+'" aria-pressed="'+(view.tab===t)+'">'+t+'</button>').join('')+
     '</div><div class="'+(items.length?'distributed-layout':'')+'">'+(items.length?'<div class=distributed-items>'+items.map(([key,label])=>
       '<button type=button data-distributed-item="'+esc(key)+'" aria-pressed="'+(view.item===key)+'">'+esc(label)+'</button>').join('')+
     '</div>':'')+'<section>'+content+'</section></div></div>';
@@ -144,7 +146,8 @@ function bindDistributedEditor(profile){
   document.querySelectorAll('[data-distributed-path]').forEach(input=>input.onchange=async()=>{
     const raw=JSON.parse(JSON.stringify(profile.distributed_config)),path=JSON.parse(input.dataset.distributedPath);
     let target=raw;for(const key of path.slice(0,-1))target=target[key]??=(typeof key==='number'?[]:{});
-    const key=path.at(-1),value=input.type==='number'?Number(input.value):(['use-shared-threads','use-united-pool','use-ring-queue','allow-errors'].includes(key)?input.value==='true':input.value);
+    const key=path.at(-1),value=input.type==='checkbox'?input.checked:
+      input.type==='number'?Number(input.value):(key==='allow-errors'?input.value==='true':input.value);
     if(input.type==='number'&&(!input.value.trim()||!Number.isSafeInteger(value)||value<0)){
       document.querySelector('#editor-message').innerHTML=displayError(Error('Enter a non-negative integer.'));return}
     target[key]=value;

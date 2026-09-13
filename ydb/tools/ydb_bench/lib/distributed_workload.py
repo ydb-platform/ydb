@@ -6,6 +6,7 @@ commands. Executable paths and command plans are resolved on the leased worker.
 
 import re
 import json
+import contextvars
 import time
 import copy
 import hashlib
@@ -337,7 +338,7 @@ class MultiWorkerWorkload:
         # cancels siblings before waiting, preserving generation cleanup.
         if action == "sample":
             with ThreadPoolExecutor(max_workers=len(self.workloads)) as pool:
-                futures = [pool.submit(perform_one, name) for name in self.workloads]
+                futures = [pool.submit(contextvars.copy_context().run, perform_one, name) for name in self.workloads]
                 try:
                     results = dict(future.result() for future in as_completed(futures))
                 except BaseException:

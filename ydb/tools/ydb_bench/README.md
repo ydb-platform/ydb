@@ -377,8 +377,12 @@ processes; stale requests cannot reopen a finished generation. Temporary binary
 copies are deleted after stopping, while original binaries remain unchanged.
 The coordinator downloads bounded diagnostic log tails and configurations after
 release. Unconfirmed cleanup is reported as `recovery_required`, not success.
-After a worker server restart, unfinished sessions conservatively require manual
-resource recovery; this version does not automatically take over an orphaned run.
+After a worker server restart, unfinished sessions are cleaned up automatically
+on Linux when their durable process ownership journal is available. Recovery
+uses process identity and pidfds, and retries unresolved cleanup every ten seconds.
+The coordinator waits for confirmed release from every participant before
+finalizing the interrupted run. Unreachable participants keep admission blocked.
+Older sessions without an ownership journal still require manual recovery.
 
 ### Other benchmark profiles and CLI execution
 
@@ -498,8 +502,11 @@ than a request handler. Event history and bounded stdout/stderr tails reconnect
 after a page reload; cancellation is idempotent. The detail view shows the
 benchmark/profile/affinity/repeat queue, active timeout, progress, and published
 artifacts. On service recovery an in-progress manifest is marked
-`recovery_required`: it is never restarted unless an executor can prove its
-previous process stopped.
+`recovery_required`. Automatic recovery stops only processes identified by the
+run's durable ownership journal, preserves artifacts, and marks the interrupted
+run as failed after cleanup is confirmed. It does not restart the benchmark.
+Missing ownership evidence or unsupported process recovery keeps the run blocked
+for manual recovery rather than risking another workload.
 
 The server binds to `127.0.0.1` on a free port by default. A non-loopback
 listener requires the explicit `--allow-remote` opt-in.

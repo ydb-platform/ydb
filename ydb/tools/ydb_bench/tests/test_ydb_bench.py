@@ -2627,7 +2627,9 @@ const enc=encodeURIComponent,esc=value=>String(value);
 (async()=>{
   await refreshActiveBanner();const recovery=banner.innerHTML;
   value={active_run_id:'live',queued:1};await refreshActiveBanner();
-  console.log(JSON.stringify({recovery,running:banner.innerHTML}));
+  const running=banner.innerHTML;
+  value={active_run_id:null,queued:0,recovery_run_ids:['old-run']};await refreshActiveBanner();
+  console.log(JSON.stringify({recovery,running,idle:banner.innerHTML}));
 })();
 """
         result = json.loads(subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10))
@@ -2635,6 +2637,7 @@ const enc=encodeURIComponent,esc=value=>String(value);
         self.assertNotIn("Running:", result["recovery"])
         self.assertIn("Running: live", result["running"])
         self.assertIn("Queue: 1", result["running"])
+        self.assertEqual("No active run", result["idle"])
 
     @unittest.skipUnless(shutil.which("node"), "node is required for builder state checks")
     def test_builder_preserves_details_per_profile(self):

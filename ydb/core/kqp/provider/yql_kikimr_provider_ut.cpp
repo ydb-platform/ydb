@@ -1,9 +1,22 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_expr_csee.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/minikql/mkql_function_registry.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/sql/v1/translation/context.h>
 #include <yql/essentials/sql/v1/translation/source.h>
 
@@ -60,9 +73,285 @@ void Find(const TAstNode* node, const std::function<bool(const TAstNode*)>& pred
     }
 }
 
+struct TStreamingAggregationTypeAnnTest {
+    TExprContext Ctx;
+    TTypeAnnotationContext Types;
+
+    TExprNode::TPtr Atom(TStringBuf value) {
+        return Ctx.NewAtom(TPositionHandle(), value);
+    }
+
+    TExprNode::TPtr List(TExprNodeList items) {
+        return Ctx.NewList(TPositionHandle(), std::move(items));
+    }
+
+    TExprNode::TPtr Traits(TStringBuf finish, TStringBuf defaultValue = "(Null)") {
+        const TString program = TStringBuilder() << R"((
+            (return (AggregationTraits
+                (StructType '('key (DataType 'String)))
+                (lambda '(item) (Int64 '0))
+                (lambda '(item state) state)
+                (lambda '(state) state)
+                (lambda '(state) state)
+                (lambda '(left right) left)
+                (lambda '(state) )" << finish << ") " << defaultValue << ")) )";
+        auto traits = ParseAndAnnotate(program, Ctx, /*instant=*/false, /*wholeProgram=*/false, Types);
+        UNIT_ASSERT_C(traits, Ctx.IssueManager.GetIssues().ToString());
+        UNIT_ASSERT(NNodes::TCoAggregationTraits::Match(traits.Get()));
+        return traits;
+    }
+
+    TExprNode::TPtr Aggregation(ETypeAnnotationKind kind, TExprNodeList keys, TExprNodeList handlers,
+        TExprNodeList settings = {})
+    {
+        const auto* rowType = Ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{
+            Ctx.MakeType<TItemExprType>("key", Ctx.MakeType<TDataExprType>(EDataSlot::String))});
+        auto input = Ctx.NewArgument(TPositionHandle(), "input");
+        input->SetTypeAnn(MakeSequenceType(kind, *rowType, Ctx));
+        return Ctx.NewCallable(input->Pos(), NNodes::TKqpStreamingAggregation::CallableName(),
+            {input, List(std::move(keys)), List(std::move(handlers)), List(std::move(settings))});
+    }
+
+    IGraphTransformer::TStatus Annotate(TExprNode::TPtr& node) {
+        auto registry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
+        const auto session = MakeIntrusive<TKikimrSessionContext>(registry.Get(), MakeIntrusive<TKikimrConfiguration>(),
+            CreateDefaultTimeProvider(), CreateDeterministicRandomProvider(1), nullptr);
+        session->SetInternalTypeAnnTransformer(NKikimr::NKqp::NOpt::CreateKqpTypeAnnotationTransformer(
+            session->GetCluster(), session->TablesPtr(), session->ConfigPtr()));
+        UNIT_ASSERT(session->GetInternalTypeAnnTransformer()->CanParse(*node));
+        auto typeAnn = CreateKiSinkTypeAnnotationTransformer(nullptr, session, Types);
+        return SyncTransform(*typeAnn, node, Ctx);
+    }
+
+    const TStructExprType* CheckType(TExprNode::TPtr& node) {
+        UNIT_ASSERT_VALUES_EQUAL_C(Annotate(node), IGraphTransformer::TStatus::Ok, Ctx.IssueManager.GetIssues().ToString());
+        return GetSeqItemType(*node->GetTypeAnn()).Cast<TStructExprType>();
+    }
+};
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KikimrProvider) {
+    Y_UNIT_TEST_TWIN(StreamingAggregationPureInputDoesNotBuildStages, Enabled) {
+        auto registry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry());
+        for (const TStringBuf input : {"input", "(Iterator input)", "(ToFlow input)",
+                "(PartitionsByKeys input (lambda '(row) (Member row 'key)) (Void) (Void) (lambda '(rows) rows))"}) {
+            for (const bool keyed : {false, true}) {
+                for (const bool useStateTable : {false, true}) {
+                    TExprContext ctx;
+                    TTypeAnnotationContext types;
+                    const TString program = TStringBuilder() << R"((
+                        (let input (AsList (AsStruct '('key (String 'a)))))
+                        (return (Aggregate )" << input << " " << (keyed ? "'('key)" : "'()")
+                        << " '() '(" << (keyed ? "'('output_columns '())" : "") << "))))";
+                    auto node = ParseAndAnnotate(program, ctx, /*instant=*/false, /*wholeProgram=*/false, types);
+                    UNIT_ASSERT_C(node, ctx.IssueManager.GetIssues().ToString());
+                    UNIT_ASSERT_VALUES_EQUAL(UpdateCompletness(node, node, ctx), IGraphTransformer::TStatus::Ok);
+                    const auto original = node;
+                    const auto config = MakeIntrusive<TKikimrConfiguration>();
+                    config->FeatureFlags.SetEnableStreamingAggregation(Enabled);
+                    if (useStateTable) {
+                        config->StreamingAggregationStateTablePath = "/Root/state";
+                    }
+                    const auto session = MakeIntrusive<TKikimrSessionContext>(registry.Get(), config,
+                        CreateDefaultTimeProvider(), CreateDeterministicRandomProvider(1), nullptr);
+                    auto optCtx = MakeIntrusive<NKikimr::NKqp::NOpt::TKqpOptimizeContext>(session->GetCluster(),
+                        config, session->QueryPtr(), session->TablesPtr(), nullptr);
+                    auto optimizer = NKikimr::NKqp::NOpt::CreateKqpLogOptTransformer(optCtx, types, config);
+                    UNIT_ASSERT_VALUES_EQUAL_C(SyncTransform(*optimizer, node, ctx), IGraphTransformer::TStatus::Ok,
+                        ctx.IssueManager.GetIssues().ToString());
+                    if (!Enabled) {
+                        UNIT_ASSERT(!FindNode(node, [](const TExprNode::TPtr& expr) {
+                            return NNodes::TKqpStreamingAggregation::Match(expr.Get());
+                        }));
+                        continue;
+                    }
+                    if (keyed) {
+                        UNIT_ASSERT(NNodes::TCoExtractMembers::Match(node.Get()));
+                        UNIT_ASSERT_VALUES_EQUAL(node->Child(1)->ChildrenSize(), 0);
+                    }
+                    const auto result = keyed ? node->HeadPtr() : node;
+                    const auto inputKind = original->Head().GetTypeAnn()->GetKind();
+                    if (inputKind == ETypeAnnotationKind::List) {
+                        UNIT_ASSERT(NNodes::TCoForwardList::Match(result.Get()));
+                    } else if (inputKind == ETypeAnnotationKind::Stream) {
+                        UNIT_ASSERT(NNodes::TCoFromFlow::Match(result.Get()));
+                    }
+                    const auto aggregation = inputKind == ETypeAnnotationKind::Flow ? result : result->HeadPtr();
+                    UNIT_ASSERT(NNodes::TKqpStreamingAggregation::Match(aggregation.Get()));
+                    if (inputKind != ETypeAnnotationKind::Flow) {
+                        UNIT_ASSERT(NNodes::TCoToFlow::Match(aggregation->HeadPtr().Get()));
+                    }
+                    const auto rewrittenInput = inputKind == ETypeAnnotationKind::Flow
+                        ? aggregation->HeadPtr() : aggregation->Head().HeadPtr();
+                    UNIT_ASSERT_C(rewrittenInput == original->HeadPtr(),
+                        "Pure input must be preserved without wrapping it in a stage or connection");
+                    UNIT_ASSERT(aggregation->ChildPtr(1) == original->ChildPtr(1));
+                    UNIT_ASSERT(aggregation->ChildPtr(2) == original->ChildPtr(2));
+                    const auto& settings = aggregation->Child(3);
+                    UNIT_ASSERT_VALUES_EQUAL(settings->ChildrenSize(), useStateTable ? 1 : 0);
+                    if (useStateTable) {
+                        UNIT_ASSERT_VALUES_EQUAL(settings->Head().Head().Content(), "state_table_path");
+                        UNIT_ASSERT_VALUES_EQUAL(settings->Head().Tail().Content(), "/Root/state");
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(KqpPureExprExcludesReads) {
+        TExprContext ctx;
+        for (const TStringBuf callable : {"KqlReadTable", "KqlReadTableIndex", "KqpReadTable",
+                "KqlReadTableRanges", "KqpReadOlapTableRanges", "KqpBlockReadOlapTableRanges",
+                "KqlReadTableFullTextIndex", "KqpReadTableFullTextIndex", "KqlReadTableVectorIndex",
+                "KqlStreamLookupTable", "KqlStreamLookupIndex", "KqpLookupTable", "DataSource", "DqSource",
+                "DqReadWrap", "DqReadWideWrap", "DqReadBlockWideWrap"}) {
+            const auto read = ctx.NewCallable(TPositionHandle(), callable, {});
+            UNIT_ASSERT_C(!NKikimr::NKqp::NOpt::IsKqpPureExpr(NNodes::TExprBase(read),
+                /* checkDqSources */ true, /* checkIndexReads */ true), callable);
+            const auto nested = ctx.NewList(TPositionHandle(), {read});
+            UNIT_ASSERT_C(!NKikimr::NKqp::NOpt::IsKqpPureExpr(NNodes::TExprBase(nested),
+                /* checkDqSources */ true, /* checkIndexReads */ true), callable);
+        }
+    }
+
+    Y_UNIT_TEST(KqpPureExprSourceFlags) {
+        TExprContext ctx;
+        const auto check = [&](TStringBuf callable, bool hasDqSource, bool hasIndexRead) {
+            const auto body = ctx.NewCallable(TPositionHandle(), callable, {});
+            for (const auto& expr : {body, ctx.NewList(TPositionHandle(), {body})}) {
+                for (const bool checkDqSources : {false, true}) {
+                    for (const bool checkIndexReads : {false, true}) {
+                        const bool expectedPure = !(checkDqSources && hasDqSource) && !(checkIndexReads && hasIndexRead);
+                        UNIT_ASSERT_VALUES_EQUAL_C(NKikimr::NKqp::NOpt::IsKqpPureExpr(NNodes::TExprBase(expr),
+                            checkDqSources, checkIndexReads), expectedPure, TStringBuilder() << callable
+                            << ", checkDqSources=" << checkDqSources << ", checkIndexReads=" << checkIndexReads);
+                    }
+                }
+            }
+        };
+
+        check("AsList", false, false);
+        for (const TStringBuf callable : {"DataSource", "DqSource", "DqReadWrap", "DqReadWideWrap", "DqReadBlockWideWrap"}) {
+            check(callable, true, false);
+        }
+        for (const TStringBuf callable : {"KqlReadTableFullTextIndex", "KqpReadTableFullTextIndex", "KqlReadTableVectorIndex"}) {
+            check(callable, false, true);
+        }
+    }
+
+    Y_UNIT_TEST(KqpPureLambdaPreservesClassification) {
+        TExprContext ctx;
+        const auto check = [&](TStringBuf callable, bool expectedPure) {
+            const auto body = ctx.NewCallable(TPositionHandle(), callable, {});
+            for (const auto& expr : {body, ctx.NewList(TPositionHandle(), {body})}) {
+                UNIT_ASSERT_VALUES_EQUAL_C(NKikimr::NKqp::NOpt::IsKqpPureExpr(NNodes::TExprBase(expr)), expectedPure, callable);
+                const auto lambda = NNodes::Build<NNodes::TCoLambda>(ctx, TPositionHandle())
+                    .Args({})
+                    .Body(expr)
+                    .Done();
+                UNIT_ASSERT_VALUES_EQUAL_C(NKikimr::NKqp::NOpt::IsKqpPureLambda(lambda), expectedPure, callable);
+            }
+        };
+
+        // Preserve historical transaction purity, including reads rejected by the streaming rewrite.
+        for (const TStringBuf callable : {"AsList", "DataSource", "DqSource", "DqReadWrap", "DqReadWideWrap",
+                "DqReadBlockWideWrap", "KqlReadTableFullTextIndex", "KqpReadTableFullTextIndex",
+                "KqlReadTableVectorIndex"}) {
+            check(callable, true);
+        }
+        for (const TStringBuf callable : {"KqlReadTable", "KqlReadTableIndex", "KqpReadTable",
+                "KqlReadTableRanges", "KqpReadOlapTableRanges", "KqpBlockReadOlapTableRanges",
+                "KqlStreamLookupTable", "KqlStreamLookupIndex", "KqpLookupTable", "KqlUpsertRows", "KqlDeleteRows"}) {
+            check(callable, false);
+        }
+    }
+
+    Y_UNIT_TEST(StreamingAggregationResultTypes) {
+        for (const auto kind : {ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}) {
+            for (const bool keyed : {false, true}) {
+                for (const bool optional : {false, true}) {
+                    for (const bool hasDefault : {false, true}) {
+                        TStreamingAggregationTypeAnnTest test;
+                        auto traits = test.Traits(optional ? "(Just (Int64 '1))" : "(Int64 '1)",
+                            hasDefault ? "(Int64 '0)" : "(Null)");
+                        auto node = test.Aggregation(kind, keyed ? TExprNodeList{test.Atom("key")} : TExprNodeList{},
+                            {test.List({test.Atom("value"), traits})},
+                            {test.List({test.Atom("state_table_path"), test.Atom("/Root/state")}),
+                             test.List({test.Atom("compact")})});
+                        const auto* result = test.CheckType(node);
+                        UNIT_ASSERT_VALUES_EQUAL(node->GetTypeAnn()->GetKind(), kind);
+                        UNIT_ASSERT_VALUES_EQUAL(result->GetSize(), keyed ? 2 : 1);
+                        const TTypeAnnotationNode* expected = test.Ctx.MakeType<TDataExprType>(EDataSlot::Int64);
+                        if (keyed ? optional : !hasDefault) {
+                            expected = test.Ctx.MakeType<TOptionalExprType>(expected);
+                        }
+                        UNIT_ASSERT(IsSameAnnotation(*result->FindItemType("value"), *expected));
+                        if (keyed) {
+                            UNIT_ASSERT(IsSameAnnotation(*result->FindItemType("key"),
+                                *test.Ctx.MakeType<TDataExprType>(EDataSlot::String)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StreamingAggregationTupleResultTypes) {
+        for (const bool keyed : {false, true}) {
+            for (const bool optional : {false, true}) {
+                TStreamingAggregationTypeAnnTest test;
+                auto traits = test.Traits(optional
+                    ? "(Just '((Int64 '1) (Just (Int64 '2))))"
+                    : "'((Int64 '1) (Just (Int64 '2)))");
+                auto node = test.Aggregation(ETypeAnnotationKind::Flow,
+                    keyed ? TExprNodeList{test.Atom("key")} : TExprNodeList{},
+                    {test.List({test.List({test.Atom("first"), test.Atom("second")}), traits})});
+                const auto* result = test.CheckType(node);
+                const auto* intType = test.Ctx.MakeType<TDataExprType>(EDataSlot::Int64);
+                const auto* optionalType = test.Ctx.MakeType<TOptionalExprType>(intType);
+                UNIT_ASSERT(IsSameAnnotation(*result->FindItemType("first"),
+                    *(optional || !keyed ? static_cast<const TTypeAnnotationNode*>(optionalType) : intType)));
+                UNIT_ASSERT(IsSameAnnotation(*result->FindItemType("second"), *optionalType));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StreamingAggregationInvalidSettings) {
+        for (const ui32 settingCase : {0, 1, 2, 3}) {
+            TStreamingAggregationTypeAnnTest test;
+            TExprNodeList setting;
+            switch (settingCase) {
+                case 0: setting = {test.Atom("state_table_path")}; break;
+                case 1: setting = {test.Atom("state_table_path"), test.List({})}; break;
+                case 2: setting = {test.Atom("state_table_path"), test.Atom("/Root/state"), test.Atom("extra")}; break;
+                case 3: setting = {test.Atom("unsupported")}; break;
+            }
+            auto node = test.Aggregation(ETypeAnnotationKind::List, {test.Atom("key")}, {}, {test.List(std::move(setting))});
+            UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), IGraphTransformer::TStatus::Error,
+                test.Ctx.IssueManager.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(StreamingAggregationInvalidColumns) {
+        for (const bool duplicate : {false, true}) {
+            TStreamingAggregationTypeAnnTest test;
+            auto node = test.Aggregation(ETypeAnnotationKind::List, {test.Atom(duplicate ? "key" : "missing")},
+                {test.List({test.Atom("key"), test.Traits("(Int64 '1)")})});
+            UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), IGraphTransformer::TStatus::Error,
+                test.Ctx.IssueManager.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(StreamingAggregationRejectsDistinct) {
+        TStreamingAggregationTypeAnnTest test;
+        auto node = test.Aggregation(ETypeAnnotationKind::List, {test.Atom("key")},
+            {test.List({test.Atom("value"), test.Traits("(Int64 '1)"), test.Atom("key")})});
+        UNIT_ASSERT_VALUES_EQUAL(test.Annotate(node), IGraphTransformer::TStatus::Error);
+        UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(),
+            "DISTINCT aggregation is not supported for mode: StreamingAggregation");
+    }
+
     Y_UNIT_TEST(LegacySyntaxVersionIsNormalized) {
         NYql::NProto::TTranslationSettings serializedSettings;
         serializedSettings.SetSyntaxVersion(0);

@@ -6,6 +6,8 @@
 
 namespace NYql {
 
+TExprNode::TPtr ExpandAggApply(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
+
 class TAggregateExpander {
 public:
     TAggregateExpander(bool usePartitionsByKeys, const bool useFinalizeByKeys, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx,
@@ -47,7 +49,6 @@ private:
     using TIdxSet = std::set<ui32>;
 
     TExprNode::TPtr ExpandAggregateWithFullOutput();
-    TExprNode::TPtr ExpandAggApply(const TExprNode::TPtr& node);
     bool CollectTraits();
     TExprNode::TPtr RebuildAggregate();
     TExprNode::TPtr GetContextLambda();

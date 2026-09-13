@@ -9,12 +9,16 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_rules.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 
+#include <yql/essentials/core/yql_aggregate_expander.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_match_recognize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
@@ -162,7 +166,9 @@ protected:
         TMaybeNode<TExprBase> output;
         auto aggregate = node.Cast<TCoAggregateBase>();
         auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
-        if (hopSetting) {
+        if (KqpCtx.Config->FeatureFlags.GetEnableStreamingAggregation()) {
+            output = RewriteAsStreamingAggregation(aggregate, ctx, getParents);
+        } else if (hopSetting) {
             auto input = aggregate.Input().Maybe<TDqConnection>();
             if (!input) {
                 return node;
@@ -192,6 +198,132 @@ protected:
             DumpAppliedRule("RewriteAggregate", node.Ptr(), output.Cast().Ptr(), ctx);
         }
         return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteAsStreamingAggregation(TCoAggregateBase aggregate, TExprContext& ctx, const TGetParents& getParents) {
+        const auto maybeInput = aggregate.Input().Maybe<TDqConnection>();
+        if (maybeInput) {
+            if (!IsSingleConsumerConnection(maybeInput.Cast(), *getParents())) {
+                return aggregate;
+            }
+        } else if (!IsDqCompletePureExpr(aggregate.Input(), /* isPrecomputePure */ false)
+            || !IsPureIsolatedLambda(aggregate.Input().Ref())
+            || !IsKqpPureExpr(aggregate.Input(), /* checkDqSources */ true, /* checkIndexReads */ true)) {
+            return aggregate;
+        }
+
+        const auto pos = aggregate.Pos();
+        if (GetSetting(aggregate.Settings().Ref(), "session")) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), "Session windows are not supported for streaming aggregation"));
+            return {};
+        }
+
+        if (GetSetting(aggregate.Settings().Ref(), "hopping")) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), "Hopping windows are not supported for streaming aggregation"));
+            return {};
+        }
+
+        auto handlers = aggregate.Handlers().Ref().ChildrenList();
+        bool expanded = false;
+        for (auto& handler : handlers) {
+            if (handler->Child(TCoAggregateTuple::idx_Trait)->IsCallable("AggApply")) {
+                handler = ctx.ChangeChild(*handler, TCoAggregateTuple::idx_Trait,
+                    ExpandAggApply(handler->ChildPtr(TCoAggregateTuple::idx_Trait), ctx, TypesCtx));
+                expanded = true;
+            }
+        }
+        if (expanded) {
+            return TExprBase(ctx.ChangeChild(aggregate.Ref(), TCoAggregateBase::idx_Handlers,
+                ctx.NewList(pos, std::move(handlers))));
+        }
+
+        auto outputColumnsSetting = GetSetting(aggregate.Settings().Ref(), "output_columns");
+        auto cleanedSettings = RemoveSetting(aggregate.Settings().Ref(), "output_columns", ctx);
+        if (const auto stateTablePath = KqpCtx.Config->StreamingAggregationStateTablePath.Get()) {
+            cleanedSettings = AddSetting(*cleanedSettings, pos, "state_table_path", ctx.NewAtom(pos, *stateTablePath), ctx);
+        }
+        const auto projectOutput = [&](TExprBase result) -> TExprBase {
+            if (outputColumnsSetting) {
+                return Build<TCoExtractMembers>(ctx, pos)
+                    .Input(result)
+                    .Members(outputColumnsSetting->ChildPtr(1))
+                    .Done();
+            }
+            return result;
+        };
+        const auto buildAggregation = [&](TExprBase input) {
+            return Build<TKqpStreamingAggregation>(ctx, pos)
+                .Input(input)
+                .Keys(aggregate.Keys())
+                .Handlers(aggregate.Handlers())
+                .Settings(cleanedSettings)
+                .Done();
+        };
+
+        if (!maybeInput) {
+            auto input = aggregate.Input();
+            const auto inputKind = input.Ref().GetTypeAnn()->GetKind();
+            if (inputKind != ETypeAnnotationKind::Flow) {
+                input = Build<TCoToFlow>(ctx, pos).Input(input).Done();
+            }
+            TExprBase result = buildAggregation(input);
+            if (inputKind == ETypeAnnotationKind::List) {
+                result = Build<TCoForwardList>(ctx, pos).Stream(result).Done();
+            } else if (inputKind == ETypeAnnotationKind::Stream) {
+                result = Build<TCoFromFlow>(ctx, pos).Input(result).Done();
+            }
+            return projectOutput(result);
+        }
+
+        auto input = maybeInput.Cast();
+        auto streamArg = Build<TCoArgument>(ctx, pos).Name("stream").Done();
+        auto streamingAggregation = buildAggregation(streamArg);
+
+        if (aggregate.Keys().Empty()) {
+            auto unionAll = Build<TDqCnUnionAll>(ctx, pos)
+                .Output(input.Output())
+                .Done();
+            auto stage = Build<TDqStage>(ctx, pos)
+                .Inputs()
+                    .Add(unionAll)
+                    .Build()
+                .Program()
+                    .Args(streamArg)
+                    .Body(streamingAggregation)
+                    .Build()
+                .Settings(TDqStageSettings().SetPartitionMode(TDqStageSettings::EPartitionMode::Aggregate).BuildNode(ctx, pos))
+                .Done();
+
+            TExprBase result = Build<TDqCnUnionAll>(ctx, pos)
+                .Output()
+                    .Stage(stage)
+                    .Index().Build("0")
+                    .Build()
+                .Done();
+            return projectOutput(result);
+        }
+
+        auto hashShuffle = Build<TDqCnHashShuffle>(ctx, pos)
+            .Output(input.Output())
+            .KeyColumns(aggregate.Keys())
+            .Done();
+        auto stage = Build<TDqStage>(ctx, pos)
+            .Inputs()
+                .Add(hashShuffle)
+                .Build()
+            .Program()
+                .Args(streamArg)
+                .Body(streamingAggregation)
+                .Build()
+            .Settings(TDqStageSettings().BuildNode(ctx, pos))
+            .Done();
+        TExprBase result = Build<TDqCnUnionAll>(ctx, pos)
+            .Output()
+                .Stage(stage)
+                .Index().Build("0")
+                .Build()
+            .Done();
+        return projectOutput(result);
     }
 
     TMaybeNode<TExprBase> RewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {

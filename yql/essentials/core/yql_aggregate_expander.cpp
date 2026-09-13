@@ -113,7 +113,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
     return GeneratePostAggregate(preAgg, keyExtractor);
 }
 
-TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
+TExprNode::TPtr ExpandAggApply(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx)
 {
     auto name = node->Head().Content();
     if (name.StartsWith("pg_")) {
@@ -122,7 +122,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
         TVector<ui32> argTypes;
         bool needRetype = false;
         bool isUniversal;
-        auto status = ExtractPgTypesFromMultiLambda(node->ChildRef(2), argTypes, needRetype, Ctx_, isUniversal);
+        auto status = ExtractPgTypesFromMultiLambda(node->ChildRef(2), argTypes, needRetype, ctx, isUniversal);
         YQL_ENSURE(!isUniversal);
         YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
 
@@ -135,28 +135,28 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
             aggDescPtr = &NPg::LookupAggregation(TString(func), argTypes);
         }
 
-        return ExpandPgAggregationTraits(node->Pos(), *aggDescPtr, /*onWindow=*/false, node->ChildPtr(2), argTypes, itemType, Ctx_);
+        return ExpandPgAggregationTraits(node->Pos(), *aggDescPtr, /*onWindow=*/false, node->ChildPtr(2), argTypes, itemType, ctx);
     }
 
     const TString modulePath = "/lib/yql/aggregate.yqls";
-    auto exportsPtr = TypesCtx_.Modules->GetModule(modulePath);
+    auto exportsPtr = typesCtx.Modules->GetModule(modulePath);
     YQL_ENSURE(exportsPtr, "Failed to get module " << modulePath);
     const auto& exports = exportsPtr->Symbols();
     const auto ex = exports.find(TString(name) + "_traits_factory");
     YQL_ENSURE(exports.cend() != ex);
     TNodeOnNodeOwnedMap deepClones;
-    auto lambda = Ctx_.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, /*internStrings=*/true, /*copyTypes=*/false);
+    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, /*internStrings=*/true, /*copyTypes=*/false);
 
-    auto listTypeNode = Ctx_.NewCallable(node->Pos(), "ListType", { node->ChildPtr(node->ChildrenSize() == 4 && !node->Child(3)->IsCallable("Void") ? 3 : 1) });
+    auto listTypeNode = ctx.NewCallable(node->Pos(), "ListType", { node->ChildPtr(node->ChildrenSize() == 4 && !node->Child(3)->IsCallable("Void") ? 3 : 1) });
     auto extractor = node->ChildPtr(2);
 
-    auto traits = Ctx_.ReplaceNodes(lambda->TailPtr(), {
+    auto traits = ctx.ReplaceNodes(lambda->TailPtr(), {
         {lambda->Head().Child(0), listTypeNode},
         {lambda->Head().Child(1), extractor}
         });
 
-    Ctx_.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-    auto status = ExpandApplyNoRepeat(traits, traits, Ctx_);
+    ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+    auto status = ExpandApplyNoRepeat(traits, traits, ctx);
     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
     return traits;
 }
@@ -166,7 +166,7 @@ bool TAggregateExpander::CollectTraits() {
     for (ui32 index = 0; index < AggregatedColumns_->ChildrenSize(); ++index) {
         auto trait = AggregatedColumns_->Child(index)->ChildPtr(1);
         if (trait->IsCallable({ "AggApply", "AggApplyState", "AggApplyManyState" })) {
-            trait = ExpandAggApply(trait);
+            trait = ExpandAggApply(trait, Ctx_, TypesCtx_);
             allTraitsCollected = false;
         }
         Traits_.push_back(trait);

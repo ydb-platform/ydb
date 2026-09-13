@@ -54,6 +54,10 @@ void TComputationUpvalues::RestoreUpvalues(TComputationContext& ctx) const {
     }
 }
 
+bool IComputationNode::IsSuitableForCache() const {
+    return true;
+}
+
 std::unique_ptr<IArrowKernelComputationNode> IComputationNode::PrepareArrowKernelComputationNode(TComputationContext& ctx) const {
     Y_UNUSED(ctx);
     return {};

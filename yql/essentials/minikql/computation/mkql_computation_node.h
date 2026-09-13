@@ -230,6 +230,7 @@ public:
     virtual ui32 GetDependentsCount() const = 0;
 
     virtual bool IsTemporaryValue() const = 0;
+    virtual bool IsSuitableForCache() const;
 
     virtual EValueRepresentation GetRepresentation() const = 0;
 

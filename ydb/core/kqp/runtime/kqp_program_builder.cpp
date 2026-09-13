@@ -7,8 +7,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -132,7 +131,7 @@ bool RightJoinSideAllowed(const TString& joinType) {
 bool RightJoinSideOptional(const TString& joinType) {
     return joinType == "Left";
 }
-} // namespace
+} // anonymous namespace
 
 TKqpProgramBuilder::TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
     : TDqProgramBuilder(env, functionRegistry) {}
@@ -368,6 +367,47 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TKqpProgramBuilder::StreamingAggregation(TRuntimeNode flow,
+                                                   const TUnaryLambda& keyExtractor,
+                                                   const TUnaryLambda& init,
+                                                   const TBinaryLambda& update,
+                                                   const TBinaryLambda& finish,
+                                                   TRuntimeNode stateTablePath)
+{
+    auto flowType = AS_TYPE(TFlowType, flow);
+    auto itemType = flowType->GetItemType();
+
+    TRuntimeNode itemArg = Arg(itemType);
+    auto outKey = keyExtractor(itemArg);
+
+    auto keyType = outKey.GetStaticType();
+    TRuntimeNode keyArg = Arg(keyType);
+
+    auto outInit = init(itemArg);
+    auto stateType = outInit.GetStaticType();
+    TRuntimeNode stateArg = Arg(stateType);
+
+    auto outUpdate = update(stateArg, itemArg);
+    MKQL_ENSURE(outUpdate.GetStaticType()->IsSameType(*stateType),
+                "StreamingAggregation: update lambda must produce the same state type as init");
+
+    auto outFinish = finish(keyArg, stateArg);
+    auto resultType = TFlowType::Create(outFinish.GetStaticType(), GetTypeEnvironment());
+
+    TCallableBuilder callableBuilder(GetTypeEnvironment(), __func__, resultType);
+    callableBuilder.Add(flow);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(stateArg);
+    callableBuilder.Add(keyArg);
+    callableBuilder.Add(outKey);
+    callableBuilder.Add(outInit);
+    callableBuilder.Add(outUpdate);
+    callableBuilder.Add(outFinish);
+    callableBuilder.Add(stateTablePath);
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TKqpProgramBuilder::KqpStreamEnumerate(TRuntimeNode input)
 {
     const auto inputType = input.GetStaticType();
@@ -403,5 +443,4 @@ TRuntimeNode TKqpProgramBuilder::KqpStreamEnumerate(TRuntimeNode input)
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -65,7 +65,15 @@ public:
 
     // input: List/Flow/Stream<T> -> same container of Tuple<Uint64, T> with a 1-based rank.
     TRuntimeNode KqpStreamEnumerate(TRuntimeNode input);
+
+    TRuntimeNode StreamingAggregation(TRuntimeNode flow,
+        const TUnaryLambda& keyExtractor,
+        const TUnaryLambda& init,
+        const TBinaryLambda& update,
+        const TBinaryLambda& finish,
+        TRuntimeNode stateTablePath);
 };
 
 } // namespace NMiniKQL
+
 } // namespace NKikimr

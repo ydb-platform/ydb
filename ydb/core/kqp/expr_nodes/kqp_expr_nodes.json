@@ -856,6 +856,17 @@
             ]
         },
         {
+            "Name": "TKqpStreamingAggregation",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "StreamingAggregation"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Keys", "Type": "TCoAtomList"},
+                {"Index": 2, "Name": "Handlers", "Type": "TCoAggregateTupleList"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TKqpStreamEnumerate",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpStreamEnumerate"},

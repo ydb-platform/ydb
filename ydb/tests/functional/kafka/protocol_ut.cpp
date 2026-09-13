@@ -24,24 +24,16 @@ Y_UNIT_TEST_SUITE(KafkaLibrdkafkaProtocol) {
     }
 
     Y_UNIT_TEST(UnsupportedApiVersionsKeepsConnection) {
-        TApiVersionsReply unsupported;
-        if (RequestApiVersionsMaybe(5, unsupported)) {
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(unsupported.ErrorCode), KafkaUnsupportedVersion);
-            UNIT_ASSERT(!unsupported.ApiKeys.empty());
-            UNIT_ASSERT_VALUES_EQUAL(unsupported.ApiKeys[0].ApiKey, KafkaApiApiVersions);
-        }
-
-        TApiVersionsReply supported;
         TApiVersionsReply first;
-        if (RequestApiVersionsKeepConnection(5, 2, &first, &supported)) {
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(first.ErrorCode), KafkaUnsupportedVersion);
-            UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(supported.ErrorCode), 0);
-            UNIT_ASSERT(FindApi(supported, KafkaApiProduce));
-        }
-
-        const auto retry = RequestApiVersions(2);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(retry.ErrorCode), 0);
-        UNIT_ASSERT(FindApi(retry, KafkaApiProduce));
+        TApiVersionsReply supported;
+        UNIT_ASSERT_C(
+            RequestApiVersionsKeepConnection(5, 2, &first, &supported),
+            "KIP-511: unsupported ApiVersions must keep the connection so the client can retry");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(first.ErrorCode), KafkaUnsupportedVersion);
+        UNIT_ASSERT(!first.ApiKeys.empty());
+        UNIT_ASSERT_VALUES_EQUAL(first.ApiKeys[0].ApiKey, KafkaApiApiVersions);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(supported.ErrorCode), 0);
+        UNIT_ASSERT(FindApi(supported, KafkaApiProduce));
     }
 
     Y_UNIT_TEST(ProduceWorksAfterVersionNegotiation) {

@@ -1107,10 +1107,42 @@ protected:
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);
 
-                            Request->Header.Read(readable, RequestHeaderVersion(Request->ApiKey, Request->ApiVersion));
-                            // KIP-511: an ApiVersions version the parser does not know is not a fatal error.
-                            // Skip the body (Kafka treats it as v0) and let the actor return UNSUPPORTED_VERSION.
-                            if (!(Request->ApiKey == API_VERSIONS && !IsApiVersionsRequestVersionSupported(Request->ApiVersion))) {
+                            const bool unsupportedApiVersions = IsUnsupportedApiVersionsRequest(
+                                Request->ApiKey, Request->ApiVersion);
+                            const TKafkaVersion headerVersion = RequestHeaderVersion(
+                                Request->ApiKey, Request->ApiVersion);
+
+                            try {
+                                Request->Header.Read(readable, headerVersion);
+                            } catch (const yexception& headerError) {
+                                if (!unsupportedApiVersions) {
+                                    throw;
+                                }
+                                // KIP-511: unknown ApiVersions is not a fatal parse error. Kafka
+                                // RequestContext.parseRequest skips the body and treats the request as v0.
+                                // A version probe may omit header v2 tagged fields; retry with header v1.
+                                YDB_LOG_DEBUG("Unsupported ApiVersions header parse, retry as v0/v1",
+                                    {LogPrefix()},
+                                    {"apiKey", Request->ApiKey},
+                                    {"version", Request->ApiVersion},
+                                    {"headerVersion", headerVersion},
+                                    {"error", headerError.what()});
+                                TKafkaReadable fallback(*Request->Buffer, readable);
+                                try {
+                                    Request->Header.Read(fallback, ApiVersionsFallbackRequestHeaderVersion);
+                                } catch (const yexception& fallbackError) {
+                                    YDB_LOG_DEBUG("Unsupported ApiVersions header v1 fallback failed, using prefix",
+                                        {LogPrefix()},
+                                        {"error", fallbackError.what()});
+                                    Request->Header.RequestApiKey = Request->ApiKey;
+                                    Request->Header.RequestApiVersion = Request->ApiVersion;
+                                    Request->Header.CorrelationId = Request->CorrelationId;
+                                    Request->Header.ClientId = TRequestHeaderData::ClientIdMeta::Default;
+                                }
+                            }
+
+                            // Skip the body for unsupported ApiVersions (Kafka treats it as v0).
+                            if (!unsupportedApiVersions) {
                                 Request->Message->Read(readable, Request->ApiVersion);
                             }
                         } catch(const yexception& e) {

@@ -485,14 +485,28 @@ class MessageAcceptor:
             data_idx = self.messages_index[data]
 
             if self.receive_idx is not None:
-                assert self.receive_idx + 1 < len(self.messages), f"All messages in order group already received, got unexpected message: '{data}' (index {data_idx} / {len(self.messages) - 1}), {self.debug_info()}"
-                assert data_idx == self.receive_idx + 1, f"Expected message '{self.messages[self.receive_idx + 1]}' (index {self.receive_idx + 1} / {len(self.messages) - 1}), but got '{data}' (index {data_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                assert self.receive_idx + 1 < len(self.messages), (
+                    f"All messages in order group already received, got unexpected message: '{data}' "
+                    f"(index {data_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
+                assert data_idx == self.receive_idx + 1, (
+                    f"Expected message '{self.messages[self.receive_idx + 1]}' "
+                    f"(index {self.receive_idx + 1} / {len(self.messages) - 1}), "
+                    f"but got '{data}' (index {data_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
                 self.receive_idx += 1
             else:
                 if self.unaccepted_count > 0:
                     max_expected_idx = len(self.messages) - self.unaccepted_count
-                    assert data_idx <= max_expected_idx, f"Unexpected message: '{data}' (index {data_idx} / {len(self.messages) - 1}), {data_idx - max_expected_idx} unseen messages were skipped, {self.debug_info()}"
-                assert data_idx >= self.start_idx, f"Unexpected starting message: '{data}' (index {data_idx} / {len(self.messages) - 1}), previous query start was on newer message {self.messages[self.start_idx]} (index {self.start_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                    assert data_idx <= max_expected_idx, (
+                        f"Unexpected message: '{data}' (index {data_idx} / {len(self.messages) - 1}), "
+                        f"{data_idx - max_expected_idx} unseen messages were skipped, {self.debug_info()}"
+                    )
+                assert data_idx >= self.start_idx, (
+                    f"Unexpected starting message: '{data}' (index {data_idx} / {len(self.messages) - 1}), "
+                    f"previous query start was on newer message {self.messages[self.start_idx]} "
+                    f"(index {self.start_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
                 self.receive_idx = data_idx
                 self.start_idx = data_idx
 
@@ -505,7 +519,10 @@ class MessageAcceptor:
             return self.unaccepted_count
 
         def debug_info(self) -> str:
-            return f"full expected messages order: {self.messages}, start_idx: {self.start_idx}, receive_idx: {self.receive_idx}, unaccepted_count: {self.unaccepted_count}"
+            return (
+                f"full expected messages order: {self.messages}, start_idx: {self.start_idx}, "
+                f"receive_idx: {self.receive_idx}, unaccepted_count: {self.unaccepted_count}"
+            )
 
     def __init__(self):
         self.all_messages: Dict[str, int] = {}
@@ -513,7 +530,10 @@ class MessageAcceptor:
 
     def accept(self, messages: List[str], ordered_group: int = 0):
         for message in messages:
-            assert message not in self.all_messages, f"All test messages must be unique, got validation set: {self.all_messages} (failed after adding duplicated '{message}')"
+            assert message not in self.all_messages, (
+                f"All test messages must be unique, got validation set: {self.all_messages} "
+                f"(failed after adding duplicated '{message}')"
+            )
             self.all_messages[message] = ordered_group
 
         self.groups[ordered_group].accept(messages)
@@ -537,13 +557,7 @@ class MessageAcceptor:
 
 
 def read_and_check_data(
-    context,
-    query_path,
-    acceptor: MessageAcceptor,
-    endpoint,
-    database_path,
-    consumer_name,
-    topic_name
+    context, query_path, acceptor: MessageAcceptor, endpoint, database_path, consumer_name, topic_name
 ):
     try:
         logger.debug("read data from stream")
@@ -553,14 +567,16 @@ def read_and_check_data(
             remaining_timeout = deadline - time.time()
             assert remaining_timeout > 0, f"Timed out waiting for expected data: {acceptor.debug_info()}"
 
-            acceptor.advance(read_stream(
-                path=topic_name,
-                messages_count=len(acceptor),
-                consumer_name=consumer_name,
-                database=database_path,
-                endpoint=endpoint,
-                timeout=remaining_timeout,
-            ))
+            acceptor.advance(
+                read_stream(
+                    path=topic_name,
+                    messages_count=len(acceptor),
+                    consumer_name=consumer_name,
+                    database=database_path,
+                    endpoint=endpoint,
+                    timeout=remaining_timeout,
+                )
+            )
     except AssertionError as error:
         raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(context, query_path)}") from error
 

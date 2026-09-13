@@ -466,6 +466,9 @@ public:
     ui64 SeqNo = 0;
     bool Leading = false;
     ui64 ChannelSeqNo = 0;
+    // when the message was last put on the wire, stamped by TNodeState::SendMessage for a send and for a
+    // resend alike; the front of the Queue carries the age of the oldest message the peer has not confirmed
+    TInstant SentAt;
 };
 
 class TOutputBuffer : public IChannelBuffer {
@@ -690,7 +693,7 @@ public:
     }
 
     virtual ~TNodeState();
-    void FailDescriptors();
+    void FailDescriptors(const TString& reason);
     void PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
     void SendMessage(std::shared_ptr<TOutputItem> item);
     void HandleDisconnected(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
@@ -706,12 +709,13 @@ public:
     void TerminateOutputDescriptor(const std::shared_ptr<TOutputDescriptor>& descriptor);
     void TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor>& descriptor);
     void HandleCleanup();
-    void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor);
-    void FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor);
+    // the reason is only needed when there is no peer to compare against, i.e. for the session teardown
+    void FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason = {});
+    void FailOutputs(const TString& reason);
     void SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie);
     void SendAckWithError(ui64 cookie, const TString& message);
     void HandleChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
-    void SendFromWaiters(ui64 deltaBytes);
+    void SendFromWaiters();
     void ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor);
     virtual TString GetDebugInfo();
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
@@ -803,6 +807,11 @@ public:
 
     void HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev);
 
+    // A debug session is created quiescent and discovers its peer only when this is called, so that every
+    // debug session of a test can be registered first. A discovery makes the service of the peer create a
+    // session of its own, and CreateDebugNodeState refuses to replace one.
+    void StartSession();
+
     void PauseChannelData();
     void ResumeChannelData();
     void PauseChannelAck();
@@ -816,6 +825,20 @@ public:
 
     std::atomic<bool> ChannelDataPaused;
     std::atomic<bool> ChannelAckPaused;
+    // Lose exactly the data message with this SeqNo and nothing else, 0 for none. Unlike DataLossProbability
+    // it is applied when the message would be delivered to the session rather than when it arrives, so a
+    // message which is already waiting in the pending queue can still be named - which is what makes the
+    // injection independent of how fast the peer happened to deliver it.
+    std::atomic<ui64> DropDataSeqNo = 0;
+    // Lose the acks which confirm up to this SeqNo, 0 for none. Only an OK ack is ever dropped: a RESEND
+    // is the answer the peer is waiting for and dropping it would stall the session instead of the channel.
+    std::atomic<ui64> DropOkAckUpToSeqNo = 0;
+    // Lose every OK ack which confirms channel data, i.e. the ones sent by HandleChannelData, and keep the
+    // ones the protocol itself runs on - the reply to a discovery carries no ChannelId. It stalls the queue
+    // of the session without breaking its handshakes.
+    std::atomic<bool> DropDataAcks = false;
+    // Data which has arrived and has not been delivered to the session yet, for a test to wait on.
+    std::atomic<ui64> PendingDataCount = 0;
     std::atomic<double> DataLossProbability;
     std::atomic<ui64> DataLossCount;
     std::atomic<double> AckLossProbability;
@@ -1325,34 +1348,50 @@ public:
         if (NodeState->ShouldLooseData()) {
             return;
         }
-        if (NodeState->ChannelDataPaused.load()) {
+        // anything which arrives while something is still pending is pending too, or a message would
+        // overtake the ones which arrived before it and a replay of an exact count would be bypassed
+        if (NodeState->ChannelDataPaused.load() || !PendingChannelData.empty()) {
             PendingChannelData.emplace(ev.Release());
-        } else {
-            while (!PendingChannelData.empty()) {
-                NodeState->HandleData(PendingChannelData.front());
-                PendingChannelData.pop();
-            }
-            if (NodeState->IsNullMode()) {
-                NodeState->HandleNullMode(ev);
-            } else {
-                NodeState->HandleData(ev);
-            }
+            NodeState->PendingDataCount++;
+            return;
         }
+        DeliverChannelData(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         if (NodeState->ShouldLooseAck()) {
             return;
         }
-        if (NodeState->ChannelAckPaused.load()) {
+        if (NodeState->ChannelAckPaused.load() || !PendingChannelAck.empty()) {
             PendingChannelAck.emplace(ev.Release());
-        } else {
-            while (!PendingChannelAck.empty()) {
-                NodeState->HandleAck(PendingChannelAck.front());
-                PendingChannelAck.pop();
-            }
-            NodeState->HandleAck(ev);
+            return;
         }
+        DeliverChannelAck(ev);
+    }
+
+    void DeliverChannelData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
+        if (auto seqNo = NodeState->DropDataSeqNo.load(); seqNo && ev->Get()->Record.GetSeqNo() == seqNo) {
+            NodeState->DropDataSeqNo.store(0);
+            return; // lost on the wire
+        }
+        if (NodeState->IsNullMode()) {
+            NodeState->HandleNullMode(ev);
+        } else {
+            NodeState->HandleData(ev);
+        }
+    }
+
+    void DeliverChannelAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+        if (auto seqNo = NodeState->DropOkAckUpToSeqNo.load(); seqNo && record.GetSeqNo() <= seqNo
+            && record.GetStatus() == NYql::NDqProto::TEvChannelAckV2::OK) {
+            return; // lost on the wire, a RESEND is never dropped
+        }
+        if (NodeState->DropDataAcks.load() && record.GetChannelId()
+            && record.GetStatus() == NYql::NDqProto::TEvChannelAckV2::OK) {
+            return; // lost on the wire, the acks of the protocol itself carry no ChannelId and stay
+        }
+        NodeState->HandleAck(ev);
     }
 
     void Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
@@ -1374,26 +1413,31 @@ public:
     void Handle(TEvPrivate::TEvProcessPending::TPtr& ev) {
         auto maxCount = ev->Get()->MaxCount;
 
-        if (!NodeState->ChannelDataPaused.load()) {
+        // A replay of an exact count (maxCount != 0) ignores the pause on purpose: replaying a known number
+        // of messages while the session stays paused is what lets a test reach one state and stop there. It
+        // counts data alone and never spills into the acks, which are a queue of their own with a pause of
+        // their own - "replay 1 message" must not deliver an ack, least of all a paused one, just because
+        // the data queue happened to be empty. Draining everything (maxCount == 0) is what a resume does.
+        if (maxCount || !NodeState->ChannelDataPaused.load()) {
             while (!PendingChannelData.empty()) {
-                if (NodeState->IsNullMode()) {
-                    NodeState->HandleNullMode(PendingChannelData.front());
-                } else {
-                    NodeState->HandleData(PendingChannelData.front());
-                }
+                DeliverChannelData(PendingChannelData.front());
                 PendingChannelData.pop();
+                NodeState->PendingDataCount--;
                 if (maxCount && --maxCount == 0) {
-                    return;
+                    break;
                 }
+            }
+            // Whatever is left of a running queue has to be drained by something: an arrival joins the
+            // pending ones to keep the order, so with nothing scheduled here every later message would
+            // park behind this remainder for good, with no pause set to explain it.
+            if (!PendingChannelData.empty() && !NodeState->ChannelDataPaused.load()) {
+                NodeState->ProcessPending(0);
             }
         }
         if (!NodeState->ChannelAckPaused.load()) {
             while (!PendingChannelAck.empty()) {
-                NodeState->HandleAck(PendingChannelAck.front());
+                DeliverChannelAck(PendingChannelAck.front());
                 PendingChannelAck.pop();
-                if (maxCount && --maxCount == 0) {
-                    return;
-                }
             }
         }
     }

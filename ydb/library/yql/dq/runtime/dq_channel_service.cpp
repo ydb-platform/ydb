@@ -1081,7 +1081,7 @@ TNodeState::~TNodeState() {
         LOG_D(LogPrefix << "DESTROYED, NodeActorId=" << NodeActorId);
     } else {
         LOG_E(LogPrefix << "DESTROYED, NodeActorId=" << NodeActorId << ", ID=" << InputDescriptors.size() << ", OD=" << OutputDescriptors.size());
-        FailDescriptors();
+        FailDescriptors("Node session destroyed with the channel still open");
     }
     *OutputBufferCount -= OutputDescriptors.size();
     *InputBufferCount -= InputDescriptors.size();
@@ -1092,9 +1092,9 @@ TNodeState::~TNodeState() {
     *OutputBufferWaiterMessages -= WaiterMessages.load();
 }
 
-void TNodeState::FailDescriptors() {
-    FailInputs(NActors::TActorId{}, 0);
-    FailOutputs(NActors::TActorId{}, 0);
+void TNodeState::FailDescriptors(const TString& reason) {
+    FailInputs(NActors::TActorId{}, 0, reason);
+    FailOutputs(reason);
 }
 
 void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
@@ -1252,9 +1252,10 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     }
 #endif
     item->State.store(TOutputItem::EState::Sent);
+    item->SentAt = TInstant::Now();
 }
 
-void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor) {
+void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason) {
     if (InputDescriptors.empty()) {
         return;
     }
@@ -1264,11 +1265,28 @@ void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 out
     for (auto& [info, descriptor] : InputDescriptors) {
         if (!descriptor->IsFinished() && descriptor->OutputNodeGenMajor) {
             if (descriptor->OutputNodeActorId != outputNodeActorId || descriptor->OutputNodeGenMajor != outputNodeGenMajor) {
-                descriptor->AbortChannel(
-                    TStringBuilder() << "OutputNodeActorId=" << descriptor->OutputNodeActorId << ", OutputNodeGenMajor=" << descriptor->OutputNodeGenMajor
-                    << " DO NOT MATCH outputNodeActorId=" << outputNodeActorId << ", outputNodeGenMajor=" << outputNodeGenMajor
-                    << ", Session=" << LogPrefix << ", Log=" << GetReconciliationLog()
-                );
+                TStringBuilder message;
+                if (outputNodeActorId) {
+                    // The comparison itself says what happened, and the 2 cases it covers are not the same
+                    // thing: the session of the peer may have been replaced by another one, or that very
+                    // session may have moved on to a new generation through a reconciliation of its own,
+                    // no restart involved.
+                    message << (descriptor->OutputNodeActorId != outputNodeActorId
+                            ? "Peer node session has been replaced"
+                            : "Peer node session has advanced its generation")
+                        << ", OutputNodeActorId=" << descriptor->OutputNodeActorId
+                        << ", OutputNodeGenMajor=" << descriptor->OutputNodeGenMajor
+                        << " DO NOT MATCH outputNodeActorId=" << outputNodeActorId
+                        << ", outputNodeGenMajor=" << outputNodeGenMajor;
+                } else {
+                    // The session teardown has no peer to name, and an empty id in a comparison reads as a
+                    // generation mismatch which never happened - say why the channel dies instead.
+                    message << reason
+                        << ", OutputNodeActorId=" << descriptor->OutputNodeActorId
+                        << ", OutputNodeGenMajor=" << descriptor->OutputNodeGenMajor;
+                }
+                message << ", Session=" << LogPrefix << ", Log=" << GetReconciliationLog();
+                descriptor->AbortChannel(message);
                 failedBuffers.push_back(info);
                 LOG_T(LogPrefix << "ID ERASE/FAIL, ChannelId=" << descriptor->Info.ChannelId
                     << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
@@ -1289,14 +1307,14 @@ void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 out
     }
 }
 
-void TNodeState::FailOutputs(const NActors::TActorId& peerActorId, ui64 peerGenMajor) {
+void TNodeState::FailOutputs(const TString& reason) {
     if (OutputDescriptors.empty()) {
         return;
     }
 
     for (auto& [info, descriptor] : OutputDescriptors) {
         descriptor->AbortChannel(
-            TStringBuilder() << "PeerActorId=" << peerActorId << ", peerGenMajor=" << peerGenMajor
+            TStringBuilder() << reason
             << ", EF=" << descriptor->EarlyFinished.load()
             << ", FP=" << descriptor->FinishPushed.load()
             << ", F=" << descriptor->Finished.load()
@@ -1469,6 +1487,38 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
             }
             break;
         }
+        case TEvDqCompute::TEvChannelDiscoveryV2::EventType: {
+            // No reconciliation is started here on purpose, whatever the reason is - the bounce is logged
+            // and nothing else. A discovery is sent by DoReconciliation and by nothing else, so this event
+            // always arrives with a reconciliation already in progress, which owns the retry and has
+            // scheduled it. That is the same rule the data case above follows with its "ignore errors in
+            // recovery" guard, and here it is not a matter of taste:
+            //
+            // the bounce comes back at once, not after a timeout, so reacting to it with another attempt
+            // would make the attempts of a reconciliation follow each other as fast as the interconnect can
+            // return them. The ReconciliationCount of them would be spent in microseconds, the backoff of
+            // DoReconciliation would never get to delay anything and the session would be destroyed, with
+            // every channel of it, the instant the 1st discovery bounced. The delay is the rate limiter of
+            // this loop, not a wait for information which has already arrived.
+            //
+            // ReasonActorUnknown is not a special case of that. It is answered by nobody because there is
+            // no channel service on the peer node to answer it, most often because the node is still
+            // starting up - which is exactly the case which repairs itself if left alone for a second, and
+            // which an immediate retry would turn into an immediate loss of every channel of the session.
+            std::lock_guard lock(Mutex);
+            if (ev->Get()->Reason == NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
+                LOG_W(LogPrefix << "UNDELIVERED DISCOVERY/UNKNOWN, no channel service on the peer node, G="
+                    << GenMajor << '.' << GenMinor << ", Log=" << GetReconciliationLog());
+            } else {
+                // Subscribed is left alone: it mirrors the state of the interconnect session, which owns it.
+                // An event carrying FlagSubscribeOnSession is answered with TEvNodeDisconnected whenever it
+                // is dropped (TInterconnectProxyTCP::DropSessionEvent), so HandleDisconnected clears the flag
+                // and restarts the reconciliation on its own.
+                LOG_W(LogPrefix << "UNDELIVERED DISCOVERY/DISCONNECTED, G=" << GenMajor << '.' << GenMinor
+                    << ", Log=" << GetReconciliationLog());
+            }
+            break;
+        }
         case TEvDqCompute::TEvChannelAckV2::EventType: {
             // Ack will be requested by peer with next reconciliation
             LOG_W(LogPrefix << "UNDELIVERED ACK");
@@ -1526,6 +1576,13 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
 
 void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
 
+    // Data proves the peer is alive just as an ack, a discovery or an update does. Without this a session
+    // which only receives - every channel of it has this node as the receiver - looks idle to HandleCleanup
+    // no matter how much the peer is streaming to it, and gets idle pinged with a fatal deadline attached.
+    // Obsolete data refreshes it as well, on purpose: it comes from a peer which is alive and sending, and
+    // the generations are resynced by its discovery rather than by an idle ping of ours.
+    LastPeerActivity.store(TInstant::Now());
+
     auto& record = ev->Get()->Record;
     auto genMajor = record.GetGenMajor();
     auto genMinor = record.GetGenMinor();
@@ -1575,16 +1632,18 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     HandleChannelData(ev);
 }
 
-void TNodeState::SendFromWaiters(ui64 deltaBytes) {
+// The bytes of an acknowledged message are released by the HandleAck pop sites, under the session Mutex
+// and before any of its early returns, so InflightBytes is always in sync with the Queue here.
+void TNodeState::SendFromWaiters() {
 
     if (Reconciliation.load() > 0) {
         return;
     }
-    ui64 inflightBytes = InflightBytes.load();
-
-    Y_ABORT_UNLESS(inflightBytes >= deltaBytes, "%s, inflightBytes=%" PRIu64 ", deltaBytes=%" PRIu64, LogPrefix.c_str(), inflightBytes, deltaBytes);
-
-    while (inflightBytes - deltaBytes < Limits.RemoteSessionInflightBytes) {
+    // InflightBytes is re-read on every iteration on purpose: PushDataChunk sends directly from the
+    // producer threads and adds to it concurrently, so a snapshot taken here would not account for those
+    // bytes and the loop would keep draining waiters well past RemoteSessionInflightBytes. The window is
+    // still checked before the bytes are added, so it is exceeded by at most one message, as in PushDataChunk.
+    while (InflightBytes.load() < Limits.RemoteSessionInflightBytes) {
         std::shared_ptr<TOutputDescriptor> waiter;
 
         {
@@ -1670,7 +1729,6 @@ now may need to send very last msg from terminated descriptor
                 SendMessage(item);
                 SendCount++;
                 (*SessionMessagesSent)++;
-                inflightBytes += bytes;
                 InflightBytes += bytes;
                 *OutputBufferInflightBytes += bytes;
                 (*OutputBufferInflightMessages)++;
@@ -1690,7 +1748,6 @@ now may need to send very last msg from terminated descriptor
         }
     }
 
-    InflightBytes -= deltaBytes;
 }
 
 void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
@@ -1749,7 +1806,18 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 item->Descriptor->AbortChannel(TStringBuilder() << "By Outdated GenMajor " << item->Descriptor->GenMajor.load() << " vs " << GenMajor);
             }
             deltaBytes += item->Data.Bytes;
-            *OutputBufferInflightBytes -= item->Data.Bytes;
+            // the counter is unsigned: releasing more than it holds wraps it around and the session
+            // stops sending for good, with an empty Queue and idle channels
+            Y_DEBUG_ABORT_UNLESS(InflightBytes.load() >= item->Data.Bytes,
+                "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
+                LogPrefix.c_str(), InflightBytes.load(), item->Data.Bytes, item->SeqNo);
+            // Clamped on purpose: a release build has no assert to stop on and a wrapped counter would
+            // leave the session unable to send anything ever again, which is far worse than losing count.
+            // The sensor loses exactly what the counter did - subtracting the unclamped size there would
+            // trade a wedged session for a gauge which goes negative, shared by every session of the node.
+            auto released = std::min<ui64>(InflightBytes.load(), item->Data.Bytes);
+            InflightBytes -= released;
+            *OutputBufferInflightBytes -= released;
             (*OutputBufferInflightMessages)--;
             Queue.pop_front();
         }
@@ -1763,18 +1831,23 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         } else {
             auto& item = Queue.front();
 
-            if (item->SeqNo != seqNo) {
-                // allow outdates/old acks
-                if (seqNo > item->SeqNo) {
-                    LOG_W(LogPrefix << "SEQ/DESYNC, SeqNo=" << seqNo << ", item.SeqNo=" << item->SeqNo);
-                    StartReconciliation(true, 'Y');
-                    return;
-                }
-            } else {
+            // An ack behind the queue front is left to the reconciliation block below: the loop above has
+            // popped everything under seqNo and an ack ahead of SeqNo is rejected by the SEQ/LARGE check,
+            // so the only way round left is a discovery reply of a major reconciliation, which has
+            // renumbered the queue from 1 while the peer is still at its own ConfirmedSeqNo. Resending
+            // the whole queue there is exactly what such a reply asks for.
+            if (item->SeqNo == seqNo) {
                 if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
-                    LOG_W(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo);
-                    StartReconciliation(false, 'R');
-                    return;
+                    if (Reconciliation.load() == 0) {
+                        // the peer found a gap: this item is the 1st missing one, resend from it by a minor reconciliation
+                        LOG_W(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo);
+                        StartReconciliation(false, 'R');
+                        return;
+                    }
+                    // a discovery reply: RESEND carries the last confirmed SeqNo here (see HandleDiscovery), not the 1st
+                    // missing one. Nothing has been sent with the current GenMinor yet, so a gap RESEND cannot pass the
+                    // generation check above. The item is acked and the rest of the queue is resent below.
+                    LOG_D(LogPrefix << "SEQ/RESEND, SeqNo=" << seqNo << " confirmed by discovery");
                 }
 
                 // if (!item->Descriptor->IsTerminatedOrAborted())
@@ -1797,7 +1870,15 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 }
 
                 deltaBytes += item->Data.Bytes;
-                *OutputBufferInflightBytes -= item->Data.Bytes;
+                // the counter is unsigned: releasing more than it holds wraps it around and the session
+                // stops sending for good, with an empty Queue and idle channels
+                Y_DEBUG_ABORT_UNLESS(InflightBytes.load() >= item->Data.Bytes,
+                    "%s, InflightBytes=%" PRIu64 ", item.Bytes=%" PRIu64 ", item.SeqNo=%" PRIu64,
+                    LogPrefix.c_str(), InflightBytes.load(), item->Data.Bytes, item->SeqNo);
+                // clamped on purpose, see the sibling release above
+                auto released = std::min<ui64>(InflightBytes.load(), item->Data.Bytes);
+                InflightBytes -= released;
+                *OutputBufferInflightBytes -= released;
                 (*OutputBufferInflightMessages)--;
                 Queue.pop_front();
             }
@@ -1806,7 +1887,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         if (Reconciliation.exchange(0) > 0) {
             ReconciliationCount = 0;
             ReconSent.store(TInstant::Zero());
-            LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", WQ=" << WaitersQueueSize.load() << ", InflightBytes=" << InflightBytes.load() << '-' << deltaBytes);
+            LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", WQ=" << WaitersQueueSize.load() << ", InflightBytes=" << InflightBytes.load() << ", Released=" << deltaBytes);
             if (!Queue.empty()) {
                 for (auto item : Queue) {
                     SendMessage(item);
@@ -1818,7 +1899,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         }
     }
 
-    SendFromWaiters(deltaBytes);
+    SendFromWaiters();
 }
 
 void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
@@ -1880,7 +1961,7 @@ void TNodeState::HandleUpdate(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 }
 
 void TNodeState::HandleSendWaiters(TEvPrivate::TEvSendWaiters::TPtr&) {
-   SendFromWaiters(0);
+   SendFromWaiters();
 }
 
 void TNodeState::UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor) {
@@ -2028,8 +2109,12 @@ void TNodeState::TerminateOutputDescriptor(const std::shared_ptr<TOutputDescript
         << ", Push=" << descriptor->PushBytes.load()
         << ", RPop=" << descriptor->RemotePopBytes.load()
     );
-    OutputDescriptors.erase(descriptor->Info);
-    (*OutputBufferCount)--;
+    // FailOutputs erases the descriptor of an aborted channel and accounts for it there, while the buffer
+    // of that channel lives on until its actor lets go of it and terminates it here. Counting an erase
+    // which removed nothing would take the very same descriptor off the sensor twice.
+    if (OutputDescriptors.erase(descriptor->Info)) {
+        (*OutputBufferCount)--;
+    }
     if (Limits.IdleDestroyPeriod == TDuration::Zero() && InputDescriptors.empty() && OutputDescriptors.empty()) {
         Terminating.store(true);
         ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
@@ -2044,8 +2129,13 @@ void TNodeState::TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor
         << ", EarlyFinished=" << descriptor->EarlyFinished.load() << ", PopBytes=" << descriptor->PopStats.Bytes.load()
         << ", Finishing=" << descriptor->Finishing.load() << ", Finished=" << descriptor->Finished.load()
     );
-    InputDescriptors.erase(descriptor->Info);
-    (*InputBufferCount)--;
+    // FailInputs and the ID ERASE/GEN path erase the descriptor of an aborted channel and account for it
+    // there, while the buffer of that channel lives on until its actor lets go of it and terminates it
+    // here. Counting an erase which removed nothing would take the very same descriptor off the sensor
+    // twice, which is what drove InputBuffer/Count negative.
+    if (InputDescriptors.erase(descriptor->Info)) {
+        (*InputBufferCount)--;
+    }
     if (Limits.IdleDestroyPeriod == TDuration::Zero() && InputDescriptors.empty() && OutputDescriptors.empty()) {
         Terminating.store(true);
         ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
@@ -2088,7 +2178,7 @@ void TNodeState::HandleCleanup() {
         if (auto it = OutputDescriptors.find(front.first); it != OutputDescriptors.end()) {
             if (!it->second->IsBound) {
                 OutputDescriptors.erase(it);
-                (*OutputBufferCount)++;
+                (*OutputBufferCount)--;
             }
         }
         UnboundOutputs.pop();
@@ -2097,15 +2187,39 @@ void TNodeState::HandleCleanup() {
     auto idlePeriod = now - LastPeerActivity.load();
 
     if (OutputDescriptors.empty() && InputDescriptors.empty()) {
+        // Whether the session is still in use is a question about the peer, and any traffic of the peer
+        // answers it - its data as much as its acks.
         if (idlePeriod > Limits.IdleDestroyPeriod) {
             Terminating.store(true);
             ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
                 new TEvPrivate::TEvFreeNodeSession(NodeId)));
         }
-    } else {
-        if (idlePeriod > Limits.IdlePingPeriod) {
-            StartReconciliation(false, 'I');
-        }
+    } else if ((!Queue.empty() && now - Queue.front()->SentAt > Limits.IdlePingPeriod)
+        || idlePeriod > Limits.IdlePingPeriod) {
+        // 2 separate reasons to ping, and a session needs both of them.
+        //
+        // The 1st is the watchdog of the outbound half. The traffic of the peer cannot answer for it: one
+        // session covers both directions of a node pair, so data arriving on a channel this node receives
+        // says nothing about a queue stuck on a channel it sends. The front of the Queue is the oldest
+        // message the peer has not confirmed and it is the thing which stalls, so it is asked directly.
+        // It has to exist, because the receiver drops data silently when the generation is stale and when
+        // the SeqNo is at or below the confirmed one, and neither answers nor bounces, while every other
+        // trigger of a reconciliation needs an ack to arrive, a delivery to bounce or the link to drop.
+        //
+        // The 2nd is the liveness probe of a session which has channels but nothing queued - every channel
+        // of it inbound, say. Its peer may have freed its own session while the link stayed up, in which
+        // case no disconnect arrives, the acks this node sends bounce into a log line and its inbound
+        // channels would hang for as long as the query lets them. The discovery of the probe makes the
+        // service of the peer create a session, which announces itself, which brings ConnectSession here
+        // to fail those channels - an error instead of a hang.
+        //
+        // The probe is the ping this series started from, and what made it harmful was answering the
+        // question with LastPeerActivity while data did not refresh it: a session streaming from its peer
+        // looked idle and was pinged with a fatal deadline attached. Data refreshes it now, so the probe
+        // only fires when the peer really has gone quiet, which is when it is wanted.
+        //
+        // (No check of Reconciliation here: the early return above covers it.)
+        StartReconciliation(false, 'I');
     }
 
 }
@@ -2134,7 +2248,6 @@ void TNodeState::StartReconciliation(bool major, char logSymbol) {
         if (major) {
             GenMajor++;
             GenMinor = 1;
-            SeqNo = 0;
             InputNodeActorId = NActors::TActorId{};
         } else {
             GenMinor++;
@@ -2170,7 +2283,8 @@ void TNodeState::DoReconciliation(char logSymbol) {
         AddReconciliationLog('X');
         LOG_E(LogPrefix << "RECONCILIATION FAILURE x" << ReconciliationCount);
         Terminating.store(true);
-        FailDescriptors();
+        FailDescriptors(TStringBuilder() << "Node session terminated, the peer has not answered "
+            << ReconciliationCount << " discoveries in a row");
         ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
             new TEvPrivate::TEvFreeNodeSession(NodeId)));
         return;
@@ -2189,9 +2303,16 @@ void TNodeState::DoReconciliation(char logSymbol) {
             << ", WQ=" << WaitersQueueSize.load() << ", Log=" << reconciliationLog);
     }
 
-    ui32 delta = 0;
+    // the bytes of the dropped items, TDataChunk::Bytes wide: a narrower accumulator would wrap and
+    // corrupt InflightBytes once the queued bytes of a session pass its range
+    ui64 delta = 0;
+    ui64 dropped = 0;
 
     if (GenMinor == 1) { // => major reconciliation
+        // Nothing is sent while the reconciliation is in progress and the peer is at ConfirmedSeqNo == 0
+        // for the new generation, so every attempt (the 1st one and the timer retries) must number the
+        // queue from 1. Dropping aborted items below would leave gaps otherwise.
+        SeqNo = 0;
         std::deque<std::shared_ptr<TOutputItem>> RebuiltQueue;
         while (!Queue.empty()) {
 
@@ -2213,6 +2334,7 @@ void TNodeState::DoReconciliation(char logSymbol) {
                 RebuiltQueue.push_back(std::move(item));
             } else {
                 delta += item->Data.Bytes;
+                dropped++;
             }
 
             Queue.pop_front();
@@ -2221,6 +2343,10 @@ void TNodeState::DoReconciliation(char logSymbol) {
     }
 
     InflightBytes -= delta;
+    // the sensors are settled from InflightBytes and from Queue.size() by ~TNodeState, and both of them
+    // exclude the dropped items by now - without this the 2 gauges drift up for the life of the process
+    *OutputBufferInflightBytes -= delta;
+    *OutputBufferInflightMessages -= dropped;
 
     SendDiscovery();
     ReconSent.store(TInstant::Now());
@@ -2305,6 +2431,11 @@ void TDebugNodeState::HandleNullMode(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     evAck->Record.SetPopBytes(descriptor->PopStats.Bytes.load());
 
     SendAck(evAck, ev->Cookie);
+}
+
+void TDebugNodeState::StartSession() {
+    ActorSystem->Send(new NActors::IEventHandle(NodeActorId, NodeActorId,
+        new TEvPrivate::TEvReconciliation(GenMajor, GenMinor, ReconciliationCount)));
 }
 
 void TDebugNodeState::PauseChannelData() {
@@ -2402,7 +2533,12 @@ std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 no
     nodeState->LogPrefix = TStringBuilder() << '[' << nodeState->NodeActorId.NodeId() << "=>" << nodeId << "] ";
     NodeStates.emplace(nodeId, nodeState);
     LOG_N(nodeState->LogPrefix << "CREATED/DEBUG, NodeActorId=" << nodeState->NodeActorId);
-    ActorSystem->Send(new NActors::IEventHandle(nodeState->NodeActorId, nodeState->NodeActorId, new TEvPrivate::TEvReconciliation(nodeState->GenMajor, nodeState->GenMinor, nodeState->ReconciliationCount)));
+    // The session discovers its peer only when TDebugNodeState::StartSession is called. Discovering it here
+    // would make the service of the peer create a session of its own before a test has registered the debug
+    // session it means to use there, and the Y_ENSURE above would then fail on that peer.
+    if (!CleanupScheduled.exchange(true)) { // as GetOrCreateNodeState does, or this session gets no cleanup
+        ActorSystem->Schedule(Limits.CleanupPeriod, new NActors::IEventHandle(ServiceActorId, ServiceActorId, new TEvPrivate::TEvCleanup()));
+    }
     return nodeState;
 }
 

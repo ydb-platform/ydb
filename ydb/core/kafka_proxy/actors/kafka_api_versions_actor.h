@@ -17,8 +17,8 @@ inline bool IsUnsupportedApiVersionsRequest(i16 apiKey, TKafkaVersion version) {
     return apiKey == API_VERSIONS && !IsApiVersionsRequestVersionSupported(version);
 }
 
-// KIP-511 treats an unknown ApiVersions version as v0. v0/v1 use request header v1
-// (nullable clientId, no tagged fields). Header v2 is only required for known flexible versions.
+// KIP-511: parse an unknown ApiVersions version as v0 (empty body, request header v1).
+static constexpr TKafkaVersion ApiVersionsFallbackRequestVersion = 0;
 static constexpr TKafkaVersion ApiVersionsFallbackRequestHeaderVersion = 1;
 
 // KIP-511: unsupported ApiVersions requests are answered with a v0 body so any client can parse it.

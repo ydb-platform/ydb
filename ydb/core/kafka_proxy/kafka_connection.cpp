@@ -1107,44 +1107,17 @@ protected:
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);
 
-                            const bool unsupportedApiVersions = IsUnsupportedApiVersionsRequest(
-                                Request->ApiKey, Request->ApiVersion);
-                            const TKafkaVersion headerVersion = RequestHeaderVersion(
-                                Request->ApiKey, Request->ApiVersion);
-
-                            try {
-                                Request->Header.Read(readable, headerVersion);
-                            } catch (const yexception& headerError) {
-                                if (!unsupportedApiVersions) {
-                                    throw;
-                                }
-                                // KIP-511: unknown ApiVersions is not a fatal parse error. Kafka
-                                // RequestContext.parseRequest skips the body and treats the request as v0.
-                                // A version probe may omit header v2 tagged fields; retry with header v1.
-                                YDB_LOG_DEBUG("Unsupported ApiVersions header parse, retry as v0/v1",
-                                    {LogPrefix()},
-                                    {"apiKey", Request->ApiKey},
-                                    {"version", Request->ApiVersion},
-                                    {"headerVersion", headerVersion},
-                                    {"error", headerError.what()});
-                                TKafkaReadable fallback(*Request->Buffer, readable);
-                                try {
-                                    Request->Header.Read(fallback, ApiVersionsFallbackRequestHeaderVersion);
-                                } catch (const yexception& fallbackError) {
-                                    YDB_LOG_DEBUG("Unsupported ApiVersions header v1 fallback failed, using prefix",
-                                        {LogPrefix()},
-                                        {"error", fallbackError.what()});
-                                    Request->Header.RequestApiKey = Request->ApiKey;
-                                    Request->Header.RequestApiVersion = Request->ApiVersion;
-                                    Request->Header.CorrelationId = Request->CorrelationId;
-                                    Request->Header.ClientId = TRequestHeaderData::ClientIdMeta::Default;
-                                }
+                            TKafkaVersion headerVersion = RequestHeaderVersion(Request->ApiKey, Request->ApiVersion);
+                            TKafkaVersion bodyVersion = Request->ApiVersion;
+                            if (IsUnsupportedApiVersionsRequest(Request->ApiKey, Request->ApiVersion)) {
+                                // KIP-511: the client does not yet know broker versions, so an unknown
+                                // ApiVersions version is parsed as v0 instead of using the requested schema.
+                                headerVersion = ApiVersionsFallbackRequestHeaderVersion;
+                                bodyVersion = ApiVersionsFallbackRequestVersion;
                             }
 
-                            // Skip the body for unsupported ApiVersions (Kafka treats it as v0).
-                            if (!unsupportedApiVersions) {
-                                Request->Message->Read(readable, Request->ApiVersion);
-                            }
+                            Request->Header.Read(readable, headerVersion);
+                            Request->Message->Read(readable, bodyVersion);
                         } catch(const yexception& e) {
                             YDB_LOG_ERROR("Error on processing message",
                                 {LogPrefix()},

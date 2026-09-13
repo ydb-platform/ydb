@@ -1303,6 +1303,62 @@ struct TOutboundStallTest : public TSessionTest {
     }
 };
 
+// The 2nd reason HandleCleanup pings: a session which has channels but nothing queued of its own - every
+// channel of it inbound, say. Nothing about its own sending can stall, so the watchdog of the queue says
+// nothing about it, and if its peer has freed its session while the link stayed up no disconnect ever
+// arrives: the acks this node sends bounce into a log line, and its inbound channels would hang for as
+// long as the query lets them. The discovery of the probe is what ends that, by making the service of the
+// peer create a session which announces itself, which brings ConnectSession here to fail those channels.
+//
+// b232cdf9bca dropped that ping and nothing noticed, which is why this test exists: the traffic of the
+// peer stops while the channel of it stays, and the session must go and ask.
+struct TLivenessProbeTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetCleanupPeriodMs(50);
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetIdlePingPeriodMs(200);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto peerNodeId = Runtime->GetNodeId(1);
+
+        // the peer produces and stops; the consumer of this node stalls after the 1st message, so the
+        // channel stays on the session instead of finishing and taking its descriptor with it
+        ProducerSettings = TWorkerSettings{ .MessageCount = 5, .MinMessageSize = 10, .MaxMessageSize = 100 };
+        ConsumerSettings = TWorkerSettings{ .MessageCount = 5, .MinMessageSize = 10, .MaxMessageSize = 100,
+            .PauseMessageIndex = 1, .PauseDelayMs = 30000 };
+        StartInboundChannel(1, true);
+
+        std::shared_ptr<TNodeState> session;
+        UNIT_ASSERT_C(WaitFor([&]() { return (session = FindNodeState(Service0, peerNodeId)) != nullptr; },
+            TDuration::Seconds(10)), "the node session not found");
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInputPopBytes(session) > 0; }, TDuration::Seconds(10)),
+            "the consumer did not bind and pop");
+
+        // the session sends nothing of its own: its acks and its updates do not go through the queue, so
+        // the watchdog of the queue has nothing to watch here
+        UNIT_ASSERT_VALUES_EQUAL_C(GetQueueSize(session), 0, "the session has something queued");
+
+        auto pinged = WaitFor([&]() { return GetReconciliationLog(session).find('I') != TString::npos; },
+            TDuration::Seconds(5));
+
+        auto peer = FindNodeState(Service1, Runtime->GetNodeId(0));
+        auto details = TStringBuilder() << "the session holds " << GetInputCount(session)
+            << " inbound channel(s) and an empty queue, its log: " << GetReconciliationLog(session)
+            << ", the log of the peer: " << (peer ? GetReconciliationLog(peer) : "no session");
+        UNIT_ASSERT_C(pinged, TStringBuilder() << "the peer went quiet and the session never asked, " << details);
+        UNIT_ASSERT_C(GetInputCount(session) > 0, TStringBuilder() << "the channel is gone, " << details);
+
+        session.reset();
+        peer.reset();
+        Destroy();
+    }
+};
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
@@ -1460,6 +1516,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(OutboundStallPingedWhilePeerStreams) {
         TOutboundStallTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(QuietPeerProbed) {
+        TLivenessProbeTest test;
 
         test.Local = false;
 

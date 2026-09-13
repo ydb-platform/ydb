@@ -212,13 +212,6 @@ public:
                 return EExecutionStatus::Executed;
             }
             seqnums.MaxRequested = requested;
-
-            DataShard.SysLocksTable().AddAffectedTable(op.GetTableId());
-            if (shardKey) {
-                seqNumUpdate.AffectedAncestorShards.insert(shardKey);
-            } else {
-                seqNumUpdate.ThisShardAffected = true;
-            }
         }
 
         // For each shard, determine current seqnum and classify as duplicate/stale/continuation.
@@ -306,13 +299,18 @@ public:
 
         // All continuations: track max per group for ApplyLocks to persist.
         for (const auto& [shardId, seqnums] : shard2seqnums) {
-            if (seqnums.isDuplicate){
-                continue;
-            }
-            if (shardId == 0) {
-                seqNumUpdate.SetWriteSeqNum = seqnums.MaxRequested;
+            if (!seqnums.isDuplicate) {
+                if (shardId == 0) {
+                    seqNumUpdate.SetWriteSeqNum = seqnums.MaxRequested;
+                } else {
+                    seqNumUpdate.SetAncestorWriteSeqNums.emplace(shardId, seqnums.MaxRequested);
+                }
             } else {
-                seqNumUpdate.SetAncestorWriteSeqNums.emplace(shardId, seqnums.MaxRequested);
+                if (shardId == 0) {
+                    seqNumUpdate.ThisShardDuplicateWrite = true;
+                } else {
+                    seqNumUpdate.AncestorShardsWithDuplicateWrites.insert(shardId);
+                }
             }
         }
         return std::nullopt;

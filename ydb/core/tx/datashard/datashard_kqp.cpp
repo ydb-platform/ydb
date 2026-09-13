@@ -104,6 +104,15 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(
                     const auto& writeSeqNum = lockProto.GetWriteSeqNums(0);
                     writeSeqNumMismatch = writeSeqNum.GetWriterIndex() != lock.WriterIndex
                         || writeSeqNum.GetWriteSeqNum() != lock.WriteSeqNum;
+                    if (writeSeqNumMismatch) {
+                        YDB_LOG_TRACE("ValidateLocks: writeSeqNum mismatch",
+                            {"lockId", lockProto.GetLockId()},
+                            {"shardId", lockProto.GetDataShard()},
+                            {"protoWriterIndex", writeSeqNum.GetWriterIndex()},
+                            {"protoWriteSeqNum", writeSeqNum.GetWriteSeqNum()},
+                            {"ourWriterIndex", lock.WriterIndex},
+                            {"ourWriteSeqNum", lock.WriteSeqNum});
+                    }
                 } else {
                     writeSeqNumMismatch = lock.WriteSeqNum != 0;
                 }

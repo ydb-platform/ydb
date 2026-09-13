@@ -1021,13 +1021,13 @@ struct TLocksUpdate {
 
     struct TWriteSeqNumUpdate {
         const ui64 WriterIndex;
-        bool ThisShardAffected = false;
-        // Ids of affected ancestor shard locks with this LockTxId (including duplicate writes).
-        absl::flat_hash_set<ui64> AffectedAncestorShards;
         // These uncommitted write position in the writer chains; ApplyLocks persists them on the lock.
         TMaybe<ui64> SetWriteSeqNum;
         // Same for operations that touched ancestor shards;
         THashMap<ui64, ui64> SetAncestorWriteSeqNums;
+
+        bool ThisShardDuplicateWrite = false;
+        absl::flat_hash_set<ui64> AncestorShardsWithDuplicateWrites;
 
         explicit TWriteSeqNumUpdate(ui64 writerIndex)
             : WriterIndex(writerIndex)
@@ -1070,7 +1070,8 @@ struct TLocksUpdate {
     ~TLocksUpdate();
 
     bool HasLocks() const {
-        return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks);
+        return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks)
+            || HasSeqNumDuplicateWrites();
     }
 
     void AddRangeLock(const TRangeKey& range) {
@@ -1152,12 +1153,12 @@ struct TLocksUpdate {
         BreakOwn = true;
     }
 
-    bool HasSeqNumWrites() const {
+    bool HasSeqNumDuplicateWrites() const {
         if (!WriteSeqNumUpdate) {
             return false;
         }
-        return WriteSeqNumUpdate->ThisShardAffected
-            || !WriteSeqNumUpdate->AffectedAncestorShards.empty();
+        return WriteSeqNumUpdate->ThisShardDuplicateWrite
+            || !WriteSeqNumUpdate->AncestorShardsWithDuplicateWrites.empty();
     }
 
     bool HasSeqNumUpdates() const {
@@ -1256,7 +1257,6 @@ public:
     void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void SetLock(const TTableId& tableId, const TTableRange& range);
     void SetWriteLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
-    void AddAffectedTable(const TTableId& tableId);
     void BreakLock(ui64 lockId);
     void BreakLocks(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void AddReadConflict(ui64 conflictId);

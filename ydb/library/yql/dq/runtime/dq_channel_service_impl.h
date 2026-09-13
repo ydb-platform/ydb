@@ -1414,26 +1414,30 @@ public:
         auto maxCount = ev->Get()->MaxCount;
 
         // A replay of an exact count (maxCount != 0) ignores the pause on purpose: replaying a known number
-        // of messages while the session stays paused is what lets a test reach one state and stop there.
-        // Draining everything (maxCount == 0) is what a resume does, and it respects the pause of the other
-        // queue, which may well still be held.
+        // of messages while the session stays paused is what lets a test reach one state and stop there. It
+        // counts data alone and never spills into the acks, which are a queue of their own with a pause of
+        // their own - "replay 1 message" must not deliver an ack, least of all a paused one, just because
+        // the data queue happened to be empty. Draining everything (maxCount == 0) is what a resume does.
         if (maxCount || !NodeState->ChannelDataPaused.load()) {
             while (!PendingChannelData.empty()) {
                 DeliverChannelData(PendingChannelData.front());
                 PendingChannelData.pop();
                 NodeState->PendingDataCount--;
                 if (maxCount && --maxCount == 0) {
-                    return;
+                    break;
                 }
             }
+            // Whatever is left of a running queue has to be drained by something: an arrival joins the
+            // pending ones to keep the order, so with nothing scheduled here every later message would
+            // park behind this remainder for good, with no pause set to explain it.
+            if (!PendingChannelData.empty() && !NodeState->ChannelDataPaused.load()) {
+                NodeState->ProcessPending(0);
+            }
         }
-        if (maxCount || !NodeState->ChannelAckPaused.load()) {
+        if (!NodeState->ChannelAckPaused.load()) {
             while (!PendingChannelAck.empty()) {
                 DeliverChannelAck(PendingChannelAck.front());
                 PendingChannelAck.pop();
-                if (maxCount && --maxCount == 0) {
-                    return;
-                }
             }
         }
     }

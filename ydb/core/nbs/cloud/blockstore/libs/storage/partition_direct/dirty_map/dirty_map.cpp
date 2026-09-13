@@ -17,20 +17,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString TPBufferCounters::DebugPrint() const
-{
-    TStringBuilder result;
-
-    result << "{Current:" << Current.Print(true) << ", "
-           << "Total:" << Total.Print(true) << ", "
-           << "CurrentLocked:" << CurrentLocked.Print(true) << ", "
-           << "TotalLocked:" << TotalLocked.Print(true) << "}";
-
-    return result;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TBlocksDirtyMap::TBlocksDirtyMap(
     TArenaAllocatorPoolPtr arenaAllocatorPool,
     const TVChunkConfig& vChunkConfig,
@@ -153,8 +139,10 @@ void TBlocksDirtyMap::RestorePBuffer(
 // with inflight requests
 TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange16 range)
 {
+    ++Stats.ReadRequestCount;
     TReadHint result;
     if (!Inflight.HasOverlaps(range)) {   // read from ddisk
+        ++Stats.ReadFromDDiskCount;
         result.RangeHints.push_back(MakeReadRangeHint({}, {}, range, 0));
         return result;
     }
@@ -176,7 +164,10 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange16 range)
             }
 
             if (!readSource.OnlyDDisk()) {
+                ++Stats.ReadFromPBufferCount;
                 ranges.push_back({.Key = item.Key, .Range = item.Range});
+            } else {
+                ++Stats.ReadFromDDiskCount;
             }
             return TInflightMap::EEnumerateContinuation::Continue;
         });
@@ -372,6 +363,12 @@ void TBlocksDirtyMap::FlushFinished(
     const TVector<TPBufferKey>& flushOk,
     const TVector<TPBufferKey>& flushFailed)
 {
+    if (route.SourceHostIndex != route.DestinationHostIndex) {
+        ++Stats.CrossNodeFlushCount;
+    } else {
+        ++Stats.InNodeFlushCount;
+    }
+
     if (DisabledHosts.Get(route.DestinationHostIndex)) {
         // No processing is required, all inflight operations have been updated
         // when transition to disabled state occurs.
@@ -569,40 +566,6 @@ ui64 TBlocksDirtyMap::GetMinErasePendingLsn() const
 std::optional<TPBufferKey> TBlocksDirtyMap::GetSafeBarrierForErase() const
 {
     return Inflight.GetMinKey();
-}
-
-const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(
-    THostIndex host) const
-{
-    Y_ABORT_UNLESS(host < PBufferCounters.size());
-    return PBufferCounters[host];
-}
-
-TCountAndSize TBlocksDirtyMap::GetPBuffersUsage(THostIndex host) const
-{
-    if (host >= PBufferCounters.size()) {
-        return {};
-    }
-
-    return PBufferCounters[host].Current;
-}
-
-ui64 TBlocksDirtyMap::GetFreshTotalBytes(THostIndex host) const
-{
-    if (host >= DDiskStates.size()) {
-        return 0;
-    }
-    return static_cast<ui64>(DDiskStates[host].GetFreshBlockCount()) *
-           BlockSize;
-}
-
-ui64 TBlocksDirtyMap::GetRottenTotalBytes(THostIndex host) const
-{
-    if (host >= DDiskStates.size()) {
-        return 0;
-    }
-    return static_cast<ui64>(DDiskStates[host].GetRottenBlockCount()) *
-           BlockSize;
 }
 
 void TBlocksDirtyMap::LockPBuffer(TPBufferKey pBufferKey)
@@ -827,26 +790,6 @@ ui32 TBlocksDirtyMap::GetCurrentGeneration() const
     return BehindAheadGeneration;
 }
 
-size_t TBlocksDirtyMap::GetAllocatedSize() const
-{
-    size_t size = 0;
-    size += ArenaAllocatorPool->GetAllocatedSize();
-    for (const auto& ddiskState: DDiskStates) {
-        size += ddiskState.GetAllocatedSize();
-    }
-    return size;
-}
-
-size_t TBlocksDirtyMap::GetUsedSize() const
-{
-    size_t size = 0;
-    size += ArenaAllocatorPool->GetUsedSize();
-    for (const auto& ddiskState: DDiskStates) {
-        size += ddiskState.GetUsedSize();
-    }
-    return size;
-}
-
 void TBlocksDirtyMap::Trim()
 {
     Inflight.Trim();
@@ -854,11 +797,68 @@ void TBlocksDirtyMap::Trim()
 
 TDirtyMapStats TBlocksDirtyMap::GetStats() const
 {
+    size_t ddiskStatesAllocatedSize = 0;
+    size_t ddiskStatesUsedSize = 0;
+    for (const auto& ddiskState: DDiskStates) {
+        ddiskStatesAllocatedSize += ddiskState.GetAllocatedSize();
+        ddiskStatesUsedSize += ddiskState.GetUsedSize();
+    }
+
     return {
         .InflightCount = GetInflightCount(),
         .ReadyToFlushCount = GetFlushPendingCount(),
         .ReadyToEraseCount = GetErasePendingCount(),
+        .ReadRequestCount = Stats.ReadRequestCount,
+        .ReadFromDDiskCount = Stats.ReadFromDDiskCount,
+        .ReadFromPBufferCount = Stats.ReadFromPBufferCount,
+        .CrossNodeFlushCount = Stats.CrossNodeFlushCount,
+        .InNodeFlushCount = Stats.InNodeFlushCount,
+        .DDiskStatesAllocatedSize = ddiskStatesAllocatedSize,
+        .DDiskStatesUsedSize = ddiskStatesUsedSize,
     };
+}
+
+TDirtyMapHostStats TBlocksDirtyMap::GetHostStats(THostIndex host) const
+{
+    const auto ddiskTotalBytes =
+        host < DDiskStates.size() && DesiredDDisks.Get(host)
+            ? BlockCount * BlockSize
+            : 0;
+    const auto freshTotalBytes =
+        host < DDiskStates.size()
+            ? static_cast<ui64>(DDiskStates[host].GetFreshBlockCount()) *
+                  BlockSize
+            : 0;
+    const auto rottenTotalBytes =
+        host < DDiskStates.size()
+            ? static_cast<ui64>(DDiskStates[host].GetRottenBlockCount()) *
+                  BlockSize
+            : 0;
+
+    return {
+        .PBufferCounters = host < PBufferCounters.size() ? PBufferCounters[host]
+                                                         : TPBufferCounters(),
+        .PBuffersUsage = GetPBuffersUsage(host),
+        .DDiskTotalBytes = ddiskTotalBytes,
+        .FreshTotalBytes = freshTotalBytes,
+        .RottenTotalBytes = rottenTotalBytes,
+    };
+}
+
+const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(
+    THostIndex host) const
+{
+    Y_ABORT_UNLESS(host < PBufferCounters.size());
+    return PBufferCounters[host];
+}
+
+TCountAndSize TBlocksDirtyMap::GetPBuffersUsage(THostIndex host) const
+{
+    if (host >= PBufferCounters.size()) {
+        return {};
+    }
+
+    return PBufferCounters[host].Current;
 }
 
 TString TBlocksDirtyMap::DebugPrintPBuffers()

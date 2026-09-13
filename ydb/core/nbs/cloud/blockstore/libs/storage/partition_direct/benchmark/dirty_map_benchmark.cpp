@@ -174,10 +174,10 @@ struct TCompactInflightInfo
     ui64 Mask = 0;
 };
 
-BENCHMARK(BM_BlockRangeMapMemory<ui64, sizeof(TInflightInfo)>)
+BENCHMARK(BM_BlockRangeMapMemory<TPBufferKey, sizeof(TInflightInfo)>)
     ->Args({100'000 * 15})
     ->Iterations(1);
-BENCHMARK(BM_BlockRangeMapMemory<TPBufferKey, sizeof(TInflightInfo)>)
+BENCHMARK(BM_BlockRangeMapMemory<ui64, sizeof(TInflightInfo)>)
     ->Args({100'000 * 15})
     ->Iterations(1);
 BENCHMARK(BM_BlockRangeMapMemory<ui64, sizeof(TCompactInflightInfo)>)

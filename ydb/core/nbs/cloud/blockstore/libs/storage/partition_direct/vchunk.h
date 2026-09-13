@@ -73,11 +73,6 @@ public:
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] TExecutorPtr GetExecutor() const;
     [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
-    [[nodiscard]] ui64 GetFreshTotalBytes(THostIndex hostIndex) const;
-    [[nodiscard]] ui64 GetRottenTotalBytes(THostIndex hostIndex) const;
-    [[nodiscard]] size_t GetAllocatedMemorySize() const;
-    [[nodiscard]] size_t GetUsedMemorySize() const;
-
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest record id still held in PBuffers, or nullopt when nothing is
     // inflight. Until the dirty map is restored it returns the zero record id
@@ -88,6 +83,8 @@ public:
 
     [[nodiscard]] TString DebugPrintDirtyMap();
     [[nodiscard]] TDirtyMapStats GetDirtyMapStats() const;
+    [[nodiscard]] TDirtyMapHostStats GetDirtyMapHostStats(
+        THostIndex hostIndex) const;
 
     // Snapshot for the mon page. Must run on the executor thread.
     [[nodiscard]] TVChunkSnapshot BuildMonSnapshot();

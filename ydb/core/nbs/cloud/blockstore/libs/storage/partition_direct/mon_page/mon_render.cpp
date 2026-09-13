@@ -274,34 +274,25 @@ void RenderDbgList(
                         str << "Hosts";
                     }
                     TABLEH () {
-                        str << "VChunks";
-                    }
-                    TABLEH () {
-                        str << "Host health";
-                    }
-                    TABLEH () {
                         str << "Inflight";
                     }
                     TABLEH () {
-                        str << "Dirty map inflight";
+                        str << "DirtyMap<br>inflight/flush/erase";
                     }
                     TABLEH () {
-                        str << "Ready to flush";
+                        str << "Reads<br>DDisk/PBuffer";
                     }
                     TABLEH () {
-                        str << "Ready to erase";
+                        str << "Flushes<br>in-node/cross-node";
                     }
                     TABLEH () {
-                        str << "Consecutive success / errors";
+                        str << "Consecutive<br>success/errors";
                     }
                     TABLEH () {
-                        str << "PBuffers usage";
+                        str << "PBuffers<br>usage";
                     }
                     TABLEH () {
-                        str << "Rotten";
-                    }
-                    TABLEH () {
-                        str << "Fresh";
+                        str << "DDisks<br>Rotten/Fresh";
                     }
                 }
             }
@@ -312,6 +303,7 @@ void RenderDbgList(
                     size_t consecutiveErrors = 0;
                     size_t consecutiveSuccesses = 0;
                     TCountAndSize pBuffersUsage;
+                    ui64 ddiskTotalBytes = 0;
                     ui64 freshTotalBytes = 0;
                     ui64 rottenTotalBytes = 0;
                     for (const auto& host: dbg.Hosts) {
@@ -324,21 +316,16 @@ void RenderDbgList(
                         {
                             inflight += host.InflightByOperation[operation];
                         }
-                        pBuffersUsage += host.PBuffersUsage;
-                        freshTotalBytes += host.FreshTotalBytes;
-                        rottenTotalBytes += host.RottenTotalBytes;
+                        pBuffersUsage += host.DirtyMapStats.PBuffersUsage;
+                        ddiskTotalBytes += host.DirtyMapStats.DDiskTotalBytes;
+                        freshTotalBytes += host.DirtyMapStats.FreshTotalBytes;
+                        rottenTotalBytes += host.DirtyMapStats.RottenTotalBytes;
                     }
                     TABLER () {
                         TABLED () {
                             str << "<a href='?TabletID=" << tabletInfo.TabletId
                                 << "&page=dbg&dbg=" << dbg.Index << "'>#"
                                 << dbg.Index << "</a>";
-                        }
-                        TABLED () {
-                            str << dbg.Hosts.size();
-                        }
-                        TABLED () {
-                            str << dbg.VChunkCount;
                         }
                         TABLED () {
                             str << HealthRollup(healthCounts);
@@ -348,24 +335,34 @@ void RenderDbgList(
                         }
                         TABLED () {
                             str << dbg.DirtyMapStats.InflightCount;
-                        }
-                        TABLED () {
+                            str << " / ";
                             str << dbg.DirtyMapStats.ReadyToFlushCount;
-                        }
-                        TABLED () {
+                            str << " / ";
                             str << dbg.DirtyMapStats.ReadyToEraseCount;
                         }
                         TABLED () {
-                            str << consecutiveSuccesses << " / "
-                                << consecutiveErrors;
+                            str << dbg.DirtyMapStats.ReadFromDDiskCount;
+                            str << " / ";
+                            str << dbg.DirtyMapStats.ReadFromPBufferCount;
+                        }
+                        TABLED () {
+                            str << dbg.DirtyMapStats.InNodeFlushCount;
+                            str << " / ";
+                            str << dbg.DirtyMapStats.CrossNodeFlushCount;
+                        }
+                        TABLED () {
+                            str << consecutiveSuccesses;
+                            str << " / ";
+                            str << consecutiveErrors;
                         }
                         TABLED () {
                             str << pBuffersUsage.Print(true);
                         }
                         TABLED () {
+                            str << FormatByteSize(ddiskTotalBytes);
+                            str << " / ";
                             str << FormatByteSize(rottenTotalBytes);
-                        }
-                        TABLED () {
+                            str << " / ";
                             str << FormatByteSize(freshTotalBytes);
                             str << "<br>";
                             RenderWatermarks(str, dbg, tabletInfo.BlockSize);
@@ -407,6 +404,93 @@ void RenderDbgDetail(
         TAG (TH3) {
             str << "DBG #" << dbg.Index;
         }
+        TAG (TH4) {
+            str << "Dirty map statistics";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLER () {
+                TABLED () {
+                    str << "Inflight";
+                }
+                TABLED () {
+                    str << dbg.DirtyMapStats.InflightCount;
+                }
+            }
+            TABLER () {
+                TABLED () {
+                    str << "Ready to flush";
+                }
+                TABLED () {
+                    str << dbg.DirtyMapStats.ReadyToFlushCount;
+                }
+            }
+            TABLER () {
+                TABLED () {
+                    str << "Ready to erase";
+                }
+                TABLED () {
+                    str << dbg.DirtyMapStats.ReadyToEraseCount;
+                }
+            }
+            TABLER () {
+                TABLED () {
+                    str << "Read requests";
+                }
+                TABLED () {
+                    str << dbg.DirtyMapStats.ReadRequestCount;
+                }
+            }
+            TABLER () {
+                TABLED () {
+                    str << "Reads from DDisk";
+                }
+                TABLED () {
+                    str << dbg.DirtyMapStats.ReadFromDDiskCount;
+                }
+            }
+            TABLER () {
+                TABLED () {
+                    str << "Reads from PBuffer";
+                }
+                TABLED () {
+                    str << dbg.DirtyMapStats.ReadFromPBufferCount;
+                }
+            }
+            TABLER () {
+                TABLED () {
+                    str << "In-node flushes";
+                }
+                TABLED () {
+                    str << dbg.DirtyMapStats.InNodeFlushCount;
+                }
+            }
+            TABLER () {
+                TABLED () {
+                    str << "Cross-node flushes";
+                }
+                TABLED () {
+                    str << dbg.DirtyMapStats.CrossNodeFlushCount;
+                }
+            }
+            TABLER () {
+                TABLED () {
+                    str << "Allocated size";
+                }
+                TABLED () {
+                    str << FormatByteSize(
+                        dbg.DirtyMapStats.DDiskStatesAllocatedSize);
+                }
+            }
+            TABLER () {
+                TABLED () {
+                    str << "Used size";
+                }
+                TABLED () {
+                    str << FormatByteSize(
+                        dbg.DirtyMapStats.DDiskStatesUsedSize);
+                }
+            }
+        }
         TABLE_CLASS ("table table-condensed") {
             TABLEHEAD () {
                 TABLER () {
@@ -421,6 +505,9 @@ void RenderDbgDetail(
                     }
                     TABLEH () {
                         str << "PBuffer used";
+                    }
+                    TABLEH () {
+                        str << "DDisk total";
                     }
                     TABLEH () {
                         str << "Fresh blocks";
@@ -449,13 +536,19 @@ void RenderDbgDetail(
                             str << ToString(host.Health);
                         }
                         TABLED () {
-                            str << host.PBuffersUsage.Print(true);
+                            str << host.DirtyMapStats.PBuffersUsage.Print(true);
                         }
                         TABLED () {
-                            str << FormatByteSize(host.FreshTotalBytes);
+                            str << FormatByteSize(
+                                host.DirtyMapStats.DDiskTotalBytes);
                         }
                         TABLED () {
-                            str << FormatByteSize(host.RottenTotalBytes);
+                            str << FormatByteSize(
+                                host.DirtyMapStats.FreshTotalBytes);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(
+                                host.DirtyMapStats.RottenTotalBytes);
                         }
                         TABLED () {
                             str << host.Errors.ConsecutiveErrorCount;

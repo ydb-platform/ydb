@@ -2161,8 +2161,6 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
 
     auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
     TVChunkConfigs vChunkConfigs;
-    size_t allocatedMemorySize = 0;
-    size_t usedMemorySize = 0;
     TDirtyMapStats dirtyMapStats;
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
@@ -2170,12 +2168,9 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
                 vChunk->GetConfig();
 
             for (THostIndex host = 0; host < GetHostCount(); ++host) {
-                auto& stat = hostsStat[host];
-                stat.FreshTotalBytes += vChunk->GetFreshTotalBytes(host);
-                stat.RottenTotalBytes += vChunk->GetRottenTotalBytes(host);
+                hostsStat[host].DirtyMapStats.Aggregate(
+                    vChunk->GetDirtyMapHostStats(host));
             }
-            allocatedMemorySize += vChunk->GetAllocatedMemorySize();
-            usedMemorySize += vChunk->GetUsedMemorySize();
             dirtyMapStats.Aggregate(vChunk->GetDirtyMapStats());
         }
     }
@@ -2186,8 +2181,10 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
         .VChunkConfigs = std::move(vChunkConfigs),
-        .AllocatedMemorySize = allocatedMemorySize,
-        .UsedMemorySize = usedMemorySize,
+        .AllocatedMemorySize = ArenaAllocatorPool->GetAllocatedSize() +
+                               dirtyMapStats.DDiskStatesAllocatedSize,
+        .UsedMemorySize = ArenaAllocatorPool->GetUsedSize() +
+                          dirtyMapStats.DDiskStatesUsedSize,
         .DirtyMapStats = dirtyMapStats,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };

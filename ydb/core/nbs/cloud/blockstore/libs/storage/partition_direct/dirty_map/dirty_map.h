@@ -25,25 +25,6 @@ class TVChunkConfig;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TPBufferCounters
-{
-    // The current PBuffer usage.
-    TCountAndSize Current;
-
-    // Overall count and size written PBuffers and possibly already deleted.
-    TCountAndSize Total;
-
-    // The current prohibited for deletion PBuffers.
-    TCountAndSize CurrentLocked;
-
-    // The total number of records ever prohibited for deletion from PBuffer
-    TCountAndSize TotalLocked;
-
-    [[nodiscard]] TString DebugPrint() const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TBlocksDirtyMap
     : public ILockableRanges
     , public IReadyQueue
@@ -127,11 +108,6 @@ public:
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
     [[nodiscard]] std::optional<TPBufferKey> GetSafeBarrierForErase() const;
-    [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
-        THostIndex host) const;
-    [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex host) const;
-    [[nodiscard]] ui64 GetFreshTotalBytes(THostIndex host) const;
-    [[nodiscard]] ui64 GetRottenTotalBytes(THostIndex host) const;
 
     // ILockableRanges implementation
     void LockPBuffer(TPBufferKey pBufferKey) override;
@@ -174,13 +150,16 @@ public:
     void StatePersisted(ui32 persistGeneration);
     [[nodiscard]] ui32 GetCurrentGeneration() const;
 
-    // Memory usage.
-    [[nodiscard]] size_t GetAllocatedSize() const;
-    [[nodiscard]] size_t GetUsedSize() const;
     void Trim();
 
-    // Debug purposes
+    // Stats
     [[nodiscard]] TDirtyMapStats GetStats() const;
+    [[nodiscard]] TDirtyMapHostStats GetHostStats(THostIndex host) const;
+    [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
+        THostIndex host) const;
+    [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex host) const;
+
+    // Debug purposes
     [[nodiscard]] TString DebugPrintPBuffers();
     [[nodiscard]] TString DebugPrintPBuffersUsage() const;
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();
@@ -255,6 +234,7 @@ private:
     const IArenaAllocatorPtr ArenaAllocator;
     const ui32 BlockSize;
     const ui16 BlockCount;
+    TDirtyMapStats Stats;
 
     THostMask DesiredDDisks;
     THostMask DisabledHosts;

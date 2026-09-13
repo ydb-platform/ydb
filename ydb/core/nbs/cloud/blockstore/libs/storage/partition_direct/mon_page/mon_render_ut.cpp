@@ -40,9 +40,12 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .InflightByOperation = inflightByOperation,
             .Errors =
                 {.ConsecutiveErrorCount = 1, .ConsecutiveSuccessCount = 7},
-            .PBuffersUsage{.Count = 1, .Size = 4096},
-            .FreshTotalBytes = 8192,
-            .RottenTotalBytes = 12288,
+            .DirtyMapStats =
+                {
+                    .PBuffersUsage = {.Count = 1, .Size = 4096},
+                    .FreshTotalBytes = 8192,
+                    .RottenTotalBytes = 12288,
+                },
         };
         THostSnapshot sufferer{
             .Index = 1,

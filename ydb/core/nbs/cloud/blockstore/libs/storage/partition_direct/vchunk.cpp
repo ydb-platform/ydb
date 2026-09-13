@@ -313,30 +313,6 @@ TCountAndSize TVChunk::GetPBuffersUsage(THostIndex hostIndex) const
     return BlocksDirtyMap->GetPBuffersUsage(hostIndex);
 }
 
-ui64 TVChunk::GetFreshTotalBytes(THostIndex hostIndex) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    return BlocksDirtyMap->GetFreshTotalBytes(hostIndex);
-}
-
-ui64 TVChunk::GetRottenTotalBytes(THostIndex hostIndex) const
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    return BlocksDirtyMap->GetRottenTotalBytes(hostIndex);
-}
-
-size_t TVChunk::GetAllocatedMemorySize() const
-{
-    return BlocksDirtyMap->GetAllocatedSize();
-}
-
-size_t TVChunk::GetUsedMemorySize() const
-{
-    return BlocksDirtyMap->GetUsedSize();
-}
-
 std::optional<TPBufferKey> TVChunk::GetSafeBarrierForErase() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -378,6 +354,13 @@ TString TVChunk::DebugPrintDirtyMap()
 TDirtyMapStats TVChunk::GetDirtyMapStats() const
 {
     return BlocksDirtyMap->GetStats();
+}
+
+TDirtyMapHostStats TVChunk::GetDirtyMapHostStats(THostIndex hostIndex) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    return BlocksDirtyMap->GetHostStats(hostIndex);
 }
 
 TVChunkSnapshot TVChunk::BuildMonSnapshot()

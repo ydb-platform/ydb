@@ -597,6 +597,11 @@ struct TSessionTest : public TLoadTest {
         return state->GenMinor;
     }
 
+    static ui64 GetReconciliationCount(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        return state->ReconciliationCount;
+    }
+
     static ui64 GetQueueSize(const std::shared_ptr<TNodeState>& state) {
         std::lock_guard lock(state->Mutex);
         return state->Queue.size();
@@ -770,14 +775,17 @@ struct TMajorReconRetryTest : public TSessionTest {
 
         UNIT_ASSERT_C(WaitFor([&]() { return GetGenMajor(sender) == genMajor + 1; }, TDuration::Seconds(5)),
             "the sender did not start a major reconciliation");
-        auto reconciliationStarted = TInstant::Now();
         auto queueSize = GetQueueSize(sender);
         auto frontSeqNo = GetFrontSeqNo(sender);
         UNIT_ASSERT_C(queueSize > 0, "nothing queued at the sender");
         UNIT_ASSERT_VALUES_EQUAL_C(frontSeqNo, 1, "queue is not renumbered from 1 by the major reconciliation");
 
-        // let the 1st reconciliation timeout (1s) expire, the sender retries the discovery
-        SleepUntil(reconciliationStarted + TDuration::MilliSeconds(1500));
+        // the retry is what is under test, so it is waited for rather than assumed to have happened by
+        // some time: a late timer would leave the sample looking at the 1st attempt on any version of the
+        // code. DoReconciliation rebuilds the queue under the same lock it counts the attempt under, so a
+        // count of 2 means the rebuild of the retry is complete
+        UNIT_ASSERT_C(WaitFor([&]() { return GetReconciliationCount(sender) >= 2; }, TDuration::Seconds(5)),
+            "the sender did not retry the discovery");
         auto retriedFrontSeqNo = GetFrontSeqNo(sender);
         UNIT_ASSERT_VALUES_EQUAL_C(GetGenMajor(sender), genMajor + 1, "unexpected 2nd major reconciliation");
         UNIT_ASSERT_VALUES_EQUAL_C(GetQueueSize(sender), queueSize, "queue size changed during reconciliation");

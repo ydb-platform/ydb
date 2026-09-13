@@ -1165,6 +1165,162 @@ struct TBufferCountTest : public TSessionTest {
     }
 };
 
+// The watchdog must not fire on a queue which is moving. On a slow link every message is older than the
+// idle period by the time it is confirmed, so the age of the front says nothing; only the absence of
+// progress does. Staged with a peer which confirms 1 message every 50ms against a 1s idle period - the
+// slack a loaded machine needs to never leave a gap of a whole period between 2 confirmations.
+struct TSlowQueueTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetCleanupPeriodMs(50);
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetIdlePingPeriodMs(1000);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto peerNodeId = Runtime->GetNodeId(1);
+
+        auto session = Service0->CreateDebugNodeState(peerNodeId);
+        auto peer = Service1->CreateDebugNodeState(senderNodeId);
+        session->StartSession();
+        peer->StartSession();
+
+        // the peer delivers, and so confirms, only what the test replays
+        peer->PauseChannelData();
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 150, .MinMessageSize = 10, .MaxMessageSize = 100 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(1, true);
+        UNIT_ASSERT_C(WaitFor([&]() { return peer->PendingDataCount.load() >= 100; }, TDuration::Seconds(10)),
+            "the messages did not reach the peer");
+
+        // the 1st confirmation proves the replay confirms at the current generation before anything is
+        // sampled: a reconciliation which slipped in during the setup would make the sender resend at a
+        // new GenMinor and the copies replayed here obsolete
+        auto frontAtStart = GetFrontSeqNo(session);
+        peer->ProcessPending(1);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetFrontSeqNo(session) > frontAtStart; }, TDuration::Seconds(5)),
+            "the 1st replayed message was not confirmed");
+        auto frontBefore = GetFrontSeqNo(session);
+        auto pingsBefore = CountPings(session);
+        auto genMinor = GetGenMinor(session);
+
+        // 4 idle periods, the queue moving all along and its front older than the period after the 1st 20
+        // confirmations
+        auto deadline = TInstant::Now() + TDuration::Seconds(4);
+        while (TInstant::Now() < deadline) {
+            peer->ProcessPending(1);
+            Sleep(TDuration::MilliSeconds(50));
+        }
+
+        auto details = TStringBuilder() << "the queue front moved from SeqNo " << frontBefore << " to "
+            << GetFrontSeqNo(session) << ", " << GetQueueSize(session) << " message(s) still queued"
+            << ", reconciliation log: " << GetReconciliationLog(session);
+        UNIT_ASSERT_C(GetQueueSize(session) > 0, TStringBuilder() << "the queue ran dry, " << details);
+        UNIT_ASSERT_C(GetGenMinor(session) == genMinor, TStringBuilder() << "the session reconciled, " << details);
+        UNIT_ASSERT_C(GetFrontSeqNo(session) > frontBefore + 10, TStringBuilder() << "the queue did not move, " << details);
+        UNIT_ASSERT_C(CountPings(session) == pingsBefore, TStringBuilder() << "a moving queue was pinged, " << details);
+
+        peer->ResumeChannelData();
+        WaitChannel(details);
+
+        session.reset();
+        peer.reset();
+        Destroy();
+        CheckQuota();
+    }
+};
+
+// A push into an empty queue starts the clock of the watchdog. Without that a session idle for longer than
+// the period is pinged at the next cleanup tick for a message it has only just sent, and every restart
+// from idle begins with a reconciliation and a resend.
+struct TIdleRestartTest : public TSessionTest {
+
+    void Prepare() override {
+        TSessionTest::Prepare();
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetCleanupPeriodMs(50);
+        settings.AppConfig.MutableTableServiceConfig()->MutableDqChannelConfig()->SetIdlePingPeriodMs(1000);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto peerNodeId = Runtime->GetNodeId(1);
+
+        auto session = Service0->CreateDebugNodeState(peerNodeId);
+        auto peer = Service1->CreateDebugNodeState(senderNodeId);
+        session->StartSession();
+        peer->StartSession();
+
+        // the traffic of the peer, replayed by the test, keeps the liveness probe quiet throughout; the
+        // queue of the session stays empty until the push under test
+        session->PauseChannelData();
+        ProducerSettings = TWorkerSettings{ .MessageCount = 200, .MinMessageSize = 10, .MaxMessageSize = 100 };
+        ConsumerSettings = ProducerSettings;
+        StartInboundChannel(2, true);
+        UNIT_ASSERT_C(WaitFor([&]() { return session->PendingDataCount.load() >= 100; }, TDuration::Seconds(10)),
+            "the traffic of the peer did not arrive");
+
+        // idle for longer than the period, with the peer heard from every 200ms
+        for (int i = 0; i < 8; ++i) {
+            session->ProcessPending(1);
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(GetQueueSize(session), 0, "the session has something queued before the push");
+        auto pingsBefore = CountPings(session);
+
+        // nothing the session sends is confirmed, so the message pushed now stays queued
+        peer->PauseChannelData();
+        ProducerSettings = TWorkerSettings{ .MessageCount = 1, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+        StartChannel(1, true);
+        UNIT_ASSERT_C(WaitFor([&]() { return GetQueueSize(session) > 0; }, TDuration::Seconds(5)),
+            "nothing was queued by the push");
+        auto pushedAt = TInstant::Now();
+
+        // No ping inside the period which starts with the push, then one once it is over - the queue is
+        // stuck for real - and the next one a full period after that, not at the next tick: the resend of
+        // a reconciliation restarts the clock as well. The peer keeps being heard from throughout, so none
+        // of it can be the liveness probe.
+        TInstant firstPing;
+        TInstant secondPing;
+        auto deadline = pushedAt + TDuration::Seconds(6);
+        while (TInstant::Now() < deadline && !secondPing) {
+            session->ProcessPending(1);
+            auto pings = CountPings(session);
+            if (!firstPing && pings > pingsBefore) {
+                firstPing = TInstant::Now();
+            } else if (firstPing && pings > pingsBefore + 1) {
+                secondPing = TInstant::Now();
+            }
+            Sleep(TDuration::MilliSeconds(50));
+        }
+
+        auto details = TStringBuilder() << "pinged " << (firstPing ? firstPing - pushedAt : TDuration::Zero())
+            << " after the push and again " << (secondPing ? secondPing - firstPing : TDuration::Zero()) << " later"
+            << ", inbound traffic left: " << session->PendingDataCount.load()
+            << ", reconciliation log: " << GetReconciliationLog(session);
+        UNIT_ASSERT_C(firstPing, TStringBuilder() << "the stuck queue was never pinged, " << details);
+        UNIT_ASSERT_C(firstPing - pushedAt >= TDuration::MilliSeconds(700),
+            TStringBuilder() << "pinged right after a push into an idle queue, " << details);
+        UNIT_ASSERT_C(secondPing, TStringBuilder() << "the stuck queue was not pinged again, " << details);
+        UNIT_ASSERT_C(secondPing - firstPing >= TDuration::MilliSeconds(700),
+            TStringBuilder() << "pinged again right after the resend, " << details);
+
+        peer->ResumeChannelData();
+        session->ResumeChannelData();
+        session.reset();
+        peer.reset();
+        Destroy();
+    }
+};
+
 // The watchdog of the outbound half: every other trigger needs an ack, a bounce or a dropped link, and one
 // TNodeState covers both directions, so the traffic of the peer cannot answer for the half it is not
 // sending on. Staged with an outbound channel whose messages never reach the peer while that peer streams
@@ -1457,6 +1613,22 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(OutboundStallPingedWhilePeerStreams) {
         TOutboundStallTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(SlowQueueNotPinged) {
+        TSlowQueueTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(IdleRestartNotPingedEarly) {
+        TIdleRestartTest test;
 
         test.Local = false;
 

@@ -1141,6 +1141,9 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
                 item->SeqNo = ++SeqNo;
                 item->ChannelSeqNo = descriptor->SeqNo.fetch_add(1) + 1;
                 item->Leading = descriptor->Leading.exchange(false);
+                if (Queue.empty()) {
+                    LastQueueProgress.store(TInstant::Now());
+                }
                 Queue.push_back(item);
                 SendMessage(item);
                 SendCount++;
@@ -1252,7 +1255,6 @@ void TNodeState::SendMessage(std::shared_ptr<TOutputItem> item) {
     }
 #endif
     item->State.store(TOutputItem::EState::Sent);
-    item->SentAt = TInstant::Now();
 }
 
 void TNodeState::FailInputs(const NActors::TActorId& outputNodeActorId, ui64 outputNodeGenMajor, const TString& reason) {
@@ -1700,6 +1702,9 @@ now may need to send very last msg from terminated descriptor
                 item->SeqNo = ++SeqNo;
                 item->ChannelSeqNo = waiter->SeqNo.fetch_add(1) + 1;
                 item->Leading = waiter->Leading.exchange(false);
+                if (Queue.empty()) {
+                    LastQueueProgress.store(TInstant::Now());
+                }
                 Queue.push_back(item);
                 SendMessage(item);
                 SendCount++;
@@ -1791,6 +1796,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             *OutputBufferInflightBytes -= released;
             (*OutputBufferInflightMessages)--;
             Queue.pop_front();
+            LastQueueProgress.store(TInstant::Now());
         }
 
         if (Queue.empty()) {
@@ -1846,12 +1852,14 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 *OutputBufferInflightBytes -= released;
                 (*OutputBufferInflightMessages)--;
                 Queue.pop_front();
+                LastQueueProgress.store(TInstant::Now());
             }
         }
 
         if (Reconciliation.exchange(0) > 0) {
             ReconciliationCount = 0;
             ReconSent.store(TInstant::Zero());
+            LastQueueProgress.store(TInstant::Now());
             LOG_I(LogPrefix << "RECONCILED, Q=" << (Queue.empty() ? "E" : ToString(Queue.front()->SeqNo)) << ':' << SeqNo << ", WQ=" << WaitersQueueSize.load() << ", InflightBytes=" << InflightBytes.load() << ", Released=" << deltaBytes);
             if (!Queue.empty()) {
                 for (auto item : Queue) {
@@ -2157,7 +2165,7 @@ void TNodeState::HandleCleanup() {
             ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
                 new TEvPrivate::TEvFreeNodeSession(NodeId)));
         }
-    } else if ((!Queue.empty() && now - Queue.front()->SentAt > Limits.IdlePingPeriod)
+    } else if ((!Queue.empty() && now - LastQueueProgress.load() > Limits.IdlePingPeriod)
         || idlePeriod > Limits.IdlePingPeriod) {
         // Has our own sending stalled: one session covers both directions, so the traffic of the peer
         // cannot answer that, and nothing else notices a stuck queue - the receiver drops stale data
@@ -2795,6 +2803,8 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                         TABLEH_ATTRS({{"title", "ResendCount"}}) {str << "Resend";}
                         TABLEH_ATTRS({{"title", "ReconCount"}}) {str << "Recon";}
                         TABLEH() {str << "ReconSent";}
+                        TABLEH_ATTRS({{"title", "since the Queue last moved: the watchdog of the outbound half"}}) {str << "Q/Idle";}
+                        TABLEH_ATTRS({{"title", "since the peer was last heard from: the liveness probe"}}) {str << "P/Idle";}
                         TABLEH_ATTRS({{"title", "WaitersQueueSize"}}) {str << "W/Queue";}
                         TABLEH_ATTRS({{"title", "WaitersMessages"}}) {str << "W/Msg";}
                         TABLEH_ATTRS({{"title", "OutputNodeGen"}}) {str << "OG";}
@@ -2848,6 +2858,8 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                             TABLED() {str << state->ResendCount.load();}
                             TABLED() {str << state->ReconCount.load();}
                             TABLED() {str << state->ReconSent.load();}
+                            TABLED() {str << (TInstant::Now() - state->LastQueueProgress.load());}
+                            TABLED() {str << (TInstant::Now() - state->LastPeerActivity.load());}
                             TABLED() {str << state->WaitersQueue.size();}
                             TABLED() {str << state->WaiterMessages.load();}
                             TABLED() {str << state->OutputNodeGenMajor.load() << '.' << state->OutputNodeGenMinor.load();}

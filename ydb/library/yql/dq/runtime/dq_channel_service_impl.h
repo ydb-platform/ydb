@@ -466,9 +466,6 @@ public:
     ui64 SeqNo = 0;
     bool Leading = false;
     ui64 ChannelSeqNo = 0;
-    // stamped by SendMessage, for a resend as much as a send, so the front of the Queue carries the age of
-    // the oldest message the peer has not confirmed
-    TInstant SentAt;
 };
 
 class TOutputBuffer : public IChannelBuffer {
@@ -689,6 +686,7 @@ public:
         SessionReconciliations = counters->GetCounter("Session/Reconciliations", true);
         auto now = TInstant::Now();
         LastPeerActivity.store(now);
+        LastQueueProgress.store(now);
         LastCleanup = now;
     }
 
@@ -759,6 +757,10 @@ public:
     std::atomic<ui64> WaitersQueueSize = 0;
     const TDuration UnboundWaitPeriod = TDuration::Minutes(10);
     std::atomic<ui64> Reconciliation = 1;
+    // when the Queue last moved: a pop, a push into an empty Queue, or the resend of a reconciliation.
+    // Written under Mutex; atomic for the mon page. The age of the front is not the same thing: on a slow
+    // link every message is old by the time it is confirmed while the Queue keeps moving all along
+    std::atomic<TInstant> LastQueueProgress;
     std::atomic<ui64> WaiterBytes = 0;
     std::atomic<ui64> WaiterMessages = 0;
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferCount;

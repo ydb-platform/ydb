@@ -43,7 +43,7 @@ public:
         return 0;
     }
 
-    TVector<TArenaAllocatorStats> GetStats() const override
+    TVector<TArenaAllocatorStats> GetDetailedStat() const override
     {
         return {};
     }
@@ -76,18 +76,18 @@ Y_UNIT_TEST_SUITE(TBlockRangeFieldBitMaskTest)
         auto allocator = CreateArenaAllocator();
         TBlockRangeFieldBitMask field(allocator, MaskSize * 8);
 
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetAllocatedSize());
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetUsedSize());
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().UsedSize);
 
         bool changed = false;
         UNIT_ASSERT(field.TryAdd(TBlockRange16::MakeOneBlock(3), &changed));
         UNIT_ASSERT(changed);
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetAllocatedSize());
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetUsedSize());
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().UsedSize);
 
         field.Clear();
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetAllocatedSize());
-        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetUsedSize());
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().ReservedSize);
+        UNIT_ASSERT_VALUES_EQUAL(MaskSize, field.GetMemoryStats().UsedSize);
     }
 
     Y_UNIT_TEST(ShouldAddSingleBlock)

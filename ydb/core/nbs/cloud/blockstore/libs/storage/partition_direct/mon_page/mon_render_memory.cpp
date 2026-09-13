@@ -12,8 +12,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 void RenderMemory(IOutputStream& str, const TMonPageData& data)
 {
-    size_t totalAllocatedMemorySize = 0;
-    size_t totalUsedMemorySize = 0;
     TDirtyMapStats dirtyMapStats;
     for (const auto& dbg: data.Dbgs) {
         dirtyMapStats.Aggregate(dbg.DirtyMapStats);
@@ -102,7 +100,7 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
             }
 
             TAG (TH3) {
-                str << "Arena allocator pool";
+                str << "Arena allocator pool summary (one pool per DBG)";
             }
             TABLE_CLASS ("table table-condensed") {
                 TABLEHEAD () {
@@ -173,35 +171,6 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                     }
                 }
             }
-            TAG (TH3) {
-                str << "Dirty map queues";
-            }
-            TABLE_CLASS ("table table-condensed") {
-                TABLER () {
-                    TABLED () {
-                        str << "Inflight";
-                    }
-                    TABLED () {
-                        str << dirtyMapStats.InflightCount;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "Ready to flush";
-                    }
-                    TABLED () {
-                        str << dirtyMapStats.ReadyToFlushCount;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "Ready to erase";
-                    }
-                    TABLED () {
-                        str << dirtyMapStats.ReadyToEraseCount;
-                    }
-                }
-            }
         }
 
         TAG (TH3) {
@@ -214,17 +183,20 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                         str << "DBG";
                     }
                     TABLEH () {
+                        str << "Reserved";
+                    }
+                    TABLEH () {
                         str << "Used";
                     }
                     TABLEH () {
-                        str << "Allocated";
+                        str << "Count";
                     }
                 }
             }
             TABLEBODY () {
+                TArenaPoolStats totalMemoryStats;
                 for (const auto& dbg: data.Dbgs) {
-                    totalAllocatedMemorySize += dbg.AllocatedMemorySize;
-                    totalUsedMemorySize += dbg.UsedMemorySize;
+                    totalMemoryStats.Aggregate(dbg.MemoryStats);
                     TABLER () {
                         TABLED () {
                             str << "<a href='?TabletID="
@@ -233,10 +205,13 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                                 << dbg.Index << "</a>";
                         }
                         TABLED () {
-                            str << FormatByteSize(dbg.UsedMemorySize);
+                            str << FormatByteSize(dbg.MemoryStats.ReservedSize);
                         }
                         TABLED () {
-                            str << FormatByteSize(dbg.AllocatedMemorySize);
+                            str << FormatByteSize(dbg.MemoryStats.UsedSize);
+                        }
+                        TABLED () {
+                            str << dbg.MemoryStats.AllocationCount;
                         }
                     }
                 }
@@ -245,10 +220,13 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                         str << "Total";
                     }
                     TABLED () {
-                        str << FormatByteSize(totalUsedMemorySize);
+                        str << FormatByteSize(totalMemoryStats.ReservedSize);
                     }
                     TABLED () {
-                        str << FormatByteSize(totalAllocatedMemorySize);
+                        str << FormatByteSize(totalMemoryStats.UsedSize);
+                    }
+                    TABLED () {
+                        str << totalMemoryStats.AllocationCount;
                     }
                 }
             }

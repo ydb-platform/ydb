@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
         void* anotherSlot512 = allocator->Allocate(512);
         void* slot2048 = allocator->Allocate(2048);
 
-        const auto stats = allocator->GetStats();
+        const auto stats = allocator->GetDetailedStat();
         UNIT_ASSERT_VALUES_EQUAL(2, stats.size());
         UNIT_ASSERT_VALUES_EQUAL(512, stats[0].SlotSize);
         UNIT_ASSERT_VALUES_EQUAL(1_MB, stats[0].ReservedSize);
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
 
         allocator->DeAllocate(slot512);
 
-        const auto statsAfterPartialDeallocation = allocator->GetStats();
+        const auto statsAfterPartialDeallocation = allocator->GetDetailedStat();
         UNIT_ASSERT_VALUES_EQUAL(
             512,
             statsAfterPartialDeallocation[0].UsedSize);
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
         allocator->DeAllocate(anotherSlot512);
         allocator->DeAllocate(slot2048);
 
-        const auto statsAfterDeallocation = allocator->GetStats();
+        const auto statsAfterDeallocation = allocator->GetDetailedStat();
         UNIT_ASSERT_VALUES_EQUAL(0, statsAfterDeallocation[0].UsedSize);
         UNIT_ASSERT_VALUES_EQUAL(0, statsAfterDeallocation[1].UsedSize);
     }
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorTest)
                 RoundAllocationSize(size),
                 allocator->AllocatedSize());
 
-            const auto stats = allocator->GetStats();
+            const auto stats = allocator->GetDetailedStat();
             const size_t allocationSize = RoundAllocationSize(size);
             const size_t expectedBlockSize = Max(
                 1_MB,

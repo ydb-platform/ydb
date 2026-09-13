@@ -25,12 +25,12 @@ public:
     void Deallocate(void*) noexcept;
     [[nodiscard]] IArenaAllocatorPtr GetAllocator() const;
 
-    // Returns the total size of slots allocated from the arena.
-    [[nodiscard]] size_t GetAllocatedSize() const;
+    // Returns memory statistics for the pool.
+    [[nodiscard]] TArenaPoolStats GetMemoryStats() const;
     // Returns the total size of chunks currently handed to clients.
     [[nodiscard]] size_t GetUsedSize() const;
     // Returns allocation statistics grouped by chunk size.
-    [[nodiscard]] TVector<TArenaAllocatorStats> GetStats() const;
+    [[nodiscard]] TVector<TArenaAllocatorStats> GetDetailedStat() const;
 
 private:
     // Intrusive free list node stored in the first bytes of a free chunk

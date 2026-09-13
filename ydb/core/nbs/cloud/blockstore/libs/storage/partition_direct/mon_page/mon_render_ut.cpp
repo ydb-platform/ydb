@@ -93,11 +93,11 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
     Y_UNIT_TEST(MemoryPageShowsPerDbgAndTotalUsage)
     {
         TDbgSnapshot first = MakeDbg(1);
-        first.UsedMemorySize = 1024;
-        first.AllocatedMemorySize = 4096;
+        first.MemoryStats.UsedSize = 1024;
+        first.MemoryStats.ReservedSize = 4096;
         TDbgSnapshot second = MakeDbg(2);
-        second.UsedMemorySize = 2048;
-        second.AllocatedMemorySize = 8192;
+        second.MemoryStats.UsedSize = 2048;
+        second.MemoryStats.ReservedSize = 8192;
 
         TMonPageData data{
             .Page = EMonPage::Memory,

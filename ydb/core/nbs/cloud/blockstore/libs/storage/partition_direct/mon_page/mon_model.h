@@ -98,8 +98,7 @@ struct TDbgSnapshot
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
     TVChunkConfigs VChunkConfigs;
-    size_t AllocatedMemorySize = 0;
-    size_t UsedMemorySize = 0;
+    TArenaPoolStats MemoryStats;
     TDirtyMapStats DirtyMapStats;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;

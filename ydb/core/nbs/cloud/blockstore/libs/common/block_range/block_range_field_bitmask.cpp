@@ -136,14 +136,13 @@ size_t TBlockRangeFieldBitMask::GetBlockCount() const
     return BlockCount;
 }
 
-size_t TBlockRangeFieldBitMask::GetAllocatedSize() const
+TArenaPoolStats TBlockRangeFieldBitMask::GetMemoryStats() const
 {
-    return GetMaskSize();
-}
-
-size_t TBlockRangeFieldBitMask::GetUsedSize() const
-{
-    return GetMaskSize();
+    return {
+        .ReservedSize = GetMaskSize(),
+        .UsedSize = GetMaskSize(),
+        .AllocationCount = 1,
+    };
 }
 
 std::optional<TBlockRange16> TBlockRangeFieldBitMask::GetFirstRange() const

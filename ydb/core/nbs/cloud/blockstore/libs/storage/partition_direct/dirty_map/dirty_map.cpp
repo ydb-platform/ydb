@@ -797,11 +797,10 @@ void TBlocksDirtyMap::Trim()
 
 TDirtyMapStats TBlocksDirtyMap::GetStats() const
 {
-    size_t ddiskStatesAllocatedSize = 0;
-    size_t ddiskStatesUsedSize = 0;
+    TArenaPoolStats memStats;
+
     for (const auto& ddiskState: DDiskStates) {
-        ddiskStatesAllocatedSize += ddiskState.GetAllocatedSize();
-        ddiskStatesUsedSize += ddiskState.GetUsedSize();
+        memStats.Aggregate(ddiskState.GetMemoryStats());
     }
 
     return {
@@ -813,8 +812,7 @@ TDirtyMapStats TBlocksDirtyMap::GetStats() const
         .ReadFromPBufferCount = Stats.ReadFromPBufferCount,
         .CrossNodeFlushCount = Stats.CrossNodeFlushCount,
         .InNodeFlushCount = Stats.InNodeFlushCount,
-        .DDiskStatesAllocatedSize = ddiskStatesAllocatedSize,
-        .DDiskStatesUsedSize = ddiskStatesUsedSize,
+        .DDisksMemoryStats = memStats,
     };
 }
 

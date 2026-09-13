@@ -327,7 +327,7 @@ public:
         return AllocatedSize();
     }
 
-    [[nodiscard]] TVector<TArenaAllocatorStats> GetStats() const override
+    [[nodiscard]] TVector<TArenaAllocatorStats> GetDetailedStat() const override
     {
         with_lock (Mutex) {
             TVector<TArenaAllocatorStats> result;
@@ -380,6 +380,15 @@ size_t RoundAllocationSize(size_t size)
         return RoundUp(size, 32);
     }
     return RoundUp(size, 64);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+void TArenaPoolStats::Aggregate(const TArenaPoolStats& stats)
+{
+    ReservedSize += stats.ReservedSize;
+    UsedSize += stats.UsedSize;
+    AllocationCount += stats.AllocationCount;
 }
 
 //////////////////////////////////////////////////////////////////////////////

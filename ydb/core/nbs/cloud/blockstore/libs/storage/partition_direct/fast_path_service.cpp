@@ -532,7 +532,8 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
     TMap<size_t, TArenaAllocatorStats> poolStats;
     for (const auto& dbg: DirectBlockGroups) {
-        for (const auto& stats: dbg->GetArenaAllocatorPool()->GetStats()) {
+        for (const auto& stats: dbg->GetArenaAllocatorPool()->GetDetailedStat())
+        {
             auto& total = poolStats[stats.SlotSize];
             total.SlotSize = stats.SlotSize;
             total.ArenaSize += stats.ArenaSize;
@@ -557,7 +558,7 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
             {.Slots = DirectBlockGroups.front()
                           ->GetArenaAllocatorPool()
                           ->GetAllocator()
-                          ->GetStats(),
+                          ->GetDetailedStat(),
              .PoolSlots = std::move(poolSlots)},
     };
 }

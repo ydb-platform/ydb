@@ -21,6 +21,15 @@ struct TArenaAllocatorStats
     size_t Count = 0;         // Total allocations performed
 };
 
+struct TArenaPoolStats
+{
+    size_t ReservedSize = 0;
+    size_t UsedSize = 0;
+    size_t AllocationCount = 0;
+
+    void Aggregate(const TArenaPoolStats& stats);
+};
+
 //////////////////////////////////////////////////////////////////////////////
 
 class IArenaAllocator
@@ -34,7 +43,8 @@ public:
     [[nodiscard]] virtual size_t AllocatedBlocks() const = 0;
     [[nodiscard]] virtual size_t AllocatedSize() const = 0;
     [[nodiscard]] virtual size_t UsedSize() const = 0;
-    [[nodiscard]] virtual TVector<TArenaAllocatorStats> GetStats() const = 0;
+    [[nodiscard]] virtual TVector<TArenaAllocatorStats>
+    GetDetailedStat() const = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////////

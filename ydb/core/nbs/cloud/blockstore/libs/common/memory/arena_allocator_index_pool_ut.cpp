@@ -48,7 +48,7 @@ struct TTrackingAllocator final: public IArenaAllocator
         return AllocatedCount;
     }
 
-    TVector<TArenaAllocatorStats> GetStats() const override
+    TVector<TArenaAllocatorStats> GetDetailedStat() const override
     {
         return {};
     }
@@ -78,20 +78,20 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorIndexPoolTest)
             MaxSizeBytes,
             ChunkSize);
 
-        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(0, pool.GetUsedSize());
 
         const ui64 first = pool.Allocate();
         const ui64 second = pool.Allocate();
-        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(2 * ChunkSize, pool.GetUsedSize());
 
         pool.Deallocate(first);
-        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(ChunkSize, pool.GetUsedSize());
 
         pool.Deallocate(second);
-        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(0, pool.GetUsedSize());
     }
 

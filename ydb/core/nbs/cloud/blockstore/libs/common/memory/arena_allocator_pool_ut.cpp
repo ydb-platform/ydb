@@ -48,7 +48,7 @@ struct TTrackingAllocator final: public IArenaAllocator
         return AllocatedCount;
     }
 
-    TVector<TArenaAllocatorStats> GetStats() const override
+    TVector<TArenaAllocatorStats> GetDetailedStat() const override
     {
         return {};
     }
@@ -72,26 +72,26 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorPoolTest)
         constexpr size_t ChunkSize = 128;
 
         TArenaAllocatorPool pool(CreateArenaAllocator(), SlotSize);
-        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(0, pool.GetUsedSize());
 
         void* first = pool.Allocate(ChunkSize);
         void* second = pool.Allocate(ChunkSize);
-        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(2 * ChunkSize, pool.GetUsedSize());
 
         pool.Deallocate(first);
-        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(ChunkSize, pool.GetUsedSize());
 
         void* reused = pool.Allocate(ChunkSize);
         UNIT_ASSERT_EQUAL(first, reused);
-        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(SlotSize, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(2 * ChunkSize, pool.GetUsedSize());
 
         pool.Deallocate(second);
         pool.Deallocate(reused);
-        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetAllocatedSize());
+        UNIT_ASSERT_VALUES_EQUAL(0, pool.GetMemoryStats().ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(0, pool.GetUsedSize());
     }
 
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorPoolTest)
         void* second = pool.Allocate(120);
         void* third = pool.Allocate(300);
 
-        auto stats = pool.GetStats();
+        auto stats = pool.GetDetailedStat();
         UNIT_ASSERT_VALUES_EQUAL(2, stats.size());
         UNIT_ASSERT_VALUES_EQUAL(120, stats[0].SlotSize);
         UNIT_ASSERT_VALUES_EQUAL(SlotSize, stats[0].ArenaSize);
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(ArenaAllocatorPoolTest)
         pool.Deallocate(second);
         pool.Deallocate(third);
 
-        stats = pool.GetStats();
+        stats = pool.GetDetailedStat();
         UNIT_ASSERT_VALUES_EQUAL(2, stats.size());
         UNIT_ASSERT_VALUES_EQUAL(0, stats[0].ReservedSize);
         UNIT_ASSERT_VALUES_EQUAL(0, stats[0].UsedSize);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/count_size.h>
 
 #include <util/system/types.h>
@@ -43,8 +44,8 @@ struct TDirtyMapStats
     size_t ReadFromPBufferCount = 0;
     size_t CrossNodeFlushCount = 0;
     size_t InNodeFlushCount = 0;
-    size_t DDiskStatesAllocatedSize = 0;
-    size_t DDiskStatesUsedSize = 0;
+
+    TArenaPoolStats DDisksMemoryStats;
 
     void Aggregate(const TDirtyMapStats& stats);
 };

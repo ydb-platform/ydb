@@ -36,7 +36,7 @@ void PrintAllocatorStats(const IArenaAllocatorPtr& allocator)
     Cout << "allocator:" << Endl;
     size_t reservedSize = 0;
     size_t usedSize = 0;
-    for (const auto& stats: allocator->GetStats()) {
+    for (const auto& stats: allocator->GetDetailedStat()) {
         Cout << "  slotSize=" << stats.SlotSize
              << ", arenaSize=" << stats.ArenaSize
              << ", reservedSize=" << FormatByteSize(stats.ReservedSize)

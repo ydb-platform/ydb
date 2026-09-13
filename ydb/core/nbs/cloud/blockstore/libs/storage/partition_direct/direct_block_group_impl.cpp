@@ -2162,6 +2162,7 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
     auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
     TVChunkConfigs vChunkConfigs;
     TDirtyMapStats dirtyMapStats;
+
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
             vChunkConfigs[vChunk->GetConfig().GetVChunkIndex()] =
@@ -2175,16 +2176,16 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         }
     }
 
+    auto memStats = ArenaAllocatorPool->GetMemoryStats();
+    memStats.Aggregate(dirtyMapStats.DDisksMemoryStats);
+
     return {
         .Index = DirectBlockGroupIndex,
         .VChunkCount = VChunks.size(),
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
         .VChunkConfigs = std::move(vChunkConfigs),
-        .AllocatedMemorySize = ArenaAllocatorPool->GetAllocatedSize() +
-                               dirtyMapStats.DDiskStatesAllocatedSize,
-        .UsedMemorySize = ArenaAllocatorPool->GetUsedSize() +
-                          dirtyMapStats.DDiskStatesUsedSize,
+        .MemoryStats = memStats,
         .DirtyMapStats = dirtyMapStats,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };

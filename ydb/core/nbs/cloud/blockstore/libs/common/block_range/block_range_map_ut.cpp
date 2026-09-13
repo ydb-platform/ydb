@@ -508,9 +508,9 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
                     static_cast<double>(pool.GetUsedSize()) / count;
 
                 Cout << count << ": " << averageMemPerItem << Endl;
-                PrintAllocatorStats("pool", pool.GetStats());
+                PrintAllocatorStats("pool", pool.GetDetailedStat());
 
-                const auto allocatorStats = allocator->GetStats();
+                const auto allocatorStats = allocator->GetDetailedStat();
                 PrintAllocatorStats("allocator", allocatorStats);
 
                 size_t allocatorAllocatedSize = 0;

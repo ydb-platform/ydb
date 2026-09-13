@@ -45,8 +45,7 @@ void TDirtyMapStats::Aggregate(const TDirtyMapStats& stats)
     ReadFromPBufferCount += stats.ReadFromPBufferCount;
     CrossNodeFlushCount += stats.CrossNodeFlushCount;
     InNodeFlushCount += stats.InNodeFlushCount;
-    DDiskStatesAllocatedSize += stats.DDiskStatesAllocatedSize;
-    DDiskStatesUsedSize += stats.DDiskStatesUsedSize;
+    DDisksMemoryStats.Aggregate(stats.DDisksMemoryStats);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

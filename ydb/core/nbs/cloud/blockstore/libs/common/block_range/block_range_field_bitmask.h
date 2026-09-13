@@ -41,8 +41,7 @@ public:
     [[nodiscard]] size_t GetBlockCount() const override;
     [[nodiscard]] std::optional<TBlockRange16> GetFirstRange() const override;
 
-    [[nodiscard]] size_t GetAllocatedSize() const override;
-    [[nodiscard]] size_t GetUsedSize() const override;
+    [[nodiscard]] TArenaPoolStats GetMemoryStats() const override;
 
     [[nodiscard]] TString Save() const override;
     [[nodiscard]] TString Print() const override;

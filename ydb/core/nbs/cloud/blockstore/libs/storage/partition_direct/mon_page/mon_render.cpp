@@ -478,7 +478,7 @@ void RenderDbgDetail(
                 }
                 TABLED () {
                     str << FormatByteSize(
-                        dbg.DirtyMapStats.DDiskStatesAllocatedSize);
+                        dbg.DirtyMapStats.DDisksMemoryStats.ReservedSize);
                 }
             }
             TABLER () {
@@ -487,7 +487,15 @@ void RenderDbgDetail(
                 }
                 TABLED () {
                     str << FormatByteSize(
-                        dbg.DirtyMapStats.DDiskStatesUsedSize);
+                        dbg.DirtyMapStats.DDisksMemoryStats.UsedSize);
+                }
+            }
+            TABLER () {
+                TABLED () {
+                    str << "DDisk state allocations";
+                }
+                TABLED () {
+                    str << dbg.DirtyMapStats.DDisksMemoryStats.AllocationCount;
                 }
             }
         }

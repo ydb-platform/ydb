@@ -197,14 +197,19 @@ void TArenaAllocatorPool::Deallocate(void* ptr) noexcept
     }
 }
 
-size_t TArenaAllocatorPool::GetAllocatedSize() const
+TArenaPoolStats TArenaAllocatorPool::GetMemoryStats() const
 {
-    size_t result = 0;
-    for (const auto& [size, slots]: SizeMap) {
-        Y_UNUSED(size);
-        result += slots.GetAllocatedSize();
+    size_t reservedSize = 0;
+    size_t allocationCount = 0;
+    for (const auto& [chunkSize, slots]: SizeMap) {
+        reservedSize += slots.GetAllocatedSize();
+        allocationCount += slots.GetStats(chunkSize).Count;
     }
-    return result;
+    return {
+        .ReservedSize = reservedSize,
+        .UsedSize = UsedSize,
+        .AllocationCount = allocationCount,
+    };
 }
 
 size_t TArenaAllocatorPool::GetUsedSize() const
@@ -212,7 +217,7 @@ size_t TArenaAllocatorPool::GetUsedSize() const
     return UsedSize;
 }
 
-TVector<TArenaAllocatorStats> TArenaAllocatorPool::GetStats() const
+TVector<TArenaAllocatorStats> TArenaAllocatorPool::GetDetailedStat() const
 {
     TVector<TArenaAllocatorStats> result;
     result.reserve(SizeMap.size());

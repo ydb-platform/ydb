@@ -499,9 +499,6 @@ class MessageAcceptor:
             if data_idx == len(self.messages) - self.unaccepted_count:
                 self.unaccepted_count -= 1
 
-        def is_ready(self) -> bool:
-            return len(self) == 0
-
         def __len__(self) -> int:
             if self.receive_idx is not None:
                 return len(self.messages) - self.receive_idx - 1
@@ -532,9 +529,6 @@ class MessageAcceptor:
             assert group_id is not None, f"Unexpected message: {data}, only expected messages are: {self.all_messages}"
             self.groups[group_id].advance(data)
 
-    def is_ready(self) -> bool:
-        return all(group.is_ready() for group in self.groups.values())
-
     def debug_info(self) -> str:
         return ";\n".join(f"{idx}: {group.debug_info()}" for idx, group in self.groups.items())
 
@@ -555,7 +549,7 @@ def read_and_check_data(
         logger.debug("read data from stream")
         deadline = time.time() + plain_or_under_sanitizer_wrapper(60, 300)
 
-        while not acceptor.is_ready():
+        while len(acceptor) != 0:
             remaining_timeout = deadline - time.time()
             assert remaining_timeout > 0, f"Timed out waiting for expected data: {acceptor.debug_info()}"
 

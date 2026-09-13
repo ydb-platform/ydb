@@ -10,7 +10,6 @@ class TestMessageAcceptor(unittest.TestCase):
         acceptor.accept(['a', 'b'], ordered_group=1)
         acceptor.accept(['x', 'y'], ordered_group=2)
         acceptor.advance(['x', 'a', 'b', 'y'])
-        self.assertTrue(acceptor.is_ready())
         self.assertEqual(len(acceptor), 0)
 
     def test_rejects_invalid_messages(self):
@@ -32,9 +31,9 @@ class TestMessageAcceptor(unittest.TestCase):
         acceptor.accept(['a'])
         acceptor.advance(['a'])
         acceptor.accept(['b'])
-        self.assertFalse(acceptor.is_ready())
+        self.assertNotEqual(len(acceptor), 0)
         acceptor.advance(['b'])
-        self.assertTrue(acceptor.is_ready())
+        self.assertEqual(len(acceptor), 0)
         with self.assertRaises(AssertionError):
             acceptor.advance(['b'])
 
@@ -47,7 +46,7 @@ class TestMessageAcceptor(unittest.TestCase):
                 acceptor.reset()
                 acceptor.accept(['d'])
                 acceptor.advance(replay + ['d'])
-                self.assertTrue(acceptor.is_ready())
+                self.assertEqual(len(acceptor), 0)
 
     def test_restart_cannot_skip_unseen_messages(self):
         acceptor = common.MessageAcceptor()
@@ -74,10 +73,9 @@ class TestMessageAcceptor(unittest.TestCase):
         acceptor.reset()
         acceptor.accept(['x'], ordered_group=2)
         acceptor.advance(['a', 'x'])
-        self.assertFalse(acceptor.is_ready())
         self.assertEqual(len(acceptor), 1)
         acceptor.advance(['b'])
-        self.assertTrue(acceptor.is_ready())
+        self.assertEqual(len(acceptor), 0)
 
     def test_group_without_replay_does_not_block_completion(self):
         acceptor = common.MessageAcceptor()
@@ -86,7 +84,7 @@ class TestMessageAcceptor(unittest.TestCase):
         acceptor.reset()
         acceptor.accept(['x'], ordered_group=2)
         acceptor.advance(['x'])
-        self.assertTrue(acceptor.is_ready())
+        self.assertEqual(len(acceptor), 0)
 
     def test_reader_waits_for_replay_suffix(self):
         acceptor = common.MessageAcceptor()
@@ -97,4 +95,4 @@ class TestMessageAcceptor(unittest.TestCase):
         with patch.object(common, 'read_stream', side_effect=[['a'], ['x'], ['b']]) as reader:
             common.read_and_check_data(None, '/query', acceptor, 'endpoint', '/Root', 'consumer', 'topic')
         self.assertEqual([call.kwargs['messages_count'] for call in reader.call_args_list], [1, 2, 1])
-        self.assertTrue(acceptor.is_ready())
+        self.assertEqual(len(acceptor), 0)

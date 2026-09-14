@@ -216,13 +216,20 @@ private: //IDqComputeActorAsyncInput
         if (!TaskCounters) {
             return;
         }
+
+        auto txId = args.TxId;
+        auto taskParamsIt = args.TaskParams.find("query_path");
+        if (taskParamsIt != args.TaskParams.end()) {
+            txId = taskParamsIt->second;
+        }
+
         switch(args.StatsLevel) {
             case TCollectStatsLevel::None:
             case TCollectStatsLevel::Basic:
                 TaskCounters = nullptr;
                 return;
             case TCollectStatsLevel::Profile:
-                TaskCountersGroup = std::pair { "tx_id", ToString(args.TxId) };
+                TaskCountersGroup = std::pair { "tx_id", ToString(txId) };
                 // XXX this nests counters twice by $TxId, ("operation_id", $TxId)->("tx_id", $TxId) in (obsolete) yqv1
                 TaskCounters = TaskCounters
                     ->GetSubgroup(TaskCountersGroup->first, TaskCountersGroup->second)

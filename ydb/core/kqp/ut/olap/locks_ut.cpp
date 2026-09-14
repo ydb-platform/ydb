@@ -188,6 +188,81 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         }
     }
 
+    Y_UNIT_TEST(DropRowTableAfterUpsertSelectIntoColumnTable) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                CREATE TABLE `/Root/SrcRowTable` (
+                    id Uint64 NOT NULL,
+                    ts Timestamp,
+                    PRIMARY KEY (id)
+                )
+                WITH (STORE = ROW);
+
+                CREATE TABLE `/Root/DstColumnTable` (
+                    id Uint64 NOT NULL,
+                    ts Timestamp,
+                    PRIMARY KEY (id)
+                )
+                WITH (STORE = COLUMN);
+            )",
+                                  NYdb::NQuery::TTxControl::NoTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                UPSERT INTO `/Root/SrcRowTable` (id, ts) VALUES
+                    (1u, Timestamp("2020-01-01T00:00:00Z"));
+            )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                UPSERT INTO `/Root/DstColumnTable` SELECT id, ts FROM `/Root/SrcRowTable`;
+            )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = queryClient
+                              .ExecuteQuery(R"(
+                SELECT id FROM `/Root/SrcRowTable`;
+            )",
+                                  NYdb::NQuery::TTxControl::BeginTx().CommitTx())
+                              .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto tableClient = kikimr.GetTableClient();
+        auto dropSession = tableClient.CreateSession().GetValueSync().GetSession();
+        auto dropFuture = dropSession.ExecuteSchemeQuery(R"(DROP TABLE `/Root/SrcRowTable`;)");
+
+        const bool completed = dropFuture.Wait(TDuration::Seconds(30));
+        UNIT_ASSERT_C(completed,
+            "DROP TABLE on the source row table did not complete within timeout: "
+            "reproduces the reported hang after UPSERT ... SELECT into a column table");
+
+        auto dropResult = dropFuture.GetValueSync();
+        UNIT_ASSERT_C(dropResult.GetStatus() == NYdb::EStatus::SUCCESS, dropResult.GetIssues().ToString());
+    }
+
     void TestDeleteAbsent(const size_t shardCount, bool reboot) {
         //This test tries to DELETE from a table when there is no rows to delete at some shard
         //It corresponds to a SCAN, then NO write then COMMIT on that shard

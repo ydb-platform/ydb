@@ -23,7 +23,7 @@ namespace NKikimr::NBlobDepot {
             TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_COMMIT_BLOB_SEQ; }
 
             TTxCommitBlobSeq(TBlobDepot *self, TAgent& agent, std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> request)
-                : TTransactionBase(self)
+                : TTransactionBase(self, std::move(request->TraceId))
                 , NodeId(agent.Connection->NodeId)
                 , AgentInstanceId(*agent.AgentInstanceId)
                 , Request(std::move(request))

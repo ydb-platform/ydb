@@ -8,6 +8,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -39,7 +41,8 @@ public:
 
 private:
     void DoDescribe() {
-        LOG_D("DoDescribe");
+        YDB_LOG_DEBUG("DoDescribe",
+            {"logPrefix", NPQ_LOG_PREFIX});
         Become(&TDropTopicOperationActor::DescribeState);
 
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
@@ -54,7 +57,8 @@ private:
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-        LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+        YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         auto& topics = ev->Get()->Topics;
         AFL_ENSURE(topics.size() == 1)("s", topics.size());
@@ -91,7 +95,8 @@ private:
 
 private:
     void DoDrop() {
-        LOG_D("DoDrop");
+        YDB_LOG_DEBUG("DoDrop",
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         Become(&TDropTopicOperationActor::DropState);
 
@@ -126,7 +131,8 @@ private:
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
-        LOG_D("Handle TEvSchemaOperationResponse");
+        YDB_LOG_DEBUG("Handle TEvSchemaOperationResponse",
+            {"logPrefix", NPQ_LOG_PREFIX});
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }

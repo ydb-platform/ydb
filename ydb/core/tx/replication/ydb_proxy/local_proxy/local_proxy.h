@@ -33,7 +33,7 @@ private:
 
 private:
     const TString Database;
-    TString LogPrefix;
+    NActors::NStructuredLog::TStructuredMessage LogPrefix;
 };
 
 }

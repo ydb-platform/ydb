@@ -765,9 +765,13 @@ public:
                     << "Pq Meta Field Descriptor was not found"));
                 return TStatus::Error;
             }
-            if (requireMetadataColumns && !inputStructType->FindItem(metadataColumnName)) {
+            const auto watermarkColumnName = GetWatermarkColumnName(*descriptor);
+            if (requireMetadataColumns
+                && !inputStructType->FindItem(metadataColumnName)
+                && !inputStructType->FindItem(watermarkColumnName)) {
                 ctx.AddError(TIssue(ctx.GetPosition(metadataColumn->Pos()), TStringBuilder()
                     << "Required PQ metadata column " << metadataColumnName
+                    << " or " << watermarkColumnName
                     << " is missing from " << input->Content() << " input"));
                 return TStatus::Error;
             }
@@ -776,8 +780,17 @@ public:
             }
         }
 
-        const auto* lambdaInputItemType = inputStructType;
-        const TTypeAnnotationNode* lambdaInputPayloadType = lambdaInputItemType;
+        const TTypeAnnotationNode* lambdaInputPayloadType = inputStructType;
+        if (HasWatermarkColumnPrefix(*inputStructType)) {
+            TVector<const TItemExprType*> lambdaInputItems;
+            lambdaInputItems.reserve(inputStructType->GetSize());
+            for (const auto* item : inputStructType->GetItems()) {
+                if (!item->GetName().StartsWith(WatermarkColumnPrefix)) {
+                    lambdaInputItems.push_back(item);
+                }
+            }
+            lambdaInputPayloadType = ctx.MakeType<TStructExprType>(lambdaInputItems);
+        }
         if (isInputItemOptional) {
             lambdaInputPayloadType = ctx.MakeType<TOptionalExprType>(lambdaInputPayloadType);
         }

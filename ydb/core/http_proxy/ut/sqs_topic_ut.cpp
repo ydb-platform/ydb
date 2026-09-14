@@ -104,6 +104,19 @@ namespace {
         return GetPathFromFullQueueUrl(url);
     }
 
+    TString GetCapturedAuthenticateService(THttpProxyTestMock& fixture) {
+        TString capturedService;
+        with_lock (fixture.AccessServiceMock.MetadataMutex) {
+            capturedService = fixture.AccessServiceMock.CapturedAuthenticateService;
+        }
+        if (capturedService.empty()) {
+            with_lock (fixture.AccessServiceMockV2.MetadataMutex) {
+                capturedService = fixture.AccessServiceMockV2.CapturedAuthenticateService;
+            }
+        }
+        return capturedService;
+    }
+
     NJson::TJsonMap SendSqsJsonWithHost(
         THttpProxyTestMock& fixture,
         const TString& host,
@@ -2173,7 +2186,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         // => Cost = base + blocks
         const ui64 blocks = RuPayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::WRITE_BLOCK_SIZE);
-        const ui64 expected = NBilling::CalcRu(blocks, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false, false);
+        const ui64 expected = NBilling::CalcRu(blocks, NBilling::WRITE_BASE_COST, NBilling::WRITE_COST_PER_BLOCK, false);
         UNIT_ASSERT_VALUES_EQUAL(blocks, 5);
         UNIT_ASSERT_VALUES_EQUAL(expected, 7);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
@@ -2230,7 +2243,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         // => Cost = base + blocks
         const ui64 blocks = RuPayloadBlocks(
             RuMetering_MessageCount * RuMetering_MessageSize, NBilling::READ_BLOCK_SIZE);
-        const ui64 expected = NBilling::CalcRu(blocks, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false, false);
+        const ui64 expected = NBilling::CalcRu(blocks, NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, false);
         UNIT_ASSERT_VALUES_EQUAL(totalReadRu, expected);
     }
 
@@ -2293,7 +2306,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL_C(charges.size(), 1, "expected exactly one delete RU charge");
         // adjunct 0.
         // Cost = base(2).
-        const ui64 expected = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0, false, false);
+        const ui64 expected = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0);
         UNIT_ASSERT_VALUES_EQUAL(expected, 2);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Amount, expected);
         UNIT_ASSERT_VALUES_EQUAL(charges[0].Quoter, ru.CoordinationNodePath);
@@ -2870,6 +2883,43 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT(queueUrl.Contains(queueName));
             UNIT_ASSERT(queueUrl.Contains("ydb-sqs-consumer"));
         }
+    }
+
+    Y_UNIT_TEST_F(TestSqsSigV4ServiceIsForwardedToAccessService, TFixture) {
+        auto res = SendHttpRequest(
+            "/Root",
+            "AmazonSQS.ListQueues",
+            NJson::TJsonMap{},
+            FormAuthorizationStr("ru-central1", "sqs"));
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+        UNIT_ASSERT_VALUES_EQUAL(GetCapturedAuthenticateService(*this), "sqs");
+    }
+
+    Y_UNIT_TEST_F(TestSqsSigV4EmptyServiceIsRejected, TFixture) {
+        const TString authorization =
+            "Authorization: AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/ru-central1, "
+            "SignedHeaders=host;x-amz-date, Signature="
+            "5da7c1a2acd57cee7505fc6676e4e544621c30862966e37dddb68e92efbe5d6b)__";
+        auto res = SendHttpRequest(
+            "/Root",
+            "AmazonSQS.ListQueues",
+            NJson::TJsonMap{},
+            authorization);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, res.Body);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "IncompleteSignature");
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "message"), "Service name should be provided");
+    }
+
+    Y_UNIT_TEST_F(TestKinesisSigV4ServiceIsForwardedToAccessService, TFixture) {
+        auto res = SendHttpRequest(
+            "/Root",
+            "kinesisApi.ListStreams",
+            NJson::TJsonMap{},
+            FormAuthorizationStr("ru-central1", "kinesis"));
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+        UNIT_ASSERT_VALUES_EQUAL(GetCapturedAuthenticateService(*this), "kinesis");
     }
 
     Y_UNIT_TEST_F(TestCreateQueueSetsDefaultTopicMessageRateLimit, TFixture) {

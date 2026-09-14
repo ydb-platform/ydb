@@ -21,7 +21,7 @@ namespace NKafka {
 
             enum EInitProducerIdKqpRequests : ui8 {
                 NO_REQUEST = 0,
-                
+
                 SELECT,
                 INSERT,
                 UPDATE,
@@ -41,7 +41,7 @@ namespace NKafka {
             const ui64 CorrelationId;
             const std::optional<TString> TransactionalId;
             const std::optional<i32> TransactionTimeoutMs;
-            
+
             // kqp related staff
             std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
             ui64 KqpReqCookie = 0;
@@ -70,7 +70,7 @@ namespace NKafka {
             void RequestFullRetry(const TActorContext& ctx);
             // event from KafkaTransactionCoordinator actor about successful or unsuccessful save of producer new state
             void Handle(NKafka::TEvKafka::TEvSaveTxnProducerResponse::TPtr& ev, const TActorContext& ctx);
-            
+
 
             void Die(const TActorContext& ctx);
 
@@ -103,7 +103,7 @@ namespace NKafka {
             EKafkaErrors KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status);
             std::optional<TProducerState> ParseProducerState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
             TString GetYqlWithTableName(const TString& templateStr);
-            TString LogPrefix();
+            NActors::NStructuredLog::TStructuredMessage LogPrefix();
             TString GetAsStr(EInitProducerIdKqpRequests request);
         };
 

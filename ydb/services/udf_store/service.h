@@ -16,6 +16,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/accessor/accessor.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
 namespace NKikimr::NUdfStore {
@@ -54,9 +56,6 @@ private:
     TString KvVolumePath;
     TString UnsafeNativeUdfDir;
     YDB_READONLY_FLAG(EnableWasmUdf, false);
-    //! While unset, this node compiles straight from the metadata snapshot as
-    //! it did before the controller existed. This is the rollback switch.
-    YDB_READONLY_FLAG(EnableCompileController, false);
     ui32 CompileCapacity = 1;
     TString WasmCpuSpecOverride;
     TString LocalCpuSpec;
@@ -110,6 +109,12 @@ private:
     //! snapshot handler re-derives every gap on every refresh, and repeating
     //! them all costs the controller a scheduling round each.
     THashMap<TString, TString> ReportedGaps;
+    //! Name to uid of the gaps this node found while the database has no
+    //! controller to report them to. Nothing will compile them, so they are
+    //! kept to drive the gauge and to warn about each one only once instead of
+    //! on every snapshot refresh.
+    THashMap<TString, TString> GapsWithoutController;
+    NMonitoring::TDynamicCounters::TCounterPtr GapsWithoutControllerGauge;
 
     bool IsNamePending(const TString& name, EUdfType type) const;
     bool IsLibraryPending(const TString& name) const;
@@ -121,7 +126,7 @@ private:
     THashMap<TString, TString> CollectLibraryUids(
         TStringBuf manifest,
         const TSnapshot* snapshot = nullptr) const;
-    void RetryPendingWasmCompilesForLibrary(const TString& libraryName);
+    void ReportGapsUnblockedByLibrary(const TString& libraryName);
     void UnloadWasmUdfsDependingOnLibrary(const TString& libraryName);
     void FetchNextNativeBody();
     void FetchNextWasmCompile();

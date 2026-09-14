@@ -7,6 +7,7 @@
 
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/kqp/common/dynamic_function_registry.h>
 
 #include <library/cpp/json/json_reader.h>
@@ -41,7 +42,6 @@ TUdfStoreService::TUdfStoreService(
     , EnableUnsafeNativeUdfFlag(config.GetEnableUnsafeNativeUdf())
     , UnsafeNativeUdfDir(config.GetUnsafeNativeUdfDir())
     , EnableWasmUdfFlag(config.GetEnableWasmUdf())
-    , EnableCompileControllerFlag(config.GetEnableWasmCompileController())
     , CompileCapacity(Max<ui32>(1, config.GetWasmCompileMaxPerDinode()))
     , WasmCpuSpecOverride(config.GetWasmCpuSpecOverride())
     , LocalCpuSpec(DetectLocalCpuSpec(WasmCpuSpecOverride))
@@ -155,23 +155,10 @@ void TUdfStoreService::EnqueueWasmCompileIfNeeded(const TUdfModule& udf, const T
     if (IsNamePending(udf.GetName(), EUdfType::WASM)) {
         return;
     }
-    if (EnableCompileControllerFlag) {
-        // Under the controller this node does not decide to compile anything on
-        // its own: it reports the gap and waits to be assigned, so that all the
-        // nodes of a platform do not start the same LLVM run at once.
-        RequestArtifact(udf.GetName(), udf.GetUid(), false);
-        return;
-    }
-    PendingWasmCompile.push_back(TPendingUdf{
-        .Name = udf.GetName(),
-        .Uid = udf.GetUid(),
-        .Md5 = udf.GetMd5(),
-        .ExpectedSize = udf.GetSize(),
-        .Type = EUdfType::WASM,
-        .Manifest = udf.GetManifest(),
-        .ModuleExtension = GetModuleExtensionFromManifest(udf.GetManifest()),
-        .LibraryUids = CollectLibraryUids(udf.GetManifest(), snapshot),
-    });
+    // This node does not decide to compile anything on its own: it reports the
+    // gap and waits to be assigned, so that all the nodes of a platform do not
+    // start the same LLVM run at once.
+    RequestArtifact(udf.GetName(), udf.GetUid(), false);
 }
 
 void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf, const TSnapshot* snapshot) {
@@ -228,16 +215,10 @@ void TUdfStoreService::EnqueueLibraryCompileIfNeeded(const TUdfModule& library) 
     if (IsLibraryPending(library.GetName())) {
         return;
     }
-    if (EnableCompileControllerFlag) {
-        RequestArtifact(library.GetName(), library.GetUid(), true);
-        return;
-    }
-    PendingLibraryCompile.push_back(TPendingLibrary{
-        .Name = library.GetName(),
-    });
+    RequestArtifact(library.GetName(), library.GetUid(), true);
 }
 
-void TUdfStoreService::RetryPendingWasmCompilesForLibrary(const TString& libraryName) {
+void TUdfStoreService::ReportGapsUnblockedByLibrary(const TString& libraryName) {
     if (!CurrentSnapshot) {
         return;
     }
@@ -291,6 +272,10 @@ void TUdfStoreService::UnloadWasmUdfsDependingOnLibrary(const TString& libraryNa
 }
 
 void TUdfStoreService::Bootstrap() {
+    GapsWithoutControllerGauge = GetServiceCounters(AppData()->Counters, "udf_store")
+        ->GetSubgroup("subsystem", "dinode")
+        ->GetCounter("WasmGapsWithoutController", false);
+
     ModulesTablePath = TUdfModule::GetBehaviour()->GetStorageTablePath();
     ModuleChunksTablePath = GetModuleChunksTablePath();
     ArtifactTablePath = GetArtifactTablePath(LocalCpuSpec);
@@ -324,10 +309,8 @@ void TUdfStoreService::Handle(TEvArtifactTableInitialized::TPtr& ev) {
     ArtifactTablePath = ev->Get()->ArtifactTablePath;
     ALS_INFO(NKikimrServices::METADATA_PROVIDER)
         << "TUdfStoreService: artifact table ready at " << ArtifactTablePath;
-    if (EnableCompileControllerFlag) {
-        ResolveCompileController();
-        ScheduleControllerTick();
-    }
+    ResolveCompileController();
+    ScheduleControllerTick();
     Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()),
         new NMetadata::NProvider::TEvSubscribeExternal(std::make_shared<TSnapshotsFetcher>()));
 }
@@ -375,11 +358,7 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
                 << ", old_md5=" << existing->GetMd5()
                 << ", new_md5=" << library.GetMd5();
             UnloadWasmUdfsDependingOnLibrary(name);
-            if (EnableCompileControllerFlag) {
-                RequestArtifact(name, library.GetUid(), true);
-            } else if (!IsLibraryPending(name)) {
-                PendingLibraryCompile.push_back(TPendingLibrary{.Name = name});
-            }
+            RequestArtifact(name, library.GetUid(), true);
         } else {
             EnqueueLibraryCompileIfNeeded(library);
         }
@@ -509,16 +488,6 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
     if (!NativeFetchInProgress) {
         FetchNextNativeBody();
     }
-    // Under the controller the compile queues are only ever filled by an
-    // assignment, so a snapshot refresh must not start anything itself.
-    if (!EnableCompileControllerFlag) {
-        if (!LibraryCompileInProgress) {
-            FetchNextLibraryCompile();
-        }
-        if (!WasmCompileInProgress) {
-            FetchNextWasmCompile();
-        }
-    }
     if (!WasmLoadInProgress) {
         FetchNextWasmLoad();
     }
@@ -634,7 +603,7 @@ void TUdfStoreService::Handle(TEvLibraryCompileResponse::TPtr& ev) {
             << "TUdfStoreService: library '" << libraryName
             << "' compiled for cpu_spec " << LocalCpuSpec;
         LocallyReadyLibraries.insert(libraryName);
-        RetryPendingWasmCompilesForLibrary(libraryName);
+        ReportGapsUnblockedByLibrary(libraryName);
     } else {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
             << "TUdfStoreService: failed to compile library '" << libraryName
@@ -681,25 +650,18 @@ void TUdfStoreService::Handle(TEvWasmCompileResponse::TPtr& ev) {
             << "TUdfStoreService: WASM UDF '" << name << "' compiled for cpu_spec "
             << LocalCpuSpec;
     } else if (assigned) {
-        // The controller owns the retry budget for an assigned compile; a local
-        // retry here would race with whatever it decides to do next.
+        // The controller owns the retry budget for a compile; a local retry here
+        // would race with whatever it decides to do next.
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
             << "TUdfStoreService: failed to compile assigned WASM UDF '" << name
             << "': " << ev->Get()->ErrorMessage;
     } else {
-        ui32& retryCount = FetchRetryCounts[name];
-        if (retryCount < MaxFetchRetries) {
-            ++retryCount;
-            PendingWasmCompile.push_back(std::move(pending));
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-                << "TUdfStoreService: failed to compile WASM UDF '" << name
-                << "' (retry " << retryCount << "/" << MaxFetchRetries
-                << "): " << ev->Get()->ErrorMessage;
-        } else {
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
-                << "TUdfStoreService: giving up on WASM UDF '" << name
-                << "' after " << MaxFetchRetries << " compile retries: " << ev->Get()->ErrorMessage;
-        }
+        // Every compile starts from an assignment, so there is nobody to report
+        // this to and nobody to schedule a retry: the gap is offered again on
+        // the next snapshot refresh.
+        ALS_ERROR(NKikimrServices::METADATA_PROVIDER)
+            << "TUdfStoreService: failed to compile WASM UDF '" << name
+            << "' outside of an assignment: " << ev->Get()->ErrorMessage;
     }
 
     if (assigned) {

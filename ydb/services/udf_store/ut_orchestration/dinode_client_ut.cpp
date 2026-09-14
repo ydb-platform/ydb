@@ -5,6 +5,7 @@
 #include <ydb/services/udf_store/events.h>
 #include <ydb/services/udf_store/service.h>
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
@@ -65,7 +66,6 @@ private:
 };
 
 struct TEnvOptions {
-    bool EnableController = true;
     //! Zero means the database has no controller yet, i.e. the state an
     //! unmigrated tenant is in.
     ui64 ControllerTabletId = ::NKikimr::NUdfStore::ControllerTabletId;
@@ -115,7 +115,6 @@ public:
         NKikimrConfig::TUdfStoreConfig config;
         config.SetEnabled(true);
         config.SetEnableWasmUdf(true);
-        config.SetEnableWasmCompileController(options.EnableController);
         // Object code is host-specific, so the service normally detects the
         // platform; pinning it keeps the assertions independent of the machine.
         config.SetWasmCpuSpecOverride(TestCpuSpec);
@@ -228,6 +227,15 @@ public:
         return SeenNeedArtifacts;
     }
 
+    //! Gaps the node found while the database has no controller to report them
+    //! to. Nothing compiles them, so this is the only trace they leave.
+    i64 GapsWithoutController() {
+        return GetServiceCounters(Runtime.GetAppData(0).Counters, "udf_store")
+            ->GetSubgroup("subsystem", "dinode")
+            ->GetCounter("WasmGapsWithoutController", false)
+            ->Val();
+    }
+
 private:
     void Observe(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
@@ -296,21 +304,9 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetNodeId(), env.NodeId());
     }
 
-    Y_UNIT_TEST(FlagOffNeverContactsController) {
-        TDinodeEnv env({.EnableController = false});
-        env.InitializeService();
-        env.Settle(TickTime);
-
-        UNIT_ASSERT_VALUES_EQUAL_C(env.NavigateCount(), 0,
-            "the compile controller was resolved with the feature flag off");
-        UNIT_ASSERT_VALUES_EQUAL_C(env.Registers().size(), 0,
-            "the node registered with the controller with the feature flag off");
-        UNIT_ASSERT_VALUES_EQUAL_C(env.Heartbeats().size(), 0,
-            "the controller tick is running with the feature flag off");
-    }
-
-    Y_UNIT_TEST(DatabaseWithoutControllerIsTolerated) {
-        // An unmigrated tenant: the params carry no controller id at all.
+    Y_UNIT_TEST(DatabaseWithoutControllerCompilesNothing) {
+        // An unmigrated tenant: the params carry no controller id at all. There
+        // is no local fallback anymore, so the gap simply stays open.
         TDinodeEnv env({.ControllerTabletId = 0});
         env.InitializeService();
         env.Settle(TickTime);
@@ -318,6 +314,14 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
         UNIT_ASSERT_C(env.NavigateCount() > 0, "discovery never asked the scheme cache");
         UNIT_ASSERT_VALUES_EQUAL_C(env.Registers().size(), 0,
             "the node registered with a controller the database does not have");
+
+        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
+        // Repeating the same gap must not inflate the gauge: every refresh
+        // rediscovers it.
+        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
+
+        UNIT_ASSERT_VALUES_EQUAL_C(env.GapsWithoutController(), 1,
+            "a gap nobody can compile was not accounted for");
     }
 
     Y_UNIT_TEST(SnapshotAsksTheControllerInsteadOfCompiling) {
@@ -354,16 +358,6 @@ Y_UNIT_TEST_SUITE(WasmCompileControllerClient) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(env.NeedArtifacts().size(), 2, "a re-upload was not reported");
         UNIT_ASSERT_VALUES_EQUAL(env.NeedArtifacts().back().GetKey().GetUid(), "u2");
-    }
-
-    Y_UNIT_TEST(FlagOffKeepsTheSnapshotPath) {
-        TDinodeEnv env({.EnableController = false});
-        env.InitializeService();
-
-        env.SendSnapshot({{.Name = "m1", .Uid = "u1"}});
-
-        UNIT_ASSERT_VALUES_EQUAL_C(env.NeedArtifacts().size(), 0,
-            "the node reported a gap to the controller with the feature flag off");
     }
 
     Y_UNIT_TEST(AssignmentIsClaimedInHeartbeat) {

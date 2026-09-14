@@ -31,7 +31,7 @@ void AddNavigateByPathId(
 } // namespace
 
 void TUdfStoreService::ResolveCompileController() {
-    if (!EnableCompileControllerFlag || ControllerResolveStage == EControllerResolveStage::InFlight) {
+    if (ControllerResolveStage == EControllerResolveStage::InFlight) {
         return;
     }
 
@@ -114,8 +114,11 @@ void TUdfStoreService::SendRegister() {
         return;
     }
     // A new leader knows nothing of what was reported to the previous one, so
-    // the gaps this node sees have to be offered again.
+    // the gaps this node sees have to be offered again. The ones dropped while
+    // there was no controller are among them: the next refresh re-derives them.
     ReportedGaps.clear();
+    GapsWithoutController.clear();
+    GapsWithoutControllerGauge->Set(0);
     auto request = std::make_unique<TEvCompileController::TEvRegister>();
     request->Record.SetCpuSpec(LocalCpuSpec);
     request->Record.SetNodeId(SelfId().NodeId());
@@ -149,9 +152,6 @@ void TUdfStoreService::ScheduleControllerTick() {
 }
 
 void TUdfStoreService::HandleControllerTick() {
-    if (!EnableCompileControllerFlag) {
-        return;
-    }
     if (!CompileControllerPipe) {
         // Covers both a controller that did not exist at startup and a pipe
         // that broke: the tablet may also have moved to another node.
@@ -200,13 +200,18 @@ void TUdfStoreService::Handle(TEvCompileController::TEvRegisterResult::TPtr& ev)
 
 void TUdfStoreService::RequestArtifact(const TString& name, const TString& uid, bool isLibrary) {
     if (!CompileControllerPipe) {
-        // Nobody else will pick this gap up, because under the flag the snapshot
-        // path no longer compiles locally. It is reported again on the next
-        // snapshot refresh, but on a database that has not been migrated yet
-        // there is no controller to report it to at all.
-        ALS_WARN(NKikimrServices::METADATA_PROVIDER)
-            << "TUdfStoreService: no compile controller to report a gap to, dropping "
-            << (isLibrary ? "library " : "module ") << name << " uid " << uid;
+        // Nobody else will pick this gap up: the snapshot path no longer
+        // compiles locally. On a database that has not been migrated yet there
+        // is no controller to report it to at all, and the gap stays open until
+        // one appears.
+        auto& knownUid = GapsWithoutController[name];
+        if (knownUid != uid) {
+            knownUid = uid;
+            ALS_WARN(NKikimrServices::METADATA_PROVIDER)
+                << "TUdfStoreService: no compile controller to report a gap to, dropping "
+                << (isLibrary ? "library " : "module ") << name << " uid " << uid;
+        }
+        GapsWithoutControllerGauge->Set(GapsWithoutController.size());
         return;
     }
     // The snapshot handler rediscovers every gap on every refresh, so without

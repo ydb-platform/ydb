@@ -8,6 +8,7 @@
 #include <ydb/services/udf_store/service.h>
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -49,9 +50,34 @@ struct TSeenAssignment {
     }
 };
 
+//! Just the one exchange the controller needs from the console at boot: it
+//! subscribes, and the answer comes back before anything else it started.
+class TConfigsDispatcherStub : public TActorBootstrapped<TConfigsDispatcherStub> {
+public:
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
+            default:
+                break;
+        }
+    }
+
+private:
+    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev) {
+        Send(ev->Sender, new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse());
+    }
+};
+
 class TTestEnv {
 public:
-    explicit TTestEnv(ui32 nodeCount = 1)
+    //! `answerConfigWhileBooting` stands a console up before the tablet, so
+    //! that the subscription it takes in OnActivateExecutor is answered while
+    //! it is still running its init transactions, the way a real one would.
+    explicit TTestEnv(ui32 nodeCount = 1, bool answerConfigWhileBooting = false)
         : Runtime(nodeCount, false)
     {
         Runtime.SetLogPriority(NKikimrServices::METADATA_PROVIDER, NActors::NLog::PRI_DEBUG);
@@ -67,6 +93,15 @@ public:
             Observe(ev);
             return TTestActorRuntime::EEventAction::PROCESS;
         });
+
+        if (answerConfigWhileBooting) {
+            for (ui32 nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
+                Runtime.RegisterService(
+                    NConsole::MakeConfigsDispatcherID(Runtime.GetNodeId(nodeIndex)),
+                    Runtime.Register(new TConfigsDispatcherStub(), nodeIndex),
+                    nodeIndex);
+            }
+        }
 
         const TActorId bootstrapper = CreateTestBootstrapper(Runtime,
             CreateTestTabletInfo(ControllerTabletId, TTabletTypes::WasmCompileController),
@@ -289,6 +324,17 @@ Y_UNIT_TEST_SUITE(WasmCompileController) {
         UNIT_ASSERT_VALUES_EQUAL_C(assignments.size(), 1, "thundering herd across peers of one platform");
         UNIT_ASSERT_VALUES_EQUAL(assignments[0].Name(), "m1");
         UNIT_ASSERT_VALUES_EQUAL(assignments[0].Uid(), "u1");
+    }
+
+    Y_UNIT_TEST(ConfigAnsweredWhileBootingDoesNotKillTheNode) {
+        TTestEnv env(1, /*answerConfigWhileBooting=*/true);
+        env.RegisterWorker(0, CpuSpecX86);
+        env.SetArtifacts(CpuSpecX86, {});
+        env.SetSnapshot({{.Name = "m1", .Uid = "u1"}});
+        env.Settle();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Assignments().size(), 1,
+            "the tablet did not survive a console answer that beat its init transactions");
     }
 
     Y_UNIT_TEST(TwoPlatformsCompileInParallel) {

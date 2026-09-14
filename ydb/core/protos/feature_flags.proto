@@ -387,7 +387,7 @@ message TFeatureFlags {
     optional bool EnableStreamingAggregation = 328 [default = false];
     optional bool EnableTableBackupAsSql = 329 [default = false];
     // Creates the per-tenant WasmCompileController tablet for new and migrated
-    // databases. Whether dinodes actually route compiles through it is a
-    // separate switch, UdfStoreConfig.EnableWasmCompileController.
+    // databases. Without it nothing compiles WASM modules to native code:
+    // dinodes only ever compile what this tablet assigns them.
     optional bool EnableWasmCompileController = 330 [default = false];
 }

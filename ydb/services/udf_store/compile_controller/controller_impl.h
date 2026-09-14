@@ -81,7 +81,14 @@ public:
     TWasmCompileController(const NActors::TActorId& tablet, TTabletStorageInfo* info);
 
     STFUNC(StateInit) {
-        StateInitImpl(ev, SelfId());
+        switch (ev->GetTypeRewrite()) {
+            // The subscription is taken in OnActivateExecutor, so the console
+            // can answer it long before TTxInit lets the tablet into StateWork.
+            hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
+            hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
+            default:
+                StateInitImpl(ev, SelfId());
+        }
     }
 
     STFUNC(StateWork) {

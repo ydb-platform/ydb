@@ -24,6 +24,7 @@ struct ITimestampProvider
 
     //! Returns the latest timestamp returned from #GenerateTimestamps.
     virtual TTimestamp GetLatestTimestamp(NObjectClient::TCellTag clockClusterTag = NObjectClient::InvalidCellTag) = 0;
+    virtual void Reconfigure(const TRemoteTimestampProviderConfigPtr& config) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(ITimestampProvider)

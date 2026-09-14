@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bloom_filter_defaults.h"
 #include "flat_page_iface.h"
 #include "flat_row_eggs.h"
 
@@ -21,14 +22,14 @@ namespace NPage {
         /**
          * Resets this instance back to the beginning
          */
-        virtual void Reset() noexcept = 0;
+        virtual void Reset() = 0;
 
         /**
          * Returns true if the specified key intersects with the key space
          *
          * NOTE: consecutive calls to HasKey must be in an increasing key order
          */
-        virtual bool HasKey(TCellsRef key) noexcept = 0;
+        virtual bool HasKey(TCellsRef key) = 0;
     };
 
     /**
@@ -41,14 +42,14 @@ namespace NPage {
         /**
          * Resets this instance back to the beginning
          */
-        virtual void Reset() noexcept = 0;
+        virtual void Reset() = 0;
 
         /**
          * Returns true if key crosses a split boundary
          *
          * NOTE: consecutive calls to ShouldSplit must be in an increasing key order
          */
-        virtual bool ShouldSplit(TCellsRef key) noexcept = 0;
+        virtual bool ShouldSplit(TCellsRef key) = 0;
     };
 
     /**
@@ -88,7 +89,11 @@ namespace NPage {
         ui32 MaxLargeBlob = 8 * 1024 * 1024 - 8; /* Maximum large blob size */
         ui32 LargeEdge = Max<ui32>();   /* External blob edge size      */
         ui32 SmallEdge = Max<ui32>();   /* Outer blobs edge bytes limit */
-        bool ByKeyFilter = false;       /* Per-part bloom filter        */
+        struct TByKeyFilterPrefix {
+            ui32 PrefixLength = 0;
+            double FalsePositiveProbability = DefaultBloomFilterFpp;
+        };
+        TVector<TByKeyFilterPrefix> ByKeyFilterPrefixes;
         ui64 MaxRows = 0;               /* Used to set up bloom filter size */
         ui64 SliceSize = Max<ui64>();   /* Data size for slice creation */
         ui64 MainPageCollectionEdge = Max<ui64>();

@@ -48,6 +48,11 @@ AWS_STATIC_IMPL double aws_htonf64(double x);
 AWS_STATIC_IMPL uint32_t aws_ntoh32(uint32_t x);
 
 /**
+ * Convert 32 bit integer from little endian to host byte order.
+ */
+AWS_STATIC_IMPL uint32_t aws_letoh32(uint32_t x);
+
+/**
  * Convert 32 bit float from network to host byte order.
  */
 AWS_STATIC_IMPL float aws_ntohf32(float x);
@@ -66,11 +71,16 @@ AWS_STATIC_IMPL uint16_t aws_hton16(uint16_t x);
  */
 AWS_STATIC_IMPL uint16_t aws_ntoh16(uint16_t x);
 
+/**
+ * Convert 16 bit integer from little endian to host byte order.
+ */
+AWS_STATIC_IMPL uint16_t aws_letoh16(uint16_t x);
+
+AWS_EXTERN_C_END
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/byte_order.inl>
 #endif /* AWS_NO_STATIC_IMPL */
 
-AWS_EXTERN_C_END
 AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_BYTE_ORDER_H */

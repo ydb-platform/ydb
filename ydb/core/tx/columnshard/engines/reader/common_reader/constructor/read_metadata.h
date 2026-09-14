@@ -1,7 +1,10 @@
 #pragma once
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
 
 #include <ydb/library/formats/arrow/replace_key.h>
@@ -12,13 +15,83 @@ class TLockSharingInfo;
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+class TSpecialReadContext;
+class IDataSource;
+
+class ISourcesConstructor {
+private:
+    virtual void DoClear() = 0;
+    virtual void DoAbort() = 0;
+    virtual bool DoIsFinished() const = 0;
+    virtual std::shared_ptr<IDataSource> DoTryExtractNext(
+        const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) = 0;
+    virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) = 0;
+    virtual TString DoDebugString() const = 0;
+    bool InitCursorFlag = false;
+
+    virtual void DoFillReadStats(TReadStats& /*stats*/) const {
+    }
+
+public:
+    virtual TString GetClassName() const {
+        return "UNDEFINED";
+    }
+
+    virtual ~ISourcesConstructor() = default;
+
+    void FillReadStats(const std::shared_ptr<TReadStats>& stats) const {
+        AFL_VERIFY(stats);
+        DoFillReadStats(*stats);
+    }
+
+    virtual std::vector<TPortionInfo::TConstPtr> GetConflictingPortions() const {
+        return std::vector<TPortionInfo::TConstPtr>();
+    }
+
+    TString DebugString() const {
+        TStringBuilder sb;
+        sb << "{";
+        sb << "class_name=" << GetClassName() << ";";
+        sb << "internal={" << DoDebugString() << "};";
+        sb << "}";
+        return sb;
+    }
+
+    void Clear() {
+        return DoClear();
+    }
+
+    void Abort() {
+        return DoAbort();
+    }
+
+    bool IsFinished() const {
+        return DoIsFinished();
+    }
+
+    std::shared_ptr<IDataSource> TryExtractNext(const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) {
+        AFL_VERIFY(!IsFinished());
+        AFL_VERIFY(InitCursorFlag);
+        auto result = DoTryExtractNext(context, inFlightCurrentLimit);
+        //        AFL_VERIFY(result);
+        return result;
+    }
+
+    void InitCursor(const std::shared_ptr<IScanCursor>& cursor) {
+        AFL_VERIFY(!InitCursorFlag);
+        InitCursorFlag = true;
+        if (cursor && cursor->IsInitialized()) {
+            return DoInitCursor(cursor);
+        }
+    }
+};
+
 class TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
 
 private:
-    const ui64 PathId;
-    std::shared_ptr<TAtomicCounter> BrokenWithCommitted = std::make_shared<TAtomicCounter>();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
+    std::shared_ptr<NOlap::NDataLocks::TManager::TGuard> DataLockGuard;
 
     class TWriteIdInfo {
     private:
@@ -28,127 +101,136 @@ private:
     public:
         TWriteIdInfo(const ui64 lockId, const std::shared_ptr<TAtomicCounter>& counter)
             : LockId(lockId)
-            , Conflicts(counter) {
+            , Conflicts(counter)
+        {
         }
 
         ui64 GetLockId() const {
             return LockId;
         }
 
-        void MarkAsConflictable() const {
+        void MarkAsConflicting() const {
             Conflicts->Inc();
         }
 
-        bool IsConflictable() const {
+        bool IsConflicting() const {
             return Conflicts->Val();
         }
     };
 
     THashMap<ui64, std::shared_ptr<TAtomicCounter>> LockConflictCounters;
-    THashMap<TInsertWriteId, TWriteIdInfo> ConflictedWriteIds;
+    THashMap<TInsertWriteId, TWriteIdInfo> ConflictingWrites;
 
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& owner) const override;
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& owner) const override;
     virtual void DoOnReplyConstruction(const ui64 tabletId, NKqp::NInternalImplementation::TEvScanData& scanData) const override;
 
-    virtual TConclusionStatus DoInitCustom(
-        const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) = 0;
+    virtual TConclusionStatus DoInitCustom(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription) = 0;
+
+    mutable std::unique_ptr<ISourcesConstructor> SourcesConstructor;
+    bool DuplicateFilteringNeeded = false;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadata>;
 
-    bool GetBrokenWithCommitted() const {
-        return BrokenWithCommitted->Val();
+    std::unique_ptr<ISourcesConstructor> ExtractSelectInfo() const {
+        AFL_VERIFY(!!SourcesConstructor);
+        return std::move(SourcesConstructor);
     }
-    THashSet<ui64> GetConflictableLockIds() const {
+
+    // Breaking it right away, not at read finish, so that this scan stops at its next step
+    // (HasWritesAndBroken) and its own reply already reports the lock as broken (DoOnReplyConstruction).
+    void BreakLock() const;
+
+    virtual bool HasWritesAndBroken() const override;
+
+    THashSet<ui64> GetConflictingLockIds() const {
         THashSet<ui64> result;
-        for (auto&& i : ConflictedWriteIds) {
-            if (i.second.IsConflictable()) {
-                result.emplace(i.second.GetLockId());
+        for (auto& [_, writeIdInfo] : ConflictingWrites) {
+            if (writeIdInfo.IsConflicting()) {
+                result.emplace(writeIdInfo.GetLockId());
             }
         }
         return result;
     }
 
-    bool IsLockConflictable(const ui64 lockId) const {
-        auto it = LockConflictCounters.find(lockId);
-        AFL_VERIFY(it != LockConflictCounters.end());
-        return it->second->Val();
+    THashSet<ui64> GetMaybeConflictingLockIds() const {
+        THashSet<ui64> result;
+        for (auto& [_, writeInfo] : ConflictingWrites) {
+            result.emplace(writeInfo.GetLockId());
+        }
+        return result;
     }
 
-    bool IsWriteConflictable(const TInsertWriteId writeId) const {
-        auto it = ConflictedWriteIds.find(writeId);
-        AFL_VERIFY(it != ConflictedWriteIds.end());
-        return it->second.IsConflictable();
+    bool MayWriteBeConflicting(const TInsertWriteId writeId) const {
+        return ConflictingWrites.contains(writeId);
     }
 
-    void AddWriteIdToCheck(const TInsertWriteId writeId, const ui64 lockId) {
+    void AddMaybeConflictingWrite(const TInsertWriteId writeId, const ui64 lockId) {
         auto it = LockConflictCounters.find(lockId);
         if (it == LockConflictCounters.end()) {
             it = LockConflictCounters.emplace(lockId, std::make_shared<TAtomicCounter>()).first;
         }
-        AFL_VERIFY(ConflictedWriteIds.emplace(writeId, TWriteIdInfo(lockId, it->second)).second);
+        AFL_VERIFY(ConflictingWrites.emplace(writeId, TWriteIdInfo(lockId, it->second)).second);
     }
 
-    [[nodiscard]] bool IsMyUncommitted(const TInsertWriteId writeId) const;
-
-    void SetConflictedWriteId(const TInsertWriteId writeId) const {
-        auto it = ConflictedWriteIds.find(writeId);
-        AFL_VERIFY(it != ConflictedWriteIds.end());
-        it->second.MarkAsConflictable();
+    void SetWriteConflicting(const TInsertWriteId writeId) const {
+        auto it = ConflictingWrites.find(writeId);
+        AFL_VERIFY(it != ConflictingWrites.end());
+        it->second.MarkAsConflicting();
     }
 
-    void SetBrokenWithCommitted() const {
-        BrokenWithCommitted->Inc();
-    }
-
-    NArrow::NMerger::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
+    NArrow::NMerger::TSortableBatchPosition BuildSortedPosition(const NArrow::TSimpleRow& key) const;
     virtual std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<TReadContext>& context) const = 0;
 
     bool HasProcessingColumnIds() const {
         return GetProgram().HasProcessingColumnIds();
     }
 
-    ui64 GetPathId() const {
-        return PathId;
+    NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
+    std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
+    const ESourcesSorting SourcesSorting;
+
+    bool NeedDuplicateFiltering() const {
+        return DuplicateFilteringNeeded;
     }
 
-    std::shared_ptr<TSelectInfo> SelectInfo;
-    NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
+    ESourcesSorting GetSourcesSorting() const {
+        return SourcesSorting;
+    }
+
+    EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
     std::shared_ptr<TReadStats> ReadStats;
 
-    TReadMetadata(const ui64 pathId, const std::shared_ptr<TVersionedIndex> info, const TSnapshot& snapshot, const ESorting sorting,
-        const TProgramContainer& ssaProgram, const std::shared_ptr<IScanCursor>& scanCursor)
-        : TBase(info, sorting, ssaProgram, info->GetSchemaVerified(snapshot), snapshot, scanCursor)
-        , PathId(pathId)
-        , ReadStats(std::make_shared<TReadStats>()) {
+    TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read);
+
+    TReadMetadata(const TReadMetadata&) = delete;
+    TReadMetadata& operator=(const TReadMetadata&) = delete;
+
+    bool OrderByLimitAllowed() const {
+        return TableMetadataAccessor->OrderByLimitAllowed();
+    }
+
+    EScanGroupedMemoryLimiterOperator GetGroupedMemoryLimiterOperator() const {
+        return GroupedMemoryLimiterOperator;
     }
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {
         return GetResultSchema()->GetIndexInfo().GetPrimaryKeyColumns();
     }
 
-    TConclusionStatus Init(
-        const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor);
+    TConclusionStatus Init(const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const EReaderClass readerClass);
 
     std::set<ui32> GetEarlyFilterColumnIds() const;
     std::set<ui32> GetPKColumnIds() const;
 
-    virtual bool Empty() const = 0;
-
-    size_t NumIndexedBlobs() const {
-        Y_ABORT_UNLESS(SelectInfo);
-        return SelectInfo->Stats().Blobs;
-    }
-
     virtual TString DebugString() const override {
         TStringBuilder result;
 
-        result << TBase::DebugString() << ";" << " index blobs: " << NumIndexedBlobs() << " committed blobs: "
-               << " at snapshot: " << GetRequestSnapshot().DebugString();
+        result << TBase::DebugString() << " at snapshot: " << GetRequestSnapshot().DebugString();
 
-        if (SelectInfo) {
-            result << ", " << SelectInfo->DebugString();
+        if (SourcesConstructor) {
+            result << ", " << SourcesConstructor->DebugString();
         }
         return result;
     }

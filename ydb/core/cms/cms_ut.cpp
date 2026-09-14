@@ -6,6 +6,8 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/base/tabletid.h>
+#include <ydb/core/protos/blobstorage_ddisk.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/svnversion/svnversion.h>
@@ -35,6 +37,21 @@ void CheckLoadLogRecord(const NKikimrCms::TLogRecord &rec,
     UNIT_ASSERT_VALUES_EQUAL(data.GetHost(), host);
     UNIT_ASSERT_VALUES_EQUAL(data.GetNodeId(), nodeId);
     UNIT_ASSERT_VALUES_EQUAL(data.GetVersion(), version);
+}
+
+void SetRunningSysTablet(ui32 nodeId, bool running) {
+    TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+    auto &info = TFakeNodeWhiteboardService::Info[nodeId];
+    const ui64 tabletId = MakeBSControllerID();
+    if (running) {
+        auto &tablet = info.TabletStateInfo[tabletId];
+        tablet.SetTabletId(tabletId);
+        tablet.SetType(TTabletTypes::BSController);
+        tablet.SetState(NKikimrWhiteboard::TTabletStateInfo::Active);
+        tablet.SetLeader(true);
+    } else {
+        info.TabletStateInfo.erase(tabletId);
+    }
 }
 
 } // anonymous namespace
@@ -95,6 +112,453 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 5, 0)));
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 6, 0)));
             UNIT_ASSERT(group.VDisks.contains(TVDiskID(groupId, 1, 0, 7, 0)));
+        }
+    }
+
+    Y_UNIT_TEST(DDiskInfoReadApiEmptyState)
+    {
+        TCmsTestEnv env(8);
+
+        const auto list = env.RequestDDiskInfoList();
+        UNIT_ASSERT_VALUES_EQUAL(list.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(list.TabletsSize(), 0);
+
+        const auto snapshot = env.RequestDDiskInfo(42);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetStatus(), NKikimrProto::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetTabletId(), 42);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncOnCmsActivation)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+
+        const ui64 tabletId = 1001;
+        const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+            allocation.ShortDebugString());
+
+        const auto bscSnapshot = env.RequestBSControllerDDiskInfo(tabletId);
+        UNIT_ASSERT_VALUES_EQUAL_C(bscSnapshot.GetStatus(), NKikimrProto::OK,
+            bscSnapshot.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId, bscSnapshot.GetRevision());
+
+        env.RestartCms();
+
+        const auto snapshot = env.WaitForDDiskInfo(tabletId, bscSnapshot.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetTabletId(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetRevision(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GroupsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetGroups(0).GetDirectBlockGroupId(), 1);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncOnBscUpdate)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(2);
+
+        const ui64 tabletId = 1002;
+        const auto first = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), NKikimrProto::OK,
+            first.ShortDebugString());
+        const auto initial = env.WaitForDDiskInfo(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(initial.GroupsSize(), 1);
+
+        const auto second = env.AllocateDDiskBlockGroup(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(second.GetStatus(), NKikimrProto::OK,
+            second.ShortDebugString());
+        const auto updated = env.WaitForDDiskInfo(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetRevision(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GroupsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(0).GetDirectBlockGroupId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(1).GetDirectBlockGroupId(), 2);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSurvivesBscRestart)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+
+        const ui64 tabletId = 1003;
+        const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+            allocation.ShortDebugString());
+        const auto before = env.WaitForDDiskInfo(tabletId, 1);
+
+        env.RestartBSController();
+
+        const auto after = env.WaitForDDiskInfo(tabletId, before.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetRevision(), before.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(after.GroupsSize(), before.GroupsSize());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetGroups(0).GetDirectBlockGroupId(), 1);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncContinuesAfterBscRestart)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(2);
+
+        const ui64 tabletId = 1005;
+        const auto first = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), NKikimrProto::OK,
+            first.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId, 1);
+
+        env.RestartBSController();
+
+        const auto second = env.AllocateDDiskBlockGroup(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(second.GetStatus(), NKikimrProto::OK,
+            second.ShortDebugString());
+        const auto updated = env.WaitForDDiskInfo(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetRevision(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GroupsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(0).GetDirectBlockGroupId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(1).GetDirectBlockGroupId(), 2);
+    }
+
+    Y_UNIT_TEST(DDiskInfoPersistsWhenBscIsUnavailable)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+
+        const ui64 tabletId = 1004;
+        const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+            allocation.ShortDebugString());
+        const auto before = env.WaitForDDiskInfo(tabletId, 1);
+
+        env.SendRestartBSController();
+        env.RestartCms();
+
+        const auto after = env.RequestDDiskInfo(tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetTabletId(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetRevision(), before.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(after.GroupsSize(), before.GroupsSize());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetGroups(0).GetDirectBlockGroupId(), 1);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncLimitsInFlightRequests)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(1);
+
+        const TActorId cmsActorId = ResolveTablet(env, env.CmsId);
+
+        TVector<TAutoPtr<IEventHandle>> delayedResults;
+        ui32 getRequests = 0;
+        ui32 capturedResults = 0;
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTablet) {
+                ++getRequests;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult
+                    && ev->Recipient == cmsActorId
+                    && capturedResults < 16) {
+                ++capturedResults;
+                delayedResults.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        for (ui64 tabletId = 1; tabletId <= 17; ++tabletId) {
+            const auto allocation = env.AllocateDDiskBlockGroup(tabletId, tabletId);
+            UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+                allocation.ShortDebugString());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(getRequests, 16);
+        UNIT_ASSERT_VALUES_EQUAL(delayedResults.size(), 16);
+
+        env.Send(delayedResults.front().Release(), 0, true);
+        delayedResults.erase(delayedResults.begin());
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back([&getRequests] (IEventHandle&) {
+            return getRequests == 17;
+        });
+        env.DispatchEvents(options);
+
+        UNIT_ASSERT_VALUES_EQUAL(getRequests, 17);
+    }
+
+    Y_UNIT_TEST(DDiskTabletListEmptyState)
+    {
+        TCmsTestEnv env(8);
+
+        const auto tablets = env.RequestDDiskTabletList();
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetTotalCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tablets.TabletsSize(), 0);
+
+        const auto disks = env.RequestDDiskDiskList();
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(disks.GetTotalCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(disks.DisksSize(), 0);
+    }
+
+    Y_UNIT_TEST(DDiskTabletListFilterSortAndPage)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(4);
+
+        // tabletId 2001 gets a single group.
+        const ui64 tabletId1 = 2001;
+        const auto a1 = env.AllocateDDiskBlockGroup(tabletId1, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(a1.GetStatus(), NKikimrProto::OK, a1.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId1, 1);
+
+        // tabletId 2002 gets two groups (revision 2).
+        const ui64 tabletId2 = 2002;
+        const auto a2 = env.AllocateDDiskBlockGroup(tabletId2, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(a2.GetStatus(), NKikimrProto::OK, a2.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId2, 1);
+        const auto a3 = env.AllocateDDiskBlockGroup(tabletId2, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(a3.GetStatus(), NKikimrProto::OK, a3.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId2, 2);
+
+        // tabletId 2003 gets a single group.
+        const ui64 tabletId3 = 2003;
+        const auto a4 = env.AllocateDDiskBlockGroup(tabletId3, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(a4.GetStatus(), NKikimrProto::OK, a4.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId3, 1);
+
+        // No filter, default sort (by tablet id ascending), no paging.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetLimit(0);
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetTabletId(), tabletId1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(1).GetTabletId(), tabletId2);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(2).GetTabletId(), tabletId3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetGroupsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(1).GetGroupsCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(2).GetGroupsCount(), 1);
+            // No PDisk cluster info is available for the dynamically allocated
+            // DDisk pool disks in this test environment, so CMS conservatively
+            // treats them as available and reports zero unavailable disks.
+            for (const auto &tablet : resp.GetTablets()) {
+                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailableDDiskCount(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.GetUnavailablePersistentBufferCount(), 0);
+            }
+        }
+
+        // Filter by tablet id substring.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetFilterTabletId(ToString(tabletId2));
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetTabletId(), tabletId2);
+        }
+
+        // Sort by groups count ascending.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT);
+            request.SetLimit(0);
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetGroupsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(1).GetGroupsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(2).GetGroupsCount(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(2).GetTabletId(), tabletId2);
+            // Tablets with equal groups count preserve tablet id ordering as a tiebreaker.
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetTabletId(), tabletId1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(1).GetTabletId(), tabletId3);
+        }
+
+        // Sort by tablet id descending.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetSortDescending(true);
+            request.SetLimit(0);
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(0).GetTabletId(), tabletId3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(1).GetTabletId(), tabletId2);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTablets(2).GetTabletId(), tabletId1);
+        }
+
+        // Paging: page size 2, verify both pages reconstruct full ascending order.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetLimit(2);
+            request.SetOffset(0);
+            const auto page1 = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetTotalCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(page1.TabletsSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetTablets(0).GetTabletId(), tabletId1);
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetTablets(1).GetTabletId(), tabletId2);
+
+            request.SetOffset(2);
+            const auto page2 = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(page2.GetTotalCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(page2.TabletsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page2.GetTablets(0).GetTabletId(), tabletId3);
+        }
+
+        // Offset beyond available items returns an empty page but a correct total count.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetOffset(100);
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 0);
+        }
+
+        // OnlyProblems: with no unavailable disks known, everything is filtered out.
+        {
+            NKikimrCms::TDDiskTabletListRequest request;
+            request.SetOnlyProblems(true);
+            const auto resp = env.RequestDDiskTabletList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(DDiskDiskListAggregationFilterSortAndPage)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(4);
+
+        const ui64 tabletId1 = 3001;
+        const auto a1 = env.AllocateDDiskBlockGroup(tabletId1, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(a1.GetStatus(), NKikimrProto::OK, a1.ShortDebugString());
+        const auto info1 = env.WaitForDDiskInfo(tabletId1, 1);
+        UNIT_ASSERT_VALUES_EQUAL(info1.GroupsSize(), 1);
+
+        const ui64 tabletId2 = 3002;
+        const auto a2 = env.AllocateDDiskBlockGroup(tabletId2, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(a2.GetStatus(), NKikimrProto::OK, a2.ShortDebugString());
+        const auto info2 = env.WaitForDDiskInfo(tabletId2, 1);
+        UNIT_ASSERT_VALUES_EQUAL(info2.GroupsSize(), 1);
+
+        // Expected disk usage derived directly from the BS Controller snapshots.
+        THashSet<TString> expectedDiskKeys;
+        auto collectKeys = [&](const NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult &info) {
+            for (const auto &group : info.GetGroups()) {
+                for (const auto &id : group.GetDDiskId()) {
+                    expectedDiskKeys.insert(TStringBuilder() << id.GetNodeId() << ":" << id.GetPDiskId() << ":" << id.GetDDiskSlotId());
+                }
+                for (const auto &id : group.GetPersistentBufferDDiskId()) {
+                    expectedDiskKeys.insert(TStringBuilder() << id.GetNodeId() << ":" << id.GetPDiskId() << ":" << id.GetDDiskSlotId());
+                }
+            }
+        };
+        collectKeys(info1);
+        collectKeys(info2);
+        UNIT_ASSERT(!expectedDiskKeys.empty());
+
+        // No filter, no paging: total count matches the number of distinct disks used.
+        NKikimrCms::TDDiskDiskListResponse full;
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetLimit(0);
+            full = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(full.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(full.GetTotalCount(), expectedDiskKeys.size());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(full.DisksSize()), expectedDiskKeys.size());
+
+            THashSet<TString> actualDiskKeys;
+            for (const auto &disk : full.GetDisks()) {
+                actualDiskKeys.insert(TStringBuilder() << disk.GetDiskId().GetNodeId() << ":"
+                    << disk.GetDiskId().GetPDiskId() << ":" << disk.GetDiskId().GetDDiskSlotId());
+                // No cluster info is available for these disks in this environment,
+                // so they must be conservatively reported as available.
+                UNIT_ASSERT(disk.GetAvailable());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(actualDiskKeys, expectedDiskKeys);
+
+            // Results must be sorted ascending by (NodeId, PDiskId, DDiskSlotId) by default.
+            for (size_t i = 1; i < static_cast<size_t>(full.DisksSize()); ++i) {
+                const auto &prev = full.GetDisks(i - 1).GetDiskId();
+                const auto &cur = full.GetDisks(i).GetDiskId();
+                const auto prevKey = std::make_tuple(prev.GetNodeId(), prev.GetPDiskId(), prev.GetDDiskSlotId());
+                const auto curKey = std::make_tuple(cur.GetNodeId(), cur.GetPDiskId(), cur.GetDDiskSlotId());
+                UNIT_ASSERT(prevKey < curKey);
+            }
+        }
+
+        // Filter by tablet id: only disks used by tabletId1 must be returned.
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetFilterTabletId(ToString(tabletId1));
+            request.SetLimit(0);
+            const auto resp = env.RequestDDiskDiskList(request);
+            for (const auto &disk : resp.GetDisks()) {
+                bool foundInDDisk = false;
+                for (auto id : disk.GetDDiskTabletIds()) {
+                    foundInDDisk = foundInDDisk || (id == tabletId1);
+                }
+                bool foundInBuffer = false;
+                for (auto id : disk.GetPersistentBufferTabletIds()) {
+                    foundInBuffer = foundInBuffer || (id == tabletId1);
+                }
+                UNIT_ASSERT(foundInDDisk || foundInBuffer);
+            }
+            UNIT_ASSERT(resp.DisksSize() > 0);
+        }
+
+        // Filter by disk id substring: pick the first disk's key from the full list.
+        {
+            UNIT_ASSERT(full.DisksSize() > 0);
+            const auto &sample = full.GetDisks(0).GetDiskId();
+            const TString key = TStringBuilder() << sample.GetNodeId() << ":" << sample.GetPDiskId() << ":" << sample.GetDDiskSlotId();
+
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetFilterDiskId(key);
+            const auto resp = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.DisksSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetDisks(0).GetDiskId().GetNodeId(), sample.GetNodeId());
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetDisks(0).GetDiskId().GetPDiskId(), sample.GetPDiskId());
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetDisks(0).GetDiskId().GetDDiskSlotId(), sample.GetDDiskSlotId());
+        }
+
+        // Sort descending must return the exact reverse of the ascending order.
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetSortDescending(true);
+            request.SetLimit(0);
+            const auto resp = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.DisksSize(), full.DisksSize());
+            for (size_t i = 0; i < static_cast<size_t>(resp.DisksSize()); ++i) {
+                const auto &a = resp.GetDisks(i).GetDiskId();
+                const auto &b = full.GetDisks(full.DisksSize() - 1 - i).GetDiskId();
+                UNIT_ASSERT_VALUES_EQUAL(a.GetNodeId(), b.GetNodeId());
+                UNIT_ASSERT_VALUES_EQUAL(a.GetPDiskId(), b.GetPDiskId());
+                UNIT_ASSERT_VALUES_EQUAL(a.GetDDiskSlotId(), b.GetDDiskSlotId());
+            }
+        }
+
+        // Paging reconstructs the full ascending list.
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetLimit(1);
+            request.SetOffset(0);
+            const auto page1 = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetTotalCount(), full.GetTotalCount());
+            UNIT_ASSERT_VALUES_EQUAL(page1.DisksSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetDisks(0).GetDiskId().GetNodeId(), full.GetDisks(0).GetDiskId().GetNodeId());
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetDisks(0).GetDiskId().GetPDiskId(), full.GetDisks(0).GetDiskId().GetPDiskId());
+            UNIT_ASSERT_VALUES_EQUAL(page1.GetDisks(0).GetDiskId().GetDDiskSlotId(), full.GetDisks(0).GetDiskId().GetDDiskSlotId());
+        }
+
+        // OnlyProblems: no known unavailable disks, so the result must be empty.
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetOnlyProblems(true);
+            const auto resp = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(resp.DisksSize(), 0);
         }
     }
 
@@ -459,6 +923,281 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                               "vdisk-3-1-0-1-0", "vdisk-3-1-0-5-0"));
     }
 
+    Y_UNIT_TEST(RequestReplaceDevicePDisk)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        env.CheckPermissionRequest("user", false, false, false, true, TStatus::NO_SUCH_DEVICE,
+                                   MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, "/dev/bad/device/path"));
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, 1, 60000000, env.PDiskName(0, 1))
+                ),
+            TStatus::ALLOW
+        );
+    }
+
+    Y_UNIT_TEST(RequestReplaceDevicePDiskByPath)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto pdiskId = env.PDiskId(0, 0);
+
+        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                ),
+            TStatus::ALLOW
+        );
+    }
+
+    Y_UNIT_TEST(RequestReplaceDeviceTwiceWithNoVDisks)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto pdiskId = env.PDiskId(0, 0);
+
+        TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.VDisksMoved = true;
+        node.VDiskStateInfo.clear();
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                ),
+            TStatus::ALLOW
+        );
+
+        env.CheckPermissionRequest(
+            MakePermissionRequest(TRequestOptions("user", false, false, false),
+                    MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                ),
+            TStatus::DISALLOW_TEMP
+        );
+    }
+
+    Y_UNIT_TEST(ManualRequestApproval)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        // Disconnect 3 nodes, in this case locking is not allowed
+        for (ui32 i = 0; i < 3; i++) {
+            auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(i)];
+            node.Connected = false;
+        }
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        auto req = MakePermissionRequest(
+            TRequestOptions("user", false, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+        // Request that cannot be fulfilled
+        auto rec1 = env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+
+        auto rid1 = rec1.GetRequestId();
+
+        // Manual approval
+        auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
+
+        // Check that request is now allowed
+        env.CheckRequest("user", rid1, false, TStatus::ALLOW);
+
+        TString permissionId = approveResp.GetManuallyApprovedPermissions(0).GetId();
+        auto rec2 = env.CheckGetPermission("user", permissionId);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), permissionId);
+
+        {
+            // Request cannot be fulfilled, since node 0 is locked by previously approved request
+            auto req = MakePermissionRequest(
+                TRequestOptions("user", false, false, true),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+            );
+            req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+            env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+        }
+
+        env.AdvanceCurrentTime(TDuration::Minutes(30));
+
+        {
+            // This will trigger CMS cleanup.
+            env.CheckPermissionRequest(MakePermissionRequest(
+                TRequestOptions("user", false, false, true),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+            ), TStatus::DISALLOW_TEMP);
+
+            auto list = env.CheckListRequests("user", 2);
+            auto reqs = list.GetRequests();
+            for (const auto& req : reqs) {
+                UNIT_ASSERT_VALUES_UNEQUAL(req.GetRequestId(), "user-r-1");
+            }
+
+            // Check that manually approved permission was cleaned up
+            env.CheckGetPermission("user", permissionId, false, TStatus::WRONG_REQUEST);
+        }
+    }
+
+    Y_UNIT_TEST(ManualRequestApprovalLockingAllNodes)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.Connected = false;
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        for (ui32 i = 0; i < 8; i++) {
+            auto req = MakePermissionRequest(
+                TRequestOptions("user", false, false, true),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(i), 60000000)
+            );
+            req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+            // Request that cannot be fulfilled
+            auto rec1 = env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+
+            auto rid1 = rec1.GetRequestId();
+
+            // Manual approval
+            auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
+            TString permissionId = approveResp.GetManuallyApprovedPermissions(0).GetId();
+            auto rec2 = env.CheckGetPermission("user", permissionId);
+            UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), permissionId);
+        }
+    }
+
+    Y_UNIT_TEST(ManualRequestApprovalWithPartialAlreadyApproved)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto req = MakePermissionRequest(
+            TRequestOptions("user", true, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)
+        );
+
+        req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+        auto rec1 = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(rec1.PermissionsSize(), 1);
+        auto rec2 = env.CheckGetPermission("user", rec1.GetPermissions(0).GetId());
+        UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), rec1.GetPermissions(0).GetId());
+
+        auto rid1 = rec1.GetRequestId();
+
+        // Manual approval
+        auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 2);
+        for (const auto& permission : approveResp.GetManuallyApprovedPermissions()) {
+            auto permissionId = permission.GetId();
+            auto rec3 = env.CheckGetPermission("user", permissionId);
+            UNIT_ASSERT_VALUES_EQUAL(rec3.PermissionsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rec3.GetPermissions(0).GetId(), permissionId);
+        }
+
+        // Check that request is now allowed
+        env.CheckRequest("user", rid1, false, TStatus::ALLOW);
+    }
+
+    Y_UNIT_TEST(ManualRequestApprovalAlreadyLockedNode)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto req = MakePermissionRequest(
+            TRequestOptions("user", true, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+        env.CheckPermissionRequest(req, TStatus::ALLOW);
+
+        auto req2 = MakePermissionRequest(
+            TRequestOptions("user", true, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req2->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+        auto rec2 = env.CheckPermissionRequest(req2, TStatus::DISALLOW_TEMP);
+        auto rid2 = rec2.GetRequestId();
+
+        // Manual approval should fail since node 0 is already locked
+        env.CheckApproveRequest("user", rid2, false, TStatus::WRONG_REQUEST);
+    }
+
+    Y_UNIT_TEST(RequestReplacePDiskDoesntBreakGroup)
+    {
+        auto opts = TTestEnvOpts(8, 2).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        {
+            auto pdiskId = env.PDiskId(0, 0);
+
+            TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+
+            env.CheckPermissionRequest(
+                MakePermissionRequest(TRequestOptions("user", false, false, false),
+                        MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                    ),
+                TStatus::ALLOW
+            );
+        }
+
+        {
+            auto pdiskId = env.PDiskId(1, 0);
+
+            TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+
+            env.CheckPermissionRequest(
+                MakePermissionRequest(TRequestOptions("user", false, false, false),
+                        MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                    ),
+                TStatus::DISALLOW_TEMP
+            );
+        }
+    }
+
+    Y_UNIT_TEST(RequestReplacePDiskConsecutiveWithDone)
+    {
+        auto opts = TTestEnvOpts(8, 2).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        for (ui32 i = 0; i < 8; ++i) {
+            auto pdiskId = env.PDiskId(i, 0);
+
+            TString pdiskPath = "/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data";
+
+            auto rec = env.CheckPermissionRequest(
+                MakePermissionRequest(TRequestOptions("user", false, false, false),
+                        MakeAction(TAction::REPLACE_DEVICES, "::1", 60000000, pdiskPath)
+                    ),
+                TStatus::ALLOW
+            );
+
+            auto pid = rec.GetPermissions(0).GetId();
+
+            env.CheckDonePermission("user", pid);
+        }
+    }
+
     Y_UNIT_TEST(RequestReplaceManyDevicesOnOneNode)
     {
         TCmsTestEnv env(16, 3);
@@ -650,7 +1389,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
              MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(9), 60000000),
              MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
         UNIT_ASSERT_VALUES_EQUAL(rec.PermissionsSize(), 0);
-    
+
         auto rid = rec.GetRequestId();
 
         // Get scheduled request
@@ -708,7 +1447,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(scheduledRec.GetRequests(0).ActionsSize(), 1);
         auto action = scheduledRec.GetRequests(0).GetActions(0);
         UNIT_ASSERT_VALUES_EQUAL(action.GetIssue().GetType(), TAction::TIssue::TOO_MANY_UNAVAILABLE_VDISKS);
-        
+
         // Try to check request
         env.CheckRequest("user", rid, false, TStatus::DISALLOW_TEMP);
 
@@ -1050,17 +1789,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TestAvailabilityMode(MODE_FORCE_RESTART, true);
     }
 
-    void TestAvailabilityModeScheduled(EAvailabilityMode mode,  bool disconnectNodes)
+    void TestKeepAvailabileModeScheduled(bool disconnectNodes)
     {
-        Y_ABORT_UNLESS(mode == MODE_KEEP_AVAILABLE
-                 || mode == MODE_FORCE_RESTART);
-
         TCmsTestEnv env(8);
         env.AdvanceCurrentTime(TDuration::Minutes(3));
 
         auto res1 = env.ExtractPermissions
             (env.CheckPermissionRequest("user", true, false, true,
-                                        true, mode, TStatus::ALLOW_PARTIAL,
+                                        true, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL,
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
                                         MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)));
@@ -1068,21 +1804,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = false;
         }
 
-        env.CheckRequest("user", res1.first, false, mode, TStatus::ALLOW_PARTIAL, 1);
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL, 1);
         if (disconnectNodes) {
             TFakeNodeWhiteboardService::Info[env.GetNodeId(1)].Connected = false;
         }
 
-        env.CheckRequest("user", res1.first, false, mode,
-                         mode == MODE_KEEP_AVAILABLE ? TStatus::DISALLOW_TEMP : TStatus::ALLOW,
-                         mode == MODE_KEEP_AVAILABLE ? 0 : 1);
-        if (mode != MODE_KEEP_AVAILABLE) {
-            return;
-        }
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP, 0);
 
         env.CheckDonePermission("user", res1.second[0]);
 
-        env.CheckRequest("user", res1.first, false, mode,
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE,
                          disconnectNodes ? TStatus::DISALLOW_TEMP : TStatus::ALLOW,
                          disconnectNodes ? 0 : 1);
         if (!disconnectNodes) {
@@ -1091,27 +1822,17 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         TFakeNodeWhiteboardService::Info[env.GetNodeId(0)].Connected = true;
 
-        env.CheckRequest("user", res1.first, false, mode, TStatus::ALLOW, 1);
+        env.CheckRequest("user", res1.first, false, MODE_KEEP_AVAILABLE, TStatus::ALLOW, 1);
     }
 
     Y_UNIT_TEST(TestKeepAvailableModeScheduled)
     {
-        TestAvailabilityModeScheduled(MODE_KEEP_AVAILABLE, false);
-    }
-
-    Y_UNIT_TEST(TestForceRestartModeScheduled)
-    {
-        TestAvailabilityModeScheduled(MODE_FORCE_RESTART, false);
+        TestKeepAvailabileModeScheduled(false);
     }
 
     Y_UNIT_TEST(TestKeepAvailableModeScheduledDisconnects)
     {
-        TestAvailabilityModeScheduled(MODE_KEEP_AVAILABLE, true);
-    }
-
-    Y_UNIT_TEST(TestForceRestartModeScheduledDisconnects)
-    {
-        TestAvailabilityModeScheduled(MODE_FORCE_RESTART, true);
+        TestKeepAvailabileModeScheduled(true);
     }
 
     Y_UNIT_TEST(TestOutdatedState)
@@ -1288,9 +2009,9 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         THashMap<ui32, ui32> NodeToRing;
         THashSet<ui32> StateStorageNodes;
-
-        for (ui32 ring = 0; ring < info->Rings.size(); ++ring) {
-            for (auto& replica : info->Rings[ring].Replicas) {
+        auto &group = info->RingGroups[0];
+        for (ui32 ring = 0; ring < group.Rings.size(); ++ring) {
+            for (auto& replica : group.Rings[ring].Replicas) {
                 ui32 nodeId = replica.NodeId();
 
                 NodeToRing[nodeId] = ring;
@@ -1498,10 +2219,12 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckPermissionRequest("user", true, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW_PARTIAL,
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+
+        // But it is possible for FORCE RESTART mode
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
 
@@ -1538,14 +2261,16 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW_PARTIAL,
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        // But it is possible for FORCE RESTART mode
+        env.CheckPermissionRequest("user", true, true, false, true, MODE_FORCE_RESTART, TStatus::ALLOW,
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
-        env.CheckPermissionRequest("user", true, true, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
-                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
-                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
 
         // It's ok to get two permissions for one group if PartialPermissionAllowed is set to false
         env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
@@ -1969,7 +2694,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             ),
             TStatus::DISALLOW_TEMP // ok, waiting for move VDisks
         );
-     
+
         // Check that FAULTY BSC request is sent
         env.CheckBSCUpdateRequests({ env.GetNodeId(0) }, NKikimrBlobStorage::FAULTY);
 
@@ -2009,7 +2734,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto emergency = env.CheckPermissionRequest
             ("user", true, false, true, true, -100, TStatus::ALLOW,
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
-    
+
         // Rolling restart is blocked by emergency request
         env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::DISALLOW_TEMP, 0);
 
@@ -2035,7 +2760,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto emergency = env.CheckPermissionRequest
             ("user", true, false, true, true, -100, TStatus::DISALLOW_TEMP,
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
-    
+
         // Done with restarting first node
         env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
 
@@ -2068,7 +2793,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Wall-E task is blocked by rolling restart
         env.CheckWalleCreateTask("task-1", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(1));
-    
+
         // Rolling restart is not blocked
         rollingRestart = env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::ALLOW, 1);
         UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
@@ -2139,7 +2864,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto samePriorityRequest = env.CheckPermissionRequest
             ("user", true, false, true, true, -80, TStatus::DISALLOW_TEMP,
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
-    
+
         // Done with restarting first node
         env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
 
@@ -2169,7 +2894,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         auto samePriorityRequest = env.CheckPermissionRequest
             ("user", true, false, true, true, -80, TStatus::DISALLOW_TEMP,
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
-    
+
         // Done with restarting first node
         env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
 
@@ -2189,14 +2914,14 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TCmsTestEnv env(8);
 
         const TString expectedReason = "Priority value is out of range";
-        
+
         // Out of range priority
         auto request = env.CheckPermissionRequest
             ("user", true, false, true, true, -101, TStatus::WRONG_REQUEST,
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
              MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
         UNIT_ASSERT_VALUES_EQUAL(request.GetStatus().GetReason(), expectedReason);
-        
+
         // Out of range priority
         request = env.CheckPermissionRequest
             ("user", true, false, true, true, 101, TStatus::WRONG_REQUEST,
@@ -2224,7 +2949,7 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Done with restarting first node
         env.CheckDonePermission("user", rollingRestart.GetPermissions(0).GetId());
-    
+
         // Rolling restart is continue
         rollingRestart = env.CheckRequest("user", rollingRestart.GetRequestId(), false, TStatus::ALLOW, 1);
         UNIT_ASSERT_VALUES_EQUAL(rollingRestart.PermissionsSize(), 1);
@@ -2249,6 +2974,840 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
 
         // Wall-E soft maintainance task can continue
         env.CheckWalleCheckTask("task-1", TStatus::ALLOW, env.GetNodeId(2));
+    }
+
+    void ChangePileMap(TEvInterconnect::TEvNodesInfo::TPtr* ev) {
+        UNIT_ASSERT((*ev)->Get()->PileMap);
+        auto nodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>((*ev)->Get()->Nodes);
+        auto pileMap = std::make_shared<TEvInterconnect::TEvNodesInfo::TPileMap>(*(*ev)->Get()->PileMap);
+        for (const auto& node : *nodes) {
+            pileMap->at(node.NodeId % pileMap->size()).push_back(node.NodeId);
+        }
+        for (auto& node : *nodes) {
+            NActorsInterconnect::TNodeLocation pb;
+            node.Location.Serialize(&pb, true);
+            pb.SetBridgePileName("r" + ToString(node.NodeId % pileMap->size()));
+            node.Location = TNodeLocation(pb);
+        }
+
+        auto newEv = IEventHandle::Downcast<TEvInterconnect::TEvNodesInfo>(
+            new IEventHandle((*ev)->Recipient, (*ev)->Sender, new TEvInterconnect::TEvNodesInfo(nodes, pileMap))
+        );
+        ev->Swap(newEv);
+    }
+
+    Y_UNIT_TEST(BridgeModeCollectInfo)
+    {
+        TTestEnvOpts opts(16);
+        TCmsTestEnv env(opts.WithBridgeMode());
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+        env.Register(CreateInfoCollector(env.GetSender(), TDuration::Minutes(1)));
+
+        TAutoPtr<IEventHandle> handle;
+        auto reply = env.GrabEdgeEventRethrow<TCms::TEvPrivate::TEvClusterInfo>(handle);
+        UNIT_ASSERT(reply);
+        const auto &info = *reply->Info;
+        UNIT_ASSERT(info.IsBridgeMode);
+        UNIT_ASSERT_EQUAL(info.NodeIdToPileId.size(), 16);
+        UNIT_ASSERT_EQUAL(info.BSGroupsCount(), 8);
+        for (const auto& [_, group] : info.AllBSGroups()) {
+            // Checking (group.VDisks.size() > 0) means there are no proxy groups.
+            UNIT_ASSERT(group.VDisks.size() > 0);
+        }
+        for (const auto [nodeId, pileId] : info.NodeIdToPileId) {
+            // In ChangePileMap, nodes are distributed among piles based on the parity.
+            UNIT_ASSERT(nodeId % opts.PileCount == pileId);
+        }
+        for (const auto& [nodeId, node] : info.AllNodes()) {
+            UNIT_ASSERT(node->PileId);
+            UNIT_ASSERT_EQUAL(nodeId % opts.PileCount, node->PileId);
+        }
+
+        auto state = env.RequestState();
+        for (const auto& host : state.GetHosts()) {
+            const ui32 correctPileId = host.GetNodeId() % opts.PileCount;
+            if (correctPileId != 0) {
+                UNIT_ASSERT(host.GetPileId());
+                UNIT_ASSERT_EQUAL(correctPileId, host.GetPileId());
+            }
+            const auto bridgePileName = host.GetLocation().GetBridgePileName();
+            UNIT_ASSERT(bridgePileName);
+            UNIT_ASSERT_EQUAL(correctPileId, static_cast<ui32>(bridgePileName[1] - '0'));
+        }
+
+        auto listNodes = env.RequestListNodes();
+        for (const auto& node : listNodes) {
+            const auto bridgePileName = node.location().bridge_pile_name();
+            UNIT_ASSERT(bridgePileName);
+            UNIT_ASSERT_EQUAL(node.node_id() % opts.PileCount, static_cast<ui32>(bridgePileName[1] - '0'));
+        }
+    }
+
+    Y_UNIT_TEST(BridgeModeGroups)
+    {
+        TTestEnvOpts opts(16, 4);
+        opts.NToSelect = 8;
+        TCmsTestEnv env(opts.WithBridgeMode());
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // Pile #1.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        // Pile #0: there are no vdisks that are the same as on the node with index 0.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
+        // Pile #1: the vdisk from this pile is already locked.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: the vdisk from this pile is already locked.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+        // Pile #1: in MODE_KEEP_AVAILABLE mode, two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #2: in MODE_KEEP_AVAILABLE mode, two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+        // Pile #1: in MODE_KEEP_AVAILABLE mode, no more than two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        // Pile #2: in MODE_KEEP_AVAILABLE mode, no more than two vdisks can be locked in a pile.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(13), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BridgeModeStateStorage)
+    {
+        TTestEnvOpts opts(16);
+        opts.VDisks = 0;
+        opts.NToSelect = 5;
+        TCmsTestEnv env(opts.WithBridgeMode());
+
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // Pile #1: There are 0 rings locked on this pile => it is possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        // Pile #0: There are 0 rings locked on this pile => it is possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        // Pile #1: There is already one ring locked on this pile => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: There is already one ring locked on this pile => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        // Pile #1: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings => it is possible to lock
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings => it is possible to lock
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        // Pile #1: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings — the limit has been exhausted => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        // Pile #0: On a pile in MODE_KEEP_AVAILABLE mode, it is possible to lock <= 2 rings — the limit has been exhausted => it is not possible to lock.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BridgeModeNodeLimit)
+    {
+        TTestEnvOpts opts(16);
+        opts.VDisks = 0;
+        opts.NToSelect = 8;
+        TCmsTestEnv env(opts.WithBridgeMode());
+
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // set limit
+        NKikimrCms::TCmsConfig config;
+        config.MutableClusterLimits()->SetDisabledNodesLimit(1);
+        env.SetCmsConfig(config);
+
+        // Pile #1: We can lock one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        // Pile #0: We can lock one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
+        // Pile #1: We cannot lock more than one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        // Pile #0: We cannot lock more than one node.
+        env.CheckPermissionRequest("user", true, false, true, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(BridgeModeSysTablets) {
+        TTestEnvOpts opts(12, 0);
+        TCmsTestEnv env(opts.WithBridgeMode(2, true));
+        env.EnableSysNodeChecking();
+
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo) {
+                auto *x = reinterpret_cast<TEvInterconnect::TEvNodesInfo::TPtr*>(&ev);
+                ChangePileMap(x);
+            }
+            return prev(ev);
+        });
+
+        // Locking 3 nodes in each pile
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+
+        // Pile #1: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 3, down: 0, limit: 3
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
+        // Pile #2: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 3, down: 0, limit: 3
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+
+        // Locking 5 nodes in each pile (MODE_KEEP_AVAILABLE)
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9), 60000000, "storage"));
+
+        // Pile #1: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 5, down: 0, limit: 5 (MODE_KEEP_AVAILABLE)
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(10), 60000000, "storage"));
+        // Pile #0: tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes. Locked: 5, down: 0, limit: 5 (MODE_KEEP_AVAILABLE)
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_KEEP_AVAILABLE, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+
+    }
+
+    Y_UNIT_TEST(CheckSysTabletsOnNodesWithPDisks) {
+        TTestEnvOpts opts(8, 1);
+        opts.NodesWithoutPDisksCount = 4;
+        TCmsTestEnv env(opts);
+        env.EnableSysNodeChecking();
+
+        // Locking 4 nodes without pdisks.
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        // tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes.
+        env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(DisableMaintenance) {
+        TCmsTestEnv env(16);
+
+        auto r1 = env.CheckPermissionRequest("user", false, false, true, true, TStatus::ALLOW,
+                                             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+        UNIT_ASSERT_VALUES_EQUAL(r1.PermissionsSize(), 1);
+
+        // Scheduled request
+        auto r2 = env.CheckPermissionRequest("user", false, false, /* scheduled */ true, true, TStatus::DISALLOW_TEMP,
+                                             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+
+        // Disable maintenance
+        NKikimrCms::TCmsConfig config;
+        config.SetDisableMaintenance(true);
+        env.SetCmsConfig(config);
+
+        env.CheckDonePermission("user", r1.GetPermissions(0).GetId());
+
+        // Requests should fail
+        env.CheckPermissionRequest("user", false, false, true, true, TStatus::ERROR_TEMP,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(9), 60000000));
+        env.CheckRequest("user", r2.GetRequestId(), true, TStatus::ERROR_TEMP);
+
+        // Enable maintenance back
+        config.SetDisableMaintenance(false);
+        env.SetCmsConfig(config);
+
+        // Requests should be ok
+        auto r3 = env.CheckPermissionRequest("user", false, false, true, true, TStatus::ALLOW,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(9), 60000000));
+        UNIT_ASSERT_VALUES_EQUAL(r3.PermissionsSize(), 1);
+        env.CheckRequest("user", r2.GetRequestId(), true, TStatus::ALLOW, 1);
+    }
+
+    Y_UNIT_TEST(WalleDisableMaintenance) {
+        TCmsTestEnv env(16);
+
+        env.CheckWalleCreateTask("task-1", "reboot", false, TStatus::ALLOW, env.GetNodeId(0));
+
+        // Scheduled request
+        env.CheckWalleCreateTask("task-2", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(0));
+
+        // Disable maintenance
+        NKikimrCms::TCmsConfig config;
+        config.SetDisableMaintenance(true);
+        env.SetCmsConfig(config);
+
+        env.CheckWalleRemoveTask("task-1");
+
+        // Requests should fail
+        env.CheckWalleCreateTask("task-3", "reboot", false, TStatus::ERROR_TEMP, env.GetNodeId(9));
+        env.CheckWalleCheckTask("task-2", TStatus::ERROR_TEMP);
+
+        // Enable maintenance back
+        config.SetDisableMaintenance(false);
+        env.SetCmsConfig(config);
+
+        // Requests should be ok
+        env.CheckWalleCreateTask("task-3", "reboot", false, TStatus::ALLOW, env.GetNodeId(9));
+        env.CheckWalleCheckTask("task-2", TStatus::ALLOW);
+    }
+
+    Y_UNIT_TEST(PriorityLocks)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCmsLocksPriority());
+
+        // Set cluster limits
+        NKikimrCms::TCmsConfig config;
+        config.MutableClusterLimits()->SetDisabledNodesLimit(1);
+        config.MutableClusterLimits()->SetDisabledNodesRatioLimit(0);
+        env.SetCmsConfig(config);
+
+        // Make basic request, allow
+        auto r1 = env.CheckPermissionRequest
+            ("user", true, false, true, true, /* priority */ 0, TStatus::ALLOW,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(r1.PermissionsSize(), 1);
+        env.CheckListPermissions("user", 1);
+
+        // Make request with high priority for the same node, allow
+        auto r2 = env.CheckPermissionRequest
+            ("user", true, false, true, true, /* priority */ -100, TStatus::ALLOW,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        UNIT_ASSERT_VALUES_EQUAL(r1.PermissionsSize(), 1);
+        env.CheckListPermissions("user", 2);
+
+        // Make request with middle priority for the same node, blocked by higher priority
+        auto r3 = env.CheckPermissionRequest
+            ("user", true, false, true, true, /* priority */ -50, TStatus::DISALLOW_TEMP,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        env.CheckListPermissions("user", 2);
+
+        // Done with high priority request
+        env.CheckDonePermission("user", r2.GetPermissions(0).GetId());
+        env.CheckListPermissions("user", 1);
+
+        // Make new request, blocked by scheduled middle priority request
+        env.CheckPermissionRequest
+            ("user", true, false, true, false, /* priority */ -25, TStatus::DISALLOW_TEMP,
+             MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"));
+        env.CheckListPermissions("user", 1);
+
+        // Middle priority request can continue
+        r3 = env.CheckRequest("user", r3.GetRequestId(), false, TStatus::ALLOW, 1);
+        env.CheckListPermissions("user", 2);
+
+        // Done with basic request
+        env.CheckDonePermission("user", r1.GetPermissions(0).GetId());
+        env.CheckListPermissions("user", 1);
+
+        // Done with middle priority request
+        env.CheckDonePermission("user", r3.GetPermissions(0).GetId());
+        env.CheckListPermissions("user", 0);
+    }
+
+    Y_UNIT_TEST(TestSmartAvailabilityModeFeatureFlagDisabled)
+    {
+        TCmsTestEnv env(8);
+        env.CheckPermissionRequest("user", false, false, false,
+                                   true, MODE_SMART_AVAILABILITY, TStatus::WRONG_REQUEST,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+    }
+
+    Y_UNIT_TEST(TestSmartAvailabilityModeFallsBackToKeepAvailable)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCmsSmartAvailabilityMode());
+        env.EnableSysNodeChecking();
+
+        // Works as max availability
+        env.CheckPermissionRequest("user", false, false, false,
+                                   true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+
+        // Works as keep available
+        env.CheckPermissionRequest("user", false, false, false,
+                                   true, MODE_SMART_AVAILABILITY, TStatus::ALLOW,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000));
+
+        // Works as keep available
+        env.CheckPermissionRequest("user", false, false, false,
+                                   true, MODE_SMART_AVAILABILITY, TStatus::DISALLOW_TEMP,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000));
+    }
+
+    Y_UNIT_TEST(TestSmartAvailabilityModeStaysMaxAvailability)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8).WithEnableCmsSmartAvailabilityMode());
+        env.EnableSysNodeChecking();
+
+        // Works as max availability
+        auto res1 = env.ExtractPermissions(
+            env.CheckPermissionRequest("user", true, false, true,
+                                       true, MODE_SMART_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                       MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
+                                       MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
+                                       MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)));
+        UNIT_ASSERT_VALUES_EQUAL(res1.second.size(), 1);
+
+        // Works as max availability
+        env.CheckRequest("user", res1.first, false, MODE_SMART_AVAILABILITY, TStatus::DISALLOW_TEMP, 0);
+
+        env.CheckDonePermission("user", res1.second[0]);
+
+        // Works as max availability
+        env.CheckRequest("user", res1.first, false, MODE_SMART_AVAILABILITY, TStatus::ALLOW_PARTIAL, 1);
+    }
+
+    Y_UNIT_TEST(SysTabletsNodeSortOrder)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8, 0));
+
+        // Nodes 0-3: sys tablet candidates. Nodes 4-7: no sys tablets.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 4; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+        addTablet(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD);
+        addTablet(NKikimrConfig::TBootstrap::CMS);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        THashSet<TString> sysNodeHosts;
+        for (ui32 id : sysNodes) {
+            sysNodeHosts.insert(ToString(id));
+        }
+
+        // Request: interleaved sys / non-sys nodes.
+        auto resp = env.CheckPermissionRequest("user", true, true, false, true,
+                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"));
+
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 4);
+        // First 2 permissions must be non-sys-tablet nodes
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(0).GetAction().GetHost()));
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(1).GetAction().GetHost()));
+        // Last 2 permissions must be sys-tablet nodes
+        UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(2).GetAction().GetHost()));
+        UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(3).GetAction().GetHost()));
+    }
+
+    Y_UNIT_TEST(SysTabletsNodeSortOrderScheduledRequest)
+    {
+        TCmsTestEnv env(TTestEnvOpts(8, 0));
+
+        // Nodes 0-5: sys tablet candidates. Nodes 6-7: no sys tablets.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 6; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        THashSet<TString> sysNodeHosts;
+        for (ui32 id : sysNodes) {
+            sysNodeHosts.insert(ToString(id));
+        }
+
+        // Request restart of all 8 nodes with schedule + partial.
+        // First round: non-sys-tablet nodes + some sys-tablet nodes get permission.
+        // Remaining sys-tablet nodes get scheduled.
+        auto resp = env.CheckPermissionRequest("user", true, false, true, true,
+                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL,
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7), 60000000, "storage"));
+
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 5);
+        UNIT_ASSERT(!resp.GetRequestId().empty());
+
+        // First 2 must be non-sys-tablet, next 3 must be sys-tablet
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(0).GetAction().GetHost()));
+        UNIT_ASSERT(!sysNodeHosts.contains(resp.GetPermissions(1).GetAction().GetHost()));
+        for (int i = 2; i < 5; ++i) {
+            UNIT_ASSERT(sysNodeHosts.contains(resp.GetPermissions(i).GetAction().GetHost()));
+        }
+
+        THashSet<TString> grantedHosts;
+        for (size_t i = 0; i < resp.PermissionsSize(); ++i) {
+            const auto &host = resp.GetPermissions(i).GetAction().GetHost();
+            UNIT_ASSERT_C(grantedHosts.insert(host).second, "Duplicate permission for host " << host);
+            env.CheckDonePermission("user", resp.GetPermissions(i).GetId());
+        }
+
+        // Now check the scheduled request: the remaining 3 sys-tablet nodes
+        // should all get permission since the previous locks are released.
+        auto resp2 = env.CheckRequest("user", resp.GetRequestId(), false,
+                                      MODE_MAX_AVAILABILITY, TStatus::ALLOW, 3);
+        UNIT_ASSERT_VALUES_EQUAL(resp2.PermissionsSize(), 3);
+        for (size_t i = 0; i < resp2.PermissionsSize(); ++i) {
+            const auto &host = resp2.GetPermissions(i).GetAction().GetHost();
+            UNIT_ASSERT(sysNodeHosts.contains(host));
+            UNIT_ASSERT_C(grantedHosts.insert(host).second, "Duplicate permission for host " << host);
+        }
+        for (ui32 i = 0; i < 8; ++i) {
+            UNIT_ASSERT_C(grantedHosts.contains(ToString(env.GetNodeId(i))),
+                          "Missing permission for node " << env.GetNodeId(i));
+        }
+    }
+
+    Y_UNIT_TEST(SysTabletsRunningLeaderDeferredWithoutBootstrapConfig)
+    {
+        TCmsTestEnv env(TTestEnvOpts(4, 0));
+
+        TFakeNodeWhiteboardService::BootstrapConfig.Clear();
+        env.EnableSysNodeChecking();
+        SetRunningSysTablet(env.GetNodeId(0), true);
+        env.RestartCms();
+
+        auto req = MakePermissionRequest("user", /* partial = */ true, /* dry = */ false,
+            /* schedule = */ true,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"));
+        req->Record.SetMaxPermissionCount(2);
+
+        auto resp = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 2);
+        UNIT_ASSERT(!resp.GetRequestId().empty());
+
+        THashSet<TString> grantedHosts;
+        for (const auto &permission : resp.GetPermissions()) {
+            grantedHosts.insert(permission.GetAction().GetHost());
+            env.CheckDonePermission("user", permission.GetId());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(grantedHosts.size(), 2);
+        UNIT_ASSERT(grantedHosts.contains(ToString(env.GetNodeId(1))));
+        UNIT_ASSERT(grantedHosts.contains(ToString(env.GetNodeId(2))));
+
+        auto finalResp = env.CheckRequest("user", resp.GetRequestId(), false,
+                                          MODE_MAX_AVAILABILITY, TStatus::ALLOW, 1);
+        UNIT_ASSERT_VALUES_EQUAL(finalResp.GetPermissions(0).GetAction().GetHost(),
+                                 ToString(env.GetNodeId(0)));
+    }
+
+    Y_UNIT_TEST(SysTabletsNodeDeferredOnCheckRequestAfterMigration)
+    {
+        TCmsTestEnv env(TTestEnvOpts(16, 0));
+
+        // Nodes 0-9: sys tablet candidates. No running tablets initially.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 10; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        // Batch 1: cap of 1 permission. No running tablets yet, so order is kept:
+        // node1 is granted, [node2, node3, node4] are scheduled.
+        auto req = MakePermissionRequest("user", /* partial = */ true, /* dry = */ false,
+            /* schedule = */ true,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        req->Record.SetMaxPermissionCount(1);
+
+        auto resp = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetPermissions(0).GetAction().GetHost(),
+                                 ToString(env.GetNodeId(1)));
+        const TString requestId = resp.GetRequestId();
+        UNIT_ASSERT(!requestId.empty());
+
+        // Release the lock taken by the granted permission.
+        env.CheckDonePermission("user", resp.GetPermissions(0).GetId());
+
+        // A tablet migrates onto node2 (the first scheduled action).
+        SetRunningSysTablet(env.GetNodeId(2), true);
+        env.RestartCms();
+
+        auto resp2 = env.CheckRequest("user", requestId, false,
+                                      MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL, 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp2.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp2.GetPermissions(0).GetAction().GetHost(),
+                                 ToString(env.GetNodeId(3)));
+    }
+
+    // Scenario for the batched permission loop:
+    //  * 16 nodes split into three separated groups
+    //      G1 (non-candidates, not in bootstrap config)     : nodes 12..15
+    //      G2 (sys-tablet candidates without running leader): nodes 2..11
+    //      G3 (candidates currently hosting a running leader): nodes 0, 1
+    //  * A single permission request lists ALL 16 nodes in a shuffled order.
+    //  * With MaxPermissionCount=4 the permissions are handed out in 4 batches:
+    //      Batch 1 must contain exactly the G1 nodes (highest priority).
+    //      Between Batch 1 and Batch 2 the BSController leader migrates from
+    //      node 0 to node 2 — a former G2 node becomes G3, a former G3 node
+    //      becomes G2. The test verifies that CheckRequest observes the new
+    //      state and defers node 2 via DISALLOW_TEMP_SYS_TABLET.
+    //      Between Batch 2 and Batch 3 another migration happens: node 1
+    //      stops being a leader, node 8 becomes one.
+    //      Batch 4 contains the remaining nodes, including the current G3
+    //      leaders that are finally allowed once no G2 candidates are left
+    //      (the deferred sys-tablet actions loop kicks in).
+    Y_UNIT_TEST(SysTabletsBatchedPermissionsWithMigrations)
+    {
+        TCmsTestEnv env(TTestEnvOpts(16, 0));
+
+        // Sys-tablet candidates: nodes 0..11.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 12; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto *tablet = bootstrapConfig.AddTablet();
+        tablet->SetType(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+        for (ui32 nodeId : sysNodes) {
+            tablet->AddNode(nodeId);
+        }
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        // Initial state: nodes 0 and 1 are the only running leaders (G3).
+        SetRunningSysTablet(env.GetNodeId(0), true);
+        SetRunningSysTablet(env.GetNodeId(1), true);
+        env.RestartCms();
+
+        auto hostOf = [&](ui32 idx) { return ToString(env.GetNodeId(idx)); };
+
+        const THashSet<TString> g1Hosts = { // non-candidates
+            hostOf(12), hostOf(13), hostOf(14), hostOf(15),
+        };
+        const THashSet<TString> initialG2Hosts = { // candidates, no running leader
+            hostOf(2), hostOf(3), hostOf(4),  hostOf(5), hostOf(6),
+            hostOf(7), hostOf(8), hostOf(9), hostOf(10), hostOf(11),
+        };
+
+        // Shuffled action list mixing all three groups.
+        auto req = MakePermissionRequest("user", /* partial = */ true, /* dry = */ false,
+            /* schedule = */ true,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(12), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(13), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(5),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(14), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(6),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(15), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(7),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(9),  60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(10), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4),  60000000, "storage"));
+        req->Record.SetMaxPermissionCount(4);
+
+        auto extractHosts = [](const NKikimrCms::TPermissionResponse &r) {
+            THashSet<TString> hosts;
+            for (size_t i = 0; i < r.PermissionsSize(); ++i) {
+                hosts.insert(r.GetPermissions(i).GetAction().GetHost());
+            }
+            return hosts;
+        };
+        auto releaseAll = [&](const NKikimrCms::TPermissionResponse &r) {
+            for (size_t i = 0; i < r.PermissionsSize(); ++i) {
+                env.CheckDonePermission("user", r.GetPermissions(i).GetId());
+            }
+        };
+
+        // Batch 1 — sort places G1 first, cap=4 exactly matches G1 size.
+        auto batch1 = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(batch1.PermissionsSize(), 4);
+        const TString requestId = batch1.GetRequestId();
+        UNIT_ASSERT(!requestId.empty());
+        {
+            auto hosts = extractHosts(batch1);
+            UNIT_ASSERT_VALUES_EQUAL(hosts.size(), 4);
+            for (const auto &h : hosts) {
+                UNIT_ASSERT_C(g1Hosts.contains(h),
+                    "Batch 1 must contain only G1 hosts, unexpected host: " << h);
+            }
+        }
+        releaseAll(batch1);
+
+        // Migration #1: leader moves from node 0 to node 2.
+        // node 0 becomes G2, node 2 becomes G3.
+        SetRunningSysTablet(env.GetNodeId(0), false);
+        SetRunningSysTablet(env.GetNodeId(2), true);
+        env.RestartCms();
+
+        // Batch 2 — deferred G2/G3 tail is reprocessed. Cap=4 is consumed by
+        // four G2 nodes. Node 2 (newly G3) must be deferred via
+        // DISALLOW_TEMP_SYS_TABLET and must NOT appear in this batch.
+        auto batch2 = env.CheckRequest("user", requestId, false,
+                                       MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL, 4);
+        UNIT_ASSERT_VALUES_EQUAL(batch2.PermissionsSize(), 4);
+        THashSet<TString> batch2Hosts;
+        {
+            batch2Hosts = extractHosts(batch2);
+            UNIT_ASSERT_VALUES_EQUAL(batch2Hosts.size(), 4);
+            UNIT_ASSERT_C(!batch2Hosts.contains(hostOf(2)),
+                "New leader (node 2) must not receive permission in Batch 2");
+            for (const auto &h : batch2Hosts) {
+                UNIT_ASSERT_C(initialG2Hosts.contains(h),
+                    "Batch 2 must contain only initial G2 hosts, unexpected host: " << h);
+            }
+        }
+        releaseAll(batch2);
+
+        // Migration #2: leader moves from node 1 to node 8.
+        // node 1 becomes G2, node 8 becomes G3. Current leaders: {2, 8}.
+        SetRunningSysTablet(env.GetNodeId(1), false);
+        SetRunningSysTablet(env.GetNodeId(8), true);
+        env.RestartCms();
+
+        // Batch 3 — again cap=4 is consumed by G2 nodes. Node 8 (new leader)
+        // must be deferred. Node 2 stays deferred as well.
+        auto batch3 = env.CheckRequest("user", requestId, false,
+                                       MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL, 4);
+        UNIT_ASSERT_VALUES_EQUAL(batch3.PermissionsSize(), 4);
+        THashSet<TString> batch3Hosts;
+        {
+            batch3Hosts = extractHosts(batch3);
+            UNIT_ASSERT_VALUES_EQUAL(batch3Hosts.size(), 4);
+            UNIT_ASSERT_C(!batch3Hosts.contains(hostOf(2)),
+                "Deferred leader (node 2) must not appear in Batch 3");
+            UNIT_ASSERT_C(!batch3Hosts.contains(hostOf(8)),
+                "New leader (node 8) must not appear in Batch 3");
+            // Batch 3 nodes must be candidates without a running leader now,
+            // taken from the set (initial G2 ∪ former G3) \ (still-running).
+            const THashSet<TString> allowedInBatch3 = {
+                hostOf(0), hostOf(1),
+                hostOf(3), hostOf(4),  hostOf(5), hostOf(6),
+                hostOf(7), hostOf(9), hostOf(10), hostOf(11),
+            };
+            for (const auto &h : batch3Hosts) {
+                UNIT_ASSERT_C(allowedInBatch3.contains(h),
+                    "Batch 3 host " << h << " must be a current non-leader candidate");
+                UNIT_ASSERT_C(!batch2Hosts.contains(h),
+                    "Batch 3 must not repeat Batch 2 hosts: " << h);
+            }
+        }
+        releaseAll(batch3);
+
+        // Batch 4 — only the deferred/current-leader nodes remain. Since no
+        // other candidates are left the sys-tablet deferred loop (allowDefer=false)
+        // hands out the remaining permissions even though cap>0.
+        auto batch4 = env.CheckRequest("user", requestId, false,
+                                       MODE_MAX_AVAILABILITY, TStatus::ALLOW, 4);
+        UNIT_ASSERT_VALUES_EQUAL(batch4.PermissionsSize(), 4);
+        {
+            auto batch4Hosts = extractHosts(batch4);
+            UNIT_ASSERT_VALUES_EQUAL(batch4Hosts.size(), 4);
+
+            // Every original node must appear in exactly one of the batches.
+            THashSet<TString> allGranted;
+            allGranted.insert(g1Hosts.begin(), g1Hosts.end());
+            allGranted.insert(batch2Hosts.begin(), batch2Hosts.end());
+            allGranted.insert(batch3Hosts.begin(), batch3Hosts.end());
+            allGranted.insert(batch4Hosts.begin(), batch4Hosts.end());
+            UNIT_ASSERT_VALUES_EQUAL(allGranted.size(), 16);
+            for (ui32 i = 0; i < 16; ++i) {
+                UNIT_ASSERT_C(allGranted.contains(hostOf(i)),
+                    "Node " << i << " (" << hostOf(i) << ") never received a permission");
+            }
+
+            // The current running leaders (2 and 8) must be part of the very
+            // last batch, confirming they were correctly prioritized last.
+            UNIT_ASSERT_C(batch4Hosts.contains(hostOf(2)),
+                "Current leader node 2 must be granted only in the final batch");
+            UNIT_ASSERT_C(batch4Hosts.contains(hostOf(8)),
+                "Current leader node 8 must be granted only in the final batch");
+        }
+        releaseAll(batch4);
     }
 }
 

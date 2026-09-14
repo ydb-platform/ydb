@@ -10,8 +10,9 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+#include <ydb/core/tx/long_tx_service/public/snapshot_handle.h>
 #include <ydb/core/ydb_convert/table_profiles.h>
 #include <ydb/library/accessor/accessor.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -69,8 +70,6 @@ struct TModuleResolverState : public TThrRefBase {
     THolder<NYql::TExprContext::TFreezeGuard> FreezeGuardHolder;
 };
 
-void ApplyServiceConfig(NYql::TKikimrConfiguration& kqpConfig, const NKikimrConfig::TTableServiceConfig& serviceConfig);
-
 enum class ELocksOp {
     Unspecified = 0,
     Commit,
@@ -82,10 +81,12 @@ public:
     struct TPhysicalTxData : private TMoveOnly {
         TKqpPhyTxHolder::TConstPtr Body;
         NKikimr::NKqp::TQueryData::TPtr Params;
+        ui64 QuerySpanId = 0;  // Original query's trace ID for lock-breaking attribution
 
-        TPhysicalTxData(const TKqpPhyTxHolder::TConstPtr& body, const TQueryData::TPtr& params)
+        TPhysicalTxData(const TKqpPhyTxHolder::TConstPtr& body, const TQueryData::TPtr& params, ui64 querySpanId = 0)
             : Body(body)
-            , Params(params) {}
+            , Params(params)
+            , QuerySpanId(querySpanId) {}
     };
 
     struct TKqpSnapshot {
@@ -120,6 +121,7 @@ public:
 
     struct TKqpSnapshotHandle : public IKqpGateway::TGenericResult {
         TKqpSnapshot Snapshot;
+        NKqp::TSnapshotHandle Handle;
         NActors::TActorId ManagingActor;
         NKikimrIssues::TStatusIds::EStatusCode Status =  NKikimrIssues::TStatusIds::UNKNOWN;
     };
@@ -140,7 +142,6 @@ public:
         NKikimr::TControlWrapper PerRequestDataSizeLimit;
         NKikimr::TControlWrapper MaxShardCount;
         TVector<TPhysicalTxData> Transactions;
-        TMap<ui64, TVector<NKikimrDataEvents::TLock>> DataShardLocks;
         NKikimr::NKqp::TTxAllocatorState::TPtr TxAlloc;
         ELocksOp LocksOp = ELocksOp::Unspecified;
         TMaybe<ui64> AcquireLocksTxId;
@@ -152,18 +153,22 @@ public:
         ui64 MkqlMemoryLimit = 0; // old engine compatibility
         ui64 PerShardKeysSizeLimitBytes = 0;
         Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+        bool CollectAffectedRows = false;
         TDuration ProgressStatsPeriod;
         TKqpSnapshot Snapshot = TKqpSnapshot();
         std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
         std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
-        NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
+        NKqpProto::EIsolationLevel IsolationLevel = NKqpProto::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
         bool NeedTxId = true;
-        bool UseImmediateEffects = false;
+        bool FlushEffects = false;
+        bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
+        std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
         TString UserTraceId;
+        ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
 
         NTopic::TTopicOperations TopicOperations;
 
@@ -181,6 +186,8 @@ public:
         NKikimrKqp::TExecuterTxResult ExecuterResult;
         NLongTxService::TLockHandle LockHandle;
         TVector<NKikimrMiniKQL::TResult> Results;
+        TVector<TString> BinaryResults;
+        bool ExpectBinaryResults = false;
     };
 
     struct TAstQuerySettings {
@@ -190,20 +197,15 @@ public:
 public:
     virtual TString GetDatabase() = 0;
     virtual TString GetDatabaseId() = 0;
-    virtual bool GetDomainLoginOnly() = 0;
-    virtual TMaybe<TString> GetDomainName() = 0;
 
     /* Scheme */
     virtual NThreading::TFuture<TKqpTableProfilesResult> GetTableProfiles() = 0;
     virtual NThreading::TFuture<TGenericResult> ModifyScheme(NKikimrSchemeOp::TModifyScheme&& modifyScheme) = 0;
 
     /* Compute */
-    using NYql::IKikimrGateway::ExecuteLiteral;
     virtual NThreading::TFuture<TExecPhysicalResult> ExecuteLiteral(TExecPhysicalRequest&& request,
         TQueryData::TPtr params, ui32 txIndex) = 0;
     using NYql::IKikimrGateway::ExecuteLiteralInstant;
-    virtual TExecPhysicalResult ExecuteLiteralInstant(TExecPhysicalRequest&& request,
-        TQueryData::TPtr params, ui32 txIndex) = 0;
 
     /* Scripting */
     virtual NThreading::TFuture<TQueryResult> ExplainDataQueryAst(const TString& cluster, const TString& query) = 0;

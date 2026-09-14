@@ -27,6 +27,8 @@ namespace NTable {
 
     using TRawVals = TArrayRef<const TRawTypeValue>;
 
+    static constexpr size_t MaxDecompressedBlobSize = 0xffffffffffULL; // 1 byte less than 1TiB
+
     class TEpoch : public TTypeSafeAlias<TEpoch, i64> {
     public:
         // N.B. this catches accidental legacy conversions
@@ -49,9 +51,9 @@ namespace NTable {
          *
          * It is always non-negative and materialized as ui64.
          */
-        ui64 ToCounter() const noexcept {
+        ui64 ToCounter() const {
             const auto value = Value;
-            Y_ABORT_UNLESS(value >= 0);
+            Y_ENSURE(value >= 0);
             return value;
         }
 
@@ -117,5 +119,10 @@ namespace NTable {
 namespace NTabletFlatExecutor {
     using TTxStamp = NTable::TTxStamp;
     using TRawVals = NTable::TRawVals;
+    using NTable::MaxDecompressedBlobSize;
+
+    struct TNoTag {};
+    using TVacuumGeneration = ui64;
+    using TVacuumTag = std::variant<TNoTag, TVacuumGeneration>;
 }
 }

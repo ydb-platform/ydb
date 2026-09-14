@@ -142,26 +142,3 @@ class Server(aiosmtpd.controller.Controller):
 
     def __repr__(self):  # pragma: no cover
         return "<smtp.Server %s:%s>" % self.addr
-
-
-def main():
-    import time
-
-    server = Server()
-    server.start()
-
-    print("SMTP server is running on %s:%i" % server.addr)
-    print("Type <Ctrl-C> to stop")
-
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        print("\rstopping...")
-        server.stop()
-
-
-if __name__ == "__main__":  # pragma: no cover
-    main()

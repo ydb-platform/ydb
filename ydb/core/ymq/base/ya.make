@@ -13,6 +13,7 @@ SRCS(
     run_query.cpp
     secure_protobuf_printer.cpp
     events_writer_iface.h
+    utils.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(query_id.h)

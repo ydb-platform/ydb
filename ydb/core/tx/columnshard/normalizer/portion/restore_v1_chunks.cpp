@@ -21,6 +21,7 @@ public:
         AFL_VERIFY(it != IndexByBlob.end());
         return it->second;
     }
+
     const std::vector<TUnifiedBlobId>& GetBlobIds() const {
         return BlobIds;
     }
@@ -35,7 +36,8 @@ public:
 
     TPatchItemAddV1(const TPortionLoadContext& portionInfo, std::map<TFullChunkAddress, TColumnChunkLoadContext>&& chunksInfo)
         : PortionInfo(portionInfo)
-        , ChunksInfo(std::move(chunksInfo)) {
+        , ChunksInfo(std::move(chunksInfo))
+    {
         for (auto&& i : ChunksInfo) {
             auto it = IndexByBlob.find(i.second.GetBlobRange().GetBlobId());
             if (it == IndexByBlob.end()) {
@@ -52,8 +54,10 @@ private:
 
 public:
     TChangesAddV1(std::vector<TPatchItemAddV1>&& patches)
-        : Patches(std::move(patches)) {
+        : Patches(std::move(patches))
+    {
     }
+
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
@@ -72,11 +76,11 @@ public:
                 AFL_VERIFY(i.GetBlobIds()[idx++].GetLogoBlobId() == logo);
             }
             db.Table<IndexPortions>()
-                .Key(i.GetPortionInfo().GetPathId(), i.GetPortionInfo().GetPortionId())
+                .Key(i.GetPortionInfo().GetPathId().GetRawValue(), i.GetPortionInfo().GetPortionId())
                 .Update(NIceDb::TUpdate<IndexPortions::Metadata>(metaProto.SerializeAsString()));
             for (auto&& [_, c] : i.GetChunksInfo()) {
                 db.Table<IndexColumnsV1>()
-                    .Key(c.GetPathId(), c.GetPortionId(), c.GetAddress().GetColumnId(), c.GetAddress().GetChunkIdx())
+                    .Key(c.GetPathId().GetRawValue(), c.GetPortionId(), c.GetAddress().GetColumnId(), c.GetAddress().GetChunkIdx())
                     .Update(NIceDb::TUpdate<IndexColumnsV1::Metadata>(c.GetMetaProto().SerializeAsString()),
                         NIceDb::TUpdate<IndexColumnsV1::BlobIdx>(i.GetIndexByBlob(c.GetBlobRange().GetBlobId())),
                         NIceDb::TUpdate<IndexColumnsV1::Offset>(c.GetBlobRange().GetOffset()),
@@ -102,7 +106,8 @@ public:
     }
 
     TPatchItemRemoveV1(const TColumnChunkLoadContextV1& chunkInfo)
-        : ChunkInfo(chunkInfo) {
+        : ChunkInfo(chunkInfo)
+    {
     }
 };
 
@@ -112,15 +117,17 @@ private:
 
 public:
     TChangesRemoveV1(std::vector<TPatchItemRemoveV1>&& patches)
-        : Patches(std::move(patches)) {
+        : Patches(std::move(patches))
+    {
     }
+
     virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController&) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
         using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
         for (auto&& i : Patches) {
             db.Table<IndexColumnsV1>()
-                .Key(i.GetChunkInfo().GetPathId(), i.GetChunkInfo().GetPortionId(), i.GetChunkInfo().GetAddress().GetEntityId(),
+                .Key(i.GetChunkInfo().GetPathId().GetRawValue(), i.GetChunkInfo().GetPortionId(), i.GetChunkInfo().GetAddress().GetEntityId(),
                     i.GetChunkInfo().GetAddress().GetChunkIdx())
                 .Delete();
         }
@@ -159,9 +166,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         while (!rowset.EndOfSet()) {
             TPortionLoadContext portion(rowset);
             existPortions0.emplace(portion.GetPortionId());
-            if (!portion.GetMetaProto().BlobIdsSize()) {
-                AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
-            }
+            AFL_VERIFY(portions0.emplace(portion.GetPortionId(), portion).second);
 
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");
@@ -210,8 +215,10 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (columns1Remove.empty() && portions0.empty()) {
         return tasks;
     }
+    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage()) {
+        return tasks;
+    }
 
-    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV0Usage());
     AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
     {
         std::vector<TPatchItemRemoveV1> package;

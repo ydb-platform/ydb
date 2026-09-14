@@ -4,9 +4,9 @@
 
 namespace NKikimr::NOlap {
 
-class TRemovedTablesNormalizer::TNormalizerResult : public INormalizerChanges {
+class TRemovedTablesNormalizer::TNormalizerResult: public INormalizerChanges {
     struct TPathInfo {
-        ui64 PathId;
+        TInternalPathId PathId;
         ui64 Step;
         ui64 TxId;
     };
@@ -16,16 +16,17 @@ class TRemovedTablesNormalizer::TNormalizerResult : public INormalizerChanges {
 public:
     TNormalizerResult(std::vector<TPathInfo>&& pathIds)
         : PathIds(std::move(pathIds))
-    {}
+    {
+    }
 
 public:
     bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /* normController */) const override {
         using namespace NColumnShard;
         NIceDb::TNiceDb db(txc.DB);
 
-        for (auto&& pathInfo: PathIds) {
-            db.Table<Schema::TableVersionInfo>().Key(pathInfo.PathId, pathInfo.Step, pathInfo.TxId).Delete();
-            db.Table<Schema::TableInfo>().Key(pathInfo.PathId).Delete();
+        for (auto&& pathInfo : PathIds) {
+            db.Table<Schema::TableVersionInfo>().Key(pathInfo.PathId.GetRawValue(), pathInfo.Step, pathInfo.TxId).Delete();
+            db.Table<Schema::TableInfo>().Key(pathInfo.PathId.GetRawValue()).Delete();
         }
         return true;
     }
@@ -63,8 +64,7 @@ public:
             }
         }
 
-
-        std::set<ui64> droppedTables;
+        std::set<TInternalPathId> droppedTables;
         {
             auto rowset = db.Table<Schema::TableInfo>().Select();
             if (!rowset.IsReady()) {
@@ -73,10 +73,11 @@ public:
 
             while (!rowset.EndOfSet()) {
                 const auto pathId = rowset.GetValue<Schema::TableInfo::PathId>();
-                const NOlap::TSnapshot dropSnapshot(rowset.GetValue<Schema::TableInfo::DropStep>(), rowset.GetValue<Schema::TableInfo::DropTxId>());
+                const NOlap::TSnapshot dropSnapshot(
+                    rowset.GetValue<Schema::TableInfo::DropStep>(), rowset.GetValue<Schema::TableInfo::DropTxId>());
 
                 if (dropSnapshot.Valid() && !notEmptyPaths.contains(pathId)) {
-                    droppedTables.emplace(pathId);
+                    droppedTables.emplace(TInternalPathId::FromRawValue(pathId));
                 }
 
                 if (!rowset.Next()) {
@@ -97,7 +98,7 @@ public:
             std::vector<TPathInfo> toRemove;
             while (!rowset.EndOfSet()) {
                 TPathInfo pathInfo;
-                pathInfo.PathId = rowset.GetValue<Schema::TableVersionInfo::PathId>();
+                pathInfo.PathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
                 if (droppedTables.contains(pathInfo.PathId)) {
                     pathInfo.Step = rowset.GetValue<Schema::TableVersionInfo::SinceStep>();
                     pathInfo.TxId = rowset.GetValue<Schema::TableVersionInfo::SinceTxId>();
@@ -120,16 +121,19 @@ public:
             }
         }
 
-        ACFL_INFO("normalizer", "TGranulesNormalizer")("message", TStringBuilder() << fullCount << " chunks found");
+        YDB_LOG_INFO_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "",
+            {"normalizer", "TGranulesNormalizer"},
+            {"message", TStringBuilder() << fullCount << " chunks found"});
         return changes;
     }
-
 };
 
-TConclusion<std::vector<INormalizerTask::TPtr>> TRemovedTablesNormalizer::DoInit(const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
+TConclusion<std::vector<INormalizerTask::TPtr>> TRemovedTablesNormalizer::DoInit(
+    const TNormalizationController& /*controller*/, NTabletFlatExecutor::TTransactionContext& txc) {
     auto changes = TNormalizerResult::Init(txc);
     if (!changes) {
-        return TConclusionStatus::Fail("Not ready");;
+        return TConclusionStatus::Fail("Not ready");
+        ;
     }
     std::vector<INormalizerTask::TPtr> tasks;
     for (auto&& c : *changes) {
@@ -138,4 +142,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TRemovedTablesNormalizer::DoInit
     return tasks;
 }
 
-}
+}   // namespace NKikimr::NOlap

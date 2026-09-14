@@ -1,12 +1,12 @@
-UNITTEST_FOR(ydb/core/load_test)
+UNITTEST_FOR(ydb/core/load_test/ycsb)
 
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(10)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -16,7 +16,6 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
-    ydb/core/load_test
     ydb/core/testlib/default
     ydb/core/tx
     yql/essentials/public/udf/service/exception_policy

@@ -212,19 +212,6 @@ BELONGS ya.make
     Files with this license:
         include/boost/system/config.hpp [3:3]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 6e1045d0df8b6baabf7415ac9f88fd52
-BELONGS ya.make
-    License text:
-        // Copyright 2017, 2021, 2022 Peter Dimov.
-        // Distributed under the Boost Software License, Version 1.0.
-        // https://www.boost.org/LICENSE_1_0.txt
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/system/result.hpp [4:6]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 7c50da02b17fc54dd1e541d68034832c
 BELONGS ya.make
     License text:
@@ -297,6 +284,20 @@ BELONGS ya.make
     Files with this license:
         include/boost/system/detail/system_category_message.hpp [6:6]
 
+KEEP     COPYRIGHT_SERVICE_LABEL ae20678c21aa4382bbfc80e33bc9ff0f
+BELONGS ya.make
+    License text:
+        // Copyright 2026 Peter Dimov
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/system/detail/is_aggregate.hpp [4:6]
+        include/boost/system/unwrap_and_invoke.hpp [4:6]
+
 KEEP     COPYRIGHT_SERVICE_LABEL b626a4b5c2666eca8400c2f213679a2f
 BELONGS ya.make
     License text:
@@ -363,6 +364,19 @@ BELONGS ya.make
         include/boost/system/detail/errc.hpp [4:6]
         include/boost/system/detail/system_category_impl.hpp [4:6]
         include/boost/system/errc.hpp [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f71580481df0a897cca3bf254804e28f
+BELONGS ya.make
+    License text:
+        // Copyright 2017, 2021-2025 Peter Dimov.
+        // Distributed under the Boost Software License, Version 1.0.
+        // https://www.boost.org/LICENSE_1_0.txt
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/system/result.hpp [4:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL faedff635aa9f9a8a18d7c7c02b75e2d
 BELONGS ya.make

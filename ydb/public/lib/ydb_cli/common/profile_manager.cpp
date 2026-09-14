@@ -5,8 +5,7 @@
 #include <util/string/builder.h>
 #include <util/system/env.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 class TProfile : public IProfile {
 public:
@@ -58,7 +57,7 @@ private:
 
 class TProfileManager : public IProfileManager {
 public:
-    TProfileManager(const TString& configPath)
+    explicit TProfileManager(const TString& configPath)
         : ConfigPath(configPath)
     {
         LoadConfig();
@@ -147,8 +146,7 @@ private:
                 Config = YAML::LoadFile(configFilePath.GetPath());
                 return;
             }
-        }
-        catch (const std::exception& e) {
+        } catch (const std::exception& e) {
             Cerr << "(!) Couldn't load profiles from config file \"" << configFilePath.GetPath()
                 << "\". " << e.what() << Endl;
         }
@@ -164,14 +162,12 @@ private:
             if (TFileStat(configFilePath).Mode & (S_IRGRP | S_IROTH)) {
                 int chmodResult = Chmod(configFilePath.GetPath().c_str(), S_IRUSR | S_IWUSR);
                 if (chmodResult) {
-                    Cerr << "Couldn't change permissions for the file \"" << configFilePath.GetPath() << "\"" << Endl;
-                    exit(chmodResult);
+                    throw yexception() << "Couldn't change permissions for the file \"" << configFilePath.GetPath() << "\"";
                 }
             }
             TFileOutput resultConfigFile(TFile(configFilePath, CreateAlways | WrOnly | AWUser | ARUser));
             resultConfigFile << YAML::Dump(Config);
-        }
-        catch (const std::exception& e) {
+        } catch (const std::exception& e) {
             Cerr << "(!) Couldn't save profiles to config file \"" << configFilePath.GetPath()
                 << "\". " << e.what() << Endl;
         }
@@ -186,5 +182,4 @@ std::shared_ptr<IProfileManager> CreateProfileManager(const TString& configPath)
     return std::make_shared<TProfileManager>(configPath);
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

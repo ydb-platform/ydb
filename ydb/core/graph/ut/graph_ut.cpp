@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(Graph) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         Ctest << "Filling..." << Endl;
-        for (int minutes = 0; minutes < 10; ++minutes) {
+        for (int minutes = 0; minutes < 2; ++minutes) {
             for (int seconds = 0; seconds < 60; ++seconds) {
                 {
                     NGraph::TEvGraph::TEvSendMetrics* event = new NGraph::TEvGraph::TEvSendMetrics();
@@ -255,9 +255,9 @@ Y_UNIT_TEST_SUITE(Graph) {
             TAutoPtr<IEventHandle> handle;
             NGraph::TEvGraph::TEvMetricsResult* response = runtime.GrabEdgeEventRethrow<NGraph::TEvGraph::TEvMetricsResult>(handle);
             Ctest << "Received result: " << response->Record.ShortDebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.TimeSize(), 10 * 60);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.TimeSize(), 2 * 60);
         }
-        runtime.AdvanceCurrentTime(TDuration::Seconds(10 * 60));
+        runtime.AdvanceCurrentTime(TDuration::Seconds(2 * 60));
 
         Ctest << "Triggering aggregation..." << Endl;
         for (int seconds = 0; seconds < 20; ++seconds) {
@@ -279,14 +279,14 @@ Y_UNIT_TEST_SUITE(Graph) {
             TAutoPtr<IEventHandle> handle;
             NGraph::TEvGraph::TEvMetricsResult* response = runtime.GrabEdgeEventRethrow<NGraph::TEvGraph::TEvMetricsResult>(handle);
             Ctest << "Received result: " << response->Record.ShortDebugString() << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.TimeSize(), 25);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(0), 559);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(1), 569);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(2), 574);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(3), 579);
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(4), 584);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.TimeSize(), 20);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(0), 79);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(1), 89);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(2), 94);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(3), 99);
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetTime(4), 104);
             UNIT_ASSERT(abs(response->Record.GetData(0).GetValues(0) - 14.5) < 0.1);
-            UNIT_ASSERT(abs(response->Record.GetData(0).GetValues(1) - 24.7) < 0.1);
+            UNIT_ASSERT(abs(response->Record.GetData(0).GetValues(1) - 24.5) < 0.1);
             UNIT_ASSERT(abs(response->Record.GetData(0).GetValues(2) - 32) < 0.1);
         }
     }

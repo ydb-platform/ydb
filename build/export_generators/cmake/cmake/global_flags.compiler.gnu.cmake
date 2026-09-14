@@ -6,6 +6,7 @@ set(_GNU_COMMON_C_CXX_FLAGS "\
   -fdebug-default-version=4 \
   -ffunction-sections \
   -fdata-sections \
+  -fsized-deallocation \
   -Wall \
   -Wextra \
   -Wno-parentheses \
@@ -66,3 +67,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${_GNU_COMMON_C_CXX_FLAGS} \
   -Wno-ambiguous-reversed-operator \
   -Wno-deprecated-volatile \
 ")
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 19)
+  string(APPEND CMAKE_CXX_FLAGS " -Wno-missing-template-arg-list-after-template-kw")
+endif()

@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxAlterReplication: public TTxBase {
@@ -19,7 +21,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", Ev->Get()->ToString()});
 
         auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvController::TEvAlterReplicationResult>();
@@ -30,34 +34,84 @@ public:
         Replication = Self->Find(pathId);
 
         if (!Replication) {
-            CLOG_W(ctx, "Cannot alter unknown replication"
-                << ": pathId# " << pathId);
+            YDB_LOG_WARN_CTX(ctx, "Cannot alter unknown replication",
+                {"pathId", pathId});
 
             Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::UNKNOWN);
             return true;
         }
 
-        Replication->SetConfig(std::move(*record.MutableConfig()));
+        bool alter = false;
+
+        const auto& oldConfig = Replication->GetConfig();
+        auto newConfig = std::move(*record.MutableConfig());
+
+        if (oldConfig.HasTransferSpecific()) {
+            auto& oldSpecific = oldConfig.GetTransferSpecific();
+            auto& newSpecific = newConfig.GetTransferSpecific();
+
+            alter = oldSpecific.GetTarget().GetTransformLambda() != newSpecific.GetTarget().GetTransformLambda()
+                || oldSpecific.GetTarget().GetDirectoryPath() != newSpecific.GetTarget().GetDirectoryPath()
+                || oldSpecific.GetBatching().GetBatchSizeBytes() != newSpecific.GetBatching().GetBatchSizeBytes()
+                || oldSpecific.GetBatching().GetFlushIntervalMilliSeconds() != newSpecific.GetBatching().GetFlushIntervalMilliSeconds();
+        }
+
+        auto desiredState = Replication->GetState();
+        if (record.HasSwitchState()) {
+            switch (record.GetSwitchState().GetStateCase()) {
+                case NKikimrReplication::TReplicationState::kDone:
+                    desiredState = TReplication::EState::Done;
+                    alter = true;
+                    break;
+                case NKikimrReplication::TReplicationState::kPaused:
+                    desiredState = TReplication::EState::Paused;
+                    alter = true;
+                    break;
+                case NKikimrReplication::TReplicationState::kStandBy:
+                    desiredState = TReplication::EState::Ready;
+                    alter = true;
+                    break;
+                default:
+                    Y_ABORT("Invalid state");
+            }
+        }
+
+        if (alter && Replication->GetState() == TReplication::EState::Error) {
+            Replication->SetState(TReplication::EState::Ready);
+            if (desiredState == TReplication::EState::Error) {
+                desiredState = TReplication::EState::Ready;
+            }
+        }
+
+        auto issue = Replication->GetIssue();
+        if (alter) {
+            Replication->SetDesiredState(desiredState);
+            if (desiredState == TReplication::EState::Ready) {
+                issue = "";
+            }
+        }
+
+        Replication->SetConfig(std::move(newConfig));
+        Replication->ResetCredentials(ctx);
+
+        if (record.HasLocation()) {
+            Replication->SetLocation(record.GetLocation());
+        }
+
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-            NIceDb::TUpdate<Schema::Replications::Config>(record.GetConfig().SerializeAsString())
+            NIceDb::TUpdate<Schema::Replications::Config>(Replication->GetConfig().SerializeAsString()),
+            NIceDb::TUpdate<Schema::Replications::DesiredState>(desiredState),
+            NIceDb::TUpdate<Schema::Replications::Issue>(issue)
         );
 
-        if (!record.HasSwitchState()) {
+        if (!alter) {
             Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
             return true;
         }
 
-        switch (record.GetSwitchState().GetStateCase()) {
-        case NKikimrReplication::TReplicationState::kDone:
-            break;
-        default:
-            Y_ABORT("Invalid state");
-        }
-
         Result->Record.SetStatus(NKikimrReplication::TEvAlterReplicationResult::SUCCESS);
 
-        bool alter = false;
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
             auto* target = Replication->FindTarget(tid);
             if (!target) {
@@ -66,6 +120,9 @@ public:
 
             target->Shutdown(ctx);
             target->SetDstState(TReplication::EDstState::Alter);
+            if (target->GetStreamState() == TReplication::EStreamState::Error && desiredState == TReplication::EState::Ready) {
+                target->SetStreamState(TReplication::EStreamState::Creating);
+            }
             db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
                 NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState())
             );
@@ -74,9 +131,9 @@ public:
         }
 
         if (alter) {
-            CLOG_N(ctx, "Alter replication"
-                << ": rid# " << Replication->GetId()
-                << ", pathId# " << pathId);
+            YDB_LOG_NOTICE_CTX(ctx, "Alter replication",
+                {"rid", Replication->GetId()},
+                {"pathId", pathId});
         } else {
             Replication.Reset();
         }
@@ -85,7 +142,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Result) {
             ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

@@ -1,8 +1,12 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+
+#include <map>
 
 namespace Ydb::Cms {
+    class CreateDatabaseRequest;
+    class AlterDatabaseRequest;
     class ListDatabasesResult;
     class GetDatabaseStatusResult;
 
@@ -20,7 +24,7 @@ namespace Ydb::Cms {
     class ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy;
 } // namespace Ydb::Cms
 
-namespace NYdb::inline V3::NCms {
+namespace NYdb::inline Dev::NCms {
 
 struct TListDatabasesSettings : public TOperationRequestSettings<TListDatabasesSettings> {};
 
@@ -34,9 +38,7 @@ private:
 
 using TAsyncListDatabasesResult = NThreading::TFuture<TListDatabasesResult>;
 
-struct TGetDatabaseStatusSettings : public TOperationRequestSettings<TGetDatabaseStatusSettings> {
-    FLUENT_SETTING(std::string, Path);
-};
+struct TGetDatabaseStatusSettings : public TOperationRequestSettings<TGetDatabaseStatusSettings> {};
 
 enum class EState {
     StateUnspecified = 0,
@@ -134,14 +136,14 @@ struct TTargetTrackingPolicy {
     TTargetTrackingPolicy() = default;
     TTargetTrackingPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy_TargetTrackingPolicy& proto);
 
-    std::variant<TAverageCpuUtilizationPercent> Target;
+    std::variant<std::monostate, TAverageCpuUtilizationPercent> Target;
 };
 
 struct TScaleRecommenderPolicy {
     TScaleRecommenderPolicy() = default;
     TScaleRecommenderPolicy(const Ydb::Cms::ScaleRecommenderPolicies_ScaleRecommenderPolicy& proto);
 
-    std::variant<TTargetTrackingPolicy> Policy;
+    std::variant<std::monostate, TTargetTrackingPolicy> Policy;
 };
 
 struct TScaleRecommenderPolicies {
@@ -151,44 +153,79 @@ struct TScaleRecommenderPolicies {
     std::vector<TScaleRecommenderPolicy> Policies;
 };
 
+using TResourcesKind = std::variant<std::monostate, TResources, TSharedResources, TServerlessResources>;
+using TAttributes = std::map<std::string, std::string>;
+
 class TGetDatabaseStatusResult : public TStatus {
 public:
     TGetDatabaseStatusResult(TStatus&& status, const Ydb::Cms::GetDatabaseStatusResult& proto);
 
     const std::string& GetPath() const;
     EState GetState() const;
-    const std::variant<TResources, TSharedResources, TServerlessResources>& GetResourcesKind() const;
+    const TResourcesKind& GetResourcesKind() const;
     const TResources& GetAllocatedResources() const;
     const std::vector<TAllocatedComputationalUnit>& GetRegisteredResources() const;
     std::uint64_t GetGeneration() const;
     const TSchemaOperationQuotas& GetSchemaOperationQuotas() const;
     const TDatabaseQuotas& GetDatabaseQuotas() const;
     const TScaleRecommenderPolicies& GetScaleRecommenderPolicies() const;
+    const TAttributes& GetAttributes() const;
+
+    // Fills CreateDatabaseRequest proto from this database status
+    void SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const;
 
 private:
     std::string Path_;
     EState State_;
-    std::variant<TResources, TSharedResources, TServerlessResources> ResourcesKind_;
+    TResourcesKind ResourcesKind_;
     TResources AllocatedResources_;
     std::vector<TAllocatedComputationalUnit> RegisteredResources_;
     std::uint64_t Generation_;
     TSchemaOperationQuotas SchemaOperationQuotas_;
     TDatabaseQuotas DatabaseQuotas_;
     TScaleRecommenderPolicies ScaleRecommenderPolicies_;
+    TAttributes Attributes_;
 };
 
 using TAsyncGetDatabaseStatusResult = NThreading::TFuture<TGetDatabaseStatusResult>;
+
+struct TCreateDatabaseSettings : public TOperationRequestSettings<TCreateDatabaseSettings> {
+    TCreateDatabaseSettings() = default;
+    explicit TCreateDatabaseSettings(const Ydb::Cms::CreateDatabaseRequest& request);
+
+    // Fills CreateDatabaseRequest proto from this settings
+    void SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const;
+
+    FLUENT_SETTING(TResourcesKind, ResourcesKind);
+    FLUENT_SETTING(TSchemaOperationQuotas, SchemaOperationQuotas);
+    FLUENT_SETTING(TDatabaseQuotas, DatabaseQuotas);
+    FLUENT_SETTING(TScaleRecommenderPolicies, ScaleRecommenderPolicies);
+};
+
+struct TAlterDatabaseSettings : public TOperationRequestSettings<TAlterDatabaseSettings> {
+    TAlterDatabaseSettings() = default;
+
+    // Fills AlterDatabaseRequest proto from this settings
+    void SerializeTo(Ydb::Cms::AlterDatabaseRequest& request) const;
+
+    // Empty value drops the attribute.
+    FLUENT_SETTING(TAttributes, AlterAttributes);
+};
 
 class TCmsClient {
 public:
     explicit TCmsClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
     TAsyncListDatabasesResult ListDatabases(const TListDatabasesSettings& settings = TListDatabasesSettings());
-    TAsyncGetDatabaseStatusResult GetDatabaseStatus(const TGetDatabaseStatusSettings& settings = TGetDatabaseStatusSettings());
-    
+    TAsyncGetDatabaseStatusResult GetDatabaseStatus(const std::string& path,
+        const TGetDatabaseStatusSettings& settings = TGetDatabaseStatusSettings());
+    TAsyncStatus CreateDatabase(const std::string& path,
+        const TCreateDatabaseSettings& settings = TCreateDatabaseSettings());
+    TAsyncStatus AlterDatabase(const std::string& path,
+        const TAlterDatabaseSettings& settings = TAlterDatabaseSettings());
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::inline V3::NCms
+} // namespace NYdb::inline Dev::NCms

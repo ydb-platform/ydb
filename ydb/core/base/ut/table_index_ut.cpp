@@ -1,5 +1,4 @@
 #include "table_index.h"
-#include "table_vector_index.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -27,16 +26,16 @@ Y_UNIT_TEST_SUITE (TableIndex) {
         UNIT_ASSERT_STRINGS_EQUAL(explain, "");
 
         {
-            const TTableColumns Table2{{"PK", "DATA", NTableVectorKmeansTreeIndex::ParentColumn}, {"PK"}};
+            const TTableColumns Table2{{"PK", "DATA", NKMeans::ParentColumn}, {"PK"}};
 
-            UNIT_ASSERT(IsCompatibleIndex(type, Table2, {{NTableVectorKmeansTreeIndex::ParentColumn}, {}}, explain));
+            UNIT_ASSERT(IsCompatibleIndex(type, Table2, {{NKMeans::ParentColumn}, {}}, explain));
             UNIT_ASSERT_STRINGS_EQUAL(explain, "");
 
-            UNIT_ASSERT(IsCompatibleIndex(type, Table2, {{"DATA"}, {NTableVectorKmeansTreeIndex::ParentColumn}}, explain));
+            UNIT_ASSERT(IsCompatibleIndex(type, Table2, {{"DATA"}, {NKMeans::ParentColumn}}, explain));
             UNIT_ASSERT_STRINGS_EQUAL(explain, "");
         }
         {
-            const TTableColumns Table3{{"PK", "DATA", NTableVectorKmeansTreeIndex::ParentColumn}, {NTableVectorKmeansTreeIndex::ParentColumn}};
+            const TTableColumns Table3{{"PK", "DATA", NKMeans::ParentColumn}, {NKMeans::ParentColumn}};
 
             UNIT_ASSERT(IsCompatibleIndex(type, Table3, {{"DATA"}, {}}, explain));
             UNIT_ASSERT_STRINGS_EQUAL(explain, "");
@@ -93,6 +92,9 @@ Y_UNIT_TEST_SUITE (TableIndex) {
 
         UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"DATA1"}, {"DATA1"}}, explain));
         UNIT_ASSERT_STRINGS_EQUAL(explain, "");
+
+        UNIT_ASSERT(IsCompatibleIndex(type, Table, {{"DATA1", "DATA2"}, {}}, explain));
+        UNIT_ASSERT_STRINGS_EQUAL(explain, "");
     }
 
     Y_UNIT_TEST (NotCompatibleVectorIndex) {
@@ -111,26 +113,23 @@ Y_UNIT_TEST_SUITE (TableIndex) {
         UNIT_ASSERT(!IsCompatibleIndex(type, Table, {{"DATA1", "DATA1"}, {}}, explain));
         UNIT_ASSERT_STRINGS_EQUAL(explain, "all index key columns should be unique, for example DATA1");
 
-        UNIT_ASSERT(!IsCompatibleIndex(type, Table, {{"DATA1", "DATA2"}, {}}, explain));
-        UNIT_ASSERT_STRINGS_EQUAL(explain, "only single key column is supported for vector index");
-
         UNIT_ASSERT(!IsCompatibleIndex(type, Table, {{"DATA1"}, {"PK2"}}, explain));
         UNIT_ASSERT_STRINGS_EQUAL(explain, "the same column can't be used as key and data column for one index, for example PK2");
 
         {
-            const TTableColumns Table2{{"PK", "DATA", NTableVectorKmeansTreeIndex::ParentColumn}, {"PK"}};
+            const TTableColumns Table2{{"PK", "DATA", NKMeans::ParentColumn}, {"PK"}};
 
-            UNIT_ASSERT(!IsCompatibleIndex(type, Table2, {{NTableVectorKmeansTreeIndex::ParentColumn}, {}}, explain));
-            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "index key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::ParentColumn);
+            UNIT_ASSERT(!IsCompatibleIndex(type, Table2, {{NKMeans::ParentColumn}, {}}, explain));
+            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "index key column shouldn't have a reserved name");
 
-            UNIT_ASSERT(!IsCompatibleIndex(type, Table2, {{"DATA"}, {NTableVectorKmeansTreeIndex::ParentColumn}}, explain));
-            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "index data column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::ParentColumn);
+            UNIT_ASSERT(!IsCompatibleIndex(type, Table2, {{"DATA"}, {NKMeans::ParentColumn}}, explain));
+            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "index data column shouldn't have a reserved name");
         }
         {
-            const TTableColumns Table3{{"PK", "DATA", NTableVectorKmeansTreeIndex::ParentColumn}, {NTableVectorKmeansTreeIndex::ParentColumn}};
+            const TTableColumns Table3{{"PK", "DATA", NKMeans::ParentColumn}, {NKMeans::ParentColumn}};
 
             UNIT_ASSERT(!IsCompatibleIndex(type, Table3, {{"DATA"}, {}}, explain));
-            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "table key column shouldn't have a reserved name: " << NTableVectorKmeansTreeIndex::ParentColumn);
+            UNIT_ASSERT_STRINGS_EQUAL(explain, TStringBuilder() << "table key column shouldn't have a reserved name");
         }
     }
 }

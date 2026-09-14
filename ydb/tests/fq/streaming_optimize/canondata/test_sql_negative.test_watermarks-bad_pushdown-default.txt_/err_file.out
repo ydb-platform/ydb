@@ -1,0 +1,8 @@
+Failed to execute query, reason:
+Request finished with status: GENERIC_ERROR
+Issues:
+<main>: Error: Type annotation, code: 1030
+    <main>:1:1: Error: At function: RemovePrefixMembers, At function: RemovePrefixMembers, At function: RemoveSystemMembers, At function: PersistableRepr, At function: SqlProject
+        <main>:4:5: Error: At function: PqReadTopic!
+            <main>:7:9: Error: Bad watermark expression: unknown UDF in apply: DateTime2.IntervalFromSeconds
+

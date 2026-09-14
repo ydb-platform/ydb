@@ -8,7 +8,8 @@
 namespace NYql::NTypeAnnImpl {
 
 IGraphTransformer::TStatus MatchRecognizeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-IGraphTransformer::TStatus MatchRecognizeMeasuresAggregatesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+IGraphTransformer::TStatus MatchRecognizeMeasuresCallablesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+IGraphTransformer::TStatus MatchRecognizeMeasuresCallableWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 IGraphTransformer::TStatus MatchRecognizeParamsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 IGraphTransformer::TStatus MatchRecognizeMeasuresWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 IGraphTransformer::TStatus MatchRecognizePatternWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

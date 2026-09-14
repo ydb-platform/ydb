@@ -1,26 +1,19 @@
-SELECT
-    Unicode::TryToUint64("hell", 10);
+$input = [
+    <|value: "0x1234abcd"u|>,
+    <|value: "0X4"u|>,
+    <|value: "0644"u|>,
+    <|value: "0101010"u|>,
+    <|value: "101"u|>,
+    <|value: "0"u|>,
+    <|value: "hell"u|>,
+    <|value: "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"u|>,
+];
 
 SELECT
-    Unicode::TryToUint64("01238", 8);
-
-SELECT
-    Unicode::TryToUint64("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 16);
-
-SELECT
-    Unicode::TryToUint64("0", 1);
-
-SELECT
-    Unicode::TryToUint64("0x1234abcd", 16),
-    Unicode::TryToUint64("0X4", 16),
-    Unicode::TryToUint64("0644", 8),
-    Unicode::TryToUint64("0101010", 16),
-    Unicode::TryToUint64("0101010", 2),
-    Unicode::TryToUint64("0101010", 10),
-    Unicode::TryToUint64("101", 10);
-
-SELECT
-    Unicode::TryToUint64("0", 8),
-    Unicode::TryToUint64("0", 10),
-    Unicode::TryToUint64("0", 16),
-    Unicode::TryToUint64("0");
+    value as value,
+    Unicode::TryToUint64(value, 10),
+    Unicode::TryToUint64(value, 1),
+    Unicode::TryToUint64(value, 4),
+    Unicode::TryToUint64(value, 8),
+    Unicode::TryToUint64(value, 16)
+FROM AS_TABLE($input)

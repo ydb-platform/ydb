@@ -1,22 +1,21 @@
 #pragma once
 
 #include "config.h"
-#include "executor_pool_jail.h"
 #include "executor_pool.h"
-#include "executor_pool_shared.h"
-#include "mon_stats.h"
 #include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <memory>
+#include <optional>
 
 namespace NActors {
     struct TActorSystemSetup;
     class TExecutorPoolJail;
+    class TSharedExecutorPool;
 
     class TCpuManager : public TNonCopyable {
         const ui32 ExecutorPoolCount;
         TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
         std::unique_ptr<IHarmonizer> Harmonizer;
-        std::unique_ptr<ISharedExecutorPool> Shared;
+        std::unique_ptr<TSharedExecutorPool> Shared;
         std::unique_ptr<TExecutorPoolJail> Jail;
         TCpuManagerConfig Config;
 
@@ -25,6 +24,7 @@ namespace NActors {
         ~TCpuManager();
 
         void Setup();
+        void SetupShared();
         void PrepareStart(TVector<NSchedulerQueue::TReader*>& scheduleReaders, TActorSystem* actorSystem);
         void Start();
         void PrepareStop();
@@ -41,6 +41,8 @@ namespace NActors {
             return Executors[poolId].Get();
         }
 
+        std::optional<TCpuMask> GetExecutorPoolAffinity(ui32 poolId) const;
+
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
             if (poolId < ExecutorPoolCount) {
                 Executors[poolId]->GetCurrentStats(poolStats, statsCopy);
@@ -51,11 +53,12 @@ namespace NActors {
         void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
         void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 
-        THarmonizerStats GetHarmonizerStats() const {
+        void GetHarmonizerStats(THarmonizerStats &stats) const {
             if (Harmonizer) {
-                return Harmonizer->GetStats();
+                return Harmonizer->GetStats(stats);
+            } else {
+                stats = {};
             }
-            return {};
         }
 
     private:

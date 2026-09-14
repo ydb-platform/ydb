@@ -2,6 +2,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -76,7 +78,7 @@ EExecutionStatus TWaitForStreamClearanceUnit::Execute(TOperation::TPtr op,
     }
 
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     if (!op->IsWaitingForStreamClearance()) {
         auto tid = tx->GetDataTx()->GetReadTableTransaction().GetTableId().GetTableId();
@@ -94,9 +96,10 @@ EExecutionStatus TWaitForStreamClearanceUnit::Execute(TOperation::TPtr op,
         op->SetWaitingForStreamClearanceFlag();
         op->SetProcessDisconnectsFlag();
 
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Requested stream clearance from " << tx->GetStreamSink()
-                    << " for " << *op << " at " << DataShard.TabletID());
+        YDB_LOG_TRACE_CTX(ctx, "Requested stream clearance",
+            {"streamSink", tx->GetStreamSink()},
+            {"operation", *op},
+            {"tabletId", DataShard.TabletID()});
     }
 
     while (op->HasPendingInputEvents()) {
@@ -123,9 +126,9 @@ void TWaitForStreamClearanceUnit::ProcessEvent(TAutoPtr<NActors::IEventHandle> &
         OHFunc(TEvents::TEvUndelivered, Handle);
         IgnoreFunc(TEvTxProcessing::TEvStreamClearancePending);
     default:
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "TWaitForStreamClearanceUnit::ProcessEvent unhandled event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString());
+        YDB_LOG_ERROR_CTX(ctx, "TWaitForStreamClearanceUnit::ProcessEvent unhandled event",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString()});
         Y_DEBUG_ABORT("unexpected event %" PRIu64, (ui64)ev->GetTypeRewrite());
     }
 }
@@ -136,7 +139,7 @@ void TWaitForStreamClearanceUnit::Handle(TDataShard::TEvPrivate::TEvNodeDisconne
 {
     if (op->IsWaitingForStreamClearance()) {
         TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (ev->Get()->NodeId == tx->GetStreamSink().NodeId()) {
             Abort(TStringBuilder() << "Disconnected from stream sink (node " << ev->Get()->NodeId
@@ -152,8 +155,9 @@ void TWaitForStreamClearanceUnit::Handle(TEvTxProcessing::TEvStreamClearanceResp
 {
     if (op->IsWaitingForStreamClearance()) {
         if (ev->Get()->Record.GetCleared()) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "Got stream clearance for " << *op << " at " << DataShard.TabletID());
+            YDB_LOG_TRACE_CTX(ctx, "Got stream clearance",
+                {"operation", *op},
+                {"tabletId", DataShard.TabletID()});
             op->ResetWaitingForStreamClearanceFlag();
         } else {
             Abort(TStringBuilder() << "Got stream clearance reject for " << *op
@@ -190,7 +194,7 @@ void TWaitForStreamClearanceUnit::Abort(const TString &err,
                                         const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
     if (tx->GetScanSnapshotId()) {
@@ -198,7 +202,8 @@ void TWaitForStreamClearanceUnit::Abort(const TString &err,
         tx->SetScanSnapshotId(0);
     }
 
-    LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+    YDB_LOG_NOTICE_CTX(ctx, "TWaitForStreamClearanceUnit::Abort: aborting operation",
+        {"errorMessage", err});
 
     op->ResetWaitingForStreamClearanceFlag();
 }
@@ -216,3 +221,7 @@ THolder<TExecutionUnit> CreateWaitForStreamClearanceUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

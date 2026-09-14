@@ -3,6 +3,7 @@
 #include <util/stream/str.h>
 
 namespace NYdb {
+inline namespace Dev {
 namespace NUuid {
 
 static void WriteHexDigit(ui8 digit, IOutputStream& out) {
@@ -79,4 +80,4 @@ void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out) {
 
 }
 }
-
+}

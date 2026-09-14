@@ -3,10 +3,7 @@
 #include <util/generic/map.h>
 #include <util/stream/str.h>
 
-
-namespace NKikimr {
-
-namespace NCHash {
+namespace NKikimr::NCHash {
 
 void TListPoolBase::FreeListPage(TListHeader* p) {
     Y_ASSERT(TAlignedPagePool::GetPageStart(p) == p);
@@ -17,23 +14,23 @@ void TListPoolBase::FreeListPage(TListHeader* p) {
 size_t TListPoolBase::TUsedPages::PrintStat(const TStringBuf& header, IOutputStream& out) const {
     TMap<ui32, ui64> counts;
     size_t pages = 0;
-    for (auto& p: FullPages) {
+    for (auto& p : FullPages) {
         ++pages;
         ++counts[p.As<TListHeader>()->ListSize];
     }
-    for (auto& c: counts) {
+    for (auto& c : counts) {
         out << header << "Count of full pages<" << c.first << ">: " << c.second << Endl;
     }
-    for (size_t i = 0; i < SmallPages.size(); ++i) {
-        if (size_t size = SmallPages[i].Size()) {
+    for (const auto& smallPage : SmallPages) {
+        if (size_t size = smallPage.Size()) {
             pages += size;
-            out << header << "Count of partially free pages<" << SmallPages[i].Front()->As<TListHeader>()->ListSize << ">: " << size << Endl;
+            out << header << "Count of partially free pages<" << smallPage.Front()->As<TListHeader>()->ListSize << ">: " << size << Endl;
         }
     }
-    for (size_t i = 0; i < MediumPages.size(); ++i) {
-        if (size_t size = MediumPages[i].Size()) {
+    for (const auto& mediumPage : MediumPages) {
+        if (size_t size = mediumPage.Size()) {
             pages += size;
-            out << header << "Count of partially free pages<" << MediumPages[i].Front()->As<TListHeader>()->ListSize << ">: " << size << Endl;
+            out << header << "Count of partially free pages<" << mediumPage.Front()->As<TListHeader>()->ListSize << ">: " << size << Endl;
         }
     }
     return pages;
@@ -42,22 +39,20 @@ size_t TListPoolBase::TUsedPages::PrintStat(const TStringBuf& header, IOutputStr
 TString TListPoolBase::TUsedPages::DebugInfo() const {
     TStringStream out;
     TMap<ui32, ui64> counts;
-    for (auto& p: FullPages) {
+    for (auto& p : FullPages) {
         out << "Full page<" << p.As<TListHeader>()->ListSize << ">: " << p.As<TListHeader>()->FreeLists << Endl;
     }
-    for (size_t i = 0; i < SmallPages.size(); ++i) {
-        for (auto& p: SmallPages[i]) {
+    for (const auto& smallPage : SmallPages) {
+        for (auto& p : smallPage) {
             out << "Partially free page<" << p.As<TListHeader>()->ListSize << ">: " << p.As<TListHeader>()->FreeLists << Endl;
         }
     }
-    for (size_t i = 0; i < MediumPages.size(); ++i) {
-        for (auto& p: MediumPages[i]) {
+    for (const auto& mediumPage : MediumPages) {
+        for (auto& p : mediumPage) {
             out << "Partially free page<" << p.As<TListHeader>()->ListSize << ">: " << p.As<TListHeader>()->FreeLists << Endl;
         }
     }
     return out.Str();
 }
 
-} // NCHash
-
-} // NKikimr
+} // namespace NKikimr::NCHash

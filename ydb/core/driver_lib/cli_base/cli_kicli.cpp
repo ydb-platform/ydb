@@ -1,58 +1,11 @@
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include "cli_kicli.h"
 
 namespace NKikimr {
 namespace NDriverClient {
-
-template <typename RequestType>
-void SetToken(TClientCommand::TConfig& config, TAutoPtr<RequestType>& request) {
-    if (!config.SecurityToken.empty()) {
-        request->Record.SetSecurityToken(config.SecurityToken);
-    }
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusRequest>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeInitRoot>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeOperation>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusSchemeDescribe>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusCmsRequest>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusConsoleRequest>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusTabletLocalMKQL>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusFillNode>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusDrainNode>& request) {
-    SetToken(config, request);
-}
 
 template <>
 int OnMessageBus(const TClientCommand::TConfig& config, const NMsgBusProxy::TBusResponse& response) {

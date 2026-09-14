@@ -19,8 +19,8 @@ PEERDIR(
     yql/essentials/public/issue
     yql/essentials/ast
     yql/essentials/utils
-    yql/essentials/core/issue/protos
-    yql/essentials/parser/proto_ast/antlr3
+    yql/essentials/public/issue/protos
+    yql/essentials/parser/proto_ast/antlr4
     yql/essentials/parser/proto_ast/gen/jsonpath
 )
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/hash.h>
+#include <util/generic/utility.h>
 #include <util/system/spinlock.h>
 
 #include <array>
@@ -58,6 +59,21 @@ public:
             return r;
         }
 
+        bool TryRemoveUnsafe(const K& key, V& result) {
+            typename TActualMap::iterator it = Map.find(key);
+            if (it == Map.end()) {
+                return false;
+            }
+            result = std::move(it->second);
+            Map.erase(it);
+            return true;
+        }
+
+        // Returns true if key was deleted from the hashmap
+        bool DropUnsafe(const K& key) {
+            return Map.erase(key) != 0;
+        }
+
         bool HasUnsafe(const K& key) const {
             typename TActualMap::const_iterator it = Map.find(key);
             return (it != Map.end());
@@ -71,6 +87,22 @@ public:
         V* TryGetUnsafe(const K& key) {
             typename TActualMap::iterator it = Map.find(key);
             return it == Map.end() ? nullptr : &it->second;
+        }
+
+        template <typename Predicate>
+        void RetainUnsafe(Predicate predicate) {
+            typename TActualMap::iterator it = Map.begin();
+            while (it != Map.end()) {
+                if (predicate(*it)) {
+                    it++;
+                } else {
+                    Map.erase(it++);
+                }
+            }
+        }
+
+        size_t SizeUnsafe() const {
+            return Map.size();
         }
     };
 
@@ -91,6 +123,12 @@ public:
         TBucket& bucket = GetBucketForKey(key);
         TBucketGuard guard(bucket.Mutex);
         bucket.Map[key] = value;
+    }
+
+    void Exchange(const K& key, V& value) {
+        TBucket& bucket = GetBucketForKey(key);
+        TBucketGuard guard(bucket.Mutex);
+        DoSwap(bucket.Map[key], value);
     }
 
     void InsertUnique(const K& key, const V& value) {
@@ -154,9 +192,39 @@ public:
         return bucket.RemoveUnsafe(key);
     }
 
+    bool TryRemove(const K& key, V& result) {
+        TBucket& bucket = GetBucketForKey(key);
+        TBucketGuard guard(bucket.Mutex);
+        return bucket.TryRemoveUnsafe(key, result);
+    }
+
+    // Returns true if key was deleted from the hashmap
+    bool Drop(const K& key) {
+        TBucket& bucket = GetBucketForKey(key);
+        TBucketGuard guard(bucket.Mutex);
+        return bucket.DropUnsafe(key);
+    }
+
     bool Has(const K& key) const {
         const TBucket& bucket = GetBucketForKey(key);
         TBucketGuard guard(bucket.Mutex);
         return bucket.HasUnsafe(key);
+    }
+
+    template <typename Predicate>
+    void Retain(Predicate predicate) {
+        for (auto& bucket: Buckets) {
+            TBucketGuard guard(bucket.Mutex);
+            bucket.RetainUnsafe(predicate);
+        }
+    }
+
+    size_t ApproximateSize() const {
+        size_t total = 0;
+        for (const auto& bucket: Buckets) {
+            TBucketGuard guard(bucket.Mutex);
+            total += bucket.SizeUnsafe();
+        }
+        return total;
     }
 };

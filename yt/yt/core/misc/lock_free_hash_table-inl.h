@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "lock_free_hash_table.h"
 #endif
-#undef LOCK_FREE_HASH_TABLE_INL_H_
 
 namespace NYT {
 
@@ -46,6 +45,12 @@ template <class T>
 size_t TLockFreeHashTable<T>::GetByteSize() const
 {
     return sizeof(std::atomic<TEntry>) * Size_;
+}
+
+template <class T>
+size_t TLockFreeHashTable<T>::GetByteSize(size_t capacity)
+{
+    return sizeof(std::atomic<TEntry>) * capacity * HashTableExpansionFactor;
 }
 
 template <class T>
@@ -141,7 +146,7 @@ typename TLockFreeHashTable<T>::TItemRef TLockFreeHashTable<T>::FindRef(TFingerp
     auto stamp = StampFromFingerprint(fingerprint);
 
     for (size_t probeCount = Size_; probeCount != 0;) {
-        auto tableEntry = HashTable_[index].load(std::memory_order::relaxed);
+        auto tableEntry = HashTable_[index].load(std::memory_order::acquire);
         // TODO(lukyan): Rename to entryStamp.
         auto tableStamp = StampFromEntry(tableEntry);
 
@@ -154,7 +159,7 @@ typename TLockFreeHashTable<T>::TItemRef TLockFreeHashTable<T>::FindRef(TFingerp
             // TIntrusivePtr::AcquireUnchecked could be used outside this function.
 
             auto item = THazardPtr<T>::Acquire([&] {
-                return ValueFromEntry(HashTable_[index].load(std::memory_order::relaxed));
+                return ValueFromEntry(HashTable_[index].load(std::memory_order::acquire));
             }, ValueFromEntry(tableEntry));
 
             if (TEqualTo<T>()(item.Get(), key)) {

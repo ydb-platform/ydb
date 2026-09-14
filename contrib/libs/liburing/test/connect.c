@@ -372,8 +372,10 @@ static int test(int flags)
 	int ret;
 
 	ret = io_uring_queue_init(8, &ring, flags);
+	if (ret == -EINVAL)
+		return T_EXIT_SKIP;
 	if (ret) {
-		fprintf(stderr, "io_uring_queue_setup() = %d\n", ret);
+		fprintf(stderr, "io_uring_queue_init() = %d\n", ret);
 		return T_EXIT_FAIL;
 	}
 
@@ -414,30 +416,32 @@ static int test(int flags)
 
 int main(int argc, char *argv[])
 {
+	bool any_passed = false;
 	int ret;
 
 	if (argc > 1)
 		return T_EXIT_SKIP;
 
 	ret = test(0);
-	if (ret == -1) {
+	any_passed |= ret == T_EXIT_PASS;
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test 0 failed\n");
 		return T_EXIT_FAIL;
 	}
-	if (no_connect)
-		return T_EXIT_SKIP;
 
 	ret = test(IORING_SETUP_SQPOLL);
-	if (ret == -1) {
+	any_passed |= ret == T_EXIT_PASS;
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test SQPOLL failed\n");
 		return T_EXIT_FAIL;
 	}
 
 	ret = test(IORING_SETUP_SINGLE_ISSUER|IORING_SETUP_DEFER_TASKRUN);
-	if (ret == -1) {
+	any_passed |= ret == T_EXIT_PASS;
+	if (ret == T_EXIT_FAIL) {
 		fprintf(stderr, "test DEFER failed\n");
 		return T_EXIT_FAIL;
 	}
 
-	return T_EXIT_PASS;
+	return any_passed ? T_EXIT_PASS : T_EXIT_SKIP;
 }

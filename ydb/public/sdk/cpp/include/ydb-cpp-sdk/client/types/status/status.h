@@ -1,16 +1,16 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/fwd.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fwd.h>
 
-#include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
-#include <ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
-#include <ydb-cpp-sdk/client/types/ydb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fatal_error_handlers/handlers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/ydb.h>
 
-#include <ydb-cpp-sdk/library/issue/yql_issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/issue/yql_issue.h>
 
 #include <library/cpp/threading/future/future.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 //! Internal status representation
 struct TPlainStatus;
@@ -61,12 +61,45 @@ public:
         return out << e.Status_;
     }
 
+    const TStatus& GetStatus() const {
+        return Status_;
+    }
+
+    TStatus&& ExtractStatus() {
+        return std::move(Status_);
+    }
+
+private:
+    TStatus Status_;
+};
+
+class TYdbRangeErrorException : public TYdbException {
+public:
+    TYdbRangeErrorException(TStatus status)
+        : Status_(std::move(status))
+    {
+    }
+
+    friend IOutputStream& operator<<(IOutputStream& out, const TYdbRangeErrorException& e) {
+        return out << e.Status_;
+    }
+
+    const TStatus& GetStatus() const {
+        return Status_;
+    }
+
+    TStatus&& ExtractStatus() {
+        return std::move(Status_);
+    }
+
 private:
     TStatus Status_;
 };
 
 void ThrowOnError(TStatus status, std::function<void(TStatus)> onSuccess = [](TStatus) {});
 void ThrowOnErrorOrPrintIssues(TStatus status);
+
+bool StatusContainsIssueWithCode(const TStatus& status, NYdb::NIssue::TIssueCode code);
 
 }
 

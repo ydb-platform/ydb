@@ -1,8 +1,8 @@
 #pragma once
 
-#include "params.h"
 #include "types.h"
 
+#include <ydb/core/http_proxy/sqs_xml/params.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/sqs.pb.h>
 
@@ -52,6 +52,13 @@ private:
             // it's also TVM-compatible due to universal TicketParser
             request->MutableCredentials()->SetOAuthToken(SecurityToken_);
         }
+    }
+
+    template<typename T>
+    void SetupAuth(T* const request) {
+        auto* auth = request->MutableAuth();
+        auth->SetUserName(UserName_);
+        auth->SetSourceAddress(SourceAddress_);
     }
 
     TString GetRequestPathPart(TStringBuf path, size_t partIdx) const;
@@ -111,7 +118,7 @@ private:
     TAsyncHttpServer* const Parent_;
     TIntrusivePtr<THttpUserCounters> UserCounters_;
 
-    TParameters QueryParams_;
+    NHttpProxy::NSQS::TParameters QueryParams_;
     EAction Action_ = EAction::Unknown;
     TString UserName_;
     TString AccountName_;

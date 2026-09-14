@@ -8,9 +8,6 @@ template <typename TCharType, typename TTraits = std::char_traits<TCharType>>
 class TBasicString;
 
 using TString = TBasicString<char>;
-#ifndef TSTRING_IS_STD_STRING
-using TCowString = TBasicString<char>;
-#endif
 using TUtf16String = TBasicString<wchar16>;
 using TUtf32String = TBasicString<wchar32>;
 
@@ -104,7 +101,7 @@ template <class T, class D = TDelete>
 class TAutoPtr;
 
 template <class T, class D = TDelete>
-class THolder;
+class Y_TRIVIAL_ABI THolder;
 
 template <class T, class C, class D = TDelete>
 class TRefCounted;
@@ -163,3 +160,5 @@ class TArrayRef;
 
 template <class T>
 using TConstArrayRef = TArrayRef<const T>;
+
+class TBlob;

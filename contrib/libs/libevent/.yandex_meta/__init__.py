@@ -6,16 +6,20 @@ from devtools.yamaker.modules import Linkable, Switch
 from devtools.yamaker.project import GNUMakeNixProject
 
 
-def libevent_post_install(self):
+def post_install(self):
     own_compat = os.path.join(self.arcdir, "compat")
+    # provide strlcpy
     for p, m in self.yamakes.items():
         if own_compat in m.ADDINCL:
             m.ADDINCL.remove(own_compat)
         m.PEERDIR.add("contrib/libs/libc_compat")
-        m.CFLAGS.append("-DEVENT__HAVE_STRLCPY=1")
 
     shutil.rmtree(os.path.join(self.dstdir, "compat"))
     os.remove(os.path.join(self.dstdir, "strlcpy.c"))
+
+    with self.yamakes["."] as m:
+        m.CFLAGS = []
+        m.CFLAGS.append("-DHAVE_CONFIG_H")
 
     with self.yamakes["event_core"] as m:
         m.SRCS -= {"epoll.c", "poll.c", "select.c", "strlcpy.c"}
@@ -85,7 +89,6 @@ def libevent_post_install(self):
 
 
 libevent = GNUMakeNixProject(
-    owners=["g:cpp-contrib", "dldmitry"],
     arcdir="contrib/libs/libevent",
     nixattr="libevent",
     ignore_commands=["bash", "sed"],
@@ -128,8 +131,12 @@ libevent = GNUMakeNixProject(
         "test-weof",
         "time-test",
     },
-    platform_dispatchers=["include/event2/event-config.h"],
-    addincl_global={".": {"./include"}},
-    post_install=libevent_post_install,
+    platform_dispatchers=[
+        "include/event2/event-config.h",
+    ],
+    addincl_global={
+        ".": {"./include"},
+    },
+    post_install=post_install,
     disable_includes=["afunix.h", "netinet/in6.h", "vproc.h"],
 )

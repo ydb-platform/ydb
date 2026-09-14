@@ -1,4 +1,4 @@
-#include "user_info.h"
+#include <ydb/core/persqueue/pqtablet/partition/user_info.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

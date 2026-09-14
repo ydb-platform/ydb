@@ -50,7 +50,7 @@ struct wide_multiply {
   }
   static input_type lo(result_type r) { return static_cast<input_type>(r); }
 
-  static_assert(std::is_unsigned<UIntType>::value,
+  static_assert(std::is_unsigned_v<UIntType>,
                 "Class-template wide_multiply<> argument must be unsigned.");
 };
 
@@ -74,7 +74,6 @@ inline U256 MultiplyU128ToU256(uint128 a, uint128 b) {
   return {c128 + (c64a >> 64) + (c64b >> 64) + carry,
           c00 + (c64a << 64) + (c64b << 64)};
 }
-
 
 template <>
 struct wide_multiply<uint128> {

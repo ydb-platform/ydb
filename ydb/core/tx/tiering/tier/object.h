@@ -1,5 +1,4 @@
 #pragma once
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/status.h>
@@ -27,11 +26,16 @@ public:
         , Compression(compression) {
     }
 
+    explicit TTierConfig(const TTierProto& config)
+        : ProtoConfig(config) {
+    }
+
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TExternalDataSourceDescription& proto);
 
     NJson::TJsonValue SerializeConfigToJson() const;
 
     TConclusion<NKikimrSchemeOp::TS3Settings> GetPatchedConfig(const std::shared_ptr<NMetadata::NSecret::ISecretAccessor>& secrets) const;
+    TTierConfig BuildWithPatchedSecrets(const TString& accessKeyValue, const TString& secretKeyValue) const;
 
     bool IsSame(const TTierConfig& item) const;
     NJson::TJsonValue GetDebugJson() const;

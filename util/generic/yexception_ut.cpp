@@ -11,6 +11,7 @@ static inline void Throw2DontMove() {
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/scope.h>
 #include <util/memory/tempbuf.h>
 #include <util/random/mersenne.h>
 #include <util/stream/output.h>
@@ -18,7 +19,6 @@ static inline void Throw2DontMove() {
 #include <util/string/split.h>
 
 #include "yexception_ut.h"
-#include "bt_exception.h"
 
 #if defined(_MSC_VER)
     #pragma warning(disable : 4702) /*unreachable code*/
@@ -160,7 +160,10 @@ private:
         auto invalidFormatter = [](IOutputStream*, void* const*, size_t) {
             Throw2DontMove();
         };
-        SetFormatBackTraceFn(invalidFormatter);
+        TFormatBackTraceFn prevFn = SetFormatBackTraceFn(invalidFormatter);
+        Y_DEFER {
+            SetFormatBackTraceFn(prevFn);
+        };
 
         try {
             Throw1DontMove();

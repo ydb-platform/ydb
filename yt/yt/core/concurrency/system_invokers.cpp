@@ -1,6 +1,6 @@
 #include "system_invokers.h"
 #include "action_queue.h"
-#include "profiling_helpers.h"
+#include "helpers.h"
 #include "single_queue_scheduler_thread.h"
 
 #include <yt/yt/core/misc/shutdown.h>
@@ -11,12 +11,17 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TTag>
 class TSystemInvokerThread
 {
 public:
+    const IInvokerPtr& GetInvoker()
+    {
+        return Invoker_;
+    }
+
+protected:
     TSystemInvokerThread(
-        const TString& threadName,
+        std::string threadName,
         int shutdownPriority)
         : Queue_(New<TMpscInvokerQueue>(
             CallbackEventCount_,
@@ -38,11 +43,6 @@ public:
         Thread_->Start();
     }
 
-    const IInvokerPtr& GetInvoker()
-    {
-        return Invoker_;
-    }
-
 private:
     const TIntrusivePtr<NThreading::TEventCount> CallbackEventCount_ = New<NThreading::TEventCount>();
     const TMpscInvokerQueuePtr Queue_;
@@ -56,20 +56,36 @@ private:
     }
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
+class TFinalizerInvokerThread
+    : public TSystemInvokerThread
+{
+public:
+    TFinalizerInvokerThread()
+        : TSystemInvokerThread("Finalizer", -300)
+    { }
+};
+
+class TShutdownInvokerThread
+    : public TSystemInvokerThread
+{
+public:
+    TShutdownInvokerThread()
+        : TSystemInvokerThread("Shutdown", -200)
+    { }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 IInvokerPtr GetFinalizerInvoker()
 {
-    struct TTag
-    { };
-    static const auto invoker = LeakySingleton<TSystemInvokerThread<TTag>>("Finalizer", -300)->GetInvoker();
-    return invoker;
+    return LeakySingleton<TFinalizerInvokerThread>()->GetInvoker();
 }
 
 IInvokerPtr GetShutdownInvoker()
 {
-    struct TTag
-    { };
-    static const auto invoker = LeakySingleton<TSystemInvokerThread<TTag>>("Shutdown", -200)->GetInvoker();
-    return invoker;
+    return LeakySingleton<TShutdownInvokerThread>()->GetInvoker();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

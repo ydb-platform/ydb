@@ -101,6 +101,26 @@ public:
         this->Join();
     }
 
+    // Force full traffic blackhole on this interrupter: no polling, no forwarding, sockets stay open.
+    // This is used by tests that need deterministic "no progress" TCP states (e.g. TCP_USER_TIMEOUT checks).
+    void StartBlackhole() {
+        ManualRejectingTraffic.store(true, std::memory_order_release);
+        ManualRejectingTrafficOverride.store(true, std::memory_order_release);
+        WaitForManualStateObservation(ManualRejectingTrafficGeneration.fetch_add(1, std::memory_order_acq_rel) + 1);
+    }
+
+    // Disable forced blackhole and resume normal mode (random reject mode if configured, otherwise pass-through).
+    void StopBlackhole() {
+        ManualRejectingTraffic.store(false, std::memory_order_release);
+        ManualRejectingTrafficOverride.store(true, std::memory_order_release);
+        WaitForManualStateObservation(ManualRejectingTrafficGeneration.fetch_add(1, std::memory_order_acq_rel) + 1);
+    }
+
+    // Drop manual override and return to legacy random reject toggling (when timeout is configured).
+    void ClearBlackholeOverride() {
+        ManualRejectingTrafficOverride.store(false, std::memory_order_release);
+    }
+
 private:
     std::atomic<bool> Running = true;
     TVector<char> Buf;
@@ -117,6 +137,18 @@ private:
     const bool Disconnect;
     bool RejectingTraffic;
     bool DelayTraffic;
+    std::atomic<bool> ManualRejectingTrafficOverride = false;
+    std::atomic<bool> ManualRejectingTraffic = false;
+    std::atomic<ui64> ManualRejectingTrafficGeneration = 0;
+    std::atomic<ui64> ObservedManualRejectingTrafficGeneration = 0;
+
+    void WaitForManualStateObservation(ui64 generation) const {
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (ObservedManualRejectingTrafficGeneration.load(std::memory_order_acquire) < generation) {
+            Y_ABORT_UNLESS(TInstant::Now() < deadline, "timeout waiting for traffic interrupter manual state observation");
+            NanoSleep(1'000'000); // 1 ms
+        }
+    }
 
     void UpdateRejectingState() {
         if (TDuration::Seconds(std::abs(RejectingStateTimer.Passed())) > CurrentRejectingTimeout) {
@@ -147,9 +179,13 @@ private:
         Events.resize(10);
 
         while (Running.load(std::memory_order_acquire)) {
-            if (RejectingTrafficTimeout != TDuration::Zero()) {
+            const ui64 manualGeneration = ManualRejectingTrafficGeneration.load(std::memory_order_acquire);
+            if (ManualRejectingTrafficOverride.load(std::memory_order_acquire)) {
+                RejectingTraffic = ManualRejectingTraffic.load(std::memory_order_acquire);
+            } else if (RejectingTrafficTimeout != TDuration::Zero()) {
                 UpdateRejectingState();
             }
+            ObservedManualRejectingTrafficGeneration.store(manualGeneration, std::memory_order_release);
             if (Disconnect) {
                 RandomlyDisconnect();
             }
@@ -175,7 +211,7 @@ private:
                     DroppedConnections.clear();
                 }
             }
-            if (DelayTraffic) { // process packets from DelayQueues
+            if (DelayTraffic && !RejectingTraffic) { // process packets from DelayQueues
                 auto processDelayedPackages = [](TDirectedConnection& conn) {
                     while (!conn.DelayedQueue.empty()) {
                         auto& frontPackage = conn.DelayedQueue.top();
@@ -194,6 +230,9 @@ private:
                     processDelayedPackages(it.ForwardConnection);
                     processDelayedPackages(it.BackwardConnection);
                 }
+            } else if (RejectingTraffic) {
+                // In rejecting mode with no delayed forwarding, avoid a hot spin loop.
+                NanoSleep(1'000'000); // 1 ms
             }
         }
         ListenSocket.Close();

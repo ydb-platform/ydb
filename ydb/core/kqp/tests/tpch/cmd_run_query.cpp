@@ -14,7 +14,7 @@ void TCommandRunQuery::Config(TConfig& config){
     config.Opts->AddLongOption('p', "profile", "Execute query with enabled profiling mode and save profile to this file")
         .StoreResult(&Profile);
     config.SetFreeArgsNum(1);
-    config.Opts->SetFreeArgDefaultTitle("Query number (1-22)");
+    config.Opts->GetOpts().SetFreeArgDefaultTitle("Query number (1-22)");
 }
 
 int TCommandRunQuery::Run(TConfig& config){

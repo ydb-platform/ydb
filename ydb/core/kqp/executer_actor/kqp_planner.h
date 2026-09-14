@@ -43,16 +43,16 @@ public:
     struct TArgs {
         TKqpTasksGraph& TasksGraph;
         const ui64 TxId;
-        const TActorId& Executer;
+        const TActorId Executer;
         const TString& Database;
         const TIntrusiveConstPtr<NACLib::TUserToken>& UserToken;
         const TInstant Deadline;
         const Ydb::Table::QueryStatsCollection::Mode& StatsMode;
+        const bool WithProgressStats;
         const TMaybe<NKikimrKqp::TRlPath>& RlPath;
         NWilson::TSpan& ExecuterSpan;
         TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
-        const bool LocalComputeTasks;
         const ui64 MkqlMemoryLimit;
         const NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
         const bool AllowSinglePartitionOpt;
@@ -64,11 +64,14 @@ public:
         const std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory>& CaFactory_;
         const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
         const TMaybe<ui8> ArrayBufferMinFillPercentage;
-        const bool VerboseMemoryLimitException;
+        const TMaybe<size_t> BufferPageAllocSize;
+        NScheduler::NHdrf::NDynamic::TQueryPtr Query;
+        const TActorId& CheckpointCoordinator;
+        const bool EnableWatermarks;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
-    bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target);
+    bool SendStartKqpTasksRequest(ui32 requestId, const TActorId& target, bool isShutdown = false);
     std::unique_ptr<IEventHandle> PlanExecution();
     std::unique_ptr<IEventHandle> AssignTasksToNodes();
     bool AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::NDqProto::TEvComputeActorState* state);
@@ -80,11 +83,17 @@ public:
     ui32 GetCurrentRetryDelay(ui32 requestId);
     void Unsubscribe();
 
-    const THashMap<TActorId, TProgressStat>& GetPendingComputeActors();
-    const THashSet<ui64>& GetPendingComputeTasks();
+    const THashSet<TActorId>& GetAllComputeActors() const;
+    const THashMap<TActorId, TProgressStat>& GetPendingComputeActors() const;
+    const THashSet<ui64>& GetPendingComputeTasks() const;
+    TMaybe<ui64> GetActualNodeIdForTask(ui64 taskId) const;
 
-    ui32 GetnScanTasks();
-    ui32 GetnComputeTasks();
+    void PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui64>>& updates);
+    void CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& task, THashMap<TActorId, THashSet<ui64>>& updates);
+
+    auto GetUnassignedTasksCount() const {
+        return UnassignedTasks.size();
+    }
 
 private:
 
@@ -97,16 +106,19 @@ private:
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
     void LogMemoryStatistics(const TLogFunc& logFunc);
+    void PrepareCheckpoints();
+    void SendReadyStateToCheckpointCoordinator();
 
 private:
     const ui64 TxId;
     const TActorId ExecuterId;
-    TVector<ui64> ComputeTasks;
-    THashMap<ui64, TVector<ui64>> TasksPerNode;
+    TVector<ui64> UnassignedTasks;
+    THashMap<ui64 /* shardId */, TVector<ui64 /* taskId */>> TasksPerNode;
     TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
+    const bool WithProgressStats;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
@@ -118,9 +130,8 @@ private:
     TKqpTasksGraph& TasksGraph;
     ui64 MkqlMemoryLimit;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    ui32 nComputeTasks = 0;
-    ui32 nScanTasks = 0;
 
+    THashSet<TActorId> AllComputeActors; // All compute actors which was acknowledged
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
 
@@ -135,10 +146,14 @@ private:
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;
-    const bool VerboseMemoryLimitException;
-
+    const TMaybe<size_t> BufferPageAllocSize;
+    NScheduler::NHdrf::NDynamic::TQueryPtr Query;
+    TActorId CheckpointCoordinatorId;
+    const bool EnableWatermarks;
+    bool CheckpointsReadyStateSent = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
+    THashMap<ui32, TActorId> ResultChannels;
 };
 
 std::unique_ptr<TKqpPlanner> CreateKqpPlanner(TKqpPlanner::TArgs args);

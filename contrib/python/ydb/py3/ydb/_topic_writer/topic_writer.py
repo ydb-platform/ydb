@@ -11,6 +11,7 @@ import typing
 
 import ydb.aio
 from .._grpc.grpcwrapper.ydb_topic import StreamWriteMessage
+from .._grpc.grpcwrapper.ydb_topic import TransactionIdentity
 from .._grpc.grpcwrapper.common_utils import IToProto
 from .._grpc.grpcwrapper.ydb_topic_public_types import PublicCodec
 from .. import connection
@@ -36,10 +37,26 @@ class PublicWriterSettings:
     encoder_executor: Optional[concurrent.futures.Executor] = None  # default shared client executor pool
     encoders: Optional[typing.Mapping[PublicCodec, typing.Callable[[bytes], bytes]]] = None
     update_token_interval: Union[int, float] = 3600
+    max_buffer_size_bytes: Optional[int] = None  # None = no limit
+    max_buffer_messages: Optional[int] = None  # None = no limit
+    # Backpressure is enabled when at least one of the limits above is set.
+    # None = wait indefinitely for buffer space; positive value = raise TopicWriterBufferFullError on timeout.
+    buffer_wait_timeout_sec: Optional[float] = None
 
     def __post_init__(self):
         if self.producer_id is None:
             self.producer_id = uuid.uuid4().hex
+        if self.max_buffer_size_bytes is not None and self.max_buffer_size_bytes <= 0:
+            raise ValueError("max_buffer_size_bytes must be a positive integer, got %d" % self.max_buffer_size_bytes)
+        if self.max_buffer_messages is not None and self.max_buffer_messages <= 0:
+            raise ValueError("max_buffer_messages must be a positive integer, got %d" % self.max_buffer_messages)
+        if self.buffer_wait_timeout_sec is not None and (
+            self.buffer_wait_timeout_sec < 0
+            or self.buffer_wait_timeout_sec != self.buffer_wait_timeout_sec  # NaN check
+        ):
+            raise ValueError(
+                "buffer_wait_timeout_sec must be a non-negative number, got %r" % self.buffer_wait_timeout_sec
+            )
 
 
 @dataclass
@@ -53,8 +70,12 @@ class PublicWriteResult:
     class Skipped:
         pass
 
+    @dataclass(eq=True)
+    class WrittenInTx:
+        pass
 
-PublicWriteResultTypes = Union[PublicWriteResult.Written, PublicWriteResult.Skipped]
+
+PublicWriteResultTypes = Union[PublicWriteResult.Written, PublicWriteResult.Skipped, PublicWriteResult.WrittenInTx]
 
 
 class WriterSettings(PublicWriterSettings):
@@ -62,10 +83,14 @@ class WriterSettings(PublicWriterSettings):
         self.__dict__ = settings.__dict__.copy()
 
     def create_init_request(self) -> StreamWriteMessage.InitRequest:
+        # producer_id is guaranteed to be set in __post_init__
+        producer_id = self.producer_id
+        if producer_id is None:
+            raise ValueError("producer_id must be set")
         return StreamWriteMessage.InitRequest(
             path=self.topic,
-            producer_id=self.producer_id,
-            write_session_meta=self.session_metadata,
+            producer_id=producer_id,
+            write_session_meta=self.session_metadata if self.session_metadata else {},
             partitioning=self.get_partitioning(),
             get_last_seq_no=True,
         )
@@ -73,7 +98,11 @@ class WriterSettings(PublicWriterSettings):
     def get_partitioning(self) -> StreamWriteMessage.PartitioningType:
         if self.partition_id is not None:
             return StreamWriteMessage.PartitioningPartitionID(self.partition_id)
-        return StreamWriteMessage.PartitioningMessageGroupID(self.producer_id)
+        # producer_id is guaranteed to be set in __post_init__
+        producer_id = self.producer_id
+        if producer_id is None:
+            raise ValueError("producer_id must be set")
+        return StreamWriteMessage.PartitioningMessageGroupID(producer_id)
 
 
 class SendMode(Enum):
@@ -120,16 +149,30 @@ class InternalMessage(StreamWriteMessage.WriteRequest.MessageData, IToProto):
     codec: PublicCodec
 
     def __init__(self, mess: PublicMessage):
-        metadata_items = mess.metadata_items or {}
+        metadata_items: Dict[str, bytes] = {}
+        if mess.metadata_items:
+            for k, v in mess.metadata_items.items():
+                if isinstance(v, bytes):
+                    metadata_items[k] = v
+                else:
+                    metadata_items[k] = v.encode("utf-8")
+
+        data_bytes: bytes
+        if isinstance(mess.data, bytes):
+            data_bytes = mess.data
+        else:
+            data_bytes = mess.data.encode("utf-8")
+
+        # created_at will be set later in _prepare_internal_messages if auto_created_at is enabled
         super().__init__(
-            seq_no=mess.seqno,
-            created_at=mess.created_at,
-            data=mess.data,
+            seq_no=mess.seqno if mess.seqno is not None else 0,
+            created_at=mess.created_at,  # type: ignore[arg-type]
+            data=data_bytes,
             metadata_items=metadata_items,
-            uncompressed_size=len(mess.data),
+            uncompressed_size=len(data_bytes),
             partitioning=None,
         )
-        self.codec = PublicCodec.RAW
+        self.codec = PublicCodec(PublicCodec.RAW)
 
     def _get_bytes(self, obj: Optional[PublicMessage.SimpleSourceType]) -> bytes:
         if obj is None:
@@ -191,6 +234,12 @@ class TopicWriterStopped(TopicWriterError):
         super(TopicWriterStopped, self).__init__("topic writer was stopped by call close")
 
 
+class TopicWriterBufferFullError(TopicWriterError):
+    """Raised when write cannot proceed: buffer is full and timeout expired waiting for free space."""
+
+    pass
+
+
 def default_serializer_message_content(data: Any) -> bytes:
     if data is None:
         return bytes()
@@ -205,16 +254,18 @@ def default_serializer_message_content(data: Any) -> bytes:
 
 def messages_to_proto_requests(
     messages: List[InternalMessage],
+    tx_identity: Optional[TransactionIdentity],
 ) -> List[StreamWriteMessage.FromClient]:
 
-    gropus = _slit_messages_for_send(messages)
+    groups = _split_messages_for_send(messages)
 
     res = []  # type: List[StreamWriteMessage.FromClient]
-    for group in gropus:
+    for group in groups:
         req = StreamWriteMessage.FromClient(
             StreamWriteMessage.WriteRequest(
                 messages=list(map(InternalMessage.to_message_data, group)),
                 codec=group[0].codec,
+                tx_identity=tx_identity,
             )
         )
         res.append(req)
@@ -239,6 +290,7 @@ _message_data_overhead = (
                 ),
             ],
             codec=20000,
+            tx_identity=None,
         )
     )
     .to_proto()
@@ -246,14 +298,14 @@ _message_data_overhead = (
 )
 
 
-def _slit_messages_for_send(
+def _split_messages_for_send(
     messages: List[InternalMessage],
 ) -> List[List[InternalMessage]]:
-    codec_groups = []  # type: List[List[InternalMessage]]
-    for _, messages in itertools.groupby(messages, lambda x: x.codec):
-        codec_groups.append(list(messages))
+    codec_groups: List[List[InternalMessage]] = []
+    for _, group_iter in itertools.groupby(messages, lambda x: x.codec):
+        codec_groups.append(list(group_iter))
 
-    res = []  # type: List[List[InternalMessage]]
+    res: List[List[InternalMessage]] = []
     for codec_group in codec_groups:
         group_by_size = _split_messages_by_size_with_default_overhead(codec_group)
         res.extend(group_by_size)
@@ -269,13 +321,22 @@ def _split_messages_by_size_with_default_overhead(
     return _split_messages_by_size(messages, connection._DEFAULT_MAX_GRPC_MESSAGE_SIZE, get_message_size)
 
 
+def internal_message_size_bytes(msg: InternalMessage) -> int:
+    """Approximate size in bytes for buffer accounting (data + metadata + overhead).
+
+    Uses uncompressed_size so the value stays consistent before and after encoding.
+    """
+    meta_len = sum(len(k) + len(v) for k, v in msg.metadata_items.items()) if msg.metadata_items else 0
+    return msg.uncompressed_size + meta_len + 64  # 64 bytes overhead per message (seq_no, timestamps, etc.)
+
+
 def _split_messages_by_size(
     messages: List[InternalMessage],
     split_size: int,
     get_msg_size: typing.Callable[[InternalMessage], int],
 ) -> List[List[InternalMessage]]:
-    res = []
-    group = []
+    res: List[List[InternalMessage]] = []
+    group: List[InternalMessage] = []
     group_size = 0
 
     for msg in messages:

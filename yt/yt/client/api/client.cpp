@@ -12,51 +12,54 @@ namespace NYT::NApi {
 
 using namespace NConcurrency;
 using namespace NYTree;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = ApiLogger;
+constinit const auto Logger = ApiLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB: After the cluster name is actually set, the value never changes. Thus, it is safe to return TStringBuf.
-std::optional<TStringBuf> TClusterAwareClientBase::GetClusterName(bool fetchIfNull)
+TFuture<std::optional<std::string>> TClusterAwareClientBase::GetClusterName(bool fetchIfNull)
 {
-    {
-        auto guard = ReaderGuard(SpinLock_);
-        if (ClusterName_) {
-            return ClusterName_;
-        }
+    auto clusterName = ClusterName_.Load();
+    if (clusterName) {
+        return MakeFuture(clusterName);
     }
 
-    auto clusterName = GetConnection()->GetClusterName();
-    if (fetchIfNull && !clusterName) {
-        clusterName = FetchClusterNameFromMasterCache();
+    clusterName = GetConnection()->GetClusterName();
+    if (clusterName) {
+        ClusterName_.Store(clusterName);
+        return MakeFuture(clusterName);
     }
 
-    if (!clusterName) {
-        return {};
+    if (!fetchIfNull) {
+        return MakeFuture<std::optional<std::string>>({});
     }
 
-    auto guard = WriterGuard(SpinLock_);
-    if (!ClusterName_) {
-        ClusterName_ = clusterName;
-    }
-
-    return ClusterName_;
+    return FetchClusterNameFromMasterCache().Apply(
+        BIND([this, this_ = MakeStrong(this)] (const std::optional<std::string>& clusterName) -> std::optional<std::string> {
+            ClusterName_.Store(clusterName);
+            return clusterName;
+        }));
 }
 
-std::optional<TString> TClusterAwareClientBase::FetchClusterNameFromMasterCache()
+TFuture<std::optional<std::string>> TClusterAwareClientBase::FetchClusterNameFromMasterCache()
 {
     TGetNodeOptions options;
-    options.ReadFrom = EMasterChannelKind::MasterCache;
-    auto clusterNameYsonOrError = WaitFor(GetNode(ClusterNamePath, options));
-    if (!clusterNameYsonOrError.IsOK()) {
-        YT_LOG_WARNING(clusterNameYsonOrError, "Could not fetch cluster name from from master cache (Path: %v)",
-            ClusterNamePath);
-        return {};
-    }
-    return ConvertTo<TString>(clusterNameYsonOrError.Value());
+    options.ReadFrom = EMasterChannelKind::Cache;
+
+    return GetNode(ClusterNamePath, options).Apply(
+        BIND([] (const TErrorOr<TYsonString>& clusterNameYsonOrError) -> std::optional<std::string> {
+            if (!clusterNameYsonOrError.IsOK()) {
+                YT_TLOG_WARNING("Could not fetch cluster name from master cache")
+                    .With("Path", ClusterNamePath)
+                    .With(clusterNameYsonOrError);
+                return {};
+            }
+
+            return ConvertTo<std::string>(clusterNameYsonOrError.Value());
+        }));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

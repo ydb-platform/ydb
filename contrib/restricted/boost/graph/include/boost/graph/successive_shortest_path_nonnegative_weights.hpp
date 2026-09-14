@@ -14,8 +14,6 @@
 #ifndef BOOST_GRAPH_SUCCESSIVE_SHORTEST_PATH_HPP
 #define BOOST_GRAPH_SUCCESSIVE_SHORTEST_PATH_HPP
 
-#include <numeric>
-
 #include <boost/property_map/property_map.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/graph_concepts.hpp>
@@ -24,6 +22,7 @@
 #include <boost/graph/properties.hpp>
 #include <boost/graph/iteration_macros.hpp>
 #include <boost/graph/detail/augment.hpp>
+#include <boost/concept/assert.hpp>
 
 namespace boost
 {
@@ -36,13 +35,21 @@ namespace detail
     : public put_get_helper< typename property_traits< Weight >::value_type,
           MapReducedWeight< Graph, Weight, Distance, Reversed > >
     {
-        typedef graph_traits< Graph > gtraits;
+        
+        using edge_descriptor = typename graph_traits< Graph >::edge_descriptor;
+        using vertex_descriptor = typename graph_traits< Graph >::vertex_descriptor;
+
+        BOOST_CONCEPT_ASSERT(( ReadablePropertyMapConcept<Weight, edge_descriptor> ));
+        BOOST_CONCEPT_ASSERT(( ReadablePropertyMapConcept<Distance, vertex_descriptor> ));
+        
+        using g_traits = graph_traits< Graph >;
 
     public:
-        typedef boost::readable_property_map_tag category;
-        typedef typename property_traits< Weight >::value_type value_type;
-        typedef value_type reference;
-        typedef typename gtraits::edge_descriptor key_type;
+        using category = boost::readable_property_map_tag;
+        using value_type = typename property_traits< Weight >::value_type;
+        using reference = value_type;
+        using key_type = typename g_traits::edge_descriptor;
+        
         MapReducedWeight(const Graph& g, Weight w, Distance d, Reversed r)
         : g_(g), weight_(w), distance_(d), rev_(r)
         {
@@ -80,9 +87,11 @@ void successive_shortest_path_nonnegative_weights(const Graph& g,
     ResidualCapacity residual_capacity, Weight weight, Reversed rev,
     VertexIndex index, Pred pred, Distance distance, Distance2 distance_prev)
 {
+
+    using edge_descriptor = typename graph_traits< Graph >::edge_descriptor;
+    
     filtered_graph< const Graph, is_residual_edge< ResidualCapacity > > gres
         = detail::residual_graph(g, residual_capacity);
-    typedef typename graph_traits< Graph >::edge_descriptor edge_descriptor;
 
     BGL_FORALL_EDGES_T(e, g, Graph)
     {
@@ -137,13 +146,13 @@ namespace detail
     template < class Graph, class Capacity, class ResidualCapacity,
         class Weight, class Reversed, class Pred, class Distance,
         class VertexIndex >
-    void successive_shortest_path_nonnegative_weights_dispatch3(Graph& g,
+    void successive_shortest_path_nonnegative_weights_dispatch3(const Graph& g,
         typename graph_traits< Graph >::vertex_descriptor s,
         typename graph_traits< Graph >::vertex_descriptor t, Capacity capacity,
         ResidualCapacity residual_capacity, Weight weight, Reversed rev,
         VertexIndex index, Pred pred, Distance dist, param_not_found)
     {
-        typedef typename property_traits< Weight >::value_type D;
+        using D = typename property_traits< Weight >::value_type;
 
         std::vector< D > d_map(num_vertices(g));
 
@@ -155,7 +164,7 @@ namespace detail
     template < class Graph, class P, class T, class R, class Capacity,
         class ResidualCapacity, class Weight, class Reversed, class Pred,
         class Distance, class VertexIndex >
-    void successive_shortest_path_nonnegative_weights_dispatch2(Graph& g,
+    void successive_shortest_path_nonnegative_weights_dispatch2(const Graph& g,
         typename graph_traits< Graph >::vertex_descriptor s,
         typename graph_traits< Graph >::vertex_descriptor t, Capacity capacity,
         ResidualCapacity residual_capacity, Weight weight, Reversed rev,
@@ -171,14 +180,14 @@ namespace detail
     template < class Graph, class P, class T, class R, class Capacity,
         class ResidualCapacity, class Weight, class Reversed, class Pred,
         class VertexIndex >
-    void successive_shortest_path_nonnegative_weights_dispatch2(Graph& g,
+    void successive_shortest_path_nonnegative_weights_dispatch2(const Graph& g,
         typename graph_traits< Graph >::vertex_descriptor s,
         typename graph_traits< Graph >::vertex_descriptor t, Capacity capacity,
         ResidualCapacity residual_capacity, Weight weight, Reversed rev,
         VertexIndex index, Pred pred, param_not_found,
         const bgl_named_params< P, T, R >& params)
     {
-        typedef typename property_traits< Weight >::value_type D;
+        using D = typename property_traits< Weight >::value_type;
 
         std::vector< D > d_map(num_vertices(g));
 
@@ -191,7 +200,7 @@ namespace detail
     template < class Graph, class P, class T, class R, class Capacity,
         class ResidualCapacity, class Weight, class Reversed, class Pred,
         class VertexIndex >
-    void successive_shortest_path_nonnegative_weights_dispatch1(Graph& g,
+    void successive_shortest_path_nonnegative_weights_dispatch1(const Graph& g,
         typename graph_traits< Graph >::vertex_descriptor s,
         typename graph_traits< Graph >::vertex_descriptor t, Capacity capacity,
         ResidualCapacity residual_capacity, Weight weight, Reversed rev,
@@ -206,14 +215,14 @@ namespace detail
     template < class Graph, class P, class T, class R, class Capacity,
         class ResidualCapacity, class Weight, class Reversed,
         class VertexIndex >
-    void successive_shortest_path_nonnegative_weights_dispatch1(Graph& g,
+    void successive_shortest_path_nonnegative_weights_dispatch1(const Graph& g,
         typename graph_traits< Graph >::vertex_descriptor s,
         typename graph_traits< Graph >::vertex_descriptor t, Capacity capacity,
         ResidualCapacity residual_capacity, Weight weight, Reversed rev,
         VertexIndex index, param_not_found,
         const bgl_named_params< P, T, R >& params)
     {
-        typedef typename graph_traits< Graph >::edge_descriptor edge_descriptor;
+        using edge_descriptor = typename graph_traits< Graph >::edge_descriptor;
         std::vector< edge_descriptor > pred_vec(num_vertices(g));
 
         successive_shortest_path_nonnegative_weights_dispatch2(g, s, t,
@@ -247,7 +256,7 @@ void successive_shortest_path_nonnegative_weights(Graph& g,
     typename graph_traits< Graph >::vertex_descriptor s,
     typename graph_traits< Graph >::vertex_descriptor t)
 {
-    bgl_named_params< int, buffer_param_t > params(0);
+    const bgl_named_params< int, buffer_param_t > params(0);
     successive_shortest_path_nonnegative_weights(g, s, t, params);
 }
 

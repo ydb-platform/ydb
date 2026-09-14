@@ -2,7 +2,11 @@
 #include "flat_executor.h"
 #include "flat_executor_counters.h"
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/base/mon_auth.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_EXECUTOR
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -16,12 +20,36 @@ TTabletExecutedFlat::TTabletExecutedFlat(TTabletStorageInfo *info, const TActorI
     , StartTime0(TAppData::TimeProvider->Now())
 {}
 
+bool TTabletExecutedFlat::OnUnhandledException(const std::exception& e) {
+    if (AppData()->FeatureFlags.GetEnableTabletRestartOnUnhandledExceptions()) {
+        // Tablets have a weird inheritence where subclass is always an actor,
+        // but we don't know the exact type at compile time. This dynamic_cast
+        // is expected to always succeed.
+        if (auto* actor = dynamic_cast<IActor*>(this)) {
+            auto ctx = TActivationContext::ActorContextFor(actor->SelfId());
+            YDB_LOG_CRIT("Tablet unhandled exception",
+                {"tabletId", TabletID()},
+                {"typeName", TypeName(e)},
+                {"exception", e.what()},
+                {"backtrace", TBackTrace::FromCurrentException().PrintToString()});
+
+            GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_exception", true)->Inc();
+
+            HandlePoison(ctx);
+            return true;
+        }
+    }
+
+    // Exception will propagate and cause the process to crash
+    return false;
+}
+
 IExecutor* TTabletExecutedFlat::CreateExecutor(const TActorContext &ctx) {
     if (!Executor()) {
         IActor *executor = NFlatExecutorSetup::CreateExecutor(this, ctx.SelfID);
         const TActorId executorID = ctx.RegisterWithSameMailbox(executor);
         Executor0 = dynamic_cast<TExecutor *>(executor);
-        Y_ABORT_UNLESS(Executor0);
+        Y_ENSURE(Executor0);
 
         ITablet::ExecutorActorID = executorID;
     }
@@ -36,16 +64,31 @@ void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction, const TAct
 
 void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction) {
     if (transaction)
-        static_cast<TExecutor*>(Executor())->Execute(transaction, ExecutorCtx(*TlsActivationContext));
+        Executor()->Execute(transaction, ExecutorCtx(*TlsActivationContext));
 }
 
-void TTabletExecutedFlat::EnqueueExecute(TAutoPtr<ITransaction> transaction) {
-    if (transaction)
-        static_cast<TExecutor*>(Executor())->Enqueue(transaction, ExecutorCtx(*TlsActivationContext));
+ui64 TTabletExecutedFlat::Enqueue(TAutoPtr<ITransaction> transaction) {
+    if (transaction) {
+        return Executor()->Enqueue(transaction);
+    } else {
+        return 0;
+    }
 }
 
-const NTable::TScheme& TTabletExecutedFlat::Scheme() const noexcept {
-    return static_cast<TExecutor*>(Executor())->Scheme();
+ui64 TTabletExecutedFlat::EnqueueExecute(TAutoPtr<ITransaction> transaction) {
+    return Enqueue(transaction);
+}
+
+ui64 TTabletExecutedFlat::EnqueueLowPriority(TAutoPtr<ITransaction> transaction) {
+    if (transaction) {
+        return Executor()->EnqueueLowPriority(transaction);
+    } else {
+        return 0;
+    }
+}
+
+const NTable::TScheme& TTabletExecutedFlat::Scheme() const {
+    return Executor()->Scheme();
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
@@ -59,7 +102,8 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorConte
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) {
-    Executor()->Restored(ev, ExecutorCtx(ctx));
+    if (Executor())
+        Executor()->Restored(ev, ExecutorCtx(ctx));
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) {
@@ -69,11 +113,13 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvFBoot::TPtr &ev, const TActorCont
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvFUpdate::TPtr &ev) {
-    Executor()->FollowerUpdate(std::move(ev->Get()->Update));
+    if (Executor())
+        Executor()->FollowerUpdate(std::move(ev->Get()->Update));
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvFAuxUpdate::TPtr &ev) {
-    Executor()->FollowerAuxUpdate(std::move(ev->Get()->AuxUpdate));
+    if (Executor())
+        Executor()->FollowerAuxUpdate(std::move(ev->Get()->AuxUpdate));
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvNewFollowerAttached::TPtr &ev) {
@@ -94,12 +140,19 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerSyncComplete::TPtr &ev) {
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvFollowerGcApplied::TPtr &ev) {
     auto *msg = ev->Get();
-    Executor()->FollowerGcApplied(msg->Step, msg->FollowerSyncDelay);
+    if (Executor())
+        Executor()->FollowerGcApplied(msg->Step, msg->FollowerSyncDelay);
 }
 
 void TTabletExecutedFlat::Handle(TEvTablet::TEvUpdateConfig::TPtr &ev) {
     if (Executor())
         Executor()->UpdateConfig(ev);
+}
+
+void TTabletExecutedFlat::Handle(TEvTablet::TEvMoveData::TPtr &ev) {
+    if (Executor()) {
+        Executor()->MoveData(ev);
+    }
 }
 
 void TTabletExecutedFlat::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
@@ -108,9 +161,9 @@ void TTabletExecutedFlat::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const
     ctx.Send(Tablet(), new TEvTablet::TEvTabletStopped());
 }
 
-void TTabletExecutedFlat::HandlePoison(const TActorContext &ctx) {
+void TTabletExecutedFlat::HandlePoison(const TActorContext& ctx) {
     if (Executor0) {
-        Executor0->DetachTablet(ExecutorCtx(ctx));
+        Executor0->DetachTablet();
         Executor0 = nullptr;
     }
 
@@ -127,7 +180,7 @@ void TTabletExecutedFlat::HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, c
 
 void TTabletExecutedFlat::HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {
     if (Executor0) {
-        Executor0->DetachTablet(ExecutorCtx(ctx));
+        Executor0->DetachTablet();
         Executor0 = nullptr;
     }
 
@@ -135,29 +188,41 @@ void TTabletExecutedFlat::HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, c
 }
 
 void TTabletExecutedFlat::HandleLocalMKQL(TEvTablet::TEvLocalMKQL::TPtr &ev, const TActorContext &ctx) {
-    Y_ABORT_UNLESS(Factory, "Need IMiniKQLFactory to execute MKQL query");
+    Y_ENSURE(Factory, "Need IMiniKQLFactory to execute MKQL query");
 
     Execute(Factory->Make(ev), ctx);
 }
 
 void TTabletExecutedFlat::HandleLocalSchemeTx(TEvTablet::TEvLocalSchemeTx::TPtr &ev, const TActorContext &ctx) {
-    Y_ABORT_UNLESS(Factory, "Need IMiniKQLFactory to execute scheme query");
+    Y_ENSURE(Factory, "Need IMiniKQLFactory to execute scheme query");
 
     Execute(Factory->Make(ev), ctx);
 }
 
 void TTabletExecutedFlat::HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns::TPtr &ev, const TActorContext &ctx) {
-    Y_ABORT_UNLESS(Factory, "Need IMiniKQLFactory to execute read columns query");
+    Y_ENSURE(Factory, "Need IMiniKQLFactory to execute read columns query");
 
     Execute(Factory->Make(ev), ctx);
 }
 
 void TTabletExecutedFlat::SignalTabletActive(const TActorIdentity &id, TString &&versionInfo) {
+    ReportStartTime();
     id.Send(Tablet(), new TEvTablet::TEvTabletActive(std::move(versionInfo)));
 }
 
 void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx, TString &&versionInfo) {
+    ReportStartTime();
     ctx.Send(Tablet(), new TEvTablet::TEvTabletActive(std::move(versionInfo)));
+}
+
+void TTabletExecutedFlat::ReportStartTime() {
+    if (Executor()) {
+        TDuration startTime = TAppData::TimeProvider->Now() - StartTime0;
+        auto* counters = Executor()->GetCounters();
+        if (counters) {
+            counters->Simple()[TExecutorCounters::TABLET_LAST_START_TIME_US].Set(startTime.MicroSeconds());
+        }
+    }
 }
 
 void TTabletExecutedFlat::Enqueue(STFUNC_SIG) {
@@ -175,6 +240,10 @@ void TTabletExecutedFlat::Detach(const TActorContext &ctx) {
     OnDetach(ctx);
 }
 
+void TTabletExecutedFlat::SetExternalExecutor(IExecutor* executor) {
+    Executor0 = executor;
+}
+
 bool TTabletExecutedFlat::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
     if (ev) {
         TStringStream str;
@@ -185,25 +254,30 @@ bool TTabletExecutedFlat::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, 
 }
 
 void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) {
-    LOG_NOTICE_S(ctx, NKikimrServices::TABLET_EXECUTOR, "RenderHtmlPage for tablet " << TabletID());
+    YDB_LOG_NOTICE_CTX(ctx, "RenderHtmlPage for tablet",
+        {"tabletId", TabletID()});
     auto cgi = ev->Get()->Cgi();
     auto path = ev->Get()->PathInfo();
     TString queryString = cgi.Print();
 
-    if (path == "/app") {
+    if (path == "/app" || (HasTabletDevUiSecureSubtree(AppData(), TabletType())
+            && IsTabletDevUiSecurePath(path))) {
         OnRenderAppHtmlPage(ev, ctx);
         return;
-    } else if (path == "/executorInternals") {
+    } else if (path == "/executorInternals" && Executor()) {
         Executor()->RenderHtmlPage(ev);
         return;
-    } else if (path == "/counters") {
+    } else if (path == "/counters" && Executor()) {
         Executor()->RenderHtmlCounters(ev);
         return;
-    } else if (path == "/db") {
+    } else if (path == "/db" && Executor()) {
         Executor()->RenderHtmlDb(ev, ExecutorCtx(ctx));
         return;
     } else {
         const TDuration uptime = TAppData::TimeProvider->Now() - StartTime0;
+        const TStringBuf tabletMonRoot = IsTabletDevUiSecurePath(path)
+            ? TStringBuf("../../")
+            : TStringBuf();
         TStringStream str;
         HTML(str) {
             DIV_CLASS("row") {
@@ -212,39 +286,56 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") {str << "Uptime: " << uptime.ToString(); }
             }
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "Tablet type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)TabletType()); }
+            TString bootType = "";
+            if (Info()->BootType == ETabletBootType::Recovery) {
+                bootType = TStringBuilder() << " (" << Info()->BootType << ")";
             }
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << (Executor()->GetStats().IsFollower() ? Sprintf(" Follower %u", Executor()->GetStats().FollowerId) : " Leader"); }
+                DIV_CLASS("col-md-12") {str << "Tablet type: " << TTabletTypes::TypeToStr((TTabletTypes::EType)TabletType()) << bootType; }
+            }
+            TString leaderFollower = " Leader";
+            if (Executor() && Executor()->GetStats().IsFollower()) {
+                leaderFollower = Sprintf(" Follower %u", Executor()->GetStats().FollowerId);
             }
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "Tablet generation: " << Executor()->Generation();}
+                DIV_CLASS("col-md-12") {str << "Tablet id: " << TabletID() << leaderFollower; }
+            }
+
+            if (Executor()) {
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12") {str << "Tablet generation: " << Executor()->Generation();}
+                }
             }
             DIV_CLASS("row") {
                 DIV_CLASS("col-md-12") { str << "Tenant id: " << Info()->TenantPathId; }
             }
 
             if (OnRenderAppHtmlPage(nullptr, ctx)) {
+                const TStringBuf tabletDevUiAppPrefix = IsTabletDevUiAppPageAdminOnly(AppData(), TabletType())
+                    ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
+                    : TStringBuf("app");
                 DIV_CLASS("row") {
-                    DIV_CLASS("col-md-12") {str << "<a href=\"tablets/app?" << queryString << "\">App</a>";}
+                    DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets/" << tabletDevUiAppPrefix << "?" << queryString << "\">App</a>";}
+                }
+            }
+
+            if (Executor()) {
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets/counters?" << queryString << "\">Counters</a>"; }
+                }
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets/executorInternals?" << queryString << "\">Executor DB internals</a>";}
+                }
+                DIV_CLASS("row") {
+                    DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets?FollowerID=" << TabletID() << "\">Connect to follower</a>";}
                 }
             }
 
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets/counters?" << queryString << "\">Counters</a>"; }
+                DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets?SsId=" << TabletID() << "\">State Storage</a>";}
             }
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets/executorInternals?" << queryString << "\">Executor DB internals</a>";}
-            }
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?FollowerID=" << TabletID() << "\">Connect to follower</a>";}
-            }
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?SsId=" << TabletID() << "\">State Storage</a>";}
-            }
-            DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?RestartTabletID=" << TabletID() << "\">Restart</a>";}
+                DIV_CLASS("col-md-12") {str << "<a href=\"" << tabletMonRoot << "tablets?RestartTabletID=" << TabletID() << "\">Restart</a>";}
             }
         }
 
@@ -254,7 +345,8 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
 }
 
 void TTabletExecutedFlat::HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev) {
-    Executor()->GetTabletCounters(ev);
+    if (Executor())
+        Executor()->GetTabletCounters(ev);
 }
 
 bool TTabletExecutedFlat::HandleDefaultEvents(TAutoPtr<IEventHandle>& ev, const TActorIdentity& id) {
@@ -278,6 +370,7 @@ bool TTabletExecutedFlat::HandleDefaultEvents(TAutoPtr<IEventHandle>& ev, const 
         hFunc(TEvTablet::TEvGetCounters, HandleGetCounters);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
         HFuncCtx(NMon::TEvRemoteHttpInfo, RenderHtmlPage, ctx);
+        hFunc(TEvTablet::TEvMoveData, Handle);
         IgnoreFunc(TEvTablet::TEvReady);
     default:
         return false;

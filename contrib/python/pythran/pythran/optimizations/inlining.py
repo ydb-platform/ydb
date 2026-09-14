@@ -7,7 +7,7 @@ import gast as ast
 import copy
 
 
-class Inlining(Transformation):
+class Inlining(Transformation[Inlinable, Aliases]):
 
     """
     Inline one line functions.
@@ -36,10 +36,10 @@ __pythran_inlinefooa0)) * (__pythran_inlinefoob1 + \
 
     def __init__(self):
         """ fun : Function {name :body} for inlinable functions. """
+        super().__init__()
         self.update = False
         self.defs = list()
         self.call_count = 0
-        super(Inlining, self).__init__(Inlinable, Aliases)
 
     def visit_Stmt(self, node):
         """ Add new variable definition before the Statement. """
@@ -54,11 +54,20 @@ __pythran_inlinefooa0)) * (__pythran_inlinefoob1 + \
     visit_AugAssign = visit_Stmt
     visit_Print = visit_Stmt
     visit_For = visit_Stmt
-    visit_While = visit_Stmt
     visit_If = visit_Stmt
     visit_With = visit_Stmt
     visit_Assert = visit_Stmt
     visit_Expr = visit_Stmt
+
+    def visit_While(self, node):
+        # FIXME: we're only preventing inlining within test because it's
+        # difficult to compute predecessors of the test while also handling
+        # exceptions. We could use the cfg analysis for this but I'm a bit lazy
+        # and it's not a critical optimization.
+        test, node.test = node.test, None
+        self.generic_visit(node)
+        node.test = test
+        return node
 
     def visit_Call(self, node):
         """
@@ -86,11 +95,12 @@ __pythran_inlinefooa0)) * (__pythran_inlinefoob1 + \
                                        annotation=None, type_comment=None)
                     self.defs.append(ast.Assign(targets=[new_var],
                                                 value=arg_call,
-                                               type_comment=None))
+                                                type_comment=None))
                     arg_to_value[arg_fun.id] = ast.Name(id=v_name,
                                                         ctx=ast.Load(),
                                                         annotation=None,
                                                         type_comment=None)
+
                 self.call_count += 1
                 return Inliner(arg_to_value).visit(to_inline.body[0])
         return node

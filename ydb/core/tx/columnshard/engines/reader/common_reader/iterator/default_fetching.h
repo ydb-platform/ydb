@@ -1,0 +1,139 @@
+#pragma once
+#include "constructor.h"
+
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
+#include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
+
+namespace NKikimr::NOlap::NReader::NCommon {
+
+class TDefaultFetchLogic: public IKernelFetchLogic {
+private:
+    using TBase = IKernelFetchLogic;
+    std::optional<bool> IsEmptyChunks;
+
+    std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoader(const std::shared_ptr<NCommon::IDataSource>& source) const {
+        if (auto loader = source->GetSourceSchema()->GetColumnLoaderOptional(GetEntityId())) {
+            return loader;
+        }
+        AFL_VERIFY(IsEmptyChunks && *IsEmptyChunks);
+        return source->GetContext()->GetReadMetadata()->GetResultSchema()->GetColumnLoaderVerified(GetEntityId());
+    }
+
+    class TChunkRestoreInfo {
+    private:
+        std::optional<TBlobRange> BlobRange;
+        std::optional<TPortionDataAccessor::TAssembleBlobInfo> Data;
+        const ui32 RecordsCount;
+        std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> AdditionalAccessorData;
+
+    public:
+        TChunkRestoreInfo(const ui32 recordsCount, const TBlobRange& range,
+            std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData> additionalAccessorData = nullptr)
+            : BlobRange(range)
+            , RecordsCount(recordsCount)
+            , AdditionalAccessorData(std::move(additionalAccessorData))
+        {
+        }
+
+        const std::optional<TBlobRange>& GetBlobRangeOptional() const {
+            return BlobRange;
+        }
+
+        TChunkRestoreInfo(const ui32 recordsCount, const TPortionDataAccessor::TAssembleBlobInfo& defaultData)
+            : Data(defaultData)
+            , RecordsCount(recordsCount)
+        {
+        }
+
+        TPortionDataAccessor::TAssembleBlobInfo ExtractDataVerified() {
+            AFL_VERIFY(!!Data);
+            Data->SetExpectedRecordsCount(RecordsCount);
+            return std::move(*Data);
+        }
+
+        void SetBlobData(const TString& data) {
+            AFL_VERIFY(!Data);
+            BlobRange.reset();
+            Data.emplace(data);
+            if (AdditionalAccessorData) {
+                Data->SetAdditionalAccessorData(AdditionalAccessorData);
+            }
+        }
+    };
+
+    std::vector<TChunkRestoreInfo> ColumnChunks;
+    std::optional<TString> StorageId;
+
+    virtual TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) override {
+        AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
+        std::vector<TPortionDataAccessor::TAssembleBlobInfo> chunks;
+        for (auto&& i : ColumnChunks) {
+            chunks.emplace_back(i.ExtractDataVerified());
+        }
+
+        TPortionDataAccessor::TPreparedColumn column(std::move(chunks), GetColumnLoader(context.GetSource()));
+        auto conclusion = column.AssembleAccessor();
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        context.GetAccessors().AddVerified(GetEntityId(), conclusion.DetachResult(), true);
+        return TConclusionStatus::Success();
+    }
+
+    virtual void DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
+        if (ColumnChunks.empty()) {
+            return;
+        }
+        for (auto&& i : ColumnChunks) {
+            if (!i.GetBlobRangeOptional()) {
+                continue;
+            }
+            AFL_VERIFY(!!StorageId);
+            i.SetBlobData(blobs.ExtractVerified(*StorageId, *i.GetBlobRangeOptional()));
+        }
+    }
+
+    virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override {
+        auto source = context.GetSource();
+        auto columnChunks = source->GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
+        IsEmptyChunks.emplace(columnChunks.empty());
+        if (columnChunks.empty()) {
+            ColumnChunks.emplace_back(source->GetRecordsCount(),
+                TPortionDataAccessor::TAssembleBlobInfo(source->GetRecordsCount(), GetColumnLoader(context.GetSource())->GetDefaultValue()));
+            return;
+        }
+        StorageId = source->GetColumnStorageId(GetEntityId());
+        TBlobsAction blobsAction(source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
+        auto reading = blobsAction.GetReading(*StorageId);
+        auto filterPtr = context.GetAppliedFilter();
+        const NArrow::TColumnFilter& cFilter = filterPtr ? *filterPtr : NArrow::TColumnFilter::BuildAllowFilter();
+        auto itFilter = cFilter.GetBegin(false, source->GetRecordsCount());
+        bool itFinished = false;
+        for (auto&& c : columnChunks) {
+            AFL_VERIFY(!itFinished);
+            if (!itFilter.IsBatchForSkip(c->GetMeta().GetRecordsCount())) {
+                reading->SetIsBackgroundProcess(false);
+                reading->AddRange(source->RestoreBlobRange(c->BlobRange));
+                ColumnChunks.emplace_back(
+                    c->GetMeta().GetRecordsCount(), source->RestoreBlobRange(c->BlobRange), c->GetMeta().GetAdditionalAccessorData());
+            } else {
+                ColumnChunks.emplace_back(
+                    c->GetMeta().GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(c->GetMeta().GetRecordsCount(),
+                                                        source->GetSourceSchema()->GetExternalDefaultValueVerified(c->GetEntityId())));
+            }
+            itFinished = !itFilter.Next(c->GetMeta().GetRecordsCount());
+        }
+        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", source->GetRecordsCount());
+        for (auto&& i : blobsAction.GetReadingActions()) {
+            nextRead.Add(i);
+        }
+    }
+
+public:
+    TDefaultFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
+        : TBase(entityId, storagesManager)
+    {
+    }
+};
+
+}   // namespace NKikimr::NOlap::NReader::NCommon

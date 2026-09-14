@@ -2,23 +2,21 @@
 #include "json_handlers.h"
 #include "json_pipe_req.h"
 #include "log.h"
+#include "ydb/core/viewer/json_local_rpc.h"
 #include <ydb/core/grpc_services/rpc_kqp_base.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NViewer {
 
 using namespace NActors;
-using namespace NMonitoring;
-using namespace NNodeWhiteboard;
 
 class TJsonQuery : public TViewerPipeClient {
     using TThis = TJsonQuery;
     using TBase = TViewerPipeClient;
-    TJsonSettings JsonSettings;
-    ui32 Timeout = 60000;
     std::vector<std::vector<Ydb::ResultSet>> ResultSets;
     TString Query;
     TString Action;
@@ -30,6 +28,20 @@ class TJsonQuery : public TViewerPipeClient {
     bool IsBase64Encode = true;
     int LimitRows = 10000;
     int TotalRows = 0;
+    bool CollectDiagnostics = true;
+    bool Long = false;
+    bool Forget = false;
+    bool QueryForgotten = false;
+    TDuration StatsPeriod;
+    TDuration KeepAlive = TDuration::MilliSeconds(10000);
+    TDuration ForgetAfter = TDuration::Seconds(1);
+    TInstant LastSendTime;
+    TInstant QueryStartTime;
+    TInstant QueryRequestStartTime;
+    TInstant Deadline;
+    TInstant WakeupScheduledAt;
+    static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
+    static constexpr TDuration MaxForgetAfter = TDuration::Seconds(60);
 
     enum ESchemaType {
         Classic,
@@ -41,12 +53,238 @@ class TJsonQuery : public TViewerPipeClient {
     ESchemaType Schema = ESchemaType::Classic;
     TRequestResponse<NKqp::TEvKqp::TEvCreateSessionResponse> CreateSessionResponse;
     TRequestResponse<NKqp::TEvKqp::TEvQueryResponse> QueryResponse;
+    TRequestResponse<NKqp::TEvKqp::TEvScriptResponse> ScriptResponse;
+    std::optional<NOperationId::TOperationId> OperationId;
+    TString ExecutionId;
+    std::optional<TRequestResponse<NKqp::TEvGetScriptExecutionOperationResponse>> GetOperationResponse;
+    ui32 FetchResultSetIndex = 0;
+    ui32 FetchResultSets = 0;
+    ui64 FetchResultRowsLimit = 1000;
+    ui64 FetchResultRowsOffset = 0;
+    ui64 FetchResultSeqNum = 0;
     TString SessionId;
-    ui64 OutputChunkMaxSize = 0;
-    bool Streaming = false;
+    ui64 OutputChunkMaxSize = 1000000; // 1 MB
+
+    enum class EStreamingType {
+        None,
+        MultiPart,
+        EventStream,
+    };
+    EStreamingType Streaming = EStreamingType::None;
+
     NHttp::THttpOutgoingResponsePtr HttpResponse;
     std::vector<bool> ResultSetHasColumns;
     bool ConcurrentResults = false;
+    bool InternalCall = false;
+    TString ContentType;
+
+private:
+    // Helper methods to reduce duplication
+    void InitJsonResponse(NJson::TJsonValue& jsonResponse) const {
+        if (Streaming == EStreamingType::None) {
+            jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
+        }
+    }
+
+    void AddOperationInfo(NJson::TJsonValue& jsonResponse) const {
+        if (OperationId) {
+            jsonResponse["operation_id"] = OperationId->ToString();
+        }
+        if (!ExecutionId.empty()) {
+            jsonResponse["execution_id"] = ExecutionId;
+        }
+    }
+
+    TDuration GetWakeupPeriod(TInstant now = TInstant()) const {
+        if (Forget && QueryRequestStartTime) {
+            now = now ? now : TActivationContext::Now();
+            return Min(WakeupPeriod, ForgetAfter - Min(now - QueryRequestStartTime, ForgetAfter));
+        }
+        return WakeupPeriod;
+    }
+
+    void ScheduleWakeup(TDuration period, TInstant now = TInstant()) {
+        now = now ? now : TActivationContext::Now();
+        TInstant wakeupAt = now + period;
+        if (!WakeupScheduledAt || wakeupAt < WakeupScheduledAt) {
+            WakeupScheduledAt = wakeupAt;
+            Schedule(period, new TEvents::TEvWakeup());
+        }
+    }
+
+    void CreateStandardErrorResponse(NJson::TJsonValue& jsonResponse, const TString& message) {
+        InitJsonResponse(jsonResponse);
+        jsonResponse["error"]["severity"] = NYql::TSeverityIds::S_ERROR;
+        jsonResponse["error"]["message"] = message;
+        NJson::TJsonValue& issue = jsonResponse["issues"].AppendValue({});
+        issue["severity"] = NYql::TSeverityIds::S_ERROR;
+        issue["message"] = message;
+    }
+
+    void CancelQueryIfNeeded() {
+        if (SessionId) {
+            auto event = std::make_unique<NKqp::TEvKqp::TEvCancelQueryRequest>();
+            event->Record.MutableRequest()->SetSessionId(SessionId);
+            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+        }
+    }
+
+    void SetTransactionControl(NKikimrKqp::TQueryRequest& request, const TString& mode) {
+        auto* txControl = request.mutable_txcontrol();
+        auto* beginTx = txControl->mutable_begin_tx();
+
+        if (mode == "serializable-read-write") {
+            beginTx->mutable_serializable_read_write();
+        } else if (mode == "online-read-only") {
+            beginTx->mutable_online_read_only();
+        } else if (mode == "stale-read-only") {
+            beginTx->mutable_stale_read_only();
+        } else if (mode == "snapshot-read-only") {
+            beginTx->mutable_snapshot_read_only();
+        } else if (mode == "snapshot-read-write") {
+            beginTx->mutable_snapshot_read_write();
+        } else {
+            return; // Don't set transaction control for unknown modes
+        }
+
+        txControl->set_commit_tx(true);
+    }
+
+    void RenderResultSetForSchema(NJson::TJsonValue& jsonResponse, const std::vector<std::vector<Ydb::ResultSet>>& resultSets) {
+        NJson::TJsonValue& jsonResults = jsonResponse["result"];
+        jsonResults.SetType(NJson::JSON_ARRAY);
+
+        switch (Schema) {
+            case ESchemaType::Classic:
+                RenderClassicSchema(jsonResults, resultSets);
+                break;
+            case ESchemaType::Modern:
+                RenderModernSchema(jsonResponse, resultSets);
+                break;
+            case ESchemaType::Multi:
+                RenderMultiSchema(jsonResults, resultSets);
+                break;
+            case ESchemaType::Ydb:
+                RenderYdbSchema(jsonResults, resultSets);
+                break;
+            case ESchemaType::Ydb2:
+                RenderYdb2Schema(jsonResults, resultSets);
+                break;
+        }
+    }
+
+    void RenderClassicSchema(NJson::TJsonValue& jsonResults, const std::vector<std::vector<Ydb::ResultSet>>& resultSets) {
+        for (const auto& resultSetGroup : resultSets) {
+            for (NYdb::TResultSet resultSet : resultSetGroup) {
+                const auto& columnsMeta = resultSet.GetColumnsMeta();
+                NYdb::TResultSetParser rsParser(resultSet);
+                while (rsParser.TryNextRow()) {
+                    NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
+                    for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                        const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
+                        jsonRow[columnMeta.Name] = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
+                    }
+                }
+            }
+        }
+    }
+
+    void RenderModernSchema(NJson::TJsonValue& jsonResponse, const std::vector<std::vector<Ydb::ResultSet>>& resultSets) {
+        // Add columns metadata
+        if (!resultSets.empty() && !resultSets.front().empty()) {
+            NJson::TJsonValue& jsonColumns = jsonResponse["columns"];
+            NYdb::TResultSet resultSet(resultSets.front().front());
+            const auto& columnsMeta = resultSet.GetColumnsMeta();
+            jsonColumns.SetType(NJson::JSON_ARRAY);
+            for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                NJson::TJsonValue& jsonColumn = jsonColumns.AppendValue({});
+                const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
+                jsonColumn["name"] = columnMeta.Name;
+                jsonColumn["type"] = columnMeta.Type.ToString();
+            }
+        }
+
+        // Add rows data
+        NJson::TJsonValue& jsonResults = jsonResponse["result"];
+        jsonResults.SetType(NJson::JSON_ARRAY);
+        for (const auto& resultSetGroup : resultSets) {
+            for (NYdb::TResultSet resultSet : resultSetGroup) {
+                const auto& columnsMeta = resultSet.GetColumnsMeta();
+                NYdb::TResultSetParser rsParser(resultSet);
+                while (rsParser.TryNextRow()) {
+                    NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
+                    jsonRow.SetType(NJson::JSON_ARRAY);
+                    for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                        NJson::TJsonValue& jsonColumn = jsonRow.AppendValue({});
+                        jsonColumn = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
+                    }
+                }
+            }
+        }
+    }
+
+    void RenderMultiSchema(NJson::TJsonValue& jsonResults, const std::vector<std::vector<Ydb::ResultSet>>& resultSets) {
+        for (const auto& resultSetGroup : resultSets) {
+            NJson::TJsonValue& jsonResult = jsonResults.AppendValue({});
+            bool hasColumns = false;
+            for (NYdb::TResultSet resultSet : resultSetGroup) {
+                RenderResultSetMulti(jsonResult, resultSet, hasColumns);
+            }
+        }
+    }
+
+    void RenderYdbSchema(NJson::TJsonValue& jsonResults, const std::vector<std::vector<Ydb::ResultSet>>& resultSets) {
+        for (const auto& resultSetGroup : resultSets) {
+            for (NYdb::TResultSet resultSet : resultSetGroup) {
+                const auto& columnsMeta = resultSet.GetColumnsMeta();
+                NYdb::TResultSetParser rsParser(resultSet);
+                while (rsParser.TryNextRow()) {
+                    NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
+                    TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, IsBase64Encode ? NYdb::EBinaryStringEncoding::Base64 : NYdb::EBinaryStringEncoding::Unicode);
+                    NJson::ReadJsonTree(row, &jsonRow);
+                }
+            }
+        }
+    }
+
+    void RenderYdb2Schema(NJson::TJsonValue& jsonResults, const std::vector<std::vector<Ydb::ResultSet>>& resultSets) {
+        for (const auto& resultSetGroup : resultSets) {
+            NJson::TJsonValue& jsonResult = jsonResults.AppendValue({});
+            bool hasColumns = false;
+            for (NYdb::TResultSet resultSet : resultSetGroup) {
+                if (!hasColumns) {
+                    NJson::TJsonValue& jsonColumns = jsonResult["columns"];
+                    jsonColumns.SetType(NJson::JSON_ARRAY);
+                    const auto& columnsMeta = resultSet.GetColumnsMeta();
+                    for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
+                        NJson::TJsonValue& jsonColumn = jsonColumns.AppendValue({});
+                        const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
+                        jsonColumn["name"] = columnMeta.Name;
+                        jsonColumn["type"] = columnMeta.Type.ToString();
+                    }
+                    hasColumns = true;
+                }
+                NJson::TJsonValue& jsonRows = jsonResult["rows"];
+                const auto& columnsMeta = resultSet.GetColumnsMeta();
+                NYdb::TResultSetParser rsParser(resultSet);
+                while (rsParser.TryNextRow()) {
+                    NJson::TJsonValue& jsonRow = jsonRows.AppendValue({});
+                    TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, IsBase64Encode ? NYdb::EBinaryStringEncoding::Base64 : NYdb::EBinaryStringEncoding::Unicode);
+                    NJson::ReadJsonTree(row, &jsonRow);
+                }
+            }
+        }
+    }
+
+    std::optional<TString> GetUserSID() const {
+        if (const auto tokenString = GetRequest().GetUserTokenObject()) {
+            if (NACLibProto::TUserToken userToken; userToken.ParseFromString(tokenString)) {
+                return userToken.GetUserSID();
+            }
+        }
+
+        return std::nullopt;
+    }
 
 public:
     ESchemaType StringToSchemaType(const TString& schemaStr) {
@@ -65,10 +303,7 @@ public:
         }
     }
 
-    void ParseCgiParameters(const TCgiParameters& params) {
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), Timeout);
+    void InitConfig(const TCgiParameters& params) {
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -81,12 +316,17 @@ public:
         if (params.Has("action")) {
             Action = params.Get("action");
         }
+        Long = Action == "execute-long-query";
+        Forget = Action == "execute-query-and-forget";
         if (params.Has("schema")) {
             Schema = StringToSchemaType(params.Get("schema"));
             if (Params.Get("schema") == "multipart") {
-                Streaming = true;
+                Streaming = EStreamingType::MultiPart;
                 if (params.Has("concurrent_results")) {
                     ConcurrentResults = FromStringWithDefault<bool>(params.Get("concurrent_results"), ConcurrentResults);
+                }
+                if (params.Has("keep_alive")) {
+                    KeepAlive = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("keep_alive"), KeepAlive.MilliSeconds()));
                 }
             }
         }
@@ -96,6 +336,16 @@ public:
         if (params.Has("query_id")) {
             QueryId = params.Get("query_id");
         }
+        if (params.Has("operation_id")) {
+            try {
+                OperationId = NOperationId::TOperationId(params.Get("operation_id"));
+            } catch (...) {
+                // Invalid operation ID will be handled later
+            }
+        }
+        if (params.Has("execution_id")) {
+            ExecutionId = params.Get("execution_id");
+        }
         if (params.Has("transaction_mode")) {
             TransactionMode = params.Get("transaction_mode");
         }
@@ -103,58 +353,100 @@ public:
             IsBase64Encode = FromStringWithDefault<bool>(params.Get("base64"), true);
         }
         if (params.Has("limit_rows")) {
-            LimitRows = std::clamp<int>(FromStringWithDefault<int>(params.Get("limit_rows"), 10000), 1, Streaming ? std::numeric_limits<int>::max() : 100000);
+            LimitRows = std::clamp<int>(FromStringWithDefault<int>(params.Get("limit_rows"), 10000), 1, Streaming != EStreamingType::None ? std::numeric_limits<int>::max() : 100000);
         }
         if (params.Has("resource_pool")) {
             ResourcePool = params.Get("resource_pool");
         }
         if (params.Has("output_chunk_max_size")) {
             OutputChunkMaxSize = FromStringWithDefault<ui64>(params.Get("output_chunk_max_size"), OutputChunkMaxSize);
+            OutputChunkMaxSize = std::clamp<ui64>(OutputChunkMaxSize, 1, 500000000); // from 1 to 50 MB
+        }
+        CollectDiagnostics = FromStringWithDefault<bool>(params.Get("collect_diagnostics"), CollectDiagnostics);
+        InternalCall = FromStringWithDefault<bool>(params.Get("internal_call"), InternalCall);
+        if (params.Has("stats_period")) {
+            StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
+        }
+        if (params.Has("forget_after")) {
+            ForgetAfter = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("forget_after"), ForgetAfter.MilliSeconds()), 1, MaxForgetAfter.MilliSeconds()));
+        }
+        if (Streaming == EStreamingType::None || params.Has("timeout")) {
+            Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
+        } else {
+            Timeout = TDuration::Max(); // no timeout for streaming queries by default
         }
     }
 
     TJsonQuery(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev)
     {
+        InitConfig(Params);
     }
 
     void Bootstrap() override {
         if (NeedToRedirect()) {
             return;
         }
-        ParseCgiParameters(Params);
-        if (Query.empty() && Action != "cancel-query") {
+        if (Query.empty() && Action != "cancel-query" && Action != "fetch-long-query") {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }
-        if (Streaming) {
+        if (Action == "fetch-long-query") {
+            if (!OperationId && ExecutionId.empty()) {
+                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "operation_id or execution_id required for fetch-long-query"), "BadRequest");
+            }
+        } else if (Action != "cancel-query" && Syntax == "pg") {
+            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "PostgreSQL syntax (syntax=pg) is not supported"), "BadRequest");
+        }
+        if (Streaming != EStreamingType::None) {
             NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
             TStringBuf accept = headers["Accept"];
-            if (accept.find("multipart/x-mixed-replace") == TString::npos) {
-                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Multipart request must accept multipart/x-mixed-replace content"), "BadRequest");
+            auto posMixedReplace = accept.find("multipart/x-mixed-replace");
+            auto posFormData = accept.find("multipart/form-data");
+            auto posEventStream = accept.find("text/event-stream");
+            auto posFirst = std::min({posMixedReplace, posFormData, posEventStream});
+            if (posFirst == TString::npos) {
+                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Multipart request must accept multipart content-type"), "BadRequest");
+            }
+            if (posFirst == posMixedReplace) {
+                ContentType = "multipart/x-mixed-replace";
+                Streaming = EStreamingType::MultiPart;
+            } else if (posFirst == posFormData) {
+                ContentType = "multipart/form-data";
+                Streaming = EStreamingType::MultiPart;
+            } else if (posFirst == posEventStream) {
+                ContentType = "text/event-stream";
+                Streaming = EStreamingType::EventStream;
             }
         }
-        if (Streaming && QueryId.empty()) {
+        if (Streaming != EStreamingType::None && QueryId.empty()) {
             QueryId = CreateGuidAsString();
         }
-        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
+        if (Timeout) {
+            Deadline = TActivationContext::Now() + Timeout;
+        }
         SendKpqProxyRequest();
-        Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Become(&TThis::StateWork);
+        if (Timeout || KeepAlive || Long || Action == "fetch-long-query") {
+            ScheduleWakeup(GetWakeupPeriod());
+        }
+        QueryStartTime = TActivationContext::Now();
+        LastSendTime = TActivationContext::Now();
     }
 
     void CancelQuery() {
-        if (SessionId) {
+        if (SessionId && !QueryForgotten) {
             auto event = std::make_unique<NKqp::TEvKqp::TEvCancelQueryRequest>();
             event->Record.MutableRequest()->SetSessionId(SessionId);
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
-            if (QueryResponse && !QueryResponse.IsDone()) {
+            if (!QueryResponse.IsDone()) {
                 QueryResponse.Error("QueryCancelled");
             }
         }
     }
 
     void CloseSession() {
-        if (SessionId) {
-            if (QueryResponse && !QueryResponse.IsDone()) {
+        if (SessionId && !QueryForgotten) {
+            if (!QueryResponse.IsDone()) {
                 CancelQuery();
             }
             auto event = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
@@ -164,14 +456,12 @@ public:
     }
 
     void Cancelled() {
-        CancelQuery();
-        PassAway();
-    }
-
-    void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Get()->SourceType == NHttp::TEvHttpProxy::EvSubscribeForCancel) {
-            Cancelled();
+        if (Forget) {
+            ForgetQuery();
+            return TBase::Cancelled();
         }
+        CancelQuery();
+        TBase::Cancelled();
     }
 
     void PassAway() override {
@@ -188,13 +478,17 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleReply);
+            hFunc(NKqp::TEvKqp::TEvScriptResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
-            hFunc(TEvents::TEvUndelivered, Undelivered);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
+            hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            default:
+                return TBase::StateWork(ev);
         }
     }
 
@@ -219,82 +513,73 @@ public:
             Viewer->AddRunningQuery(QueryId, SelfId());
         }
 
-        auto event = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
-        if (Database) {
-            event->Record.MutableRequest()->SetDatabase(Database);
-            if (Span) {
-                Span.Attribute("database", Database);
+        if (Streaming != EStreamingType::None) {
+            auto contentType = ContentType;
+            if (Streaming == EStreamingType::MultiPart) {
+                contentType += ";boundary=boundary";
             }
-        }
-        auto request = GetRequest();
-        event->Record.SetApplicationName("ydb-ui");
-        event->Record.SetClientAddress(request.GetRemoteAddr());
-        event->Record.SetClientUserAgent(TString(request.GetHeader("User-Agent")));
-        if (TString tokenString = request.GetUserTokenObject()) {
-            NACLibProto::TUserToken userToken;
-            if (userToken.ParseFromString(tokenString)) {
-                event->Record.SetUserSID(userToken.GetUserSID());
-            }
-        }
-        CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
-        if (Streaming) {
-            HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), "multipart/x-mixed-replace;boundary=boundary"));
+            HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), contentType));
             Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
+        }
+
+        if (Action == "fetch-long-query") {
+            // For fetch-long-query, we need to directly check operation status and fetch results
+            if (OperationId) {
+                CheckOperationStatus();
+            } else if (!ExecutionId.empty()) {
+                // If we have execution_id but no operation_id, we can directly fetch results
+                Register(NKqp::CreateGetScriptExecutionResultActor(
+                    SelfId(),
+                    Database,
+                    ExecutionId,
+                    GetUserSID(),
+                    FetchResultSetIndex,
+                    FetchResultRowsOffset,
+                    std::min<i64>(FetchResultRowsLimit, LimitRows),
+                    OutputChunkMaxSize,
+                    Deadline));
+            }
+            return;
+        }
+
+        if (Long) {
+            ScriptResponse = MakeQueryRequest<NKqp::TEvKqp::TEvScriptRequest, NKqp::TEvKqp::TEvScriptResponse>();
+        } else {
+            auto event = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
+            if (Database) {
+                event->Record.MutableRequest()->SetDatabase(Database);
+                if (Span) {
+                    Span.Attribute("database", Database);
+                }
+            }
+            auto request = GetRequest();
+            event->Record.SetApplicationName("ydb-ui");
+            event->Record.SetClientAddress(request.GetRemoteAddr());
+            event->Record.SetClientUserAgent(TString(request.GetHeader("User-Agent")));
+            if (const auto userSID = GetUserSID()) {
+                event->Record.SetUserSID(*userSID);
+            }
+            CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
         }
     }
 
     void SetTransactionMode(NKikimrKqp::TQueryRequest& request) {
-        if (TransactionMode == "serializable-read-write") {
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
-            request.mutable_txcontrol()->set_commit_tx(true);
-        } else if (TransactionMode == "online-read-only") {
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_online_read_only();
-            request.mutable_txcontrol()->set_commit_tx(true);
-        } else if (TransactionMode == "stale-read-only") {
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_stale_read_only();
-            request.mutable_txcontrol()->set_commit_tx(true);
-        } else if (TransactionMode == "snapshot-read-only") {
-            request.mutable_txcontrol()->mutable_begin_tx()->mutable_snapshot_read_only();
-            request.mutable_txcontrol()->set_commit_tx(true);
+        if (!TransactionMode.empty()) {
+            SetTransactionControl(request, TransactionMode);
         }
     }
 
     void PingSession() {
         auto event = std::make_unique<NKqp::TEvKqp::TEvPingSessionRequest>();
         event->Record.MutableRequest()->SetSessionId(SessionId);
-        ActorIdToProto(SelfId(), event->Record.MutableRequest()->MutableExtSessionCtrlActorId());
+        TActorId ctrlActor = Forget ? MakeViewerID(SelfId().NodeId()) : SelfId();
+        ActorIdToProto(ctrlActor, event->Record.MutableRequest()->MutableExtSessionCtrlActorId());
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
     }
 
-    void HandleReply(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
-        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            CreateSessionResponse.Set(std::move(ev));
-        } else {
-            CreateSessionResponse.Error("FailedToCreateSession");
-            NYdb::NIssue::TIssue issue;
-            issue.SetMessage("Failed to create session");
-            issue.SetCode(ev->Get()->Record.GetYdbStatus(), NYdb::NIssue::ESeverity::Error);
-            NJson::TJsonValue json;
-            TString message;
-            MakeJsonErrorReply(json, message, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NIssue::TIssues{issue}));
-            return ReplyWithJsonAndPassAway(json, message);
-        }
-
-        SessionId = CreateSessionResponse->Record.GetResponse().GetSessionId();
-        PingSession();
-
-        if (Streaming) {
-            NJson::TJsonValue json;
-            json["version"] = Viewer->GetCapabilityVersion("/viewer/query");
-            NJson::TJsonValue& jsonMeta = json["meta"];
-            jsonMeta["event"] = "SessionCreated";
-            jsonMeta["session_id"] = SessionId;
-            jsonMeta["query_id"] = QueryId;
-            jsonMeta["node_id"] = SelfId().NodeId();
-            StreamJsonResponse(json);
-        }
-
-        auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    template<typename TRequestType, typename TResponseType>
+    TRequestResponse<TResponseType> MakeQueryRequest() {
+        auto event = MakeHolder<TRequestType>();
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(Query);
         request.SetSessionId(SessionId);
@@ -312,11 +597,17 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
             request.SetKeepSession(false);
-        } else if (Action.empty() || Action == "execute-query" || Action == "execute") {
+        } else if (Action.empty() || Action == "execute-query" || Action == "execute" || Forget) {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             request.SetType(ConcurrentResults ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
             request.SetKeepSession(false);
             SetTransactionMode(request);
+        } else if (Action == "execute-long-query") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+            SetTransactionMode(request);
+        } else if (Action == "fetch-long-query") {
+            // handle fetch-long-query in a special way
         } else if (Action == "explain-query") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
@@ -359,20 +650,127 @@ public:
         }
         if (Syntax == "yql_v1") {
             request.SetSyntax(Ydb::Query::Syntax::SYNTAX_YQL_V1);
-        } else if (Syntax == "pg") {
-            request.SetSyntax(Ydb::Query::Syntax::SYNTAX_PG);
         }
         if (OutputChunkMaxSize) {
             request.SetOutputChunkMaxSize(OutputChunkMaxSize);
         }
+        request.SetCollectDiagnostics(CollectDiagnostics);
+        if constexpr (requires() {event->SetProgressStatsPeriod(StatsPeriod);}) {
+            if (StatsPeriod) {
+                event->SetProgressStatsPeriod(StatsPeriod);
+            }
+        }
+        request.SetIsInternalCall(InternalCall);
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
-        QueryResponse = MakeRequest<NKqp::TEvKqp::TEvQueryResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+        if (Forget && !QueryRequestStartTime) {
+            QueryRequestStartTime = TActivationContext::Now();
+        }
+        return MakeRequest<TResponseType>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+    }
 
+    void HandleReply(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
+        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            CreateSessionResponse.Set(std::move(ev));
+        } else {
+            CreateSessionResponse.Error("FailedToCreateSession");
+            NYdb::NIssue::TIssue issue;
+            issue.SetMessage(TStringBuilder() << "Failed to create session (" << ev->Get()->Record.GetError() << ")");
+            issue.SetCode(ev->Get()->Record.GetYdbStatus(), NYdb::NIssue::ESeverity::Error);
+            NJson::TJsonValue json;
+            TString message;
+            MakeJsonErrorReply(json, message, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NIssue::TIssues{issue}));
+            return ReplyWithJsonAndPassAway("Error", std::move(json), message);
+        }
+
+        SessionId = CreateSessionResponse->Record.GetResponse().GetSessionId();
+        PingSession();
+
+        if (Streaming != EStreamingType::None) {
+            NJson::TJsonValue json;
+            json["version"] = Viewer->GetCapabilityVersion("/viewer/query");
+            NJson::TJsonValue& jsonMeta = json["meta"];
+            jsonMeta["session_id"] = SessionId;
+            jsonMeta["query_id"] = QueryId;
+            jsonMeta["node_id"] = SelfId().NodeId();
+            StreamJsonResponse("SessionCreated", std::move(json));
+        }
+        QueryResponse = MakeQueryRequest<NKqp::TEvKqp::TEvQueryRequest, NKqp::TEvKqp::TEvQueryResponse>();
+        if (Forget) {
+            ScheduleWakeup(GetWakeupPeriod());
+        }
     }
 
 private:
+    std::string WriteTime(ui32 value) {
+        ui32 hour, min, sec;
+
+        Y_ASSERT(value < 86400);
+        hour = value / 3600;
+        value -= hour * 3600;
+        min = value / 60;
+        sec = value - min * 60;
+
+        return TStringBuilder() << LeftPad(hour, 2, '0') << ':' << LeftPad(min, 2, '0') << ':' << LeftPad(sec, 2, '0');
+    }
+
+    std::string FormatDate32(const std::chrono::sys_time<NYdb::TWideDays>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        i32 year;
+        ui32 month;
+        ui32 day;
+        if (!NKikimr::NMiniKQL::SplitDate32(value, year, month, day)) {
+            return TStringBuilder() << "Error: failed to split Date32: " << value;
+        }
+
+        return TStringBuilder() << year << "-" << LeftPad(month, 2, '0') << '-' << LeftPad(day, 2, '0');
+    }
+
+    std::string FormatDatetime64(const std::chrono::sys_time<NYdb::TWideSeconds>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        if (Y_UNLIKELY(NUdf::MIN_DATETIME64 > value || value > NUdf::MAX_DATETIME64)) {
+            return TStringBuilder() << "Error: value out of range for Datetime64: " << value << " (min: " << NUdf::MIN_DATETIME64 << ", max: " << NUdf::MAX_DATETIME64 << ")";
+        }
+
+        auto date = value / 86400;
+        value -= date * 86400;
+        if (value < 0) {
+            date -= 1;
+            value += 86400;
+        }
+
+        return TStringBuilder() << FormatDate32(std::chrono::sys_time<NYdb::TWideDays>(NYdb::TWideDays(date))) << 'T' << WriteTime(value) << 'Z';
+    }
+
+    std::string FormatTimestamp64(const std::chrono::sys_time<NYdb::TWideMicroseconds>& tp) {
+        auto value = tp.time_since_epoch().count();
+
+        if (Y_UNLIKELY(NUdf::MIN_TIMESTAMP64 > value || value > NUdf::MAX_TIMESTAMP64)) {
+            return TStringBuilder() << "Error: value out of range for Timestamp64: " << value << " (min: " << NUdf::MIN_TIMESTAMP64 << ", max: " << NUdf::MAX_TIMESTAMP64 << ")";
+        }
+        auto date = value / 86400000000ll;
+        value -= date * 86400000000ll;
+        if (value < 0) {
+            date -= 1;
+            value += 86400000000ll;
+        }
+
+        TStringBuilder out;
+        out << FormatDate32(std::chrono::sys_time<NYdb::TWideDays>(NYdb::TWideDays(date)));
+        out << 'T';
+
+        const ui32 time = static_cast<ui32>(value / 1000000ull);
+        value -= time * 1000000ull;
+        out << WriteTime(time);
+        if (value) {
+            out << '.' << LeftPad(value, 6, '0');
+        }
+        return out << 'Z';
+    }
+
     NJson::TJsonValue ColumnPrimitiveValueToJsonValue(NYdb::TValueParser& valueParser) {
-        switch (const auto primitive = valueParser.GetPrimitiveType()) {
+        switch (valueParser.GetPrimitiveType()) {
             case NYdb::EPrimitiveType::Bool:
                 return valueParser.GetBool();
             case NYdb::EPrimitiveType::Int8:
@@ -406,13 +804,13 @@ private:
             case NYdb::EPrimitiveType::Interval:
                 return TStringBuilder() << valueParser.GetInterval();
             case NYdb::EPrimitiveType::Date32:
-                return valueParser.GetDate32();
+                return FormatDate32(valueParser.GetDate32());
             case NYdb::EPrimitiveType::Datetime64:
-                return valueParser.GetDatetime64();
+                return FormatDatetime64(valueParser.GetDatetime64());
             case NYdb::EPrimitiveType::Timestamp64:
-                return valueParser.GetTimestamp64();
+                return FormatTimestamp64(valueParser.GetTimestamp64());
             case NYdb::EPrimitiveType::Interval64:
-                return valueParser.GetInterval64();
+                return valueParser.GetInterval64().count();
             case NYdb::EPrimitiveType::TzDate:
                 return valueParser.GetTzDate();
             case NYdb::EPrimitiveType::TzDatetime:
@@ -447,17 +845,7 @@ private:
                     if (valueParser.IsNull()) {
                         jsonOptional = NJson::JSON_NULL;
                     } else {
-                        switch(valueParser.GetKind()) {
-                            case NYdb::TTypeParser::ETypeKind::Primitive:
-                                jsonOptional = ColumnPrimitiveValueToJsonValue(valueParser);
-                                break;
-                            case NYdb::TTypeParser::ETypeKind::Decimal:
-                                jsonOptional = valueParser.GetDecimal().ToString();
-                                break;
-                            default:
-                                jsonOptional = NJson::JSON_UNDEFINED;
-                                break;
-                        }
+                        jsonOptional = ColumnValueToJsonValue(valueParser);
                     }
                     valueParser.CloseOptional();
                     return jsonOptional;
@@ -550,11 +938,15 @@ private:
 
     void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         NJson::TJsonValue jsonResponse;
-        if (Streaming) {
-            NJson::TJsonValue& jsonMeta = jsonResponse["meta"];
-            jsonMeta["event"] = "QueryResponse";
-        } else {
+        if (Streaming == EStreamingType::None) {
             jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
+        }
+        if (ev->Get()->Record.GetYdbStatus() != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+            if (Ydb::StatusIds_StatusCode_IsValid(ev->Get()->Record.GetYdbStatus())) {
+                jsonResponse["status"] = Ydb::StatusIds_StatusCode_Name(ev->Get()->Record.GetYdbStatus());
+            } else {
+                jsonResponse["status"] = ev->Get()->Record.GetYdbStatus();
+            }
         }
         if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
@@ -568,7 +960,42 @@ private:
             NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
             MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
         }
-        ReplyWithJsonAndPassAway(jsonResponse);
+        ReplyWithJsonAndPassAway("QueryResponse", std::move(jsonResponse));
+    }
+
+    void HandleReply(NKqp::TEvKqp::TEvScriptResponse::TPtr& ev) {
+        NJson::TJsonValue jsonResponse;
+        InitJsonResponse(jsonResponse);
+
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            ScriptResponse.Set(std::move(ev));
+            jsonResponse["status"] = Ydb::StatusIds_StatusCode_Name(ScriptResponse->Status);
+            jsonResponse["operation_id"] = ScriptResponse->OperationId;
+            jsonResponse["execution_id"] = ScriptResponse->ExecutionId;
+            jsonResponse["exec_status"] = Ydb::Query::ExecStatus_Name(ScriptResponse->ExecStatus);
+            jsonResponse["exec_mode"] = Ydb::Query::ExecMode_Name(ScriptResponse->ExecMode);
+            if (ScriptResponse->Issues) {
+                Ydb::Issue::IssueMessage issueMessage;
+                NYql::IssuesToMessage(ScriptResponse->Issues, issueMessage.mutable_issues());
+                Proto2Json(issueMessage, jsonResponse["issues"]);
+            }
+            if (Streaming != EStreamingType::None) {
+                StreamJsonResponse("ScriptResponse", std::move(jsonResponse));
+                OperationId = NOperationId::TOperationId(ScriptResponse->OperationId);
+                ExecutionId = ScriptResponse->ExecutionId;
+            } else {
+                // For non-streaming mode, set operation and execution IDs and start checking operation status
+                OperationId = NOperationId::TOperationId(ScriptResponse->OperationId);
+                ExecutionId = ScriptResponse->ExecutionId;
+                CheckOperationStatus();
+                // Don't reply yet - wait for operation status response
+                return;
+            }
+        } else {
+            ScriptResponse.Error("QueryError");
+            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Status), NYdb::NAdapters::ToSdkIssues(std::move(ev->Get()->Issues))));
+            ReplyWithJsonAndPassAway("ScriptResponse", std::move(jsonResponse));
+        }
     }
 
     void HandleReply(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
@@ -581,22 +1008,20 @@ private:
             MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(record.GetStatusCode()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
         }
         CancelQuery();
-        ReplyWithJsonAndPassAway(jsonResponse);
+        ReplyWithJsonAndPassAway("Aborted", std::move(jsonResponse));
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
-        if (Streaming) {
+        if (Streaming != EStreamingType::None) {
             NJson::TJsonValue json;
-            NJson::TJsonValue& jsonMeta = json["meta"];
-            jsonMeta["event"] = "Progress";
             auto& progress(ev->Get()->Record);
             if (progress.HasQueryPlan()) {
                 NJson::ReadJsonTree(progress.GetQueryPlan(), &(json["plan"]));
             }
             if (progress.HasQueryStats()) {
-                NProtobufJson::Proto2Json(progress.GetQueryStats(), json["stats"]);
+                Proto2Json(progress.GetQueryStats(), json["stats"]);
             }
-            StreamJsonResponse(json);
+            StreamJsonResponse("Progress", std::move(json));
         }
     }
 
@@ -605,8 +1030,14 @@ private:
     }
 
     void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        QueryResponse.Event("StreamData");
         NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
+        if (QueryResponse.Span) {
+            QueryResponse.Span.Event("StreamData", {
+                {"result_idx", static_cast<i64>(data.GetQueryResultIndex())},
+                {"seq", static_cast<i64>(data.GetSeqNo())},
+                {"rows", static_cast<i64>(data.GetResultSet().rows_size())},
+            });
+        }
 
         if (TotalRows < LimitRows) {
             int rowsAvailable = LimitRows - TotalRows;
@@ -615,7 +1046,7 @@ private:
                 data.MutableResultSet()->set_truncated(true);
             }
             TotalRows += data.GetResultSet().rows_size();
-            if (Streaming) {
+            if (Streaming != EStreamingType::None) {
                 StreamJsonResponse(data);
             } else {
                 if (ResultSets.size() <= data.GetQueryResultIndex()) {
@@ -627,28 +1058,235 @@ private:
 
         THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
+            if (QueryResponse.Span) {
+                QueryResponse.Span.Event("LimitReached", {
+                    {"limit_rows", static_cast<i64>(LimitRows)},
+                    {"total_rows", static_cast<i64>(TotalRows)},
+                });
+            }
             ack->Record.SetEnough(true);
         }
         Send(ev->Sender, ack.Release());
     }
 
-    void ReplyWithError(const TString& error) {
-        if (SessionId) {
-            auto event = std::make_unique<NKqp::TEvKqp::TEvCancelQueryRequest>();
-            event->Record.MutableRequest()->SetSessionId(SessionId);
-            Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
+    void HandleReply(NKqp::TEvGetScriptExecutionOperationResponse::TPtr& ev) {
+        GetOperationResponse->Set(std::move(ev));
+
+        // Check if we have a valid response or an error
+        if (!GetOperationResponse->IsOk()) {
+            NJson::TJsonValue json;
+            InitJsonResponse(json);
+            AddOperationInfo(json);
+            json["ready"] = false;
+
+            if (GetOperationResponse->IsError()) {
+                CreateStandardErrorResponse(json, GetOperationResponse->GetError());
+            } else {
+                CreateStandardErrorResponse(json, "Failed to get operation status");
+            }
+
+            return ReplyWithJsonAndPassAway("OperationResponse", std::move(json));
         }
-        NJson::TJsonValue json;
-        json["error"]["severity"] = NYql::TSeverityIds::S_ERROR;
-        json["error"]["message"] = error;
-        NJson::TJsonValue& issue = json["issues"].AppendValue({});
-        issue["severity"] = NYql::TSeverityIds::S_ERROR;
-        issue["message"] = error;
-        ReplyWithJsonAndPassAway(json);
+
+        // Now we know we have a valid response, safe to access
+        // Extract metadata for both streaming and non-streaming modes
+        Ydb::Query::ExecuteScriptMetadata metadata;
+        if (GetOperationResponse->Get()->Metadata && GetOperationResponse->Get()->Metadata->UnpackTo(&metadata)) {
+            FetchResultSets = metadata.result_sets_meta_size();
+            // Extract execution_id from metadata if we don't have it yet
+            if (ExecutionId.empty() && !metadata.execution_id().empty()) {
+                ExecutionId = metadata.execution_id();
+            }
+        }
+
+        if (Streaming != EStreamingType::None) {
+            NJson::TJsonValue json;
+            json["id"] = OperationId->ToString();
+            json["ready"] = GetOperationResponse->Get()->Ready;
+            if (GetOperationResponse->Get()->Issues) {
+                Ydb::Issue::IssueMessage issueMessage;
+                NYql::IssuesToMessage(GetOperationResponse->Get()->Issues, issueMessage.mutable_issues());
+                Proto2Json(issueMessage, json["issues"]);
+            }
+            Proto2Json(metadata, json["metadata"]);
+            StreamJsonResponse("OperationResponse", std::move(json));
+        }
+
+        if (GetOperationResponse->Get()->Ready) {
+            if (FetchResultSets > 0) {
+                // Make sure we have execution_id before trying to fetch results
+                if (ExecutionId.empty()) {
+                    // If we still don't have execution_id, there's an issue with the operation metadata
+                    NJson::TJsonValue json;
+                    if (Streaming == EStreamingType::None) {
+                        json["version"] = Viewer->GetCapabilityVersion("/viewer/query");
+                    }
+                    json["id"] = OperationId->ToString();
+                    json["ready"] = true;
+                    json["error"]["severity"] = NYql::TSeverityIds::S_ERROR;
+                    json["error"]["message"] = "Failed to extract execution_id from operation metadata";
+                    return ReplyWithJsonAndPassAway("OperationResponse", std::move(json));
+                }
+
+                Register(NKqp::CreateGetScriptExecutionResultActor(
+                    SelfId(),
+                    Database,
+                    ExecutionId,
+                    GetUserSID(),
+                    FetchResultSetIndex,
+                    FetchResultRowsOffset,
+                    std::min<i64>(FetchResultRowsLimit, LimitRows),
+                    OutputChunkMaxSize,
+                    Deadline));
+            } else {
+                // Operation is ready but no result sets - reply with empty result for non-streaming
+                if (Streaming == EStreamingType::None) {
+                    NJson::TJsonValue jsonResponse;
+                    jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
+                    jsonResponse["operation_id"] = OperationId->ToString();
+                    if (!ExecutionId.empty()) {
+                        jsonResponse["execution_id"] = ExecutionId;
+                    }
+                    ReplyWithJsonAndPassAway("OperationResponse", std::move(jsonResponse));
+                }
+            }
+        } else {
+            // Operation not ready yet - reset and continue waiting (will be checked again on next wakeup)
+            GetOperationResponse.reset();
+        }
     }
 
-    void HandleTimeout() {
-        ReplyWithError("Timeout executing query");
+    void HandleReply(NKqp::TEvFetchScriptResultsResponse::TPtr& ev) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            return ReplyWithError("Failed to fetch script results");
+        }
+        if (ev->Get()->ResultSet && TotalRows < LimitRows) {
+            int rowsAvailable = LimitRows - TotalRows;
+            if (ev->Get()->ResultSet->rows_size() > rowsAvailable) {
+                ev->Get()->ResultSet->mutable_rows()->Truncate(rowsAvailable);
+                ev->Get()->ResultSet->set_truncated(true);
+            }
+            TotalRows += ev->Get()->ResultSet->rows_size();
+            if (Streaming != EStreamingType::None) {
+                StreamJsonResponse(*ev->Get(), FetchResultSetIndex);
+            } else {
+                if (ResultSets.size() <= FetchResultSetIndex) {
+                    ResultSets.resize(FetchResultSetIndex + 1);
+                }
+                ResultSets[FetchResultSetIndex].emplace_back() = std::move(*ev->Get()->ResultSet);
+            }
+            FetchResultRowsOffset += ev->Get()->ResultSet->rows_size();
+        }
+        if (TotalRows < LimitRows) {
+            if (ev->Get()->HasMoreResults) {
+                Register(NKqp::CreateGetScriptExecutionResultActor(
+                    SelfId(),
+                    Database,
+                    ExecutionId,
+                    GetUserSID(),
+                    FetchResultSetIndex,
+                    FetchResultRowsOffset,
+                    std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
+                    OutputChunkMaxSize,
+                    Deadline));
+                return;
+            } else if (FetchResultSetIndex + 1 < FetchResultSets) {
+                ++FetchResultSetIndex;
+                FetchResultRowsOffset = 0;
+                Register(NKqp::CreateGetScriptExecutionResultActor(
+                    SelfId(),
+                    Database,
+                    ExecutionId,
+                    GetUserSID(),
+                    FetchResultSetIndex,
+                    FetchResultRowsOffset,
+                    std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
+                    OutputChunkMaxSize,
+                    Deadline));
+                return;
+            }
+        }
+        if (Streaming != EStreamingType::None) {
+            FinishStreamAndPassAway();
+        } else {
+            // For non-streaming mode, return the results directly
+            NJson::TJsonValue jsonResponse;
+            jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
+            if (OperationId) {
+                jsonResponse["operation_id"] = OperationId->ToString();
+            }
+            if (!ExecutionId.empty()) {
+                jsonResponse["execution_id"] = ExecutionId;
+            }
+
+            // Render results using the same logic as other queries
+            if (ResultSets.size() > 0) {
+                RenderResultSetForSchema(jsonResponse, ResultSets);
+            }
+            ReplyWithJsonAndPassAway("OperationResponse", std::move(jsonResponse));
+        }
+    }
+
+    void ReplyWithTimeoutError() {
+        CancelQueryIfNeeded();
+
+        NJson::TJsonValue json;
+        InitJsonResponse(json);
+
+        // For long queries (execute-long-query), include operation metadata with timeout error
+        if (Long && Streaming != EStreamingType::None) {
+            AddOperationInfo(json);
+            // Add a note about being able to fetch results later
+            json["timeout_info"] = "Query execution may still be running. Use fetch-long-query with the operation_id or execution_id to check status and retrieve results.";
+        }
+
+        CreateStandardErrorResponse(json, "Timeout executing query");
+        ReplyWithJsonAndPassAway("Timeout", std::move(json), "timeout");
+    }
+
+    void ReplyWithError(const TString& error) {
+        CancelQueryIfNeeded();
+        NJson::TJsonValue json;
+        CreateStandardErrorResponse(json, error);
+        ReplyWithJsonAndPassAway("Error", std::move(json), error);
+    }
+
+    void ReplyAndForgetQuery() {
+        ForgetQuery();
+
+        NJson::TJsonValue json;
+        InitJsonResponse(json);
+        json["status"] = Ydb::StatusIds_StatusCode_Name(Ydb::StatusIds::SUCCESS);
+        json["message"] = "Query is running in background";
+        ReplyWithJsonAndPassAway("QueryForgotten", std::move(json));
+    }
+
+    void ForgetQuery() {
+        QueryForgotten = true;
+    }
+
+    void CheckOperationStatus() {
+        if (!GetOperationResponse.has_value() || GetOperationResponse->IsDone()) {
+            GetOperationResponse = MakeRequest<NKqp::TEvGetScriptExecutionOperationResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(Database, *OperationId, GetUserSID()));
+        }
+    }
+
+    void HandleWakeup() {
+        auto now = TActivationContext::Now();
+        WakeupScheduledAt = TInstant();
+        if (Forget && QueryRequestStartTime && (now - QueryRequestStartTime >= ForgetAfter)) {
+            return ReplyAndForgetQuery();
+        }
+        if (Timeout && (!Forget || !QueryRequestStartTime) && (now - QueryStartTime > Timeout)) {
+            return ReplyWithTimeoutError();
+        }
+        if (!Forget && KeepAlive && (now - LastSendTime > KeepAlive)) {
+            SendKeepAlive();
+        }
+        if (OperationId && (!GetOperationResponse.has_value() || GetOperationResponse->IsDone())) {
+            CheckOperationStatus();
+        }
+        ScheduleWakeup(GetWakeupPeriod(now), now);
     }
 
 private:
@@ -697,123 +1335,15 @@ private:
             const auto& response = record.GetResponse();
 
             if (response.YdbResultsSize() > 0) {
-
                 for (const auto& result : response.GetYdbResults()) {
                     ResultSets.emplace_back().emplace_back(result);
                 }
-
             }
 
-            if (ResultSets.size() > 0 && !Streaming) {
-                if (Schema == ESchemaType::Classic) {
-                    NJson::TJsonValue& jsonResults = jsonResponse["result"];
-                    jsonResults.SetType(NJson::JSON_ARRAY);
-                    for (const auto& resultSets : ResultSets) {
-                        for (NYdb::TResultSet resultSet : resultSets) {
-                            const auto& columnsMeta = resultSet.GetColumnsMeta();
-                            NYdb::TResultSetParser rsParser(resultSet);
-                            while (rsParser.TryNextRow()) {
-                                NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
-                                for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
-                                    const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
-                                    jsonRow[columnMeta.Name] = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (Schema == ESchemaType::Modern) {
-                    {
-                        NJson::TJsonValue& jsonColumns = jsonResponse["columns"];
-                        NYdb::TResultSet resultSet(ResultSets.front().front());
-                        const auto& columnsMeta = resultSet.GetColumnsMeta();
-                        jsonColumns.SetType(NJson::JSON_ARRAY);
-                        for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
-                            NJson::TJsonValue& jsonColumn = jsonColumns.AppendValue({});
-                            const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
-                            jsonColumn["name"] = columnMeta.Name;
-                            jsonColumn["type"] = columnMeta.Type.ToString();
-                        }
-                    }
-
-                    NJson::TJsonValue& jsonResults = jsonResponse["result"];
-                    jsonResults.SetType(NJson::JSON_ARRAY);
-                    for (const auto& resultSets : ResultSets) {
-                        for (NYdb::TResultSet resultSet : resultSets) {
-                            const auto& columnsMeta = resultSet.GetColumnsMeta();
-                            NYdb::TResultSetParser rsParser(resultSet);
-                            while (rsParser.TryNextRow()) {
-                                NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
-                                jsonRow.SetType(NJson::JSON_ARRAY);
-                                for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
-                                    NJson::TJsonValue& jsonColumn = jsonRow.AppendValue({});
-                                    jsonColumn = ColumnValueToJsonValue(rsParser.ColumnParser(columnNum));
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (Schema == ESchemaType::Multi) {
-                    NJson::TJsonValue& jsonResults = jsonResponse["result"];
-                    jsonResults.SetType(NJson::JSON_ARRAY);
-                    for (const auto& resultSets : ResultSets) {
-                        NJson::TJsonValue& jsonResult = jsonResults.AppendValue({});
-                        bool hasColumns = false;
-                        for (NYdb::TResultSet resultSet : resultSets) {
-                            RenderResultSetMulti(jsonResult, resultSet, hasColumns);
-                        }
-                    }
-                }
-
-                if (Schema == ESchemaType::Ydb) {
-                    NJson::TJsonValue& jsonResults = jsonResponse["result"];
-                    jsonResults.SetType(NJson::JSON_ARRAY);
-                    for (const auto& resultSets : ResultSets) {
-                        for (NYdb::TResultSet resultSet : resultSets) {
-                            const auto& columnsMeta = resultSet.GetColumnsMeta();
-                            NYdb::TResultSetParser rsParser(resultSet);
-                            while (rsParser.TryNextRow()) {
-                                NJson::TJsonValue& jsonRow = jsonResults.AppendValue({});
-                                TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, IsBase64Encode ? NYdb::EBinaryStringEncoding::Base64 : NYdb::EBinaryStringEncoding::Unicode);
-                                NJson::ReadJsonTree(row, &jsonRow);
-                            }
-                        }
-                    }
-                }
-
-                if (Schema == ESchemaType::Ydb2) {
-                    NJson::TJsonValue& jsonResults = jsonResponse["result"];
-                    jsonResults.SetType(NJson::JSON_ARRAY);
-                    for (const auto& resultSets : ResultSets) {
-                        NJson::TJsonValue& jsonResult = jsonResults.AppendValue({});
-                        bool hasColumns = false;
-                        for (NYdb::TResultSet resultSet : resultSets) {
-                            if (!hasColumns) {
-                                NJson::TJsonValue& jsonColumns = jsonResult["columns"];
-                                jsonColumns.SetType(NJson::JSON_ARRAY);
-                                const auto& columnsMeta = resultSet.GetColumnsMeta();
-                                for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
-                                    NJson::TJsonValue& jsonColumn = jsonColumns.AppendValue({});
-                                    const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
-                                    jsonColumn["name"] = columnMeta.Name;
-                                    jsonColumn["type"] = columnMeta.Type.ToString();
-                                }
-                                hasColumns = true;
-                            }
-                            NJson::TJsonValue& jsonRows = jsonResult["rows"];
-                            const auto& columnsMeta = resultSet.GetColumnsMeta();
-                            NYdb::TResultSetParser rsParser(resultSet);
-                            while (rsParser.TryNextRow()) {
-                                NJson::TJsonValue& jsonRow = jsonRows.AppendValue({});
-                                TString row = NYdb::FormatResultRowJson(rsParser, columnsMeta, IsBase64Encode ? NYdb::EBinaryStringEncoding::Base64 : NYdb::EBinaryStringEncoding::Unicode);
-                                NJson::ReadJsonTree(row, &jsonRow);
-                            }
-                        }
-                    }
-                }
+            if (ResultSets.size() > 0) {
+                RenderResultSetForSchema(jsonResponse, ResultSets);
             }
+
             if (response.HasQueryAst()) {
                 jsonResponse["ast"] = response.GetQueryAst();
             }
@@ -821,7 +1351,7 @@ private:
                 NJson::ReadJsonTree(response.GetQueryPlan(), &(jsonResponse["plan"]));
             }
             if (response.HasQueryStats()) {
-                NProtobufJson::Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
+                Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
             }
         }
         catch (const std::exception& ex) {
@@ -832,24 +1362,34 @@ private:
         }
     }
 
-    void StreamJsonResponse(const NJson::TJsonValue& json) {
-        constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
+    void StreamJsonResponse(const TString& event, NJson::TJsonValue&& json) {
+        if (Streaming == EStreamingType::MultiPart) {
+            json["meta"]["event"] = event;
+        }
         TStringStream content;
         NJson::WriteJson(&content, &json, {
-            .FloatToStringMode = floatMode,
+            .DoubleNDigits = Proto2JsonConfig.DoubleNDigits,
+            .FloatNDigits = Proto2JsonConfig.FloatNDigits,
+            .FloatToStringMode = Proto2JsonConfig.FloatToStringMode,
             .ValidateUtf8 = false,
-            .WriteNanAsString = true,
+            .WriteNanAsString = Proto2JsonConfig.WriteNanAsString,
         });
         TStringBuilder data;
-        data << "--boundary\r\nContent-Type: application/json\r\nContent-Length: " << content.Size() << "\r\n\r\n" << content.Str() << "\r\n";
+        if (Streaming == EStreamingType::MultiPart) {
+            data << "--boundary\r\nContent-Type: application/json\r\nContent-Length: " << content.Size() << "\r\n\r\n" << content.Str() << "\r\n";
+        }
+        if (Streaming == EStreamingType::EventStream) {
+            data << "event: " << event << "\n";
+            data << "data: " << content.Str() << "\n\n";
+        }
         auto dataChunk = HttpResponse->CreateDataChunk(data);
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+        LastSendTime = TActivationContext::Now();
     }
 
     void StreamJsonResponse(const NKikimrKqp::TEvExecuterStreamData& data) {
         NJson::TJsonValue json;
         NJson::TJsonValue& jsonMeta = json["meta"];
-        jsonMeta["event"] = "StreamData";
         jsonMeta["result_index"] = data.GetQueryResultIndex();
         jsonMeta["seq_no"] = data.GetSeqNo();
         if (ResultSetHasColumns.size() <= data.GetQueryResultIndex()) {
@@ -860,21 +1400,66 @@ private:
         } catch (const std::exception& ex) {
             return ReplyWithError(ex.what());
         }
-        StreamJsonResponse(json);
+        StreamJsonResponse("StreamData", std::move(json));
+    }
+
+    void StreamJsonResponse(const NKqp::TEvFetchScriptResultsResponse& data, ui32 resultSetIndex) {
+        NJson::TJsonValue json;
+        NJson::TJsonValue& jsonMeta = json["meta"];
+        jsonMeta["result_index"] = resultSetIndex;
+        jsonMeta["seq_no"] = FetchResultSeqNum++;
+        if (ResultSetHasColumns.size() <= resultSetIndex) {
+            ResultSetHasColumns.resize(resultSetIndex + 1);
+        }
+        try {
+            RenderResultSetMulti(json["result"], *data.ResultSet, ResultSetHasColumns[resultSetIndex]);
+        } catch (const std::exception& ex) {
+            return ReplyWithError(ex.what());
+        }
+        StreamJsonResponse("StreamData", std::move(json));
     }
 
     void StreamEndOfStream() {
-        auto dataChunk = HttpResponse->CreateDataChunk("--boundary--\r\n");
-        dataChunk->SetEndOfData();
-        Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+        if (Streaming == EStreamingType::MultiPart) {
+            auto dataChunk = HttpResponse->CreateDataChunk("--boundary--\r\n");
+            dataChunk->SetEndOfData();
+            Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+        }
+        if (Streaming == EStreamingType::EventStream) {
+            auto dataChunk = HttpResponse->CreateDataChunk();
+            Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+        }
+        LastSendTime = TActivationContext::Now();
     }
 
-    void ReplyWithJsonAndPassAway(const NJson::TJsonValue& json, const TString& error = {}) {
-        if (Streaming) {
-            StreamJsonResponse(json);
+    void SendKeepAlive() {
+        if (Streaming == EStreamingType::MultiPart) {
+            StreamJsonResponse("KeepAlive", {});
+        }
+        if (Streaming == EStreamingType::EventStream) {
+            TStringBuilder ping;
+            ping << ": ping - " << NActors::TActivationContext::Now().ToIsoStringLocal() << "\n\n";
+            auto dataChunk = HttpResponse->CreateDataChunk(ping);
+            Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+            LastSendTime = TActivationContext::Now();
+        }
+        if (SessionId) {
+            PingSession();
+        }
+    }
+
+    void FinishStreamAndPassAway(const TString& error = {}) {
+        if (Streaming != EStreamingType::None) {
             StreamEndOfStream();
             HttpEvent.Reset(); // to avoid double reply
             TBase::ReplyAndPassAway(error);
+        }
+    }
+
+    void ReplyWithJsonAndPassAway(const TString& event, NJson::TJsonValue&& json, const TString& error = {}) {
+        if (Streaming != EStreamingType::None) {
+            StreamJsonResponse(event, std::move(json));
+            FinishStreamAndPassAway(error);
         } else {
             TBase::ReplyAndPassAway(GetHTTPOKJSON(json), error);
         }
@@ -892,14 +1477,17 @@ public:
               - name: action
                 in: query
                 type: string
-                enum: [execute-scan, execute-script, execute-query, execute-data, explain-ast, explain-scan, explain-script, explain-query, explain-data, cancel-query]
+                enum: [execute-scan, execute-script, execute-query, execute-query-and-forget, execute-data, execute-long-query, fetch-long-query, explain-ast, explain-scan, explain-script, explain-query, explain-data, cancel-query]
                 required: true
                 description: >
                     execute method:
                       * `execute-query` - execute query (QueryService)
+                      * `execute-query-and-forget` - execute query (QueryService), wait up to forget_after for an immediate response, then leave it running in background; after the query is forgotten, it cannot be cancelled using query_id
                       * `execute-data` - execute data query (DataQuery)
                       * `execute-scan` - execute scan query (ScanQuery)
                       * `execute-script` - execute script query (ScriptingService)
+                      * `execute-long-query` - execute long running script query (returns operation_id and execution_id for later fetching results)
+                      * `fetch-long-query` - fetch results from previously executed long query (requires operation_id or execution_id)
                       * `explain-query` - explain query (QueryService)
                       * `explain-data` - explain data query (DataQuery)
                       * `explain-scan` - explain scan query (ScanQuery)
@@ -919,14 +1507,23 @@ public:
                 in: query
                 description: unique query identifier (uuid) - use the same id to cancel query
                 required: false
+              - name: operation_id
+                in: query
+                description: operation identifier for fetch-long-query action
+                type: string
+                required: false
+              - name: execution_id
+                in: query
+                description: execution identifier for fetch-long-query action
+                type: string
+                required: false
               - name: syntax
                 in: query
                 description: >
                     query syntax:
                       * `yql_v1` - YQL v1 (default)
-                      * `pg` - PostgreSQL compatible
                 type: string
-                enum: [yql_v1, pg]
+                enum: [yql_v1]
                 required: false
               - name: schema
                 in: query
@@ -960,8 +1557,9 @@ public:
                       * `online-read-only`
                       * `stale-read-only`
                       * `snapshot-read-only`
+                      * `snapshot-read-write`
                 type: string
-                enum: [serializable-read-write, online-read-only, stale-read-only, snapshot-read-only]
+                enum: [serializable-read-write, online-read-only, stale-read-only, snapshot-read-only, snapshot-read-write]
                 required: false
               - name: output_chunk_max_size
                 in: query
@@ -988,10 +1586,16 @@ public:
                 default: true
               - name: timeout
                 in: query
-                description: timeout in ms
+                description: timeout in ms, for synchronous queries it's 60s by default, for streaming queries it's off by default
                 type: integer
                 required: false
-                default: 60000
+              - name: forget_after
+                in: query
+                description: maximum time in ms to wait for an execute-query-and-forget result before leaving the query running in background
+                type: integer
+                required: false
+                default: 1000
+                maximum: 60000
               - name: ui64
                 in: query
                 description: return ui64 as number to avoid 56-bit js rounding
@@ -1002,6 +1606,20 @@ public:
                 description: resource pool in which the query will be executed
                 type: string
                 required: false
+              - name: keep_alive
+                in: query
+                description: time of inactivity to send keep-alive in stream (multipart) queries
+                type: integer
+                default: 10000
+              - name: collect_diagnostics
+                in: query
+                description: collect query diagnostics
+                type: boolean
+                default: true
+              - name: stats_period
+                in: query
+                description: time interval for sending periodical query statistics in ms
+                type: integer
             requestBody:
                 description: Executes SQL query
                 required: false
@@ -1019,6 +1637,10 @@ public:
                                 type: object
                                 description: format depends on schema parameter
                         multipart/x-mixed-replace:
+                            schema:
+                                type: object
+                                description: format depends on schema parameter
+                        multipart/form-data:
                             schema:
                                 type: object
                                 description: format depends on schema parameter

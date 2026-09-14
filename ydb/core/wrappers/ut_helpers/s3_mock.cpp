@@ -5,6 +5,7 @@
 
 #include <util/generic/xrange.h>
 #include <util/random/shuffle.h>
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
@@ -16,6 +17,7 @@ namespace NTestHelpers {
 TS3Mock::TSettings::TSettings()
     : CorruptETags(false)
     , RejectUploadParts(false)
+    , PartialReadFailures(0)
 {
 }
 
@@ -23,6 +25,7 @@ TS3Mock::TSettings::TSettings(ui16 port)
     : HttpOptions(THttpServer::TOptions(port).SetThreads(1))
     , CorruptETags(false)
     , RejectUploadParts(false)
+    , PartialReadFailures(0)
 {
 }
 
@@ -38,6 +41,12 @@ TS3Mock::TSettings& TS3Mock::TSettings::WithCorruptETags(bool value) {
 
 TS3Mock::TSettings& TS3Mock::TSettings::WithRejectUploadParts(bool value) {
     RejectUploadParts = value;
+    return *this;
+}
+
+TS3Mock::TSettings& TS3Mock::TSettings::WithPartialReadFailure(TString path, ui32 count) {
+    PartialReadPath = std::move(path);
+    PartialReadFailures = count;
     return *this;
 }
 
@@ -128,20 +137,30 @@ bool TS3Mock::TRequest::HttpServeRead(const TReplyParams& params, EMethod method
         ShuffleRange(etag);
     }
 
-    params.Output << "HTTP/1.1 200 Ok\r\n";
+    params.Output << (rangeHeader ? "HTTP/1.1 206 Partial Content\r\n" : "HTTP/1.1 200 Ok\r\n");
     THttpHeaders headers;
     headers.AddHeader("ETag", etag);
 
     if (method == EMethod::Get) {
-        headers.AddHeader("Content-Length", range.second - range.first + 1);
+        const size_t responseSize = range.second - range.first + 1;
+        const bool failPartialRead = Parent->ShouldFailPartialRead(path);
+        headers.AddHeader("Content-Length", responseSize);
         headers.AddHeader("Content-Type", "application/octet-stream");
-        headers.OutTo(&params.Output);
         if (rangeHeader) {
             headers.AddHeader("Accept-Ranges", "bytes");
             headers.AddHeader("Content-Range", "bytes " + ::ToString(range.first) + "-" + ToString(range.second) + "/" + ::ToString(content.size()));
         }
+        if (failPartialRead) {
+            params.Output.EnableKeepAlive(false);
+            headers.AddHeader("Connection", "close");
+        }
+        headers.OutTo(&params.Output);
         params.Output << "\r\n";
-        params.Output << content.SubStr(range.first, range.second - range.first + 1);
+        params.Output << content.SubStr(range.first, failPartialRead ? responseSize / 2 : responseSize);
+        if (failPartialRead) {
+            params.Output.Finish();
+            return true;
+        }
     } else {
         headers.AddHeader("Content-Length", content.size());
         headers.OutTo(&params.Output);
@@ -152,13 +171,72 @@ bool TS3Mock::TRequest::HttpServeRead(const TReplyParams& params, EMethod method
     return true;
 }
 
+TString BuildContentXML(const TString& path, size_t size) {
+    return Sprintf(R"(
+                <Contents>
+                    <Key>%s</Key>
+                    <Size>%zu</Size>
+                </Contents>
+        )", path.c_str(), size);
+}
+
+TString BuildContentListXML(const TVector<std::pair<TString, size_t>>& objects) {
+    TString result;
+    for (const auto& [path, size] : objects) {
+        result += BuildContentXML(path, size);
+    }
+    return result;
+}
+
+TString BuildListObjectsXML(const TVector<std::pair<TString, size_t>>& objects, const TStringBuf bucketName) {
+    return Sprintf(R"(<?xml version="1.0" encoding="UTF-8"?>
+            <ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+                <Name>%s</Name>
+                <IsTruncated>false</IsTruncated>
+                <MaxKeys>%zu</MaxKeys>
+                <KeyCount>%zu</KeyCount>
+                %s
+            </ListBucketResult>
+        )", TString(bucketName).c_str(), objects.size(), objects.size(), BuildContentListXML(objects).c_str());
+}
+
+bool TS3Mock::TRequest::HttpServeList(const TReplyParams& params, TStringBuf bucketName, const TString& prefix) {
+    Cerr << "S3_MOCK::HttpServeList: " << prefix << Endl;
+    params.Output << "HTTP/1.1 200 Ok\r\n";
+    THttpHeaders headers;
+
+    TVector<std::pair<TString, size_t>> objects;
+    TString bucketPrefix(bucketName);
+    if (!bucketPrefix.EndsWith('/')) {
+        bucketPrefix += '/';
+    }
+    const TString keyPrefix = TStringBuilder() << bucketPrefix << prefix;
+    for (const auto& [key, value] : Parent->Data) {
+        if (key.StartsWith(keyPrefix)) {
+            objects.emplace_back(key.substr(bucketPrefix.size()), value.size());
+        }
+    }
+
+    TString xml = BuildListObjectsXML(objects, bucketName);
+
+    headers.AddHeader("Content-Type", "application/xml");
+    headers.AddHeader("Content-Length", xml.length());
+    headers.OutTo(&params.Output);
+
+    params.Output << "\r\n";
+    params.Output << xml;
+    params.Output.Flush();
+
+    return true;
+}
+
 bool TS3Mock::TRequest::HttpServeWrite(const TReplyParams& params, TStringBuf path, const TCgiParameters& queryParams) {
     TString content;
-    ui64 length;
+    ui64 length = 0;
 
     if (params.Input.GetContentLength(length)) {
         content = TString::Uninitialized(length);
-        params.Input.Read(content.Detach(), length);
+        params.Input.Load(content.Detach(), length);
     } else {
         content = params.Input.ReadAll();
     }
@@ -366,7 +444,9 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
 
     case EMethod::Head:
     case EMethod::Get:
-        if (Parent->Data.contains(pathStr)) {
+        if (queryParams.Has("prefix")) {
+            return HttpServeList(params, pathStr == "/" ? "" : pathStr, queryParams.Get("prefix"));
+        } else if (Parent->Data.contains(pathStr)) {
             return HttpServeRead(params, method, pathStr);
         } else {
             return HttpNotFound(params, "NoSuchKey");
@@ -398,6 +478,7 @@ const char* TS3Mock::GetError() {
 
 TS3Mock::TS3Mock(const TSettings& settings)
     : Settings(settings)
+    , PartialReadFailuresLeft(settings.PartialReadFailures)
     , HttpServer(this, settings.HttpOptions)
 {
 }
@@ -405,6 +486,7 @@ TS3Mock::TS3Mock(const TSettings& settings)
 TS3Mock::TS3Mock(THashMap<TString, TString>&& data, const TSettings& settings)
     : Settings(settings)
     , Data(std::move(data))
+    , PartialReadFailuresLeft(settings.PartialReadFailures)
     , HttpServer(this, settings.HttpOptions)
 {
 }
@@ -412,8 +494,26 @@ TS3Mock::TS3Mock(THashMap<TString, TString>&& data, const TSettings& settings)
 TS3Mock::TS3Mock(const THashMap<TString, TString>& data, const TSettings& settings)
     : Settings(settings)
     , Data(data)
+    , PartialReadFailuresLeft(settings.PartialReadFailures)
     , HttpServer(this, settings.HttpOptions)
 {
+}
+
+bool TS3Mock::ShouldFailPartialRead(TStringBuf path) {
+    if (path != Settings.PartialReadPath) {
+        return false;
+    }
+
+    ++PartialReadRequestCount;
+
+    ui32 failuresLeft = PartialReadFailuresLeft.load();
+    while (failuresLeft) {
+        if (PartialReadFailuresLeft.compare_exchange_weak(failuresLeft, failuresLeft - 1)) {
+            ++PartialReadFailureCount;
+            return true;
+        }
+    }
+    return false;
 }
 
 TClientRequest* TS3Mock::CreateClient() {

@@ -4,6 +4,7 @@
 #include "flat_sausage_gut.h"
 #include "flat_sausage_solid.h"
 #include "util_deref.h"
+#include "util_fmt_abort.h"
 #include <array>
 
 namespace NKikimr {
@@ -35,16 +36,17 @@ namespace NPage {
             : Raw(std::move(raw))
             , Label_(label)
         {
-            Y_ABORT_UNLESS(uintptr_t(Raw.data()) % alignof(TEntry) == 0);
+            Y_ENSURE(uintptr_t(Raw.data()) % alignof(TEntry) == 0);
 
             auto got = NPage::TLabelWrapper().Read(Raw, EPage::Globs);
 
-            Y_ABORT_UNLESS(got == ECodec::Plain && got.Version == 1);
+            Y_ENSURE(got == ECodec::Plain && got.Version == 1);
 
             Header = TDeref<THeader>::At(got.Page.data(), 0);
 
-            if (Header->Skip > got.Page.size())
-                Y_ABORT("NPage::TExtBlobs header is out of its blob");
+            if (Header->Skip > got.Page.size()) {
+                Y_TABLET_ERROR("NPage::TExtBlobs header is out of its blob");
+            }
 
             auto *ptr = TDeref<TEntry>::At(got.Page.data(), Header->Skip);
 

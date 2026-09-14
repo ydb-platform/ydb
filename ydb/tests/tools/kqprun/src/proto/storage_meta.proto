@@ -3,6 +3,24 @@ syntax = "proto3";
 package NKqpRun;
 
 message TStorageMeta {
-    uint64 StorageGeneration = 1;
+    message TTenant {
+        enum EType {
+            DEDICATED = 0;
+            SHARED = 1;
+            SERVERLESS = 2;
+        }
+
+        EType Type = 1;
+        uint32 NodesCount = 2;
+        uint32 StorageGroupsCount = 5;
+        string SharedTenant = 3;  // Only for serverless tenants
+        bool CreationInProgress = 4;
+    }
+
+    uint64 StorageGeneration = 1;  // Deprecated (currently not used)
     uint64 StorageSize = 2;
+    string DomainName = 3;
+    uint32 NodesCount = 5;
+    uint32 StorageGroupsCount = 6;
+    map<string, TTenant> Tenants = 4;
 }

@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -150,15 +150,11 @@ Y_UNIT_TEST_SUITE(KqpExtractPredicateLookup) {
 void Test(
     const TString& query,
     const TString& answer,
-    bool enableKqpDataQueryStreamLookup,
     THashSet<TString> allowScans = {},
     NYdb::TParams params = TParamsBuilder().Build())
 {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(enableKqpDataQueryStreamLookup);
     TKikimrSettings settings;
     settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-    settings.SetAppConfig(appConfig);
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -193,12 +189,8 @@ void Test(
     }
 }
 
-void TestRange(const TString& query, const TString& answer, ui64 rowsRead, int stagesCount = 1, bool streamLookup = true) {
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
-
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig);
+void TestRange(const TString& query, const TString& answer, ui64 rowsRead, int stagesCount = 1) {
+    TKikimrSettings settings;
 
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
@@ -245,8 +237,7 @@ Y_UNIT_TEST(OverflowLookup) {
         )",
         R"([])",
         0,
-        2,
-        false);
+        2);
 
     TestRange(
         R"(
@@ -337,6 +328,18 @@ Y_UNIT_TEST(ComplexRange) {
     TestRange(
         R"(
             SELECT Key, Fk, Value FROM `/Root/ComplexKey`
+            WHERE Key = 2
+            ORDER BY Value DESC
+            LIMIT 1;
+        )",
+        R"([
+            [[2];[103];["Value3"]];
+        ])",
+        2);
+
+    TestRange(
+        R"(
+            SELECT Key, Fk, Value FROM `/Root/ComplexKey`
             WHERE Key >= 1 AND Key < 4 AND Fk >= 101 AND Fk < 104;
         )",
         R"([
@@ -394,7 +397,7 @@ Y_UNIT_TEST(ComplexRange) {
         2);
 }
 
-Y_UNIT_TEST_TWIN(PointJoin, EnableKqpDataQueryStreamLookup) {
+Y_UNIT_TEST(PointJoin) {
     Test(
         R"(
             DECLARE $p as Int32;
@@ -408,7 +411,6 @@ Y_UNIT_TEST_TWIN(PointJoin, EnableKqpDataQueryStreamLookup) {
             [[2];[102];["Value1"];[102];["Value22"]];
             [[2];[103];["Value3"];[103];["Value23"]]
         ])",
-        EnableKqpDataQueryStreamLookup,
         {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(1).Build().Build());
 
@@ -424,7 +426,6 @@ Y_UNIT_TEST_TWIN(PointJoin, EnableKqpDataQueryStreamLookup) {
         R"([
             [[3u];[103];["Value2"];[103];["Value23"]]
         ])",
-        EnableKqpDataQueryStreamLookup,
         {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(3).Build().Build());
 
@@ -439,7 +440,6 @@ Y_UNIT_TEST_TWIN(PointJoin, EnableKqpDataQueryStreamLookup) {
         )",
         R"([
         ])",
-        EnableKqpDataQueryStreamLookup,
         {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(-2).Build().Build());
 
@@ -455,7 +455,6 @@ Y_UNIT_TEST_TWIN(PointJoin, EnableKqpDataQueryStreamLookup) {
         R"([
             [[3u];[103];["Value2"];[103];["Value23"];["103-2"]]
         ])",
-        EnableKqpDataQueryStreamLookup,
         {"/Root/SimpleKey", "/Root/UintComplexKeyWithIndex/Index/indexImplTable"},
         TParamsBuilder().AddParam("$p").Int32(3).Build().Build());
 
@@ -472,12 +471,11 @@ Y_UNIT_TEST_TWIN(PointJoin, EnableKqpDataQueryStreamLookup) {
             ["2";"102";["Value1"];"102";["Value22"]];
             ["2";"103";["Value3"];"103";["Value23"]]
         ])",
-        EnableKqpDataQueryStreamLookup,
         {"/Root/PgKey"},
         TParamsBuilder().AddParam("$p").Pg(TPgValue(TPgValue::VK_TEXT, "1", TPgType("pgint4"))).Build().Build());
 }
 
-Y_UNIT_TEST_TWIN(SqlInJoin, EnableKqpDataQueryStreamLookup) {
+Y_UNIT_TEST(SqlInJoin) {
     Test(
         R"(
             DECLARE $p AS Int32;
@@ -490,7 +488,6 @@ Y_UNIT_TEST_TWIN(SqlInJoin, EnableKqpDataQueryStreamLookup) {
             [[2];[102];["Value1"]];
             [[2];[103];["Value3"]]
         ])",
-        EnableKqpDataQueryStreamLookup,
         {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(1).Build().Build());
 
@@ -504,7 +501,6 @@ Y_UNIT_TEST_TWIN(SqlInJoin, EnableKqpDataQueryStreamLookup) {
         R"([
             [[3u];[103];["Value2"]]
         ])",
-        EnableKqpDataQueryStreamLookup,
         {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(3).Build().Build());
 
@@ -517,7 +513,6 @@ Y_UNIT_TEST_TWIN(SqlInJoin, EnableKqpDataQueryStreamLookup) {
         )",
         R"([
         ])",
-        EnableKqpDataQueryStreamLookup,
         {"/Root/SimpleKey"},
         TParamsBuilder().AddParam("$p").Int32(-2).Build().Build());
 
@@ -531,7 +526,6 @@ Y_UNIT_TEST_TWIN(SqlInJoin, EnableKqpDataQueryStreamLookup) {
         R"([
             [[3u];[103];["Value2"];["103-2"]]
         ])",
-        EnableKqpDataQueryStreamLookup,
         {"/Root/SimpleKey", "/Root/UintComplexKeyWithIndex/Index/indexImplTable"},
         TParamsBuilder().AddParam("$p").Int32(3).Build().Build());
 
@@ -547,7 +541,6 @@ Y_UNIT_TEST_TWIN(SqlInJoin, EnableKqpDataQueryStreamLookup) {
             ["2";"102";["Value1"]];
             ["2";"103";["Value3"]]
         ])",
-        EnableKqpDataQueryStreamLookup,
         {"/Root/PgKey"},
         TParamsBuilder().AddParam("$p").Pg(TPgValue(TPgValue::VK_TEXT, "1", TPgType("pgint4"))).Build().Build());
 }

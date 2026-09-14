@@ -61,7 +61,7 @@ class alias(option_base):
             alias = self.args[0]
             command = ' '.join(map(shquote, self.args[1:]))
 
-        edit_config(self.filename, {'aliases': {alias: command}}, self.dry_run)
+        edit_config(self.filename, {'aliases': {alias: command}})
 
 
 def format_alias(name, aliases):

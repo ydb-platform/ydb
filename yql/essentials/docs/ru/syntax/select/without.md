@@ -1,11 +1,12 @@
 # WITHOUT
 
-Исключение столбцов из результата запроса `SELECT *`.
+Исключение столбцов из результата запроса `SELECT *`. С модификатором `IF EXISTS` не выдается ошибки для отсутствующих столбцов.
 
 ## Примеры
 
 ```yql
 SELECT * WITHOUT foo, bar FROM my_table;
+SELECT * WITHOUT IF EXISTS foo, bar FROM my_table;
 ```
 
 ```yql

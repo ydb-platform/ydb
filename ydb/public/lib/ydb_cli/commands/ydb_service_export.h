@@ -3,7 +3,7 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb-cpp-sdk/client/export/export.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/lib/ydb_cli/common/aws.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>
@@ -27,6 +27,7 @@ public:
     TCommandExportToYt();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -44,34 +45,72 @@ private:
     bool UseTypeV3 = false;
 };
 
-class TCommandExportToS3 : public TYdbOperationCommand,
-                           public TCommandWithAwsCredentials,
+class TCommandExportBase : public TYdbOperationCommand,
                            public TCommandWithOutput {
-    using EStorageClass = NExport::TExportToS3Settings::EStorageClass;
-
 public:
-    TCommandExportToS3();
+    TCommandExportBase(const TString& name, const TString& description);
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
 
-private:
+    template <typename TSettings, typename TResponse>
+    int Run(TConfig& config, TSettings& settings);
+
+protected:
+    void ParseItems(TConfig& config, const TString& optionName);
+
     struct TItemFields {
         TString Source;
         TString Destination;
     };
     DEFINE_PARSEABLE_STRUCT(TItem, TItemFields, Source, Destination);
 
-    TString AwsEndpoint;
-    ES3Scheme AwsScheme = ES3Scheme::HTTPS;
-    EStorageClass AwsStorageClass = EStorageClass::NOT_SET;
-    TString AwsBucket;
     TVector<TItem> Items;
     TVector<TRegExMatch> ExclusionPatterns;
     TString Description;
     ui32 NumberOfRetries = 10;
     TString Compression;
+    bool IncludeIndexData = false;
+    TString CommonSourcePath;
+    TString CommonDestinationPrefix;
+
+    // Encryption params
+    TString EncryptionAlgorithm;
+    TString EncryptionKey;
+    TString EncryptionKeyFile;
+};
+
+class TCommandExportToS3 : public TCommandExportBase,
+                           public TCommandWithAwsCredentials {
+    using EStorageClass = NExport::TExportToS3Settings::EStorageClass;
+
+public:
+    TCommandExportToS3();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+private:
+    DEFINE_PARSEABLE_STRUCT(TItemS3, TItemFields, Source, Destination);
+
+    TString AwsEndpoint;
+    ES3Scheme AwsScheme = ES3Scheme::HTTPS;
+    EStorageClass AwsStorageClass = EStorageClass::NOT_SET;
+    TString AwsBucket;
     bool UseVirtualAddressing = true;
+};
+
+class TCommandExportToNfs : public TCommandExportBase {
+public:
+    TCommandExportToNfs();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+private:
+    DEFINE_PARSEABLE_STRUCT(TItemNfs, TItemFields, Source, Destination);
 };
 
 }

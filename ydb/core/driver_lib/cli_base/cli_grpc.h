@@ -2,7 +2,7 @@
 
 #include "cli_command.h"
 
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/lib/deprecated/client/grpc_client.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
@@ -94,6 +94,8 @@ public:
         ClientConfig.MaxInFlight = CommandConfig.ClientConfig.MaxInFlight;
         ClientConfig.EnableSsl = CommandConfig.ClientConfig.EnableSsl;
         ClientConfig.SslCredentials.pem_root_certs = CommandConfig.ClientConfig.SslCredentials.pem_root_certs;
+        ClientConfig.SslCredentials.pem_cert_chain = CommandConfig.ClientConfig.SslCredentials.pem_cert_chain;
+        ClientConfig.SslCredentials.pem_private_key = CommandConfig.ClientConfig.SslCredentials.pem_private_key;
     }
 
     static int PrepareConfigCredentials(NGRpcProxy::TGRpcClientConfig clientConfig, TConfig& commandConfig) {
@@ -159,4 +161,3 @@ public:
 
 }
 }
-

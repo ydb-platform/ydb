@@ -1,6 +1,8 @@
 {#- default JDK version -#}
 {%- set jdk_version = '17' -%}
-{%- if target.required_jdk -%}
+{%- if force_jdk_version -%}
+{%-     set jdk_version = force_jdk_version -%}
+{%- elif target.required_jdk -%}
 {%-     set jdk_version = target.required_jdk -%}
 {%- elif target.jdk_version -%}
 {%-     set jdk_version = target.jdk_version -%}

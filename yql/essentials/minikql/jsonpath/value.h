@@ -36,7 +36,7 @@ public:
     bool Next(TValue& value);
 
 private:
-    std::variant<TEmptyMarker, NUdf::TUnboxedValue, NKikimr::NBinaryJson::TArrayIterator> Iterator;
+    std::variant<TEmptyMarker, NUdf::TUnboxedValue, NKikimr::NBinaryJson::TArrayIterator> Iterator_;
 };
 
 class TObjectIterator {
@@ -51,7 +51,7 @@ public:
     bool Next(TValue& key, TValue& value);
 
 private:
-    std::variant<TEmptyMarker, NUdf::TUnboxedValue, NKikimr::NBinaryJson::TObjectIterator> Iterator;
+    std::variant<TEmptyMarker, NUdf::TUnboxedValue, NKikimr::NBinaryJson::TObjectIterator> Iterator_;
 };
 
 class TValue {
@@ -78,7 +78,7 @@ public:
     // Scalar value methods
     double GetNumber() const;
     bool GetBool() const;
-    const TStringBuf GetString() const;
+    TStringBuf GetString() const;
 
     ui32 GetSize() const;
 
@@ -87,7 +87,7 @@ public:
     TArrayIterator GetArrayIterator() const;
 
     // Object methods
-    TMaybe<TValue> Lookup(const TStringBuf key) const;
+    TMaybe<TValue> Lookup(TStringBuf key) const;
     TObjectIterator GetObjectIterator() const;
 
     NUdf::TUnboxedValue ConvertToUnboxedValue(const NUdf::IValueBuilder* valueBuilder) const;
@@ -95,7 +95,7 @@ public:
 private:
     void UnpackInnerValue();
 
-    std::variant<NUdf::TUnboxedValue, NKikimr::NBinaryJson::TEntryCursor, NKikimr::NBinaryJson::TContainerCursor> Value;
+    std::variant<NUdf::TUnboxedValue, NKikimr::NBinaryJson::TEntryCursor, NKikimr::NBinaryJson::TContainerCursor> Value_;
 };
 
-}
+} // namespace NYql::NJsonPath

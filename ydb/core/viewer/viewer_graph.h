@@ -22,7 +22,9 @@ public:
     {}
 
     void Bootstrap() override {
-        BLOG_TRACE("Graph received request for " << Event->Get()->Request.GetUri());
+        YDB_LOG_TRACE_COMP(NKikimrServices::VIEWER, "Graph received request",
+            {"logPrefix", GetLogPrefix()},
+            {"uri", Event->Get()->Request.GetUri()});
         const auto& params(Event->Get()->Request.GetParams());
         NKikimrGraph::TEvGetMetrics getRequest;
         if (params.Has("target")) {

@@ -1,6 +1,7 @@
 RECURSE(
     dstool
-    pgwire
+    etcd_proxy
     ydb
+    ydb/experimental
     ydbd
 )

@@ -6,9 +6,7 @@
 #include <yt/cpp/mapreduce/interface/errors.h>
 #include <yt/cpp/mapreduce/interface/format.h>
 #include <yt/cpp/mapreduce/interface/io.h>
-#include <yt/cpp/mapreduce/interface/node.h>
 
-#include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/http/io/stream.h>
 
 #include <util/generic/hash.h>
@@ -20,6 +18,8 @@
 #include <util/system/mutex.h>
 #include <util/system/rwlock.h>
 #include <util/generic/ptr.h>
+
+#include <atomic>
 
 namespace NYT {
 
@@ -78,6 +78,9 @@ public:
     void SetRequestCompression(const TString& compression);
     void SetResponseCompression(const TString& compression);
 
+    void SetTraceparent(const TString& traceparent);
+    const TString& GetTraceparent() const;
+
     TString GetCommand() const;
     TString GetUrl(bool needProxy = false) const;
     TString GetHeaderAsString(const TString& hostName, const TString& requestId, bool includeParameters = true) const;
@@ -106,6 +109,8 @@ private:
 
     TString RequestCompression_ = "identity";
     TString ResponseCompression_ = "identity";
+
+    TString Traceparent_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -139,7 +144,7 @@ private:
 struct TConnection
 {
     std::unique_ptr<TSocket> Socket;
-    TAtomic Busy = 1;
+    std::atomic<bool> Busy = true;
     TInstant DeadLine;
     ui32 Id;
 };

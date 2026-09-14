@@ -1,20 +1,21 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     test_multinode_cluster.py
     test_recompiles_requests.py
 )
 
+REQUIREMENTS(cpu:4)
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

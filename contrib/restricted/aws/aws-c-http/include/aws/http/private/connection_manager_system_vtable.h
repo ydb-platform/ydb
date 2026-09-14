@@ -12,28 +12,20 @@
 
 struct aws_http_connection_manager;
 
-typedef int(aws_http_connection_manager_create_connection_fn)(const struct aws_http_client_connection_options *options);
-typedef void(aws_http_connection_manager_close_connection_fn)(struct aws_http_connection *connection);
-typedef void(aws_http_connection_release_connection_fn)(struct aws_http_connection *connection);
-typedef bool(aws_http_connection_is_connection_available_fn)(const struct aws_http_connection *connection);
-typedef bool(aws_http_connection_manager_is_callers_thread_fn)(struct aws_channel *channel);
-typedef struct aws_channel *(aws_http_connection_manager_connection_get_channel_fn)(
-    struct aws_http_connection *connection);
-typedef enum aws_http_version(aws_http_connection_manager_connection_get_version_fn)(
-    const struct aws_http_connection *connection);
-
+/* vtable of functions that aws_http_connection_manager uses to interact with external systems.
+ * tests override the vtable to mock those systems */
 struct aws_http_connection_manager_system_vtable {
     /*
      * Downstream http functions
      */
-    aws_http_connection_manager_create_connection_fn *create_connection;
-    aws_http_connection_manager_close_connection_fn *close_connection;
-    aws_http_connection_release_connection_fn *release_connection;
-    aws_http_connection_is_connection_available_fn *is_connection_available;
-    aws_io_clock_fn *get_monotonic_time;
-    aws_http_connection_manager_is_callers_thread_fn *is_callers_thread;
-    aws_http_connection_manager_connection_get_channel_fn *connection_get_channel;
-    aws_http_connection_manager_connection_get_version_fn *connection_get_version;
+    int (*aws_http_client_connect)(const struct aws_http_client_connection_options *options);
+    void (*aws_http_connection_close)(struct aws_http_connection *connection);
+    void (*aws_http_connection_release)(struct aws_http_connection *connection);
+    bool (*aws_http_connection_new_requests_allowed)(const struct aws_http_connection *connection);
+    int (*aws_high_res_clock_get_ticks)(uint64_t *timestamp);
+    bool (*aws_channel_thread_is_callers_thread)(struct aws_channel *channel);
+    struct aws_channel *(*aws_http_connection_get_channel)(struct aws_http_connection *connection);
+    enum aws_http_version (*aws_http_connection_get_version)(const struct aws_http_connection *connection);
 };
 
 AWS_HTTP_API

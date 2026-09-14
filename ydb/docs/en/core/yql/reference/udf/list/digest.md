@@ -21,7 +21,13 @@ A set of commonly used hash functions.
 * `Digest::Argon2(String{Flags:AutoMap},String{Flags:AutoMap}) -> String`: The second argument is the salt
 * `Digest::Blake2B(String{Flags:AutoMap},[String?]) -> String`: The second optional argument is the key
 * `Digest::SipHash(Uint64,Uint64,String{Flags:AutoMap}) -> Uint64`
-* `Digest::HighwayHash(Uint64,Uint64,Uint64,Uint64,String{Flags:AutoMap}) -> Uint64`
+* Signature:
+
+  ```text
+  Digest::HighwayHash(Uint64,Uint64,Uint64,Uint64,String{Flags:AutoMap})
+  -> Uint64
+  ```
+
 * `Digest::FarmHashFingerprint(Uint64{Flags:AutoMap}) -> Uint64`
 * `Digest::FarmHashFingerprint2(Uint64{Flags:AutoMap}, Uint64{Flags:AutoMap}) -> Uint64`
 * `Digest::FarmHashFingerprint32(String{Flags:AutoMap}) -> Uint32`

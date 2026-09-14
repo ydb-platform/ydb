@@ -1,14 +1,53 @@
-#include <src/client/persqueue_public/impl/persqueue_impl.h>
-#include <src/client/topic/impl/common.h>
-#include <src/client/persqueue_public/include/client.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/persqueue_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/include/client.h>
 
-#include <src/library/persqueue/obfuscate/obfuscate.h>
+#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
 #include <util/random/random.h>
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
+
+namespace {
+
+TDuration ProtoDurationToTDuration(const google::protobuf::Duration& duration) {
+    return TDuration::Seconds(duration.seconds()) + TDuration::MicroSeconds(duration.nanos() / 1000);
+}
+
+TSharedConsumerSettings ConvertProtoToSharedConsumerSettings(
+    const Ydb::PersQueue::V1::TopicSettings::SharedConsumerType& shared)
+{
+    TSharedConsumerSettings settings;
+    settings.KeepMessagesOrder(shared.keep_messages_order());
+    if (shared.has_default_processing_timeout()) {
+        settings.DefaultProcessingTimeout(ProtoDurationToTDuration(shared.default_processing_timeout()));
+    }
+    if (shared.has_receive_message_wait_time()) {
+        settings.ReceiveMessageWaitTime(ProtoDurationToTDuration(shared.receive_message_wait_time()));
+    }
+    if (shared.has_receive_message_delay()) {
+        settings.ReceiveMessageDelay(ProtoDurationToTDuration(shared.receive_message_delay()));
+    }
+    if (shared.has_dead_letter_policy()) {
+        const auto& policy = shared.dead_letter_policy();
+        TSharedConsumerDeadLetterPolicySettings deadLetterPolicy;
+        deadLetterPolicy.Enabled(policy.enabled());
+        if (policy.has_condition()) {
+            deadLetterPolicy.MaxProcessingAttempts(policy.condition().max_processing_attempts());
+        }
+        if (policy.has_delete_action()) {
+            deadLetterPolicy.DeleteAction();
+        } else if (policy.has_move_action()) {
+            deadLetterPolicy.MoveAction(policy.move_action().dead_letter_queue());
+        }
+        settings.DeadLetterPolicy(deadLetterPolicy);
+    }
+    return settings;
+}
+
+} // namespace
 
 class TCommonCodecsProvider {
 public:
@@ -48,7 +87,7 @@ TCredentials::TCredentials(const Ydb::PersQueue::V1::Credentials& settings)
             break;
         }
         default: {
-            ythrow yexception() << "unsupported credentials type " << ::NPersQueue::ObfuscateString(ToString(Credentials_));
+            ythrow yexception() << "unsupported credentials type " << ::NPersQueue::ObfuscateString(Credentials_.ShortDebugString());
         }
     }
 }
@@ -107,6 +146,9 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
     MaxPartitionWriteBurst_ = settings.max_partition_write_burst();
     ClientWriteDisabled_ = settings.client_write_disabled();
     AllowUnauthenticatedRead_ = AllowUnauthenticatedWrite_ = false;
+    if (settings.has_metrics_level()) {
+        MetricsLevel_ = settings.metrics_level();
+    }
 
     for (auto& pair : settings.attributes()) {
         if (pair.first == "_partitions_per_tablet") {
@@ -121,6 +163,8 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
             AbcSlug_ = pair.second;
         } else if (pair.first == "_federation_account") {
             FederationAccount_ = pair.second;
+        } else if (pair.first == "_advanced_monitoring") {
+            AdvancedMonitoringSettings_ = pair.second;
         }
     }
     for (const auto& readRule : settings.read_rules()) {
@@ -136,6 +180,7 @@ TDescribeTopicResult::TTopicSettings::TReadRule::TReadRule(const Ydb::PersQueue:
 
     ConsumerName_ = settings.consumer_name();
     Important_ = settings.important();
+    AvailabilityPeriod_ = TDuration::Seconds(settings.availability_period().seconds());
     StartingMessageTimestamp_ = TInstant::MilliSeconds(settings.starting_message_timestamp_ms());
 
     SupportedFormat_ = static_cast<EFormat>(settings.supported_format());
@@ -144,6 +189,9 @@ TDescribeTopicResult::TTopicSettings::TReadRule::TReadRule(const Ydb::PersQueue:
     }
     Version_ = settings.version();
     ServiceType_ = settings.service_type();
+    if (settings.has_shared_consumer_type()) {
+        SharedConsumer_ = ConvertProtoToSharedConsumerSettings(settings.shared_consumer_type());
+    }
 }
 
 TDescribeTopicResult::TTopicSettings::TRemoteMirrorRule::TRemoteMirrorRule(const Ydb::PersQueue::V1::TopicSettings::RemoteMirrorRule& settings)

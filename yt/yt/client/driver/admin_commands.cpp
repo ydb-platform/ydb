@@ -45,6 +45,13 @@ void TBuildSnapshotCommand::Register(TRegistrar registrar)
             return command->Options.WaitForSnapshotCompletion;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_automaton_read_only_barrier",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableAutomatonReadOnlyBarrier;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TBuildSnapshotCommand::DoExecute(ICommandContextPtr context)
@@ -79,6 +86,13 @@ void TBuildMasterSnapshotsCommand::Register(TRegistrar registrar)
         "retry",
         [] (TThis* command) -> auto& {
             return command->Options.Retry;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "enable_automaton_read_only_barrier",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableAutomatonReadOnlyBarrier;
         })
         .Optional(/*init*/ false);
 }
@@ -156,6 +170,19 @@ void TMasterExitReadOnlyCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TResetDynamicallyPropagatedMasterCellsCommand::Register(TRegistrar /*registrar*/)
+{ }
+
+void TResetDynamicallyPropagatedMasterCellsCommand::DoExecute(ICommandContextPtr context)
+{
+    WaitFor(context->GetClient()->ResetDynamicallyPropagatedMasterCells(Options))
+        .ThrowOnError();
+
+    ProduceEmptyOutput(context);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TDiscombobulateNonvotingPeersCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("cell_id", &TThis::CellId_);
@@ -213,14 +240,14 @@ void THealExecNodeCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("address", &TThis::Address_);
 
-    registrar.ParameterWithUniversalAccessor<std::vector<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::vector<std::string>>(
         "locations",
         [] (TThis* command) -> auto& {
             return command->Options.Locations;
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::vector<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::vector<std::string>>(
         "alert_types_to_reset",
         [] (TThis* command) -> auto& {
             return command->Options.AlertTypesToReset;

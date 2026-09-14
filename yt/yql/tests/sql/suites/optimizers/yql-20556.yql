@@ -1,0 +1,15 @@
+/* yt can not */
+
+USE plato;
+
+PRAGMA warning('disable', '4525');
+PRAGMA warning('disable', '1101');
+PRAGMA DisableDirectRowDependsOn;
+
+SELECT
+    -- "key" has incompatible types across Input1 and Input2 but is not used
+    subkey,
+    TableName() AS table_name
+FROM CONCAT(Input1, Input2) AS a
+LEFT SEMI JOIN (SELECT "123" AS subkey) AS b
+ON a.subkey == b.subkey;

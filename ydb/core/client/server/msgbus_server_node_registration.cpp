@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -38,7 +39,7 @@ public:
         if (!clientCertificates.empty()) {
             TBase::SetSecurityToken(TString(clientCertificates.front()));
         } else {
-            TBase::SetSecurityToken(BUILTIN_ACL_ROOT); // NBS compatibility
+            TBase::SetSecurityToken(request.GetSecurityToken());
         }
         TBase::SetPeerName(msg.GetPeerName());
     }
@@ -168,24 +169,13 @@ public:
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            CFunc(TEvents::TSystem::PoisonPill, TBase::Cancel);
         }
     }
 
 private:
     bool CheckAccess() {
-        const auto serializedToken = TBase::GetSerializedToken();
-        // Empty serializedToken means token is not required. Checked in secure_request.h
-        if (!serializedToken.empty() && !AppData()->RegisterDynamicNodeAllowedSIDs.empty()) {
-            NACLib::TUserToken token(serializedToken);
-            for (const auto& sid : AppData()->RegisterDynamicNodeAllowedSIDs) {
-                if (token.IsExist(sid)) {
-                    IsNodeAuthorizedByCertificate = true;
-                    return true;
-                }
-            }
-            return false;
-        }
-        return true;
+        return IsTokenAllowed(TBase::GetParsedToken().Get(), AppData()->RegisterDynamicNodeAllowedSIDs);
     }
 
     NKikimrClient::TNodeRegistrationRequest Request;

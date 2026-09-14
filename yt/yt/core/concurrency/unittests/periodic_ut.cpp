@@ -7,6 +7,7 @@
 #include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/scheduler.h>
+#include <yt/yt/core/concurrency/thread_pool.h>
 
 #include <yt/yt/core/misc/lazy_ptr.h>
 
@@ -18,6 +19,11 @@
 namespace NYT::NConcurrency {
 namespace {
 
+using ::testing::Each;
+using ::testing::IsFalse;
+using ::testing::IsTrue;
+using ::testing::Property;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPeriodicTest
@@ -28,7 +34,7 @@ class TPeriodicTest
 
 TEST_W(TPeriodicTest, Simple)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(200));
@@ -41,8 +47,9 @@ TEST_W(TPeriodicTest, Simple)
         callback,
         TDuration::MilliSeconds(100));
 
-    executor->Start();
+    auto firstExecution = executor->StartAndGetFirstExecutedEvent();
     TDelayedExecutor::WaitForDuration(TDuration::MilliSeconds(600));
+    EXPECT_TRUE(firstExecution.IsSet());
     WaitFor(executor->Stop())
         .ThrowOnError();
     EXPECT_EQ(2, count.load());
@@ -60,11 +67,18 @@ TEST_W(TPeriodicTest, Simple)
     EXPECT_EQ(6, count.load());
     WaitFor(executor->Stop())
         .ThrowOnError();
+    EXPECT_EQ(6, count.load());
+
+    WaitFor(executor->StartAndGetFirstExecutedEvent())
+        .ThrowOnError();
+    EXPECT_EQ(7, count.load());
+    WaitFor(executor->Stop())
+        .ThrowOnError();
 }
 
 TEST_W(TPeriodicTest, SimpleScheduleOutOfBand)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         ++count;
@@ -90,9 +104,69 @@ TEST_W(TPeriodicTest, SimpleScheduleOutOfBand)
     EXPECT_EQ(2, count.load());
 }
 
+TEST_W(TPeriodicTest, ParallelStart)
+{
+    static constexpr int ThreadCount = 4;
+
+    TPromise<void> threadStartBarrier = NewPromise<void>();
+    TPromise<void> callbackStartBarrier = NewPromise<void>();
+    TPromise<void> callbackEndBarrier = NewPromise<void>();
+    std::atomic<int> countStarted = 0;
+    std::atomic<int> countFinished = 0;
+    std::atomic<int> countWaiting = 0;
+
+    auto callback = BIND([&] {
+        ++countStarted;
+        WaitUntilSet(threadStartBarrier.ToFuture());
+        callbackStartBarrier.Set();
+        WaitUntilSet(callbackEndBarrier.ToFuture());
+        ++countFinished;
+    });
+
+    auto actionQueue = New<TActionQueue>();
+    auto executor = New<TPeriodicExecutor>(
+        actionQueue->GetInvoker(),
+        callback,
+        TDuration::MilliSeconds(200));
+
+    auto startCallback = BIND([&] {
+        auto result = executor->StartAndGetFirstExecutedEvent();
+        if (++countWaiting == ThreadCount) {
+            threadStartBarrier.Set();
+        }
+        return result;
+    });
+
+    auto threadPool = CreateThreadPool(ThreadCount, "test");
+
+    std::vector<TFuture<void>> futures;
+    for (int i = 0; i < ThreadCount; ++i) {
+        futures.push_back(startCallback.AsyncVia(threadPool->GetInvoker()).Run());
+    }
+
+    // Check that start futures are set correctly in all threads
+    // after the first execution, but before the second one.
+
+    WaitUntilSet(callbackStartBarrier.ToFuture());
+    EXPECT_THAT(
+        futures,
+        Each(
+            Property(&TFuture<void>::IsSet, IsFalse())));
+    callbackEndBarrier.Set();
+    threadStartBarrier = NewPromise<void>();
+    WaitFor(AllSucceeded(futures))
+        .ThrowOnError();
+    EXPECT_EQ(1, countStarted.load());
+    EXPECT_EQ(1, countFinished.load());
+    threadStartBarrier.Set();
+
+    WaitFor(executor->Stop())
+        .ThrowOnError();
+}
+
 TEST_W(TPeriodicTest, ParallelStop)
 {
-    std::atomic<int> count = {0};
+    std::atomic<int> count = 0;
 
     auto callback = BIND([&] {
         ++count;
@@ -233,6 +307,38 @@ TEST_W(TPeriodicTest, OnExecutedEventCanceled)
     EXPECT_EQ(2, count.load());
 }
 
+TEST_W(TPeriodicTest, OnStartCancelled)
+{
+    auto callbackStarted = NewPromise<void>();
+
+    auto callback = BIND([&] {
+        callbackStarted.Set();
+    });
+
+    auto actionQueue = New<TActionQueue>();
+    auto executor = New<TPeriodicExecutor>(
+        actionQueue->GetInvoker(),
+        callback,
+        TDuration::MilliSeconds(200));
+
+    auto startFuture1 = executor->StartAndGetFirstExecutedEvent();
+    auto startFuture2 = executor->StartAndGetFirstExecutedEvent();
+
+    startFuture1.Cancel(TError(NYT::EErrorCode::Canceled, "Canceled"));
+
+    // NB(pavook): cancellation of a start future shouldn't cause an executor stop
+    // and should not propagate to the underlying promise (and other futures).
+    auto callbackStartedResult = WaitForFast(callbackStarted.ToFuture());
+    EXPECT_TRUE(callbackStartedResult.IsOK());
+    EXPECT_TRUE(executor->IsStarted());
+
+    auto startFuture2Result = WaitForFast(startFuture2);
+    EXPECT_TRUE(startFuture2Result.IsOK());
+
+    WaitFor(executor->Stop())
+        .ThrowOnError();
+}
+
 TEST_W(TPeriodicTest, Stop)
 {
     auto neverSetPromise = NewPromise<void>();
@@ -248,14 +354,84 @@ TEST_W(TPeriodicTest, Stop)
         callback,
         TDuration::MilliSeconds(100));
 
-    executor->Start();
+    auto startFuture = executor->StartAndGetFirstExecutedEvent();
     // Wait for the callback to enter WaitFor.
     Sleep(TDuration::MilliSeconds(100));
     WaitFor(executor->Stop())
         .ThrowOnError();
 
     EXPECT_TRUE(immediatelyCancelableFuture.IsSet());
-    EXPECT_EQ(NYT::EErrorCode::Canceled, immediatelyCancelableFuture.Get().GetCode());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, WaitForFast(immediatelyCancelableFuture).GetCode());
+    EXPECT_FALSE(WaitForFast(startFuture).IsOK());
+    EXPECT_EQ(NYT::EErrorCode::Canceled, WaitForFast(startFuture).GetCode());
+
+    startFuture = executor->StartAndGetFirstExecutedEvent();
+    Sleep(TDuration::MilliSeconds(200));
+    WaitFor(executor->Stop())
+        .ThrowOnError();
+    // startFuture should be set after the first execution.
+    EXPECT_TRUE(startFuture.IsSet());
+    EXPECT_TRUE(WaitForFast(startFuture).IsOK());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::vector<TDuration> MeasureInvocationStartGaps(EPeriodicExecutorDelayMode delayMode)
+{
+    constexpr auto Period = TDuration::MilliSeconds(500);
+    constexpr auto CallbackDuration = TDuration::MilliSeconds(400);
+    constexpr auto WindowDuration = TDuration::MilliSeconds(2100);
+
+    std::vector<TInstant> startTimes;
+
+    auto callback = BIND([&] {
+        startTimes.push_back(TInstant::Now());
+        TDelayedExecutor::WaitForDuration(CallbackDuration);
+    });
+
+    auto actionQueue = New<TActionQueue>();
+    auto executor = New<TPeriodicExecutor>(
+        actionQueue->GetInvoker(),
+        callback,
+        TPeriodicExecutorOptions{
+            .Period = Period,
+            .DelayMode = delayMode,
+        });
+
+    executor->Start();
+    TDelayedExecutor::WaitForDuration(WindowDuration);
+    WaitFor(executor->Stop())
+        .ThrowOnError();
+
+    std::vector<TDuration> gaps;
+    for (int index = 1; index < std::ssize(startTimes); ++index) {
+        gaps.push_back(startTimes[index] - startTimes[index - 1]);
+    }
+    return gaps;
+}
+
+TEST_W(TPeriodicTest, DelayModeFromPreviousStart)
+{
+    auto gaps = MeasureInvocationStartGaps(EPeriodicExecutorDelayMode::FromPreviousStart);
+
+    EXPECT_GE(std::ssize(gaps), 2);
+    for (auto gap : gaps) {
+        // The start-to-start gap stays close to the period, independent of the
+        // callback duration.
+        EXPECT_GE(gap, TDuration::MilliSeconds(350));
+        EXPECT_LE(gap, TDuration::MilliSeconds(700));
+    }
+}
+
+TEST_W(TPeriodicTest, DelayModeFromPreviousEnd)
+{
+    auto gaps = MeasureInvocationStartGaps(EPeriodicExecutorDelayMode::FromPreviousEnd);
+
+    EXPECT_GE(std::ssize(gaps), 2);
+    for (auto gap : gaps) {
+        // The gap spans the callback duration plus the period.
+        EXPECT_GE(gap, TDuration::MilliSeconds(750));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -7,11 +7,20 @@
 #include "yql_arrow_resolver.h"
 #include "yql_statistics.h"
 
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
+
+#include <yql/essentials/minikql/mkql_bridge_mode.h>
 #include <yql/essentials/public/udf/udf_validate.h>
+#include <yql/essentials/public/udf/udf_log.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/core/credentials/yql_credentials.h>
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
+#include <yql/essentials/core/layers/layers.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/sql/settings/flags/flags.h>
+#include <yql/essentials/sql/sql.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -24,69 +33,111 @@
 #include <util/generic/vector.h>
 #include <util/digest/city.h>
 
+#include <functional>
+#include <utility>
 #include <vector>
 
 namespace NYql {
 
-class IUrlLoader : public TThrRefBase {
+using TTypeAnnCallableFactory = std::function<TAutoPtr<IGraphTransformer>()>;
+
+class IUrlLoader: public TThrRefBase {
 public:
-    ~IUrlLoader() = default;
+    ~IUrlLoader() override = default;
 
     virtual TString Load(const TString& url, const TString& token) = 0;
 
     using TPtr = TIntrusivePtr<IUrlLoader>;
 };
 
-class TModuleResolver : public IModuleResolver {
+class TModuleResolver: public IModuleResolver {
 public:
-    TModuleResolver(TModulesTable&& modules, ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries = true, THolder<TExprContext> ownedCtx = {})
-        : OwnedCtx(std::move(ownedCtx))
-        , LibsContext(nextUniqueId)
-        , Modules(std::move(modules))
-        , ClusterMapping(clusterMapping)
-        , SqlFlags(sqlFlags)
-        , OptimizeLibraries(optimizeLibraries)
+    using TModuleChecker = std::function<bool(const TString& query, const TString& fileName, TExprContext& ctx)>;
+
+    TModuleResolver(
+        NSQLTranslation::TTranslators translators,
+        TModulesTable&& modules,
+        ui64 nextUniqueId,
+        const THashMap<TString, TString>& clusterMapping,
+        NSQLTranslation::TExtendedSqlFlags sqlFlags,
+        bool optimizeLibraries = true,
+        THolder<TExprContext> ownedCtx = {},
+        TModuleChecker moduleChecker = {})
+        : Translators_(std::move(translators))
+        , OwnedCtx_(std::move(ownedCtx))
+        , LibsContext_(nextUniqueId)
+        , Modules_(std::move(modules))
+        , ClusterMapping_(clusterMapping)
+        , SqlFlags_(std::move(sqlFlags))
+        , ModuleChecker_(std::move(moduleChecker))
+        , OptimizeLibraries_(optimizeLibraries)
     {
-        if (OwnedCtx) {
-            FreezeGuard = MakeHolder<TExprContext::TFreezeGuard>(*OwnedCtx);
+        if (OwnedCtx_) {
+            FreezeGuard_ = MakeHolder<TExprContext::TFreezeGuard>(*OwnedCtx_);
         }
     }
 
-    TModuleResolver(const TModulesTable* parentModules, ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
-        THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix)
-        : ParentModules(parentModules)
-        , LibsContext(nextUniqueId)
-        , KnownPackages(knownPackages)
-        , Libs(libs)
-        , ClusterMapping(clusterMapping)
-        , SqlFlags(sqlFlags)
-        , OptimizeLibraries(optimizeLibraries)
-        , FileAliasPrefix(fileAliasPrefix)
+    TModuleResolver(
+        NSQLTranslation::TTranslators translators,
+        const TModulesTable* parentModules,
+        ui64 nextUniqueId,
+        const THashMap<TString, TString>& clusterMapping,
+        NSQLTranslation::TExtendedSqlFlags sqlFlags,
+        bool optimizeLibraries,
+        const TSet<TString>& knownPackages,
+        const THashMap<TString,
+                       THashMap<int, TLibraryCohesion>>& libs,
+        TString fileAliasPrefix,
+        TModuleChecker moduleChecker)
+        : Translators_(std::move(translators))
+        , ParentModules_(parentModules)
+        , LibsContext_(nextUniqueId)
+        , KnownPackages_(knownPackages)
+        , Libs_(libs)
+        , ClusterMapping_(clusterMapping)
+        , SqlFlags_(std::move(sqlFlags))
+        , ModuleChecker_(std::move(moduleChecker))
+        , OptimizeLibraries_(optimizeLibraries)
+        , FileAliasPrefix_(std::move(fileAliasPrefix))
     {
     }
 
     static TString NormalizeModuleName(const TString& path);
 
     void AttachUserData(TUserDataStorage::TPtr userData) {
-        UserData = userData;
+        UserData_ = userData;
     }
 
     void SetUrlLoader(IUrlLoader::TPtr loader) {
-        UrlLoader = loader;
+        UrlLoader_ = loader;
     }
 
     void SetParameters(const NYT::TNode& node) {
-        Parameters = node;
+        Parameters_ = node;
     }
 
     void SetCredentials(TCredentials::TPtr credentials) {
-        Credentials = std::move(credentials);
+        Credentials_ = std::move(credentials);
     }
 
     void SetQContext(const TQContext& qContext) {
-        QContext = qContext;
+        QContext_ = qContext;
+    }
+
+    void SetClusterMapping(const THashMap<TString, TString>& clusterMapping) {
+        ClusterMapping_ = clusterMapping;
+    }
+
+    void SetSqlFlags(NSQLTranslation::TExtendedSqlFlags flags) {
+        SqlFlags_ = std::move(flags);
+    }
+
+    void SetModuleChecker(TModuleChecker moduleChecker) {
+        ModuleChecker_ = moduleChecker;
+    }
+
+    void SetUseCanonicalLibrarySuffix(bool use) {
+        UseCanonicalLibrarySuffix_ = use;
     }
 
     void RegisterPackage(const TString& package) override;
@@ -109,26 +160,29 @@ private:
     THashMap<TString, TLibraryCohesion> FilterLibsByVersion() const;
     static TString ExtractPackageNameFromModule(TStringBuf moduleName);
     TString SubstParameters(const TString& str);
+    bool IsSExpr(bool isYql, bool isYqls, const TString& body) const;
 
-private:
-    THolder<TExprContext> OwnedCtx;
-    const TModulesTable* ParentModules = nullptr;
-    TUserDataStorage::TPtr UserData;
-    IUrlLoader::TPtr UrlLoader;
-    TMaybe<NYT::TNode> Parameters;
-    TCredentials::TPtr Credentials;
-    TQContext QContext;
-    TExprContext LibsContext;
-    TSet<TString> KnownPackages;
-    THashMap<TString, ui32> PackageVersions;
-    THashMap<TString, THashMap<int, TLibraryCohesion>> Libs;
-    TModulesTable Modules;
-    const THashMap<TString, TString> ClusterMapping;
-    const THashSet<TString> SqlFlags;
-    const bool OptimizeLibraries;
-    THolder<TExprContext::TFreezeGuard> FreezeGuard;
-    TString FileAliasPrefix;
-    TSet<TString> UsedSuffixes;
+    const NSQLTranslation::TTranslators Translators_;
+    THolder<TExprContext> OwnedCtx_;
+    const TModulesTable* ParentModules_ = nullptr;
+    TUserDataStorage::TPtr UserData_;
+    IUrlLoader::TPtr UrlLoader_;
+    TMaybe<NYT::TNode> Parameters_;
+    TCredentials::TPtr Credentials_;
+    TQContext QContext_;
+    TExprContext LibsContext_;
+    TSet<TString> KnownPackages_;
+    THashMap<TString, ui32> PackageVersions_;
+    THashMap<TString, THashMap<int, TLibraryCohesion>> Libs_;
+    TModulesTable Modules_;
+    THashMap<TString, TString> ClusterMapping_;
+    NSQLTranslation::TExtendedSqlFlags SqlFlags_;
+    TModuleChecker ModuleChecker_;
+    const bool OptimizeLibraries_;
+    THolder<TExprContext::TFreezeGuard> FreezeGuard_;
+    TString FileAliasPrefix_;
+    bool UseCanonicalLibrarySuffix_ = false;
+    TSet<TString> UsedSuffixes_;
 };
 
 bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName);
@@ -150,6 +204,7 @@ struct TYqlOperationOptions {
     TMaybe<TString> Url;
     TMaybe<TString> AttrsYson;
     TMaybe<NYT::TNode> ParametersYson;
+    TMaybe<TString> ProjectSlug;
 };
 
 class TColumnOrder {
@@ -157,7 +212,11 @@ public:
     struct TOrderedItem {
         TString LogicalName;
         TString PhysicalName;
-        TOrderedItem(const TString& logical, const TString& physical) : LogicalName(logical), PhysicalName(physical) {}
+        TOrderedItem(TString logical, TString physical)
+            : LogicalName(std::move(logical))
+            , PhysicalName(std::move(physical))
+        {
+        }
         TOrderedItem(TOrderedItem&&) = default;
         TOrderedItem(const TOrderedItem&) = default;
         TOrderedItem& operator=(const TOrderedItem&) = default;
@@ -185,11 +244,11 @@ public:
 
     TString Find(const TString&) const;
 
-    TVector<TOrderedItem>::const_pointer begin() const {
+    TVector<TOrderedItem>::const_iterator begin() const {
         return Order_.cbegin();
     }
 
-    TVector<TOrderedItem>::const_pointer end() const {
+    TVector<TOrderedItem>::const_iterator end() const {
         return Order_.cend();
     }
 
@@ -216,7 +275,7 @@ public:
     TVector<TString> GetLogicalNames() const {
         TVector<TString> res;
         res.reserve(Order_.size());
-        for (const auto &[name, _]: Order_) {
+        for (const auto& [name, _] : Order_) {
             res.emplace_back(name);
         }
         return res;
@@ -225,20 +284,21 @@ public:
     TVector<TString> GetPhysicalNames() const {
         TVector<TString> res;
         res.reserve(Order_.size());
-        for (const auto &[_, name]: Order_) {
+        for (const auto& [_, name] : Order_) {
             res.emplace_back(name);
         }
         return res;
     }
 
     bool HasDuplicates() const {
-        for (const auto& e: Order_) {
+        for (const auto& e : Order_) {
             if (e.PhysicalName != e.LogicalName) {
                 return true;
             }
         }
         return false;
     }
+
 private:
     THashMap<TString, TString> GeneratedToOriginal_;
     THashMap<TString, uint64_t> UseCount_;
@@ -256,18 +316,19 @@ public:
     TColumnOrderStorage() = default;
 
     TMaybe<TColumnOrder> Lookup(ui64 uniqueId) const {
-        auto it = Storage.find(uniqueId);
-        if (it == Storage.end()) {
+        auto it = Storage_.find(uniqueId);
+        if (it == Storage_.end()) {
             return {};
         }
         return it->second;
     }
 
     void Set(ui64 uniqueId, const TColumnOrder& order) {
-        Storage[uniqueId] = order;
+        Storage_[uniqueId] = order;
     }
+
 private:
-    THashMap<ui64, TColumnOrder> Storage;
+    THashMap<ui64, TColumnOrder> Storage_;
 };
 
 enum class EHiddenMode {
@@ -278,9 +339,9 @@ enum class EHiddenMode {
 };
 
 enum class EFallbackPolicy {
-    Default     /* "default" */,
-    Never       /* "never" */,
-    Always      /* "always" */
+    Default /* "default" */,
+    Never /* "never" */,
+    Always /* "always" */
 };
 
 enum class ECostBasedOptimizerType {
@@ -301,6 +362,17 @@ enum class EBlockEngineMode {
     Force /* "force" */,
 };
 
+enum class EDecimalConversionMode {
+    WithoutCommonTypeFixup /* "without_common_type_fixup" */,
+    WithCommonTypeFixup /* "with_common_type_fixup" */,
+};
+
+enum class EEngineType {
+    Default /* "default" */,
+    Dq /* "dq" */,
+    Ytflow /* "ytflow" */,
+};
+
 struct TUdfCachedInfo {
     TString NormalizedName;
     const TTypeAnnotationNode* FunctionType = nullptr;
@@ -308,6 +380,33 @@ struct TUdfCachedInfo {
     const TTypeAnnotationNode* NormalizedUserType = nullptr;
     bool SupportsBlocks = false;
     bool IsStrict = false;
+    TLangVersion MinLangVer = UnknownLangVersion;
+    TLangVersion MaxLangVer = UnknownLangVersion;
+};
+
+struct TLineageStats {
+    TMaybe<bool> Correct;
+    TMaybe<bool> CorrectStandalone;
+    ui64 Size = 0;
+    ui64 Memory = 0;
+    ui64 Duration = 0;
+    ui32 Version = 0;
+};
+
+struct TEvaluationStats {
+    ui64 Count = 0;
+    ui64 CacheHits = 0;
+    ui64 CalcProviderCalls = 0;
+    TDuration CalcProviderDurationSum = TDuration::Zero();
+};
+
+struct TLineageSettings {
+    bool EnableLineage = false;
+    bool EnableStandaloneLineage = false;
+    ui64 LineageOutputLimit = 40 * 1024 * 1024;  // 40 mb limit for lineage representation
+    ui64 LineageMemoryLimit = 150 * 1024 * 1024; // 150 mb limit for memory allocation in lineage calculation
+    ui32 LineageVersion = 1;
+    ui32 LineageStandaloneVersion = 1;
 };
 
 const TString TypeAnnotationContextComponent = "TypeAnnotationContext";
@@ -345,6 +444,15 @@ inline TString GetRandomKey<TGUID>() {
 }
 
 struct TTypeAnnotationContext: public TThrRefBase {
+    TTypeAnnotationContext();
+    ~TTypeAnnotationContext() override;
+
+    TSimpleSharedPtr<NDq::TOrderingsStateMachine> SortingsFSM;
+    TSimpleSharedPtr<NDq::TOrderingsStateMachine> OrderingsFSM;
+    TLangVersion LangVer = MinLangVersion;
+    EBackportCompatibleFeaturesMode BackportMode = EBackportCompatibleFeaturesMode::None;
+    bool UseTypeDiffForConvertToError = false;
+    bool DebugPositions = false;
     THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>> ColumnStatisticsByTableName;
     THashMap<ui64, std::shared_ptr<TOptimizerStatistics>> StatisticsMap;
     TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -368,8 +476,11 @@ struct TTypeAnnotationContext: public TThrRefBase {
     IModuleResolver::TPtr Modules;
     IUrlListerManagerPtr UrlListerManager;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
+    NUdf::EBridgeMode BridgeMode = NUdf::EBridgeMode::None;
+    TString UdfBridgeBinaryPath;
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;
+    NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;
     bool IsReadOnly = false;
     TAutoPtr<IGraphTransformer> CustomInstantTypeTransformer;
     bool Diagnostics = false;
@@ -391,12 +502,15 @@ struct TTypeAnnotationContext: public TThrRefBase {
     THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>, TUdfCachedInfo> UdfTypeCache; // (name,typecfg,type)->info
     bool UseTableMetaFromGraph = false;
     bool DiscoveryMode = false;
+    bool WindowNewPipeline = true;
     bool ForceDq = false;
     bool DqCaptured = false; // TODO: Add before/after recapture transformers
+    bool EnableEvaluateExprCache = false;
     EFallbackPolicy DqFallbackPolicy = EFallbackPolicy::Default;
     bool StrictTableProps = true;
     bool JsonQueryReturnsJsonDocument = false;
     bool YsonCastToString = true;
+    bool CaseInsensitiveNamedArgs = false;
     ui32 FolderSubDirsLimit = 1000;
     bool UseBlocks = false;
     EBlockEngineMode BlockEngineMode = EBlockEngineMode::Disable;
@@ -407,18 +521,35 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TFileStoragePtr FileStorage;
     TQContext QContext;
     ECostBasedOptimizerType CostBasedOptimizer = ECostBasedOptimizerType::Disable;
+    ui32 CostBasedOptimizerVersion = 0;
     bool MatchRecognize = false;
+    TMaybe<NSQLTranslation::TSqlFlags> SqlFlags;
     EMatchRecognizeStreamingMode MatchRecognizeStreaming = EMatchRecognizeStreamingMode::Force;
-    i64 TimeOrderRecoverDelay = -10'000'000; //microseconds
-    i64 TimeOrderRecoverAhead = 10'000'000; //microseconds
+    i64 TimeOrderRecoverDelay = -10'000'000; // microseconds
+    i64 TimeOrderRecoverAhead = 10'000'000;  // microseconds
     ui32 TimeOrderRecoverRowLimit = 1'000'000;
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;
+    bool DeriveColumnOrder = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
     THashSet<TString> PeepholeFlags;
     bool StreamLookupJoin = false;
     ui32 MaxAggPushdownPredicates = 6; // algorithm complexity is O(2^N)
+    ui32 PruneKeysMemLimit = 128 * 1024 * 1024;
+    bool NormalizeDependsOn = false;
+    ui32 AndOverOrExpansionLimit = 100;
+    bool EarlyExpandSeq = true;
+    bool DirectRowDependsOn = true;
+    TEvaluationStats EvaluationStats;
+    TLineageStats LineageStats;
+    TLineageSettings LineageSettings;
+    bool FuzzUntypedLambda = false;
+    bool FuzzUniversal = false;
+    TRuntimeSettings::TConstPtr RuntimeSettings;
+
+    THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
+    NLayers::ILayersRegistryPtr LayersRegistry;
 
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
@@ -429,6 +560,10 @@ struct TTypeAnnotationContext: public TThrRefBase {
 
     std::optional<bool> InitializeResult;
     EHiddenMode HiddenMode = EHiddenMode::Disable;
+    EEngineType EngineType = EEngineType::Default;
+
+    // temporary flag to skip applying ExpandPg rules
+    bool IgnoreExpandPg = false;
 
     template <typename T>
     T GetRandom() const noexcept;
@@ -457,7 +592,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui64 GetCachedNow() {
         if (!CachedNow) {
             if (QContext.CanRead()) {
-                auto item = QContext.GetReader()->Get({TypeAnnotationContextComponent, NowKey}).GetValueSync();
+                auto item = QContext.GetReader()->Get({.Component = TypeAnnotationContextComponent, .Label = NowKey}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
                 }
@@ -466,7 +601,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
             } else {
                 CachedNow = TimeProvider->Now().GetValue();
                 if (QContext.CanWrite()) {
-                    QContext.GetWriter()->Put({TypeAnnotationContextComponent, NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
+                    QContext.GetWriter()->Put({.Component = TypeAnnotationContextComponent, .Label = NowKey}, SerializeBinary<ui64>(*CachedNow)).GetValueSync();
                 }
             }
         }
@@ -479,7 +614,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     }
 
     void AddDataSource(const THashSet<TString>& names, TIntrusivePtr<IDataProvider> provider) {
-        for (auto name: names) {
+        for (auto name : names) {
             DataSourceMap[name] = provider;
         }
         DataSources.push_back(std::move(provider));
@@ -491,10 +626,14 @@ struct TTypeAnnotationContext: public TThrRefBase {
     }
 
     void AddDataSink(const THashSet<TString>& names, TIntrusivePtr<IDataProvider> provider) {
-        for (auto name: names) {
+        for (auto name : names) {
             DataSinkMap[name] = provider;
         }
         DataSinks.push_back(std::move(provider));
+    }
+
+    void AddRemoteLayersProvider(const TString& name, NLayers::IRemoteLayerProviderPtr provider) {
+        RemoteLayerProviderByName[name] = provider;
     }
 
     bool Initialize(TExprContext& ctx);
@@ -528,7 +667,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     /**
      * Helper method to fetch statistics from type annotation context
      */
-    std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) {
+    std::shared_ptr<TOptimizerStatistics> GetStats(const TExprNode* input) const {
         return StatisticsMap.Value(input ? input->UniqueId() : 0, std::shared_ptr<TOptimizerStatistics>(nullptr));
     }
 
@@ -543,6 +682,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
         return BlockEngineMode != EBlockEngineMode::Disable || UseBlocks;
     }
 
+    void UpdateDecimalConversionMode(EDecimalConversionMode decimalConversionMode);
+    EDecimalConversionMode GetDecimalConversionMode() const;
+
     void IncNoBlockCallable(TStringBuf callableName);
     void IncNoBlockType(const TTypeAnnotationNode& type);
     void IncNoBlockType(ETypeAnnotationKind kind);
@@ -550,20 +692,23 @@ struct TTypeAnnotationContext: public TThrRefBase {
 
     TVector<TString> GetTopNoBlocksCallables(size_t maxCount) const;
     TVector<TString> GetTopNoBlocksTypes(size_t maxCount) const;
+
+private:
+    EDecimalConversionMode DecimalConversionMode_ = EDecimalConversionMode::WithoutCommonTypeFixup;
 };
 
-template <> inline
-double TTypeAnnotationContext::GetRandom<double>() const noexcept {
+template <>
+inline double TTypeAnnotationContext::GetRandom<double>() const noexcept {
     return RandomProvider->GenRandReal2();
 }
 
-template <> inline
-ui64 TTypeAnnotationContext::GetRandom<ui64>() const noexcept {
+template <>
+inline ui64 TTypeAnnotationContext::GetRandom<ui64>() const noexcept {
     return RandomProvider->GenRand64();
 }
 
-template <> inline
-TGUID TTypeAnnotationContext::GetRandom<TGUID>() const noexcept {
+template <>
+inline TGUID TTypeAnnotationContext::GetRandom<TGUID>() const noexcept {
     return RandomProvider->GenUuid4();
 }
 

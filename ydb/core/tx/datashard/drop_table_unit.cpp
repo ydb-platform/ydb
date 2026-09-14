@@ -2,6 +2,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -35,7 +37,7 @@ TDropTableUnit::~TDropTableUnit()
 bool TDropTableUnit::IsReadyToExecute(TOperation::TPtr op) const
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasDropTable())
@@ -52,7 +54,7 @@ bool TDropTableUnit::IsReadyToExecute(TOperation::TPtr op) const
     }
 
     // We shouldn't have any normal dependencies
-    Y_ABORT_UNLESS(op->GetDependencies().empty());
+    Y_ENSURE(op->GetDependencies().empty());
 
     return op->GetSpecialDependencies().empty();
 }
@@ -62,23 +64,23 @@ EExecutionStatus TDropTableUnit::Execute(TOperation::TPtr op,
                                          const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasDropTable())
         return EExecutionStatus::Executed;
 
-    LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-               "Trying to DROP TABLE at " << DataShard.TabletID());
+    YDB_LOG_INFO_CTX(ctx, "TDropTableUnit::Execute: trying to drop table",
+        {"tabletId", DataShard.TabletID()});
 
     ui64 tableId = schemeTx.GetDropTable().GetId_Deprecated();
     if (schemeTx.GetDropTable().HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == schemeTx.GetDropTable().GetPathId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == schemeTx.GetDropTable().GetPathId().GetOwnerId());
         tableId = schemeTx.GetDropTable().GetPathId().GetLocalId();
     }
 
     auto it = DataShard.GetUserTables().find(tableId);
-    Y_ABORT_UNLESS(it != DataShard.GetUserTables().end());
+    Y_ENSURE(it != DataShard.GetUserTables().end());
     {
         it->second->ForEachAsyncIndex([&](const auto& indexPathId, const auto&) {
             RemoveSenders.emplace_back(new TEvChangeExchange::TEvRemoveSender(indexPathId));
@@ -128,3 +130,7 @@ THolder<TExecutionUnit> CreateDropTableUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

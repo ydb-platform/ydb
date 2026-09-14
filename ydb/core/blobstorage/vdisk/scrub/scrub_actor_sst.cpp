@@ -1,11 +1,15 @@
 #include "scrub_actor_impl.h"
 #include "scrub_actor_sst_blob_merger.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_VDISK_SCRUB
+
 namespace NKikimr {
 
     void TScrubCoroImpl::ScrubSst(TLevelSegmentPtr sst) {
         SstId = sst->AssignedSstId;
-        STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS03, VDISKP(LogPrefix, "starting to scrub SST"), (SstId, SstId));
+        YDB_LOG_INFO_CTX(GetActorContext(), VDISKP(LogPrefix, "starting to scrub SST"),
+            {"marker", "VDS03"},
+            {"sstId", SstId});
         auto blobsOnDisk = MakeBlobList(sst);
         ReadOutAndResilverIndex(sst);
         ReadOutSelectedBlobs(std::move(blobsOnDisk));
@@ -31,17 +35,21 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::ReadOutAndResilverIndex(TLevelSegmentPtr sst) {
+        TTrackableVector<TLevelSegment::TRec> linearIndex(TMemoryConsumer(VCtx->SstIndex));
+        sst->SaveLinearIndex(&linearIndex);
+
         TDiskPart prevPart;
         bool first = true;
         ui32 remainOutboundSize = sst->LoadedOutbound.size() * sizeof(TDiskPart);
-        ui32 remainIndexSize = sst->LoadedIndex.size() * sizeof(TLevelSegment::TRec);
+        ui32 remainIndexSize = linearIndex.size() * sizeof(TLevelSegment::TRec);
         for (TDiskPart part : sst->IndexParts) {
             TString regen = TString::Uninitialized(part.Size);
             ui32 destLen = regen.size();
             char *dest = regen.Detach() + destLen;
-            auto prepend = [&destLen, &dest](const void *data, ui32 len) {
+            const TString& logPrefix = LogPrefix;
+            auto prepend = [&destLen, &dest, &logPrefix](const void *data, ui32 len) {
                 if (len) {
-                    Y_ABORT_UNLESS(len <= destLen);
+                    Y_VERIFY_S(len <= destLen, logPrefix);
                     destLen -= len;
                     dest -= len;
                     memcpy(dest, data, len);
@@ -71,27 +79,30 @@ namespace NKikimr {
             // third step: the index
             const ui32 isize = Min(remainIndexSize, destLen);
             remainIndexSize -= isize;
-            prepend(reinterpret_cast<const char*>(sst->LoadedIndex.data()) + remainIndexSize, isize);
+            prepend(reinterpret_cast<const char*>(linearIndex.data()) + remainIndexSize, isize);
 
             // fourth step: sanity check
-            Y_ABORT_UNLESS(!destLen);
+            Y_VERIFY_S(!destLen, LogPrefix);
 
-            std::optional<TRcBuf> data = Read(part);
+            std::optional<TRcBuf> data = Read(part, {});
             if (!data) {
-                STLOGX(GetActorContext(), PRI_WARN, BS_VDISK_SCRUB, VDS13, VDISKP(LogPrefix, "index is corrupt, restoring"),
-                    (SstId, sst->AssignedSstId), (Location, part));
+                YDB_LOG_WARN_CTX(GetActorContext(), VDISKP(LogPrefix, "index is corrupt, restoring"),
+                    {"marker", "VDS13"},
+                    {"sstId", sst->AssignedSstId},
+                    {"location", part});
 
                 ui32 offset = part.Offset - part.Offset % ScrubCtx->PDiskCtx->Dsk->AppendBlockSize;
                 if (const ui32 prefixLen = part.Offset - offset) {
                     // restore prefixLen bytes of data before the index
-                    std::optional<TRcBuf> data = Read(TDiskPart(part.ChunkIdx, offset, prefixLen));
+                    std::optional<TRcBuf> data = Read(TDiskPart(part.ChunkIdx, offset, prefixLen), {});
                     if (data) {
                         regen = TStringBuf(*data) + regen;
                         part.Offset = offset;
                         part.Size += prefixLen;
                     } else {
-                        STLOGX(GetActorContext(), PRI_CRIT, BS_VDISK_SCRUB, VDS38, VDISKP(LogPrefix, "index is corrupt and can't be restored"),
-                            (SstId, sst->AssignedSstId));
+                        YDB_LOG_CRIT_CTX(GetActorContext(), VDISKP(LogPrefix, "index is corrupt and can't be restored"),
+                            {"marker", "VDS38"},
+                            {"sstId", sst->AssignedSstId});
                         Success = false;
                         return;
                     }
@@ -102,15 +113,15 @@ namespace NKikimr {
                     Checkpoints |= TEvScrubNotify::INDEX_RESTORED;
                 }
             } else {
-                Y_ABORT_UNLESS(regen.size() == data->size(), "index size differs from one stored in memory");
+                Y_VERIFY_S(regen.size() == data->size(), LogPrefix << "index size differs from one stored in memory");
                 const size_t headerLen = first ? sizeof(TIdxDiskPlaceHolder) : sizeof(TIdxDiskLinker);
-                Y_ABORT_UNLESS(memcmp(regen.data(), data->data(), part.Size - headerLen) == 0,
-                    "index data differs from one stored in memory"); // compare index data up to header
+                Y_VERIFY_S(memcmp(regen.data(), data->data(), part.Size - headerLen) == 0,
+                    LogPrefix << "index data differs from one stored in memory"); // compare index data up to header
                 auto compare = [&](auto a, auto b) {
-                    Y_ABORT_UNLESS(sizeof(a) == headerLen && sizeof(b) == headerLen);
+                    Y_VERIFY_S(sizeof(a) == headerLen && sizeof(b) == headerLen, LogPrefix);
                     memcpy(&a, regen.data() + regen.size() - headerLen, headerLen); // to prevent unaligned access
                     memcpy(&b, data->data() + data->size() - headerLen, headerLen);
-                    Y_ABORT_UNLESS(a == b, "index header differs from one stored in memory");
+                    Y_VERIFY_S(a == b, LogPrefix << "index header differs from one stored in memory");
                 };
                 if (first) {
                     compare(TIdxDiskPlaceHolder(0), TIdxDiskPlaceHolder(0));
@@ -122,12 +133,14 @@ namespace NKikimr {
             prevPart = part;
             first = false;
         }
-        Y_ABORT_UNLESS(!remainOutboundSize && !remainIndexSize);
+        Y_VERIFY_S(!remainOutboundSize && !remainIndexSize, LogPrefix);
     }
 
     void TScrubCoroImpl::ReadOutSelectedBlobs(std::vector<TBlobOnDisk>&& blobsOnDisk) {
-        STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS14, VDISKP(LogPrefix, "reading out SST"), (SstId, SstId),
-            (NumBlobs, blobsOnDisk.size()));
+        YDB_LOG_INFO_CTX(GetActorContext(), VDISKP(LogPrefix, "reading out SST"),
+            {"marker", "VDS14"},
+            {"sstId", SstId},
+            {"numBlobs", blobsOnDisk.size()});
 
         // scan all the blobs and sort them out -- huge blobs can be checked directly by reading them, small blobs
         // are split into chunks with intervals
@@ -149,24 +162,30 @@ namespace NKikimr {
         std::vector<TBlobToCheck> blobsToCheck;
         for (const auto& [chunkIdx, blobs] : chunks) {
             const auto chunkIdx_{chunkIdx};
-            STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS08, VDISKP(LogPrefix, "reading out chunk"), (SstId, SstId),
-                (ChunkIdx, chunkIdx_));
+            YDB_LOG_INFO_CTX(GetActorContext(), VDISKP(LogPrefix, "reading out chunk"),
+                {"marker", "VDS08"},
+                {"sstId", SstId},
+                {"chunkIdx", chunkIdx_});
             TDiskPart interval;
             auto doCheck = [&] {
                 if (interval != TDiskPart()) {
-                    const bool intervalReadable = IsReadable(interval);
-                    STLOGX(GetActorContext(), intervalReadable ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDS04,
-                        VDISKP(LogPrefix, "small blob interval checked"), (Interval, interval),
-                        (IsReadable, intervalReadable), (NumBlobsOfInterest, pendingBlobs.size()));
+                    const bool intervalReadable = IsReadable(interval, {});
+                    YDB_LOG_CTX(GetActorContext(), intervalReadable ? PRI_DEBUG : PRI_ERROR, VDISKP(LogPrefix, "small blob interval checked"),
+                        {"marker", "VDS04"},
+                        {"interval", interval},
+                        {"isReadable", intervalReadable},
+                        {"numBlobsOfInterest", pendingBlobs.size()});
                     ++MonGroup.SmallBlobIntervalsRead();
                     MonGroup.SmallBlobIntervalBytesRead() += interval.Size;
 
                     for (TBlobOnDisk *blob : pendingBlobs) {
-                        const bool blobReadable = intervalReadable || IsReadable(blob->Part);
+                        const bool blobReadable = intervalReadable || IsReadable(blob->Part, {});
                         if (!intervalReadable) {
-                            STLOGX(GetActorContext(), blobReadable ? PRI_INFO : PRI_ERROR, BS_VDISK_SCRUB, VDS12,
-                                VDISKP(LogPrefix, "small blob from unreadable interval checked"),
-                                (Key, blob->Id), (Location, blob->Part), (IsReadable, blobReadable));
+                            YDB_LOG_CTX(GetActorContext(), blobReadable ? PRI_INFO : PRI_ERROR, VDISKP(LogPrefix, "small blob from unreadable interval checked"),
+                                {"marker", "VDS12"},
+                                {"key", blob->Id},
+                                {"location", blob->Part},
+                                {"isReadable", blobReadable});
                             ++MonGroup.SmallBlobsRead();
                             MonGroup.SmallBlobBytesRead() += interval.Size;
                         }
@@ -181,9 +200,12 @@ namespace NKikimr {
                 pendingBlobs.clear();
             };
             for (TBlobOnDisk *blob : blobs) {
+                if (ScrubCtx->EnableDeepScrubbing) {
+                    EnqueueCheckIntegrity(blob->Id, false);
+                }
                 const TDiskPart& part = blob->Part;
                 const ui32 end = part.Offset + part.Size;
-                Y_ABORT_UNLESS(part.ChunkIdx == chunkIdx);
+                Y_VERIFY_S(part.ChunkIdx == chunkIdx, LogPrefix);
                 if (interval == TDiskPart()) {
                     interval = blob->Part;
                 } else if (end - interval.Offset <= ScrubCtx->PDiskCtx->Dsk->ReadBlockSize) {
@@ -210,17 +232,23 @@ namespace NKikimr {
                 iter.PutToMerger(&merger);
 
                 NMatrix::TVectorType needed = blob.Needed;
-                Y_ABORT_UNLESS(!needed.Empty());
+                Y_VERIFY_S(!needed.Empty(), LogPrefix);
 
-                STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS11, VDISKP(LogPrefix, "reading out blob"), (SstId, SstId),
-                    (Id, blob.Id));
+                YDB_LOG_INFO_CTX(GetActorContext(), VDISKP(LogPrefix, "reading out blob"),
+                    {"marker", "VDS11"},
+                    {"sstId", SstId},
+                    {"id", blob.Id});
 
                 for (const TBlobOnDisk& replica : merger.BlobsOnDisk) {
                     if (!(replica.Local & needed).Empty()) {
-                        const bool blobReadable = IsReadable(replica.Part);
-                        STLOGX(GetActorContext(), blobReadable ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDS16,
-                            VDISKP(LogPrefix, "read replica"), (SstId, SstId), (Id, blob.Id), (Location, replica.Part),
-                            (Local, replica.Local), (IsReadable, blobReadable));
+                        const bool blobReadable = IsReadable(replica.Part, {});
+                        YDB_LOG_CTX(GetActorContext(), blobReadable ? PRI_DEBUG : PRI_ERROR, VDISKP(LogPrefix, "read replica"),
+                            {"marker", "VDS16"},
+                            {"sstId", SstId},
+                            {"id", blob.Id},
+                            {"location", replica.Part},
+                            {"local", replica.Local},
+                            {"isReadable", blobReadable});
                         if (blobReadable) {
                             needed &= ~replica.Local;
                         }

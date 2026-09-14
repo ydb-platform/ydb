@@ -1,5 +1,5 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/mind/hive/hive.h>
@@ -16,18 +16,53 @@ namespace {
 
 struct IStrategy {
     virtual void Check(const TPath::TChecker& checks) const = 0;
+    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const = 0;
 };
 
 struct TReplicationStrategy : public IStrategy {
     void Check(const TPath::TChecker& checks) const override {
         checks.IsReplication();
     };
+
+    bool Validate(TProposeResponse&, const NKikimrSchemeOp::TReplicationDescription&, const TOperationContext&) const override {
+        return true;
+    }
 };
 
 struct TTransferStrategy : public IStrategy {
     void Check(const TPath::TChecker& checks) const override {
         checks.IsTransfer();
     };
+
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
+        const auto& alter = desc.GetAlterTransfer();
+        const auto& batching = desc.GetConfig().GetTransferSpecific().GetBatching();
+
+        if ((alter.HasBatchSizeBytes() && alter.GetBatchSizeBytes() > 1_GB)
+            || (batching.HasBatchSizeBytes() && batching.GetBatchSizeBytes() > 1_GB)) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Batch size must be less than or equal to 1Gb");
+            return false;
+        }
+        if ((alter.HasFlushIntervalMilliSeconds() && alter.GetFlushIntervalMilliSeconds() < TDuration::Seconds(1).MilliSeconds())
+            || (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() < TDuration::Seconds(1).MilliSeconds())) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be greater than or equal to 1 second");
+            return false;
+        }
+        if ((alter.HasFlushIntervalMilliSeconds() && alter.GetFlushIntervalMilliSeconds() > TDuration::Hours(24).MilliSeconds())
+            || (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() > TDuration::Hours(24).MilliSeconds())) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be less than or equal to 24 hours");
+            return false;
+        }
+        if (alter.HasDirectoryPath()) {
+            auto directoryPath = TPath::Resolve(alter.GetDirectoryPath(), context.SS);
+            if (!directoryPath.IsResolved() || directoryPath.IsUnderDeleting() || directoryPath->IsUnderMoving() || directoryPath.IsDeleted()) {
+                result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination directory path '" << alter.GetDirectoryPath() << "' not found");
+                return true;
+            }
+        }
+
+        return true;
+    }
 };
 
 static constexpr TReplicationStrategy ReplicationStrategy;
@@ -81,6 +116,22 @@ public:
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
                 if (alterData->Description.GetState().GetStateCase() != context.SS->Replications.at(pathId)->Description.GetState().GetStateCase()) {
                     ev->Record.MutableSwitchState()->CopyFrom(alterData->Description.GetState());
+                }
+                auto& location = *ev->Record.MutableLocation();
+                location.SetPath(TPath::Init(pathId, context.SS).PathString());
+
+                const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
+                if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
+                    location.SetYcCloudId(it->second);
+                }
+                if (auto it = attrs.find("folder_id"); it != attrs.end()) {
+                    location.SetYcFolderId(it->second);
+                }
+                if (auto it = attrs.find("database_id"); it != attrs.end()) {
+                    location.SetYcResourceId(it->second);
+                }
+                if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
+                    location.SetMonitoringProjectId(it->second);
                 }
 
                 LOG_D(DebugHint() << "Send TEvAlterReplication to controller"
@@ -189,7 +240,7 @@ public:
         Y_ABORT_UNLESS(alterData);
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->Replications[pathId] = alterData;
+        context.SS->Replications.Set(pathId, alterData);
         context.SS->PersistReplicationAlterRemove(db, pathId);
         context.SS->PersistReplication(db, pathId, *alterData);
 
@@ -244,7 +295,7 @@ class TAlterReplication: public TSubOperation {
         using TState = NKikimrReplication::TReplicationState;
         switch (desc.GetState().GetStateCase()) {
         case TState::kStandBy:
-            if (newState.GetStateCase() != TState::kDone) {
+            if (!THashSet<TState::StateCase>{TState::kPaused, TState::kDone}.contains(newState.GetStateCase())) {
                 result.SetError(NKikimrScheme::StatusInvalidParameter, "Cannot switch state");
                 return false;
             }
@@ -368,7 +419,7 @@ public:
             return result;
         }
 
-        if (!op.HasConfig() && !op.HasState() && !op.HasTransferTransformLambda()) {
+        if (!op.HasConfig() && !op.HasState() && !op.HasAlterTransfer()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Empty alter");
             return result;
         }
@@ -384,6 +435,10 @@ public:
         }
 
         if (op.HasConfig() && !ValidateAlterConfig(*result, replication->Description, op.GetConfig())) {
+            return result;
+        }
+
+        if (!Strategy->Validate(*result, op, context)) {
             return result;
         }
 
@@ -432,20 +487,49 @@ public:
             }
         }
 
-        if (op.HasTransferTransformLambda()) {
+        auto transferSetter = [&](const TString& name, auto&& action) {
             auto& oldConf = *(alterData->Description.MutableConfig());
             if (!oldConf.HasTransferSpecific()) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "Change TransformLambda allowed only for transfer");
-                return result;
+                    TStringBuilder() << "Change " << name << " allowed only for transfer");
+                return false;
             }
-            auto& targets = *oldConf.MutableTransferSpecific()->MutableTargets();
-            if (targets.size() != 1) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter,
-                    "Only one transfer target allowed");
-                return result;
+            action(*oldConf.MutableTransferSpecific());
+            return true;
+        };
+
+        if (op.HasAlterTransfer()) {
+            if (op.GetAlterTransfer().HasTransformLambda()) {
+                if (!transferSetter("TransformLambda", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific& specific) -> void {
+                    specific.MutableTarget()->SetTransformLambda(op.GetAlterTransfer().GetTransformLambda());
+                })) {
+                    return result;
+                }
             }
-            targets.begin()->SetTransformLambda(op.GetTransferTransformLambda());
+
+            if (op.GetAlterTransfer().HasFlushIntervalMilliSeconds()) {
+                if (!transferSetter("FlushInterval", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific& specific) -> void {
+                    specific.MutableBatching()->SetFlushIntervalMilliSeconds(op.GetAlterTransfer().GetFlushIntervalMilliSeconds());
+                })) {
+                    return result;
+                }
+            }
+
+            if (op.GetAlterTransfer().HasBatchSizeBytes()) {
+                if (!transferSetter("BatchSize", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific& specific) -> void {
+                    specific.MutableBatching()->SetBatchSizeBytes(op.GetAlterTransfer().GetBatchSizeBytes());
+                })) {
+                    return result;
+                }
+            }
+
+            if (op.GetAlterTransfer().HasDirectoryPath()) {
+                if (!transferSetter("DirectoryPath", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific& specific) -> void {
+                    specific.MutableTarget()->SetDirectoryPath(op.GetAlterTransfer().GetDirectoryPath());
+                })) {
+                    return result;
+                }
+            }
         }
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));

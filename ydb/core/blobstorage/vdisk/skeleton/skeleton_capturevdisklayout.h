@@ -44,7 +44,7 @@ namespace NKikimr {
                 void Clear() {}
 
                 void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
-                        ui64 /*circaLsn*/) {
+                        ui64 /*circaLsn*/, const void* /*sst*/) {
                     TDiskDataExtractor extr;
                     memRec.GetDiskData(&extr, outbound);
                     const TRes::ERecordType recordType = extr.BlobType == TBlobType::DiskBlob
@@ -61,7 +61,7 @@ namespace NKikimr {
                 void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope *data, const TKeyLogoBlob& key,
                         ui64 circaLsn) {
                     if (!data) {
-                        AddFromSegment(memRec, nullptr, key, circaLsn);
+                        AddFromSegment(memRec, nullptr, key, circaLsn, nullptr);
                     }
                 }
             };

@@ -302,7 +302,7 @@ long      weight,
 
     if (d_path == NULL)
 		{
-		sprintf(line, "%s%c%s", 
+		snprintf(line, 256, "%s%c%s", 
 			env_config(CONFIG_TAG, CONFIG_DFLT), PATH_SEP, path);
 		fp = fopen(line, "r");
 		OPEN_CHECK(fp, line);
@@ -389,7 +389,7 @@ tbl_open(int tbl, char *mode)
     if (*tdefs[tbl].name == PATH_SEP)
         strcpy(fullpath, tdefs[tbl].name);
     else
-        sprintf(fullpath, "%s%c%s",
+        snprintf(fullpath, 256, "%s%c%s",
             env_config(PATH_TAG, PATH_DFLT), PATH_SEP, tdefs[tbl].name);
 
     retcode = stat(fullpath, &fstats);

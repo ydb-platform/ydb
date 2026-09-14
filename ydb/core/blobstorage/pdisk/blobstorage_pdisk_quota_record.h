@@ -3,6 +3,8 @@
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_color_limits.h"
 
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -34,6 +36,7 @@ class TQuotaRecord {
 
     TString Name;
     std::optional<TVDiskID> VDiskId;
+    ui32 Weight = 1;
 public:
     void SetName(const TString& name) {
         Name = name;
@@ -41,6 +44,10 @@ public:
 
     void SetVDiskId(const TVDiskID& v) {
         VDiskId = v;
+    }
+
+    void SetWeight(ui32 v) {
+        Weight = v;
     }
 
     i64 GetUsed() const {
@@ -55,6 +62,10 @@ public:
         return AtomicGet(Free);
     }
 
+    ui32 GetWeight() const {
+        return Weight ? Weight : 1;
+    }
+
     TString Print() const {
         TStringStream str;
         Print(str);
@@ -67,9 +78,10 @@ public:
             str << " VDiskId# " << *VDiskId;
         }
         str << "\n";
-        str << " HardLimit# " << HardLimit;
-        str << " Free# " << Free;
+        str << " HardLimit# " << AtomicGet(HardLimit);
+        str << " Free# " << AtomicGet(Free);
         str << " Used# " << GetUsed();
+        str << " Weight# " << GetWeight();
         double occupancy;
         str << " CurrentColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(EstimateSpaceColor(0, &occupancy)) << "\n";
         str << " Occupancy# " << occupancy << "\n";
@@ -101,9 +113,14 @@ public:
         return AtomicSub(Free, count) > AtomicGet(Black);
     }
 
+    // The largest count TryAllocate can satisfy right now
+    i64 GetAllocatableFree() const {
+        return Max<i64>(0, AtomicGet(Free) - AtomicGet(Black) - 1);
+    }
+
     // Called only from the main thread
     bool TryAllocate(i64 count, TString &outErrorReason) {
-        Y_ABORT_UNLESS(count > 0);
+        Y_VERIFY(count > 0);
         if (AtomicSub(Free, count) > AtomicGet(Black)) {
             return true;
         }
@@ -118,7 +135,7 @@ public:
     }
 
     bool InitialAllocate(i64 count) {
-        Y_ABORT_UNLESS(count >= 0);
+        Y_VERIFY(count >= 0);
         if (AtomicSub(Free, count) >= 0) {
             return true;
         } else {
@@ -128,7 +145,7 @@ public:
     }
 
     void Release(i64 count) {
-        Y_ABORT_UNLESS(count > 0);
+        Y_VERIFY(count > 0);
         TAtomicBase newFree = AtomicAdd(Free, count);
         Y_VERIFY_S(newFree <= AtomicGet(HardLimit), Print());
     }
@@ -138,8 +155,13 @@ public:
     NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(i64 count, double *occupancy) const {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         const i64 newFree = AtomicGet(Free) - count;
+        const i64 hardLimit = AtomicGet(HardLimit);
 
-        *occupancy = HardLimit ? (double)(HardLimit - newFree) / HardLimit : 1.0;
+        if (hardLimit) {
+            *occupancy = (double)(std::max(static_cast<i64>(0), hardLimit - newFree)) / hardLimit;
+        } else {
+            *occupancy = 1.0;
+        }
 
         if (newFree > AtomicGet(Cyan)) {
             return TColor::GREEN;
@@ -162,7 +184,7 @@ public:
         }
     }
 
-    ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
         switch (color) {

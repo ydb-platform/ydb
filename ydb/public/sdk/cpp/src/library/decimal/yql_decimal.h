@@ -7,7 +7,9 @@
 #include <type_traits>
 #include <limits>
 
-namespace NYdb::NDecimal {
+namespace NYdb {
+inline namespace Dev {
+namespace NDecimal {
 
 #ifdef _win_
 #ifndef DONT_USE_NATIVE_INT128
@@ -51,4 +53,6 @@ TInt128 FromHalfs(ui64 lo, i64 hi);
 
 bool IsValid(const std::string_view& str);
 
+}
+}
 }

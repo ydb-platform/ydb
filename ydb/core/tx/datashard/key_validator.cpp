@@ -7,6 +7,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 
 
 using namespace NKikimr;
@@ -30,7 +32,9 @@ void TKeyValidator::AddReadRange(const TTableId& tableId, const TVector<NTable::
         columnOps.emplace_back(std::move(op));
     }
 
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::TX_DATASHARD, "-- AddReadRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry) << " table: " << tableId);
+    YDB_LOG_TRACE("Adding read range to key validator",
+        {"readRange", DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry)},
+        {"tableId", tableId});
 
     auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit, 0 /* bytesLimit */, reverse);
 
@@ -51,7 +55,9 @@ void TKeyValidator::AddWriteRange(const TTableId& tableId, const TTableRange& ra
         columnOps.emplace_back(std::move(op));
     }
 
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::TX_DATASHARD, "-- AddWriteRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry) << " table: " << tableId);
+    YDB_LOG_TRACE("Adding write range to key validator",
+        {"writeRange", DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry)},
+        {"tableId", tableId});
 
     auto rowOp = isPureEraseOp ? TKeyDesc::ERowOperation::Erase : TKeyDesc::ERowOperation::Update;
     auto desc = MakeHolder<TKeyDesc>(tableId, range, rowOp, keyTypes, columnOps);
@@ -110,8 +116,7 @@ ui64 TKeyValidator::GetTableSchemaVersion(const TTableId& tableId) const {
     const auto& userTables = Self.GetUserTables();
     auto it = userTables.find(tableId.PathId.LocalPathId);
     if (it == userTables.end()) {
-        Y_FAIL_S("TKeyValidator (tablet id: " << Self.TabletID() << " state: " << Self.GetState() << ") unable to find given table with id: " << tableId);
-        return 0;
+        Y_ENSURE(false, "TKeyValidator (tablet id: " << Self.TabletID() << " state: " << Self.GetState() << ") unable to find given table with id: " << tableId);
     } else {
         return it->second->GetTableSchemaVersion();
     }
@@ -159,3 +164,7 @@ NMiniKQL::IEngineFlat::TValidationInfo& TKeyValidator::GetInfo() {
 const NMiniKQL::IEngineFlat::TValidationInfo& TKeyValidator::GetInfo() const {
     return Info;
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -1,6 +1,8 @@
 #include <yt/yt/client/cache/cache.h>
 #include <yt/yt/client/cache/config.h>
 
+#include <yt/yt/core/ytree/convert.h>
+
 #include <library/cpp/testing/gtest/gtest.h>
 
 #include <library/cpp/yt/string/format.h>
@@ -44,6 +46,26 @@ TEST(TClientsCacheTest, GetClientWithProxyRole)
     // It's because we don't actually create YT Server.
     client1->GetConnection()->Terminate();
     client2->GetConnection()->Terminate();
+}
+
+TEST(TClientsCacheTest, GetClientByClusteName)
+{
+    SetEnv("YT_TOKEN", "AAAA-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    auto connectionConfig = New<NApi::NRpcProxy::TConnectionConfig>();
+    connectionConfig->ClusterName = "test";
+    connectionConfig->ClusterUrl = "localhost";
+    auto cache = CreateClientsCache(connectionConfig);
+    auto client = cache->GetClient("test");
+    auto connection = client->GetConnection();
+
+    EXPECT_EQ("test", connection->GetClusterName());
+    auto newConnectionConfig = NYTree::ConvertTo<NApi::NRpcProxy::TConnectionConfigPtr>(connection->GetConfigYson());
+    EXPECT_EQ("localhost", newConnectionConfig->ClusterUrl);
+
+    // This is needed for TConnection.OnProxyUpdate to stop
+    // and to remove references to TConnection that it's holding.
+    // It's because we don't actually create YT Server.
+    connection->Terminate();
 }
 
 TEST(TClientsCacheTest, MultiThreads)
@@ -90,46 +112,46 @@ TEST(TClientsCacheTest, MultiThreads)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TEST(TClientsCacheTest, MakeClusterConfig)
+TEST(TClientsCacheTest, GetConnectionConfig)
 {
     auto clientsCacheConfig = New<TClientsCacheConfig>();
-    clientsCacheConfig->DefaultConfig = New<NApi::NRpcProxy::TConnectionConfig>();
-    clientsCacheConfig->DefaultConfig->ClusterUrl = "seneca-nan"; // will be ignored
-    clientsCacheConfig->DefaultConfig->ProxyRole = "default_role"; // can be overwritten
-    clientsCacheConfig->DefaultConfig->DynamicChannelPool->MaxPeerCount = 42;
+    clientsCacheConfig->DefaultConnection = New<NApi::NRpcProxy::TConnectionConfig>();
+    clientsCacheConfig->DefaultConnection->ClusterUrl = "seneca-nan"; // will be ignored
+    clientsCacheConfig->DefaultConnection->ProxyRole = "default_role"; // can be overwritten
+    clientsCacheConfig->DefaultConnection->DynamicChannelPool->MaxPeerCount = 42;
 
     auto senecaVlaConfig = New<NApi::NRpcProxy::TConnectionConfig>();
     senecaVlaConfig->ClusterUrl = ""; // will be ignored
     senecaVlaConfig->ProxyRole = "seneca_vla_role"; // can be overwritten
     senecaVlaConfig->DynamicChannelPool->MaxPeerCount = 43;
-    clientsCacheConfig->ClusterConfigs["seneca-vla"] = senecaVlaConfig;
+    clientsCacheConfig->PerClusterConnection["seneca-vla"] = senecaVlaConfig;
 
     {
-        auto config = MakeClusterConfig(clientsCacheConfig, "seneca-man");
+        auto config = GetConnectionConfig(clientsCacheConfig, "seneca-man");
         EXPECT_EQ(config->ClusterUrl, "seneca-man");
         EXPECT_EQ(config->ProxyRole, "default_role");
         EXPECT_EQ(config->DynamicChannelPool->MaxPeerCount, 42);
     }
     {
-        auto config = MakeClusterConfig(clientsCacheConfig, "seneca-man/overwriting_role");
+        auto config = GetConnectionConfig(clientsCacheConfig, "seneca-man/overwriting_role");
         EXPECT_EQ(config->ClusterUrl, "seneca-man");
         EXPECT_EQ(config->ProxyRole, "overwriting_role");
         EXPECT_EQ(config->DynamicChannelPool->MaxPeerCount, 42);
     }
     {
-        auto config = MakeClusterConfig(clientsCacheConfig, "seneca-vla");
+        auto config = GetConnectionConfig(clientsCacheConfig, "seneca-vla");
         EXPECT_EQ(config->ClusterUrl, "seneca-vla");
         EXPECT_EQ(config->ProxyRole, "seneca_vla_role");
         EXPECT_EQ(config->DynamicChannelPool->MaxPeerCount, 43);
     }
     {
-        auto config = MakeClusterConfig(clientsCacheConfig, "seneca-vla/overwriting_role");
+        auto config = GetConnectionConfig(clientsCacheConfig, "seneca-vla/overwriting_role");
         EXPECT_EQ(config->ClusterUrl, "seneca-vla");
         EXPECT_EQ(config->ProxyRole, "overwriting_role");
         EXPECT_EQ(config->DynamicChannelPool->MaxPeerCount, 43);
     }
     {
-        auto config = MakeClusterConfig(clientsCacheConfig, "seneca-vla.yt.yandex.net");
+        auto config = GetConnectionConfig(clientsCacheConfig, "seneca-vla.yt.yandex.net");
         EXPECT_EQ(config->ClusterUrl, "seneca-vla.yt.yandex.net");
         EXPECT_EQ(config->ProxyRole, "seneca_vla_role");
         EXPECT_EQ(config->DynamicChannelPool->MaxPeerCount, 43);

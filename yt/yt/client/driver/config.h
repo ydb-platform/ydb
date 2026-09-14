@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/api/public.h>
 
+#include <yt/yt/client/api/rpc_proxy/public.h>
+
 #include <yt/yt/client/table_client/public.h>
 
 #include <yt/yt/client/chunk_client/public.h>
@@ -17,10 +19,9 @@ namespace NYT::NDriver {
 constexpr int ApiVersion3 = 3;
 constexpr int ApiVersion4 = 4;
 
-class TDriverConfig
+struct TDriverConfig
     : public NYTree::TYsonStruct
 {
-public:
     NApi::TFileReaderConfigPtr FileReader;
     NApi::TFileWriterConfigPtr FileWriter;
     NTableClient::TTableReaderConfigPtr TableReader;
@@ -35,11 +36,19 @@ public:
     i64 ReadBufferSize;
     i64 WriteBufferSize;
 
+    //! Driver tries not to send attachments larger than this size.
+    i64 MaxAttachmentSize;
+
     TSlruCacheConfigPtr ClientCache;
 
-    std::optional<TString> Token;
+    std::optional<std::string> Token;
+
+    //! Target cluster for multiproxy mode.
+    std::optional<std::string> MultiproxyTargetCluster;
 
     TAsyncExpiringCacheConfigPtr ProxyDiscoveryCache;
+
+    NApi::NRpcProxy::EAddressType DefaultRpcProxyAddressType;
 
     bool EnableInternalCommands;
 
@@ -47,6 +56,10 @@ public:
 
     //! Controls whether authentication commands (SetUserPassword, IssueToken, ListUserTokens, etc.) require a correct password to be used.
     bool RequirePasswordInAuthenticationCommands;
+
+    //! If set, a master transaction whose commit fails is abandoned (dropped locally, no
+    //! abort) instead of aborted, so a retrier can re-issue the commit. RPC proxy only.
+    bool AbandonMasterTransactionsOnFailedCommit;
 
     REGISTER_YSON_STRUCT(TDriverConfig);
 
@@ -58,4 +71,3 @@ DEFINE_REFCOUNTED_TYPE(TDriverConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDriver
-

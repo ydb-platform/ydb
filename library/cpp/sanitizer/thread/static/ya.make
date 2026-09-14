@@ -3,8 +3,8 @@ LIBRARY()
 NO_UTIL()
 
 PEERDIR(
-    contrib/libs/clang${CLANG_VER}-rt/lib/tsan
-    contrib/libs/clang${CLANG_VER}-rt/lib/tsan_cxx
+    contrib/libs/clang${COMPILER_VERSION}-rt/lib/tsan
+    contrib/libs/clang${COMPILER_VERSION}-rt/lib/tsan_cxx
 )
 
 END()

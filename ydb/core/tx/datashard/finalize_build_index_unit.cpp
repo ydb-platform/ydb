@@ -1,4 +1,5 @@
 #include "datashard_impl.h"
+#include "datashard_locks_db.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
@@ -18,10 +19,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSchemeTx());
+        Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto& schemeTx = tx->GetSchemeTx();
         if (!schemeTx.HasFinalizeBuildIndex()) {
@@ -31,10 +32,10 @@ public:
         const auto& params = schemeTx.GetFinalizeBuildIndex();
 
         const auto pathId = TPathId::FromProto(params.GetPathId());
-        Y_ABORT_UNLESS(pathId.OwnerId == DataShard.GetPathOwnerId());
+        Y_ENSURE(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();
-        Y_ABORT_UNLESS(version);
+        Y_ENSURE(version);
 
         TUserTable::TPtr tableInfo;
         if (params.HasOutcome() && params.GetOutcome().HasApply()) {
@@ -45,7 +46,7 @@ public:
             const auto indexPathId = TPathId::FromProto(params.GetOutcome().GetCancel().GetIndexPathId());
 
             const auto& userTables = DataShard.GetUserTables();
-            Y_ABORT_UNLESS(userTables.contains(pathId.LocalPathId));
+            Y_ENSURE(userTables.contains(pathId.LocalPathId));
             userTables.at(pathId.LocalPathId)->ForAsyncIndex(indexPathId, [&](const auto&) {
                 RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId));
             });
@@ -55,8 +56,9 @@ public:
             tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
         }
 
-        Y_ABORT_UNLESS(tableInfo);
-        DataShard.AddUserTable(pathId, tableInfo);
+        Y_ENSURE(tableInfo);
+        TDataShardLocksDb locksDb(DataShard, txc);
+        DataShard.ReplaceUserTable(pathId, tableInfo, locksDb);
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
@@ -64,14 +66,22 @@ public:
 
         ui64 step = params.GetSnapshotStep();
         ui64 txId = params.GetSnapshotTxId();
-        Y_ABORT_UNLESS(step != 0);
+        Y_ENSURE(step != 0);
 
-        if (const auto* record = DataShard.GetScanManager().Get(params.GetBuildIndexId())) {
+        const ui64 buildIndexId = params.GetBuildIndexId();
+        if (const auto* record = DataShard.GetScanManager().Get(buildIndexId)) {
             for (auto scanId : record->ScanIds) {
                 DataShard.CancelScan(tableInfo->LocalTid, scanId);
             }
-            DataShard.GetScanManager().Drop(params.GetBuildIndexId());
+            DataShard.GetScanManager().Drop(buildIndexId);
         }
+
+        NIceDb::TNiceDb db(txc.DB);
+        const auto& scans = DataShard.GetBuildIndexScanManager().GetScans();
+        if (const auto* info = scans.FindPtr(buildIndexId)) {
+            DataShard.GetBuildIndexScanManager().PersistRemove(db, buildIndexId, info->SeqNoGeneration, info->SeqNoRound);
+        }
+        DataShard.ClearPendingBuildIndexFinalResponse(buildIndexId);
 
         const TSnapshotKey key(pathId, step, txId);
         DataShard.GetSnapshotManager().RemoveSnapshot(txc.DB, key);

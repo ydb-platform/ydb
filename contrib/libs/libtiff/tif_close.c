@@ -48,7 +48,6 @@ void TIFFCleanup(TIFF *tif)
      */
     if (tif->tif_mode != O_RDONLY)
         TIFFFlush(tif);
-    (*tif->tif_cleanup)(tif);
     TIFFFreeDirectory(tif);
 
     _TIFFCleanupIFDOffsetAndNumberMaps(tif);
@@ -89,7 +88,7 @@ void TIFFCleanup(TIFF *tif)
                      */
                     TIFFFieldIsAnonymous(fld))
                 {
-                    _TIFFfreeExt(tif, fld->field_name);
+                    _TIFFfreeExt(tif, (void *)fld->field_name);
                     _TIFFfreeExt(tif, fld);
                 }
             }
@@ -110,11 +109,19 @@ void TIFFCleanup(TIFF *tif)
         _TIFFfreeExt(tif, tif->tif_fieldscompat);
     }
 
+    if (tif->tif_cur_cumulated_mem_alloc != 0)
+    {
+        TIFFErrorExtR(tif, "TIFFCleanup",
+                      "tif_cur_cumulated_mem_alloc = %" PRIu64 " whereas it "
+                      "should be 0",
+                      (uint64_t)tif->tif_cur_cumulated_mem_alloc);
+    }
+
     _TIFFfreeExt(NULL, tif);
 }
 
 /************************************************************************/
-/*                    _TIFFCleanupIFDOffsetAndNumberMaps()              */
+/*                 _TIFFCleanupIFDOffsetAndNumberMaps()                 */
 /************************************************************************/
 
 void _TIFFCleanupIFDOffsetAndNumberMaps(TIFF *tif)
@@ -132,7 +139,7 @@ void _TIFFCleanupIFDOffsetAndNumberMaps(TIFF *tif)
 }
 
 /************************************************************************/
-/*                            TIFFClose()                               */
+/*                             TIFFClose()                              */
 /************************************************************************/
 
 /**

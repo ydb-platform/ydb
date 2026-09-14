@@ -1,259 +1,43 @@
-ydb/apps/ydb/ut YdbWorkloadTopic.Full_Statistics_UseTx
-ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Clean_Without_Init
-ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Init_Clean
-ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
-ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_VdiskErrors
-ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
-ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
-ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
-ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
-ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
-ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
-ydb/core/blobstorage/ut_vdisk TBsLocalRecovery.WriteRestartReadHugeDecreased
-ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
-ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
-ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
-ydb/core/blobstorage/ut_vdisk2 VDiskTest.HugeBlobWrite
-ydb/core/client/ut TClientTest.PromoteFollower
-ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
-ydb/core/cms/ut_sentinel_unstable sole chunk chunk
-ydb/core/cms/ut_sentinel_unstable sole+chunk+chunk
-ydb/core/fq/libs/row_dispatcher/ut sole chunk chunk
-ydb/core/fq/libs/ydb/ut TCheckGenerationTest.ShouldRollbackTransactionWhenCheckFails2
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
-ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
-ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
-ydb/core/kqp/ut/data_integrity KqpDataIntegrityTrails.Select
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
-ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
-ydb/core/kqp/ut/olap KqpOlap.TableSinkWithOlapStore
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_1_clean_with_restarts
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_3_1
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit1_3_2_1_clean
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.BlobsSharingSplit3_1
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.ChangeSchemaAndSplit
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.HugeSchemeHistory
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMerge
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsAfterWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleMergesWithRestartsWhenWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSchemaVersions
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplits
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsThenMerges
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsWithRestartsAfterWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.MultipleSplitsWithRestartsWhenWait
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingConsistency64
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.TableReshardingModuloN
-ydb/core/kqp/ut/olap KqpOlapBlobsSharing.UpsertWhileSplitTest
-ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
-ydb/core/kqp/ut/olap [*/*] chunk chunk
-ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
-ydb/core/kqp/ut/query KqpStats.SysViewClientLost
-ydb/core/kqp/ut/scan KqpRequestContext.TraceIdInErrorMessage
-ydb/core/kqp/ut/scheme KqpOlapScheme.InitTtlSettingsOnShardStart
-ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
-ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
-ydb/core/kqp/ut/scheme [*/*] chunk chunk
-ydb/core/kqp/ut/scheme [*/*]+chunk+chunk
-ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryWithResourcePoolClassifier
-ydb/core/kqp/ut/service KqpQueryService.TableSink_HtapComplex+withOltpSink
-ydb/core/kqp/ut/service [*/*] chunk chunk
-ydb/core/kqp/ut/service [*/*]+chunk+chunk
-ydb/core/kqp/ut/spilling KqpScanSpilling.SelfJoinQueryService
-ydb/core/kqp/ut/tx KqpSinkTx.OlapDeferredEffects
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOlap
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltp
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltpNoSink
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOlap
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltp
-ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictWriteOltpNoSink
-ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
-ydb/core/mind/hive/ut THiveTest.TestReassignUseRelativeSpace
-ydb/core/persqueue/ut [*/*] chunk chunk
-ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
-ydb/core/tablet_flat/ut TSharedPageCache.ThreeLeveledLRU
-ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
-ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlter-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.CreateAlterDropPqGroupWithReboots-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/tiering/ut ColumnShardTiers.TTLUsage
-ydb/core/viewer/tests test.py.test_viewer_cluster
-ydb/core/viewer/tests test.py.test_viewer_describe
-ydb/core/viewer/tests test.py.test_viewer_healthcheck
-ydb/core/viewer/tests test.py.test_viewer_nodes
-ydb/core/viewer/tests test.py.test_viewer_sysinfo
-ydb/core/viewer/tests test.py.test_viewer_tenantinfo
-ydb/core/viewer/ut Viewer.TabletMerging
-ydb/core/viewer/ut Viewer.TabletMergingPacked
-ydb/library/actors/http/ut sole chunk chunk
-ydb/library/actors/http/ut sole+chunk+chunk
-ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
-ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_asterisk-dqrun]
-ydb/library/yql/providers/generic/connector/tests/datasource/ydb test.py.test_select_positive[column_selection_col2_COL1-kqprun]
-ydb/services/datastreams/ut DataStreams.TestPutRecordsCornerCases
-ydb/services/keyvalue/ut sole chunk chunk
-ydb/services/keyvalue/ut sole+chunk+chunk
-ydb/services/persqueue_v1/ut TPersQueueCommonTest.TestLimiterLimitsWithBlobsRateLimit
-ydb/services/persqueue_v1/ut TPersQueueCommonTest.TestLimiterLimitsWithUserPayloadRateLimit
-ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1
-ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
-ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryService
-ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryServiceStreamCall
-ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
-ydb/services/ydb/table_split_ut [*/*] chunk chunk
-ydb/services/ydb/ut YdbLogStore.AlterLogTable
-ydb/tests/fq/control_plane_storage [*/*] chunk chunk
-ydb/tests/fq/control_plane_storage [*/*]+chunk+chunk
-ydb/tests/fq/generic/analytics sole chunk chunk
-ydb/tests/fq/generic/analytics test_join.py.TestJoinAnalytics.test_simple[v1-2-fq_client0-mvp_external_ydb_endpoint0]
-ydb/tests/fq/generic/streaming sole chunk chunk
-ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_simple[v1-fq_client0-mvp_external_ydb_endpoint0]
-ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-0-True-3-fq_client0-mvp_external_ydb_endpoint0]
-ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-1-True-3-fq_client0-mvp_external_ydb_endpoint0]
-ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-2-True-3-fq_client0-mvp_external_ydb_endpoint0]
-ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-3-True-3-fq_client0-mvp_external_ydb_endpoint0]
-ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-4-True-3-fq_client0-mvp_external_ydb_endpoint0]
-ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-5-True-3-fq_client0-mvp_external_ydb_endpoint0]
-ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-6-True-3-fq_client0-mvp_external_ydb_endpoint0]
-ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_restart_idempotency
-ydb/tests/fq/mem_alloc sole chunk chunk
-ydb/tests/fq/mem_alloc sole+chunk+chunk
-ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
-ydb/tests/fq/multi_plane [test_dispatch.py] chunk chunk
-ydb/tests/fq/multi_plane [test_dispatch.py]+chunk+chunk
-ydb/tests/fq/multi_plane [test_retry.py] chunk chunk
-ydb/tests/fq/multi_plane [test_retry.py]+chunk+chunk
-ydb/tests/fq/multi_plane [test_retry_high_rate.py] chunk chunk
-ydb/tests/fq/s3 [test_format_setting.py] chunk chunk
-ydb/tests/fq/s3 [test_inflight.py] chunk chunk
-ydb/tests/fq/yds [*/*] chunk chunk
-ydb/tests/fq/yds [*/*]+chunk+chunk
-ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
-ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
-ydb/tests/fq/yds test_big_state.py.TestBigState.test_gt_8mb[v1]
-ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
-ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
-ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
-ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
-ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple
-ydb/tests/functional/compatibility test_followers.py.TestFollowersCompatibility.test_followers_compatability
-ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
-ydb/tests/functional/rename [test_rename.py */*] chunk chunk
-ydb/tests/functional/restarts test_restarts.py.TestRestartMultipleMirror3DC.test_tablets_are_successfully_started_after_few_killed_nodes
-ydb/tests/functional/restarts test_restarts.py.TestRestartSingleBlock42.test_restart_single_node_is_ok
-ydb/tests/functional/serializable sole chunk chunk
-ydb/tests/functional/serializable test.py.test_local
-ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
-ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
-ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join2.test]
-ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--false]
-ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--true]
-ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--false]
-ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--true]
-ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--false]
-ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_above[enable_alter_database_create_hive_first--true]
-ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--false]
-ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]
-ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
-ydb/tests/functional/tpc/large sole chunk chunk
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[36]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[67]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
-ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test
-ydb/tests/olap/scenario sole chunk chunk
-ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
-ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
-ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhenAlterTtl.test
-ydb/tests/olap/ttl_tiering sole chunk chunk
-ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_data_unchanged_after_ttl_change
-ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_ttl_delete
-ydb/tests/olap/ttl_tiering ttl_unavailable_s3.py.TestUnavailableS3.test
-ydb/tests/postgres_integrations/go-libpq [docker_wrapper_test.py] chunk chunk
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBinaryByteSliceToInt]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBinaryByteSlicetoUUID]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestBindError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCommit]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnListen]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnPing]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnUnlistenAll]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnUnlisten]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnectorWithNoticeHandler_Simple]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestConnectorWithNotificationHandler_Simple]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestContextCancelBegin]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestContextCancelExec]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestContextCancelQuery]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyFromError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInBinaryError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInMultipleValues]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInRaiseStmtTrigger]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInStmtAffectedRows]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInTypes]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyInWrongType]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopyRespLoopConnectionError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestCopySyntaxError]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestEmptyQuery]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestEncodeDecode]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorClass]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorDuringStartup]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorOnExec]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorOnQueryRowSimpleQuery]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestErrorOnQuery]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestExec]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestFormatTsBackend]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestHasCorrectRootGroupPermissions]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestInfinityTimestamp]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIssue1046]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIssue1062]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestIssue186]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerFailedQuery]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerListen]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerPing]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerReconnect]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerUnlistenAll]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestListenerUnlisten]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNewConnector_Connect]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNewConnector_Driver]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNewConnector_WorksWithOpenDB]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNotifyExtra]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestNullAfterNonNull]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestParseErrorInExtendedQuery]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestPing]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestQueryCancelRace]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestQueryCancelledReused]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestQueryRowBugWorkaround]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestReconnect]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestReturning]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestRowsResultTag]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestRuntimeParameters]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtExecContext/context.Background]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtExecContext/context.WithTimeout]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtExecContext/context.WithTimeout_exceeded]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtExecContext]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtQueryContext/context.Background]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtQueryContext/context.WithTimeout]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtQueryContext/context.WithTimeout_exceeded]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStmtQueryContext]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestStringWithNul]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimestampWithTimeZone]
-ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTxOptions]
-ydb/tests/sql sole chunk chunk
-ydb/tests/sql test_inserts.py.TestYdbInsertsOperations.test_insert_multiple_empty_rows
-ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_upsert_delete_and_read_tpch_tx
-ydb/tests/sql/large test_tiering.py.TestYdbS3TTL.test_basic_tiering_operations
-ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_classifier_init[False]
-ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_classifier_without_init_timeout
-ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-False]
-ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
-ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit
-ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]
-ydb/tests/stress/kv/tests test_workload.py.TestYdbKvWorkload.test[column]
-ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
+ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_race unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
+ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
+ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
+ydb/core/external_sources/hive_metastore/ut unittest.sole chunk
+ydb/core/external_sources/s3/ut unittest.sole chunk
+ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/ut TOracle.ShouldPersistHostHealthIfChangesToOnline
+ydb/core/persqueue/public/schema/ut unittest.sole chunk
+ydb/core/persqueue/ut/ut_with_sdk TopicAutoscaling.PartitionSplit_ManySessions_NoCommits_AutoscaleAwareSDK
+ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.DropIndexedTableWithReboots[TabletRebootsBucket1]
+ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
+ydb/library/actors/interconnect/ut InterconnectSessionV2.ActorSystemTeardownIdleSessions
+ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
+ydb/services/config/ut ConfigGRPCService.ReplaceConfig
+ydb/tests/compatibility/indexes py3test.[test_vector_index.py */*] chunk
+ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-3-1_to_prestable-26-4]
+ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-lax]
+ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-strict]
+ydb/tests/compatibility/indexes test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-2-1_to_stable-26-3-1]
+ydb/tests/compatibility/indexes test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-3-1_to_prestable-26-4]
+ydb/tests/compatibility/kv test_s3_router_metrics.py.TestS3RouterMetricsMixedCluster.test_kv_volume_over_s3_alive_with_router_metrics_push[mixed_prestable-26-4_and_stable-26-3-1]
+ydb/tests/compatibility/kv test_s3_router_metrics.py.TestS3RouterMetricsRolling.test_kv_volume_over_s3_survives_rolling_with_router_metrics_push[rolling_stable-26-3-1_to_prestable-26-4]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_join[rolling_stable-26-3-1_to_prestable-26-4-False]
+ydb/tests/compatibility/topics test_sqs_topic.py.TestTopicSqsRollingUpdate.test_write_and_read[rolling_stable-26-3-1_to_prestable-26-4]
+ydb/tests/fq/pq_async_io/ut TPqWriterTest.TestCheckpoints
+ydb/tests/fq/streaming py3test.[*/*] chunk
+ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_shared_reading_group[False]
+ydb/tests/fq/streaming/generic py3test.sole chunk
+ydb/tests/fq/streaming/streaming_large test_cluster_restarts.py.TestStreamingLarge.test_replace_node[kikimr0]
+ydb/tests/fq/yt/yt_integration py3test.sole chunk
+ydb/tests/functional/kqp/kqp_query_svc NodeIdDescribe.HasDistribution
+ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
+ydb/tests/functional/sqs_topic test_send_message_batch.py.TestSqsTopicSendMessageBatch.test_send_message_batch_with_delay_seconds
+ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
+ydb/tests/stress/oltp_workload/tests py3test.sole chunk
+ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
+ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_read[scale_aware_sdk]
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test

@@ -4,12 +4,13 @@
 
 namespace NYql {
 
+namespace {
+
 using namespace NThreading;
 
 class TSolomonGateway : public ISolomonGateway {
 public:
-    TSolomonGateway(const TSolomonGatewayConfig& config)
-    {
+    explicit TSolomonGateway(const TSolomonGatewayConfig& config) {
         for (const auto& item: config.GetClusterMapping()) {
             Clusters_[item.GetName()] = item;
         }
@@ -36,6 +37,10 @@ public:
         }
     }
 
+    void AddCluster(const TSolomonClusterConfig& cluster) override {
+        Clusters_[cluster.GetName()] = cluster;
+    }
+
     TMaybe<TSolomonClusterConfig> GetClusterConfig(const TStringBuf cluster) const override {
         if (Clusters_.contains(cluster)) {
             return Clusters_.find(cluster)->second;
@@ -51,8 +56,10 @@ private:
     THashMap<TString, TSolomonClusterConfig> Clusters_;
 };
 
+} // anonymous namespace
+
 ISolomonGateway::TPtr CreateSolomonGateway(const TSolomonGatewayConfig& config) {
-    return new TSolomonGateway(config);
+    return MakeIntrusive<TSolomonGateway>(config);
 }
 
 } // namespace NYql

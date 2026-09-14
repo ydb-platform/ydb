@@ -8,6 +8,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
+#include <util/generic/size_literals.h>
+
 namespace NKikimr::NOlap {
 
 ui64 TPortionInfo::GetColumnRawBytes() const {
@@ -18,16 +20,34 @@ ui64 TPortionInfo::GetColumnBlobBytes() const {
     return GetMeta().GetColumnBlobBytes();
 }
 
+ui64 TPortionInfo::GetSmallBlobBytesInBlobStorage(const ui64 smallBlobThresholdBytes) const {
+    const TString& defaultStorageId = NBlobOperations::TGlobal::DefaultStorageId;
+
+    const ui64 columnBsBytes = IsDefaultTier(defaultStorageId) ? GetColumnBlobBytes() : 0;
+
+    ui64 indexBsBytes;
+    if (const auto& bsBytes = GetMeta().GetBsIndexBlobBytes(); bsBytes.has_value()) {
+        indexBsBytes = bsBytes.value();
+    } else {
+        // At the moment of introducing BsIndexBlobBytes, for all existing ydb installations, indices lived TOGETHER
+        // with the columns. So, if columns are in blob storage, all the indices are there too.
+        indexBsBytes = columnBsBytes ? GetIndexBlobBytes() : 0;
+    }
+
+    // The splitter guarantees that there can be only one small blob in blob storage for a portion.
+    // If both columns and indices are in blob storage, and their total size is less than the threshold,
+    // then they are packed into a single blob.
+    const ui64 totalBsBytes = columnBsBytes + indexBsBytes;
+    return totalBsBytes <= smallBlobThresholdBytes ? totalBsBytes : 0;
+}
+
 TString TPortionInfo::DebugString(const bool withDetails) const {
     TStringBuilder sb;
     sb << "(portion_id:" << PortionId << ";"
        << "path_id:" << PathId << ";records_count:" << GetRecordsCount()
        << ";"
-          "min_schema_snapshot:("
-       << MinSnapshotDeprecated.DebugString()
-       << ");"
           "schema_version:"
-       << SchemaVersion.value_or(0)
+       << SchemaVersion
        << ";"
           "level:"
        << GetMeta().GetCompactionLevel() << ";";
@@ -37,11 +57,12 @@ TString TPortionInfo::DebugString(const bool withDetails) const {
            << "from:" << IndexKeyStart().DebugString() << ";"
            << "to:" << IndexKeyEnd().DebugString() << ";";
     }
+    sb << DoDebugString(withDetails) << ";";
     sb << "column_size:" << GetColumnBlobBytes() << ";"
        << "index_size:" << GetIndexBlobBytes() << ";"
        << "meta:(" << Meta.DebugString() << ");";
-    if (RemoveSnapshot.Valid()) {
-        sb << "remove_snapshot:(" << RemoveSnapshot.DebugString() << ");";
+    if (HasRemoveSnapshot()) {
+        sb << "remove_snapshot:(" << RemoveSnapshot.Get().DebugString() << ");";
     }
     return sb << ")";
 }
@@ -54,75 +75,42 @@ ui64 TPortionInfo::GetApproxChunksCount(const ui32 schemaColumnsCount) const {
     return schemaColumnsCount * (GetRecordsCount() / 10000 + 1);
 }
 
-void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
-    proto.SetPathId(PathId);
+void TPortionInfo::SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
+    PathId.ToProto(proto);
     proto.SetPortionId(PortionId);
     proto.SetSchemaVersion(GetSchemaVersionVerified());
-    *proto.MutableMinSnapshotDeprecated() = MinSnapshotDeprecated.SerializeToProto();
-    if (!RemoveSnapshot.IsZero()) {
-        *proto.MutableRemoveSnapshot() = RemoveSnapshot.SerializeToProto();
+    if (HasRemoveSnapshot()) {
+        *proto.MutableRemoveSnapshot() = RemoveSnapshot.Get().SerializeToProto();
     }
 
-    *proto.MutableMeta() = Meta.SerializeToProto();
+    *proto.MutableMeta() = Meta.SerializeToProto(blobIds, GetProduced());
 }
 
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
-    PathId = proto.GetPathId();
+    PathId = TInternalPathId::FromProto(proto);
     PortionId = proto.GetPortionId();
     SchemaVersion = proto.GetSchemaVersion();
-    {
-        auto parse = MinSnapshotDeprecated.DeserializeFromProto(proto.GetMinSnapshotDeprecated());
-        if (!parse) {
-            return parse;
-        }
+    if (!SchemaVersion) {
+        return TConclusionStatus::Fail("portion's schema version cannot been equals to zero");
     }
     if (proto.HasRemoveSnapshot()) {
-        auto parse = RemoveSnapshot.DeserializeFromProto(proto.GetRemoveSnapshot());
+        TSnapshot tmp = TSnapshot::Zero();
+        auto parse = tmp.DeserializeFromProto(proto.GetRemoveSnapshot());
         if (!parse) {
             return parse;
         }
+
+        RemoveSnapshot.Set(std::move(tmp));
     }
+
     return TConclusionStatus::Success();
-}
-
-const TString& TPortionInfo::GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
-    if (HasInsertWriteId()) {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
-    }
-    return indexInfo.GetColumnStorageId(columnId, GetMeta().GetTierName());
-}
-
-const TString& TPortionInfo::GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const {
-    if (HasInsertWriteId()) {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
-    }
-    return indexInfo.GetEntityStorageId(columnId, GetMeta().GetTierName());
-}
-
-const TString& TPortionInfo::GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const {
-    if (HasInsertWriteId()) {
-        return { NBlobOperations::TGlobal::DefaultStorageId };
-    }
-    return indexInfo.GetIndexStorageId(indexId);
 }
 
 ISnapshotSchema::TPtr TPortionInfo::GetSchema(const TVersionedIndex& index) const {
     AFL_VERIFY(SchemaVersion);
-    if (SchemaVersion) {
-        auto schema = index.GetSchemaVerified(SchemaVersion.value());
-        AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
-        return schema;
-    }
-    return index.GetSchemaVerified(MinSnapshotDeprecated);
-}
-
-ISnapshotSchema::TPtr TPortionInfo::TSchemaCursor::GetSchema(const TPortionInfoConstructor& portion) {
-    if (!CurrentSchema || portion.GetMinSnapshotDeprecatedVerified() != LastSnapshot) {
-        CurrentSchema = portion.GetSchema(VersionedIndex);
-        LastSnapshot = portion.GetMinSnapshotDeprecatedVerified();
-    }
-    AFL_VERIFY(!!CurrentSchema);
-    return CurrentSchema;
+    auto schema = index.GetSchemaVerified(SchemaVersion);
+    AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion);
+    return schema;
 }
 
 bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const {
@@ -130,21 +118,6 @@ bool TPortionInfo::NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) 
         return false;
     }
     return true;
-}
-
-NSplitter::TEntityGroups TPortionInfo::GetEntityGroupsByStorageId(
-    const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const {
-    if (HasInsertWriteId()) {
-        NSplitter::TEntityGroups groups(storages.GetDefaultOperator()->GetBlobSplitSettings(), IStoragesManager::DefaultStorageId);
-        return groups;
-    } else {
-        return indexInfo.GetEntityGroupsByStorageId(specialTier, storages);
-    }
-}
-
-void TPortionInfo::SaveMetaToDatabase(IDbWrapper& db) const {
-    FullValidation();
-    db.WritePortion(*this);
 }
 
 }   // namespace NKikimr::NOlap

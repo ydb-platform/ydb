@@ -12,11 +12,10 @@
 
 namespace NYql {
 
-class TUserDataStorage : public TThrRefBase {
+class TUserDataStorage: public TThrRefBase {
 public:
-    typedef TIntrusivePtr<TUserDataStorage> TPtr;
+    using TPtr = TIntrusivePtr<TUserDataStorage>;
 
-public:
     TUserDataStorage(TFileStoragePtr fileStorage, TUserDataTable data, IUdfResolver::TPtr udfResolver, TUdfIndex::TPtr udfIndex);
     void SetTokenResolver(TTokenResolver tokenResolver);
     void SetUrlPreprocessor(IUrlPreprocessing::TPtr urlPreprocessing);
@@ -28,6 +27,8 @@ public:
     bool ContainsUserDataBlock(const TStringBuf& name) const;
     bool ContainsUserDataBlock(const TUserDataKey& key) const;
     TUserDataBlock& GetUserDataBlock(const TUserDataKey& key);
+    const TUserDataBlock& GetUserDataBlock(const TUserDataKey& key) const;
+    TUserDataBlock GetUserDataBlockForDownload(const TUserDataKey& key) const;
     TUserDataBlock* FindUserDataBlock(const TStringBuf& name);
     const TUserDataBlock* FindUserDataBlock(const TUserDataKey& key) const;
     TUserDataBlock* FindUserDataBlock(const TUserDataKey& key);
@@ -39,11 +40,11 @@ public:
     static TUserDataBlock* FindUserDataBlock(TUserDataTable& userData, const TUserDataKey& key);
 
     bool ContainsUserDataFolder(const TStringBuf& name) const;
-    TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TStringBuf& name, ui32 maxFileCount = ~0u) const;
-    static TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount = ~0u);
+    TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TStringBuf& name, ui32 maxFileCount = ~0U) const;
+    static TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount = ~0U);
 
     void FillUserDataUrls();
-    std::map<TString, const TUserDataBlock*> GetDirectoryContent(const TStringBuf& path, ui32 maxFileCount = ~0u) const;
+    std::map<TString, const TUserDataBlock*> GetDirectoryContent(const TStringBuf& path, ui32 maxFileCount = ~0U) const;
     static TString MakeFullName(const TStringBuf& name);
     static TString MakeFolderName(const TStringBuf& name);
     static TUserDataKey ComposeUserDataKey(const TStringBuf& name);
@@ -60,23 +61,25 @@ public:
     TUserDataBlock& Freeze(const TUserDataKey& key);
     TUserDataBlock* FreezeNoThrow(const TUserDataKey& key, TString& errorMessage);
 
+    THoldingFileStorage& GetHoldingFileStorage();
+
     // as above + udf will be scanned and meta info put into UdfIndex
-    TUserDataBlock* FreezeUdfNoThrow(const TUserDataKey& key, TString& errorMessage, const TString& customUdfPrefix = {});
+    TUserDataBlock* FreezeUdfNoThrow(const TUserDataKey& key, TString& errorMessage, const TString& customUdfPrefix, NUdf::ELogLevel logLevel, const TStringBuf& alias);
 
     // returns function which will register value in cache after invocation
     NThreading::TFuture<std::function<TUserDataBlock()>> FreezeAsync(const TUserDataKey& key);
 
 private:
-    void TryFillUserDataUrl(TUserDataBlock& block) const;
+    void TryFillUserDataUrl(const TUserDataKey& key, TUserDataBlock& block);
     TUserDataBlock& RegisterLink(const TUserDataKey& key, TFileLinkPtr link);
 
-private:
     THoldingFileStorage FileStorage_;
     TUserDataTable UserData_;
     IUdfResolver::TPtr UdfResolver_;
     TUdfIndex::TPtr UdfIndex_;
     TTokenResolver TokenResolver_;
     IUrlPreprocessing::TPtr UrlPreprocessing_;
+    THashMap<TUserDataKey, TString, TUserDataKey::THash, TUserDataKey::TEqualTo> UrlAliases_;
 
     THashSet<TUserDataKey, TUserDataKey::THash, TUserDataKey::TEqualTo> ScannedUdfs_;
     std::function<void(const TUserDataBlock& block)> ScanUdfStrategy_;

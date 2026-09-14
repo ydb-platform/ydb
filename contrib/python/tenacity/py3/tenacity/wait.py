@@ -98,10 +98,10 @@ class wait_chain(wait_base):
 
         @retry(wait=wait_chain(*[wait_fixed(1) for i in range(3)] +
                                [wait_fixed(2) for j in range(5)] +
-                               [wait_fixed(5) for k in range(4)))
+                               [wait_fixed(5) for k in range(4)]))
         def wait_chained():
-            print("Wait 1s for 3 attempts, 2s for 5 attempts and 5s
-                   thereafter.")
+            print("Wait 1s for 3 attempts, 2s for 5 attempts and 5s "
+                  "thereafter.")
     """
 
     def __init__(self, *strategies: wait_base) -> None:
@@ -111,6 +111,45 @@ class wait_chain(wait_base):
         wait_func_no = min(max(retry_state.attempt_number, 1), len(self.strategies))
         wait_func = self.strategies[wait_func_no - 1]
         return wait_func(retry_state=retry_state)
+
+
+class wait_exception(wait_base):
+    """Wait strategy that waits the amount of time returned by the predicate.
+
+    The predicate is passed the exception object. Based on the exception, the
+    user can decide how much time to wait before retrying.
+
+    For example::
+
+        def http_error(exception: BaseException) -> float:
+            if (
+                isinstance(exception, requests.HTTPError)
+                and exception.response.status_code == requests.codes.too_many_requests
+            ):
+                return float(exception.response.headers.get("Retry-After", "1"))
+            return 60.0
+
+
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_exception(http_error),
+        )
+        def http_get_request(url: str) -> None:
+            response = requests.get(url)
+            response.raise_for_status()
+    """
+
+    def __init__(self, predicate: typing.Callable[[BaseException], float]) -> None:
+        self.predicate = predicate
+
+    def __call__(self, retry_state: "RetryCallState") -> float:
+        if retry_state.outcome is None:
+            raise RuntimeError("__call__() called before outcome was set")
+
+        exception = retry_state.outcome.exception()
+        if exception is None:
+            raise RuntimeError("outcome failed but the exception is None")
+        return self.predicate(exception)
 
 
 class wait_incrementing(wait_base):
@@ -197,7 +236,7 @@ class wait_random_exponential(wait_exponential):
 
     def __call__(self, retry_state: "RetryCallState") -> float:
         high = super().__call__(retry_state=retry_state)
-        return random.uniform(0, high)
+        return random.uniform(self.min, high)
 
 
 class wait_exponential_jitter(wait_base):

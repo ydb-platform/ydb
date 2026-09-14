@@ -1,10 +1,10 @@
 #pragma once
 
+#include "util_fmt_abort.h"
 #include "util_fmt_line.h"
 
 #include <ydb/core/base/appdata.h>
 #include <library/cpp/time_provider/time_provider.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log_iface.h>
 
 namespace NKikimr {
@@ -26,7 +26,7 @@ namespace NUtil {
 
         }
 
-        TLogLn Log(ELnLev level_) const noexcept override
+        TLogLn Log(ELnLev level_) const override
         {
             const NActors::NLog::TLevel level{ ui32(level_) };
 
@@ -37,7 +37,7 @@ namespace NUtil {
         }
 
     private:
-        bool ShouldLog(EPrio prio_, ui8 minor) const noexcept
+        bool ShouldLog(EPrio prio_, ui8 minor) const
         {
             /* Minor filtering isn't implemented in levle settings */
 
@@ -48,7 +48,7 @@ namespace NUtil {
             return conf && conf->Satisfies(prio, Comp, 0ull);
         }
 
-        void LogLn(ELnLev level, const TString &line) const noexcept override
+        void LogLn(ELnLev level, const TString &line) const override
         {
             /* Usage of time provider will be possible on complete migration
                 to this logger. Legacy macros based logging takes just Now().
@@ -58,8 +58,9 @@ namespace NUtil {
 
             auto *ev = new NLog::TEvLog(stamp, ui32(level), Comp, line);
 
-            if (!Sys->Send(Path, ev))
-                Y_ABORT("Cannot send NLog::TEvLog to logger actor");
+            if (!Sys->Send(Path, ev)) {
+                Y_TABLET_ERROR("Cannot send NLog::TEvLog to logger actor");
+            }
         }
 
     private:

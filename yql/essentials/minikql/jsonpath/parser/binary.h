@@ -15,7 +15,7 @@
 
 namespace NYql::NJsonPath {
 
-class TJsonPath : public TSimpleRefCount<TJsonPath>, public TBuffer {
+class TJsonPath: public TSimpleRefCount<TJsonPath>, public TBuffer {
 };
 
 using TJsonPathPtr = TIntrusivePtr<TJsonPath>;
@@ -106,10 +106,10 @@ struct TJsonPathItem {
         TStartsWithPrefixOffset,
         NReWrapper::IRePtr,
         double,
-        bool
-    > Data;
+        bool>
+        Data;
 
-    const TStringBuf GetString() const;
+    TStringBuf GetString() const;
     const TVector<TArraySubscriptOffsets>& GetSubscripts() const;
     const TBinaryOpArgumentsOffset& GetBinaryOpArguments() const;
     const NReWrapper::IRePtr& GetRegex() const;
@@ -126,10 +126,10 @@ struct TJsonPathItem {
     const TJsonPathPtr JsonPath;
 };
 
-class TJsonPathBuilder : public IAstNodeVisitor {
+class TJsonPathBuilder: public IAstNodeVisitor {
 public:
     TJsonPathBuilder()
-        : Result(new TJsonPath())
+        : Result_(new TJsonPath())
     {
     }
 
@@ -180,9 +180,9 @@ public:
 private:
     void WriteZeroInputItem(EJsonPathItemType type, const TAstNode& node);
 
-    void WriteSingleInputItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr input);
+    void WriteSingleInputItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr& input);
 
-    void WriteTwoInputsItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr firstInput, const TAstNodePtr secondInput);
+    void WriteTwoInputsItem(EJsonPathItemType type, const TAstNode& node, const TAstNodePtr& firstInput, const TAstNodePtr& secondInput);
 
     void WritePos(const TAstNode& node);
 
@@ -211,17 +211,17 @@ private:
     template <typename T>
     void WritePOD(const T& value) {
         static_assert(std::is_pod_v<T>, "Type must be POD");
-        Result->Append(reinterpret_cast<const char*>(&value), sizeof(T));
+        Result_->Append(reinterpret_cast<const char*>(&value), sizeof(T));
     }
 
     TUint CurrentEndPos() const;
 
-    TJsonPathPtr Result;
+    TJsonPathPtr Result_;
 };
 
 class TJsonPathReader {
 public:
-    TJsonPathReader(const TJsonPathPtr path);
+    explicit TJsonPathReader(TJsonPathPtr path);
 
     const TJsonPathItem& ReadFirst();
 
@@ -254,22 +254,22 @@ private:
 
     EJsonPathMode ReadMode(TUint& pos);
 
-    const TStringBuf ReadString(TUint& pos);
+    TStringBuf ReadString(TUint& pos);
 
     TVector<TArraySubscriptOffsets> ReadSubscripts(TUint& pos);
 
     template <typename T>
     T ReadPOD(TUint& pos) {
         static_assert(std::is_pod_v<T>, "Type must be POD");
-        T value = ReadUnaligned<T>(Path->Begin() + pos);
+        T value = ReadUnaligned<T>(Path_->Begin() + pos);
         pos += sizeof(T);
         return std::move(value);
     }
 
-    const TJsonPathPtr Path;
-    TUint InitialPos;
-    EJsonPathMode Mode;
-    THashMap<TUint, TJsonPathItem> ItemCache;
+    const TJsonPathPtr Path_;
+    TUint InitialPos_;
+    EJsonPathMode Mode_;
+    THashMap<TUint, TJsonPathItem> ItemCache_;
 };
 
-}
+} // namespace NYql::NJsonPath

@@ -3,15 +3,23 @@
 #include "rpc_export_base.h"
 #include "rpc_calls.h"
 #include "rpc_operation_request_base.h"
+#include "fs_path_validation.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/feature_flags.h>
+#include <ydb/core/backup/regexp/regexp.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/ydb_convert/compression.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <util/folder/path.h>
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -25,11 +33,176 @@ using TEvExportToYtRequest = TGrpcRequestOperationCall<Ydb::Export::ExportToYtRe
     Ydb::Export::ExportToYtResponse>;
 using TEvExportToS3Request = TGrpcRequestOperationCall<Ydb::Export::ExportToS3Request,
     Ydb::Export::ExportToS3Response>;
+using TEvExportToFsRequest = TGrpcRequestOperationCall<Ydb::Export::ExportToFsRequest,
+    Ydb::Export::ExportToFsResponse>;
+
+template<typename TEvRequest>
+struct TExportTraits;
+
+template<>
+struct TExportTraits<TEvExportToS3Request> {
+    using TSettings = Ydb::Export::ExportToS3Settings;
+    using TItem = Ydb::Export::ExportToS3Settings::Item;
+
+    static constexpr bool HasEncryption = true;
+    static constexpr bool HasCompression = true;
+    static constexpr bool HasSourcePath = true;
+
+    static auto* GetSettings(NKikimrExport::TCreateExportRequest& req) {
+        return req.MutableExportToS3Settings();
+    }
+
+    static auto& GetItems(const TSettings& settings) {
+        return settings.items();
+    }
+
+    static const auto& GetSourcePath(const TSettings& settings) {
+        return settings.source_path();
+    }
+
+    static const auto& GetDestination(const TSettings& settings) {
+        return settings.destination_prefix();
+    }
+
+    static bool HasDestination(const TSettings& settings) {
+        return !settings.destination_prefix().empty();
+    }
+
+    static const auto& GetDestination(const TItem& item) {
+        return item.destination_prefix();
+    }
+
+    static void SetSourcePath(TSettings* settings, const TString& path) {
+        settings->set_source_path(path);
+    }
+
+    static void SetDestination(TItem* item, const TString& dest) {
+        item->set_destination_prefix(dest);
+    }
+};
+
+template<>
+struct TExportTraits<TEvExportToFsRequest> {
+    using TSettings = Ydb::Export::ExportToFsSettings;
+    using TItem = Ydb::Export::ExportToFsSettings::Item;
+
+    static constexpr bool HasEncryption = true;
+    static constexpr bool HasCompression = true;
+    static constexpr bool HasSourcePath = true;
+
+    static auto* GetSettings(NKikimrExport::TCreateExportRequest& req) {
+        return req.MutableExportToFsSettings();
+    }
+
+    static auto& GetItems(const TSettings& settings) {
+        return settings.items();
+    }
+
+    static const auto& GetSourcePath(const TSettings& settings) {
+        return settings.source_path();
+    }
+
+    static const auto& GetDestination(const TSettings& settings) {
+        return settings.base_path();
+    }
+
+    static bool HasDestination(const TSettings& settings) {
+        return !settings.base_path().empty();
+    }
+
+    static const auto& GetDestination(const TItem& item) {
+        return item.destination_path();
+    }
+
+    static void SetSourcePath(TSettings* settings, const TString& path) {
+        settings->set_source_path(path);
+    }
+
+    static void SetDestination(TItem* item, const TString& dest) {
+        item->set_destination_path(dest);
+    }
+};
+
+template<>
+struct TExportTraits<TEvExportToYtRequest> {
+    using TSettings = Ydb::Export::ExportToYtSettings;
+    using TItem = Ydb::Export::ExportToYtSettings::Item;
+
+    static constexpr bool HasEncryption = false;
+    static constexpr bool HasCompression = false;
+    static constexpr bool HasSourcePath = false;
+
+    static auto* GetSettings(NKikimrExport::TCreateExportRequest& req) {
+        return req.MutableExportToYtSettings();
+    }
+
+    static auto& GetItems(const TSettings& settings) {
+        return settings.items();
+    }
+
+    static const auto& GetDestination(const TItem& item) {
+        return item.destination_path();
+    }
+
+    static void SetDestination(TItem* item, const TString& dest) {
+        item->set_destination_path(dest);
+    }
+};
 
 template <typename TDerived, typename TEvRequest>
 class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, public TExportConv {
+    using TTraits = TExportTraits<TEvRequest>;
+    static constexpr bool IsS3Export = std::is_same_v<TEvRequest, TEvExportToS3Request>;
+    static constexpr bool IsFsExport = std::is_same_v<TEvRequest, TEvExportToFsRequest>;
+
+    struct TExportItemInfo {
+        TString Destination;
+        bool Resolved = false;
+    };
+
+    enum class EStage {
+        ResolvePaths, // Resolve explicitly specified paths. Check that they are all supported in export
+        ExpandDirectories, // Expand directories and subdirectories
+        ResolveExpandedPaths, // Resolve expanded paths, ignore children that is not supported in export
+        AllocateTxId,
+    };
+
     TStringBuf GetLogPrefix() const override {
         return "[CreateExport]";
+    }
+
+    static bool IsItemSupportedInExport(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+        switch (entry.Kind) {
+            case NSchemeCache::TSchemeCacheNavigate::KindTable: {
+                auto it = entry.Attributes.find("__async_replica");
+                return it == entry.Attributes.end() || it->second != "true";
+
+            }
+            case NSchemeCache::TSchemeCacheNavigate::KindTopic:
+                return true;
+            case NSchemeCache::TSchemeCacheNavigate::KindReplication:
+                return AppData()->Icb->BackupControls.S3Controls.EnableAsyncReplicationExport.AtomicLoad()->Get();
+            case NSchemeCache::TSchemeCacheNavigate::KindTransfer:
+                return AppData()->Icb->BackupControls.S3Controls.EnableTransferExport.AtomicLoad()->Get();
+            case NSchemeCache::TSchemeCacheNavigate::KindExternalDataSource:
+                return AppData()->Icb->BackupControls.S3Controls.EnableExternalDataSourceExport.AtomicLoad()->Get();
+            case NSchemeCache::TSchemeCacheNavigate::KindExternalTable:
+                return AppData()->Icb->BackupControls.S3Controls.EnableExternalTableExport.AtomicLoad()->Get();
+            case NSchemeCache::TSchemeCacheNavigate::KindSysView:
+                return AppData()->FeatureFlags.GetEnableSysViewPermissionsExport();
+            case NSchemeCache::TSchemeCacheNavigate::KindColumnTable:
+                return AppData()->FeatureFlags.GetEnableColumnTablesBackup();
+            case NSchemeCache::TSchemeCacheNavigate::KindView:
+                return AppData()->FeatureFlags.GetEnableViewExport();
+            default:
+                return false;
+        }
+    }
+
+    static bool IsLikeDirectory(NSchemeCache::TSchemeCacheNavigate::EKind kind) {
+        return kind == NSchemeCache::TSchemeCacheNavigate::KindPath
+            || kind == NSchemeCache::TSchemeCacheNavigate::KindSubdomain
+            || kind == NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain;
     }
 
     IEventBase* MakeRequest() override {
@@ -46,33 +219,70 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         auto& createExport = *ev->Record.MutableRequest();
         *createExport.MutableOperationParams() = request.operation_params();
-        if constexpr (std::is_same_v<TEvRequest, TEvExportToYtRequest>) {
-            *createExport.MutableExportToYtSettings() = request.settings();
-        } else if constexpr (std::is_same_v<TEvRequest, TEvExportToS3Request>) {
-            *createExport.MutableExportToS3Settings() = request.settings();
+
+        auto* exportSettings = TTraits::GetSettings(createExport);
+        *exportSettings = request.settings();
+
+        if constexpr (TTraits::HasSourcePath) {
+            TTraits::SetSourcePath(exportSettings, CommonSourcePath);
+        }
+
+        if constexpr (IsFsExport) {
+            exportSettings->set_base_path(StripTrailingSlashes(exportSettings->base_path()));
+        }
+
+        exportSettings->clear_items();
+        for (const auto& [sourcePath, info] : ExportItems) {
+            auto* item = exportSettings->add_items();
+            item->set_source_path(sourcePath);
+            TTraits::SetDestination(item, info.Destination);
         }
 
         return ev.Release();
     }
 
-    template <typename TProtoSettings>
-    static void ExtractPaths(TVector<TString>& paths, const TProtoSettings& settings) {
-        paths.reserve(settings.items_size() + 1);
-        for (const auto& item : settings.items()) {
-            paths.emplace_back(item.source_path());
-        }
-    }
+    bool ExtractSpecifiedPaths(TVector<TString>& paths) {
+        const auto& settings = this->GetProtoRequest()->settings();
 
-    TVector<TString> ExtractPaths() {
-        TVector<TString> paths;
-
+        paths.reserve(settings.items_size() + 3);
         paths.emplace_back(this->GetDatabaseName()); // first entry is database
-        ExtractPaths(paths, this->GetProtoRequest()->settings());
+        paths.emplace_back(CommonSourcePath); // second entry is common source path
+        for (const auto& item : TTraits::GetItems(settings)) {
+            TString userSpecifiedPath = CanonizePath(item.source_path());
+            TString fullPath;
+            if (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath) {
+                fullPath = userSpecifiedPath; // Full path
+            } else {
+                fullPath = CommonSourcePath + userSpecifiedPath; // Relative path
+            }
+            if (IsExcludedFromExport(fullPath)) {
+                continue;
+            }
+            paths.emplace_back(fullPath);
+            auto [it, inserted] = ExportItems.insert({paths.back(), TExportItemInfo{}});
+            if (!inserted) {
+                this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Duplicate export item source path: \"" << item.source_path() << "\"");
+                return false;
+            }
+            it->second.Destination = TTraits::GetDestination(item);
+        }
 
-        return paths;
+        if constexpr (TTraits::HasSourcePath) {
+            if (settings.items_size() == 0) { // expand all source path by default
+                paths.emplace_back(CommonSourcePath);
+                ExportItems.insert({CommonSourcePath, TExportItemInfo{}});
+            }
+        }
+
+        if (ExportItems.empty()) { // Excluded all items by regexp
+            this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Nothing to export");
+            return false;
+        }
+
+        return true;
     }
 
-    void ResolvePaths(const TVector<TString>& paths) {
+    void ResolvePaths(const TVector<TString>& paths, NSchemeCache::TSchemeCacheNavigate::EOp op = NSchemeCache::TSchemeCacheNavigate::OpPath) {
         Y_ABORT_UNLESS(!paths.empty());
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
@@ -80,7 +290,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         for (const auto& path : paths) {
             auto& entry = request->ResultSet.emplace_back();
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
+            entry.Operation = op;
             entry.Path = NKikimr::SplitPath(path);
             if (entry.Path.empty()) {
                 return this->Reply(StatusIds::SCHEME_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR, "Cannot resolve empty path");
@@ -91,18 +301,63 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         this->Become(&TDerived::StateResolvePaths);
     }
 
+    void NextStage() {
+        if (Stage == EStage::ResolvePaths) {
+            Stage = EStage::ExpandDirectories;
+        }
+
+        if (Stage == EStage::ExpandDirectories && DirectoryItems.empty()) {
+            Stage = EStage::ResolveExpandedPaths;
+        }
+
+        if (Stage == EStage::ExpandDirectories) {
+            TVector<TString> paths;
+            for (const auto& [path, _] : DirectoryItems) {
+                paths.emplace_back(path);
+            }
+            ResolvePaths(paths, NSchemeCache::TSchemeCacheNavigate::OpList);
+            return;
+        }
+        if (Stage == EStage::ResolveExpandedPaths) {
+            TVector<TString> paths;
+            for (const auto& [path, info] : ExportItems) {
+                if (!info.Resolved) {
+                    paths.emplace_back(path);
+                }
+            }
+            if (paths.empty()) {
+                Stage = EStage::AllocateTxId;
+            } else {
+                ResolvePaths(paths, NSchemeCache::TSchemeCacheNavigate::OpPath);
+                return;
+            }
+        }
+        if (Stage == EStage::AllocateTxId) {
+            if (ExportItems.empty()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Nothing to export");
+            }
+
+            this->AllocateTxId();
+            this->Become(&TDerived::StateWait);
+            return;
+        }
+    }
+
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& request = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": request# " << (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"request", (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (request->ResultSet.empty()) {
             return this->Reply(StatusIds::SCHEME_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
         }
 
         if (request->ErrorCount > 0) {
-            for (const auto& entry : request->ResultSet) {
+            for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : request->ResultSet) {
                 if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                     continue;
                 }
@@ -137,69 +392,278 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             }
         }
 
-        TString error;
-
-        if (this->UserToken) {
-            bool isDatabase = true; // first entry is database
-
-            for (const auto& entry : request->ResultSet) {
-                const ui32 access = isDatabase ? NACLib::GenericRead | NACLib::GenericWrite : NACLib::SelectRow;
-                if (!this->CheckAccess(CanonizePath(entry.Path), entry.SecurityObject, access)) {
-                    return;
+        if (Stage == EStage::ResolvePaths) {
+            // All explicitly specified items must be supported in export
+            for (size_t i = 2; i < request->ResultSet.size(); ++i) {
+                const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request->ResultSet[i];
+                TString path = CanonizePath(entry.Path);
+                const auto it = ExportItems.find(path);
+                if (it == ExportItems.end()) {
+                    return this->Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, TStringBuilder() << "Item \""
+                        << path << "\" not found in export items list");
                 }
-
-                isDatabase = false;
+                it->second.Resolved = true;
+                const NSchemeCache::TSchemeCacheNavigate::EKind kind = entry.Kind;
+                if (IsLikeDirectory(kind)) {
+                    DirectoryItems[path] = it->second;
+                }
+                if (!IsItemSupportedInExport(entry)) {
+                    if (IsLikeDirectory(kind)) { // If directories/databases are not supported => it is OK, they are expanded and then thrown
+                        ExportItems.erase(it);
+                    } else {
+                        return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Item \""
+                            << path << "\" is not supported in export");
+                    }
+                }
+            }
+        } else if (Stage == EStage::ExpandDirectories) {
+            const TString canonizedDatabasePath = CanonizePath(this->GetDatabaseName());
+            for (size_t i = 0; i < request->ResultSet.size(); ++i) {
+                const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request->ResultSet[i];
+                TString path = CanonizePath(request->ResultSet[i].Path);
+                const auto it = DirectoryItems.find(path);
+                if (it == DirectoryItems.end()) {
+                    return this->Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, TStringBuilder() << "Item \""
+                        << path << "\" not found in directories list");
+                }
+                if (!entry.ListNodeEntry) {
+                    return this->Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, TStringBuilder() << "Directory \""
+                        << path << "\" does not have list entry");
+                }
+                const bool isRoot = path == canonizedDatabasePath;
+                for (const NSchemeCache::TSchemeCacheNavigate::TListNodeEntry::TChild& child : entry.ListNodeEntry->Children) {
+                    const NSchemeCache::TSchemeCacheNavigate::EKind kind = child.Kind;
+                    if (isRoot && kind == NSchemeCache::TSchemeCacheNavigate::KindPath) {
+                        // Skip children that we don't want to export
+                        if (child.Name.StartsWith("~")
+                            || child.Name.StartsWith(".sys")
+                            || child.Name.StartsWith(".tmp")
+                            || child.Name.StartsWith(".metadata")
+                            || child.Name.StartsWith("export-"))
+                        {
+                            continue;
+                        }
+                    }
+                    const TString childPath = CanonizePath(TStringBuilder() << path << "/" << child.Name);
+                    TString destination;
+                    if (it->second.Destination) {
+                        destination = TStringBuilder() << it->second.Destination << "/" << child.Name;
+                    }
+                    if (IsLikeDirectory(kind)) {
+                        DirectoryItems.insert({childPath, TExportItemInfo{.Destination = destination}});
+                    } else {
+                        // We'll remove all unsupported children on ResolveExpandedPaths stage
+                        if (!IsExcludedFromExport(childPath)) {
+                            ExportItems.insert({childPath, TExportItemInfo{.Destination = destination}});
+                        }
+                    }
+                }
+                DirectoryItems.erase(it);
             }
         }
 
-        NSchemeCache::TDomainInfo::TPtr domainInfo;
+        TString error;
+
+        if (this->UserToken) {
+            for (size_t i = 0; i < request->ResultSet.size(); ++i) {
+                const auto& entry = request->ResultSet[i];
+                ui32 access = NACLib::SelectRow;
+                if (Stage == EStage::ResolvePaths) {
+                    if (i == 0) { // database
+                        access = NACLib::GenericRead | NACLib::GenericWrite;
+                    } else if (i == 1) { // common source path => don't check, it is only a prefix
+                        access = 0;
+                    }
+                }
+                if (access && !this->CheckAccess(CanonizePath(entry.Path), entry.SecurityObject, access)) {
+                    return;
+                }
+            }
+        }
+
         for (const auto& entry : request->ResultSet) {
+            TString path = CanonizePath(entry.Path);
+            const auto it = ExportItems.find(path);
+            if (it != ExportItems.end()) {
+                if (!IsItemSupportedInExport(entry)) {
+                    ExportItems.erase(it);
+                    continue;
+                }
+                it->second.Resolved = true;
+            }
+
             if (!entry.DomainInfo) {
-                LOG_E("Got empty domain info");
+                YDB_LOG_ERROR("Got empty domain info",
+                    {"logPrefix", GetLogPrefix()},
+                    {"selfId", this->SelfId()},
+                    {"txId", this->TxId});
                 return this->Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
             }
 
-            if (!domainInfo) {
-                domainInfo = entry.DomainInfo;
+            if (!DomainInfo) {
+                DomainInfo = entry.DomainInfo;
                 continue;
             }
 
-            if (domainInfo->DomainKey != entry.DomainInfo->DomainKey) {
+            if (DomainInfo->DomainKey != entry.DomainInfo->DomainKey) {
                 return this->Reply(StatusIds::SCHEME_ERROR, TIssuesIds::DOMAIN_LOCALITY_ERROR,
                     TStringBuilder() << "Failed locality check"
-                        << ": expected# " << domainInfo->DomainKey
+                        << ": expected# " << DomainInfo->DomainKey
                         << ", actual# " << entry.DomainInfo->DomainKey);
             }
         }
 
-        this->AllocateTxId();
-        this->Become(&TDerived::StateWait);
+        NextStage();
     }
 
     void Handle(TEvExport::TEvCreateExportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvCreateExportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvExport::TEvCreateExportResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         this->Reply(TExportConv::ToOperation(record.GetEntry()));
+    }
+
+    void InitCommonSourcePath() {
+        const auto& settings = this->GetProtoRequest()->settings();
+        if constexpr (TTraits::HasSourcePath) {
+            CommonSourcePath = CanonizePath(settings.source_path()); // /Foo/Bar, but empty result for empty source_path
+        }
+        if (CommonSourcePath.empty()) {
+            CommonSourcePath = CanonizePath(this->GetDatabaseName());
+        }
+    }
+
+    bool ValidateEncryptionParameters() {
+        const auto& settings = this->GetProtoRequest()->settings();
+        try {
+            NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
+            NBackup::TEncryptionKey key(settings.encryption_settings().symmetric_key().key());
+            NBackup::TEncryptedFileSerializer::EncryptFullFile(settings.encryption_settings().encryption_algorithm(), key, iv, {});
+            return true;
+        } catch (const std::exception& ex) {
+            this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid encryption settings: " << ex.what());
+            return false;
+        }
+    }
+
+    bool HasCommonSourcePathPrefix(const TStringBuf path) const {
+        return path.StartsWith(CommonSourcePath)
+            && path.size() > CommonSourcePath.size()
+            && path[CommonSourcePath.size()] == '/';
+    }
+
+    bool IsExcludedFromExport(const TString& exportPath) const {
+        const char* path = exportPath.c_str();
+        if (HasCommonSourcePathPrefix(exportPath)) {
+            path += CommonSourcePath.size() + 1; // prefix + /
+        }
+        for (const auto& regexp : ExcludeRegexps) {
+            if (regexp.Match(path)) {
+                return true;
+            }
+        }
+        return false;
     }
 
 public:
     using TRpcOperationRequestActor<TDerived, TEvRequest, true>::TRpcOperationRequestActor;
 
-    void Bootstrap(const TActorContext&) {
-        const auto& request = *(this->GetProtoRequest());
+    void Bootstrap() {
+        const auto& request = *this->GetProtoRequest();
         if (request.operation_params().has_forget_after() && request.operation_params().operation_mode() != Ydb::Operations::OperationParams::SYNC) {
             return this->Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "forget_after is not supported for this type of operation");
         }
 
         const auto& settings = request.settings();
-        if (settings.items().empty()) {
-            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+        InitCommonSourcePath();
+
+        if constexpr (TTraits::HasEncryption) {
+            if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
+                if (!NBackup::IsEncryptedExportEnabled(*AppData())) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+                }
+                if (!TTraits::HasDestination(settings)) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
+                }
+
+                if (!ValidateEncryptionParameters()) {
+                    return;
+                }
+            }
         }
 
-        if constexpr (std::is_same_v<TEvRequest, TEvExportToS3Request>) {
+        try {
+            ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
+        } catch (const std::exception& ex) {
+            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
+        }
+
+        if constexpr (IsFsExport) {
+            if (!TFsPath(settings.base_path()).IsAbsolute()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                    "base_path must be an absolute path");
+            }
+
+            TString error;
+            if (!ValidateFsPath(settings.base_path(), "base_path", error)) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
+            }
+
+            for (const auto& item : TTraits::GetItems(settings)) {
+                if (!TTraits::GetDestination(item).empty()) {
+                    const auto pathDesc = TStringBuilder() << "destination_path for item \"" << item.source_path() << "\"";
+                    if (!ValidateFsPath(TTraits::GetDestination(item), pathDesc, error)) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, error);
+                    }
+                }
+            }
+        }
+
+        if constexpr (!TTraits::HasSourcePath) {
+            if (settings.items().empty()) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+            }
+        } else {
+            const bool commonDestSpecified = TTraits::HasDestination(settings);
+            if (!NBackup::IsExportFilteringEnabled(*AppData())) {
+                // Check that no new fields are specified
+                if constexpr (IsS3Export) {
+                    if (commonDestSpecified) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination prefix is not supported in current configuration");
+                    }
+                }
+                if (!settings.source_path().empty()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source path is not supported in current configuration");
+                }
+                if constexpr (IsFsExport) {
+                    if (settings.items().empty()) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                            "Exporting without explicitly specified items is not supported in current configuration");
+                    }
+                    for (const auto& item : settings.items()) {
+                        if (TTraits::GetDestination(item).empty()) {
+                            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR,
+                                TStringBuilder() << "destination_path must be specified for item \"" << item.source_path() << "\" in current configuration");
+                        }
+                    }
+                }
+            }
+            if (settings.items().empty() && !commonDestSpecified) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No destination prefix nor items specified. Don't know where to export");
+            }
+            for (const auto& item : settings.items()) {
+                if (TTraits::GetDestination(item).empty() && !commonDestSpecified) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix or common destination prefix specified for item \"" << item.source_path() << "\"");
+                }
+            }
+        }
+
+        if constexpr (TTraits::HasCompression) {
             if (settings.compression()) {
                 StatusIds::StatusCode status;
                 TString error;
@@ -209,7 +673,11 @@ public:
             }
         }
 
-        ResolvePaths(ExtractPaths());
+        TVector<TString> specifiedPaths;
+        if (!ExtractSpecifiedPaths(specifiedPaths)) {
+            return;
+        }
+        ResolvePaths(specifiedPaths);
     }
 
     STATEFN(StateResolvePaths) {
@@ -226,6 +694,13 @@ public:
         }
     }
 
+private:
+    EStage Stage = EStage::ResolvePaths;
+    NSchemeCache::TDomainInfo::TPtr DomainInfo;
+    TString CommonSourcePath; // Canonized source path
+    THashMap<TString, TExportItemInfo> ExportItems;
+    THashMap<TString, TExportItemInfo> DirectoryItems;
+    std::vector<TRegExMatch> ExcludeRegexps;
 }; // TExportRPC
 
 class TExportToYtRPC: public TExportRPC<TExportToYtRPC, TEvExportToYtRequest> {
@@ -238,12 +713,21 @@ public:
     using TExportRPC::TExportRPC;
 };
 
+class TExportToFsRPC: public TExportRPC<TExportToFsRPC, TEvExportToFsRequest> {
+public:
+    using TExportRPC::TExportRPC;
+};
+
 void DoExportToYtRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TExportToYtRPC(p.release()));
 }
 
 void DoExportToS3Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
     f.RegisterActor(new TExportToS3RPC(p.release()));
+}
+
+void DoExportToFsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TExportToFsRPC(p.release()));
 }
 
 } // namespace NGRpcService

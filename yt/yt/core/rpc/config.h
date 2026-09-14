@@ -5,6 +5,7 @@
 #include <yt/yt/core/compression/public.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
+#include <yt/yt/core/ytree/polymorphic_yson_struct.h>
 
 #include <yt/yt/core/concurrency/config.h>
 
@@ -26,10 +27,9 @@ DEFINE_ENUM(ERequestTracingMode,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THistogramExponentialBounds
+struct THistogramExponentialBounds
     : public NYTree::TYsonStruct
 {
-public:
     TDuration Min;
     TDuration Max;
 
@@ -42,10 +42,9 @@ DEFINE_REFCOUNTED_TYPE(THistogramExponentialBounds)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTimeHistogramConfig
+struct TTimeHistogramConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<THistogramExponentialBoundsPtr> ExponentialBounds;
     std::optional<std::vector<TDuration>> CustomBounds;
 
@@ -59,10 +58,9 @@ DEFINE_REFCOUNTED_TYPE(TTimeHistogramConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 // Common options shared between all services in one server.
-class TServiceCommonConfig
+struct TServiceCommonConfig
     : public NYTree::TYsonStruct
 {
-public:
     bool EnablePerUserProfiling;
     TTimeHistogramConfigPtr TimeHistogram;
     bool EnableErrorCodeCounter;
@@ -77,11 +75,10 @@ DEFINE_REFCOUNTED_TYPE(TServiceCommonConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerConfig
+struct TServerConfig
     : public TServiceCommonConfig
 {
-public:
-    THashMap<TString, NYTree::INodePtr> Services;
+    THashMap<std::string, NYTree::INodePtr> Services;
 
     REGISTER_YSON_STRUCT(TServerConfig);
 
@@ -93,10 +90,9 @@ DEFINE_REFCOUNTED_TYPE(TServerConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 // Common options shared between all services in one server.
-class TServiceCommonDynamicConfig
+struct TServiceCommonDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<bool> EnablePerUserProfiling;
     std::optional<TTimeHistogramConfigPtr> TimeHistogram;
     std::optional<bool> EnableErrorCodeCounter;
@@ -111,11 +107,10 @@ DEFINE_REFCOUNTED_TYPE(TServiceCommonDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerDynamicConfig
+struct TServerDynamicConfig
     : public TServiceCommonDynamicConfig
 {
-public:
-    THashMap<TString, NYTree::INodePtr> Services;
+    THashMap<std::string, NYTree::INodePtr> Services;
 
     REGISTER_YSON_STRUCT(TServerDynamicConfig);
 
@@ -126,10 +121,9 @@ DEFINE_REFCOUNTED_TYPE(TServerDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServiceConfig
+struct TServiceConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<bool> EnablePerUserProfiling;
     std::optional<bool> EnableErrorCodeCounter;
     std::optional<ERequestTracingMode> TracingMode;
@@ -148,22 +142,36 @@ DEFINE_REFCOUNTED_TYPE(TServiceConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMethodConfig
+struct TMethodTestingConfig
+    : public NYTree::TYsonStructLite
+{
+    std::optional<TDuration> RandomDelay;
+
+    REGISTER_YSON_STRUCT_LITE(TMethodTestingConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TMethodConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<bool> Heavy;
     std::optional<int> QueueSizeLimit;
     std::optional<i64> QueueByteSizeLimit;
     std::optional<int> ConcurrencyLimit;
     std::optional<i64> ConcurrencyByteLimit;
     std::optional<NLogging::ELogLevel> LogLevel;
+    std::optional<NLogging::ELogLevel> ErrorLogLevel;
     std::optional<TDuration> LoggingSuppressionTimeout;
     NConcurrency::TThroughputThrottlerConfigPtr RequestBytesThrottler;
     NConcurrency::TThroughputThrottlerConfigPtr RequestWeightThrottler;
     NConcurrency::TThroughputThrottlerConfigPtr LoggingSuppressionFailedRequestThrottler;
     std::optional<ERequestTracingMode> TracingMode;
     std::optional<bool> Pooled;
+
+    TMethodTestingConfig Testing;
 
     REGISTER_YSON_STRUCT(TMethodConfig);
 
@@ -174,10 +182,9 @@ DEFINE_REFCOUNTED_TYPE(TMethodConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRetryingChannelConfig
+struct TRetryingChannelConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Time to wait between consequent attempts.
     TDuration RetryBackoffTime;
 
@@ -208,10 +215,9 @@ DEFINE_ENUM(EPeerPriorityStrategy,
     (PreferLocal)
 );
 
-class TViablePeerRegistryConfig
+struct TViablePeerRegistryConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Timeout for |Discover| requests.
     TDuration DiscoverTimeout;
 
@@ -246,9 +252,6 @@ public:
     //! For sticky mode: number of consistent hash tokens to assign to each peer.
     int HashesPerPeer;
 
-    //! Configures how random channels are selected.
-    EPeerPriorityStrategy PeerPriorityStrategy;
-
     //! If set to a positive value, this number of active peers with the smallest priority will be required
     //! for priority to be taken into account when choosing a random peer according to the peer priority strategy.
     //! If it is not satisfied, peers will be chosen randomly from the whole pool of active peers.
@@ -257,7 +260,8 @@ public:
     //! MinPeerCountForPriorityAwareness active local peers, otherwise peers will be chosen uniformly from the whole set of active peers.
     //!
     //! NB: Please note that MaxPeerCount respects priorities, e.g. given EPeerPriorityStrategy::PreferLocal and
-    //! MaxPeerCount = 100, if there are 200 available local and 400 available non-local peers, all active peers will be local.
+    //! MaxPeerCount = 100, if there are 200 available peers with priority 0 and 400 available peers with priority 1,
+    //! all active peers will be chosen among peers with priority 0.
     //! This means that setting MinPeerCountForPriorityAwareness close to MaxPeerCount is practically useless.
     //! If you want to set bigger values, you must also increase MaxPeerCount to accommodate more peers.
     int MinPeerCountForPriorityAwareness;
@@ -273,10 +277,9 @@ DEFINE_REFCOUNTED_TYPE(TViablePeerRegistryConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDynamicChannelPoolConfig
+struct TDynamicChannelPoolConfig
     : public TViablePeerRegistryConfig
 {
-public:
     //! Maximum number of peers to query in parallel when locating alive ones.
     int MaxConcurrentDiscoverRequests;
 
@@ -291,6 +294,9 @@ public:
 
     TDuration DiscoverySessionTimeout;
 
+    //! Configures how random channels are selected.
+    EPeerPriorityStrategy PeerPriorityStrategy;
+
     REGISTER_YSON_STRUCT(TDynamicChannelPoolConfig);
 
     static void Register(TRegistrar registrar);
@@ -300,14 +306,13 @@ DEFINE_REFCOUNTED_TYPE(TDynamicChannelPoolConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServiceDiscoveryEndpointsConfig
+struct TServiceDiscoveryEndpointsConfig
     : public NYTree::TYsonStruct
 {
-public:
-    std::optional<TString> Cluster;
+    std::optional<std::string> Cluster;
     //! NB: If empty (default) this vector is filled with the cluster above.
-    std::vector<TString> Clusters;
-    TString EndpointSetId;
+    std::vector<std::string> Clusters;
+    std::string EndpointSetId;
     TDuration UpdatePeriod;
 
     //! Use IPv4 address of endpoint.
@@ -324,10 +329,9 @@ DEFINE_REFCOUNTED_TYPE(TServiceDiscoveryEndpointsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelConfigBase
+struct TBalancingChannelConfigBase
     : public TDynamicChannelPoolConfig
 {
-public:
     //! Disables discovery and balancing when just one address is given.
     //! This is vital for jobs since node's redirector is incapable of handling
     //! discover requests properly.
@@ -348,10 +352,9 @@ DEFINE_REFCOUNTED_TYPE(TBalancingChannelConfigBase)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelConfig
+struct TBalancingChannelConfig
     : public TBalancingChannelConfigBase
 {
-public:
     //! First option: static list of addresses.
     std::optional<std::vector<std::string>> Addresses;
 
@@ -367,10 +370,9 @@ DEFINE_REFCOUNTED_TYPE(TBalancingChannelConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TThrottlingChannelConfig
+struct TThrottlingChannelConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Maximum allowed number of requests per second.
     int RateLimit;
 
@@ -383,10 +385,9 @@ DEFINE_REFCOUNTED_TYPE(TThrottlingChannelConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TThrottlingChannelDynamicConfig
+struct TThrottlingChannelDynamicConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     std::optional<int> RateLimit;
 
     REGISTER_YSON_STRUCT(TThrottlingChannelDynamicConfig);
@@ -398,10 +399,9 @@ DEFINE_REFCOUNTED_TYPE(TThrottlingChannelDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TResponseKeeperConfig
+struct TResponseKeeperConfig
     : public NYTree::TYsonStruct
 {
-public:
     //! For how long responses are kept in memory.
     TDuration ExpirationTime;
 
@@ -432,15 +432,16 @@ DEFINE_REFCOUNTED_TYPE(TResponseKeeperConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDispatcherConfig
+struct TDispatcherConfig
     : public NYTree::TYsonStruct
 {
-public:
     int HeavyPoolSize;
     int CompressionPoolSize;
     TDuration HeavyPoolPollingPeriod;
+    TDuration DefaultRequestTimeout;
 
     bool AlertOnMissingRequestInfo;
+    bool AlertOnUnsetRequestTimeout;
 
     bool SendTracingBaggage;
 
@@ -455,15 +456,16 @@ DEFINE_REFCOUNTED_TYPE(TDispatcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDispatcherDynamicConfig
+struct TDispatcherDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
     std::optional<int> HeavyPoolSize;
     std::optional<int> CompressionPoolSize;
     std::optional<TDuration> HeavyPoolPollingPeriod;
+    std::optional<TDuration> DefaultRequestTimeout;
 
     std::optional<bool> AlertOnMissingRequestInfo;
+    std::optional<bool> AlertOnUnsetRequestTimeout;
 
     std::optional<bool> SendTracingBaggage;
 
@@ -476,4 +478,183 @@ DEFINE_REFCOUNTED_TYPE(TDispatcherDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TOverloadTrackedServiceMethod
+    : public NYTree::TYsonStructLite
+{
+    std::string Service;
+    std::string Method;
+
+    int MaxWindow;
+
+    REGISTER_YSON_STRUCT_LITE(TOverloadTrackedServiceMethod);
+
+    static void Register(TRegistrar registrar);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TOverloadTrackedServiceMethodConfig
+    : public NYTree::TYsonStruct
+{
+    std::string Service;
+    std::string Method;
+
+    int MaxWindow;
+    double WaitingTimeoutFraction;
+
+    REGISTER_YSON_STRUCT(TOverloadTrackedServiceMethodConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TOverloadTrackedServiceMethodConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TOverloadTrackerConfigBase
+    : public NYTree::TYsonStruct
+{
+    std::vector<TOverloadTrackedServiceMethod> MethodsToThrottle;
+
+    REGISTER_YSON_STRUCT(TOverloadTrackerConfigBase);
+
+    static void Register(TRegistrar registrar);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TOverloadTrackerMeanWaitTimeConfig
+    : public TOverloadTrackerConfigBase
+{
+    TDuration MeanWaitTimeThreshold;
+
+    REGISTER_YSON_STRUCT(TOverloadTrackerMeanWaitTimeConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TOverloadTrackerMeanWaitTimeConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TOverloadTrackerBacklogQueueFillFractionConfig
+    : public TOverloadTrackerConfigBase
+{
+    double BacklogQueueFillFractionThreshold;
+
+    REGISTER_YSON_STRUCT(TOverloadTrackerBacklogQueueFillFractionConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TOverloadTrackerBacklogQueueFillFractionConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+DEFINE_ENUM(EOverloadTrackerConfigType,
+    (Base)
+    (MeanWaitTime)
+    (BacklogQueueFillFraction)
+);
+
+DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(OverloadTrackerConfig, EOverloadTrackerConfigType, MeanWaitTime, TOverloadTrackerConfigBase,
+    ((Base)                     (TOverloadTrackerConfigBase))
+    ((MeanWaitTime)             (TOverloadTrackerMeanWaitTimeConfig))
+    ((BacklogQueueFillFraction) (TOverloadTrackerBacklogQueueFillFractionConfig))
+);
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TOverloadControllerConfig
+    : public NYTree::TYsonStruct
+{
+    bool Enabled;
+    THashMap<std::string, TOverloadTrackerConfig> Trackers;
+    std::vector<TOverloadTrackedServiceMethodConfigPtr> Methods;
+    TDuration LoadAdjustingPeriod;
+
+    REGISTER_YSON_STRUCT(TOverloadControllerConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TOverloadControllerConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TProtocolMapConfigBase
+    : public NYTree::TYsonStruct
+{
+public:
+    //! Returns the protocols that are actually configured (i.e. present with a
+    //! non-null config), skipping registered-but-unconfigured ones.
+    std::vector<std::string> GetConfiguredProtocols() const;
+
+    //! Returns a pointer to the typed config for #protocol, creating an
+    //! empty (null) entry if needed.
+    template <class TConfig>
+    TIntrusivePtr<TConfig>* MutableTypedConfig(TStringBuf protocol);
+
+    //! Returns the type-erased config for #protocol; crashes if it is absent.
+    std::any GetUntypedConfig(TStringBuf protocol);
+
+    //! Like #GetUntypedConfig, but returns an empty std::any for an unconfigured protocol
+    //! (i.e. one that is absent or whose config is null).
+    std::any FindUntypedConfig(TStringBuf protocol);
+
+    //! Sets the typed config for #protocol.
+    template <class TConfig>
+    void SetTypedConfig(TStringBuf protocol, TIntrusivePtr<TConfig> config);
+
+    //! Returns the typed config for #protocol, or null if it is unconfigured
+    //! (i.e. absent or holding a null pointer).
+    template <class TConfig>
+    TIntrusivePtr<TConfig> FindTypedConfig(TStringBuf protocol);
+
+    //! Like #FindTypedConfig, but throws if #protocol is unconfigured.
+    template <class TConfig>
+    TIntrusivePtr<TConfig> GetTypedConfigOrThrow(TStringBuf protocol);
+
+private:
+    struct TProtocolEntry
+    {
+        std::any CurrentConfig;
+        //! Tells whether #CurrentConfig holds a null pointer, i.e. the protocol was not
+        //! actually configured (std::any cannot check this without knowing the type).
+        bool (*IsNull)(const std::any& config) = nullptr;
+    };
+
+    THashMap<std::string, TProtocolEntry> ProtocolToEntry_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TMultiProtocolClientConfig
+    : public TProtocolMapConfigBase
+{
+    REGISTER_YSON_STRUCT(TMultiProtocolClientConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TMultiProtocolClientConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TMultiProtocolServerConfig
+    : public TProtocolMapConfigBase
+{
+    REGISTER_YSON_STRUCT(TMultiProtocolServerConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TMultiProtocolServerConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NRpc
+
+#define CONFIG_INL_H_
+#include "config-inl.h"
+#undef CONFIG_INL_H_

@@ -288,9 +288,9 @@ class MaxAttemptsDecorator(BaseChecker):
             if attempt_number >= self._max_attempts:
                 # explicitly set MaxAttemptsReached
                 if response is not None and 'ResponseMetadata' in response[1]:
-                    response[1]['ResponseMetadata'][
-                        'MaxAttemptsReached'
-                    ] = True
+                    response[1]['ResponseMetadata']['MaxAttemptsReached'] = (
+                        True
+                    )
                 logger.debug(
                     "Reached the maximum number of retry attempts: %s",
                     attempt_number,
@@ -316,7 +316,7 @@ class MaxAttemptsDecorator(BaseChecker):
                 return True
         else:
             # If we've exceeded the max attempts we just let the exception
-            # propogate if one has occurred.
+            # propagate if one has occurred.
             return self._checker(attempt_number, response, caught_exception)
 
 
@@ -412,5 +412,5 @@ class ExceptionRaiser(BaseChecker):
         # and retry, but something needs to come along and actually raise the
         # caught_exception.  That's what this class is being used for.  If
         # the MaxAttemptsDecorator is not interested in retrying the exception
-        # then this exception just propogates out past the retry code.
+        # then this exception just propagates out past the retry code.
         raise caught_exception

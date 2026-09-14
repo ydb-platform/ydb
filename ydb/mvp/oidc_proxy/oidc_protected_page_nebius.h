@@ -24,12 +24,6 @@ public:
     void StartOidcProcess(const NActors::TActorContext& ctx) override;
     void HandleExchange(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event);
 
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
-        }
-    }
-
     STFUNC(StateExchange) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleExchange);

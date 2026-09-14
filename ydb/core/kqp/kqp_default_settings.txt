@@ -44,11 +44,6 @@ DefaultSettings {
 }
 
 DefaultSettings {
-    Name: "_KqpYqlSyntaxVersion"
-    Value: "1"
-}
-
-DefaultSettings {
     Name: "_KqpAllowUnsafeCommit"
     Value: "false"
 }
@@ -71,9 +66,4 @@ DefaultSettings {
 DefaultSettings {
     Name: "_KqpDisableLlvmForUdfStages"
     Value: "false"
-}
-
-DefaultSettings {
-    Name: "UseGraceJoinCoreForMap"
-    Value: "true"
 }

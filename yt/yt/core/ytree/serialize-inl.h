@@ -8,6 +8,7 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/collection_helpers.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/yson/stream.h>
 #include <yt/yt/core/yson/string.h>
@@ -22,15 +23,76 @@ namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class T>
+struct TAssociativeContainerKeyHelper
+{
+    static std::string Serialize(const T& value)
+    {
+        return ToString(value);
+    }
+
+    static T Deserialize(TStringBuf key)
+    {
+        return FromString<T>(key);
+    }
+};
+
+template <class T>
+    requires(TEnumTraits<T>::IsEnum)
+struct TAssociativeContainerKeyHelper<T>
+{
+    static std::string Serialize(const T& value)
+    {
+        return FormatEnum(value);
+    }
+
+    static T Deserialize(TStringBuf key)
+    {
+        return ParseEnum<T>(key);
+    }
+};
+
+template <>
+struct TAssociativeContainerKeyHelper<TGuid>
+{
+    static std::string Serialize(TGuid value)
+    {
+        return ToString(value);
+    }
+
+    static TGuid Deserialize(TStringBuf key)
+    {
+        return TGuid::FromString(key);
+    }
+};
+
+template <class T, class TTag, TStrongTypedefOptions Options>
+struct TAssociativeContainerKeyHelper<TStrongTypedef<T, TTag, Options>>
+{
+    using TValue = TStrongTypedef<T, TTag, Options>;
+
+    static std::string Serialize(const TValue& value)
+    {
+        return TAssociativeContainerKeyHelper<T>::Serialize(value.Underlying());
+    }
+
+    static TValue Deserialize(TStringBuf key)
+    {
+        return TValue(TAssociativeContainerKeyHelper<T>::Deserialize(key));
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NDetail {
 
-// all
-inline bool CanOmitValue(const void* /*parameter*/, const void* /*defaultValue*/)
+// All types. Return false_type to indicate at compile time that the result is always false.
+inline std::false_type CanOmitValue(const void* /*parameter*/, const void* /*defaultValue*/)
 {
-    return false;
+    return {};
 }
 
-// TIntrusivePtr
+// TIntrusivePtr.
 template <class T>
 bool CanOmitValue(const TIntrusivePtr<T>* parameter, const TIntrusivePtr<T>* defaultValue)
 {
@@ -43,9 +105,21 @@ bool CanOmitValue(const TIntrusivePtr<T>* parameter, const TIntrusivePtr<T>* def
     return false;
 }
 
-// std::optional
+// std::optional.
 template <class T>
 bool CanOmitValue(const std::optional<T>* parameter, const std::optional<T>* defaultValue)
+{
+    if (!defaultValue) {
+        return !*parameter;
+    }
+    if (!*parameter && !*defaultValue) {
+        return true;
+    }
+    return false;
+}
+
+// TYsonString.
+inline bool CanOmitValue(const NYson::TYsonString* parameter, const NYson::TYsonString* defaultValue)
 {
     if (!defaultValue) {
         return !*parameter;
@@ -80,58 +154,12 @@ void SerializeSet(const T& items, NYson::IYsonConsumer* consumer)
     consumer->OnEndList();
 }
 
-template <class T, bool IsEnum = TEnumTraits<T>::IsEnum>
-struct TMapKeyHelper;
-
-template <class T>
-struct TMapKeyHelper<T, true>
-{
-    static void Serialize(const T& value, NYson::IYsonConsumer* consumer)
-    {
-        consumer->OnKeyedItem(FormatEnum(value));
-    }
-
-    static void Deserialize(T& value, const std::string& key)
-    {
-        value = ParseEnum<T>(key);
-    }
-};
-
-template <class T>
-struct TMapKeyHelper<T, false>
-{
-    static void Serialize(const T& value, NYson::IYsonConsumer* consumer)
-    {
-        consumer->OnKeyedItem(ToString(value));
-    }
-
-    static void Deserialize(T& value, const std::string& key)
-    {
-        value = FromString<T>(key);
-    }
-};
-
-template <>
-struct TMapKeyHelper<TGuid, false>
-{
-    static void Serialize(TGuid value, NYson::IYsonConsumer* consumer)
-    {
-        consumer->OnKeyedItem(ToString(value));
-    }
-
-    static void Deserialize(TGuid& value, const std::string& key)
-    {
-        value = TGuid::FromString(key);
-    }
-};
-
-
 template <class T>
 void SerializeMap(const T& items, NYson::IYsonConsumer* consumer)
 {
     consumer->OnBeginMap();
     for (auto it : GetSortedIterators(items)) {
-        TMapKeyHelper<typename T::key_type>::Serialize(it->first, consumer);
+        consumer->OnKeyedItem(TAssociativeContainerKeyHelper<typename T::key_type>::Serialize(it->first));
         Serialize(it->second, consumer);
     }
     consumer->OnEndMap();
@@ -145,6 +173,18 @@ void DeserializeVector(T& value, INodePtr node)
     value.resize(size);
     for (int i = 0; i < size; ++i) {
         Deserialize(value[i], listNode->GetChildOrThrow(i));
+    }
+}
+
+template <class T>
+void DeserializeProtobufRepeated(T& value, INodePtr node)
+{
+    auto listNode = node->AsList();
+    auto size = listNode->GetChildCount();
+    value.Clear();
+    value.Reserve(size);
+    for (int i = 0; i < size; ++i) {
+        Deserialize(*value.Add(), listNode->GetChildOrThrow(i));
     }
 }
 
@@ -173,8 +213,7 @@ void DeserializeMap(T& value, INodePtr node)
         value.reserve(mapNode->GetChildCount());
     }
     for (const auto& [serializedKey, serializedItem] : mapNode->GetChildren()) {
-        typename T::key_type key;
-        TMapKeyHelper<typename T::key_type>::Deserialize(key, serializedKey);
+        auto key = TAssociativeContainerKeyHelper<typename T::key_type>::Deserialize(serializedKey);
         typename T::mapped_type item;
         Deserialize(item, serializedItem);
         value.emplace(std::move(key), std::move(item));
@@ -332,7 +371,7 @@ void Serialize(T value, NYson::IYsonConsumer* consumer)
 {
     if constexpr (TEnumTraits<T>::IsBitEnum) {
         consumer->OnBeginList();
-        for (auto scalarValue : TEnumTraits<T>::GetDomainValues()) {
+        for (auto scalarValue : TEnumTraits<T>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
             if (Any(value & scalarValue)) {
                 consumer->OnListItem();
                 consumer->OnStringScalar(FormatEnum(scalarValue));
@@ -348,8 +387,13 @@ template <class T>
     requires (!TEnumTraits<T>::IsEnum) && std::is_enum_v<T>
 void Serialize(T value, NYson::IYsonConsumer* consumer)
 {
-    static_assert(CanFitSubtype<i64, std::underlying_type_t<T>>());
-    consumer->OnInt64Scalar(static_cast<i64>(value));
+    if constexpr (std::is_signed_v<std::underlying_type_t<T>>) {
+        static_assert(CanFitSubtype<i64, std::underlying_type_t<T>>());
+        consumer->OnInt64Scalar(static_cast<i64>(value));
+    } else {
+        static_assert(CanFitSubtype<ui64, std::underlying_type_t<T>>());
+        consumer->OnUint64Scalar(static_cast<ui64>(value));
+    }
 }
 
 // std::optional
@@ -431,9 +475,10 @@ void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer)
     NDetail::SerializeTuple(value, consumer);
 }
 
-// For any associative container.
-template <template<typename...> class C, class... T, class K>
-void Serialize(const C<T...>& value, NYson::IYsonConsumer* consumer)
+// TODO(eshcherbin): Add a concept for associative containers.
+// Any associative container (except TCompactFlatMap).
+template <NMpl::CAssociative TContainer>
+void Serialize(const TContainer& value, NYson::IYsonConsumer* consumer)
 {
     NDetail::SerializeAssociative(value, consumer);
 }
@@ -442,12 +487,12 @@ template <class E, class T, E Min, E Max>
 void Serialize(const TEnumIndexedArray<E, T, Min, Max>& vector, NYson::IYsonConsumer* consumer)
 {
     consumer->OnBeginMap();
-    for (auto key : TEnumTraits<E>::GetDomainValues()) {
+    for (auto key : TEnumTraits<E>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
         if (!vector.IsValidIndex(key)) {
             continue;
         }
         const auto& value = vector[key];
-        if (!NDetail::CanOmitValue(&value, nullptr)) {
+        if (!NDetail::CanOmitValue(&value, static_cast<T*>(nullptr))) {
             consumer->OnKeyedItem(FormatEnum(key));
             Serialize(value, consumer);
         }
@@ -460,17 +505,24 @@ void SerializeProtobufMessage(
     const NYson::TProtobufMessageType* type,
     NYson::IYsonConsumer* consumer);
 
-template <class T>
+template <CProtobufMessageAsYson T>
 void Serialize(
     const T& message,
-    NYson::IYsonConsumer* consumer,
-    typename std::enable_if<std::is_convertible<T*, ::google::protobuf::Message*>::value, void>::type*)
+    NYson::IYsonConsumer* consumer)
 {
     SerializeProtobufMessage(message, NYson::ReflectProtobufMessageType<T>(), consumer);
 }
 
-template <class T, class TTag>
-void Serialize(const TStrongTypedef<T, TTag>& value, NYson::IYsonConsumer* consumer)
+template <CProtobufMessageAsString T>
+void Serialize(
+    const T& message,
+    NYson::IYsonConsumer* consumer)
+{
+    consumer->OnStringScalar(SerializeProtoToString(message));
+}
+
+template <class T, class TTag, TStrongTypedefOptions Options>
+void Serialize(const TStrongTypedef<T, TTag, Options>& value, NYson::IYsonConsumer* consumer)
 {
     Serialize(value.Underlying(), consumer);
 }
@@ -509,7 +561,7 @@ void Deserialize(T& value, INodePtr node)
             case ENodeType::List:
                 value = T();
                 for (const auto& item : node->AsList()->GetChildren()) {
-                    value |= ParseEnum<T>(item->GetValue<TString>());
+                    value |= ParseEnum<T>(item->GetValue<std::string>());
                 }
                 break;
             case ENodeType::String:
@@ -522,7 +574,7 @@ void Deserialize(T& value, INodePtr node)
     } else {
         switch (node->GetType()) {
             case ENodeType::String: {
-                value = ParseEnum<T>(node->GetValue<TString>());
+                value = ParseEnum<T>(node->GetValue<std::string>());
                 break;
             }
             case ENodeType::Int64: {
@@ -542,8 +594,13 @@ void Deserialize(T& value, INodePtr node)
 {
     switch (node->GetType()) {
         case ENodeType::Int64: {
-            // TODO: CheckedEnumCast via __PRETTY_FUNCTION__?
+            // TODO(dgolear): CheckedEnumCast via __PRETTY_FUNCTION__?
             i64 serialized = node->AsInt64()->GetValue();
+            value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>(serialized));
+            break;
+        }
+        case ENodeType::Uint64: {
+            ui64 serialized = node->AsUint64()->GetValue();
             value = static_cast<T>(CheckedIntegralCast<std::underlying_type_t<T>>(serialized));
             break;
         }
@@ -588,18 +645,35 @@ void Deserialize(TCompactVector<T, N>& value, INodePtr node)
     NDetail::DeserializeVector(value, node);
 }
 
+// RepeatedPtrField
+template <class T>
+void Deserialize(google::protobuf::RepeatedPtrField<T>& value, INodePtr node)
+{
+    NDetail::DeserializeProtobufRepeated(value, node);
+}
+
+// RepeatedField
+template <class T>
+void Deserialize(google::protobuf::RepeatedField<T>& value, INodePtr node)
+{
+    NDetail::DeserializeProtobufRepeated(value, node);
+}
+
 // TErrorOr
 template <class T>
 void Deserialize(TErrorOr<T>& error, NYTree::INodePtr node)
 {
-    TError& justError = error;
+    TError justError = error;
     Deserialize(justError, node);
-    if (error.IsOK()) {
+    if (justError.IsOK()) {
+        error = TErrorOr(T());
         auto mapNode = node->AsMap();
         auto valueNode = mapNode->FindChild("value");
         if (valueNode) {
             Deserialize(error.Value(), std::move(valueNode));
         }
+    } else {
+        error = std::move(justError);
     }
 }
 
@@ -628,8 +702,8 @@ void Deserialize(std::tuple<T...>& value, INodePtr node)
 }
 
 // For any associative container.
-template <template<typename...> class C, class... T, class K>
-void Deserialize(C<T...>& value, INodePtr node)
+template <NMpl::CAssociative TContainer>
+void Deserialize(TContainer& value, INodePtr node)
 {
     NDetail::DeserializeAssociative(value, node);
 }
@@ -655,8 +729,7 @@ void DeserializeProtobufMessage(
     const INodePtr& node,
     const NYson::TProtobufWriterOptions& options = {});
 
-template <class T>
-    requires std::derived_from<T, google::protobuf::Message>
+template <CProtobufMessageAsYson T>
 void Deserialize(
     T& message,
     const INodePtr& node)
@@ -667,8 +740,21 @@ void Deserialize(
     DeserializeProtobufMessage(message, NYson::ReflectProtobufMessageType<T>(), node, options);
 }
 
-template <class T, class TTag>
-void Deserialize(TStrongTypedef<T, TTag>& value, INodePtr node)
+template <CProtobufMessageAsString T>
+void Deserialize(
+    T& message,
+    const INodePtr& node)
+{
+    std::string string;
+    Deserialize(string, node);
+    if (!TryDeserializeProto(&message, TRef::FromString(string))) {
+        THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
+            .With("protobuf_type", message.GetTypeName());
+    }
+}
+
+template <class T, class TTag, TStrongTypedefOptions Options>
+void Deserialize(TStrongTypedef<T, TTag, Options>& value, INodePtr node)
 {
     Deserialize(value.Underlying(), node);
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "blob.h"
+#include <library/cpp/yt/memory/blob.h>
 
 #include <util/stream/zerocopy_output.h>
 

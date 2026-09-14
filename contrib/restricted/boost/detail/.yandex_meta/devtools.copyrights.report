@@ -160,12 +160,13 @@ KEEP     COPYRIGHT_SERVICE_LABEL 55b50589a90f6abb0dcaedb86d9ce7ed
 BELONGS ya.make
     License text:
         //  Copyright Beman Dawes 2006
+        //  Copyright Andrey Semashev 2025
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/detail/bitmask.hpp [3:3]
+        include/boost/detail/bitmask.hpp [3:4]
         include/boost/detail/identifier.hpp [3:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 5f5f9caa49264cbb4cb51ab4b0070946
@@ -289,3 +290,15 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/detail/has_default_constructor.hpp [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c77aad9e4a0d988f28a9c822c1a7e726
+BELONGS ya.make
+    License text:
+        //  Copyright Beman Dawes 2006
+        //  Copyright Andrey Semashev 2025
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/detail/bitmask.hpp [3:4]

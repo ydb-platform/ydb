@@ -1,4 +1,7 @@
+
 # Running a script
+
+{% include notitle [warning](./_includes/deprecated_command_warning.md) %}
 
 You can use the `scripting yql` subcommand to run a YQL script. The script can include queries of different types. Unlike `yql`, the `scripting yql` command has a limit on the number of returned rows and accessed data.
 

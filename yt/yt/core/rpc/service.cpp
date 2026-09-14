@@ -6,12 +6,12 @@ namespace NYT::NRpc {
 
 void IServiceContext::SetRequestInfo()
 {
-    SetRawRequestInfo(TString(), false);
+    SetRawRequestInfo(std::string(), false);
 }
 
 void IServiceContext::SetResponseInfo()
 {
-    SetRawResponseInfo(TString(), false);
+    SetRawResponseInfo(std::string(), false);
 }
 
 void IServiceContext::ReplyFrom(TFuture<TSharedRefArray> asyncMessage)
@@ -25,6 +25,24 @@ void IServiceContext::ReplyFrom(TFuture<TSharedRefArray> asyncMessage)
     }));
     SubscribeCanceled(BIND([asyncMessage = std::move(asyncMessage)] (const TError& error) {
         asyncMessage.Cancel(error);
+    }));
+}
+
+void IServiceContext::ReplyAndLogFrom(
+    bool incremental,
+    TFuture<std::pair<TSharedRefArray, std::string>> asyncMessages)
+{
+    asyncMessages.Subscribe(BIND([this, this_ = MakeStrong(this), incremental] (const TErrorOr<std::pair<TSharedRefArray, std::string>>& result) {
+        if (result.IsOK()) {
+            const auto& [response, logMessage] = result.Value();
+            SetRawResponseInfo(logMessage, incremental);
+            Reply(response);
+        } else {
+            Reply(TError(result));
+        }
+    }));
+    SubscribeCanceled(BIND([asyncMessages = std::move(asyncMessages)] (const TError& error) {
+        asyncMessages.Cancel(error);
     }));
 }
 
@@ -64,8 +82,8 @@ void ThrowUnsupportedClientFeature(int featureId, TStringBuf featureName)
     THROW_ERROR_EXCEPTION(
         NRpc::EErrorCode::UnsupportedClientFeature,
         "Client does not support the feature requested by server")
-        << TErrorAttribute("feature_id", featureId)
-        << TErrorAttribute("feature_name", featureName);
+        .With("feature_id", featureId)
+        .With("feature_name", featureName);
 }
 
 } // namespace NDetail

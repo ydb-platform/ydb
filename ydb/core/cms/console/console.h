@@ -1,16 +1,42 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/core/protos/config.pb.h>
+// Event Record types live in the console_* generated headers. Protobuf 22
+// does not include imported .pb.h files, so console.pb.h does not pull
+// config.pb.h. TAppConfig is forward-declared; methods that need a complete
+// TAppConfig are defined in console.cpp.
 #include <ydb/core/protos/console.pb.h>
 #include <ydb/core/protos/console_base.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/console_tenant.pb.h>
-#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/map.h>
+#include <util/generic/maybe.h>
+#include <util/generic/strbuf.h>
+
+#include <memory>
+
+namespace NKikimrConfig {
+class TAppConfig;
+}
+
+namespace NKikimr {
+// Only used below as a pointer in a factory-function declaration; forward
+// declaration avoids pulling ydb/core/base/blobstorage.h into this header.
+class TTabletStorageInfo;
+}
 
 namespace NKikimr::NConsole {
+
+// Tenant UserAttribute that enables the usage of database YAML config selectors.
+// Values: (according to TryFromString<bool>() function logic - IsTrue()/IsFalse())
+//  - "true", "yes", "on", "1"            - enabled
+//  - "false", "no", "off", "0", (absent) - disabled
+constexpr TStringBuf TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS = "allow_database_config_selectors";
 
 namespace TEvConsole {
     enum EEv {
@@ -56,7 +82,9 @@ namespace TEvConsole {
         EvGetAllMetadataRequest,
         EvGetNodeLabelsRequest,
         EvIsYamlReadOnlyRequest,
-
+        EvFetchStartupConfigRequest,
+        EvGetConfigurationVersionRequest,
+        EvGetNodeConfigurationVersionRequest,
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
         EvAlterTenantResponse,
@@ -102,6 +130,9 @@ namespace TEvConsole {
         EvGenericError,
 
         EvIsYamlReadOnlyResponse,
+        EvFetchStartupConfigResponse,
+        EvGetConfigurationVersionResponse,
+        EvGetNodeConfigurationVersionResponse,
 
         EvEnd
     };
@@ -225,6 +256,18 @@ namespace TEvConsole {
 
     struct TEvResolveAllConfigResponse : public TEventShortDebugPB<TEvResolveAllConfigResponse, NKikimrConsole::TResolveAllConfigResponse, EvResolveAllConfigResponse> {};
 
+    struct TEvFetchStartupConfigRequest : public TEventShortDebugPB<TEvFetchStartupConfigRequest, NKikimrConsole::TFetchStartupConfigRequest, EvFetchStartupConfigRequest> {};
+
+    struct TEvFetchStartupConfigResponse : public TEventShortDebugPB<TEvFetchStartupConfigResponse, NKikimrConsole::TFetchStartupConfigResponse, EvFetchStartupConfigResponse> {};
+
+    struct TEvGetConfigurationVersionRequest : public TEventShortDebugPB<TEvGetConfigurationVersionRequest, NKikimrConsole::TGetConfigurationVersionRequest, EvGetConfigurationVersionRequest> {};
+
+    struct TEvGetConfigurationVersionResponse : public TEventShortDebugPB<TEvGetConfigurationVersionResponse, NKikimrConsole::TGetConfigurationVersionResponse, EvGetConfigurationVersionResponse> {};
+
+    struct TEvGetNodeConfigurationVersionRequest : public TEventShortDebugPB<TEvGetNodeConfigurationVersionRequest, NKikimrConsole::TGetNodeConfigurationVersionRequest, EvGetNodeConfigurationVersionRequest> {};
+
+    struct TEvGetNodeConfigurationVersionResponse : public TEventShortDebugPB<TEvGetNodeConfigurationVersionResponse, NKikimrConsole::TGetNodeConfigurationVersionResponse, EvGetNodeConfigurationVersionResponse> {};
+
     struct TEvUnauthorized : public TEventShortDebugPB<TEvUnauthorized, NKikimrConsole::TUnauthorized, EvUnauthorized> {};
 
     struct TEvDisabled : public TEventShortDebugPB<TEvDisabled, NKikimrConsole::TDisabled, EvDisabled> {};
@@ -282,7 +325,12 @@ namespace TEvConsole {
     struct TEvReplaceConfigSubscriptionsResponse : public TEventShortDebugPB<TEvReplaceConfigSubscriptionsResponse, NKikimrConsole::TReplaceConfigSubscriptionsResponse, EvReplaceConfigSubscriptionsResponse> {};
 
     struct TEvConfigNotificationRequest : public TEventShortDebugPB<TEvConfigNotificationRequest, NKikimrConsole::TConfigNotificationRequest, EvConfigNotificationRequest> {
-        const NKikimrConfig::TAppConfig& GetConfig() const { return Record.GetConfig(); }
+        const NKikimrConfig::TAppConfig& GetConfig() const;
+
+        // Node-local only: parsed forms of opaque config sections (kind -> message),
+        // produced by the configs dispatcher via an injected OpaqueConfigParser.
+        // .second != nullptr - config either not empty and present or not added into map
+        THashMap<ui32, std::shared_ptr<const ::google::protobuf::Message>> OpaqueConfigs;
     };
 
     struct TEvConfigNotificationResponse : public TEventShortDebugPB<TEvConfigNotificationResponse, NKikimrConsole::TConfigNotificationResponse, EvConfigNotificationResponse> {
@@ -335,46 +383,31 @@ namespace TEvConsole {
             NKikimrConfig::TAppConfig &&config,
             const THashSet<ui32> &affectedKinds,
             const TString &yamlConfig = {},
-            const TMap<ui64, TString> &volatileYamlConfigs = {})
-        {
-            Record.SetGeneration(generation);
-            Record.MutableConfig()->Swap(&config);
-            for (ui32 kind : affectedKinds)
-                Record.AddAffectedKinds(kind);
-
-            if (!yamlConfig.empty()) {
-                Record.SetYamlConfig(yamlConfig);
-                for (auto &[id, config] : volatileYamlConfigs) {
-                    auto *volatileConfig = Record.AddVolatileConfigs();
-                    volatileConfig->SetId(id);
-                    volatileConfig->SetConfig(config);
-                }
-            }
-        }
+            const TMap<ui64, TString> &volatileYamlConfigs = {});
 
         TEvConfigSubscriptionNotification(
             ui64 generation,
             const NKikimrConfig::TAppConfig &config,
             const THashSet<ui32> &affectedKinds,
             const TString &yamlConfig = {},
-            const TMap<ui64, TString> &volatileYamlConfigs = {},
-            const NKikimrConfig::TAppConfig &rawConfig = {})
-        {
-            Record.SetGeneration(generation);
-            Record.MutableConfig()->CopyFrom(config);
-            Record.MutableRawConsoleConfig()->CopyFrom(rawConfig);
-            for (ui32 kind : affectedKinds)
-                Record.AddAffectedKinds(kind);
+            const TMap<ui64, TString> &volatileYamlConfigs = {});
 
-            if (!yamlConfig.empty()) {
-                Record.SetYamlConfig(yamlConfig);
-                for (auto &[id, config] : volatileYamlConfigs) {
-                    auto *volatileConfig = Record.AddVolatileConfigs();
-                    volatileConfig->SetId(id);
-                    volatileConfig->SetConfig(config);
-                }
-            }
-        }
+        TEvConfigSubscriptionNotification(
+            ui64 generation,
+            const NKikimrConfig::TAppConfig &config,
+            const THashSet<ui32> &affectedKinds,
+            const TString &yamlConfig,
+            const TMap<ui64, TString> &volatileYamlConfigs,
+            const NKikimrConfig::TAppConfig &rawConfig);
+
+        TEvConfigSubscriptionNotification(
+            ui64 generation,
+            const NKikimrConfig::TAppConfig &config,
+            const THashSet<ui32> &affectedKinds,
+            const TString &yamlConfig,
+            const TMap<ui64, TString> &volatileYamlConfigs,
+            const NKikimrConfig::TAppConfig &rawConfig,
+            const TMaybe<TString> databaseYamlConfig);
     };
 
     /**

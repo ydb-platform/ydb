@@ -1,14 +1,18 @@
 # Переименование таблицы
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% endif %}
-
 ```yql
 ALTER TABLE old_table_name RENAME TO new_table_name;
 ```
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% note info %}
+
+При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+{% endnote %}
+
+{% endif %}
 
 Если таблица с новым именем существует, будет возвращена ошибка. Возможность транзакционной подмены таблицы под нагрузкой поддерживается специализированными методами в CLI и SDK.
 

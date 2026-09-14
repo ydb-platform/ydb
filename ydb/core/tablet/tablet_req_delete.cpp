@@ -33,7 +33,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
                          TabletId,
                          0,
                          NKikimrWhiteboard::TTabletStateInfo::Deleted,
-                         std::numeric_limits<ui32>::max()),
+                         Generation != std::numeric_limits<ui32>::max() ? Generation + 1 : Generation),
                          true);
             // TODO(xenoxeno): broadcast message to more/all nodes ... maybe?
         }
@@ -66,7 +66,8 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
                     info.Channel,                     // channel
                     Generation,                       // collectGeneration
                     std::numeric_limits<ui32>::max(), // collectStep
-                    TInstant::Max());                 // deadline
+                    TInstant::Max(),                  // deadline
+                    TWriteSource::DeleteHardBarrier);
         event->IsMonitored = false;
         SendToBSProxy(ctx, info.GroupId, event.Release(), numRequest);
     }

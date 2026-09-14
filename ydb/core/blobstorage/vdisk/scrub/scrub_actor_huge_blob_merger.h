@@ -10,7 +10,7 @@ namespace NKikimr {
         NMatrix::TVectorType Local;
         NMatrix::TVectorType ReadableLocal;
         std::vector<TDiskPart> CorruptedParts;
-        std::function<std::optional<TRcBuf>(const TDiskPart&)> Read;
+        std::function<std::optional<TRcBuf>(const TDiskPart&, TLogoBlobID)> Read;
         const TBlobStorageGroupType GType;
         TScrubCoroImpl *Impl;
 
@@ -32,7 +32,8 @@ namespace NKikimr {
         void Finish() {}
 
         // process on-disk data
-        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 /*sstId*/) {
+        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 /*sstId*/,
+                const void* /*sst*/) {
             switch (memRec.GetType()) {
                 // ignore non-huge blobs
                 case TBlobType::MemBlob:
@@ -44,14 +45,18 @@ namespace NKikimr {
                     TDiskDataExtractor extr;
                     memRec.GetDiskData(&extr, outbound);
                     const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
-                    Y_ABORT_UNLESS(extr.End - extr.Begin == local.CountBits());
+                    Y_VERIFY_S(extr.End - extr.Begin == local.CountBits(), LogPrefix);
                     const TDiskPart *part = extr.Begin;
                     for (ui32 i = local.FirstPosition(); i != local.GetSize(); i = local.NextPosition(i), ++part) {
                         if (part->ChunkIdx && part->Size) {
-                            std::optional<TRcBuf> data = Read(*part);
-                            STLOGX(Impl->GetActorContext(), data ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDS21,
-                                VDISKP(LogPrefix, "huge blob read"), (Id, key.LogoBlobID()), (Local, local),
-                                (Location, *part), (IsReadable, data.has_value()));
+                            const TLogoBlobID partId(key.LogoBlobID(), i + 1); // part id for this blob
+                            std::optional<TRcBuf> data = Read(*part, partId);
+                            YDB_LOG_CTX_COMP(Impl->GetActorContext(), data ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDISKP(LogPrefix, "huge blob read"),
+                                {"marker", "VDS21"},
+                                {"id", key.LogoBlobID()},
+                                {"local", local},
+                                {"location", *part},
+                                {"isReadable", data.has_value()});
                             Local.Set(i);
                             if (data) {
                                 ReadableLocal.Set(i);
@@ -66,7 +71,7 @@ namespace NKikimr {
         }
 
         void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope* /*data*/, const TKeyLogoBlob& key, ui64 /*lsn*/) {
-            AddFromSegment(memRec, nullptr, key, Max<ui64>());
+            AddFromSegment(memRec, nullptr, key, Max<ui64>(), nullptr);
         }
 
         void Clear() {
@@ -91,8 +96,8 @@ namespace NKikimr {
     public:
         template<typename TRead>
         THugeBlobAndIndexMerger(const TString& logPrefix, const TBlobStorageGroupType& gtype, TRead&& read, TScrubCoroImpl *impl)
-        : HugeBlobMerger(logPrefix, gtype, std::move(read), impl)
-        , IndexMerger(gtype)
+            : HugeBlobMerger(logPrefix, gtype, std::move(read), impl)
+            , IndexMerger(gtype)
         {}
 
         void AddFromFresh(const TMemRecLogoBlob &memRec, const TRope* data, const TKeyLogoBlob &key, ui64 lsn) {
@@ -100,9 +105,10 @@ namespace NKikimr {
             IndexMerger.AddFromFresh(memRec, data, key, lsn);
         }
 
-        void AddFromSegment(const TMemRecLogoBlob &memRec, const TDiskPart* outbound, const TKeyLogoBlob &key, ui64 circaLsn) {
-            HugeBlobMerger.AddFromSegment(memRec, outbound, key, circaLsn);
-            IndexMerger.AddFromSegment(memRec, outbound, key, circaLsn);
+        void AddFromSegment(const TMemRecLogoBlob &memRec, const TDiskPart* outbound, const TKeyLogoBlob &key, ui64 circaLsn,
+                const auto *sst) {
+            HugeBlobMerger.AddFromSegment(memRec, outbound, key, circaLsn, sst);
+            IndexMerger.AddFromSegment(memRec, outbound, key, circaLsn, sst);
         }
 
         static bool HaveToMergeData() { return true; }

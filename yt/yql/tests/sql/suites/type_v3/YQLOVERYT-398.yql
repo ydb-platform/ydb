@@ -1,0 +1,21 @@
+/* custom error: At function: YtWriteTable! */
+/* custom error: Strict Yson type is not allowed to write, please use Optional<Yson> for column(s): "ys_list": Optional<List<Yson>> */
+
+/*
+ * YQLOVERYT-398. Creating a table with native YT types from a row type with a strict Yson
+ * nested into a container ("ys_list": List<Yson>) is not supported. The destination row spec
+ * is built by SetType() with non zero NativeYtTypeFlags, so it must be rejected right at the
+ * write - the "At function: YtWriteTable!" expectation above pins that.
+ *
+ * Otherwise such row spec is copied onto an operation output table by
+ * PhysicalFinalizing-AlignPublishTypes (the source table is not native, so the flags differ),
+ * the check fires in the repeat type annotation and the error is escalated to S_FATAL
+ * ("An abnormal situation found").
+ */
+
+USE plato;
+
+PRAGMA yt.UseNativeYtTypes;
+
+INSERT INTO Output WITH TRUNCATE
+SELECT * FROM Input;

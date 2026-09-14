@@ -23,7 +23,7 @@ TEST(TSignatureTest, DeserializeSerialize)
 
     TSignaturePtr signature;
     EXPECT_NO_THROW(signature = ConvertTo<TSignaturePtr>(ysonOK));
-    EXPECT_EQ(signature->Payload().ToString(), "payload");
+    EXPECT_EQ(signature->Payload(), "payload");
 
     EXPECT_EQ(ConvertToYsonString(signature, EYsonFormat::Text).ToString(), ysonOK.ToString());
 }

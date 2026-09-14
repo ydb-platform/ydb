@@ -10,11 +10,10 @@ namespace NYT::NChaosClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChaosCacheChannelConfig
+struct TChaosCacheChannelConfig
     : public NRpc::TRetryingChannelConfig
     , public NRpc::TBalancingChannelConfig
 {
-public:
     REGISTER_YSON_STRUCT(TChaosCacheChannelConfig);
 
     static void Register(TRegistrar /*registrar*/)
@@ -25,27 +24,47 @@ DEFINE_REFCOUNTED_TYPE(TChaosCacheChannelConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationCardCacheConfig
+struct TWatchedReplicationCardCacheConfig
+    : public TAsyncExpiringCacheConfig
+{
+    TWatchedReplicationCardCacheConfigPtr ApplyDynamic(
+        const TAsyncExpiringCacheDynamicConfigPtr& dynamicConfig) const;
+
+    REGISTER_YSON_STRUCT(TWatchedReplicationCardCacheConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TWatchedReplicationCardCacheConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReplicationCardCacheConfig
     : public TAsyncExpiringCacheConfig
     , public TChaosCacheChannelConfig
 {
-public:
     bool EnableWatching;
+    TWatchedReplicationCardCacheConfigPtr WatchedCacheConfig;
+
+    TReplicationCardCacheConfigPtr ApplyDynamic(const TReplicationCardCacheDynamicConfigPtr& dynamicConfig) const;
 
     REGISTER_YSON_STRUCT(TReplicationCardCacheConfig);
 
     static void Register(TRegistrar registrar);
+
+protected:
+    void ApplyDynamicInplace(const TReplicationCardCacheDynamicConfigPtr& dynamicConfig);
 };
 
 DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationCardCacheDynamicConfig
-    : public virtual NYTree::TYsonStruct
+struct TReplicationCardCacheDynamicConfig
+    : public TAsyncExpiringCacheDynamicConfig
 {
-public:
     std::optional<bool> EnableWatching;
+    TAsyncExpiringCacheDynamicConfigPtr WatchedCacheConfig;
 
     REGISTER_YSON_STRUCT(TReplicationCardCacheDynamicConfig);
 
@@ -57,4 +76,3 @@ DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheDynamicConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NChaosClient
-

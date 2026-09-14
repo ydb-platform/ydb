@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/destination/events/transfer.h>
 #include <ydb/core/tx/columnshard/data_sharing/modification/tasks/modification.h>
@@ -7,7 +8,7 @@
 namespace NKikimr::NOlap {
 class TColumnEngineForLogs;
 class TVersionedIndex;
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NIceDb {
 class TNiceDb;
@@ -19,17 +20,17 @@ class TSharedBlobsManager;
 
 class TSourceCursor {
 private:
-    std::map<ui64, std::map<ui32, TPortionDataAccessor>> PortionsForSend;
-    THashMap<ui64, NEvents::TPathIdData> PreviousSelected;
-    THashMap<ui64, NEvents::TPathIdData> Selected;
+    std::map<TInternalPathId, std::map<ui32, std::shared_ptr<TPortionDataAccessor>>> PortionsForSend;
+    THashMap<TInternalPathId, NEvents::TPathIdData> PreviousSelected;
+    THashMap<TInternalPathId, NEvents::TPathIdData> Selected;
     THashMap<TTabletId, TTaskForTablet> Links;
     std::vector<NOlap::TSchemaPresetVersionInfo> SchemeHistory;
-    YDB_READONLY(ui64, StartPathId, 0);
+    YDB_READONLY(TInternalPathId, StartPathId, TInternalPathId{});
     YDB_READONLY(ui64, StartPortionId, 0);
     YDB_READONLY(ui64, PackIdx, 0);
     TTabletId SelfTabletId;
     TTransferContext TransferContext;
-    std::optional<ui64> NextPathId = 0;
+    std::optional<TInternalPathId> NextPathId = TInternalPathId{};
     std::optional<ui64> NextPortionId = 0;
 
     // Begin/End of the next slice of SchemeHistory
@@ -38,8 +39,8 @@ private:
 
     THashSet<TTabletId> LinksModifiedTablets;
     ui64 AckReceivedForPackIdx = 0;
-    std::set<ui64> PathIds;
-    THashMap<ui64, TString> PathPortionHashes;
+    std::set<TInternalPathId> PathIds;
+    THashMap<TInternalPathId, TString> PathPortionHashes;
     bool IsStartedFlag = false;
     bool IsStaticSaved = false;
     void BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index);
@@ -60,20 +61,32 @@ public:
     TConclusionStatus AckData(const ui64 packIdxReceived) {
         AFL_VERIFY(packIdxReceived <= PackIdx);
         if (packIdxReceived != PackIdx) {
-            return TConclusionStatus::Fail("incorrect packIdx received for AckData: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
+            return TConclusionStatus::Fail(
+                "incorrect packIdx received for AckData: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
         }
         AckReceivedForPackIdx = packIdxReceived;
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)("links_ready", LinksModifiedTablets.size())("links_waiting", Links.size());
+        YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "SourceAckData"},
+            {"pack", PackIdx},
+            {"packAck", AckReceivedForPackIdx},
+            {"linksReady", LinksModifiedTablets.size()},
+            {"linksWaiting", Links.size()});
         return TConclusionStatus::Success();
     }
 
     TConclusionStatus AckLinks(const TTabletId tabletId, const ui64 packIdxReceived) {
         if (packIdxReceived != PackIdx) {
-            return TConclusionStatus::Fail("incorrect packIdx received for AckLinks: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
+            return TConclusionStatus::Fail(
+                "incorrect packIdx received for AckLinks: " + ::ToString(packIdxReceived) + " but expected: " + ::ToString(PackIdx));
         }
         AFL_VERIFY(Links.contains(tabletId));
         if (LinksModifiedTablets.emplace(tabletId).second) {
-            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "SourceAckData")("pack", PackIdx)("pack_ack", AckReceivedForPackIdx)("links_ready", LinksModifiedTablets.size())("links_waiting", Links.size());
+            YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "SourceAckData"},
+                {"pack", PackIdx},
+                {"packAck", AckReceivedForPackIdx},
+                {"linksReady", LinksModifiedTablets.size()},
+                {"linksWaiting", Links.size()});
             return TConclusionStatus::Success();
         } else {
             return TConclusionStatus::Fail("AckLinks repeated table");
@@ -92,15 +105,16 @@ public:
         LinksModifiedTablets.emplace(tabletId);
     }
 
-    const THashMap<ui64, NEvents::TPathIdData> GetPreviousSelected() const {
+    const THashMap<TInternalPathId, NEvents::TPathIdData> GetPreviousSelected() const {
         return PreviousSelected;
     }
 
     TArrayRef<const NOlap::TSchemaPresetVersionInfo> GetSelectedSchemas() const {
-        return TArrayRef<const NOlap::TSchemaPresetVersionInfo>(SchemeHistory.data() + NextSchemasIntervalBegin, NextSchemasIntervalEnd - NextSchemasIntervalBegin);
+        return TArrayRef<const NOlap::TSchemaPresetVersionInfo>(
+            SchemeHistory.data() + NextSchemasIntervalBegin, NextSchemasIntervalEnd - NextSchemasIntervalBegin);
     }
 
-    const THashMap<ui64, NEvents::TPathIdData>& GetSelected() const {
+    const THashMap<TInternalPathId, NEvents::TPathIdData>& GetSelected() const {
         return Selected;
     }
 
@@ -115,14 +129,15 @@ public:
         return NextSchemasIntervalBegin < SchemeHistory.size() || Selected.size();
     }
 
-    TSourceCursor(const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTransferContext transferContext);
+    TSourceCursor(const TTabletId selfTabletId, const std::set<TInternalPathId>& pathIds, const TTransferContext transferContext);
 
     void SaveToDatabase(class NIceDb::TNiceDb& db, const TString& sessionId);
 
-    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions,
+    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager,
+        THashMap<TInternalPathId, std::vector<std::shared_ptr<TPortionDataAccessor>>>&& portions,
         std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index);
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
         const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic);
 };
 
-} // namespace NKikimr::NOlap::NDataSharing
+}   // namespace NKikimr::NOlap::NDataSharing

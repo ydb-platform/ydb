@@ -15,7 +15,7 @@ struct TControllerSystemViewsState;
 
 std::unique_ptr<NActors::IActor> CreateStorageStatsCoroCalculator(
     const TControllerSystemViewsState& state,
-    const TBlobStorageController::THostRecordMap& hostRecordMap,
+    const THostRecordMap& hostRecordMap,
     ui32 groupReserveMin,
     ui32 groupReservePart);
 

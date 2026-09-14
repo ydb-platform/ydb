@@ -1,6 +1,5 @@
 #include "run_query.h"
-
-#include <ydb/library/actors/core/executor_thread.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 namespace NKikimr::NSQS {
 
@@ -9,7 +8,6 @@ namespace NKikimr::NSQS {
         std::optional<NYdb::TParams> params,
         bool readonly,
         TDuration sendAfter,
-        const TString& database,
         const TActorContext& ctx
     ) {
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
@@ -21,9 +19,8 @@ namespace NKikimr::NSQS {
         request->SetQuery(query);
         request->SetUsePublicResponseDataFormat(true);
 
-        if (database) {
-            request->SetDatabase(database);
-        }
+        auto database = AppData()->SqsConfig.GetRoot() == "/Root/SQS" ? "/Root" : AppData()->SqsConfig.GetRoot();
+        request->SetDatabase(database);
 
         request->MutableQueryCachePolicy()->set_keep_in_cache(true);
 
@@ -42,7 +39,7 @@ namespace NKikimr::NSQS {
         if (sendAfter == TDuration::Zero()) {
             ctx.Send(kqpActor, ev.Release());
         } else {
-            ctx.ExecutorThread.Schedule(sendAfter, new IEventHandle(kqpActor, ctx.SelfID, ev.Release()));
+            TActivationContext::Schedule(sendAfter, new IEventHandle(kqpActor, ctx.SelfID, ev.Release()));
         }
     }
 

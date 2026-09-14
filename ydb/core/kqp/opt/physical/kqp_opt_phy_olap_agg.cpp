@@ -1,11 +1,13 @@
 #include "kqp_opt_phy_rules.h"
 
 #include <ydb/core/kqp/common/kqp_yql.h>
-
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
-
-#include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/actors/core/log.h>
+
+#include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <vector>
 #include <unordered_set>
@@ -69,6 +71,11 @@ bool CanBePushedDown(const TExprBase& trait, TExprContext& ctx)
     }
     auto aggApply = trait.Cast<TCoAggApply>();
     auto aggName = aggApply.Name();
+    const auto& aggType = aggApply.Extractor().Ptr()->GetTypeAnn();
+    if (const auto& nakedType = RemoveOptionality(*aggType); nakedType.GetKind() == ETypeAnnotationKind::Data) {
+        if (GetDataTypeInfo(nakedType.Cast<TDataExprType>()->GetSlot()).Features & NUdf::EDataTypeFeatures::DecimalType)
+            return false;
+    }
     if (SupportedAggFuncs.find(aggName.StringValue()) != SupportedAggFuncs.end()) {
         return true;
     }
@@ -197,7 +204,7 @@ TExprBase BuildAvgResultProcessing(const std::vector<TAggInfo>& aggInfos, const 
         .Done();
 }
 
-} // anonymous namespace end
+} // anonymous namespace
 
 template <class TReadClass>
 TExprBase KqpPushDownOlapGroupByKeysImpl(TExprBase node, TExprContext& ctx, bool& applied) {
@@ -244,13 +251,9 @@ TExprBase KqpPushDownOlapGroupByKeysImpl(TExprBase node, TExprContext& ctx, bool
     }
 }
 
-TExprBase KqpPushDownOlapGroupByKeys(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (NKikimr::NSsa::RuntimeVersion < 2U) {
-        // We introduced aggregate pushdown in v2 of SSA program
-        return node;
-    }
-
-    if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->HasOptEnableOlapProvideComputeSharding()) {
+TExprBase KqpPushDownOlapGroupByKeys(TExprBase node, TExprContext &ctx, const TKqpOptimizeContext &kqpCtx) {
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->HasOptEnableOlapProvideComputeSharding() ||
+        !kqpCtx.Config->GetEnableOlapPushdownAggregate()) {
         return node;
     }
 
@@ -271,12 +274,7 @@ TExprBase KqpPushDownOlapGroupByKeys(TExprBase node, TExprContext& ctx, const TK
 
 TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    if (NKikimr::NSsa::RuntimeVersion < 2U) {
-        // We introduced aggregate pushdown in v2 of SSA program
-        return node;
-    }
-
-    if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
+    if (!kqpCtx.Config->HasOptEnableOlapPushdown() || !kqpCtx.Config->GetEnableOlapPushdownAggregate()) {
         return node;
     }
 
@@ -300,6 +298,14 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 
     auto read = maybeRead.Cast();
+
+    const auto olapDistinctPred = [](const TExprNode::TPtr& n) -> bool {
+        return !!TMaybeNode<TKqpOlapDistinct>(n);
+    };
+    if (FindNode(read.Process().Body().Ptr(), olapDistinctPred)) {
+        return node;
+    }
+
     auto aggs = Build<TKqpOlapAggOperationList>(ctx, node.Pos());
 
     auto aggInfos = CollectAggInfos(aggCombine.Handlers(), ctx);
@@ -373,11 +379,6 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
 
 TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx)
 {
-    if (NKikimr::NSsa::RuntimeVersion < 2U) {
-        // We introduced aggregate pushdown in v2 of SSA program
-        return node;
-    }
-
     if (!kqpCtx.Config->HasOptEnableOlapPushdown()) {
         return node;
     }

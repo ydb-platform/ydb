@@ -1,5 +1,8 @@
 #include "init_impl.h"
 #include "mock.h"
+#include "yaml_config_helpers.h"
+#include <ydb/core/util/backoff.h>
+#include <util/generic/overloaded.h>
 
 namespace NKikimr::NConfig {
 
@@ -29,8 +32,11 @@ class TDefaultErrorCollector
 {
 public:
     // TODO(Enjection): CFG-UX-0 replace regular throw with just collecting
-    void Fatal(TString error) override {
-        ythrow yexception() << error;
+    void Fatal(TString error, TStringBuf errorCode) override {
+        if (errorCode) {
+            throw TInitializationException(TString(errorCode)) << error;
+        }
+        throw TInitializationException() << error;
     }
 };
 
@@ -39,11 +45,6 @@ class TDefaultProtoConfigFileProvider
 {
 private:
     TMap<TString, TSimpleSharedPtr<TFileConfigOptions>> Opts;
-
-    static bool IsFileExists(const fs::path& p) {
-        std::error_code ec;
-        return fs::exists(p, ec) && !ec;
-    }
 
     static bool IsFileReadable(const fs::path& p) {
         std::error_code ec; // For noexcept overload usage.
@@ -64,20 +65,25 @@ public:
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) const override {
         for (const auto& [name, opt] : Opts) {
-            opts.AddLongOption(name, opt->Description)
-                .OptionalArgument("PATH")
-                .StoreResult(&opt->ParsedOption);
+            auto& o = opts.AddLongOption(name, opt->Description)
+                .OptionalArgument("PATH");
+            // Most file options are deprecated: should be provided in yaml config.
+            // log-file and audit-file are still needed for dynamic nodes.
+            if (name != "log-file" && name != "audit-file") {
+                o.Hidden();
+            }
+            o.StoreResult(&opt->ParsedOption);
         }
     }
 
     TString GetProtoFromFile(const TString& path, IErrorCollector& errorCollector) const override {
         fs::path filePath(path.c_str());
-        if (!IsFileExists(filePath)) {
-            errorCollector.Fatal(Sprintf("File %s doesn't exists", path.c_str()));
+        if (!fs::is_regular_file(filePath)) {
+            errorCollector.Fatal(Sprintf("File %s does not exist", path.c_str()), "YDBE-10025");
             return {};
         }
         if (!IsFileReadable(filePath)) {
-            errorCollector.Fatal(Sprintf("File %s isn't readable", path.c_str()));
+            errorCollector.Fatal(Sprintf("File %s is not readable", path.c_str()), "YDBE-10026");
             return {};
         }
         TAutoPtr<TMappedFileInput> fileInput(new TMappedFileInput(path));
@@ -96,7 +102,7 @@ public:
             return (*opt)->ParsedOption.GetRef();
         }
         // TODO(Enjection): CFG-UX-0 replace with IErrorCollector call
-        ythrow yexception() << "option " << optName.Quote() << " undefined";
+        throw TMisuseException() << "option " << optName.Quote() << " undefined";
     }
 };
 
@@ -206,22 +212,7 @@ class TDefaultNodeBrokerClient
             const TString& nodeRegistrationToken,
             const IEnv& env)
     {
-        TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
-        NYdb::TDriverConfig config;
-        if (endpoint.EnableSsl.Defined() && endpoint.EnableSsl.GetRef()) {
-            if (grpcSettings.PathToGrpcCaFile) {
-                config.UseSecureConnection(env.ReadFromFile(grpcSettings.PathToGrpcCaFile, "CA certificates").c_str());
-            }
-            if (grpcSettings.PathToGrpcCertFile && grpcSettings.PathToGrpcPrivateKeyFile) {
-                auto certificate = env.ReadFromFile(grpcSettings.PathToGrpcCertFile, "Client certificates");
-                auto privateKey = env.ReadFromFile(grpcSettings.PathToGrpcPrivateKeyFile, "Client certificates key");
-                config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
-            }
-        }
-        if (nodeRegistrationToken) {
-            config.SetAuthToken(nodeRegistrationToken);
-        }
-        config.SetEndpoint(endpoint.Address);
+        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addr, env, settings.DomainPath_, nodeRegistrationToken);
         auto connection = NYdb::TDriver(config);
 
         auto client = NYdb::NDiscovery::TDiscoveryClient(connection);
@@ -249,11 +240,9 @@ class TDefaultNodeBrokerClient
                                                   env);
                 if (result.IsSuccess()) {
                     logger.Out() << "Success. Registered as " << result.GetNodeId() << Endl;
-                    logger.Out() << "Node name: ";
                     if (result.HasNodeName()) {
-                        logger.Out() << result.GetNodeName();
+                        logger.Out() << "Node name: " << result.GetNodeName() << Endl;
                     }
-                    logger.Out() << Endl;
                     break;
                 }
                 logger.Err() << "Registration error: " << static_cast<NYdb::TStatus>(result) << Endl;
@@ -313,27 +302,104 @@ class TDynConfigResultWrapper
     : public IConfigurationResult
 {
     NKikimr::NClient::TConfigurationResult Result;
+    std::optional<TString> MainYamlConfig;
+
 public:
     TDynConfigResultWrapper(NKikimr::NClient::TConfigurationResult&& result)
         : Result(std::move(result))
-    {}
+    {
+        if (Result.HasMainYamlConfig()) {
+            MainYamlConfig.emplace(Result.GetMainYamlConfig());
+        }
+    }
 
-    const NKikimrConfig::TAppConfig& GetConfig() const {
+    const NKikimrConfig::TAppConfig& GetConfig() const override {
         return Result.GetConfig();
     }
 
-    bool HasYamlConfig() const {
-        return Result.HasYamlConfig();
+    const std::optional<TString>& GetMainYamlConfig() const override {
+        return MainYamlConfig;
     }
 
-    const TString& GetYamlConfig() const {
-        return Result.GetYamlConfig();
-    }
-
-    TMap<ui64, TString> GetVolatileYamlConfigs() const {
+    TMap<ui64, TString> GetVolatileYamlConfigs() const override {
         return Result.GetVolatileYamlConfigs();
     }
+
+    bool HasDatabaseYamlConfig() const override {
+        return Result.HasDatabaseYamlConfig();
+    }
+
+    const TString& GetDatabaseYamlConfig() const override {
+        return Result.GetDatabaseYamlConfig();
+    }
 };
+
+namespace {
+
+struct RetryResult {
+    bool Success;
+    int TotalAttempts;
+    int Rounds;
+};
+
+template <typename TAttemptFn>
+RetryResult RetryWithJitter(
+    const TVector<TString>& addrs,
+    const IEnv& env,
+    TAttemptFn attempt)
+{
+    const int maxRounds = 10;
+    const TDuration baseRoundDelay = TDuration::MilliSeconds(500);
+    const TDuration maxIntraAddrDelay = TDuration::Minutes(3);
+    const TDuration maxDelay = TDuration::Minutes(5);
+    const TDuration baseAddressDelay = TDuration::MilliSeconds(250);
+
+    auto sleepWithJitteredExponentialDelay = [&env](TDuration baseDelay, TDuration maxDelay, int exponent) {
+        ui64 multiplier = 1ULL << exponent;
+        TDuration delay = baseDelay * multiplier;
+        delay = Min(delay, maxDelay);
+
+        ui64 maxMs = delay.MilliSeconds();
+        ui64 jitteredMs = RandomNumber<ui64>(maxMs + 1);
+        TDuration jitteredDelay = TDuration::MilliSeconds(jitteredMs);
+
+        env.Sleep(jitteredDelay);
+    };
+
+    int round = 0;
+    int totalAttempts = 0;
+    bool success = false;
+
+    while (!success && round < maxRounds) {
+        int addressIndex = 0;
+        for (const auto& addr : addrs) {
+            success = attempt(addr);
+            ++totalAttempts;
+
+            if (success) {
+                break;
+            }
+
+            // Exponential delay between individual addresses - delay grows with each address in the round
+            if (addrs.size() > 1) {
+                sleepWithJitteredExponentialDelay(baseAddressDelay, maxIntraAddrDelay, Max(addressIndex, round));
+            }
+
+            ++addressIndex;
+        }
+
+        if (!success) {
+            ++round;
+
+            if (round < maxRounds) {
+                sleepWithJitteredExponentialDelay(baseRoundDelay, maxDelay, round - 1);
+            }
+        }
+    }
+    return {success, totalAttempts, round};
+}
+
+} // namespace
 
 class TDefaultDynConfigClient
     : public IDynConfigClient
@@ -386,33 +452,176 @@ public:
         IInitLogger& logger) const override
     {
         std::shared_ptr<IConfigurationResult> res;
-        bool success = false;
         TString error;
-
         SetRandomSeed(TInstant::Now().MicroSeconds());
-        int minAttempts = 10;
-        int attempts = 0;
-        while (!success && attempts < minAttempts) {
-            for (auto addr : addrs) {
-                success = TryToLoadConfigForDynamicNodeFromCMS(grpcSettings, addr, settings, env, logger, res, error);
-                ++attempts;
-                if (success) {
-                    break;
-                }
-            }
-            // Randomized backoff
-            if (!success) {
-                env.Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
-            } else {
-                break;
-            }
-        }
 
-        if (!success) {
-            logger.Err() << "WARNING: couldn't load config from CMS: " << error << Endl;
+        auto attempt = [&](const TString& addr) {
+            logger.Out() << "Trying to get dynamic config from " << addr << Endl;
+            bool success = TryToLoadConfigForDynamicNodeFromCMS(grpcSettings, addr, settings, env, logger, res, error);
+            if (success) {
+                logger.Out() << "Success. Got dynamic config from " << addr << Endl;
+            }
+            return success;
+        };
+
+        const auto result = RetryWithJitter(addrs, env, attempt);
+
+        if (!result.Success) {
+            logger.Err() << "WARNING: couldn't load config from Console after "
+                        << result.TotalAttempts << " attempts across " << result.Rounds
+                        << " rounds: " << error << Endl;
         }
 
         return res;
+    }
+};
+
+class TConfigResultWrapper
+    : public IStorageConfigResult
+{
+public:
+    TConfigResultWrapper(const NYdb::NConfig::TFetchConfigResult& result, const TString& sourceAddress = TString())
+        : Success(result.IsSuccess())
+        , TransportError(result.IsTransportError())
+        , Endpoint(result.GetEndpoint())
+        , PrimaryIssueMessage(result.GetIssues().Empty() ? TString() : TString(result.GetIssues().begin()->GetMessage()))
+        , IssuesText(result.GetIssues().ToOneLineString())
+        , SourceAddress(sourceAddress)
+        , Transient(result.Transient())
+    {
+        for (const auto& entry : result.GetConfigs()) {
+            std::visit(TOverloaded{
+                [&](const NYdb::NConfig::TMainConfigIdentity&) { MainYamlConfig.emplace(entry.Config); },
+                [&](const NYdb::NConfig::TStorageConfigIdentity&) { StorageYamlConfig.emplace(entry.Config); },
+                [&](const NYdb::NConfig::TDatabaseConfigIdentity&) {},
+                [&](const std::monostate&) { Y_DEBUG_ABORT(); }
+            }, entry.Identity);
+        }
+    }
+
+    bool IsSuccess() const override {
+        return Success;
+    }
+
+    bool IsTransportError() const override {
+        return TransportError;
+    }
+
+    const TString& GetEndpoint() const override {
+        return Endpoint;
+    }
+
+    const TString& GetPrimaryIssueMessage() const override {
+        return PrimaryIssueMessage;
+    }
+
+    const TString& GetIssuesText() const override {
+        return IssuesText;
+    }
+
+    const std::optional<TString>& GetMainYamlConfig() const override {
+        return MainYamlConfig;
+    }
+
+    const std::optional<TString>& GetStorageYamlConfig() const override {
+        return StorageYamlConfig;
+    }
+
+    const TString& GetSourceAddress() const override {
+        return SourceAddress;
+    }
+
+    bool IsTransient() const override {
+        return Transient;
+    }
+
+private:
+    bool Success;
+    bool TransportError;
+    TString Endpoint;
+    TString PrimaryIssueMessage;
+    TString IssuesText;
+    std::optional<TString> MainYamlConfig;
+    std::optional<TString> StorageYamlConfig;
+    TString SourceAddress;
+    bool Transient;
+};
+
+class TDefaultConfigClient
+    : public IConfigClient
+{
+private:
+    static NYdb::NConfig::TFetchConfigResult TryToFetchConfig(
+        const TGrpcSslSettings& grpcSettings,
+        const TString& addrs,
+        const IEnv& env,
+        const std::vector<TString>& hostOptions,
+        int interconnectPort)
+    {
+        NYdb::TDriverConfig config = CreateDriverConfig(grpcSettings, addrs, env);
+
+        auto connection = NYdb::TDriver(config);
+
+        auto client = NYdb::NConfig::TConfigClient(connection);
+        std::vector<std::string> hostOptionsAdopted;
+        for (const TString& host : hostOptions) {
+            hostOptionsAdopted.emplace_back(host.data(), host.size());
+        }
+        NYdb::NConfig::TFetchConfigResult result = client.FetchAllConfigs(hostOptionsAdopted, interconnectPort).GetValueSync();
+        connection.Stop(true);
+        return result;
+    }
+
+    struct TFetchConfigImplResult {
+        NYdb::NConfig::TFetchConfigResult Result;
+        TString SourceAddress;
+    };
+
+    static TFetchConfigImplResult FetchConfigImpl(
+        const TGrpcSslSettings& grpcSettings,
+        const TVector<TString>& addrs,
+        const IEnv& env,
+        IInitLogger& logger,
+        const std::vector<TString>& hostOptions,
+        int interconnectPort)
+    {
+        std::optional<NYdb::NConfig::TFetchConfigResult> result;
+        TString sourceAddress;
+        SetRandomSeed(TInstant::Now().MicroSeconds());
+
+        auto attempt = [&](const TString& addr) {
+            logger.Out() << "Trying to fetch config from " << addr << Endl;
+            result = TryToFetchConfig(grpcSettings, addr, env, hostOptions, interconnectPort);
+            if (result->IsSuccess()) {
+                logger.Out() << "Success. Fetched config from " << addr << Endl;
+                sourceAddress = addr;
+                return true;
+            }
+            logger.Err() << "Fetch config error: " << static_cast<NYdb::TStatus>(*result) << Endl;
+            return false;
+        };
+
+        const auto retryResult = RetryWithJitter(addrs, env, attempt);
+
+        if (!retryResult.Success) {
+             logger.Err() << "WARNING: couldn't fetch config from Console after "
+                        << retryResult.TotalAttempts << " attempts across " << retryResult.Rounds
+                        << " rounds. Last error: " << static_cast<NYdb::TStatus>(*result) << Endl;
+        }
+        return {*result, sourceAddress};
+    }
+
+public:
+    std::shared_ptr<IStorageConfigResult> FetchConfig(
+        const TGrpcSslSettings& grpcSettings,
+        const TVector<TString>& addrs,
+        const IEnv& env,
+        IInitLogger& logger,
+        const std::vector<TString>& hostOptions,
+        int interconnectPort) const override
+    {
+        auto fetchResult = FetchConfigImpl(grpcSettings, addrs, env, logger, hostOptions, interconnectPort);
+        return std::make_shared<TConfigResultWrapper>(std::move(fetchResult.Result), std::move(fetchResult.SourceAddress));
     }
 };
 
@@ -457,6 +666,10 @@ std::unique_ptr<IDynConfigClient> MakeDefaultDynConfigClient() {
     return std::make_unique<TDefaultDynConfigClient>();
 }
 
+std::unique_ptr<IConfigClient> MakeDefaultConfigClient() {
+    return std::make_unique<TDefaultConfigClient>();
+}
+
 std::unique_ptr<IInitLogger> MakeDefaultInitLogger() {
     return std::make_unique<TDefaultInitLogger>();
 }
@@ -476,6 +689,9 @@ void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const NYdb::NDisc
     }
     if (src.Body) {
         dst->SetBody(src.Body.value());
+    }
+    if (src.BridgePileName) {
+        dst->SetBridgePileName(TString{src.BridgePileName.value()});
     }
     if (src.DataCenter) {
         dst->SetDataCenter(TString{src.DataCenter.value()});
@@ -506,6 +722,9 @@ void CopyNodeLocation(NYdb::NDiscovery::TNodeLocation* dst, const NActorsInterco
     }
     if (src.HasBody()) {
         dst->Body = src.GetBody();
+    }
+    if (src.HasBridgePileName()) {
+        dst->BridgePileName = src.GetBridgePileName();
     }
     if (src.HasDataCenter()) {
         dst->DataCenter = src.GetDataCenter();
@@ -569,35 +788,63 @@ void LoadBootstrapConfig(IProtoConfigFileProvider& protoConfigFileProvider, IErr
         /*
          * FIXME: if (ErrorCollector.HasFatal()) { return; }
          */
-        const bool result = ParsePBFromString(protoString, &parsedConfig);
+        TString parseError;
+        const bool result = ParsePBFromString(protoString, &parsedConfig, &parseError);
         if (!result) {
-            errorCollector.Fatal(Sprintf("Can't parse protobuf: %s", path.c_str()));
+            TStringBuilder message;
+            message << "Failed to parse protobuf file " << path.Quote();
+            if (parseError) {
+                message << ": " << parseError;
+            }
+            errorCollector.Fatal(message, "YDBE-10024");
             return;
         }
         out.MergeFrom(parsedConfig);
     }
 }
 
-void LoadYamlConfig(TConfigRefs refs, const TString& yamlConfigFile, NKikimrConfig::TAppConfig& appConfig, const NCompat::TSourceLocation location) {
-    if (!yamlConfigFile) {
-        return;
+void ApplyMainYamlConfig(
+    TConfigRefs refs,
+    const TYamlConfigs& yamlConfigs,
+    NKikimrConfig::TAppConfig& appConfig,
+    const NCompat::TSourceLocation location)
+{
+    IConfigUpdateTracer& configUpdateTracer = refs.Tracer;
+    Y_ABORT_UNLESS(yamlConfigs.Main);
+    const TString& mainYamlConfigString = *yamlConfigs.Main;
+    const auto& storageYamlConfigString = yamlConfigs.Storage;
+
+    appConfig.SetStartupConfigYaml(mainYamlConfigString);
+    if (storageYamlConfigString) {
+        appConfig.SetStartupStorageYaml(*storageYamlConfigString);
     }
 
-    IConfigUpdateTracer& configUpdateTracer = refs.Tracer;
-    IErrorCollector& errorCollector = refs.ErrorCollector;
-    IProtoConfigFileProvider& protoConfigFileProvider = refs.ProtoConfigFileProvider;
-
-    const TString yamlConfigString = protoConfigFileProvider.GetProtoFromFile(yamlConfigFile, errorCollector);
-
-    if (appConfig.GetSelfManagementConfig().GetEnabled()) {
-        // fill in InitialConfigYaml only when self-management through distconf is enabled
-        appConfig.MutableSelfManagementConfig()->SetInitialConfigYaml(yamlConfigString);
+    if (yamlConfigs.LoadedFromStore) {
+        auto *yamlConfig = appConfig.MutableStoredConfigYaml();
+        yamlConfig->SetMainConfig(mainYamlConfigString);
+        yamlConfig->SetMainConfigVersion(NYamlConfig::GetVersion(mainYamlConfigString));
+        if (storageYamlConfigString) {
+            yamlConfig->SetStorageConfig(*storageYamlConfigString);
+            yamlConfig->SetStorageConfigVersion(NYamlConfig::GetVersion(*storageYamlConfigString));
+        }
     }
 
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
      */
-    NKikimrConfig::TAppConfig parsedConfig = NKikimr::NYaml::Parse(yamlConfigString); // FIXME
+
+    NKikimrConfig::TAppConfig parsedConfig;
+
+    auto main = LoadYamlAsJsonOrThrow(mainYamlConfigString, yamlConfigs.MainSource);
+    if (storageYamlConfigString) {
+        auto storage = LoadYamlAsJsonOrThrow(*storageYamlConfigString, yamlConfigs.StorageSource ? *yamlConfigs.StorageSource : TStringBuf{});
+        auto& target = main["config"].GetMapSafe();
+        for (auto&& [key, value] : std::move(storage["config"].GetMapSafe())) {
+            target.emplace(std::move(key), std::move(value));
+        }
+    }
+    ParseJsonConfigOrThrow(main, yamlConfigs.MainSource, parsedConfig, yamlConfigs.AllowUnknownFields);
+
     /*
      * FIXME: if (ErrorCollector.HasFatal()) { return; }
      */
@@ -636,15 +883,18 @@ TString DeduceNodeDomain(const NConfig::TCommonAppOptions& cf, const NKikimrConf
     }
 
     if (appConfig.GetTenantPoolConfig().SlotsSize() == 1) {
-        auto &slot = appConfig.GetTenantPoolConfig().GetSlots(0);
+        const auto &slot = appConfig.GetTenantPoolConfig().GetSlots(0);
         if (slot.GetDomainName()) {
             return slot.GetDomainName();
         }
 
-        auto &tenantName = slot.GetTenantName();
-        if (IsStartWithSlash(tenantName)) {
-            return ToString(ExtractDomain(tenantName));
+        if (slot.GetTenantName()) {
+            return ToString(ExtractDomain(slot.GetTenantName()));
         }
+    }
+
+    if (cf.TenantName.GetOrElse("")) {
+        return ToString(ExtractDomain(*cf.TenantName));
     }
 
     return "";
@@ -685,20 +935,21 @@ NClient::TKikimr GetKikimr(const TGrpcSslSettings& cf, const TString& addr, cons
 }
 
 NKikimrConfig::TAppConfig GetYamlConfigFromResult(const IConfigurationResult& result, const TMap<TString, TString>& labels) {
-    NKikimrConfig::TAppConfig yamlConfig;
-    if (result.HasYamlConfig() && !result.GetYamlConfig().empty()) {
+    NKikimrConfig::TAppConfig appConfig;
+    if (const auto& config = result.GetMainYamlConfig(); config && *config) {
         NYamlConfig::ResolveAndParseYamlConfig(
-            result.GetYamlConfig(),
+            *config,
             result.GetVolatileYamlConfigs(),
             labels,
-            yamlConfig);
+            appConfig,
+            result.HasDatabaseYamlConfig() ? std::optional{result.GetDatabaseYamlConfig()} : std::nullopt);
     }
-    return yamlConfig;
+    return appConfig;
 }
 
-NKikimrConfig::TAppConfig GetActualDynConfig(
+TMaybe<NKikimrConfig::TAppConfig> GetActualDynConfig(
     const NKikimrConfig::TAppConfig& yamlConfig,
-    const NKikimrConfig::TAppConfig& regularConfig,
+    const TMaybe<NKikimrConfig::TAppConfig>& regularConfig,
     IConfigUpdateTracer& ConfigUpdateTracer)
 {
     if (yamlConfig.GetYamlConfigEnabled()) {
@@ -720,6 +971,36 @@ NKikimrConfig::TAppConfig GetActualDynConfig(
     return regularConfig;
 }
 
+void UpdateConfigUpdateTracer(
+    IConfigUpdateTracer& ConfigUpdateTracer)
+{
+    for (ui32 kind = NKikimrConsole::TConfigItem::EKind_MIN; kind <= NKikimrConsole::TConfigItem::EKind_MAX; kind = NextValidKind(kind)) {
+        ConfigUpdateTracer.AddUpdate(kind, TConfigItemInfo::EUpdateKind::ReplaceConfigWithSeedNodes);
+    }
+}
+
+NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, const TString& addr, const IEnv& env, const std::string& database, const std::optional<TString>& authToken) {
+    TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
+    NYdb::TDriverConfig config;
+    if (endpoint.EnableSsl.Defined() && endpoint.EnableSsl.GetRef()) {
+        if (grpcSettings.PathToGrpcCaFile) {
+            config.UseSecureConnection(env.ReadFromFile(grpcSettings.PathToGrpcCaFile, "CA certificates").c_str());
+        }
+        if (grpcSettings.PathToGrpcCertFile && grpcSettings.PathToGrpcPrivateKeyFile) {
+            auto certificate = env.ReadFromFile(grpcSettings.PathToGrpcCertFile, "Client certificates");
+            auto privateKey = env.ReadFromFile(grpcSettings.PathToGrpcPrivateKeyFile, "Client certificates key");
+            config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
+        }
+    }
+    config.SetDatabase(database);
+    if (authToken) {
+        config.SetAuthToken(authToken.value());
+    }
+    config.SetEndpoint(endpoint.Address);
+
+    return config;
+}
+
 std::unique_ptr<IInitialConfigurator> MakeDefaultInitialConfigurator(TInitialConfiguratorDependencies deps) {
     return std::make_unique<TInitialConfiguratorImpl>(deps);
 }
@@ -731,6 +1012,7 @@ class TInitialConfiguratorDepsRecorder
     TProtoConfigFileProviderRecorder ProtoConfigFileProvider;
     TNodeBrokerClientRecorder NodeBrokerClient;
     TDynConfigClientRecorder DynConfigClient;
+    TConfigClientRecorder ConfigClient;
     TEnvRecorder Env;
 public:
     TInitialConfiguratorDepsRecorder(TInitialConfiguratorDependencies deps)
@@ -738,6 +1020,7 @@ public:
         , ProtoConfigFileProvider(deps.ProtoConfigFileProvider)
         , NodeBrokerClient(deps.NodeBrokerClient)
         , DynConfigClient(deps.DynConfigClient)
+        , ConfigClient(deps.ConfigClient)
         , Env(deps.Env)
     {}
 
@@ -749,6 +1032,7 @@ public:
             .MemLogInit = Impls.MemLogInit,
             .NodeBrokerClient = NodeBrokerClient,
             .DynConfigClient = DynConfigClient,
+            .ConfigClient = ConfigClient,
             .Env = Env,
             .Logger = Impls.Logger,
         };
@@ -762,6 +1046,7 @@ public:
             .MemLogInit = MakeNoopMemLogInitializer(),
             .NodeBrokerClient = std::make_unique<TNodeBrokerClientMock>(NodeBrokerClient.GetMock()),
             .DynConfigClient = std::make_unique<TDynConfigClientMock>(DynConfigClient.GetMock()),
+            .ConfigClient = std::make_unique<TConfigClientMock>(ConfigClient.GetMock()),
             .Env = std::make_unique<TEnvMock>(Env.GetMock()),
             .Logger = MakeNoopInitLogger(),
         };

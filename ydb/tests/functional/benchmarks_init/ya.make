@@ -1,5 +1,3 @@
-IF (NOT SANITIZER_TYPE)
-
 PY3TEST()
 
 TEST_SRCS(
@@ -7,7 +5,14 @@ TEST_SRCS(
     test_init.py
 )
 
-SIZE(MEDIUM)
+REQUIREMENTS(ram:16 cpu:4)
+
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
@@ -25,5 +30,3 @@ PEERDIR(
 FORK_SUBTESTS()
 FORK_TEST_FILES()
 END()
-
-ENDIF()

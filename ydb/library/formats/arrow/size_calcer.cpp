@@ -56,6 +56,17 @@ ui32 TRowSizeCalculator::GetRowBytesSize(const ui32 row) const {
     return result;
 }
 
+ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ChunkedArray>& data) {
+    if (!data) {
+        return 0;
+    }
+    ui64 result = 0;
+    for (auto&& i : data->chunks()) {
+        result += GetArrayMemorySize(i->data());
+    }
+    return result;
+}
+
 ui64 GetArrayMemorySize(const std::shared_ptr<arrow::ArrayData>& data) {
     if (!data) {
         return 0;
@@ -88,20 +99,28 @@ ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch) {
     if (!batch) {
         return 0;
     }
-    ui64 bytes = 0;
-    for (auto& column : batch->columns()) {
-        bytes += GetArrayDataSize(column);
-    }
-    return bytes;
+    return GetBatchDataSize(batch->columns());
 }
 
 ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>& batch) {
     if (!batch) {
         return 0;
     }
+    return GetBatchMemorySize(batch->columns());
+}
+
+ui64 GetBatchDataSize(const std::vector<std::shared_ptr<arrow::Array>>& columns) {
     ui64 bytes = 0;
-    for (auto& column : batch->column_data()) {
-        bytes += GetArrayMemorySize(column);
+    for (auto& column : columns) {
+        bytes += GetArrayDataSize(column);
+    }
+    return bytes;
+}
+
+ui64 GetBatchMemorySize(const std::vector<std::shared_ptr<arrow::Array>>& columns) {
+    ui64 bytes = 0;
+    for (auto& column : columns) {
+        bytes += GetArrayMemorySize(column->data());
     }
     return bytes;
 }
@@ -146,26 +165,26 @@ public:
     {}
 
     template <typename TType>
-    arrow::Status Visit(const TType& type) {
-        return arrow::Status::NotImplemented(TStringBuilder() << "unsupported arrow type " << type.ToString());
+    arrow::Status Visit(const TType*) {
+        return arrow::Status::NotImplemented(TStringBuilder() << "unsupported arrow type " << TypeName<TType>());
     }
 
     template <typename TType>
         requires arrow::has_c_type<TType>::value
-    arrow::Status Visit(const TType&) {
+    arrow::Status Visit(const TType*) {
         Bytes += sizeof(typename TType::c_type) * Column->length();
         return arrow::Status::OK();
     }
 
     template <>
-    arrow::Status Visit(const arrow::NullType&) {
+    arrow::Status Visit(const arrow::NullType*) {
         Bytes += Column->length() * 8; // Special value for empty lines
         return arrow::Status::OK();
     }
 
     template <typename TType>
         requires arrow::is_base_binary_type<TType>::value
-    arrow::Status Visit(const TType&) {
+    arrow::Status Visit(const TType*) {
         using TArray = typename arrow::TypeTraits<TType>::ArrayType;
 
         auto typedColumn = std::static_pointer_cast<TArray>(Column);
@@ -175,7 +194,7 @@ public:
 
     template <typename TType>
         requires arrow::is_fixed_size_binary_type<TType>::value
-    arrow::Status Visit(const TType&) {
+    arrow::Status Visit(const TType*) {
         using TArray = typename arrow::TypeTraits<TType>::ArrayType;
 
         auto typedColumn = std::static_pointer_cast<TArray>(Column);
@@ -184,7 +203,7 @@ public:
     }
 
     template <>
-    arrow::Status Visit(const arrow::FixedSizeListType&) {
+    arrow::Status Visit(const arrow::FixedSizeListType*) {
         auto typedColumn = std::static_pointer_cast<arrow::FixedSizeListArray>(Column);
         auto offset = typedColumn->value_offset(0);
         auto length = typedColumn->value_length() * typedColumn->length();
@@ -194,7 +213,7 @@ public:
 
     template <typename TType>
         requires arrow::is_var_length_list_type<TType>::value
-    arrow::Status Visit(const TType&) {
+    arrow::Status Visit(const TType*) {
         using TArray = typename arrow::TypeTraits<TType>::ArrayType;
 
         auto typedColumn = std::static_pointer_cast<TArray>(Column);
@@ -210,7 +229,7 @@ public:
     }
 
     template <>
-    arrow::Status Visit(const arrow::StructType&) {
+    arrow::Status Visit(const arrow::StructType*) {
         auto typedColumn = std::static_pointer_cast<arrow::StructArray>(Column);
         for (const auto& field : typedColumn->fields()) {
             Bytes += GetArrayDataSize(field);
@@ -219,7 +238,7 @@ public:
     }
 
     template <>
-    arrow::Status Visit(const arrow::SparseUnionType&) {
+    arrow::Status Visit(const arrow::SparseUnionType*) {
         auto typedColumn = std::static_pointer_cast<arrow::SparseUnionArray>(Column);
         Bytes += sizeof(typename arrow::SparseUnionArray::type_code_t) * typedColumn->length();
         for (int fieldId = 0; fieldId < typedColumn->union_type()->num_fields(); ++fieldId) {
@@ -232,14 +251,14 @@ public:
 }
 
 ui64 GetArrayDataSize(const std::shared_ptr<arrow::Array>& column) {
-    auto type = column->type();
-    if (type->id() == arrow::Type::DICTIONARY) {
+    auto typeId = column->type_id();
+    if (typeId == arrow::Type::DICTIONARY) {
         auto dictArray = static_pointer_cast<arrow::DictionaryArray>(column);
         return GetDictionarySize(dictArray);
     }
 
     TSizeVisitor visitor(column);
-    auto status = arrow::VisitTypeInline(*type, &visitor);
+    auto status = arrow::VisitTypeIdInline(typeId, &visitor);
     Y_VERIFY_S(status.ok(), "Failed to calculate array size: " << status.ToString());
 
     ui64 bytes = visitor.GetBytes();

@@ -6,6 +6,8 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
     std::optional<ui64> SkipBlocksUpTo;
     std::optional<std::tuple<ui64, ui8>> SkipBarriersUpTo;
     std::optional<TLogoBlobID> SkipBlobsUpTo;
+    const bool IgnoreDecommitState;
+    const bool Reverse;
 
     struct TBlock : TEvBlobStorage::TEvAssimilateResult::TBlock {
         TBlock(const TBlock&) = default;
@@ -25,8 +27,10 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
             }
         }
 
-        bool GoesBeforeThan(const TBlock& other) const {
-            return TabletId < other.TabletId;
+        bool GoesBeforeThan(const TBlock& other, bool reverse) const {
+            return reverse
+                ? other.TabletId < TabletId
+                : TabletId < other.TabletId;
         }
     };
 
@@ -70,8 +74,10 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
             }
         }
 
-        bool GoesBeforeThan(const TBarrier& other) const {
-            return std::tie(TabletId, Channel) < std::tie(other.TabletId, other.Channel);
+        bool GoesBeforeThan(const TBarrier& other, bool reverse) const {
+            return reverse
+                ? std::tie(other.TabletId, other.Channel) < std::tie(TabletId, Channel)
+                : std::tie(TabletId, Channel) < std::tie(other.TabletId, other.Channel);
         }
     };
 
@@ -96,8 +102,10 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
             }
         }
 
-        bool GoesBeforeThan(const TBlob& other) const {
-            return Id < other.Id;
+        bool GoesBeforeThan(const TBlob& other, bool reverse) const {
+            return reverse
+                ? other.Id < Id
+                : Id < other.Id;
         }
     };
 
@@ -121,7 +129,8 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
         std::variant<TBlock*, TBarrier*, TBlob*, TFinished> Next;
 
         void PushDataFromMessage(const NKikimrBlobStorage::TEvVAssimilateResult& msg,
-                const TBlobStorageGroupAssimilateRequest& self, TBlobStorageGroupType gtype) {
+                const TBlobStorageGroupAssimilateRequest& self, TBlobStorageGroupType gtype,
+                bool reverse) {
             Y_ABORT_UNLESS(Blocks.empty() && Barriers.empty() && Blobs.empty());
 
             std::array<ui64, 3> context = {0, 0, 0};
@@ -135,21 +144,20 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
                     Y_DEBUG_ABORT_UNLESS(item.HasTabletId() && item.HasChannel());
                     return std::tuple<ui64, ui8>(item.GetTabletId(), item.GetChannel());
                 } else if constexpr (std::is_same_v<T, NKikimrBlobStorage::TEvVAssimilateResult::TBlob>) {
-                    if (item.HasRawX1()) {
-                        context[0] = item.GetRawX1();
-                    } else if (item.HasDiffX1()) {
-                        context[0] += item.GetDiffX1();
+#define UNWRAP(X, INDEX) \
+                    if (item.HasRaw##X()) { \
+                        context[INDEX] = item.GetRaw##X(); \
+                    } else if (item.HasDiff##X()) { \
+                        if (reverse) { \
+                            context[INDEX] -= item.GetDiff##X(); \
+                        } else { \
+                            context[INDEX] += item.GetDiff##X(); \
+                        } \
                     }
-                    if (item.HasRawX2()) {
-                        context[1] = item.GetRawX2();
-                    } else if (item.HasDiffX2()) {
-                        context[1] += item.GetDiffX2();
-                    }
-                    if (item.HasRawX3()) {
-                        context[2] = item.GetRawX3();
-                    } else if (item.HasDiffX3()) {
-                        context[2] += item.GetDiffX3();
-                    }
+                    UNWRAP(X1, 0)
+                    UNWRAP(X2, 1)
+                    UNWRAP(X3, 2)
+#undef UNWRAP
                     return TLogoBlobID(context.data());
                 } else {
                     static_assert(TDependentFalse<T>, "unsupported protobuf");
@@ -159,9 +167,10 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
             auto processItems = [&](const auto& items, auto& lastProcessed, auto& field, const auto& skipUpTo) {
                 for (const auto& item : items) {
                     const auto key = getKey(item);
-                    Y_ABORT_UNLESS(lastProcessed < key);
+                    const auto expected = [&](const auto& opt) { return !opt || (reverse ? key < *opt : *opt < key); };
+                    Y_ABORT_UNLESS(expected(lastProcessed));
                     lastProcessed.emplace(key);
-                    if (skipUpTo < key) {
+                    if (expected(skipUpTo)) {
                         field.emplace_back(key, item, gtype);
                     }
                 }
@@ -220,16 +229,16 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
             }, Next);
         }
 
-        bool GoesBeforeThan(const TPerVDiskInfo& other) const {
+        bool GoesBeforeThan(const TPerVDiskInfo& other, bool reverse) const {
             return Next.index() != other.Next.index()
                     ? Next.index() < other.Next.index()
-                    : std::visit([&other](auto&& left) {
+                    : std::visit([&other, reverse](auto&& left) {
                 using T = std::decay_t<decltype(left)>;
                 const auto& right = std::get<T>(other.Next);
                 if constexpr (std::is_same_v<T, TFinished>) {
                     return false; // always equal
                 } else {
-                    return left->GoesBeforeThan(*right);
+                    return left->GoesBeforeThan(*right, reverse);
                 }
             }, Next);
         }
@@ -243,8 +252,10 @@ class TBlobStorageGroupAssimilateRequest : public TBlobStorageGroupRequestActor 
         }
 
         struct TCompare {
+            const bool Reverse;
+
             bool operator ()(const TPerVDiskInfo *x, const TPerVDiskInfo *y) const {
-                return y->GoesBeforeThan(*x);
+                return y->GoesBeforeThan(*x, Reverse);
             }
         };
     };
@@ -269,6 +280,8 @@ public:
         , SkipBlocksUpTo(params.Common.Event->SkipBlocksUpTo)
         , SkipBarriersUpTo(params.Common.Event->SkipBarriersUpTo)
         , SkipBlobsUpTo(params.Common.Event->SkipBlobsUpTo)
+        , IgnoreDecommitState(params.Common.Event->IgnoreDecommitState)
+        , Reverse(params.Common.Event->Reverse)
         , PerVDiskInfo(Info->GetTotalVDisksNum())
         , Result(new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::OK, {}))
     {
@@ -313,7 +326,8 @@ public:
         SendToQueue(std::make_unique<TEvBlobStorage::TEvVAssimilate>(Info->GetVDiskId(orderNumber),
             maxOpt(SkipBlocksUpTo, info.LastProcessedBlock),
             maxOpt(SkipBarriersUpTo, info.LastProcessedBarrier),
-            maxOpt(SkipBlobsUpTo, info.LastProcessedBlob)), 0);
+            maxOpt(SkipBlobsUpTo, info.LastProcessedBlob),
+            IgnoreDecommitState, Reverse), 0);
 
         DSP_LOG_DEBUG_S("BPA03", "Request orderNumber# " << orderNumber << " VDiskId# " << Info->GetVDiskId(orderNumber));
 
@@ -343,10 +357,10 @@ public:
         auto& info = PerVDiskInfo[orderNumber];
         Y_ABORT_UNLESS(!info.HasItemsToMerge());
         if (record.GetStatus() == NKikimrProto::OK) {
-            info.PushDataFromMessage(record, *this, Info->Type);
+            info.PushDataFromMessage(record, *this, Info->Type, Reverse);
             if (info.HasItemsToMerge()) {
                 Heap.push_back(&info);
-                std::push_heap(Heap.begin(), Heap.end(), TPerVDiskInfo::TCompare());
+                std::push_heap(Heap.begin(), Heap.end(), TPerVDiskInfo::TCompare{Reverse});
             } else if (!info.Finished()) {
                 Request(orderNumber);
             }
@@ -395,11 +409,11 @@ public:
             auto item = heapItem->BeginMerge();
 
             for (;;) {
-                std::pop_heap(Heap.begin(), Heap.end(), TPerVDiskInfo::TCompare());
+                std::pop_heap(Heap.begin(), Heap.end(), TPerVDiskInfo::TCompare{Reverse});
                 heapItem->Consume();
                 if (heapItem->HasItemsToMerge()) {
                     heapItem->AdjustNext();
-                    std::push_heap(Heap.begin(), Heap.end(), TPerVDiskInfo::TCompare());
+                    std::push_heap(Heap.begin(), Heap.end(), TPerVDiskInfo::TCompare{Reverse});
                 } else {
                     Heap.pop_back();
                     const ui32 orderNumber = heapItem - PerVDiskInfo.data();
@@ -440,7 +454,8 @@ public:
 
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) override {
         ++*Mon->NodeMon->RestartAssimilate;
-        auto ev = std::make_unique<TEvBlobStorage::TEvAssimilate>(SkipBlocksUpTo, SkipBarriersUpTo, SkipBlobsUpTo);
+        auto ev = std::make_unique<TEvBlobStorage::TEvAssimilate>(SkipBlocksUpTo, SkipBarriersUpTo, SkipBlobsUpTo,
+            IgnoreDecommitState, Reverse);
         ev->RestartCounter = counter;
         return ev;
     }

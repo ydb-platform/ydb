@@ -68,7 +68,8 @@ public:
         const NKikimr::NMiniKQL::TStructType* keyType,
         const NKikimr::NMiniKQL::TStructType* payloadType,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const size_t maxKeysInRequest)
+        const size_t maxKeysInRequest,
+        const bool isMultiMatches)
         : YtServices(ytServices)
         , ParentId(std::move(parentId))
         , Alloc(alloc)
@@ -80,6 +81,7 @@ public:
         , HolderFactory(holderFactory)
         , TypeEnv(typeEnv)
         , MaxKeysInRequest(maxKeysInRequest)
+        , IsMultiMatches(isMultiMatches)
         , Data(10,
             KeyTypeHelper->GetValueHash(),
             KeyTypeHelper->GetValueEqual()
@@ -149,7 +151,12 @@ public:
                         break;
                 }
             }
-            Data.emplace(std::move(key), std::move(payload));
+            auto [it, inserted] = Data.emplace(std::move(key), NUdf::TUnboxedValue{});
+            if (IsMultiMatches) {
+                it->second = HolderFactory.CreateDirectListHolder((inserted ? NKikimr::NMiniKQL::TDefaultListRepresentation{} : *NKikimr::NMiniKQL::GetDefaultListRepresentation(it->second)).Append(std::move(payload)));
+            } else {
+                it->second = std::move(payload);
+            }
 
         }
         Become(&TYtLookupActor::StateFunc);
@@ -216,6 +223,7 @@ private:
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
     const size_t MaxKeysInRequest;
+    const bool IsMultiMatches;
     std::atomic_bool InProgress;
     
     IDqAsyncLookupSource::TUnboxedValueMap Data;
@@ -232,7 +240,8 @@ std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateYtLookupActo
     const NKikimr::NMiniKQL::TStructType* payloadType,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    const size_t maxKeysInRequest)
+    const size_t maxKeysInRequest,
+    const bool isMultiMatches)
 {
     const auto actor = new TYtLookupActor(
         ytServices,
@@ -245,7 +254,8 @@ std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateYtLookupActo
         keyType,
         payloadType,
         holderFactory,
-        maxKeysInRequest);
+        maxKeysInRequest,
+        isMultiMatches);
     return {actor, actor};
 }
 

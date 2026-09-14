@@ -2,7 +2,6 @@
 #include "aws/s3/private/s3_util.h"
 #include <aws/cal/hash.h>
 #include <aws/checksums/crc.h>
-#include <aws/io/stream.h>
 
 #define AWS_CRC32_LEN 4
 #define AWS_CRC32C_LEN 4
@@ -265,7 +264,7 @@ int aws_checksum_compute(
         case AWS_SCA_CRC32C:
             return aws_checksum_compute_fn(allocator, input, output, aws_crc32c_checksum_new, truncate_to);
         default:
-            return AWS_OP_ERR;
+            return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
 }
 

@@ -2,7 +2,7 @@
 
 #include "yql_yt_op_tracker.h"
 
-#include <yt/yql/providers/yt/gateway/lib/transaction_cache.h>
+#include <yt/yql/providers/yt/gateway/lib/session.h>
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
 #include <yql/essentials/core/yql_execution.h>
@@ -27,37 +27,43 @@ namespace NYql {
 
 namespace NNative {
 
-struct TSession: public TThrRefBase {
+struct TSession: public TSessionBase {
     using TPtr = TIntrusivePtr<TSession>;
 
     TSession(IYtGateway::TOpenSessionOptions&& options, size_t numThreads);
     ~TSession() = default;
 
     void Close();
-    NYT::TNode CreateSpecWithDesc(const TVector<std::pair<TString, TString>>& code = {}) const;
     NYT::TNode CreateTableAttrs() const;
 
     void EnsureInitializedSemaphore(const TYtSettings::TConstPtr& settings);
     void InitLocalCalcSemaphore(const TYtSettings::TConstPtr& settings);
 
-    const TString UserName_;
-    const TOperationProgressWriter ProgressWriter_;
+    template <typename TCallable>
+    [[nodiscard]]
+    ::NThreading::TFuture<::NThreading::TFutureType<::TFunctionResult<TCallable>>> Async(TCallable&& func) {
+        return TAsyncQueue::Async(Queue_, std::move(func));
+    }
+
     const TStatWriter StatWriter_;
-    const TYqlOperationOptions OperationOptions_;
-    const TIntrusivePtr<IRandomProvider> RandomProvider_;
-    const TIntrusivePtr<ITimeProvider> TimeProvider_;
     const bool DeterministicMode_;
-    TAsyncQueue::TPtr Queue_;
+    TAsyncQueue::TWeakPtr Queue_;
     TOperationTracker::TPtr OpTracker_;
     NThreading::TAsyncSemaphore::TPtr OperationSemaphore;
     TMutex Mutex_;
     THolder<TFastSemaphore> LocalCalcSemaphore_;
 
     TTransactionCache TxCache_;
-    TString SessionId_;
+
+    const TQContext QContext_;
+    const IYtFullCapture::TPtr FullCapture_;
+
+    TMutex SecureTmpFolderPreparationsMutex_;
+    THashMap<TString, NThreading::TFuture<void>> SecureTmpFolderPreparationsByCluster_;
 
 private:
     void StopQueueAndTracker();
+    TAsyncQueue::TPtr QueueOwned_;
 };
 
 } // NNative

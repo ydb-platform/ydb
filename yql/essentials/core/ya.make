@@ -1,11 +1,15 @@
 LIBRARY()
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+
 SRCS(
     yql_aggregate_expander.cpp
     yql_callable_transform.cpp
     yql_callable_transform.h
     yql_cost_function.cpp
     yql_data_provider.h
+    yql_default_valid_value.cpp
+    yql_default_valid_value.h
     yql_execution.cpp
     yql_execution.h
     yql_expr_constraint.cpp
@@ -16,6 +20,10 @@ SRCS(
     yql_expr_optimize.h
     yql_expr_type_annotation.cpp
     yql_expr_type_annotation.h
+    yql_expr_type_annotation_pg.cpp
+    yql_expr_type_annotation_pg.h
+    yql_func_stack.cpp
+    yql_func_stack.h
     yql_gc_transformer.cpp
     yql_gc_transformer.h
     yql_graph_transformer.cpp
@@ -24,10 +32,15 @@ SRCS(
     yql_holding_file_storage.h
     yql_join.cpp
     yql_join.h
+    yql_module_helpers.cpp
     yql_library_compiler.cpp
+    yql_linear_checker.cpp
+    yql_layers_helpers.cpp
     yql_opt_hopping.cpp
     yql_opt_match_recognize.cpp
     yql_opt_match_recognize.h
+    yql_opt_normalize_depends_on.cpp
+    yql_opt_normalize_depends_on.h
     yql_opt_proposed_by_data.cpp
     yql_opt_proposed_by_data.h
     yql_opt_range.cpp
@@ -38,6 +51,10 @@ SRCS(
     yql_opt_utils.h
     yql_opt_window.cpp
     yql_opt_window.h
+    yql_opt_window_stream_transformers.cpp
+    yql_opt_window_stream_transformers.h
+    yql_sql_combine_expander.cpp
+    yql_sql_combine_expander.h
     yql_statistics.cpp
     yql_type_annotation.cpp
     yql_type_annotation.h
@@ -53,6 +70,16 @@ SRCS(
     yql_user_data.h
     yql_user_data_storage.cpp
     yql_user_data_storage.h
+    yql_window_features.cpp
+    yql_window_features.h
+    yql_window_frame_setting_bound.h
+    yql_window_frame_settings.cpp
+    yql_window_frame_settings.h
+    yql_window_frames_collector_params_serializer.cpp
+    yql_window_frames_collector_params_serializer.h
+    yql_window_frame_settings_pg.cpp
+    yql_window_frame_settings_pg.h
+    yql_sqlselect.cpp
 )
 
 PEERDIR(
@@ -60,25 +87,32 @@ PEERDIR(
     library/cpp/random_provider
     library/cpp/threading/future
     library/cpp/time_provider
+    library/cpp/type_info/tz
     library/cpp/yson
     library/cpp/yson/node
+    library/cpp/containers/stack_vector
     yql/essentials/ast
     yql/essentials/core/file_storage
     yql/essentials/core/sql_types
     yql/essentials/core/credentials
     yql/essentials/core/url_lister/interface
     yql/essentials/core/url_preprocessing/interface
+    yql/essentials/core/layers
+    yql/essentials/core/langver
     yql/essentials/minikql
     yql/essentials/minikql/jsonpath/parser
     yql/essentials/core/minsketch
+    yql/essentials/core/histogram
     yql/essentials/protos
     yql/essentials/public/udf
-    yql/essentials/public/udf/tz
+    yql/essentials/public/langver
     yql/essentials/sql/settings
+    yql/essentials/sql
     yql/essentials/utils
     yql/essentials/utils/log
     yql/essentials/core/expr_nodes
     yql/essentials/providers/common/proto
+    yql/essentials/minikql/runtime_settings
 )
 
 GENERATE_ENUM_SERIALIZATION(yql_data_provider.h)
@@ -101,9 +135,12 @@ RECURSE(
     dqs_expr_nodes
     file_storage
     issue
+    langver
+    layers
     minsketch
     pg_ext
     pg_settings
+    poly_args
     sql_types
     url_lister
     url_preprocessing

@@ -1,0 +1,326 @@
+#include "cq_actor.h"
+
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+
+#include <ydb/library/actors/interconnect/logging/logging.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/library/actors/interconnect/rdma/ctx.h>
+#include <ydb/library/actors/interconnect/rdma/events.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
+#include <ydb/library/actors/interconnect/rdma/rdma.h>
+
+#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
+
+#include <cerrno>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
+
+using namespace NActors;
+
+namespace NInterconnect::NRdma {
+
+using TCqFactory = std::function<ICq::TPtr(const TRdmaCtx*, std::shared_ptr<IMemPool>)>;
+
+static const TDuration PeriodicActionInterval = TDuration::Seconds(1);
+
+class TCqActor: public TInterconnectLoggingBase, public TActorBootstrapped<TCqActor> {
+    class TAsyncEventDesctiptor : public TSharedDescriptor {
+    public:
+        TAsyncEventDesctiptor(const TRdmaCtx* ctx)
+            : Ctx(ctx)
+        {}
+        int GetDescriptor() override {
+            return Ctx->GetContext()->async_fd;
+        }
+        const TRdmaCtx* GetContext() const {
+            return Ctx;
+        }
+    private:
+        const TRdmaCtx* Ctx;
+    };
+
+public:
+    TCqActor(TCqFactory cqFactory)
+        : TInterconnectLoggingBase("CqActor")
+        , CqFactory(std::move(cqFactory))
+    {}
+
+    static constexpr IActor::EActivityType ActorActivityType() {
+        return IActor::EActivityType::INTERCONNECT_RDMA_CQ;
+    }
+
+    void Bootstrap() {
+        Become(&TCqActor::StateFunc);
+
+        TActorSystem* as = TlsActivationContext->AsActorContext().ActorSystem();
+
+        if (IRcBufAllocator* rcBufAlloc = as->GetRcBufAllocator()) {
+            if (TRdmaAllocatorWithFallback* rdmaAlloc = dynamic_cast<TRdmaAllocatorWithFallback*>(rcBufAlloc)) {
+                MemPool = rdmaAlloc->GetRdmaMemPool();
+            }
+        }
+
+        Schedule(PeriodicActionInterval, new TEvents::TEvWakeup());
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvGetCqHandle, Handle);
+        hFunc(NActors::TEvPollerRegisterResult, Handle);
+        hFunc(NActors::TEvPollerReady, Handle);
+        hFunc(TEvents::TEvWakeup, Handle);
+    )
+
+    bool RegisterForAsyncEvent(const TRdmaCtx* ctx) {
+        int flags = fcntl(ctx->GetContext()->async_fd, F_GETFL);
+        int ret = fcntl(ctx->GetContext()->async_fd, F_SETFL, flags | O_NONBLOCK);
+        if (ret < 0) {
+            return false;
+        }
+        auto rv = Send(MakePollerActorId(),
+            new NActors::TEvPollerRegister(new TAsyncEventDesctiptor(ctx), SelfId(), SelfId()));
+        Y_ABORT_UNLESS(rv, "actor system poller service must present");
+        return true;
+    }
+
+    void Handle(TEvGetCqHandle::TPtr& ev) {
+        auto rdmaCtx = ev->Get()->Ctx;
+        auto it = CqMap.find(rdmaCtx);
+        ICq::TPtr cqPtr = nullptr;
+        if (it == CqMap.end()) {
+            if (RegisterForAsyncEvent(rdmaCtx)) {
+                CqMap.emplace(rdmaCtx, TWaitPollerReg(ev));
+                return;
+            }
+            YDB_LOG_ERROR("Unable to register",
+                {"marker", "ICRDMA"},
+                {"asyncFd", rdmaCtx->GetContext()->async_fd});
+        } else if (it->second.index() == 0) {
+            cqPtr = std::get<0>(it->second).Cq;
+        } else {
+            Y_ABORT_UNLESS(it->second.index() == 1);
+            std::get<1>(it->second).Waiters.emplace_back(ev);
+            return;
+        }
+
+        // nullptr in case of err
+        ev->Get()->CqPtr = cqPtr;
+
+        TlsActivationContext->Send(ev->Sender, std::unique_ptr<TEvGetCqHandle>(ev->Release().Release()));
+        Y_UNUSED(it);
+    }
+
+    void Handle(NActors::TEvPollerRegisterResult::TPtr& ev) {
+        YDB_LOG_DEBUG("Got TEvPollerRegisterResult",
+            {"marker", "ICRDMA"},
+            {"fd", ev->Get()->Socket.Get()->GetDescriptor()});
+        auto rdmaCtx = static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get())->GetContext();
+        auto cqPtr = CqFactory(rdmaCtx, MemPool);
+        auto it = CqMap.find(rdmaCtx);
+        Y_ABORT_UNLESS(it != CqMap.end());
+        Y_ABORT_UNLESS(it->second.index() == 1);
+        auto waiters = std::get<1>(it->second).Waiters;
+        if (cqPtr) {
+            it->second = TCtxData {
+                .Cq = cqPtr,
+                .AsyncEventToken = ev->Get()->PollerToken,
+            };
+            for (auto p : waiters) {
+                p->Get()->CqPtr = cqPtr;
+                TlsActivationContext->Send(p->Sender, std::unique_ptr<TEvGetCqHandle>(p->Release().Release()));
+            }
+            std::get<0>(it->second).AsyncEventToken->Request(true, false);
+        } else {
+            for (auto p : waiters) {
+                TlsActivationContext->Send(p->Sender, std::unique_ptr<TEvGetCqHandle>(p->Release().Release()));
+            }
+            CqMap.erase(it);
+        }
+    }
+
+    void Handle(NActors::TEvPollerReady::TPtr& ev) {
+        auto* desc = static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get());
+        for (;;) {
+            switch (ProcessIbvAsyncEvent(desc)) {
+                case EProcessAsyncEventResult::Processed:
+                    continue;
+
+                case EProcessAsyncEventResult::WouldBlock: {
+                    auto it = CqMap.find(desc->GetContext());
+                    Y_ABORT_UNLESS(it != CqMap.end());
+                    Y_ABORT_UNLESS(it->second.index() == 0);
+                    if (std::get<0>(it->second).AsyncEventToken->RequestReadNotificationAfterWouldBlock()) {
+                        continue;
+                    }
+                    return;
+                }
+
+                case EProcessAsyncEventResult::ContextRemoved:
+                    return;
+            }
+        }
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        NActors::TMonotonic time = TlsActivationContext->AsActorContext().Monotonic();
+        if (MemPool) {
+            MemPool->Tick(time);
+        }
+
+        Schedule(PeriodicActionInterval, new TEvents::TEvWakeup());
+    }
+private:
+
+    static TString GetAsyncEventDbg(const TRdmaCtx* ctx, const ibv_async_event& event) {
+        switch (event.event_type) {
+            /* QP events */
+            case IBV_EVENT_QP_FATAL:
+                return Sprintf("QP fatal event for QP with handle %p\n", event.element.qp);
+            case IBV_EVENT_QP_REQ_ERR:
+                return Sprintf("QP Requestor error for QP with handle %p\n", event.element.qp);
+            case IBV_EVENT_QP_ACCESS_ERR:
+                return Sprintf("QP access error event for QP with handle %p\n", event.element.qp);
+            case IBV_EVENT_COMM_EST:
+                return Sprintf("QP communication established event for QP with handle %p\n", event.element.qp);
+            case IBV_EVENT_SQ_DRAINED:
+                return Sprintf("QP Send Queue drained event for QP with handle %p\n", event.element.qp);
+            case IBV_EVENT_PATH_MIG:
+                return Sprintf("QP Path migration loaded event for QP with handle %p\n", event.element.qp);
+            case IBV_EVENT_PATH_MIG_ERR:
+                return Sprintf("QP Path migration error event for QP with handle %p\n", event.element.qp);
+            case IBV_EVENT_QP_LAST_WQE_REACHED:
+                return Sprintf("QP last WQE reached event for QP with handle %p\n", event.element.qp);
+
+            /* CQ events */
+            case IBV_EVENT_CQ_ERR:
+                return Sprintf("CQ error for CQ with handle %p\n", event.element.cq);
+
+            /* SRQ events */
+            case IBV_EVENT_SRQ_ERR:
+                return Sprintf("SRQ error for SRQ with handle %p\n", event.element.srq);
+            case IBV_EVENT_SRQ_LIMIT_REACHED:
+                return Sprintf("SRQ limit reached event for SRQ with handle %p\n", event.element.srq);
+
+            /* Port events */
+            case IBV_EVENT_PORT_ACTIVE:
+                return Sprintf("Port active event for port number %d\n", event.element.port_num);
+            case IBV_EVENT_PORT_ERR:
+                return Sprintf("Port error event for port number %d\n", event.element.port_num);
+            case IBV_EVENT_LID_CHANGE:
+                return Sprintf("LID change event for port number %d\n", event.element.port_num);
+            case IBV_EVENT_PKEY_CHANGE:
+                return Sprintf("P_Key table change event for port number %d\n", event.element.port_num);
+            case IBV_EVENT_GID_CHANGE:
+                return Sprintf("GID table change event for port number %d\n", event.element.port_num);
+            case IBV_EVENT_SM_CHANGE:
+                return Sprintf("SM change event for port number %d\n", event.element.port_num);
+            case IBV_EVENT_CLIENT_REREGISTER:
+                return Sprintf("Client reregister event for port number %d\n", event.element.port_num);
+
+            /* RDMA device events */
+            case IBV_EVENT_DEVICE_FATAL:
+                return Sprintf("Fatal error event for device %s\n", ctx->GetDeviceName());
+
+            default:
+                return Sprintf("Unknown event (%d)\n", event.event_type);
+        }
+    }
+
+    void ProcessCqErr(auto it) {
+        TCtxData& c = std::get<0>(it->second);
+        YDB_LOG_ERROR("CQ/SRQ error issued on ctx notify all pending cq callbacks",
+            {"marker", "ICRDMA"},
+            {"rdmaCtx", it->first->ToString().data()});
+        c.Cq->NotifyErr();
+    }
+
+    enum class EProcessAsyncEventResult {
+        Processed,
+        WouldBlock,
+        ContextRemoved,
+    };
+
+    EProcessAsyncEventResult ProcessIbvAsyncEvent(const TAsyncEventDesctiptor* desc) {
+        auto rdmaCtx = desc->GetContext();
+        ibv_async_event async_event;
+        for (;;) {
+            if (!ibv_get_async_event(rdmaCtx->GetContext(), &async_event)) {
+                break;
+            }
+            const int error = errno;
+            if (error == EINTR) {
+                continue;
+            }
+            Y_ABORT_UNLESS(error == EAGAIN || error == EWOULDBLOCK,
+                "ibv_get_async_event failed with errno# %d", error);
+            return EProcessAsyncEventResult::WouldBlock;
+        }
+
+        auto it = CqMap.find(rdmaCtx);
+        Y_ABORT_UNLESS(it != CqMap.end());
+
+        YDB_LOG_DEBUG("RDMA async event issued on ctx",
+            {"marker", "ICRDMA"},
+            {"rdmaCtx", rdmaCtx->ToString().data()},
+            {"eventDbg", GetAsyncEventDbg(rdmaCtx, async_event).data()});
+
+        switch (async_event.event_type) {
+            case IBV_EVENT_CQ_ERR:
+            case IBV_EVENT_SRQ_ERR:
+            /*  Docs say:
+                All async events that ibv_get_async_event() returns must be
+                acknowledged using ibv_ack_async_event().  To avoid races,
+                destroying an object (CQ, SRQ or QP) will wait for all affiliated
+                events for the object to be acknowledged; this avoids an
+                application retrieving an affiliated event after the corresponding
+                object has already been destroyed.
+
+                So, to avoid deadlock we need ack event before decrementing refcount
+            */
+                ProcessCqErr(it);
+                ibv_ack_async_event(&async_event);
+                CqMap.erase(it);
+                return EProcessAsyncEventResult::ContextRemoved;
+            default:
+                break;
+        }
+        ibv_ack_async_event(&async_event);
+        return EProcessAsyncEventResult::Processed;
+    }
+
+    struct TCtxData {
+        ICq::TPtr Cq;
+        NActors::TPollerToken::TPtr AsyncEventToken;
+    };
+    struct TWaitPollerReg {
+        TWaitPollerReg(TEvGetCqHandle::TPtr& ev)
+        {
+            Waiters.emplace_back(ev);
+        }
+        std::vector<TEvGetCqHandle::TPtr> Waiters;
+    };
+    std::map<const TRdmaCtx*, std::variant<TCtxData, TWaitPollerReg>> CqMap;
+    TCqFactory CqFactory;
+    std::shared_ptr<NInterconnect::NRdma::IMemPool> MemPool;
+};
+
+NActors::IActor* CreateCqActor(const TRdmaRuntimeParams& runtimeParams, ECqMode mode, NMonitoring::TDynamicCounters* counters) {
+    switch (mode) {
+        case NInterconnect::NRdma::ECqMode::POLLING:
+            return new TCqActor([runtimeParams, counters](const TRdmaCtx* ctx, std::shared_ptr<IMemPool> memPool) {
+                return CreateSimpleCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), runtimeParams, std::move(memPool), counters);
+            });
+
+        case NInterconnect::NRdma::ECqMode::EVENT:
+            return new TCqActor([runtimeParams, counters](const TRdmaCtx* ctx, std::shared_ptr<IMemPool> memPool) {
+                return CreateSimpleEventDrivenCq(ctx, TlsActivationContext->AsActorContext().ActorSystem(), runtimeParams, std::move(memPool), counters);
+            });
+    }
+}
+
+NActors::TActorId MakeCqActorId() {
+    char x[12] = {'I', 'C', 'R', 'D', 'M', 'A', 'C', 'Q', '\xDE', '\xAD', '\xBE', '\xEF'};
+    return TActorId(0, TStringBuf(std::begin(x), std::end(x)));
+}
+
+}

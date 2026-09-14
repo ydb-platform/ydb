@@ -14,30 +14,30 @@ IF (ALLOCATOR == "B" OR ALLOCATOR == "BS" OR ALLOCATOR == "C")
 ENDIF()
 
 SRCS(
+    activity_guard.cpp
     actor_bootstrapped.cpp
     actor_coroutine.cpp
     actor_coroutine.h
     actor.cpp
     actor.h
-    actor_virtual.cpp
     actorid.cpp
     actorid.h
     actorsystem.cpp
     actorsystem.h
     ask.cpp
     ask.h
-    av_bootstrapped.cpp
     buffer.cpp
     buffer.h
     callstack.cpp
     callstack.h
     config.h
+    coro_stack_pool.cpp
     cpu_manager.cpp
     cpu_manager.h
-    cpu_state.h
     defs.h
     event.cpp
     event.h
+    event_flat.h
     event_load.cpp
     event_local.h
     event_pb.cpp
@@ -46,6 +46,7 @@ SRCS(
     events.h
     events_undelivered.cpp
     executelater.h
+    execution_stats.cpp
     executor_pool_base.cpp
     executor_pool_base.h
     executor_pool_basic.cpp
@@ -54,6 +55,7 @@ SRCS(
     executor_pool_io.h
     executor_pool_shared.cpp
     executor_pool_shared.h
+    executor_thread_ctx.cpp
     executor_thread.cpp
     executor_thread.h
     hfunc.h
@@ -82,8 +84,7 @@ SRCS(
     monotonic.h
     monotonic_provider.cpp
     monotonic_provider.h
-    worker_context.cpp
-    worker_context.h
+    thread_context.cpp
     probes.cpp
     probes.h
     process_stats.cpp
@@ -95,6 +96,8 @@ SRCS(
     scheduler_cookie.cpp
     scheduler_cookie.h
     scheduler_queue.h
+    subsystem.cpp
+    subsystem.h
     servicemap.h
 )
 
@@ -104,10 +107,13 @@ GENERATE_ENUM_SERIALIZATION(log_iface.h)
 
 PEERDIR(
     ydb/library/actors/actor_type
+    ydb/library/actors/core/subsystems
+    ydb/library/actors/interconnect/rdma
     ydb/library/actors/core/harmonizer
     ydb/library/actors/memory_log
     ydb/library/actors/prof
     ydb/library/actors/protos
+    ydb/library/actors/struct_log
     ydb/library/actors/util
     ydb/library/services
     library/cpp/execprofile
@@ -115,9 +121,11 @@ PEERDIR(
     library/cpp/logger
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
+    library/cpp/string_utils/base64
     library/cpp/svnversion
     library/cpp/time_provider
     library/cpp/threading/future
+    library/cpp/threading/queue
 )
 
 IF (SANITIZER_TYPE == "thread")
@@ -130,9 +138,11 @@ END()
 
 RECURSE(
     harmonizer
+    manual_test
 )
 
 RECURSE_FOR_TESTS(
     ut
     ut_fat
+    ut_mprotect
 )

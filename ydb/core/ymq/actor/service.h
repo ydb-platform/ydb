@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 #include "events.h"
 #include "log.h"
 #include "serviceid.h"
@@ -9,11 +9,12 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_multi_map.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <library/cpp/logger/log.h>
 
@@ -45,6 +46,8 @@ private:
     void InitSchemeCache();
 
     void HandleWakeup(TEvWakeup::TPtr& ev);
+    void HandlePeriodicCreateTopic(TSqsEvents::TEvPeriodicCreateTopic::TPtr& ev);
+    void HandleDeferredTopicCreationResult(TSqsEvents::TEvDeferredTopicCreationResult::TPtr& ev);
     void HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
     void HandlePipeClientConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev);
@@ -69,9 +72,13 @@ private:
     void ScheduleRequestSqsUsersList();
     void RequestSqsUsersList();
 
+    TString MakeDeferredTopicCreationKey(const TString& userName, const TString& queueName) const;
+
     void ScheduleRequestSqsQueuesList();
     void RequestSqsQueuesList();
-    bool RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId) Y_WARN_UNUSED_RESULT;
+
+    void SchedulePeriodicCreateTopic();
+    bool RequestQueueListForUser(const TUserInfoPtr& user, const TString& reqId, bool throttlingEnabled = true) Y_WARN_UNUSED_RESULT;
 
     void RemoveQueue(const TString& userName, const TString& queue);
     TUsersMap::iterator MutableUserIter(const TString& userName, bool moveUserRequestsToUserRecord = true, bool* requestsWereMoved = nullptr);
@@ -79,7 +86,7 @@ private:
     void RemoveUser(const TString& userName);
     std::map<TString, TQueueInfoPtr>::iterator AddQueue(const TString& userName, const TString& queue, ui64 leaderTabletId,
                                                         const TString& customName, const TString& folderId, const ui32 tablesFormat, const ui64 version,
-                                                        const ui64 shardsCount, const TInstant createdTimestamp, bool isFifo);
+                                                        const ui64 shardsCount, const TInstant createdTimestamp, bool isFifo, bool topicCreated);
 
     void AnswerNoUserToRequests();
     void AnswerNoQueueToRequests(const TUserInfoPtr& user);
@@ -144,6 +151,7 @@ private:
     void NotifyLocalDeadLetterQueuesLeaders(const std::vector<TSqsEvents::TEvQueuesList::TQueueRecord>& sortedQueues) const;
 
     void MakeAndRegisterYcEventsProcessor();
+    void MakeAndRegisterCloudEventsProcessor();
 
 private:
     TString RootUrl_;
@@ -187,7 +195,19 @@ private:
         TDuration RescanInterval = TDuration::Minutes(1);
     };
     TYcSearchEventsConfig YcSearchEventsConfig;
+
+    struct TCloudEventsConfig {
+        TString Database = "";
+        TDuration RetryTimeout = TDuration::Seconds(10);
+        bool Enabled = false;
+        bool TenantMode = false;
+    };
+    TCloudEventsConfig CloudEventsConfig;
+
     THolder<TLocalLeaderManager> LocalLeaderManager;
+
+    /// Queues for which a deferred topic creation actor is already running (user\\0queue).
+    THashSet<TString> PendingDeferredTopicCreations_;
 };
 
 } // namespace NKikimr::NSQS

@@ -2,12 +2,12 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
 class TMoveTableUnit : public TExecutionUnit {
-    TVector<IDataShardChangeCollector::TChange> ChangeRecords;
-
 public:
     TMoveTableUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::MoveTable, false, dataShard, pipeline)
@@ -43,10 +43,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSchemeTx());
+        Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (tx->GetSchemeTxType() != TSchemaOperation::ETypeMoveTable) {
             return EExecutionStatus::Executed;
@@ -59,13 +59,13 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        ChangeRecords.clear();
+        op->ChangeRecords().clear();
 
         auto changesQueue = DataShard.TakeChangesQueue();
         auto lockChangeRecords = DataShard.TakeLockChangeRecords();
         auto committedLockChangeRecords = DataShard.TakeCommittedLockChangeRecords();
 
-        if (!DataShard.LoadChangeRecords(db, ChangeRecords)) {
+        if (!DataShard.LoadChangeRecords(db, op->ChangeRecords())) {
             DataShard.SetChangesQueue(std::move(changesQueue));
             DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
             DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
@@ -79,23 +79,23 @@ public:
             return EExecutionStatus::Restart;
         }
 
-        if (!DataShard.LoadChangeRecordCommits(db, ChangeRecords)) {
+        if (!DataShard.LoadChangeRecordCommits(db, op->ChangeRecords())) {
             DataShard.SetChangesQueue(std::move(changesQueue));
             DataShard.SetLockChangeRecords(std::move(lockChangeRecords));
             DataShard.SetCommittedLockChangeRecords(std::move(committedLockChangeRecords));
             return EExecutionStatus::Restart;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "TMoveTableUnit Execute"
-            << ": schemeTx# " << schemeTx.DebugString()
-            << ": changeRecords size# " << ChangeRecords.size()
-            << ", at tablet# " << DataShard.TabletID());
+        YDB_LOG_DEBUG("TMoveTableUnit Execute changeRecords",
+            {"schemeTx", schemeTx.DebugString()},
+            {"size", op->ChangeRecords().size()},
+            {"tabletId", DataShard.TabletID()});
 
         DataShard.SuspendChangeSender(ctx);
 
         const auto& params = schemeTx.GetMoveTable();
         DataShard.MoveUserTable(op, params, ctx, txc);
-        MoveChangeRecords(db, params, ChangeRecords);
+        MoveChangeRecords(db, params, op->ChangeRecords());
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
@@ -103,10 +103,10 @@ public:
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+    void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
         DataShard.CreateChangeSender(ctx);
         DataShard.MaybeActivateChangeSender(ctx);
-        DataShard.EnqueueChangeRecords(std::move(ChangeRecords), 0, true);
+        DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()), 0, true);
     }
 };
 
@@ -116,3 +116,7 @@ THolder<TExecutionUnit> CreateMoveTableUnit(TDataShard& dataShard, TPipeline& pi
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

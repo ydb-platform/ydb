@@ -92,7 +92,13 @@ protected:
 
     virtual int GetMaxChildCount() const;
 
-    void ValidateChildCount(const TYPath& path, int childCount) const;
+    void ValidateChildCount(TYPathBuf path, int childCount) const;
+
+    virtual void SetChildValue(
+        INodeFactory* factory,
+        const TYPath& path,
+        NYson::TYsonString childValue,
+        bool recursive) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -118,7 +124,7 @@ protected:
         INodePtr child,
         bool recursive) override;
 
-    std::pair<TString, INodePtr> PrepareSetChild(
+    std::pair<std::string, INodePtr> PrepareSetChild(
         INodeFactory* factory,
         const TYPath& path,
         INodePtr child,
@@ -126,8 +132,18 @@ protected:
 
     virtual int GetMaxKeyLength() const;
 
+    void SetChildValue(
+        INodeFactory* factory,
+        const TYPath& path,
+        NYson::TYsonString childValue,
+        bool recursive) final;
+
 private:
-    void ThrowMaxKeyLengthViolated() const;
+    std::pair<std::string, INodePtr> PrepareSetChildOrChildValue(
+        INodeFactory* factory,
+        const TYPath& path,
+        std::variant<INodePtr, NYson::TYsonString> childOrChildValue,
+        bool recursive);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,6 +162,19 @@ protected:
         const TYPath& path,
         INodePtr child,
         bool recursive) override;
+
+    void SetChildValue(
+        INodeFactory* factory,
+        const TYPath& path,
+        NYson::TYsonString childValue,
+        bool recursive) final;
+
+private:
+    void SetChildOrChildValue(
+        INodeFactory* factory,
+        const TYPath& path,
+        std::variant<INodePtr, NYson::TYsonString> childOrChildValue,
+        bool recursive);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -242,4 +271,3 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NYTree
-

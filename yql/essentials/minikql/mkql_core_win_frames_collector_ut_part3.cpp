@@ -1,0 +1,525 @@
+#include "mkql_core_win_frames_collector_test_helper.h"
+
+#include <library/cpp/testing/unittest/registar.h>
+
+using namespace NKikimr::NMiniKQL;
+using namespace NKikimr::NMiniKQL::NTest::NWindow;
+
+// clang-format off
+Y_UNIT_TEST_SUITE(TCoreWinFramesCollectorTestPart3) {
+
+Y_UNIT_TEST(RangeInterval_WithNulls_MultipleIntervals_Asc) {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
+        .RangeIntervals = {
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>::Inf(EDirection::Preceding),
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>::Inf(EDirection::Following)
+            },
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>::Inf(EDirection::Following)
+            },
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>::Inf(EDirection::Preceding),
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(3), EDirection::Following}
+            },
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(3), EDirection::Following}
+            }
+        },
+        .InputElements = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1), TMaybe<ui64>(4), TMaybe<ui64>(7), TMaybe<ui64>()},
+        .ExpectedStates = {
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1), TMaybe<ui64>(4), TMaybe<ui64>(7), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {0, 6},
+                    {0, 2},
+                    {0, 2}
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1), TMaybe<ui64>(4), TMaybe<ui64>(7), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {0, 6},
+                    {0, 2},
+                    {0, 2}
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(1),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1), TMaybe<ui64>(4), TMaybe<ui64>(7), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {2, 6},
+                    {0, 4},
+                    {2, 4}
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(4),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1), TMaybe<ui64>(4), TMaybe<ui64>(7), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {2, 6},
+                    {0, 5},
+                    {2, 5}
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(7),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1), TMaybe<ui64>(4), TMaybe<ui64>(7), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {3, 6},
+                    {0, 5},
+                    {3, 5}
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1), TMaybe<ui64>(4), TMaybe<ui64>(7), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {5, 6},
+                    {0, 6},
+                    {5, 6}
+                }
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeInterval_WithNullsLast_Following_Desc) {
+    TTestCase<TMaybe<ui64>, ESortOrder::Desc> testCase = {
+        .RangeIntervals = {
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Following},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(7), EDirection::Following}
+            },
+        },
+        .InputElements = {TMaybe<ui64>(1), TMaybe<ui64>(), TMaybe<ui64>()},
+        .ExpectedStates = {
+            {
+                .CurrentElement = TMaybe<ui64>(1),
+                .QueueContent = {TMaybe<ui64>(1), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    TEmptyInterval{},
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeInterval_WithNullsFirst_Following_Asc) {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
+        .RangeIntervals = {
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Following},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(7), EDirection::Following}
+            },
+        },
+        .InputElements = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1)},
+        .ExpectedStates = {
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1)},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1)},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(1),
+                .QueueContent = {TMaybe<ui64>(1)},
+                .RangeIntervalChecks = {
+                    TEmptyInterval{},
+                }
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeInterval_WithNullsLast_Preceding_Asc) {
+    TTestCase<TMaybe<ui64>, ESortOrder::Desc> testCase = {
+        .RangeIntervals = {
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(7), EDirection::Preceding}
+            },
+        },
+        .InputElements = {TMaybe<ui64>(1), TMaybe<ui64>(), TMaybe<ui64>()},
+        .ExpectedStates = {
+            {
+                .CurrentElement = TMaybe<ui64>(1),
+                .QueueContent = {TMaybe<ui64>(1)},
+                .RangeIntervalChecks = {
+                    TEmptyInterval{},
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeInterval_WithNullsFirst_Preceding_Asc) {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
+        .RangeIntervals = {
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(7), EDirection::Preceding}
+            },
+        },
+        .InputElements = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1)},
+        .ExpectedStates = {
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1)},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(1)},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(1),
+                .QueueContent = {TMaybe<ui64>(1)},
+                .RangeIntervalChecks = {
+                    TEmptyInterval{},
+                }
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeInterval_WithNaNsLast_Following_Desc) {
+    const float NaN = std::numeric_limits<float>::quiet_NaN();
+
+    TTestCase<TMaybe<float>, ESortOrder::Desc> testCase = {
+        .RangeIntervals = {
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<float>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0F), EDirection::Following},
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0F), EDirection::Following}
+            },
+        },
+        .InputElements = {1.0F, NaN, NaN},
+        .ExpectedStates = {
+            {
+                .CurrentElement = 1.0F,
+                .QueueContent = {1.0F, NaN},
+                .RangeIntervalChecks = {
+                    TEmptyInterval{},
+                }
+            },
+            {
+                .CurrentElement = NaN,
+                .QueueContent = {NaN, NaN},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = NaN,
+                .QueueContent = {NaN, NaN},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeInterval_WithNaNsFirst_Following_Asc) {
+    const float NaN = std::numeric_limits<float>::quiet_NaN();
+
+    TTestCase<TMaybe<float>, ESortOrder::Asc> testCase = {
+        .RangeIntervals = {
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<float>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0F), EDirection::Following},
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0F), EDirection::Following}
+            },
+        },
+        .InputElements = {NaN, NaN, 1.0F},
+        .ExpectedStates = {
+            {
+                .CurrentElement = NaN,
+                .QueueContent = {NaN, NaN, 1.0F},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = NaN,
+                .QueueContent = {NaN, NaN, 1.0F},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = 1.0F,
+                .QueueContent = {1.0F},
+                .RangeIntervalChecks = {
+                    TEmptyInterval{},
+                }
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeInterval_WithNaNsLast_Preceding_Asc) {
+    const float NaN = std::numeric_limits<float>::quiet_NaN();
+
+    TTestCase<TMaybe<float>, ESortOrder::Desc> testCase = {
+        .RangeIntervals = {
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<float>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0F), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0F), EDirection::Preceding}
+            },
+        },
+        .InputElements = {1.0F, NaN, NaN},
+        .ExpectedStates = {
+            {
+                .CurrentElement = 1.0F,
+                .QueueContent = {1.0F},
+                .RangeIntervalChecks = {
+                    TEmptyInterval{},
+                }
+            },
+            {
+                .CurrentElement = NaN,
+                .QueueContent = {NaN, NaN},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = NaN,
+                .QueueContent = {NaN, NaN},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeInterval_WithNaNsFirst_Preceding_Asc) {
+    const float NaN = std::numeric_limits<float>::quiet_NaN();
+
+    TTestCase<TMaybe<float>, ESortOrder::Asc> testCase = {
+        .RangeIntervals = {
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<float>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(5.0F), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<float>>>{TNoScaledType<float>(7.0F), EDirection::Preceding}
+            },
+        },
+        .InputElements = {NaN, NaN, 1.0F},
+        .ExpectedStates = {
+            {
+                .CurrentElement = NaN,
+                .QueueContent = {NaN, NaN, 1.0F},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = NaN,
+                .QueueContent = {NaN, NaN, 1.0F},
+                .RangeIntervalChecks = {
+                    {0, 2},
+                }
+            },
+            {
+                .CurrentElement = 1.0F,
+                .QueueContent = {1.0F},
+                .RangeIntervalChecks = {
+                    TEmptyInterval{},
+                }
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RangeInterval_WithNulls_MultipleIntervals_Desc) {
+    TTestCase<TMaybe<ui64>, ESortOrder::Desc> testCase = {
+        .RangeIntervals = {
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>::Inf(EDirection::Preceding),
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>::Inf(EDirection::Following)
+            },
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>::Inf(EDirection::Following)
+            },
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>::Inf(EDirection::Preceding),
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(3), EDirection::Following}
+            },
+            TInputRangeWindowFrame<TTypeTestWithScale<TMaybe<ui64>>>{
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(5), EDirection::Preceding},
+                TInputRange<TTypeTestWithScale<TMaybe<ui64>>>{TNoScaledType<ui64>(3), EDirection::Following}
+            }
+        },
+        .InputElements = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(7), TMaybe<ui64>(4), TMaybe<ui64>(1), TMaybe<ui64>()},
+        .ExpectedStates = {
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(7), TMaybe<ui64>(4), TMaybe<ui64>(1), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {0, 6},
+                    {0, 2},
+                    {0, 2}
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(7), TMaybe<ui64>(4), TMaybe<ui64>(1), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {0, 6},
+                    {0, 2},
+                    {0, 2}
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(7),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(7), TMaybe<ui64>(4), TMaybe<ui64>(1), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {2, 6},
+                    {0, 4},
+                    {2, 4}
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(4),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(7), TMaybe<ui64>(4), TMaybe<ui64>(1), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {2, 6},
+                    {0, 5},
+                    {2, 5}
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(1),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(7), TMaybe<ui64>(4), TMaybe<ui64>(1), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {3, 6},
+                    {0, 5},
+                    {3, 5}
+                }
+            },
+            {
+                .CurrentElement = TMaybe<ui64>(),
+                .QueueContent = {TMaybe<ui64>(), TMaybe<ui64>(), TMaybe<ui64>(7), TMaybe<ui64>(4), TMaybe<ui64>(1), TMaybe<ui64>()},
+                .RangeIntervalChecks = {
+                    {0, 6},
+                    {5, 6},
+                    {0, 6},
+                    {5, 6}
+                }
+            }
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+Y_UNIT_TEST(RowIntervalUnbounded) {
+    TTestCase<TMaybe<ui64>, ESortOrder::Asc> testCase = {
+        .RowIntervals = {
+            TInputRowWindowFrame(
+                TInputRow::Inf(EDirection::Preceding),
+                TInputRow::Inf(EDirection::Following)
+            ),
+            TInputRowWindowFrame(
+                TInputRow(1, EDirection::Preceding),
+                TInputRow(1, EDirection::Preceding)
+            )
+        },
+        .InputElements = {ui64(10), ui64(20), ui64(30)},
+        .ExpectedStates = {
+            {
+                .CurrentElement = 10,
+                .QueueContent = {10, 20, 30},
+                .RowIntervalChecks = {{0, 3}, {0, 0}},
+            },
+            {
+                .CurrentElement = 20,
+                .QueueContent = {10, 20, 30},
+                .RowIntervalChecks = {{0, 3}, {0, 1}},
+            },{
+                .CurrentElement = 30,
+                .QueueContent = {10, 20, 30},
+                .RowIntervalChecks = {{0, 3}, {1, 2}},
+            },
+        }
+    };
+
+    RunTestCase(testCase);
+}
+
+}

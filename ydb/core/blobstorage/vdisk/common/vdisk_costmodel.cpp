@@ -79,8 +79,7 @@ namespace NKikimr {
     TCostModel::TMessageCostEssence::TMessageCostEssence(const TEvBlobStorage::TEvVPut& ev)
         : HandleClass(ev.Record.GetHandleClass())
     {
-        PutBufferSizes.push_back(ev.Record.HasBuffer() ?
-                ev.Record.GetBuffer().size() : ev.GetPayload(0).GetSize());
+        PutBufferSizes.push_back(ev.GetBufferBytes());
     }
 
     TCostModel::TMessageCostEssence::TMessageCostEssence(const TEvBlobStorage::TEvVMultiPut& ev)
@@ -179,9 +178,9 @@ namespace NKikimr {
     ui64 TCostModel::GetCost(const TEvBlobStorage::TEvVPut &ev, bool *logPutInternalQueue) const {
         const auto &record = ev.Record;
         const NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
-        const ui64 bufSize = record.HasBuffer() ? record.GetBuffer().size() : ev.GetPayload(0).GetSize();
+        const ui64 bufSize = ev.GetBufferBytes();
 
-        NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, bufSize, true);
+        NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, bufSize);
         if (handleType == NPriPut::Log) {
             *logPutInternalQueue = true;
             return SmallWriteCost(bufSize);
@@ -198,7 +197,7 @@ namespace NKikimr {
         ui64 cost = 0;
         for (ui64 idx = 0; idx < record.ItemsSize(); ++idx) {
             const ui64 size = ev.GetBufferBytes(idx);
-            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, size, true);
+            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, size);
             if (handleType == NPriPut::Log) {
                 cost += SmallWriteCost(size);
             } else {
@@ -265,7 +264,7 @@ namespace NKikimr {
             cost += MovedPatchCostBySize(essence.MovedPatchBlobSize);
         }
         for (ui64 size : essence.PutBufferSizes) {
-            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, essence.HandleClass, size, true);
+            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, essence.HandleClass, size);
             if (handleType == NPriPut::Log) {
                 cost += SmallWriteCost(size);
             } else {
@@ -295,7 +294,7 @@ namespace NKikimr {
         WriteSpeedBps = std::min(WriteSpeedBps, other.WriteSpeedBps);
         ReadBlockSize = std::min(ReadBlockSize, other.ReadBlockSize);
         WriteBlockSize = std::min(WriteBlockSize, other.WriteBlockSize);
-        MinHugeBlobInBytes = std::max(MinHugeBlobInBytes, other.MinHugeBlobInBytes);
+        MinHugeBlobInBytes = std::min(MinHugeBlobInBytes, other.MinHugeBlobInBytes);
     }
 
     // PDisk messages cost

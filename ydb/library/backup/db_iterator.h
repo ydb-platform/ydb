@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/sys.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <util/folder/path.h>
 #include <util/generic/deque.h>
@@ -40,6 +40,21 @@ private:
     TString TraverseRoot;
     TDeque<TSchemeEntryWithPath> NextNodes;
 
+    static const TVector<NScheme::ESchemeEntryType>& SupportedEntryTypes() {
+        static const TVector<NScheme::ESchemeEntryType> values = {
+            NScheme::ESchemeEntryType::Table,
+            NScheme::ESchemeEntryType::ColumnTable,
+            NScheme::ESchemeEntryType::View,
+            NScheme::ESchemeEntryType::Topic,
+            NScheme::ESchemeEntryType::CoordinationNode,
+            NScheme::ESchemeEntryType::Replication,
+            NScheme::ESchemeEntryType::SysView,
+            NScheme::ESchemeEntryType::Transfer,
+        };
+
+        return values;
+    }
+
 public:
     TDbIterator(TDriver driver, const TString& fullPath)
       : Client(driver)
@@ -48,7 +63,7 @@ public:
         Y_ENSURE(listResult.IsSuccess(), "Can't list directory, maybe it doesn't exist, dbPath# "
                 << fullPath.Quote());
 
-        if (IsIn({NScheme::ESchemeEntryType::Table, NScheme::ESchemeEntryType::View}, listResult.GetEntry().Type)) {
+        if (IsIn(SupportedEntryTypes(), listResult.GetEntry().Type)) {
             TPathSplitUnix parentPath(fullPath);
             parentPath.pop_back();
             TraverseRoot = parentPath.Reconstruct();
@@ -125,8 +140,16 @@ public:
         return path.Reconstruct();
     }
 
-    bool IsTable() const {
+    bool IsRowTable() const {
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Table;
+    }
+
+    bool IsColumnTable() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ColumnTable;
+    }
+
+    bool IsTable() const {
+        return IsRowTable() || IsColumnTable();
     }
 
     bool IsView() const {
@@ -145,6 +168,30 @@ public:
         return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Directory;
     }
 
+    bool IsSystemDir() const {
+        return NConsoleClient::IsSystemDir(*GetCurrentNode());
+    }
+
+    bool IsReplication() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Replication;
+    }
+
+    bool IsExternalDataSource() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ExternalDataSource;
+    }
+
+    bool IsExternalTable() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::ExternalTable;
+    }
+
+    bool IsSystemView() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::SysView;
+    }
+
+    bool IsTransfer() const {
+        return GetCurrentNode()->Type == NScheme::ESchemeEntryType::Transfer;
+    }
+
     bool IsListed() const {
         return NextNodes.front().IsListed;
     }
@@ -153,8 +200,27 @@ public:
         return bool{NextNodes};
     }
 
-    bool IsSkipped() const {
-        return NConsoleClient::IsSystemObject(*GetCurrentNode());
+    bool IsMaterializedSysDir() {
+        const auto& entry = *GetCurrentNode();
+        if (IsDir() && entry.Name == ".sys") {
+            // TODO(n00bcracker): drop this check after removing EnableRealSystemViewPaths flag
+            const TString& fullPath = GetFullPath();
+            NScheme::TListDirectoryResult listResult = Client.ListDirectory(GetFullPath()).GetValueSync();
+            Y_ENSURE(listResult.IsSuccess(), "Can't list '.sys' directory, maybe it doesn't exist, dbPath# "
+                << fullPath.Quote());
+
+            for (const auto& child : listResult.GetChildren()) {
+                if (child.Type == NScheme::ESchemeEntryType::SysView) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    bool IsSkipped() {
+        return IsSystemDir() && !IsMaterializedSysDir();
     }
 
     void Next() {

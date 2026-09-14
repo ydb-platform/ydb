@@ -1,33 +1,15 @@
 #include "stages.h"
 
+#include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
 #include <ydb/core/tx/tiering/manager.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard::NLoading {
-
-bool TInsertTableInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    NIceDb::TNiceDb db(txc.DB);
-    TBlobGroupSelector dsGroupSelector(Self->Info());
-    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    auto localInsertTable = std::make_unique<NOlap::TInsertTable>();
-    for (auto&& i : Self->TablesManager.GetTables()) {
-        localInsertTable->RegisterPathInfo(i.first);
-    }
-    if (!localInsertTable->Load(db, dbTable, TAppData::TimeProvider->Now())) {
-        ACFL_ERROR("step", "TInsertTable::Load_Fails");
-        return false;
-    }
-    Self->InsertTable.swap(localInsertTable);
-    return true;
-}
-
-bool TInsertTableInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    NIceDb::TNiceDb db(txc.DB);
-    return Schema::Precharge<Schema::InsertTable>(db, txc.DB.GetScheme());
-}
 
 bool TTxControllerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     auto localTxController = std::make_unique<TTxController>(*Self);
@@ -70,40 +52,6 @@ bool TStoragesManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionC
            (int)Schema::Precharge<Schema::BlobsToDeleteWT>(db, txc.DB.GetScheme()) &
            (int)Schema::Precharge<Schema::SharedBlobIds>(db, txc.DB.GetScheme()) &
            (int)Schema::Precharge<Schema::BorrowedBlobIds>(db, txc.DB.GetScheme());
-}
-
-bool TLongTxInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    NIceDb::TNiceDb db(txc.DB);
-    auto rowset = db.Table<Schema::LongTxWrites>().Select();
-    if (!rowset.IsReady()) {
-        return false;
-    }
-
-    while (!rowset.EndOfSet()) {
-        const TInsertWriteId writeId = (TInsertWriteId)rowset.GetValue<Schema::LongTxWrites::WriteId>();
-        const ui32 writePartId = rowset.GetValue<Schema::LongTxWrites::WritePartId>();
-        NKikimrLongTxService::TLongTxId proto;
-        Y_ABORT_UNLESS(proto.ParseFromString(rowset.GetValue<Schema::LongTxWrites::LongTxId>()));
-        const auto longTxId = NLongTxService::TLongTxId::FromProto(proto);
-
-        std::optional<ui32> granuleShardingVersion;
-        if (rowset.HaveValue<Schema::LongTxWrites::GranuleShardingVersion>() &&
-            rowset.GetValue<Schema::LongTxWrites::GranuleShardingVersion>()) {
-            granuleShardingVersion = rowset.GetValue<Schema::LongTxWrites::GranuleShardingVersion>();
-        }
-
-        Self->LoadLongTxWrite(writeId, writePartId, longTxId, granuleShardingVersion);
-
-        if (!rowset.Next()) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool TLongTxInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
-    NIceDb::TNiceDb db(txc.DB);
-    return Schema::Precharge<Schema::LongTxWrites>(db, txc.DB.GetScheme());
 }
 
 bool TDBLocksInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
@@ -166,12 +114,25 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo)) {
         return false;
     }
-    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPathId, Self->OwnerPathId)) {
-        return false;
-    }
     if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::OwnerPath, Self->OwnerPath)) {
         return false;
     }
+
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainLocalPathId, Self->SpaceWatcher->SubDomainPathId)) {
+        return false;
+    }
+
+    ui64 outOfSpace = 0;
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainOutOfSpace, outOfSpace)) {
+        return false;
+    }
+    Self->SpaceWatcher->SubDomainOutOfSpace = outOfSpace;
+
+    ui64 smallBlobsQuotaExceeded = 0;
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainSmallBlobsQuotaExceeded, smallBlobsQuotaExceeded)) {
+        return false;
+    }
+    Self->SpaceWatcher->SubDomainSmallBlobsQuotaExceeded = smallBlobsQuotaExceeded;
 
     {
         ui64 lastCompletedStep = 0;
@@ -184,22 +145,61 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
         }
         Self->LastCompletedTx = NOlap::TSnapshot(lastCompletedStep, lastCompletedTx);
     }
+    {
+        ui64 lastCleanupStep = 0;
+        ui64 lastCleanupTxId = 0;
+        if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCleanupSnapshotStep, lastCleanupStep)) {
+            return false;
+        }
+        if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::LastCleanupSnapshotTxId, lastCleanupTxId)) {
+            return false;
+        }
+        Self->LastCleanupSnapshot = NOlap::TSnapshot(lastCleanupStep, lastCleanupTxId);
+    }
+
+    auto rowset = db.Table<Schema::TableInfoV1>().Range().Select();
+    if (!rowset.IsReady()) {
+        return false;
+    }
+
+    while (!rowset.EndOfSet()) {
+        const auto schemeShardLocalPathId =
+            TSchemeShardLocalPathId::FromRawValue(rowset.GetValue<Schema::TableInfoV1::SchemeShardLocalPathId>());
+        const auto serializedBackupTx = rowset.HaveValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()
+                                            ? rowset.GetValue<Schema::TableInfoV1::LastCompletedBackupTransaction>()
+                                            : TString{};
+        if (serializedBackupTx) {
+            NKikimrTxColumnShard::TCompletedBackupTransaction backupTx;
+            if (backupTx.ParseFromString(serializedBackupTx)) {
+                Self->LastCompletedBackupTransactions[schemeShardLocalPathId] = backupTx;
+                Self->LastCompletedBackupTransactionsByTxId[backupTx.GetTxId()] = backupTx;
+            } else {
+                YDB_LOG_ERROR("",
+                    {"event", "cannot_parse_last_completed_backup_transaction"},
+                    {"schemeShardLocalPathId", schemeShardLocalPathId},
+                    {"serializedSize", serializedBackupTx.size()});
+            }
+        }
+        if (!rowset.Next()) {
+            return false;
+        }
+    }
 
     return true;
 }
 
 bool TSpecialValuesInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme());
+    return Schema::Precharge<Schema::Value>(db, txc.DB.GetScheme()) && Schema::Precharge<Schema::TableInfoV1>(db, txc.DB.GetScheme());
 }
 
 bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    TTablesManager tablesManagerLocal(Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(),
-        NOlap::TSchemaCachesManager::GetCache(Self->OwnerPathId), Self->TabletID());
+    TTablesManager tablesManagerLocal(
+        Self->StoragesManager, Self->DataAccessorsManager.GetObjectPtrVerified(), Self->Counters.GetPortionIndexCounters(), Self->TabletID());
     {
         TMemoryProfileGuard g("TTxInit/TTablesManager");
-        if (!tablesManagerLocal.InitFromDB(db)) {
+        if (!tablesManagerLocal.InitFromDB(db, Self->Info())) {
             return false;
         }
     }
@@ -208,6 +208,7 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, tablesManagerLocal.GetTtl().size());
 
     Self->TablesManager = std::move(tablesManagerLocal);
+    Self->ApplyColumnShardConfig();
     return true;
 }
 
@@ -242,7 +243,7 @@ bool TTiersManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContex
         if (versionInfo.GetTtlSettings().HasEnabled()) {
             NOlap::TTiering tiering;
             tiering.DeserializeFromProto(versionInfo.GetTtlSettings().GetEnabled()).Validate();
-            Self->Tiers->ActivateTiers(tiering.GetUsedTiers());
+            Self->Tiers->ActivateTiers(tiering.GetUsedTiers(), false);
         }
 
         if (!rowset.Next()) {

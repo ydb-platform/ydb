@@ -1,0 +1,66 @@
+# KeyValue Volume Stress Load Configuration
+
+partition_mode: OnePartition
+
+volume_config {
+    path: "kv_volume"
+    partition_count: 2048
+    channel_media: ["ssd", "ssd", "ssd"]
+}
+
+initial_data {
+    write_commands {
+        size: 2048
+        count: 10
+        channel: 0
+    }
+}
+
+actions {
+    name: "read"
+    period_us: 1
+
+    action_data_mode {
+        worker {}
+    }
+
+    action_command {
+        read {
+            size: 1024
+            count: 1
+            verify_data: true
+        }
+    }
+}
+
+actions {
+    name: "write"
+    period_us: 1
+
+    action_command {
+        write {
+            size: 1024
+            count: 1
+            channel: 0
+        }
+    }
+}
+
+
+
+actions {
+    name: "delete"
+    parent_action: "write"
+
+    action_data_mode {
+        from_prev_actions {
+            action_name: "write"
+        }
+    }
+
+    action_command {
+        delete {
+            count: 1
+        }
+    }
+}

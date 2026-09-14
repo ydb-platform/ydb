@@ -52,6 +52,7 @@ struct Schema : NIceDb::Schema {
         struct IsExternalStatisticsAggregator : Column<28, NScheme::NTypeIds::Bool> {};
         struct IsExternalBackupController : Column<29, NScheme::NTypeIds::Bool> {};
         struct ScaleRecommenderPolicies : Column<30, NScheme::NTypeIds::String> {};
+        struct PeerName : Column<31, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Path>;
         using TColumns = TableColumns<Path, State, Coordinators, Mediators, PlanResolution,
@@ -59,7 +60,7 @@ struct Schema : NIceDb::Schema {
             Attributes, Generation, SchemeShardId, PathId, ErrorCode, IsExternalSubDomain, IsExternalHive,
             AreResourcesShared, SharedDomainSchemeShardId, SharedDomainPathId, IsExternalSysViewProcessor,
             SchemaOperationQuotas, CreateIdempotencyKey, AlterIdempotencyKey, DatabaseQuotas, IsExternalStatisticsAggregator,
-            IsExternalBackupController, ScaleRecommenderPolicies>;
+            IsExternalBackupController, ScaleRecommenderPolicies, PeerName>;
     };
 
     struct TenantPools : Table<3> {
@@ -116,6 +117,14 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, Timestamp, UserSID, Data>;
     };
 
+    struct DecommittedGroups : Table<8> {
+        struct GroupId : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct DecommitTime : Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<GroupId>;
+        using TColumns = TableColumns<GroupId, DecommitTime>;
+    };
+
     struct ConfigItems : Table<100> {
         struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Generation : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -128,7 +137,6 @@ struct Schema : NIceDb::Schema {
         struct Merge : Column<9, NScheme::NTypeIds::Uint32> {};
         struct Config : Column<10, NScheme::NTypeIds::String> {};
         struct Cookie : Column<11, NScheme::NTypeIds::String> {};
-
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<Id, Generation, Kind, NodeIds, Hosts, Tenant, NodeType, Order, Merge, Config, Cookie>;
@@ -145,7 +153,6 @@ struct Schema : NIceDb::Schema {
         struct ItemKinds : Column<8, NScheme::NTypeIds::String> { using Type = TVector<ui32>; };
         struct LastProvidedConfig : Column<9, NScheme::NTypeIds::String> { using Type = TVector<std::pair<ui64, ui64>>; };
 
-
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<Id, TabletId, ServiceId, NodeId, Host, Tenant, NodeType, ItemKinds, LastProvidedConfig>;
     };
@@ -161,14 +168,25 @@ struct Schema : NIceDb::Schema {
         struct Version : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Config : Column<2, NScheme::NTypeIds::String> {};
         struct Dropped : Column<3, NScheme::NTypeIds::Bool> {};
+        // serialized NKikimrConsole::TYamlConfigUnknownFields snapshot taken at upload time
+        struct UnknownFields : Column<4, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Version>;
-        using TColumns = TableColumns<Version, Config, Dropped>;
+        using TColumns = TableColumns<Version, Config, Dropped, UnknownFields>;
+    };
+
+    struct DatabaseYamlConfigs : Table<104> {
+        struct Path : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Version : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Config : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<Path, Version>;
+        using TColumns = TableColumns<Path, Version, Config>;
     };
 
     using TTables = SchemaTables<Config, Tenants, TenantPools, TenantUnits, RemovedTenants,
                                  RegisteredUnits, LogRecords, ConfigItems, ConfigSubscriptions, DisabledValidators,
-                                 YamlConfig>;
+                                 YamlConfig, DatabaseYamlConfigs, DecommittedGroups>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };

@@ -5,16 +5,17 @@
 
 namespace NPython {
 
+// NOLINTNEXTLINE(modernize-avoid-c-arrays)
 extern const char ResourceCapsuleName[];
 
 TPyObjectPtr ToPyResource(
-        const TPyCastContext::TPtr& ctx,
-        const NKikimr::NUdf::TType* type,
-        const NKikimr::NUdf::TUnboxedValuePod& value);
+    const TPyCastContext::TPtr& ctx,
+    const NKikimr::NUdf::TType* type,
+    const NKikimr::NUdf::TUnboxedValuePod& value);
 
 NKikimr::NUdf::TUnboxedValue FromPyResource(
-        const TPyCastContext::TPtr& ctx,
-        const NKikimr::NUdf::TType* type,
-        PyObject* value);
+    const TPyCastContext::TPtr& ctx,
+    const NKikimr::NUdf::TType* type,
+    PyObject* value);
 
-} // namspace NPython
+} // namespace NPython

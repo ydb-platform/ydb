@@ -192,7 +192,6 @@
 #include <typeinfo>
 #include <utility>
 
-#include "absl/base/attributes.h"
 #include "absl/base/config.h"
 #include "absl/debugging/internal/demangle.h"
 #include "absl/meta/type_traits.h"
@@ -262,11 +261,10 @@ struct AlignOf<Aligned<T, N>> {
 
 // Does `Ts...` contain `T`?
 template <class T, class... Ts>
-using Contains = absl::disjunction<std::is_same<T, Ts>...>;
+using Contains = std::disjunction<std::is_same<T, Ts>...>;
 
 template <class From, class To>
-using CopyConst =
-    typename std::conditional<std::is_const<From>::value, const To, To>::type;
+using CopyConst = std::conditional_t<std::is_const_v<From>, const To, To>;
 
 // Note: We're not qualifying this with absl:: because it doesn't compile under
 // MSVC.
@@ -306,7 +304,7 @@ constexpr size_t Max(size_t a, size_t b, Ts... rest) {
 template <class T>
 std::string TypeName() {
   std::string out;
-#if ABSL_INTERNAL_HAS_RTTI
+#ifdef ABSL_INTERNAL_HAS_RTTI
   absl::StrAppend(&out, "<",
                   absl::debugging_internal::DemangleString(typeid(T).name()),
                   ">");
@@ -316,16 +314,14 @@ std::string TypeName() {
 
 }  // namespace adl_barrier
 
-template <bool C>
-using EnableIf = typename std::enable_if<C, int>::type;
-
 // Can `T` be a template argument of `Layout`?
 template <class T>
-using IsLegalElementType = std::integral_constant<
-    bool, !std::is_reference<T>::value && !std::is_volatile<T>::value &&
-              !std::is_reference<typename Type<T>::type>::value &&
-              !std::is_volatile<typename Type<T>::type>::value &&
-              adl_barrier::IsPow2(AlignOf<T>::value)>;
+using IsLegalElementType =
+    std::integral_constant<bool,
+                           !std::is_reference_v<T> && !std::is_volatile_v<T> &&
+                               !std::is_reference_v<typename Type<T>::type> &&
+                               !std::is_volatile_v<typename Type<T>::type> &&
+                               adl_barrier::IsPow2(AlignOf<T>::value)>;
 
 template <class Elements, class StaticSizeSeq, class RuntimeSizeSeq,
           class SizeSeq, class OffsetSeq>
@@ -350,13 +346,13 @@ class LayoutImpl;
 // can compute offsets).
 template <class... Elements, size_t... StaticSizeSeq, size_t... RuntimeSizeSeq,
           size_t... SizeSeq, size_t... OffsetSeq>
-class LayoutImpl<
-    std::tuple<Elements...>, absl::index_sequence<StaticSizeSeq...>,
-    absl::index_sequence<RuntimeSizeSeq...>, absl::index_sequence<SizeSeq...>,
-    absl::index_sequence<OffsetSeq...>> {
+class LayoutImpl<std::tuple<Elements...>, std::index_sequence<StaticSizeSeq...>,
+                 std::index_sequence<RuntimeSizeSeq...>,
+                 std::index_sequence<SizeSeq...>,
+                 std::index_sequence<OffsetSeq...>> {
  private:
   static_assert(sizeof...(Elements) > 0, "At least one field is required");
-  static_assert(absl::conjunction<IsLegalElementType<Elements>...>::value,
+  static_assert(std::conjunction_v<IsLegalElementType<Elements>...>,
                 "Invalid element type (see IsLegalElementType)");
   static_assert(sizeof...(StaticSizeSeq) <= sizeof...(Elements),
                 "Too many static sizes specified");
@@ -418,17 +414,16 @@ class LayoutImpl<
   //   assert(x.Offset<1>() == 16);  // The doubles starts from 16.
   //
   // Requires: `N <= NumSizes && N < sizeof...(Ts)`.
-  template <size_t N, EnableIf<N == 0> = 0>
+  template <size_t N>
   constexpr size_t Offset() const {
-    return 0;
-  }
-
-  template <size_t N, EnableIf<N != 0> = 0>
-  constexpr size_t Offset() const {
-    static_assert(N < NumOffsets, "Index out of bounds");
-    return adl_barrier::Align(
-        Offset<N - 1>() + SizeOf<ElementType<N - 1>>::value * Size<N - 1>(),
-        ElementAlignment<N>::value);
+    if constexpr (N == 0) {
+      return 0;
+    } else {
+      static_assert(N < NumOffsets, "Index out of bounds");
+      return adl_barrier::Align(
+          Offset<N - 1>() + SizeOf<ElementType<N - 1>>::value * Size<N - 1>(),
+          ElementAlignment<N>::value);
+    }
   }
 
   // Offset in bytes of the array with the specified element type. There must
@@ -457,15 +452,14 @@ class LayoutImpl<
   //   assert(x.Size<1>() == 4);
   //
   // Requires: `N < NumSizes`.
-  template <size_t N, EnableIf<(N < NumStaticSizes)> = 0>
+  template <size_t N>
   constexpr size_t Size() const {
-    return kStaticSizes[N];
-  }
-
-  template <size_t N, EnableIf<(N >= NumStaticSizes)> = 0>
-  constexpr size_t Size() const {
-    static_assert(N < NumSizes, "Index out of bounds");
-    return size_[N - NumStaticSizes];
+    if constexpr (N < NumStaticSizes) {
+      return kStaticSizes[N];
+    } else {
+      static_assert(N < NumSizes, "Index out of bounds");
+      return size_[N - NumStaticSizes];
+    }
   }
 
   // The number of elements in the array with the specified element type.
@@ -500,7 +494,7 @@ class LayoutImpl<
   // Requires: `p` is aligned to `Alignment()`.
   template <size_t N, class Char>
   CopyConst<Char, ElementType<N>>* Pointer(Char* p) const {
-    using C = typename std::remove_const<Char>::type;
+    using C = std::remove_const_t<Char>;
     static_assert(
         std::is_same<C, char>() || std::is_same<C, unsigned char>() ||
             std::is_same<C, signed char>(),
@@ -596,10 +590,10 @@ class LayoutImpl<
   //
   // Requires: `p` is aligned to `Alignment()`.
   //
-  // Note: We mark the parameter as unused because GCC detects it is not used
-  // when `SizeSeq` is empty [-Werror=unused-but-set-parameter].
+  // Note: We mark the parameter as maybe_unused because GCC detects it is not
+  // used when `SizeSeq` is empty [-Werror=unused-but-set-parameter].
   template <class Char>
-  auto Slices(ABSL_ATTRIBUTE_UNUSED Char* p) const {
+  auto Slices([[maybe_unused]] Char* p) const {
     return std::tuple<SliceType<CopyConst<Char, ElementType<SizeSeq>>>...>(
         Slice<SizeSeq>(p)...);
   }
@@ -624,15 +618,13 @@ class LayoutImpl<
   // `Char` must be `[const] [signed|unsigned] char`.
   //
   // Requires: `p` is aligned to `Alignment()`.
-  template <class Char, size_t N = NumOffsets - 1, EnableIf<N == 0> = 0>
+  template <class Char, size_t N = NumOffsets - 1>
   void PoisonPadding(const Char* p) const {
-    Pointer<0>(p);  // verify the requirements on `Char` and `p`
-  }
-
-  template <class Char, size_t N = NumOffsets - 1, EnableIf<N != 0> = 0>
-  void PoisonPadding(const Char* p) const {
-    static_assert(N < NumOffsets, "Index out of bounds");
-    (void)p;
+    if constexpr (N == 0) {
+      Pointer<0>(p);  // verify the requirements on `Char` and `p`
+    } else {
+      static_assert(N < NumOffsets, "Index out of bounds");
+      (void)p;
 #ifdef ABSL_HAVE_ADDRESS_SANITIZER
     PoisonPadding<Char, N - 1>(p);
     // The `if` is an optimization. It doesn't affect the observable behaviour.
@@ -642,6 +634,7 @@ class LayoutImpl<
       ASAN_POISON_MEMORY_REGION(p + start, Offset<N>() - start);
     }
 #endif
+    }
   }
 
   // Human-readable description of the memory layout. Useful for debugging.
@@ -692,21 +685,11 @@ class LayoutImpl<
   size_t size_[NumRuntimeSizes > 0 ? NumRuntimeSizes : 1];
 };
 
-// Defining a constexpr static class member variable is redundant and deprecated
-// in C++17, but required in C++14.
-template <class... Elements, size_t... StaticSizeSeq, size_t... RuntimeSizeSeq,
-          size_t... SizeSeq, size_t... OffsetSeq>
-constexpr std::array<size_t, sizeof...(StaticSizeSeq)> LayoutImpl<
-    std::tuple<Elements...>, absl::index_sequence<StaticSizeSeq...>,
-    absl::index_sequence<RuntimeSizeSeq...>, absl::index_sequence<SizeSeq...>,
-    absl::index_sequence<OffsetSeq...>>::kStaticSizes;
-
 template <class StaticSizeSeq, size_t NumRuntimeSizes, class... Ts>
 using LayoutType = LayoutImpl<
-    std::tuple<Ts...>, StaticSizeSeq,
-    absl::make_index_sequence<NumRuntimeSizes>,
-    absl::make_index_sequence<NumRuntimeSizes + StaticSizeSeq::size()>,
-    absl::make_index_sequence<adl_barrier::Min(
+    std::tuple<Ts...>, StaticSizeSeq, std::make_index_sequence<NumRuntimeSizes>,
+    std::make_index_sequence<NumRuntimeSizes + StaticSizeSeq::size()>,
+    std::make_index_sequence<adl_barrier::Min(
         sizeof...(Ts), NumRuntimeSizes + StaticSizeSeq::size() + 1)>>;
 
 template <class StaticSizeSeq, class... Ts>
@@ -809,11 +792,12 @@ class LayoutWithStaticSizes
 // internal_layout::LayoutImpl above. Those types are internal to the library
 // but their methods are public, and they are inherited by `Layout`.
 template <class... Ts>
-class Layout : public internal_layout::LayoutWithStaticSizes<
-                   absl::make_index_sequence<0>, Ts...> {
+class Layout
+    : public internal_layout::LayoutWithStaticSizes<std::make_index_sequence<0>,
+                                                    Ts...> {
  private:
   using Super =
-      internal_layout::LayoutWithStaticSizes<absl::make_index_sequence<0>,
+      internal_layout::LayoutWithStaticSizes<std::make_index_sequence<0>,
                                              Ts...>;
 
  public:

@@ -18,10 +18,12 @@ namespace NMonitoring {
     struct TDynamicCountersPage: public TPreMonPage {
     public:
         using TOutputCallback = std::function<void()>;
+        using TFilterCallback = std::function<THolder<ICountableConsumer>(const TString& setName, THolder<ICountableConsumer>&& nextConsumer)>;
 
     private:
         const TIntrusivePtr<TDynamicCounters> Counters;
         TOutputCallback OutputCallback;
+        TFilterCallback FilterCallback;
         EUnknownGroupPolicy UnknownGroupPolicy {EUnknownGroupPolicy::Error};
 
     private:
@@ -31,10 +33,12 @@ namespace NMonitoring {
         TDynamicCountersPage(const TString& path,
                              const TString& title,
                              TIntrusivePtr<TDynamicCounters> counters,
-                             TOutputCallback outputCallback = nullptr)
+                             TOutputCallback outputCallback = nullptr,
+                             TFilterCallback filterCallback = nullptr)
             : TPreMonPage(path, title)
             , Counters(counters)
             , OutputCallback(outputCallback)
+            , FilterCallback(filterCallback)
         {
         }
 

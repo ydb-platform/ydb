@@ -10,8 +10,6 @@
 
 namespace NYT::NRe2 {
 
-using namespace re2;
-
 ////////////////////////////////////////////////////////////////////////////////
 
 // We create a ref-counted version of re2 to deal with an issue of regular re2::RE2
@@ -20,10 +18,10 @@ using namespace re2;
 
 //! Ref-counted version of re2::RE2.
 class TRe2
-    : public RE2
+    : public re2::RE2
     , public TRefCounted
 {
-    using RE2::RE2;
+    using re2::RE2::RE2;
 };
 
 DEFINE_REFCOUNTED_TYPE(TRe2)

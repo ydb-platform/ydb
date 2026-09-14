@@ -6,9 +6,10 @@ ADDINCL(
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32)
 ELSE()
     SIZE(MEDIUM)
@@ -22,6 +23,7 @@ SRCS(
 PEERDIR(
     ydb/core/testlib/default
     ydb/core/client/server
+    ydb/core/persqueue/public/describer
     ydb/services/persqueue_v1
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/api/grpc

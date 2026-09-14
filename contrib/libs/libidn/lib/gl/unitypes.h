@@ -1,6 +1,6 @@
 /* DO NOT EDIT! GENERATED AUTOMATICALLY! */
 /* Elementary types and macros for the GNU UniString library.
-   Copyright (C) 2002, 2005-2006, 2009-2024 Free Software Foundation, Inc.
+   Copyright (C) 2002, 2005-2006, 2009-2025 Free Software Foundation, Inc.
 
    This file is free software: you can redistribute it and/or modify
    it under the terms of the GNU Lesser General Public License as
@@ -20,6 +20,11 @@
 
 /* Get uint8_t, uint16_t, uint32_t.  */
 #include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 
 /* Type representing a Unicode character.  */
 typedef uint32_t ucs4_t;
@@ -57,6 +62,11 @@ typedef uint32_t ucs4_t;
 # else
 #  define _UC_RESTRICT
 # endif
+#endif
+
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif /* _UNITYPES_H */

@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     ListReplicate(-1, 10),
     ListReplicate(AsTuple(1, 2), 3),

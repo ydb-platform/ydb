@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/fwd.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 namespace NTestHelpers {
@@ -13,5 +14,7 @@ NYdbGrpc::IStreamRequestCtrl::TPtr CheckAttach(NYdbGrpc::TGRpcClientLow& clientL
 void CheckAttach(const NYdbGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
 void CheckDelete(const NYdbGrpc::TGRpcClientConfig& clientConfig, const TString& id, int expected, bool& allDoneOk);
 void EnsureSessionClosed(NYdbGrpc::IStreamRequestCtrl::TPtr p, int expected, bool& allDone);
+void EnsureSessionClosedWithHint(NYdbGrpc::IStreamRequestCtrl::TPtr p, Ydb::StatusIds::StatusCode expectedStatus,
+    Ydb::Query::SessionState::SessionHintCase expectedHint, bool& allDone);
 
 }

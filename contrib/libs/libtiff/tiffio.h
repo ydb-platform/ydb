@@ -45,12 +45,14 @@ typedef struct tiff TIFF;
  * to pass tag types and values uses the types defined in
  * tiff.h directly.
  *
- * NB: ttag_t is unsigned int and not unsigned short because
+ * NB: ttag_t -> deprecated and replaced by uint32_t
+ *     is unsigned int and not unsigned short because
  *     ANSI C requires that the type before the ellipsis be a
  *     promoted type (i.e. one of int, unsigned int, pointer,
  *     or double) and because we defined pseudo-tags that are
  *     outside the range of legal Aldus-assigned tags.
- * NB: tsize_t is signed and not unsigned because some functions
+ * NB: tsize_t -> deprecated and replaced by tmsize_t
+ *     is signed and not unsigned because some functions
  *     return -1.
  * NB: toff_t is not off_t for many reasons; TIFFs max out at
  *     32-bit file offsets, and BigTIFF maxes out at 64-bit
@@ -66,20 +68,17 @@ typedef TIFF_SSIZE_T tmsize_t;
 #define TIFF_TMSIZE_T_MAX (tmsize_t)(SIZE_MAX >> 1)
 
 typedef uint64_t toff_t; /* file offset */
+typedef uint32_t tdir_t; /* directory index */
+
 /* the following are deprecated and should be replaced by their defining
    counterparts */
 typedef uint32_t ttag_t;    /* directory tag */
-typedef uint32_t tdir_t;    /* directory index */
 typedef uint16_t tsample_t; /* sample number */
 typedef uint32_t tstrile_t; /* strip or tile number */
 typedef tstrile_t tstrip_t; /* strip number */
 typedef tstrile_t ttile_t;  /* tile number */
 typedef tmsize_t tsize_t;   /* i/o size in bytes */
 typedef void *tdata_t;      /* image data ref */
-
-#if !defined(__WIN32__) && (defined(_WIN32) || defined(WIN32))
-#define __WIN32__
-#endif
 
 /*
  * On windows you should define USE_WIN32_FILEIO if you are using tif_win32.c
@@ -88,7 +87,7 @@ typedef void *tdata_t;      /* image data ref */
  * By default tif_unix.c is assumed.
  */
 
-#if defined(_WINDOWS) || defined(__WIN32__) || defined(_Windows)
+#if defined(_WIN32)
 #if !defined(__CYGWIN) && !defined(AVOID_WIN32_FILEIO) &&                      \
     !defined(USE_WIN32_FILEIO)
 #define AVOID_WIN32_FILEIO
@@ -98,11 +97,11 @@ typedef void *tdata_t;      /* image data ref */
 #if defined(USE_WIN32_FILEIO)
 #define VC_EXTRALEAN
 #include <windows.h>
-#ifdef __WIN32__
+#ifdef _WIN32
 DECLARE_HANDLE(thandle_t); /* Win32 file handle */
 #else
 typedef HFILE thandle_t; /* client data handle */
-#endif /* __WIN32__ */
+#endif /* _WIN32 */
 #else
 typedef void *thandle_t; /* client data handle */
 #endif /* USE_WIN32_FILEIO */
@@ -126,13 +125,13 @@ typedef void *thandle_t; /* client data handle */
  */
 
 /* reference white */
-#define D65_X0 (95.0470F)
-#define D65_Y0 (100.0F)
-#define D65_Z0 (108.8827F)
+#define D65_X0 (95.0470f)
+#define D65_Y0 (100.0f)
+#define D65_Z0 (108.8827f)
 
-#define D50_X0 (96.4250F)
-#define D50_Y0 (100.0F)
-#define D50_Z0 (82.4680F)
+#define D50_X0 (96.4250f)
+#define D50_Y0 (100.0f)
+#define D50_Z0 (82.4680f)
 
 /* Structure for holding information about a display device. */
 
@@ -155,6 +154,18 @@ typedef struct
     float d_gammaB;
 } TIFFDisplay;
 
+/* YCbCr->RGB support for TIFFYCbCrToRGBInit() and TIFFYCbCrToRGB()
+ * Attention:
+ * Functions TIFFYCbCrToRGBInit() and TIFFYCbCrToRGB() require a user provided
+ * large memory buffer, where several tables can be setup.
+ * The pointers to these tables are stored in the structure TIFFYCbCrToRGB,
+ * which is located at the beginning of the buffer. Thus, this memory has to be
+ * allocated as follows:
+ *     TIFFYCbCrToRGB *ycbcr = (TIFFYCbCrToRGB *)_TIFFmalloc(
+ *         TIFFroundup_32(sizeof(TIFFYCbCrToRGB), sizeof(long)) +
+ *         4 * 256 * sizeof(TIFFRGBValue) + 2 * 256 * sizeof(int) +
+ *         3 * 256 * sizeof(int32_t));
+ */
 typedef struct
 {                           /* YCbCr->RGB support */
     TIFFRGBValue *clamptab; /* range clamping table */
@@ -243,7 +254,7 @@ struct _TIFFRGBAImage
  * Macros for extracting components from the
  * packed ABGR form returned by TIFFReadRGBAImage.
  */
-#define TIFFGetR(abgr) ((abgr)&0xff)
+#define TIFFGetR(abgr) ((abgr) & 0xff)
 #define TIFFGetG(abgr) (((abgr) >> 8) & 0xff)
 #define TIFFGetB(abgr) (((abgr) >> 16) & 0xff)
 #define TIFFGetA(abgr) (((abgr) >> 24) & 0xff)
@@ -258,7 +269,7 @@ struct _TIFFRGBAImage
 typedef int (*TIFFInitMethod)(TIFF *, int);
 typedef struct
 {
-    char *name;
+    const char *name;
     uint16_t scheme;
     TIFFInitMethod init;
 } TIFFCodec;
@@ -311,14 +322,15 @@ extern "C"
     /*
      * Auxiliary functions.
      */
-
+#ifndef TIFF_DO_NOT_USE_NON_EXT_ALLOC_FUNCTIONS
     extern void *_TIFFmalloc(tmsize_t s);
     extern void *_TIFFcalloc(tmsize_t nmemb, tmsize_t siz);
     extern void *_TIFFrealloc(void *p, tmsize_t s);
+    extern void _TIFFfree(void *p);
+#endif
     extern void _TIFFmemset(void *p, int v, tmsize_t c);
     extern void _TIFFmemcpy(void *d, const void *s, tmsize_t c);
     extern int _TIFFmemcmp(const void *p1, const void *p2, tmsize_t c);
-    extern void _TIFFfree(void *p);
 
     /*
     ** Stuff, related to tag handling and creating custom tags.
@@ -508,6 +520,12 @@ extern int TIFFReadRGBAImageOriented(TIFF *, uint32_t, uint32_t, uint32_t *,
     TIFFOpenOptionsSetMaxSingleMemAlloc(TIFFOpenOptions *opts,
                                         tmsize_t max_single_mem_alloc);
     extern void
+    TIFFOpenOptionsSetMaxCumulatedMemAlloc(TIFFOpenOptions *opts,
+                                           tmsize_t max_cumulated_mem_alloc);
+    extern void
+    TIFFOpenOptionsSetWarnAboutUnknownTags(TIFFOpenOptions *opts,
+                                           int warn_about_unknown_tags);
+    extern void
     TIFFOpenOptionsSetErrorHandlerExtR(TIFFOpenOptions *opts,
                                        TIFFErrorHandlerExtR handler,
                                        void *errorhandler_user_data);
@@ -518,11 +536,11 @@ extern int TIFFReadRGBAImageOriented(TIFF *, uint32_t, uint32_t, uint32_t *,
 
     extern TIFF *TIFFOpen(const char *, const char *);
     extern TIFF *TIFFOpenExt(const char *, const char *, TIFFOpenOptions *opts);
-#ifdef __WIN32__
+#ifdef _WIN32
     extern TIFF *TIFFOpenW(const wchar_t *, const char *);
     extern TIFF *TIFFOpenWExt(const wchar_t *, const char *,
                               TIFFOpenOptions *opts);
-#endif /* __WIN32__ */
+#endif /* _WIN32 */
     extern TIFF *TIFFFdOpen(int, const char *, const char *);
     extern TIFF *TIFFFdOpenExt(int, const char *, const char *,
                                TIFFOpenOptions *opts);
@@ -566,6 +584,7 @@ extern int TIFFReadRGBAImageOriented(TIFF *, uint32_t, uint32_t, uint32_t *,
                                          tmsize_t cc);
     extern tmsize_t TIFFWriteRawTile(TIFF *tif, uint32_t tile, void *data,
                                      tmsize_t cc);
+    extern uint64_t TIFFGetMaxCompressionRatio(TIFF *tif);
     extern int TIFFDataWidth(
         TIFFDataType); /* table of tag datatype widths within TIFF file. */
     extern void TIFFSetWriteOffset(TIFF *tif, toff_t off);
@@ -590,7 +609,7 @@ extern int TIFFReadRGBAImageOriented(TIFF *, uint32_t, uint32_t, uint32_t *,
     extern uint64_t TIFFGetStrileByteCountWithErr(TIFF *tif, uint32_t strile,
                                                   int *pbErr);
 
-#ifdef LOGLUV_PUBLIC
+#if LOGLUV_PUBLIC
 #define U_NEU 0.210526316
 #define V_NEU 0.473684211
 #define UVSCALE 410.
@@ -634,14 +653,14 @@ extern int TIFFReadRGBAImageOriented(TIFF *, uint32_t, uint32_t, uint32_t *,
      ****************************************************************************/
     typedef struct
     {
-        ttag_t field_tag;               /* field's tag */
+        uint32_t field_tag;             /* field's tag */
         short field_readcount;          /* read count/TIFF_VARIABLE/TIFF_SPP */
         short field_writecount;         /* write count/TIFF_VARIABLE */
         TIFFDataType field_type;        /* type of associated data */
         unsigned short field_bit;       /* bit in fieldsset bit vector */
         unsigned char field_oktochange; /* if true, can change while writing */
         unsigned char field_passcount;  /* if true, pass dir count on set */
-        char *field_name;               /* ASCII name */
+        const char *field_name;         /* ASCII name */
     } TIFFFieldInfo;
 
     extern int TIFFMergeFieldInfo(TIFF *, const TIFFFieldInfo[], uint32_t);

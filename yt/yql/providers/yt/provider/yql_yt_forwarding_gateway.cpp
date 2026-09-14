@@ -57,7 +57,7 @@ TFuture<IYtGateway::TRunResult> TYtForwardingGatewayBase::Run(const TExprNode::T
     return Slave_->Run(node, ctx, std::move(options));
 }
 
-TFuture<IYtGateway::TRunResult> TYtForwardingGatewayBase::Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const {
+TFuture<IYtGateway::TRunResult> TYtForwardingGatewayBase::Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) {
     return Slave_->Prepare(node, ctx, std::move(options));
 }
 
@@ -97,8 +97,12 @@ TString TYtForwardingGatewayBase::GetClusterServer(const TString& cluster) const
     return Slave_->GetClusterServer(cluster);
 }
 
-NYT::TRichYPath TYtForwardingGatewayBase::GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const {
-    return Slave_->GetRealTable(sessionId, cluster, table, epoch, tmpFolder);
+TString TYtForwardingGatewayBase::GetClusterYtName(const TString& cluster) const {
+    return Slave_->GetClusterYtName(cluster);
+}
+
+NYT::TRichYPath TYtForwardingGatewayBase::GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const {
+    return Slave_->GetRealTable(sessionId, cluster, table, epoch, tmpFolder, temp, anonymous);
 }
 
 NYT::TRichYPath TYtForwardingGatewayBase::GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const {
@@ -135,6 +139,34 @@ IYtGateway::TGetTablePartitionsResult TYtForwardingGatewayBase::GetTablePartitio
 
 void TYtForwardingGatewayBase::AddCluster(const TYtClusterConfig& config) {
     Slave_->AddCluster(config);
+}
+
+IYtGateway::TClusterConnectionResult TYtForwardingGatewayBase::GetClusterConnection(const TClusterConnectionOptions&& options) const {
+    return Slave_->GetClusterConnection(std::move(options));
+}
+
+TMaybe<TString> TYtForwardingGatewayBase::GetTableFilePath(const TGetTableFilePathOptions&& options) {
+    return Slave_->GetTableFilePath(std::move(options));
+}
+
+NThreading::TFuture<IYtGateway::TLayersSnapshotResult> TYtForwardingGatewayBase::SnapshotLayers(TSnapshotLayersOptions&& options) {
+    return Slave_->SnapshotLayers(std::move(options));
+}
+
+NThreading::TFuture<IYtGateway::TDumpResult> TYtForwardingGatewayBase::Dump(TDumpOptions&& options) {
+    return Slave_->Dump(std::move(options));
+}
+
+NThreading::TFuture<IYtGateway::TDownloadTableResult> TYtForwardingGatewayBase::DownloadTable(TDownloadTableOptions&& options) {
+    return Slave_->DownloadTable(std::move(options));
+}
+
+NThreading::TFuture<IYtGateway::TUploadFilesToCacheResult> TYtForwardingGatewayBase::UploadFilesToCache(TUploadFilesToCacheOptions&& options) {
+    return Slave_->UploadFilesToCache(std::move(options));
+}
+
+IYtTokenResolver::TPtr TYtForwardingGatewayBase::GetYtTokenResolver() const {
+    return Slave_->GetYtTokenResolver();
 }
 
 } // namspace NYql

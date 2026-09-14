@@ -8,7 +8,7 @@
 
 namespace NKikimr::NOlap {
 
-class IPortionColumnChunk : public IPortionDataChunk {
+class IPortionColumnChunk: public IPortionDataChunk {
 private:
     using TBase = IPortionDataChunk;
 
@@ -31,14 +31,17 @@ protected:
         const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const = 0;
     virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoInternalSplit(const TColumnSaver& saver,
         const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, const std::vector<ui64>& splitSizes) const override;
+
     virtual bool DoIsSplittable() const override {
         return GetRecordsCount() > 1;
     }
 
 public:
     IPortionColumnChunk(const ui32 entityId, const std::optional<ui16>& chunkIdx = {})
-        : TBase(entityId, chunkIdx) {
+        : TBase(entityId, chunkIdx)
+    {
     }
+
     virtual ~IPortionColumnChunk() = default;
 
     TSimpleChunkMeta BuildSimpleChunkMeta() const {
@@ -55,10 +58,16 @@ private:
     std::vector<std::shared_ptr<IPortionDataChunk>> Chunks;
     std::shared_ptr<TColumnLoader> Loader;
 
-    std::shared_ptr<NArrow::NAccessor::IChunkedArray> CurrentChunk;
-    std::optional<NArrow::NAccessor::IChunkedArray::TFullDataAddress> CurrentChunkArray;
-    ui32 CurrentChunkIndex = 0;
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> CurrentArray;
+    std::optional<NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress> CurrentChunkArray;
+    ui32 CurrentArrayIndex = 0;
     ui32 CurrentRecordIndex = 0;
+
+    std::shared_ptr<NArrow::NAccessor::IChunkedArray> ApplyChunk(const std::shared_ptr<IPortionDataChunk>& chunk) const {
+        return Loader->ApplyVerified(
+            chunk->GetData(), chunk->GetRecordsCountVerified(), std::nullopt, chunk->GetAdditionalAccessorDataOptional());
+    }
+
 public:
     TChunkedColumnReader(const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks, const std::shared_ptr<TColumnLoader>& loader)
         : Chunks(chunks)
@@ -68,55 +77,43 @@ public:
     }
 
     void Start() {
-        CurrentChunkIndex = 0;
+        CurrentArrayIndex = 0;
         CurrentRecordIndex = 0;
         if (Chunks.size()) {
-            CurrentChunk = Loader->ApplyVerified(Chunks.front()->GetData(), Chunks.front()->GetRecordsCountVerified());
+            CurrentArray = ApplyChunk(Chunks.front());
             CurrentChunkArray.reset();
         }
     }
 
-    const std::shared_ptr<arrow::Array>& GetCurrentChunk() {
+    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& GetCurrentChunk() {
         if (!CurrentChunkArray || !CurrentChunkArray->GetAddress().Contains(CurrentRecordIndex)) {
-            CurrentChunkArray = CurrentChunk->GetChunk(CurrentChunkArray, CurrentRecordIndex);
+            CurrentChunkArray = CurrentArray->GetArray(CurrentChunkArray, CurrentRecordIndex, CurrentArray);
         }
         AFL_VERIFY(CurrentChunkArray);
         return CurrentChunkArray->GetArray();
     }
 
-    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& GetCurrentAccessor() const {
-        AFL_VERIFY(CurrentChunk);
-        return CurrentChunk;
-    }
-
-    ui32 GetCurrentRecordIndex() {
-        if (!CurrentChunkArray || !CurrentChunkArray->GetAddress().Contains(CurrentRecordIndex)) {
-            CurrentChunkArray = CurrentChunk->GetChunk(CurrentChunkArray->GetAddress(), CurrentRecordIndex);
-        }
-        return CurrentChunkArray->GetAddress().GetLocalIndex(CurrentRecordIndex);
-    }
-
     bool IsCorrect() const {
-        return !!CurrentChunk;
+        return !!CurrentArray;
     }
 
     bool ReadNextChunk() {
-        while (++CurrentChunkIndex < Chunks.size()) {
-            CurrentChunk = Loader->ApplyVerified(Chunks[CurrentChunkIndex]->GetData(), Chunks[CurrentChunkIndex]->GetRecordsCountVerified());
+        while (++CurrentArrayIndex < Chunks.size()) {
+            CurrentArray = ApplyChunk(Chunks[CurrentArrayIndex]);
             CurrentChunkArray.reset();
             CurrentRecordIndex = 0;
-            if (CurrentRecordIndex < CurrentChunk->GetRecordsCount()) {
+            if (CurrentRecordIndex < CurrentArray->GetRecordsCount()) {
                 return true;
             }
         }
         CurrentChunkArray.reset();
-        CurrentChunk = nullptr;
+        CurrentArray = nullptr;
         return false;
     }
 
     bool ReadNext() {
-        AFL_VERIFY(!!CurrentChunk);
-        if (++CurrentRecordIndex < CurrentChunk->GetRecordsCount()) {
+        AFL_VERIFY(!!CurrentArray);
+        if (++CurrentRecordIndex < CurrentArray->GetRecordsCount()) {
             return true;
         }
         return ReadNextChunk();
@@ -127,9 +124,11 @@ class TChunkedBatchReader {
 private:
     std::vector<TChunkedColumnReader> Columns;
     bool IsCorrectFlag = true;
+
 public:
     TChunkedBatchReader(const std::vector<TChunkedColumnReader>& columnReaders)
-        : Columns(columnReaders) {
+        : Columns(columnReaders)
+    {
         AFL_VERIFY(Columns.size());
         for (auto&& i : Columns) {
             AFL_VERIFY(i.IsCorrect());
@@ -193,4 +192,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap

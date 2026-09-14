@@ -4,17 +4,17 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(1.54.3)
+VERSION(1.60.2)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/libs/grpc
-    contrib/libs/grpc/src/proto/grpc/channelz
     contrib/libs/grpc/third_party/address_sorting
     contrib/libs/grpc/third_party/upb
     contrib/libs/protobuf
-    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization
+    contrib/proto/grpc/grpc/channelz/v1
+    contrib/restricted/abseil-cpp-tstring
 )
 
 ADDINCL(

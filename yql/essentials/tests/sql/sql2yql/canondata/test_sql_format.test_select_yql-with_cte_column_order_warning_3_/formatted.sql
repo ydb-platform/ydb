@@ -1,0 +1,16 @@
+PRAGMA YqlSelect = 'force';
+
+WITH x (a, b) AS (
+    SELECT
+        1 AS a,
+        '2' AS b
+    UNION
+    SELECT
+        1 AS a,
+        '2' AS b
+)
+SELECT
+    1
+FROM
+    x
+;

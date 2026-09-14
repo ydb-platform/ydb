@@ -48,7 +48,7 @@ public:
             Ctest << "orderNumber# " << get.OrderNumber << " get Id# " << get.Id;
             if (disk.InErrorState) {
                 Ctest << " ERROR";
-                blackboard.AddErrorResponse(get.Id, get.OrderNumber);
+                blackboard.AddErrorResponse(get.Id, get.OrderNumber, "Disk in error state");
             } else if (auto it = disk.Blobs.find(get.Id); it == disk.Blobs.end()) {
                 Ctest << " NODATA";
                 blackboard.AddNoDataResponse(get.Id, get.OrderNumber);
@@ -76,7 +76,7 @@ public:
             Ctest << "orderNumber# " << put.OrderNumber << " put Id# " << put.Id;
             if (disk.InErrorState) {
                 Ctest << " ERROR";
-                blackboard.AddErrorResponse(put.Id, put.OrderNumber);
+                blackboard.AddErrorResponse(put.Id, put.OrderNumber, "Disk in error state");
             } else {
                 Ctest << " OK";
                 disk.Blobs[put.Id] = std::move(put.Buffer);
@@ -100,7 +100,8 @@ void RunStrategyTest(TBlobStorageGroupType type) {
     TString data(1000, 'x');
     TLogoBlobID id(1'000'000'000, 1, 1, 0, data.size(), 0);
     std::vector<TRope> parts(type.TotalPartCount());
-    ErasureSplit(TBlobStorageGroupType::CrcModeNone, type, TRope(data), parts);
+    ErasureSplit(TBlobStorageGroupType::CrcModeNone, type, TRope(data), parts,
+        nullptr, GetDefaultRcBufAllocator());
 
     for (ui32 iter = 0; iter < 100'000; ++iter) {
         Ctest << "iteration# " << iter << Endl;
@@ -132,12 +133,12 @@ void RunStrategyTest(TBlobStorageGroupType type) {
                 TBlobStorageGroupInfo::TGroupVDisks diskMask = {&info.GetTopology(), info.GetVDiskId(orderNumber)};
                 if (sureFailedDisks & diskMask) {
                     if (RandomNumber(5u) == 0) {
-                        blackboard.AddErrorResponse(partId, orderNumber);
+                        blackboard.AddErrorResponse(partId, orderNumber, "Bad disk");
                     }
                 } else {
                     switch (RandomNumber(100u)) {
                         case 0:
-                            blackboard.AddErrorResponse(partId, orderNumber);
+                            blackboard.AddErrorResponse(partId, orderNumber, "Random failure");
                             break;
 
                         case 1:
@@ -264,7 +265,7 @@ void RunTestLevel(const TBlobStorageGroupInfo& info, TBlackboard& blackboard,
             [&](const TGetQuery& op) {
                 const ui32 idxInSubgroup = info.GetTopology().GetIdxInSubgroup(info.GetVDiskId(op.OrderNumber), id.Hash());
                 if (nonWorkingDomain && idxInSubgroup % 3 == 2) {
-                    branch.AddErrorResponse(op.Id, op.OrderNumber);
+                    branch.AddErrorResponse(op.Id, op.OrderNumber, "Non-working domain");
                 } else if (myPresenceMask.GetDisksWithPart(op.Id.PartId() - 1) >> idxInSubgroup & 1) {
                     const ui32 blobSize = op.Id.BlobSize();
                     const ui32 shift = Min(op.Shift, blobSize);
@@ -277,7 +278,7 @@ void RunTestLevel(const TBlobStorageGroupInfo& info, TBlackboard& blackboard,
             [&](const TPutQuery& op) {
                 const ui32 idxInSubgroup = info.GetTopology().GetIdxInSubgroup(info.GetVDiskId(op.OrderNumber), id.Hash());
                 if (nonWorkingDomain && idxInSubgroup % 3 == 2) {
-                    branch.AddErrorResponse(op.Id, op.OrderNumber);
+                    branch.AddErrorResponse(op.Id, op.OrderNumber, "Non-working domain");
                 } else {
                     myPresenceMask.AddItem(idxInSubgroup, op.Id.PartId() - 1, info.Type);
                     branch.AddPutOkResponse(op.Id, op.OrderNumber);

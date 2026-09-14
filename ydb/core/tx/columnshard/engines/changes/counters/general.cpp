@@ -1,5 +1,3 @@
 #include "general.h"
 
-namespace NKikimr::NOlap::NChanges {
-
-}
+namespace NKikimr::NOlap::NChanges {}

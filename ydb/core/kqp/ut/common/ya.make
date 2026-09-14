@@ -1,22 +1,27 @@
 LIBRARY()
 
 SRCS(
-    json2_udf.cpp
+    arrow_builders.cpp
     kqp_ut_common.cpp
     kqp_ut_common.h
-    re2_udf.cpp
-    string_udf.cpp
     columnshard.cpp
-    datetime2_udf.cpp
 )
 
 PEERDIR(
     library/cpp/testing/common
     ydb/core/kqp/federated_query
     ydb/core/testlib
+    ydb/library/testlib/common
     ydb/library/yql/providers/s3/actors_factory
     yql/essentials/public/udf
+    yql/essentials/udfs/common/datetime2
+    yql/essentials/udfs/common/digest
+    yql/essentials/udfs/common/json2
+    yql/essentials/udfs/common/math
+    yql/essentials/udfs/common/re2
     yql/essentials/udfs/common/string
+    ydb/core/formats/arrow/program/olap_kernels
+    yql/essentials/udfs/common/unicode_base
     yql/essentials/utils/backtrace
     ydb/public/lib/yson_value
     ydb/core/tx/columnshard/test_helper
@@ -26,8 +31,11 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/topic
+    contrib/libs/highwayhash
 )
 
 YQL_LAST_ABI_VERSION()
+
+GENERATE_ENUM_SERIALIZATION(olap_indexes_enums.h)
 
 END()

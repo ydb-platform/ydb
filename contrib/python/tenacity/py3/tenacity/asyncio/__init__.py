@@ -107,11 +107,15 @@ class AsyncRetrying(BaseRetrying):
         self.begin()
 
         retry_state = RetryCallState(retry_object=self, fn=fn, args=args, kwargs=kwargs)
+        is_async = _utils.is_coroutine_callable(fn)
         while True:
             do = await self.iter(retry_state=retry_state)
             if isinstance(do, DoAttempt):
                 try:
-                    result = await fn(*args, **kwargs)
+                    if is_async:
+                        result = await fn(*args, **kwargs)
+                    else:
+                        result = fn(*args, **kwargs)
                 except BaseException:  # noqa: B902
                     retry_state.set_exception(sys.exc_info())  # type: ignore[arg-type]
                 else:
@@ -175,18 +179,23 @@ class AsyncRetrying(BaseRetrying):
                 raise StopAsyncIteration
 
     def wraps(self, fn: WrappedFn) -> WrappedFn:
-        fn = super().wraps(fn)
+        wrapped = super().wraps(fn)
         # Ensure wrapper is recognized as a coroutine function.
 
         @functools.wraps(
             fn, functools.WRAPPER_ASSIGNMENTS + ("__defaults__", "__kwdefaults__")
         )
         async def async_wrapped(*args: t.Any, **kwargs: t.Any) -> t.Any:
-            return await fn(*args, **kwargs)
+            # Always create a copy to prevent overwriting the local contexts when
+            # calling the same wrapped functions multiple times in the same stack
+            copy = self.copy()
+            async_wrapped.statistics = copy.statistics  # type: ignore[attr-defined]
+            return await copy(fn, *args, **kwargs)
 
         # Preserve attributes
-        async_wrapped.retry = fn.retry  # type: ignore[attr-defined]
-        async_wrapped.retry_with = fn.retry_with  # type: ignore[attr-defined]
+        async_wrapped.retry = self  # type: ignore[attr-defined]
+        async_wrapped.retry_with = wrapped.retry_with  # type: ignore[attr-defined]
+        async_wrapped.statistics = {}  # type: ignore[attr-defined]
 
         return async_wrapped  # type: ignore[return-value]
 

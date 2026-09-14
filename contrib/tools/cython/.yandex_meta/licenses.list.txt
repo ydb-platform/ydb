@@ -1,7 +1,7 @@
 ====================Apache-2.0====================
                                  Apache License
                            Version 2.0, January 2004
-                        http://www.apache.org/licenses/
+                        https://www.apache.org/licenses/
 
    TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
@@ -177,22 +177,18 @@
    END OF TERMS AND CONDITIONS
 
 ====================Apache-2.0====================
-Classifier: License :: OSI Approved :: Apache Software License
-
-
-====================Apache-2.0====================
 Cython, which derives from Pyrex, is licensed under the Apache 2.0
 Software License.  More precisely, all modifications and new code
 
 
 ====================Apache-2.0====================
-License: Apache
+License: Apache-2.0
 
 
 ====================File: LICENSE.txt====================
                                  Apache License
                            Version 2.0, January 2004
-                        http://www.apache.org/licenses/
+                        https://www.apache.org/licenses/
 
    TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 

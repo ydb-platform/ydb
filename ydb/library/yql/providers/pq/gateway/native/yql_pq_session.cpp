@@ -1,11 +1,21 @@
 #include "yql_pq_session.h"
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 #include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+
+#include <library/cpp/threading/future/wait/wait.h>
 
 namespace NYql {
 
+using namespace NYdb;
+using namespace NYdb::NTopic;
+using namespace NYdb::NFederatedTopic;
+
 namespace {
-NPq::NConfigurationManager::TClientOptions GetCmClientOptions(const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+
+NPq::NConfigurationManager::TClientOptions GetCmClientOptions(const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
     NPq::NConfigurationManager::TClientOptions opts;
     opts
         .SetEndpoint(cfg.GetConfigManagerEndpoint())
@@ -15,52 +25,52 @@ NPq::NConfigurationManager::TClientOptions GetCmClientOptions(const NYql::TPqClu
     return opts;
 }
 
-NYdb::NTopic::TTopicClientSettings GetYdbPqClientOptions(const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
-    NYdb::NTopic::TTopicClientSettings opts;
+TFederatedTopicClientSettings GetYdbFederatedPqClientOptions(const TString& database, const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
+    TFederatedTopicClientSettings opts;
     opts
         .DiscoveryEndpoint(cfg.GetEndpoint())
         .Database(database)
-        .SslCredentials(NYdb::TSslCredentials(cfg.GetUseSsl()))
+        .SslCredentials(TSslCredentials(cfg.GetUseSsl()))
         .CredentialsProviderFactory(credentialsProviderFactory);
 
     return opts;
 }
 
-NYdb::TCommonClientSettings GetDsClientOptions(const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
-    NYdb::TCommonClientSettings opts;
+TTopicClientSettings GetYdbPqClientOptions(const TString& database, const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
+    TTopicClientSettings opts;
     opts
         .DiscoveryEndpoint(cfg.GetEndpoint())
         .Database(database)
-        .SslCredentials(NYdb::TSslCredentials(cfg.GetUseSsl()))
+        .SslCredentials(TSslCredentials(cfg.GetUseSsl()))
         .CredentialsProviderFactory(credentialsProviderFactory);
 
     return opts;
 }
+
+TCommonClientSettings GetDsClientOptions(const TString& database, const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
+    TCommonClientSettings opts;
+    opts
+        .DiscoveryEndpoint(cfg.GetEndpoint())
+        .Database(database)
+        .SslCredentials(TSslCredentials(cfg.GetUseSsl()))
+        .CredentialsProviderFactory(credentialsProviderFactory);
+
+    return opts;
 }
 
-const NPq::NConfigurationManager::IClient::TPtr& TPqSession::GetConfigManagerClient(const TString& cluster, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
-    auto& client = ClusterCmClients[cluster];
-    if (!client && CmConnections) {
-        client = CmConnections->GetClient(GetCmClientOptions(cfg, credentialsProviderFactory));
-    }
-    return client;
-}
+} // anonymous namespace
 
-NYdb::NTopic::TTopicClient& TPqSession::GetYdbPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
-    const auto clientIt = ClusterYdbPqClients.find(cluster);
-    if (clientIt != ClusterYdbPqClients.end()) {
-        return clientIt->second;
-    }
-    return ClusterYdbPqClients.emplace(cluster, NYdb::NTopic::TTopicClient(YdbDriver, GetYdbPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
-}
-
-NYdb::NDataStreams::V1::TDataStreamsClient& TPqSession::GetDsClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
-    const auto clientIt = ClusterDsClients.find(cluster);
-    if (clientIt != ClusterDsClients.end()) {
-        return clientIt->second;
-    }
-    return ClusterDsClients.emplace(cluster, NYdb::NDataStreams::V1::TDataStreamsClient(YdbDriver, GetDsClientOptions(database, cfg, credentialsProviderFactory))).first->second;
-}
+TPqSession::TPqSession(const TString& sessionId, const TString& username, const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
+    const TDriver& ydbDriver, const TPqClusterConfigsMapPtr& clusterConfigs, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
+    IPqLocalClientFactory::TPtr localTopicClientFactory)
+    : SessionId(sessionId)
+    , UserName(username)
+    , CmConnections(cmConnections)
+    , YdbDriver(ydbDriver)
+    , ClusterConfigs(clusterConfigs)
+    , CredentialsFactory(credentialsFactory)
+    , LocalTopicClientFactory(std::move(localTopicClientFactory))
+{}
 
 NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(const TString& cluster, const TString& database, const TString& path, const TString& token) {
     const auto* config = ClusterConfigs->FindPtr(cluster);
@@ -70,7 +80,7 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
 
     YQL_ENSURE(config->GetEndpoint(), "Can't describe topic `" << cluster << "`.`" << path << "`: no endpoint");
 
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, token, config->GetAddBearerToToken());
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     with_lock (Mutex) {
         if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE) {
             const NPq::NConfigurationManager::IClient::TPtr& client = GetConfigManagerClient(cluster, *config, credentialsProviderFactory);
@@ -85,8 +95,8 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             return client->DescribePath(path);
         }
 
-        return GetYdbPqClient(cluster, database, *config, credentialsProviderFactory).DescribeTopic(path).Apply([cluster, path, database](const NYdb::NTopic::TAsyncDescribeTopicResult& describeTopicResultFuture) {
-            const NYdb::NTopic::TDescribeTopicResult& describeTopicResult = describeTopicResultFuture.GetValue();
+        return GetYdbPqClient(cluster, database, *config, credentialsProviderFactory).DescribeTopic(path).Apply([cluster, path, database](const TAsyncDescribeTopicResult& describeTopicResultFuture) {
+            const TDescribeTopicResult& describeTopicResult = describeTopicResultFuture.GetValue();
             if (!describeTopicResult.IsSuccess()) {
                 throw yexception() << "Failed to describe topic `" << cluster << "`.`" << path << "` in the database `" << database << "`: " << describeTopicResult.GetIssues().ToString();
             }
@@ -105,7 +115,7 @@ NThreading::TFuture<IPqGateway::TListStreams> TPqSession::ListStreams(const TStr
 
     YQL_ENSURE(config->GetEndpoint(), "Can't get list topics for " << cluster << ": no endpoint");
 
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, token, config->GetAddBearerToToken());
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     with_lock (Mutex) {
         if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE) {
             const NPq::NConfigurationManager::IClient::TPtr& client = GetConfigManagerClient(cluster, *config, credentialsProviderFactory);
@@ -127,18 +137,198 @@ NThreading::TFuture<IPqGateway::TListStreams> TPqSession::ListStreams(const TStr
         }
 
         return GetDsClient(cluster, database, *config, credentialsProviderFactory)
-                .ListStreams(NYdb::NDataStreams::V1::TListStreamsSettings{ .Limit_ = limit, .ExclusiveStartStreamName_ = exclusiveStartStreamName})
-                .Apply([](const auto& future) {
-                    auto& response = future.GetValue();
-                    if (!response.IsSuccess()) {
-                        throw yexception() << response.GetIssues().ToString();
-                    }
-                    const auto& result = response.GetResult();
-                    IPqGateway::TListStreams listStrems;
-                    listStrems.Names.insert(listStrems.Names.end(), result.stream_names().begin(), result.stream_names().end());
-                    return listStrems;
-                });
+            .ListStreams(NDataStreams::V1::TListStreamsSettings{ .Limit_ = limit, .ExclusiveStartStreamName_ = exclusiveStartStreamName})
+            .Apply([](const auto& future) {
+                auto& response = future.GetValue();
+                if (!response.IsSuccess()) {
+                    throw yexception() << response.GetIssues().ToString();
+                }
+                const auto& result = response.GetResult();
+                IPqGateway::TListStreams listStreams;
+                listStreams.Names.insert(listStreams.Names.end(), result.stream_names().begin(), result.stream_names().end());
+                return listStreams;
+            });
     }
+}
+
+IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopic(const TString& cluster, const TString& requestedDatabase, const TString& requestedPath, const TString& token) {
+    const auto* config = ClusterConfigs->FindPtr(cluster);
+    if (!config) {
+        // For local (non-federated) topics the cluster name is empty.
+        // If a LocalTopicClientFactory is available, use an empty cluster config
+        // which routes through the local factory path below.
+        if (cluster.empty() && LocalTopicClientFactory) {
+            static const TPqClusterConfig defaultLocalConfig;
+            config = &defaultLocalConfig;
+        } else {
+            ythrow yexception() << "Pq cluster `" << cluster << "` does not exist";
+        }
+    }
+
+    TString database = requestedDatabase;
+    TString path = requestedPath;
+    if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE && requestedDatabase == "/Root") {
+        // RTMR compatibility
+        // It uses cluster specified in gateways.conf with ClusterType unset (CT_PERS_QUEUE by default) and default Database and its own read/write code
+        auto pos = requestedPath.find('/');
+        Y_ENSURE(pos != TString::npos, "topic name is expected in format <account>/<path>");
+        database = "/logbroker-federation/" + requestedPath.substr(0, pos);
+        path = requestedPath.substr(pos + 1);
+    }
+
+    YQL_ENSURE(CredentialsFactory, "CredentialsFactory is not set for `" << cluster << "`.`" << path << "`");
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
+    if (!config->GetEndpoint() && LocalTopicClientFactory) {
+        NYdb::NTopic::TDescribeTopicSettings settings;
+        return LocalTopicClientFactory->CreateTopicClient(GetYdbPqClientOptions(database, *config, credentialsProviderFactory))->DescribeTopic(path, settings)
+            .Apply([path](const TAsyncDescribeTopicResult& f) {
+                IPqGateway::TClusterInfo info = {.Info = {.Status = TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE}};
+
+                TString error;
+                const auto setError = [&error, path](const TString& msg) {
+                    error = TStringBuilder() << "Failed to describe local topic `" << path << "`: " << msg;
+                };
+
+                try {
+                    const auto& response = f.GetValue();
+                    if (response.IsSuccess()) {
+                        const auto& topicDescription = response.GetTopicDescription();
+                        info.PartitionsCount = topicDescription.GetTotalPartitionsCount();
+                        info.Consumers.reserve(topicDescription.GetConsumers().size());
+                        for (const auto& consumer : topicDescription.GetConsumers()) {
+                            info.Consumers.emplace(consumer.GetConsumerName());
+                        }
+                    } else {
+                        setError(response.GetIssues().ToString());
+                    }
+                } catch (...) {
+                    setError(FormatCurrentException());
+                }
+
+                if (error) {
+                    throw yexception() << error;
+                }
+
+                return std::vector<IPqGateway::TClusterInfo>{{std::move(info)}};
+            });
+    }
+    YQL_ENSURE(config->GetEndpoint(), "Can't describe topic `" << cluster << "`.`" << path << "`: no endpoint, and local topics are not enabled");
+
+    with_lock (Mutex) {
+        return GetYdbFederatedPqClient(cluster, database, *config, credentialsProviderFactory)
+            .GetAllClusterInfo()
+            .Apply([
+                ydbDriver = YdbDriver, credentialsProviderFactory,
+                cluster, database, path,
+                topicSettings = GetYdbPqClientOptions(database, *config, credentialsProviderFactory)
+            ](const auto& futureClusterInfo) mutable {
+                auto allClustersInfo = futureClusterInfo.GetValue();
+                Y_ENSURE(!allClustersInfo.empty());
+                std::vector<TAsyncDescribeTopicResult> futures;
+                IPqGateway::TDescribeFederatedTopicResult results;
+                results.reserve(allClustersInfo.size());
+                futures.reserve(allClustersInfo.size());
+                std::vector<std::string> paths;
+                paths.reserve(allClustersInfo.size());
+                for (auto& clusterInfo : allClustersInfo) {
+                    auto& clusterTopicPath = paths.emplace_back(path);
+                    clusterInfo.AdjustTopicPath(clusterTopicPath);
+                    if (!clusterInfo.IsAvailableForRead()) {
+                        futures.emplace_back(NThreading::MakeErrorFuture<TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException() << "Cluster " << clusterInfo.Name << " is unavailable for read")));
+                    } else {
+                        clusterInfo.AdjustTopicClientSettings(topicSettings);
+                        futures.emplace_back(TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath));
+                    }
+                    results.emplace_back(std::move(clusterInfo));
+                }
+                Y_ENSURE(results.size() == allClustersInfo.size());
+                Y_ENSURE(paths.size() == allClustersInfo.size());
+                Y_ENSURE(futures.size() == allClustersInfo.size());
+                // XXX This produces circular dependency until the future is fired
+                // futures references allFutureDescribe
+                // lambda references futures[]
+                // allFutureDescribe contains lambda
+                auto allFutureDescribes = NThreading::WaitAll(futures);
+                return allFutureDescribes.Apply([futures = std::move(futures), paths = std::move(paths), results = std::move(results), cluster, database, path](const auto& ) mutable {
+                    TStringBuilder ex;
+                    auto addErrorHeader = [&]() {
+                        if (ex.empty()) {
+                            ex << "Failed to describe topic `" << cluster << "`.`" << path << "` in the database `" << database << "`: ";
+                        } else {
+                            ex << "; ";
+                        }
+                    };
+                    bool gotAnyTopic = false;
+                    for (size_t i = 0; i != results.size(); ++i) {
+                        auto& futureDescribe = futures[i];
+                        auto addErrorCluster = [&]() {
+                            addErrorHeader();
+                            ex << "#" << i << " (name '" << results[i].Info.Name << "' endpoint '" << results[i].Info.Endpoint << "' path `" << paths[i] << "`): ";
+                        };
+                        try {
+                            auto describeTopicResult = futureDescribe.ExtractValue();
+                            if (!describeTopicResult.IsSuccess()) {
+                                addErrorCluster();
+                                ex << describeTopicResult.GetIssues().ToString();
+                                continue;
+                            }
+                            const auto& topicDescription = describeTopicResult.GetTopicDescription();
+                            results[i].PartitionsCount = topicDescription.GetTotalPartitionsCount();
+                            results[i].Consumers.reserve(topicDescription.GetConsumers().size());
+                            for (const auto& consumer : topicDescription.GetConsumers()) {
+                                results[i].Consumers.emplace(consumer.GetConsumerName());
+                            }
+                            gotAnyTopic = true;
+                        } catch (...) {
+                            addErrorCluster();
+                            ex << "Got exception: " << FormatCurrentException();
+                        }
+                    }
+                    if (!gotAnyTopic) {
+                        addErrorHeader();
+                        ex << "No working cluster found\n";
+                        throw yexception() << ex;
+                    }
+                    return results;
+                });
+            });
+    }
+}
+
+const NPq::NConfigurationManager::IClient::TPtr& TPqSession::GetConfigManagerClient(const TString& cluster, const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
+    auto& client = ClusterCmClients[cluster];
+    if (!client && CmConnections) {
+        Y_VALIDATE(cfg.GetEndpoint(), "Can't get config manager client for cluster `" << cluster << "`: no endpoint");
+        client = CmConnections->GetClient(GetCmClientOptions(cfg, credentialsProviderFactory));
+    }
+    return client;
+}
+
+NDataStreams::V1::TDataStreamsClient& TPqSession::GetDsClient(const TString& cluster, const TString& database, const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
+    const auto clientIt = ClusterDbDsClients.find(std::pair(cluster, database));
+    if (clientIt != ClusterDbDsClients.end()) {
+        return clientIt->second;
+    }
+    Y_VALIDATE(cfg.GetEndpoint(), "Can't get data streams client for cluster `" << cluster << "`: no endpoint");
+    return ClusterDbDsClients.emplace(std::pair(cluster, database), NDataStreams::V1::TDataStreamsClient(YdbDriver, GetDsClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+}
+
+TFederatedTopicClient& TPqSession::GetYdbFederatedPqClient(const TString& cluster, const TString& database, const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
+    const auto clientIt = ClusterDbYdbFederatedPqClients.find(std::pair(cluster, database));
+    if (clientIt != ClusterDbYdbFederatedPqClients.end()) {
+        return clientIt->second;
+    }
+    Y_VALIDATE(cfg.GetEndpoint(), "Can't get federated topic client for cluster `" << cluster << "`: no endpoint");
+    return ClusterDbYdbFederatedPqClients.emplace(std::pair(cluster, database), TFederatedTopicClient(YdbDriver, GetYdbFederatedPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+}
+
+TTopicClient& TPqSession::GetYdbPqClient(const TString& cluster, const TString& database, const TPqClusterConfig& cfg, std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
+    const auto clientIt = ClusterDbYdbPqClients.find(std::pair(cluster, database));
+    if (clientIt != ClusterDbYdbPqClients.end()) {
+        return clientIt->second;
+    }
+    Y_VALIDATE(cfg.GetEndpoint(), "Can't get topic client for cluster `" << cluster << "`: no endpoint");
+    return ClusterDbYdbPqClients.emplace(std::pair(cluster, database), TTopicClient(YdbDriver, GetYdbPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
 }
 
 } // namespace NYql

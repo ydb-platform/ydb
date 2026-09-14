@@ -9,9 +9,9 @@ LICENSE(
 
 PROVIDES(protoc)
 
-VERSION(3.22.5)
+VERSION(22.5)
 
-ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.22.5.tar.gz)
+ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v22.5.tar.gz)
 
 IF (OPENSOURCE_REPLACE_PROTOBUF AND EXPORT_CMAKE)
     OPENSOURCE_EXPORT_REPLACEMENT(
@@ -42,7 +42,7 @@ PEERDIR(
 )
 
 ADDINCL(
-    contrib/libs/protobuf/third_party/utf8_range
+    contrib/libs/protobuf/src
 )
 
 NO_COMPILER_WARNINGS()

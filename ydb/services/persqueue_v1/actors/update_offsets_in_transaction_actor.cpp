@@ -18,13 +18,6 @@ void TUpdateOffsetsInTransactionActor::Bootstrap(const NActors::TActorContext& c
 
 void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx)
 {
-    if (!AppData(ctx)->FeatureFlags.GetEnableTopicServiceTx()) {
-        return Reply(Ydb::StatusIds::UNSUPPORTED,
-                     "Disabled transaction support for TopicService.",
-                     NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
-                     ctx);
-    }
-
     const auto req = GetProtoRequest();
 
     if (!req->has_tx()) {
@@ -61,7 +54,22 @@ void TUpdateOffsetsInTransactionActor::Proceed(const NActors::TActorContext& ctx
     ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(req->tx().id());
 
     ev->Record.MutableRequest()->MutableTopicOperations()->SetConsumer(req->consumer());
-    *ev->Record.MutableRequest()->MutableTopicOperations()->MutableTopics() = req->topics();
+
+    for (const auto& topic : req->topics()) {
+        auto* newTopic = ev->Record.MutableRequest()->MutableTopicOperations()->AddTopics();
+        newTopic->set_path(topic.path());
+
+        for (const auto& partition : topic.partitions()) {
+            auto* newPartition = newTopic->add_partitions();
+            newPartition->set_partition_id(partition.partition_id());
+
+            for (const auto& offsetsRange : partition.partition_offsets()) {
+                auto* newOffsetsRange = newPartition->add_partition_offsets();
+                newOffsetsRange->set_start(offsetsRange.start());
+                newOffsetsRange->set_end(offsetsRange.end());
+            }
+        }
+    }
 
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
 }

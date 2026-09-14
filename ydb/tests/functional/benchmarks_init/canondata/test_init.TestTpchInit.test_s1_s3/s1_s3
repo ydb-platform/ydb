@@ -1,12 +1,12 @@
 Init tables ...
 --!syntax_v1
-CREATE EXTERNAL DATA SOURCE `/Root/db/Root/db/tpch/s1_s3_external_source` WITH (
+CREATE EXTERNAL DATA SOURCE `/Root/db/tpch/s1_s3_external_source` WITH (
     SOURCE_TYPE="ObjectStorage",
     LOCATION="https://storage.yandexcloud.net/tpc",
     AUTH_METHOD="NONE"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/customer` (
+CREATE EXTERNAL TABLE `/Root/db/tpch/s1/customer` (
     c_acctbal Double NOT NULL,
     c_address Utf8 NOT NULL,
     c_comment Utf8 NOT NULL,
@@ -17,10 +17,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/customer` (
     c_phone Utf8 NOT NULL
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/customer/"
+    DATA_SOURCE = "/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/customer/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/lineitem` (
+CREATE EXTERNAL TABLE `/Root/db/tpch/s1/lineitem` (
     l_comment Utf8 NOT NULL,
     l_commitdate Date32 NOT NULL,
     l_discount Double NOT NULL,
@@ -39,20 +39,20 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/lineitem` (
     l_tax Double NOT NULL
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/lineitem/"
+    DATA_SOURCE = "/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/lineitem/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/nation` (
+CREATE EXTERNAL TABLE `/Root/db/tpch/s1/nation` (
     n_comment Utf8 NOT NULL,
     n_name Utf8 NOT NULL,
     n_nationkey Int32 NOT NULL,
     n_regionkey Int32 NOT NULL
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/nation/"
+    DATA_SOURCE = "/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/nation/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/orders` (
+CREATE EXTERNAL TABLE `/Root/db/tpch/s1/orders` (
     o_clerk Utf8 NOT NULL,
     o_comment Utf8 NOT NULL,
     o_custkey Int64 NOT NULL,
@@ -64,10 +64,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/orders` (
     o_totalprice Double NOT NULL
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/orders/"
+    DATA_SOURCE = "/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/orders/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/part` (
+CREATE EXTERNAL TABLE `/Root/db/tpch/s1/part` (
     p_brand Utf8 NOT NULL,
     p_comment Utf8 NOT NULL,
     p_container Utf8 NOT NULL,
@@ -79,10 +79,10 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/part` (
     p_type Utf8 NOT NULL
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/part/"
+    DATA_SOURCE = "/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/part/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/partsupp` (
+CREATE EXTERNAL TABLE `/Root/db/tpch/s1/partsupp` (
     ps_availqty Int32 NOT NULL,
     ps_comment Utf8 NOT NULL,
     ps_partkey Int64 NOT NULL,
@@ -90,19 +90,19 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/partsupp` (
     ps_supplycost Double NOT NULL
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/partsupp/"
+    DATA_SOURCE = "/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/partsupp/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/region` (
+CREATE EXTERNAL TABLE `/Root/db/tpch/s1/region` (
     r_comment Utf8 NOT NULL,
     r_name Utf8 NOT NULL,
     r_regionkey Int32 NOT NULL
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/region/"
+    DATA_SOURCE = "/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/region/"
 );
 
-CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/supplier` (
+CREATE EXTERNAL TABLE `/Root/db/tpch/s1/supplier` (
     s_acctbal Double NOT NULL,
     s_address Utf8 NOT NULL,
     s_comment Utf8 NOT NULL,
@@ -112,7 +112,7 @@ CREATE EXTERNAL TABLE `/Root/db/Root/db/tpch/s1/supplier` (
     s_suppkey Int64 NOT NULL
 )
 WITH (
-    DATA_SOURCE = "/Root/db/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/supplier/"
+    DATA_SOURCE = "/Root/db/tpch/s1_s3_external_source", FORMAT = "parquet", LOCATION = "h/s1/parquet/supplier/"
 );
 
 Init tables ...Ok

@@ -2,7 +2,7 @@
 
 #include "codecs.h"
 
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
@@ -10,7 +10,7 @@
 
 #include <limits>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class TProtoAccessor;
 
     namespace NScheme {
@@ -18,7 +18,7 @@ namespace NYdb::inline V3 {
     }
 }
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 enum class EMeteringMode : uint32_t {
     Unspecified = 0,
@@ -36,25 +36,82 @@ enum class EAutoPartitioningStrategy: uint32_t {
     Paused = 4,
 };
 
+enum class EConsumerType {
+    Unspecified = 0,
+    Streaming = 1,
+    Shared = 2,
+};
+
+enum class EDeadLetterAction {
+    Unspecified = 0,
+    Delete = 1,
+    Move = 2,
+};
+
+// 0 - disabled
+// 1 - database level metrics
+// 2 - object level metrics
+// 3 - detailed metrics
+using EMetricsLevel = uint32_t;
+
+class TDeadLetterPolicyCondition {
+public:
+    TDeadLetterPolicyCondition(const Ydb::Topic::DeadLetterPolicyCondition&);
+
+    ui32 GetMaxProcessingAttempts() const;
+
+private:
+    ui32 MaxProcessingAttempts_ = 0;
+};
+
+class TDeadLetterPolicy {
+public:
+    TDeadLetterPolicy(const Ydb::Topic::DeadLetterPolicy&);
+
+    bool GetEnabled() const;
+    const TDeadLetterPolicyCondition& GetCondition() const;
+    EDeadLetterAction GetAction() const;
+    const std::string& GetDeadLetterQueue() const;
+
+private:
+    bool Enabled_;
+    TDeadLetterPolicyCondition Condition_;
+    EDeadLetterAction Action_;
+    std::string DeadLetterQueue_;
+
+};
+
 class TConsumer {
 public:
     TConsumer(const Ydb::Topic::Consumer&);
 
     const std::string& GetConsumerName() const;
+    EConsumerType GetConsumerType() const;
     bool GetImportant() const;
+    TDuration GetAvailabilityPeriod() const;
     const TInstant& GetReadFrom() const;
     const std::vector<ECodec>& GetSupportedCodecs() const;
     const std::map<std::string, std::string>& GetAttributes() const;
+    bool GetKeepMessagesOrder() const;
+    TDuration GetDefaultProcessingTimeout() const;
+    TDuration GetReceiveMessageWaitTime() const;
+    TDuration GetReceiveMessageDelay() const;
+    const TDeadLetterPolicy& GetDeadLetterPolicy() const;
 
 private:
     std::string ConsumerName_;
+    EConsumerType ConsumerType_;
     bool Important_;
+    TDuration AvailabilityPeriod_;
     TInstant ReadFrom_;
     std::map<std::string, std::string> Attributes_;
     std::vector<ECodec> SupportedCodecs_;
-
+    bool KeepMessagesOrder_;
+    TDuration DefaultProcessingTimeout_;
+    TDeadLetterPolicy DeadLetterPolicy_;
+    TDuration ReceiveMessageWaitTime_;
+    TDuration ReceiveMessageDelay_;
 };
-
 
 class TTopicStats {
 public:
@@ -111,6 +168,7 @@ public:
     const TInstant& GetLastReadTime() const;
     const TDuration& GetMaxReadTimeLag() const;
     const TDuration& GetMaxWriteTimeLag() const;
+    const TDuration& GetMaxCommittedTimeLag() const;
 
 private:
     uint64_t CommittedOffset_;
@@ -120,12 +178,14 @@ private:
     TInstant LastReadTime_;
     TDuration MaxReadTimeLag_;
     TDuration MaxWriteTimeLag_;
+    TDuration MaxCommittedTimeLag_;
 };
 
 // Topic partition location
 class TPartitionLocation {
 public:
     TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation);
+    TPartitionLocation(std::int32_t nodeId, std::int64_t generation);
     int32_t GetNodeId() const;
     int64_t GetGeneration() const;
 
@@ -267,7 +327,7 @@ private:
 };
 
 class TTopicDescription {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
 public:
     TTopicDescription(Ydb::Topic::DescribeTopicResult&& desc);
@@ -279,6 +339,8 @@ public:
     const std::vector<NScheme::TPermissions>& GetPermissions() const;
 
     const std::vector<NScheme::TPermissions>& GetEffectivePermissions() const;
+
+    bool GetInterruptInheritance() const;
 
     const TPartitioningSettings& GetPartitioningSettings() const;
 
@@ -296,6 +358,12 @@ public:
 
     uint64_t GetPartitionWriteBurstBytes() const;
 
+    uint64_t GetPartitionWriteSpeedMessagesPerSecond() const;
+
+    uint64_t GetPartitionWriteBurstMessages() const;
+
+    bool GetContentBasedDeduplication() const;
+
     const std::map<std::string, std::string>& GetAttributes() const;
 
     const std::vector<TConsumer>& GetConsumers() const;
@@ -303,6 +371,8 @@ public:
     EMeteringMode GetMeteringMode() const;
 
     const TTopicStats& GetTopicStats() const;
+
+    std::optional<EMetricsLevel> GetMetricsLevel() const;
 
     void SerializeTo(Ydb::Topic::CreateTopicRequest& request) const;
 private:
@@ -317,6 +387,8 @@ private:
     std::optional<uint64_t> RetentionStorageMb_;
     uint64_t PartitionWriteSpeedBytesPerSecond_;
     uint64_t PartitionWriteBurstBytes_;
+    uint64_t PartitionWriteSpeedMessagesPerSecond_;
+    uint64_t PartitionWriteBurstMessages_;
     EMeteringMode MeteringMode_;
     std::map<std::string, std::string> Attributes_;
     std::vector<TConsumer> Consumers_;
@@ -325,12 +397,15 @@ private:
 
     std::string Owner_;
     NScheme::TVirtualTimestamp CreationTimestamp_;
+    bool InterruptInheritance_ = false;
     std::vector<NScheme::TPermissions> Permissions_;
     std::vector<NScheme::TPermissions> EffectivePermissions_;
+    std::optional<EMetricsLevel> MetricsLevel_;
+    bool ContentBasedDeduplication_;
 };
 
 class TConsumerDescription {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
 public:
     TConsumerDescription(Ydb::Topic::DescribeConsumerResult&& desc);
@@ -350,7 +425,7 @@ private:
 };
 
 class TPartitionDescription {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
 public:
     TPartitionDescription(Ydb::Topic::DescribePartitionResult&& desc);
@@ -365,7 +440,7 @@ private:
 
 // Result for describe topic request.
 struct TDescribeTopicResult : public TStatus {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
     TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result);
 
@@ -377,7 +452,7 @@ private:
 
 // Result for describe consumer request.
 struct TDescribeConsumerResult : public TStatus {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
     TDescribeConsumerResult(TStatus&& status, Ydb::Topic::DescribeConsumerResult&& result);
 
@@ -389,7 +464,7 @@ private:
 
 // Result for describe partition request.
 struct TDescribePartitionResult: public TStatus {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
     TDescribePartitionResult(TStatus&& status, Ydb::Topic::DescribePartitionResult&& result);
 
@@ -435,10 +510,149 @@ struct TAlterTopicSettings;
 using TAlterConsumerAttributesBuilder = TAlterAttributesBuilderImpl<TAlterConsumerSettings>;
 using TAlterTopicAttributesBuilder = TAlterAttributesBuilderImpl<TAlterTopicSettings>;
 
+struct TDeadLetterPolicyConditionSettings {
+    using TSelf = TDeadLetterPolicyConditionSettings;
+
+    TDeadLetterPolicyConditionSettings(const Ydb::Topic::DeadLetterPolicyCondition&);
+    TDeadLetterPolicyConditionSettings() = default;
+    TDeadLetterPolicyConditionSettings(const TSelf&) = default;
+    TDeadLetterPolicyConditionSettings(TSelf&&) = default;
+    TSelf& operator=(const TSelf&) = default;
+
+    FLUENT_SETTING_OPTIONAL(ui32, MaxProcessingAttempts);
+};
+
+template<typename TParent>
+struct TDeadLetterPolicyConditionBuilder {
+    TDeadLetterPolicyConditionBuilder(TParent& parent) : Parent_(parent) {};
+
+    TDeadLetterPolicyConditionBuilder& MaxProcessingAttempts(ui32 maxProcessingAttempts) {
+        Parent_.Parent_.DeadLetterPolicy_.Condition_.MaxProcessingAttempts_ = maxProcessingAttempts;
+        return *this;
+    }
+
+    TParent& EndCondition() { return Parent_; }
+
+private:
+    TParent& Parent_;
+};
+
+struct TDeadLetterPolicySettings {
+    using TSelf = TDeadLetterPolicySettings;
+
+    TDeadLetterPolicySettings() = default;
+    TDeadLetterPolicySettings(const Ydb::Topic::DeadLetterPolicy&);
+
+    FLUENT_SETTING_OPTIONAL(bool, Enabled);
+    FLUENT_SETTING(TDeadLetterPolicyConditionSettings, Condition);
+    FLUENT_SETTING_DEFAULT(EDeadLetterAction, Action, EDeadLetterAction::Unspecified);
+    FLUENT_SETTING_OPTIONAL(std::string, DeadLetterQueue);
+};
+
+template<typename TParent>
+struct TDeadLetterPolicyBuilder {
+    using TSelf = TDeadLetterPolicyBuilder;
+    friend struct TDeadLetterPolicyConditionBuilder<TSelf>;
+
+    TDeadLetterPolicyBuilder(TParent& parent) : Parent_(parent) {};
+
+    TSelf& Enable() {
+        return Enabled(true);
+    }
+
+    TSelf& Disable() {
+        return Enabled(false);
+    }
+
+    TSelf& Enabled(bool enabled) {
+        Parent_.DeadLetterPolicy_.Enabled_ = enabled;
+        return *this;
+    }
+
+    TDeadLetterPolicyConditionBuilder<TSelf> BeginCondition() {
+        return TDeadLetterPolicyConditionBuilder<TSelf>(*this);
+    }
+
+    TSelf& DeleteAction() {
+        Parent_.DeadLetterPolicy_.Action_ = EDeadLetterAction::Delete;
+        return *this;
+    }
+
+    TSelf& MoveAction(const std::string& deadLetterQueue) {
+        Parent_.DeadLetterPolicy_.Action_ = EDeadLetterAction::Move;
+        Parent_.DeadLetterPolicy_.DeadLetterQueue_ = deadLetterQueue;
+        return *this;
+    }
+
+    TParent& EndDeadLetterPolicy() { return Parent_; }
+
+private:
+    TParent& Parent_;
+};
+
+struct TAlterDeadLetterPolicySettings {
+    using TSelf = TAlterDeadLetterPolicySettings;
+
+    FLUENT_SETTING_OPTIONAL(bool, Enabled);
+    FLUENT_SETTING_DEFAULT(bool, DeadLetterPolicyChanged, false);
+    FLUENT_SETTING_OPTIONAL(EDeadLetterAction, Action);
+    FLUENT_SETTING(TDeadLetterPolicyConditionSettings, Condition);
+    FLUENT_SETTING_OPTIONAL(std::string, DeadLetterQueue);
+};
+
+template<typename TParent>
+struct TAlterDeadLetterPolicyBuilder {
+    using TSelf = TAlterDeadLetterPolicyBuilder;
+    friend struct TDeadLetterPolicyConditionBuilder<TSelf>;
+
+    TAlterDeadLetterPolicyBuilder(TParent& parent) : Parent_(parent) {};
+
+    TSelf& Enable() {
+        return Enabled(true);
+    }
+
+    TSelf& Disable() {
+        return Enabled(false);
+    }
+
+    TSelf& Enabled(bool enabled) {
+        Parent_.DeadLetterPolicy_.Enabled_ = enabled;
+        return *this;
+    }
+
+    TDeadLetterPolicyConditionBuilder<TSelf> BeginCondition() {
+        return TDeadLetterPolicyConditionBuilder<TSelf>(*this);
+    }
+
+    TSelf& SetDeleteAction() {
+        Parent_.DeadLetterPolicy_.DeadLetterPolicyChanged_ = true;
+        Parent_.DeadLetterPolicy_.Action_ = EDeadLetterAction::Delete;
+        return *this;
+    }
+
+    TSelf& AlterMoveAction(const std::string& deadLetterQueue) {
+        Parent_.DeadLetterPolicy_.DeadLetterPolicyChanged_ = false;
+        Parent_.DeadLetterPolicy_.Action_ = EDeadLetterAction::Move;
+        Parent_.DeadLetterPolicy_.DeadLetterQueue_ = deadLetterQueue;
+        return *this;
+    }
+
+    TSelf& SetMoveAction(const std::string& deadLetterQueue) {
+        Parent_.DeadLetterPolicy_.DeadLetterPolicyChanged_ = true;
+        Parent_.DeadLetterPolicy_.Action_ = EDeadLetterAction::Move;
+        Parent_.DeadLetterPolicy_.DeadLetterQueue_ = deadLetterQueue;
+        return *this;
+    }
+
+    TParent& EndAlterDeadLetterPolicy() { return Parent_; }
+
+private:
+    TParent& Parent_;
+};
+
 template<class TSettings>
 struct TConsumerSettings {
     using TSelf = TConsumerSettings;
-
     using TAttributes = std::map<std::string, std::string>;
 
     TConsumerSettings(TSettings& parent) : Parent_(parent) {}
@@ -448,10 +662,18 @@ struct TConsumerSettings {
     void SerializeTo(Ydb::Topic::Consumer& proto) const;
 
     FLUENT_SETTING(std::string, ConsumerName);
+    FLUENT_SETTING_DEFAULT(EConsumerType, ConsumerType, EConsumerType::Streaming);
     FLUENT_SETTING_DEFAULT(bool, Important, false);
+    FLUENT_SETTING_DEFAULT(TDuration, AvailabilityPeriod, TDuration::Zero());
     FLUENT_SETTING_DEFAULT(TInstant, ReadFrom, TInstant::Zero());
 
     FLUENT_SETTING_VECTOR(ECodec, SupportedCodecs);
+
+    FLUENT_SETTING_OPTIONAL(bool, KeepMessagesOrder);
+    FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
+    FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageWaitTime);
+    FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageDelay);
+    FLUENT_SETTING(TDeadLetterPolicySettings, DeadLetterPolicy)
 
     FLUENT_SETTING(TAttributes, Attributes);
 
@@ -485,6 +707,20 @@ struct TConsumerSettings {
         return *this;
     }
 
+    TConsumerSettings& SetAvailiabilityPeriod(TDuration availabilityPeriod) {
+        AvailabilityPeriod_ = availabilityPeriod;
+        return *this;
+    }
+
+    TConsumerSettings& StreamingConsumerType() {
+        ConsumerType_ = EConsumerType::Streaming;
+        return *this;
+    }
+
+    TDeadLetterPolicyBuilder<TSelf> BeginDeadLetterPolicy() {
+        return TDeadLetterPolicyBuilder<TSelf>(*this);
+    }
+
     TSettings& EndAddConsumer() { return Parent_; };
 
 private:
@@ -499,13 +735,21 @@ struct TAlterConsumerSettings {
     TAlterConsumerSettings(TAlterTopicSettings& parent): Parent_(parent) {}
     TAlterConsumerSettings(TAlterTopicSettings& parent, const std::string& name) : ConsumerName_(name), Parent_(parent) {}
 
+    void SerializeTo(Ydb::Topic::AlterConsumer& proto) const;
+
     FLUENT_SETTING(std::string, ConsumerName);
     FLUENT_SETTING_OPTIONAL(bool, SetImportant);
+    FLUENT_SETTING_OPTIONAL(TDuration, SetAvailabilityPeriod);
     FLUENT_SETTING_OPTIONAL(TInstant, SetReadFrom);
 
     FLUENT_SETTING_OPTIONAL_VECTOR(ECodec, SetSupportedCodecs);
 
     FLUENT_SETTING(TAlterAttributes, AlterAttributes);
+
+    FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
+    FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageWaitTime);
+    FLUENT_SETTING_OPTIONAL(TDuration, ReceiveMessageDelay);
+    FLUENT_SETTING(TAlterDeadLetterPolicySettings, DeadLetterPolicy);
 
     TAlterConsumerAttributesBuilder BeginAlterAttributes() {
         return TAlterConsumerAttributesBuilder(*this);
@@ -519,6 +763,15 @@ struct TAlterConsumerSettings {
     TAlterConsumerSettings& SetSupportedCodecs(const std::vector<ECodec>& codecs) {
         SetSupportedCodecs_ = codecs;
         return *this;
+    }
+
+    TAlterConsumerSettings& SetAvailabilityPeriod(TDuration availabilityPeriod) {
+        SetAvailabilityPeriod_ = availabilityPeriod;
+        return *this;
+    }
+
+    TAlterDeadLetterPolicyBuilder<TSelf> BeginAlterDeadLetterPolicy() {
+        return TAlterDeadLetterPolicyBuilder<TSelf>(*this);
     }
 
     TAlterTopicSettings& EndAlterConsumer() { return Parent_; };
@@ -545,14 +798,19 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
     FLUENT_SETTING_VECTOR(ECodec, SupportedCodecs);
 
     FLUENT_SETTING_DEFAULT(uint64_t, RetentionStorageMb, 0);
+    FLUENT_SETTING_DEFAULT(bool, ContentBasedDeduplication, false);
     FLUENT_SETTING_DEFAULT(EMeteringMode, MeteringMode, EMeteringMode::Unspecified);
 
     FLUENT_SETTING_DEFAULT(uint64_t, PartitionWriteSpeedBytesPerSecond, 0);
     FLUENT_SETTING_DEFAULT(uint64_t, PartitionWriteBurstBytes, 0);
+    FLUENT_SETTING_DEFAULT(uint64_t, PartitionWriteSpeedMessagesPerSecond, 0);
+    FLUENT_SETTING_DEFAULT(uint64_t, PartitionWriteBurstMessages, 0);
 
     FLUENT_SETTING_VECTOR(TConsumerSettings<TCreateTopicSettings>, Consumers);
 
     FLUENT_SETTING(TAttributes, Attributes);
+
+    FLUENT_SETTING_OPTIONAL(EMetricsLevel, MetricsLevel);
 
     TCreateTopicSettings& SetSupportedCodecs(std::vector<ECodec>&& codecs) {
         SupportedCodecs_ = std::move(codecs);
@@ -564,13 +822,31 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
         return *this;
     }
 
-    TConsumerSettings<TCreateTopicSettings>& BeginAddConsumer() {
+    TConsumerSettings<TCreateTopicSettings>& BeginAddSharedConsumer() {
+        return BeginAddConsumer(EConsumerType::Shared);
+    }
+
+    TConsumerSettings<TCreateTopicSettings>& BeginAddStreamingConsumer() {
+        return BeginAddConsumer(EConsumerType::Streaming);
+    }
+
+    TConsumerSettings<TCreateTopicSettings>& BeginAddConsumer(EConsumerType consumerType = EConsumerType::Streaming) {
         Consumers_.push_back({*this});
+        Consumers_.back().ConsumerType(consumerType);
         return Consumers_.back();
     }
 
-    TConsumerSettings<TCreateTopicSettings>& BeginAddConsumer(const std::string& name) {
+    TConsumerSettings<TCreateTopicSettings>& BeginAddSharedConsumer(const std::string& name) {
+        return BeginAddConsumer(name, EConsumerType::Shared);
+    }
+
+    TConsumerSettings<TCreateTopicSettings>& BeginAddStreamingConsumer(const std::string& name) {
+        return BeginAddConsumer(name, EConsumerType::Streaming);
+    }
+
+    TConsumerSettings<TCreateTopicSettings>& BeginAddConsumer(const std::string& name, EConsumerType consumerType = EConsumerType::Streaming) {
         Consumers_.push_back({*this, name});
+        Consumers_.back().ConsumerType(consumerType);
         return Consumers_.back();
     }
 
@@ -664,6 +940,7 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
     using TAlterAttributes = std::map<std::string, std::string>;
 
     FLUENT_SETTING_OPTIONAL(TDuration, SetRetentionPeriod);
+    FLUENT_SETTING_OPTIONAL(bool, SetContentBasedDeduplication);
 
     FLUENT_SETTING_OPTIONAL_VECTOR(ECodec, SetSupportedCodecs);
 
@@ -671,6 +948,8 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
 
     FLUENT_SETTING_OPTIONAL(uint64_t, SetPartitionWriteSpeedBytesPerSecond);
     FLUENT_SETTING_OPTIONAL(uint64_t, SetPartitionWriteBurstBytes);
+    FLUENT_SETTING_OPTIONAL(uint64_t, SetPartitionWriteSpeedMessagesPerSecond);
+    FLUENT_SETTING_OPTIONAL(uint64_t, SetPartitionWriteBurstMessages);
 
     FLUENT_SETTING_OPTIONAL(EMeteringMode, SetMeteringMode);
 
@@ -694,13 +973,31 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
         return *this;
     }
 
-    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer() {
+    TConsumerSettings<TAlterTopicSettings>& BeginAddSharedConsumer() {
+        return BeginAddConsumer(EConsumerType::Shared);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddStreamingConsumer() {
+        return BeginAddConsumer(EConsumerType::Streaming);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer(EConsumerType consumerType = EConsumerType::Streaming) {
         AddConsumers_.push_back({*this});
+        AddConsumers_.back().ConsumerType(consumerType);
         return AddConsumers_.back();
     }
 
-    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer(const std::string& name) {
+    TConsumerSettings<TAlterTopicSettings>& BeginAddSharedConsumer(const std::string& name) {
+        return BeginAddConsumer(name, EConsumerType::Shared);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddStreamingConsumer(const std::string& name) {
+        return BeginAddConsumer(name, EConsumerType::Streaming);
+    }
+
+    TConsumerSettings<TAlterTopicSettings>& BeginAddConsumer(const std::string& name, EConsumerType consumerType = EConsumerType::Streaming) {
         AddConsumers_.push_back({*this, name});
+        AddConsumers_.back().ConsumerType(consumerType);
         return AddConsumers_.back();
     }
 
@@ -726,7 +1023,20 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
         return *this;
     }
 
+    TAlterTopicSettings& SetMetricsLevel(EMetricsLevel level) {
+        MetricsLevel_ = level;
+        return *this;
+    }
+    TAlterTopicSettings& ResetMetricsLevel() {
+        MetricsLevel_ = true;
+        return *this;
+    }
+
     std::optional<TAlterPartitioningSettings> AlterPartitioningSettings_;
+    std::variant<
+        bool,         // Reset
+        EMetricsLevel // Set
+    > MetricsLevel_ = false;
 };
 
 inline TPartitioningSettingsBuilder TCreateTopicSettings::BeginConfigurePartitioningSettings() {
@@ -766,6 +1076,8 @@ struct TDescribePartitionSettings: public TOperationRequestSettings<TDescribePar
 };
 
 // Settings for commit offset request.
-struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSettings> {};
+struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSettings> {
+    FLUENT_SETTING_OPTIONAL(std::string, ReadSessionId);
+};
 
-}  // namespace NYdb::V3::NTopic
+}  // namespace NYdb::NTopic

@@ -151,3 +151,16 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/exception/detail/clone_current_exception.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 974d4582a53157074878d9d22f605834
+BELONGS ya.make
+    License text:
+        //Copyright (c) 2006-2026 Emil Dotchevski and Reverge Studios, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/exception/detail/encoder.hpp [1:1]
+        include/boost/exception/serialization/boost_json_encoder.hpp [1:1]
+        include/boost/exception/serialization/nlohmann_json_encoder.hpp [1:1]

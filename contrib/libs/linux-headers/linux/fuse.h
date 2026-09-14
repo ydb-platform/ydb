@@ -207,6 +207,34 @@
  *  - add FUSE_EXT_GROUPS
  *  - add FUSE_CREATE_SUPP_GROUP
  *  - add FUSE_HAS_EXPIRE_ONLY
+ *
+ *  7.39
+ *  - add FUSE_DIRECT_IO_ALLOW_MMAP
+ *  - add FUSE_STATX and related structures
+ *
+ *  7.40
+ *  - add max_stack_depth to fuse_init_out, add FUSE_PASSTHROUGH init flag
+ *  - add backing_id to fuse_open_out, add FOPEN_PASSTHROUGH open flag
+ *  - add FUSE_NO_EXPORT_SUPPORT init flag
+ *  - add FUSE_NOTIFY_RESEND, add FUSE_HAS_RESEND init flag
+ *
+ *  7.41
+ *  - add FUSE_ALLOW_IDMAP
+ *  7.42
+ *  - Add FUSE_OVER_IO_URING and all other io-uring related flags and data
+ *    structures:
+ *    - struct fuse_uring_ent_in_out
+ *    - struct fuse_uring_req_header
+ *    - struct fuse_uring_cmd_req
+ *    - FUSE_URING_IN_OUT_HEADER_SZ
+ *    - FUSE_URING_OP_IN_OUT_SZ
+ *    - enum fuse_uring_cmd
+ *
+ *  7.43
+ *  - add FUSE_REQUEST_TIMEOUT
+ *
+ *  7.44
+ *  - add FUSE_NOTIFY_INC_EPOCH
  */
 
 #ifndef _LINUX_FUSE_H
@@ -238,7 +266,7 @@
 #define FUSE_KERNEL_VERSION 7
 
 /** Minor version number of this interface */
-#define FUSE_KERNEL_MINOR_VERSION 38
+#define FUSE_KERNEL_MINOR_VERSION 44
 
 /** The node ID of the root inode */
 #define FUSE_ROOT_ID 1
@@ -263,6 +291,40 @@ struct fuse_attr {
 	uint32_t	rdev;
 	uint32_t	blksize;
 	uint32_t	flags;
+};
+
+/*
+ * The following structures are bit-for-bit compatible with the statx(2) ABI in
+ * Linux.
+ */
+struct fuse_sx_time {
+	int64_t		tv_sec;
+	uint32_t	tv_nsec;
+	int32_t		__reserved;
+};
+
+struct fuse_statx {
+	uint32_t	mask;
+	uint32_t	blksize;
+	uint64_t	attributes;
+	uint32_t	nlink;
+	uint32_t	uid;
+	uint32_t	gid;
+	uint16_t	mode;
+	uint16_t	__spare0[1];
+	uint64_t	ino;
+	uint64_t	size;
+	uint64_t	blocks;
+	uint64_t	attributes_mask;
+	struct fuse_sx_time	atime;
+	struct fuse_sx_time	btime;
+	struct fuse_sx_time	ctime;
+	struct fuse_sx_time	mtime;
+	uint32_t	rdev_major;
+	uint32_t	rdev_minor;
+	uint32_t	dev_major;
+	uint32_t	dev_minor;
+	uint64_t	__spare2[14];
 };
 
 struct fuse_kstatfs {
@@ -311,6 +373,7 @@ struct fuse_file_lock {
  * FOPEN_STREAM: the file is stream-like (no file position at all)
  * FOPEN_NOFLUSH: don't flush data cache on close (unless FUSE_WRITEBACK_CACHE)
  * FOPEN_PARALLEL_DIRECT_WRITES: Allow concurrent direct writes on the same inode
+ * FOPEN_PASSTHROUGH: passthrough read/write io for this open file
  */
 #define FOPEN_DIRECT_IO		(1 << 0)
 #define FOPEN_KEEP_CACHE	(1 << 1)
@@ -319,6 +382,7 @@ struct fuse_file_lock {
 #define FOPEN_STREAM		(1 << 4)
 #define FOPEN_NOFLUSH		(1 << 5)
 #define FOPEN_PARALLEL_DIRECT_WRITES	(1 << 6)
+#define FOPEN_PASSTHROUGH	(1 << 7)
 
 /**
  * INIT request/reply flags
@@ -367,6 +431,14 @@ struct fuse_file_lock {
  * FUSE_CREATE_SUPP_GROUP: add supplementary group info to create, mkdir,
  *			symlink and mknod (single group that matches parent)
  * FUSE_HAS_EXPIRE_ONLY: kernel supports expiry-only entry invalidation
+ * FUSE_DIRECT_IO_ALLOW_MMAP: allow shared mmap in FOPEN_DIRECT_IO mode.
+ * FUSE_NO_EXPORT_SUPPORT: explicitly disable export support
+ * FUSE_HAS_RESEND: kernel supports resending pending requests, and the high bit
+ *		    of the request ID indicates resend requests
+ * FUSE_ALLOW_IDMAP: allow creation of idmapped mounts
+ * FUSE_OVER_IO_URING: Indicate that client supports io-uring
+ * FUSE_REQUEST_TIMEOUT: kernel supports timing out requests.
+ *			 init_out.request_timeout contains the timeout (in secs)
  */
 #define FUSE_ASYNC_READ		(1 << 0)
 #define FUSE_POSIX_LOCKS	(1 << 1)
@@ -405,6 +477,15 @@ struct fuse_file_lock {
 #define FUSE_HAS_INODE_DAX	(1ULL << 33)
 #define FUSE_CREATE_SUPP_GROUP	(1ULL << 34)
 #define FUSE_HAS_EXPIRE_ONLY	(1ULL << 35)
+#define FUSE_DIRECT_IO_ALLOW_MMAP (1ULL << 36)
+#define FUSE_PASSTHROUGH	(1ULL << 37)
+#define FUSE_NO_EXPORT_SUPPORT	(1ULL << 38)
+#define FUSE_HAS_RESEND		(1ULL << 39)
+/* Obsolete alias for FUSE_DIRECT_IO_ALLOW_MMAP */
+#define FUSE_DIRECT_IO_RELAX	FUSE_DIRECT_IO_ALLOW_MMAP
+#define FUSE_ALLOW_IDMAP	(1ULL << 40)
+#define FUSE_OVER_IO_URING	(1ULL << 41)
+#define FUSE_REQUEST_TIMEOUT	(1ULL << 42)
 
 /**
  * CUSE INIT request/reply flags
@@ -571,6 +652,7 @@ enum fuse_opcode {
 	FUSE_REMOVEMAPPING	= 49,
 	FUSE_SYNCFS		= 50,
 	FUSE_TMPFILE		= 51,
+	FUSE_STATX		= 52,
 
 	/* CUSE specific operations */
 	CUSE_INIT		= 4096,
@@ -587,6 +669,8 @@ enum fuse_notify_code {
 	FUSE_NOTIFY_STORE = 4,
 	FUSE_NOTIFY_RETRIEVE = 5,
 	FUSE_NOTIFY_DELETE = 6,
+	FUSE_NOTIFY_RESEND = 7,
+	FUSE_NOTIFY_INC_EPOCH = 8,
 	FUSE_NOTIFY_CODE_MAX,
 };
 
@@ -633,6 +717,22 @@ struct fuse_attr_out {
 	uint32_t	attr_valid_nsec;
 	uint32_t	dummy;
 	struct fuse_attr attr;
+};
+
+struct fuse_statx_in {
+	uint32_t	getattr_flags;
+	uint32_t	reserved;
+	uint64_t	fh;
+	uint32_t	sx_flags;
+	uint32_t	sx_mask;
+};
+
+struct fuse_statx_out {
+	uint64_t	attr_valid;	/* Cache timeout for the attributes */
+	uint32_t	attr_valid_nsec;
+	uint32_t	flags;
+	uint64_t	spare[2];
+	struct fuse_statx stat;
 };
 
 #define FUSE_COMPAT_MKNOD_IN_SIZE 8
@@ -697,7 +797,7 @@ struct fuse_create_in {
 struct fuse_open_out {
 	uint64_t	fh;
 	uint32_t	open_flags;
-	uint32_t	padding;
+	int32_t		backing_id;
 };
 
 struct fuse_release_in {
@@ -813,7 +913,9 @@ struct fuse_init_out {
 	uint16_t	max_pages;
 	uint16_t	map_alignment;
 	uint32_t	flags2;
-	uint32_t	unused[7];
+	uint32_t	max_stack_depth;
+	uint16_t	request_timeout;
+	uint16_t	unused[11];
 };
 
 #define CUSE_INIT_INFO_MAX 4096
@@ -895,6 +997,29 @@ struct fuse_fallocate_in {
 	uint32_t	mode;
 	uint32_t	padding;
 };
+
+/**
+ * FUSE request unique ID flag
+ *
+ * Indicates whether this is a resend request. The receiver should handle this
+ * request accordingly.
+ */
+#define FUSE_UNIQUE_RESEND (1ULL << 63)
+
+/**
+ * This value will be set by the kernel to
+ * (struct fuse_in_header).{uid,gid} fields in
+ * case when:
+ * - fuse daemon enabled FUSE_ALLOW_IDMAP
+ * - idmapping information is not available and uid/gid
+ *   can not be mapped in accordance with an idmapping.
+ *
+ * Note: an idmapping information always available
+ * for inode creation operations like:
+ * FUSE_MKNOD, FUSE_SYMLINK, FUSE_MKDIR, FUSE_TMPFILE,
+ * FUSE_CREATE and FUSE_RENAME2 (with RENAME_WHITEOUT).
+ */
+#define FUSE_INVALID_UIDGID ((uint32_t)(-1))
 
 struct fuse_in_header {
 	uint32_t	len;
@@ -985,9 +1110,18 @@ struct fuse_notify_retrieve_in {
 	uint64_t	dummy4;
 };
 
+struct fuse_backing_map {
+	int32_t		fd;
+	uint32_t	flags;
+	uint64_t	padding;
+};
+
 /* Device ioctls: */
 #define FUSE_DEV_IOC_MAGIC		229
 #define FUSE_DEV_IOC_CLONE		_IOR(FUSE_DEV_IOC_MAGIC, 0, uint32_t)
+#define FUSE_DEV_IOC_BACKING_OPEN	_IOW(FUSE_DEV_IOC_MAGIC, 1, \
+					     struct fuse_backing_map)
+#define FUSE_DEV_IOC_BACKING_CLOSE	_IOW(FUSE_DEV_IOC_MAGIC, 2, uint32_t)
 
 struct fuse_lseek_in {
 	uint64_t	fh;
@@ -1087,6 +1221,69 @@ struct fuse_ext_header {
 struct fuse_supp_groups {
 	uint32_t	nr_groups;
 	uint32_t	groups[];
+};
+
+/**
+ * Size of the ring buffer header
+ */
+#define FUSE_URING_IN_OUT_HEADER_SZ 128
+#define FUSE_URING_OP_IN_OUT_SZ 128
+
+/* Used as part of the fuse_uring_req_header */
+struct fuse_uring_ent_in_out {
+	uint64_t flags;
+
+	/*
+	 * commit ID to be used in a reply to a ring request (see also
+	 * struct fuse_uring_cmd_req)
+	 */
+	uint64_t commit_id;
+
+	/* size of user payload buffer */
+	uint32_t payload_sz;
+	uint32_t padding;
+
+	uint64_t reserved;
+};
+
+/**
+ * Header for all fuse-io-uring requests
+ */
+struct fuse_uring_req_header {
+	/* struct fuse_in_header / struct fuse_out_header */
+	char in_out[FUSE_URING_IN_OUT_HEADER_SZ];
+
+	/* per op code header */
+	char op_in[FUSE_URING_OP_IN_OUT_SZ];
+
+	struct fuse_uring_ent_in_out ring_ent_in_out;
+};
+
+/**
+ * sqe commands to the kernel
+ */
+enum fuse_uring_cmd {
+	FUSE_IO_URING_CMD_INVALID = 0,
+
+	/* register the request buffer and fetch a fuse request */
+	FUSE_IO_URING_CMD_REGISTER = 1,
+
+	/* commit fuse request result and fetch next request */
+	FUSE_IO_URING_CMD_COMMIT_AND_FETCH = 2,
+};
+
+/**
+ * In the 80B command area of the SQE.
+ */
+struct fuse_uring_cmd_req {
+	uint64_t flags;
+
+	/* entry identifier for commits */
+	uint64_t commit_id;
+
+	/* queue the command is for (queue index) */
+	uint16_t qid;
+	uint8_t padding[6];
 };
 
 #endif /* _LINUX_FUSE_H */

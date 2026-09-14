@@ -32,7 +32,6 @@ namespace internal {  // No extern "C" (contains template)
  * Then undefine the awkward macro so it's not used any more than it has to be.
  */
 typedef ROARING_CONTAINER_T container_t;
-#undef ROARING_CONTAINER_T
 
 /*
  * See ROARING_CONTAINER_T for notes on using container_t as a base class.

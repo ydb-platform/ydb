@@ -1,5 +1,5 @@
-libpng 1.6.45 - January 7, 2025
-===============================
+libpng 1.6.58 - April 15, 2026
+==============================
 
 This is a public release of libpng, intended for use in production code.
 
@@ -7,15 +7,12 @@ This is a public release of libpng, intended for use in production code.
 Files available for download
 ----------------------------
 
-Source files with LF line endings (for Unix/Linux):
+Source files:
 
- * libpng-1.6.45.tar.xz (LZMA-compressed, recommended)
- * libpng-1.6.45.tar.gz (deflate-compressed)
-
-Source files with CRLF line endings (for Windows):
-
- * lpng1645.7z (LZMA-compressed, recommended)
- * lpng1645.zip (deflate-compressed)
+ * libpng-1.6.58.tar.xz (LZMA-compressed, recommended)
+ * libpng-1.6.58.tar.gz (deflate-compressed)
+ * lpng1658.7z (LZMA-compressed)
+ * lpng1658.zip (deflate-compressed)
 
 Other information:
 
@@ -25,21 +22,16 @@ Other information:
  * TRADEMARK.md
 
 
-Changes from version 1.6.44 to version 1.6.45
+Changes from version 1.6.57 to version 1.6.58
 ---------------------------------------------
 
- * Added support for the cICP chunk.
-   (Contributed by Lucas Chollet and John Bowler)
- * Adjusted and improved various checks in colorspace calculations.
-   (Contributed by John Bowler)
- * Rearranged the write order of colorspace chunks for better conformance
-   with the PNG v3 draft specification.
-   (Contributed by John Bowler)
- * Raised the minimum required CMake version from 3.6 to 3.14.
- * Forked off a development branch for libpng version 1.8.
+ * Fixed a regression introduced in version 1.6.56 that caused `png_get_PLTE`
+   to return stale palette data after applying gamma and background transforms
+   in-place.
+   (Reported by ralfjunker <ralfjunker@users.noreply.github.com>.)
 
 
 Send comments/corrections/commendations to png-mng-implement at lists.sf.net.
 Subscription is required; visit
-https://lists.sourceforge.net/lists/listinfo/png-mng-implement
+<https://lists.sourceforge.net/lists/listinfo/png-mng-implement>
 to subscribe.

@@ -20,11 +20,11 @@
 #include "blobstorage_pdisk_writer.h"
 #include "blobstorage_pdisk_impl_metadata.h"
 
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/base/resource_profile.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/library/schlab/schine/scheduler.h>
 #include <ydb/library/schlab/schine/job_kind.h>
@@ -33,7 +33,15 @@
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <list>
 #include <queue>
+
+#if defined(__linux__)
+#include <ydb/library/pdisk_io/uring_router.h>
+#endif
 
 namespace NKikimr {
 namespace NPDisk {
@@ -47,7 +55,18 @@ class TCompletionEventSender;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class TPDisk : public IPDisk {
+#if defined(__linux__)
+    friend class TPDiskTestPeer;
+    // Configured under StateMutex before the first router creation attempt.
+    std::function<void(TUringRouter&)> ConfigureRouterForTest;
+#endif
+
 public:
+#ifdef ENABLE_PDISK_SHRED
+    static constexpr bool IS_SHRED_ENABLED = true;
+#else
+    static constexpr bool IS_SHRED_ENABLED = false;
+#endif
     std::shared_ptr<TPDiskCtx> PCtx;
     // ui32 PDiskId; // deprecated, moved to PCtx
     // TActorId PDiskActor; // deprecated, moved to PCtx
@@ -83,7 +102,8 @@ public:
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
     TDeque<TRequestBase*> PausedQueue;
-    std::set<std::unique_ptr<TYardInit>> PendingYardInits;
+    // Preserve arrival order among ready owners; busy owners may still be skipped.
+    std::list<std::unique_ptr<TYardInit>> PendingYardInits;
     ui64 LastFlushId = 0;
     bool IsQueuePaused = false;
     bool IsQueueStep = false;
@@ -101,10 +121,37 @@ public:
     TControlWrapper ForsetiMinLogCostNsControl;
     TControlWrapper ForsetiMilliBatchSize;
     TControlWrapper ForsetiMaxLogBatchNs;
-    TControlWrapper ForsetiOpPieceSizeSsd;
-    TControlWrapper ForsetiOpPieceSizeRot;
+    TControlWrapper ForsetiOpPieceSize;
+    TControlWrapper EnableFreeChunksSortingHDD;
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
+    TControlWrapper ChunkBaseLimitPerMille;
+    TControlWrapper SemiStrictSpaceIsolation;
+    // If enabled (default), the merged (cross-source) device overestimation metric
+    // replaces the legacy PDisk-only DeviceOverestimationRatio/DeviceNonperformanceMs
+    // sensors. Can be toggled via ICB without a cluster restart to revert to the
+    // old algorithm if something goes wrong with the new one.
+    TControlWrapper UseDeviceOverestimationRatioMerged;
+    i64 SemiStrictSpaceIsolationCached = 0;
+    TControlWrapper StaticGroupChunkReservePerMille;
+    i64 StaticGroupChunkReservePerMilleCached = 0;
+    TControlWrapper ForcedPDiskSpaceColor;
+    std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> GetForcedPDiskSpaceColorIcb() const {
+        if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
+            if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
+                return static_cast<NKikimrBlobStorage::TPDiskSpaceColor::E>(forcedColor);
+            }
+        }
+        return std::nullopt;
+    }
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        switch (SemiStrictSpaceIsolation) {
+            case 1: return TColor::LIGHT_YELLOW;
+            case 2: return TColor::YELLOW;
+            default: return Cfg->SpaceColorBorder;
+        }
+    }
     bool UseNoopSchedulerCached = false;
 
     // SectorMap Controls
@@ -116,6 +163,10 @@ public:
     // used to store valid value in ICB if SectorMapFirstSector*Rate < SectorMapLastSector*Rate
     TString LastSectorReadRateControlName;
     TString LastSectorWriteRateControlName;
+    TControlWrapper SectorMapWriteErrorProbability;
+    TControlWrapper SectorMapReadErrorProbability;
+    TControlWrapper SectorMapSilentWriteFailProbability;
+    TControlWrapper SectorMapReadReplayProbability;
 
     ui64 ForsetiMinLogCostNs = 2000000ull;
     i64 ForsetiMaxLogBatchNsCached;
@@ -125,7 +176,7 @@ public:
     TNonceSet ForceLogNonceDiff;
 
     // Static state
-    alignas(16) TDiskFormat Format;
+    alignas(16) TDiskFormat Format = {};
     ui64 ExpectedDiskGuid;
     TPDiskCategory PDiskCategory;
     TNonceJumpLogPageHeader2 LastNonceJumpLogPageHeader2;
@@ -148,6 +199,7 @@ public:
     ui64 InsaneLogChunks = 0;  // Set when pdisk sees insanely large log, to give vdisks a chance to cut it
     ui32 FirstLogChunkToParseCommits = 0;
 
+    // DO NOT CHANGE STATE NUMBERS, NUMBERS ARE USED TO ENCODE THE STATE IN A FUTURE-PROOF WAY
     enum EShredState {
         EShredStateDefault = 0,
         EShredStateSendPreShredCompactVDisk = 1,
@@ -157,7 +209,16 @@ public:
     };
     EShredState ShredState = EShredStateDefault;
     ui64 ShredGeneration = 0;
+    TChunkIdx ChunkBeingShredded = 0;
+    ui64 ChunkBeingShreddedIteration = 0;
+    ui64 ChunkBeingShreddedNextSectorIdx = 0;
+    ui64 ShredReqIdx = 0;
+    std::atomic<ui64> ChunkBeingShreddedInFlight = 0;
     std::deque<std::tuple<TActorId, ui64>> ShredRequesters;
+    THolder<TAlignedData> ShredPayload[2];
+    std::atomic<ui64> ShredLogPaddingInFlight = 0;
+    std::atomic<ui64> ShredIsWaitingForCutLog = 0;
+    std::atomic<ui64> ContinueShredsInFlight = 0;
 
     // Chunks that are owned by killed owner, but have operations InFlight
     TVector<TChunkIdx> QuarantineChunks;
@@ -178,6 +239,14 @@ public:
     // Incapsulated components
     TPDiskThread PDiskThread;
     THolder<IBlockDevice> BlockDevice;
+#if defined(__linux__)
+    // DDisk/PB hold IUringRouterClient copies of this pointer. PDisk releases
+    // it during Stop() only when no clients remain; otherwise the final owner
+    // destroys the router, drains accepted I/O, and closes the duplicated fd.
+    std::shared_ptr<TUringRouter> SharedUringRouter;
+#endif
+    bool SharedUringCreateAttempted = false;
+    bool SharedUringFailureReported = false;
     THolder<TLogWriter> CommonLogger;
     THolder<TSysLogWriter> SysLogger;
 
@@ -198,7 +267,8 @@ public:
     ui32 LastInitialChunkIdx;
     ui64 LastInitialSectorIdx;
 
-    ui64 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
+    ui32 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
+    ui64 ExpectedSlotSize = 0; // Slot size to use for space limit calculation, 0 if not set.
 
     TAtomic TotalOwners = 0; // number of registered owners
 
@@ -253,8 +323,6 @@ public:
     void ObliterateCommonLogSectorSet();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Generic format-related calculations
-    ui32 GetUserAccessibleChunkSize() const;
-    ui32 GetChunkAppendBlockSize() const;
     ui32 SystemChunkSize(const TDiskFormat& format, ui32 userAccessibleChunkSizeBytes, ui32 sectorSizeBytes) const;
     ui64 UsableSectorsPerLogChunk() const;
     void CheckLogCanary(ui8* sector, ui32 chunkIdx = 0, ui64 sectorIdx = 0) const;
@@ -267,13 +335,14 @@ public:
     ui32 GetTotalChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
     ui32 GetFreeChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
     ui32 GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
+    ui32 GetNumActiveSlots() const;
     TStatusFlags GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy = nullptr) const;
     TStatusFlags NotEnoughDiskSpaceStatusFlags(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Generic log writing
     void LogFlush(TCompletionAction *action, TVector<ui32> *logChunksToCommit, TReqId reqId, NWilson::TTraceId *traceId);
-    void AskVDisksToCutLogs(TOwner ownerFilter, bool doForce);
+    ui32 AskVDisksToCutLogs(TOwner ownerFilter, bool doForce);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // SysLog writing
     void WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NWilson::TTraceId *traceId);
@@ -301,6 +370,8 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk writing
     bool ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pieceSize);
+    void ChunkWritePiecePlain(TChunkWrite *evChunkWrite);
+    bool ChunkWritePieceEncrypted(TChunkWrite *evChunkWrite, TChunkWriter &writer, ui32 bytesAvailable);
     void SendChunkWriteError(TChunkWrite &evChunkWrite, const TString &errorReason, NKikimrProto::EReplyStatus status);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk reading
@@ -313,7 +384,7 @@ public:
     void SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& errorReason,
             NKikimrProto::EReplyStatus status);
     EChunkReadPieceResult ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit,
-            NWilson::TTraceId traceId, NLWTrace::TOrbit&& orbit);
+            NLWTrace::TOrbit&& orbit);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Chunk locking
     TVector<TChunkIdx> LockChunksForOwner(TOwner owner, const ui32 count, TString &errorReason);
@@ -342,7 +413,7 @@ public:
     void WriteDiskFormat(ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes, const ui64 &diskGuid,
             const TKey &chunkKey, const TKey &logKey, const TKey &sysLogKey, const TKey &mainKey,
             TString textMessage, const bool isErasureEncodeUserLog, const bool trimEntireDevice,
-            std::optional<TRcBuf> metadata);
+            std::optional<TRcBuf> metadata, bool plainDataChunks, std::optional<bool> forceRandomizeMagic);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Owner initialization
     void ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str, NKikimrProto::EReplyStatus status = NKikimrProto::ERROR);
@@ -350,9 +421,21 @@ public:
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
+    void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);
+    void EnsureSharedUringRouter(ui32 idleSpinUs);
+#if defined(__linux__)
+    TDeviceIoSampleSink MakeUringSampleSink() const;
+#endif
+    void CheckSharedUringRouter(); // Called by the PDisk worker
+    void YardResize(TYardResize &evYardResize);
+    void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
+    void NormalizeExpectedSlotSettings();
+    i64 GetExpectedOwnerSizeInChunks() const;
+    ui32 GetOwnerWeight(ui32 groupSizeInUnits) const;
+
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);
-    void SchedulerConfigure(const TConfigureScheduler &conf);
+    void SchedulerConfigure(const TPDiskSchedulerConfig& cfg, ui32 ownerId);
     void SendCutLog(TAskForCutLog &reqest);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Free space check
@@ -373,12 +456,12 @@ public:
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
     void ProcessLogReadQueue();
-    void ProcessYardInitSet();
+    void ProcessPendingYardInits();
     void TrimAllUntrimmedChunks();
     void ProcessChunkTrimQueue();
     void ClearQuarantineChunks();
     // Should be called to initiate TRIM (on chunk delete or prev trim done)
-    void TryTrimChunk(bool prevDone, ui64 trimmedSize, const NWilson::TSpan& parentSpan);
+    void TryTrimChunk(bool prevDone, ui64 trimmedSize);
     void ProcessFastOperationsQueue();
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Drive info and write cache
@@ -399,20 +482,23 @@ public:
     void HandleNextWriteMetadata();
     void ProcessWriteMetadataResult(TWriteMetadataResult& request);
 
+    TChunkIdx GetUnshreddedFreeChunk();
     void ProgressShredState();
     void ProcessShredPDisk(TShredPDisk& request);
     void ProcessPreShredCompactVDiskResult(TPreShredCompactVDiskResult& request);
     void ProcessShredVDiskResult(TShredVDiskResult& request);
-    void ProcessMarkDirty(TMarkDirty& request);
+    void ProcessChunkShredResult(TChunkShredResult& request);
+    void ProcessContinueShred(TContinueShred& request);
 
     void DropAllMetadataRequests();
 
-    TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize, bool encryption,
-        const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords);
+    TRcBuf CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize,
+        const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords, const ui64 *magic);
     bool WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format);
 
-    static std::optional<TMetadataFormatSector> CheckMetadataFormatSector(const ui8 *data, size_t len, const TMainKey& mainKey);
-    static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format);
+    static std::optional<TMetadataFormatSector> CheckMetadataFormatSector(const ui8 *data, size_t len,
+        const TMainKey& mainKey, const TString& logPrefix, bool encryption);
+    static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format, bool encryption);
 
     NMeta::TFormatted& GetFormattedMeta();
     NMeta::TUnformatted& GetUnformattedMeta();
@@ -453,10 +539,12 @@ private:
 };
 
 void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, ui64 lastSector, ui64 currentSector,
-        ui64 *outPayloadBytes, ui64 *outPayloadOffset);
+        ui64 *outPayloadBytes, ui64 *outPayloadOffset, const TString& logPrefix);
 
 bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui32 pDiskId, ui64 offset, ui64 size,
-        ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset);
+        ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset, const TString& logPrefix);
+
+void InitializeKeeperLogParams(TKeeperParams& params, const TIntrusivePtr<TPDiskConfig>& cfg, const TDiskFormat& format);
 
 } // NPDisk
 } // NKikimr

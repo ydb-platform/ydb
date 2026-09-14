@@ -58,6 +58,14 @@ private:
     TMainClassV* Main;
 };
 
+void TMainClass::SetSubcommandPath(TVector<TString> parts) {
+    SubcommandPath_ = std::move(parts);
+}
+
+const TVector<TString>& TMainClass::GetSubcommandPath() const {
+    return SubcommandPath_;
+}
+
 TModChooser::TMode::TMode(const TString& name, TMainClass* main, const TString& descr, bool hidden, bool noCompletion)
     : Name(name)
     , Main(main)
@@ -114,7 +122,14 @@ void TModChooser::AddGroupModeDescription(const TString& description, bool hidde
 }
 
 void TModChooser::SetDefaultMode(const TString& mode) {
-    DefaultMode = mode;
+    Y_ENSURE(!std::holds_alternative<TMainClass*>(DefaultBehaviour), "Default mode and default action are mutually exclusive.");
+    DefaultBehaviour = mode.empty() ? TDefaultBehaviour{std::monostate{}} : TDefaultBehaviour{mode};
+}
+
+void TModChooser::SetDefaultAction(TMainClass* action) {
+    Y_ENSURE(action != nullptr, "Default action must not be null.");
+    Y_ENSURE(!std::holds_alternative<TString>(DefaultBehaviour), "Default mode and default action are mutually exclusive.");
+    DefaultBehaviour = action;
 }
 
 void TModChooser::AddAlias(const TString& alias, const TString& mode) {
@@ -161,18 +176,28 @@ void TModChooser::AddCompletions(TString progName, const TString& name, bool hid
     }
 }
 
+void TModChooser::SetSubcommandPath(const TVector<TString>& subcommandPath) const {
+    SubcommandPath_ = subcommandPath;
+}
+
+const TVector<TString>& TModChooser::GetSubcommandPath() const {
+    return SubcommandPath_;
+}
+
 int TModChooser::Run(const int argc, const char** argv) const {
     Y_ENSURE(argc, "Can't run TModChooser with empty list of arguments.");
 
+    const auto* defaultMode = std::get_if<TString>(&DefaultBehaviour);
+    const auto* defaultAction = std::get_if<TMainClass*>(&DefaultBehaviour);
     bool shiftArgs = true;
     TString modeName;
     if (argc == 1) {
-        if (DefaultMode.empty()) {
+        if (defaultMode != nullptr) {
+            modeName = *defaultMode;
+            shiftArgs = false;
+        } else if (defaultAction == nullptr) {
             PrintHelp(argv[0], HelpAlwaysToStdErr);
             return 0;
-        } else {
-            modeName = DefaultMode;
-            shiftArgs = false;
         }
     } else {
         modeName = argv[1];
@@ -191,9 +216,15 @@ int TModChooser::Run(const int argc, const char** argv) const {
     }
 
     auto modeIter = Modes.find(modeName);
-    if (modeIter == Modes.end() && !DefaultMode.empty()) {
-        modeIter = Modes.find(DefaultMode);
-        shiftArgs = false;
+    if (modeIter == Modes.end()) {
+        if (defaultAction != nullptr) {
+            (*defaultAction)->SetSubcommandPath(SubcommandPath_);
+            return (**defaultAction)(argc, argv);
+        }
+        if (defaultMode != nullptr) {
+            modeIter = Modes.find(*defaultMode);
+            shiftArgs = false;
+        }
     }
 
     if (modeIter == Modes.end()) {
@@ -201,6 +232,10 @@ int TModChooser::Run(const int argc, const char** argv) const {
         PrintHelp(argv[0], true);
         return 1;
     }
+
+    TVector<TString> subcommandPath = SubcommandPath_;
+    subcommandPath.push_back(modeIter->second->Name);
+    modeIter->second->Main->SetSubcommandPath(std::move(subcommandPath));
 
     if (shiftArgs) {
         TString firstArg;
@@ -329,7 +364,11 @@ bool TModChooser::IsSvnRevisionOptionDisabled() const {
 }
 
 int TMainClassArgs::Run(int argc, const char** argv) {
-    return DoRun(NLastGetopt::TOptsParseResult(&GetOptions(), argc, argv));
+    NLastGetopt::TOptsParseResult res(&GetOptions(), argc, argv);
+    if (!GetSubcommandPath().empty()) {
+        res.SetProgramSubcommandPath(GetSubcommandPath());
+    }
+    return DoRun(std::move(res));
 }
 
 const NLastGetopt::TOpts& TMainClassArgs::GetOptions() {
@@ -355,16 +394,21 @@ int TMainClassModes::operator()(const int argc, const char** argv) {
 
 int TMainClassModes::Run(int argc, const char** argv) {
     auto& chooser = GetSubModes();
+    chooser.SetSubcommandPath(GetSubcommandPath());
     return chooser.Run(argc, argv);
 }
 
-const TModChooser& TMainClassModes::GetSubModes() {
+TModChooser& TMainClassModes::GetSubModes() {
     if (Modes_.Empty()) {
         Modes_.ConstructInPlace();
         RegisterModes(Modes_.GetRef());
     }
 
     return Modes_.GetRef();
+}
+
+const TModChooser& TMainClassModes::GetSubModes() const {
+    return const_cast<TMainClassModes*>(this)->GetSubModes();
 }
 
 void TMainClassModes::RegisterModes(TModChooser& modes) {

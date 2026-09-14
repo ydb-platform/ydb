@@ -1,9 +1,13 @@
-/* syntax version 1 */
+$input = [
+    <|value: "строка без внешних пробелов"u|>,
+    <|value: " только левый пробел"u|>,
+    <|value: "только правый пробел "u|>,
+    <|value: "строка_совсем_без_пробелов"u|>,
+    <|value: " юникод+перевод строки\n"u|>,
+    <|value: ""u|>,
+];
+
 SELECT
-    Unicode::Strip("ываыва"u),
-    Unicode::Strip(" ячсячсяаачы"u),
-    Unicode::Strip("аавыаываыва "u),
-    Unicode::Strip("аав ыа ыва ыва "u),
-    Unicode::Strip("\u2009ыва\n"u),
-    Unicode::Strip("\u200aваоао\u2002"u),
-    Unicode::Strip(""u)
+    value as value,
+    Unicode::Strip(value)
+FROM AS_TABLE($input)

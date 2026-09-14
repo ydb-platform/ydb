@@ -1,0 +1,106 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_operation.proto";
+
+import "google/protobuf/timestamp.proto";
+
+package Ydb.Topic.DeferredPublish;
+
+option java_package = "com.yandex.ydb.topic.deferredpublish";
+
+message BeginPublicationRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Client-defined publication name. Unique among active publications in the database.
+    string ext_publication_id = 2 [(Ydb.length).le = 2048];
+
+    // Optional writer identity stored in the registry and used as a filter in ListPublications.
+    optional string writer_identity = 3 [(Ydb.length).le = 2048];
+}
+
+message BeginPublicationResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message BeginPublicationResult {
+    uint64 int_publication_id = 1;
+}
+
+message PublishRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    uint64 int_publication_id = 2;
+}
+
+message PublishResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message PublishResult {
+}
+
+message CancelPublicationRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    uint64 int_publication_id = 2;
+}
+
+message CancelPublicationResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message CancelPublicationResult {
+}
+
+message ListPublicationsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Optional filter by writer identity from BeginPublication.
+    optional string writer_identity = 2 [(Ydb.length).le = 2048];
+}
+
+message ListPublicationsResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message PublicationSummary {
+    uint64 int_publication_id = 1;
+
+    string ext_publication_id = 2 [(Ydb.length).le = 2048];
+
+    optional string writer_identity = 3 [(Ydb.length).le = 2048];
+}
+
+message ListPublicationsResult {
+    repeated PublicationSummary publications = 1;
+}
+
+message DescribePublicationRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    uint64 int_publication_id = 2;
+}
+
+message DescribePublicationResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message DescribePublicationResult {
+    string ext_publication_id = 1;
+
+    optional string writer_identity = 2;
+
+    google.protobuf.Timestamp created_at = 3;
+
+    optional string created_by = 4;
+
+    repeated Destination destinations = 5;
+
+    message Destination {
+        string topic_path = 1;
+
+        repeated int64 partition_ids = 2;
+    }
+}

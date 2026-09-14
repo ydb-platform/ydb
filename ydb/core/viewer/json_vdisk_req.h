@@ -18,6 +18,27 @@ struct TJsonVDiskRequestHelper  {
     }
 };
 
+struct TVDiskID : NKikimr::TVDiskID {
+    using NKikimr::TVDiskID::TVDiskID;
+
+    TVDiskID& operator =(TStringBuf vdiskId) {
+        GroupID = TGroupId::FromValue(FromStringWithDefault<ui32>(vdiskId.NextTok('-')));
+        GroupGeneration = FromStringWithDefault<ui32>(vdiskId.NextTok('-'));
+        FailRealm = FromStringWithDefault<ui8>(vdiskId.NextTok('-'));
+        FailDomain = FromStringWithDefault<ui8>(vdiskId.NextTok('-'));
+        VDisk = FromStringWithDefault<ui8>(vdiskId);
+        return *this;
+    }
+
+    operator bool() const {
+        return GroupGeneration != 0 || FailRealm != 0 || FailDomain != 0 || VDisk != 0;
+    }
+
+    TString ToString() const {
+        return TStringBuilder() << GroupID << "-" << GroupGeneration << "-" << ui32(FailRealm) << "-" << ui32(FailDomain) << "-" << ui32(VDisk);
+    }
+};
+
 template <typename RequestType, typename ResponseType>
 class TJsonVDiskRequest : public TViewerPipeClient {
     enum EEv {
@@ -28,7 +49,6 @@ class TJsonVDiskRequest : public TViewerPipeClient {
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     struct TEvRetryNodeRequest : NActors::TEventLocal<TEvRetryNodeRequest, EvRetryNodeRequest> {
-
         TEvRetryNodeRequest()
         {}
     };
@@ -37,74 +57,54 @@ protected:
     using TThis = TJsonVDiskRequest<RequestType, ResponseType>;
     using TBase = TViewerPipeClient;
     using THelper = TJsonVDiskRequestHelper<RequestType, ResponseType>;
-    IViewer* Viewer;
-    TActorId Initiator;
-    NMon::TEvHttpInfo::TPtr Event;
-    TJsonSettings JsonSettings;
-    bool AllEnums = false;
-    ui32 Timeout = 0;
+    using TBase::ReplyAndPassAway;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
-
-    std::unique_ptr<ResponseType> Response;
-
+    std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse>> GetVSlotsResponse;
+    TRequestResponse<ResponseType> Response;
     ui32 NodeId = 0;
     ui32 PDiskId = 0;
     ui32 VSlotId = 0;
-
-    std::optional<TActorId> TcpProxyId;
+    TVDiskID VDiskId;
 
 public:
     TJsonVDiskRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Initiator(ev->Sender)
-        , Event(ev)
+        : TBase(viewer, ev)
     {}
 
     void Bootstrap() override {
-        const auto& params(Event->Get()->Request.GetParams());
-        NodeId = FromStringWithDefault<ui32>(params.Get("node_id"), 0);
-        PDiskId = FromStringWithDefault<ui32>(params.Get("pdisk_id"), Max<ui32>());
-        VSlotId = FromStringWithDefault<ui32>(params.Get("vslot_id"), Max<ui32>());
-
-        if (PDiskId == Max<ui32>()) {
-            ReplyAndPassAway("field 'pdisk_id' is required");
-            return;
+        Retries = FromStringWithDefault<ui32>(Params.Get("retries"), 0);
+        RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(Params.Get("retry_period"), RetryPeriod.MilliSeconds()));
+        VDiskId = Params.Get("vdisk_id");
+        if (Span) {
+            Span.Attribute("parsed_vdisk_id", VDiskId.ToString());
         }
-
-        if (VSlotId == Max<ui32>()) {
-            ReplyAndPassAway("field 'vslot_id' is required");
-            return;
+        if (VDiskId) {
+            GetVSlotsResponse = MakeCachedRequestBSControllerVSlots();
+        } else {
+            NodeId = FromStringWithDefault<ui32>(Params.Get("node_id"), 0);
+            PDiskId = FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>());
+            VSlotId = FromStringWithDefault<ui32>(Params.Get("vslot_id"), Max<ui32>());
+            if (PDiskId == Max<ui32>() || VSlotId == Max<ui32>()) {
+                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "You must specify either vdisk_id, or all three of the following: node_id, pdisk_id, and vslot_id"));
+            }
+            if (!NodeId) {
+                NodeId = TlsActivationContext->ActorSystem()->NodeId;
+            }
+            SendRequest();
         }
-
-        if (!NodeId) {
-            NodeId = TlsActivationContext->ActorSystem()->NodeId;
-        }
-        TBase::InitConfig(params);
-
-
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        JsonSettings.EmptyRepeated = FromStringWithDefault<bool>(params.Get("empty_repeated"), false);
-
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
-        Retries = FromStringWithDefault<ui32>(params.Get("retries"), 0);
-        RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("retry_period"), RetryPeriod.MilliSeconds()));
-
-        SendRequest();
-        TBase::Become(&TThis::WaitState);
-        TBase::Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Become(&TThis::WaitState, Timeout, new TEvents::TEvWakeup());
     }
 
     STATEFN(WaitState) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, Handle);
             hFunc(ResponseType, Handle);
             cFunc(TEvRetryNodeRequest::EventType, HandleRetry);
             cFunc(TEvents::TEvUndelivered::EventType, Undelivered);
-            hFunc(TEvInterconnect::TEvNodeConnected, Connected);
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, Disconnected);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            cFunc(TEvents::TSystem::Wakeup, TBase::HandleTimeout);
         }
     }
 
@@ -113,16 +113,43 @@ public:
         auto req = THelper::MakeRequest(Event, &error);
         if (req) {
             TActorId vdiskServiceId = MakeBlobStorageVDiskID(NodeId, PDiskId, VSlotId);
-            TBase::SendRequest(vdiskServiceId, req.release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, NodeId);
+            Response = MakeRequest<ResponseType>(vdiskServiceId, req.release());
         } else {
             ReplyAndPassAway(error);
+        }
+    }
+
+    TVDiskID GetVDiskId(const NKikimrSysView::TVSlotEntry& vslot) const {
+        const auto& info = vslot.GetInfo();
+        return TVDiskID(
+            info.GetGroupId(),
+            info.GetGroupGeneration(),
+            info.GetFailRealm(),
+            info.GetFailDomain(),
+            info.GetVDisk());
+    }
+
+    void FindVDisk() {
+        if (GetVSlotsResponse && GetVSlotsResponse->IsOk()) {
+            for (const NKikimrSysView::TVSlotEntry& entry : GetVSlotsResponse->Get()->Record.GetEntries()) {
+                if (GetVDiskId(entry) == VDiskId) {
+                    NodeId = entry.GetKey().GetNodeId();
+                    PDiskId = entry.GetKey().GetPDiskId();
+                    VSlotId = entry.GetKey().GetVSlotId();
+                    SendRequest();
+                    return;
+                }
+            }
+            ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", TStringBuilder() << "VDiskId '" << VDiskId.ToString() << "' not found"));
+        } else {
+            ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", "Failed to get VSlots information"));
         }
     }
 
     bool RetryRequest() {
         if (Retries) {
             if (++ActualRetries <= Retries) {
-                TBase::Schedule(RetryPeriod, new TEvRetryNodeRequest());
+                Schedule(RetryPeriod, new TEvRetryNodeRequest());
                 return true;
             }
         }
@@ -131,66 +158,39 @@ public:
 
     void Undelivered() {
         if (!RetryRequest()) {
-            TBase::RequestDone();
+            RequestDone();
         }
     }
 
-    void Connected(TEvInterconnect::TEvNodeConnected::TPtr &ev) {
-        TcpProxyId = ev->Sender;
+    void Disconnected() {
+        if (!RetryRequest()) {
+            RequestDone();
+        }
     }
 
-    void Disconnected() {
-        TcpProxyId = {};
-        if (!RetryRequest()) {
-            TBase::RequestDone();
+    void Handle(NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr& ev) {
+        if (GetVSlotsResponse->Set(std::move(ev))) {
+            FindVDisk();
+            RequestDone();
         }
     }
 
     void Handle(typename ResponseType::TPtr& ev) {
-        Response.reset(ev->Release().Release());
-        ReplyAndPassAway();
+        if (Response.Set(std::move(ev))) {
+            RequestDone();
+        }
     }
 
     void HandleRetry() {
         SendRequest();
     }
 
-    void HandleTimeout() {
-        ReplyAndPassAway("Timeout");
-    }
-
-    void RenderResponse(TStringStream& json) {
-        if (Response != nullptr) {
-            TProtoToJson::ProtoToJson(json, Response->Record, JsonSettings);
-        } else {
-            json << "null";
-        }
-    }
-
-    void PassAway() override {
-        if (TcpProxyId) {
-            this->Send(*TcpProxyId, new TEvents::TEvUnsubscribe);
-        }
-        TBase::PassAway();
-    }
-
-    void ReplyAndPassAway(const TString &error) {
-        try {
-            TStringStream json;
-            if (error) {
-                json << "{\"Error\":\"" << TProtoToJson::EscapeJsonString(error) << "\"}";
-            } else {
-                RenderResponse(json);
-            }
-            TBase::Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), std::move(json.Str())), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        } catch (const std::exception& e) {
-            TBase::Send(Initiator, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        }
-        PassAway();
-    }
-
     void ReplyAndPassAway() override {
-        ReplyAndPassAway({});
+        if (Response.IsOk()) {
+            TBase::ReplyAndPassAway(GetHTTPOKJSON(Response->Record));
+        } else {
+            TBase::ReplyAndPassAway(GetHTTPINTERNALERROR("text/plain", Response.GetError()));
+        }
     }
 
     static YAML::Node GetSchema() {
@@ -199,49 +199,24 @@ public:
 
     static YAML::Node GetParameters() {
         return YAML::Load(R"___(
+            - name: vdisk_id
+              in: query
+              description: vdisk identifier
+              required: true
+              type: string
             - name: node_id
               in: query
               description: node identifier
-              required: true
               type: integer
             - name: pdisk_id
               in: query
               description: pdisk identifier
-              required: true
               type: integer
             - name: vslot_id
               in: query
               description: vdisk slot identifier
-              required: true
               type: integer
-            )___" + TJsonVDiskRequestHelper<RequestType, ResponseType>::GetAdditionalParameters() + R"___(
-            - name: enums
-              in: query
-              description: convert enums to strings
-              required: false
-              type: boolean
-            - name: ui64
-              in: query
-              description: return ui64 as number
-              required: false
-              type: boolean
-            - name: timeout
-              in: query
-              description: timeout in ms
-              required: false
-              type: integer
-            - name: retries
-              in: query
-              description: number of retries
-              required: false
-              type: integer
-            - name: retry_period
-              in: query
-              description: retry period in ms
-              required: false
-              type: integer
-              default: 500
-            )___");
+            )___" + TJsonVDiskRequestHelper<RequestType, ResponseType>::GetAdditionalParameters());
     }
 };
 

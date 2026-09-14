@@ -1,0 +1,24 @@
+From 9a9bcd8ef3e635194f9bfaa1085b8ed2b88455e3 Mon Sep 17 00:00:00 2001
+From: Yuriy Chernyshov <thegeorg@yandex-team.com>
+Date: Thu, 27 Feb 2025 16:38:01 +0100
+Subject: [PATCH] Merge short lines into one
+
+We still need to reduce the diff with our downstream, as #41 does not work for us out of the box.
+---
+ src/exception.cc | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/exception.cc b/src/exception.cc
+index 9bcf903..ccf32de 100644
+--- a/exception.cc
++++ b/exception.cc
+@@ -356,8 +356,7 @@ static void terminate_with_diagnostics() {
+ 		const char *mangled = ex->exceptionType->name();
+ 		int status;
+ 		demangled = __cxa_demangle(mangled, demangled, &bufferSize, &status);
+-		fprintf(stderr, " of type %s\n",
+-			status == 0 ? demangled : mangled);
++		fprintf(stderr, " of type %s\n", status == 0 ? demangled : mangled);
+ 		if (status == 0) { free(demangled); }
+ 
+ 		_Unwind_Backtrace(trace, 0);

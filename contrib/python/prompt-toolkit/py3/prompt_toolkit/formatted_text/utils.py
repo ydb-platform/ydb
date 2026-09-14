@@ -7,7 +7,8 @@ tuples. This file contains functions for manipulating such a list.
 
 from __future__ import annotations
 
-from typing import Iterable, cast
+from collections.abc import Iterable
+from typing import cast
 
 from prompt_toolkit.utils import get_cwidth
 
@@ -89,8 +90,7 @@ def split_lines(
         parts = string.split("\n")
 
         for part in parts[:-1]:
-            if part:
-                line.append(cast(OneStyleAndTextTuple, (style, part, *mouse_handler)))
+            line.append(cast(OneStyleAndTextTuple, (style, part, *mouse_handler)))
             yield line
             line = []
 

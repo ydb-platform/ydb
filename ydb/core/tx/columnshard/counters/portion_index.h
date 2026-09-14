@@ -1,0 +1,134 @@
+#pragma once
+
+#include "portions.h"
+
+#include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/portion.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+
+#include <algorithm>
+
+namespace NKikimr::NColumnShard {
+
+class TPortionIndexStats {
+public:
+    class TPortionClass {
+    private:
+        YDB_READONLY_DEF(NOlap::NPortion::EProduced, Produced);
+        YDB_READONLY_DEF(bool, IsDefaultTier);
+
+    public:
+        TPortionClass(const NOlap::TPortionInfo& portion);
+
+        bool operator==(const TPortionClass& other) const {
+            return Produced == other.Produced && IsDefaultTier == other.IsDefaultTier;
+        }
+
+        explicit operator size_t() const {
+            return CombineHashes((ui64)Produced, (ui64)IsDefaultTier);
+        }
+    };
+
+    class IStatsSelector {
+    public:
+        ~IStatsSelector() = default;
+
+    public:
+        virtual bool Select(const TPortionClass& portionClass) const = 0;
+    };
+
+private:
+    using TStatsByClass = THashMap<TPortionClass, NOlap::TSimplePortionsGroupInfo>;
+    TStatsByClass TotalStats;
+    THashMap<TInternalPathId, TStatsByClass> StatsByPathId;
+
+    // Signed because the value is recomputed on add and on remove, and the runtime smallness
+    // threshold may change in between; GetNormalized() clamps the transient negative back to zero for reporting.
+    struct TSmallBlobsAcc {
+        i64 VolumeBytes = 0;
+        i64 Count = 0;
+
+        void Add(const ui64 volumeBytes, const ui64 count) {
+            VolumeBytes += (i64)volumeBytes;
+            Count += (i64)count;
+        }
+
+        void Sub(const ui64 volumeBytes, const ui64 count) {
+            VolumeBytes -= (i64)volumeBytes;
+            Count -= (i64)count;
+        }
+
+        NOlap::TSmallBlobsStat GetNormalized() const {
+            return { .VolumeBytes = (ui64)std::max<i64>(0, VolumeBytes), .Count = (ui64)std::max<i64>(0, Count) };
+        }
+    };
+
+    TSmallBlobsAcc TotalSmallBlobs;
+    THashMap<TInternalPathId, TSmallBlobsAcc> SmallBlobsByPathId;
+
+    ui64 SmallBlobThresholdBytes = 0;
+
+    static NOlap::TSimplePortionsGroupInfo SelectStats(const TStatsByClass& container, const IStatsSelector& selector) {
+        NOlap::TSimplePortionsGroupInfo result;
+        for (const auto& [portionClass, stats] : container) {
+            if (selector.Select(portionClass)) {
+                result += stats;
+            }
+        }
+        return result;
+    }
+
+public:
+    void SetSmallBlobThresholdBytes(const ui64 value) {
+        SmallBlobThresholdBytes = value;
+    }
+
+    void AddPortion(const NOlap::TPortionInfo& portion);
+    void RemovePortion(const NOlap::TPortionInfo& portion);
+
+    NOlap::TSimplePortionsGroupInfo GetTotalStats(const IStatsSelector& selector) const {
+        return SelectStats(TotalStats, selector);
+    }
+
+    NOlap::TSimplePortionsGroupInfo GetTableStats(const TInternalPathId pathId, const IStatsSelector& selector) const {
+        if (auto* findTable = StatsByPathId.FindPtr(pathId)) {
+            return SelectStats(*findTable, selector);
+        }
+        return {};
+    }
+
+    NOlap::TSmallBlobsStat GetTotalSmallBlobs() const {
+        return TotalSmallBlobs.GetNormalized();
+    }
+
+    NOlap::TSmallBlobsStat GetTableSmallBlobs(const TInternalPathId pathId) const {
+        if (auto* findTable = SmallBlobsByPathId.FindPtr(pathId)) {
+            return findTable->GetNormalized();
+        }
+        return {};
+    }
+
+    ui64 GetTablesCount() const {
+        return StatsByPathId.size();
+    }
+
+public:
+    class TDiskUsedPortions: public IStatsSelector {
+    public:
+        bool Select(const TPortionClass& portionClass) const override {
+            return IsIn({ NOlap::NPortion::EProduced::INSERTED, NOlap::NPortion::EProduced::COMPACTED,
+                            NOlap::NPortion::EProduced::SPLIT_COMPACTED, NOlap::NPortion::EProduced::INACTIVE }, portionClass.GetProduced()) &&
+                   portionClass.GetIsDefaultTier();
+        }
+    };
+
+    template <NOlap::NPortion::EProduced Type>
+    class TPortionsByType: public IStatsSelector {
+    public:
+        bool Select(const TPortionClass& portionClass) const override {
+            return portionClass.GetProduced() == Type;
+        }
+    };
+};
+
+}   // namespace NKikimr::NColumnShard

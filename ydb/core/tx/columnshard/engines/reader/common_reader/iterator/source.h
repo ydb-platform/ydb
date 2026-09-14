@@ -3,18 +3,26 @@
 #include "fetched_data.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/formats/arrow/program/execution.h>
+#include <ydb/core/formats/arrow/program/visitor.h>
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
-#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/script_counters.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/script_cursor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
+#include <ydb/core/util/evlog/log.h>
 
+#include <library/cpp/lwtrace/shuttle.h>
 #include <util/string/join.h>
+
+#include <atomic>
 
 namespace NKikimr::NOlap {
 class IDataReader;
@@ -24,57 +32,364 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 class TFetchingScriptCursor;
 
-class IDataSource: public ICursorEntity {
+class TExecutionContext {
 private:
-    YDB_READONLY(ui64, SourceId, 0);
-    YDB_READONLY(ui32, SourceIdx, 0);
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator> ProgramIterator;
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> ExecutionVisitor;
+
+    std::optional<ui32> CurrentProgramNodeId;
+    std::shared_ptr<TFetchingStepSignals> CurrentStepSignals;
+    std::optional<TMonotonic> CurrentNodeStart;
+
+    std::optional<TFetchingScriptCursor> CursorStep;
+
+private:
+    struct TPrevNodeState {
+        ui32 NodeId = 0;
+        NArrow::NSSA::IResourceProcessor::EExecutionResult Result = NArrow::NSSA::IResourceProcessor::EExecutionResult::Success;
+        bool Failed = false;
+        bool Defined = false;
+    };
+
+    static_assert(std::atomic<TPrevNodeState>::is_always_lock_free);
+
+    // Prev-node tracing state is written by every finished program-step frame; a continuation frame may
+    // still be unwinding concurrently (issue #49169), so mutable TStrings are not allowed here. The
+    // whole state fits into one lock-free atomic struct; the category name is resolved on read through
+    // the immutable compiled graph.
+    TString StartCategoryName;
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph> Program;
+    std::atomic<TPrevNodeState> PrevNode = {};
+
+    TString RenderCategoryName(const TPrevNodeState& state) const {
+        if (!state.Defined) {
+            return StartCategoryName;
+        }
+        AFL_VERIFY(Program);
+        auto it = Program->GetNodes().find(state.NodeId);
+        AFL_VERIFY(it != Program->GetNodes().end())("node_id", state.NodeId);
+        return it->second->GetProcessor()->GetSignalCategoryName();
+    }
+
+public:
+    void SetStartCategoryName(TString&& name) {
+        StartCategoryName = std::move(name);
+    }
+
+    void SetPrevNodeTracing(const ui32 nodeId, const TConclusion<NArrow::NSSA::IResourceProcessor::EExecutionResult>& conclusion) {
+        PrevNode.store(TPrevNodeState{ .NodeId = nodeId,
+                           .Result = conclusion.IsFail() ? NArrow::NSSA::IResourceProcessor::EExecutionResult::Success : *conclusion,
+                           .Failed = conclusion.IsFail(),
+                           .Defined = true }, std::memory_order_release);
+    }
+
+    TString GetPrevCategoryName() const {
+        return RenderCategoryName(PrevNode.load(std::memory_order_acquire));
+    }
+
+    struct TPrevNodeTracing {
+        TString CategoryName;
+        TString ExecutionResult;
+    };
+
+    // CategoryName/ExecutionResult are coupled only in the program-step transition tracing; a single
+    // load keeps the pair consistent.
+    TPrevNodeTracing GetPrevNodeTracing() const {
+        const TPrevNodeState state = PrevNode.load(std::memory_order_acquire);
+        TString executionResult;
+        if (state.Defined) {
+            executionResult = state.Failed ? "Fail" : ::ToString(state.Result);
+        }
+        return TPrevNodeTracing{ .CategoryName = RenderCategoryName(state), .ExecutionResult = std::move(executionResult) };
+    }
+
+    void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
+
+    void OnFinishProgramStepExecution();
+
+    void OnFailedProgramStepExecution() {
+        OnFinishProgramStepExecution();
+    }
+
+    void Start(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program,
+        const TFetchingScriptCursor& step);
+
+    void Stop();
+
+    const TFetchingStepSignals& GetCurrentStepSignalsVerified() const;
+
+    const TFetchingStepSignals* GetCurrentStepSignalsOptional() const;
+
+    bool HasProgramIterator() const {
+        return !!ProgramIterator;
+    }
+
+    bool HasExecutionVisitor() const {
+        return !!ExecutionVisitor;
+    }
+
+    std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor> GetExecutionVisitorOptional() const {
+        return ExecutionVisitor;
+    }
+
+    void SetProgramIterator(const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& it,
+        const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& visitor);
+
+    void SetCursorStep(const TFetchingScriptCursor& step);
+
+    const TFetchingScriptCursor& GetCursorStep() const;
+
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph::TIterator>& GetProgramIteratorVerified() const;
+
+    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>& GetExecutionVisitorVerified() const;
+};
+
+class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
+public:
+    enum class EType {
+        Undefined,
+        SimpleSysInfo,
+        SimplePortion,
+        SimpleAggregation,
+        PlainPortion
+    };
+
+private:
+    TAtomic SyncSectionFlag = 1;
+    YDB_READONLY(EType, Type, EType::Undefined);
+    ui32 SourceIdx = 0;
+    YDB_READONLY_DEF(ui64, SourceId);
+    static inline TAtomicCounter MemoryGroupCounter = 0;
+    YDB_READONLY(ui64, SequentialMemoryGroupIdx, MemoryGroupCounter.Inc());
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
     YDB_READONLY(TSnapshot, RecordSnapshotMax, TSnapshot::Zero());
     YDB_READONLY_DEF(std::shared_ptr<TSpecialReadContext>, Context);
-    YDB_READONLY(ui32, RecordsCount, 0);
+    std::optional<ui32> RecordsCountImpl;
     YDB_READONLY_DEF(std::optional<ui64>, ShardingVersionOptional);
     YDB_READONLY(bool, HasDeletions, false);
+    // A conflicting source is scanned only so TConflictDetector can detect a conflict and break the lock: it yields no
+    // rows and takes no part in the ordered stream
+    const bool ConflictingFlag;
     std::optional<ui64> MemoryGroupId;
-
+    TExecutionContext ExecutionContext;
     virtual bool DoAddTxConflict() = 0;
 
-    virtual ui64 DoGetEntityId() const override {
+    virtual ui32 DoGetSourceIdx() const override {
+        return SourceIdx;
+    }
+
+    virtual ui64 DoGetSourceId() const override {
         return SourceId;
     }
 
-    virtual ui64 DoGetEntityRecordsCount() const override {
-        return RecordsCount;
-    }
+    virtual ui64 DoGetSourceRecordsCount() const override;
 
     std::optional<bool> IsSourceInMemoryFlag;
+    bool InFlightReleasedFlag = false;
     TAtomic SourceFinishedSafeFlag = 0;
     TAtomic StageResultBuiltFlag = 0;
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
 
+    virtual TConclusion<bool> DoStartFetchImpl(
+        const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchersExt) = 0;
+
+    virtual TConclusion<bool> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
+        const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
+
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
+    std::optional<NEvLog::TLogsThread> Events;
+    std::unique_ptr<TFetchedData> StageData;
+    std::shared_ptr<TPortionDataAccessor> Accessor;
+
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
-    std::unique_ptr<TFetchedData> StageData;
+    NLWTrace::TOrbit DataSourceOrbit;
+    TMonotonic LastProbeTimestamp;
+    TMonotonic SourcesAheadQueueEnterTime;
+    ui32 SourcesAhead = 0;
+    TMonotonic SourceCreatedTimestamp;
+    TDuration TotalExecutionDuration;
+    ui64 TotalBytesRead = 0;
     std::unique_ptr<TFetchedResult> StageResult;
+    virtual ui32 GetRecordsCountVirtual() const;
 
 public:
-    IDataSource(const ui64 sourceId, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context,
-        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const ui32 recordsCount,
-        const std::optional<ui64> shardingVersion, const bool hasDeletions)
-        : SourceId(sourceId)
-        , SourceIdx(sourceIdx)
-        , RecordSnapshotMin(recordSnapshotMin)
-        , RecordSnapshotMax(recordSnapshotMax)
-        , Context(context)
-        , RecordsCount(recordsCount)
-        , ShardingVersionOptional(shardingVersion)
-        , HasDeletions(hasDeletions) {
+    ui64 GetReservedMemory() const;
+
+    TDuration GetAndResetWaitDuration() {
+        const TMonotonic now = TMonotonic::Now();
+        const TDuration result = LastProbeTimestamp ? (now - LastProbeTimestamp) : TDuration::Zero();
+        LastProbeTimestamp = now;
+        return result;
     }
+
+    void SetSourcesAheadQueueEnterTime(const TMonotonic t) {
+        SourcesAheadQueueEnterTime = t;
+    }
+
+    TDuration GetSourcesAheadQueueWaitDuration() const {
+        if (!SourcesAhead || !SourcesAheadQueueEnterTime) {
+            return TDuration::Zero();
+        }
+        return TMonotonic::Now() - SourcesAheadQueueEnterTime;
+    }
+
+    void SetSourcesAhead(const ui32 count) {
+        SourcesAhead = count;
+    }
+
+    ui32 GetSourcesAhead() const {
+        return SourcesAhead;
+    }
+
+    ui32 GetFilteredRowsCount() const {
+        if (!HasStageResult() || GetStageResult().IsEmpty()) {
+            return 0;
+        }
+        const auto& notAppliedFilter = GetStageResult().GetNotAppliedFilter();
+        return notAppliedFilter ? notAppliedFilter->GetFilteredCount().value_or(GetStageResult().GetBatch()->num_rows())
+                                : GetStageResult().GetBatch()->num_rows();
+    }
+
+    NO_SANITIZE_THREAD
+    void AddExecutionDuration(const TDuration d) {
+        TotalExecutionDuration += d;
+    }
+
+    NO_SANITIZE_THREAD
+    void AddBytesRead(const ui64 bytes) {
+        TotalBytesRead += bytes;
+    }
+
+    void OnStartProcessing();
+
+    NO_SANITIZE_THREAD
+    TDuration GetTotalDuration() const {
+        return SourceCreatedTimestamp ? (TMonotonic::Now() - SourceCreatedTimestamp) : TDuration::Zero();
+    }
+
+    NO_SANITIZE_THREAD
+    TDuration GetTotalExecutionDuration() const {
+        return TotalExecutionDuration;
+    }
+
+    NO_SANITIZE_THREAD
+    ui64 GetTotalBytesRead() const {
+        return TotalBytesRead;
+    }
+
+    NO_SANITIZE_THREAD
+    ui64 ExtractTotalBytesRead() {
+        const ui64 result = TotalBytesRead;
+        TotalBytesRead = 0;
+        return result;
+    }
+
+    NLWTrace::TOrbit& GetDataSourceOrbit() {
+        return DataSourceOrbit;
+    }
+
+    const NLWTrace::TOrbit& GetDataSourceOrbit() const {
+        return DataSourceOrbit;
+    }
+
+    const TPortionDataAccessor& GetPortionAccessor() const;
+
+    std::shared_ptr<TPortionDataAccessor> ExtractPortionAccessor();
+
+    bool HasPortionAccessor() const {
+        return !!Accessor;
+    }
+
+    void SetPortionAccessor(std::shared_ptr<TPortionDataAccessor>&& acc);
+
+    template <class T>
+    const T* GetAs() const {
+        AFL_VERIFY(T::CheckTypeCast(Type))("type", Type);
+        return static_cast<const T*>(this);
+    }
+
+    template <class T>
+    T* MutableAs() {
+        AFL_VERIFY(T::CheckTypeCast(Type))("type", Type);
+        return static_cast<T*>(this);
+    }
+
+    template <class T>
+    const T* GetOptionalAs() const {
+        if (!T::CheckTypeCast(Type)) {
+            return nullptr;
+        }
+        return static_cast<const T*>(this);
+    }
+
+    template <class T>
+    T* MutableOptionalAs() {
+        if (!T::CheckTypeCast(Type)) {
+            return nullptr;
+        }
+        return static_cast<T*>(this);
+    }
+
+    virtual bool NeedPortionData() const {
+        return true;
+    }
+
+    std::optional<ui32> GetRecordsCountOptional() const {
+        return RecordsCountImpl;
+    }
+
+    virtual void InitRecordsCount(const ui32 recordsCount);
+
+    ui32 GetRecordsCount() const;
+
+    void StartAsyncSection();
+
+    void CheckAsyncSection();
+
+    void StartSyncSection();
+
+    bool IsSyncSection() const {
+        return AtomicGet(SyncSectionFlag) == 1;
+    }
+
+    void AddEvent(const TString& evDescription);
+
+    TString GetEventsReport() const;
+
+    TExecutionContext& MutableExecutionContext() {
+        return ExecutionContext;
+    }
+
+    const TExecutionContext& GetExecutionContext() const {
+        return ExecutionContext;
+    }
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const;
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchemaOptional() const {
+        static std::shared_ptr<ISnapshotSchema> defaultValue;
+        return defaultValue;
+    }
+
+    virtual ui64 GetUsedRawBytesOptional() const {
+        return 0;
+    }
+
+    virtual TString GetColumnStorageId(const ui32 /*columnId*/) const;
+
+    virtual TString GetEntityStorageId(const ui32 /*entityId*/) const;
+
+    virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const;
+
+    IDataSource(const EType type, const ui32 sourceIdx, const std::shared_ptr<TSpecialReadContext>& context, const bool isConflicting,
+        const TSnapshot& recordSnapshotMin, const TSnapshot& recordSnapshotMax, const std::optional<ui32> recordsCount,
+        const std::optional<ui64> shardingVersion, const bool hasDeletions, const ui64 deprecatedPortionId);
 
     virtual ~IDataSource() = default;
 
@@ -82,126 +397,105 @@ public:
         return ResourceGuards;
     }
 
+    std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ExtractResourceGuards();
+
     virtual THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobsOriginal) const = 0;
 
-    bool IsSourceInMemory() const {
-        AFL_VERIFY(IsSourceInMemoryFlag);
-        return *IsSourceInMemoryFlag;
-    }
-    void SetSourceInMemory(const bool value) {
-        AFL_VERIFY(!IsSourceInMemoryFlag);
-        IsSourceInMemoryFlag = value;
-        if (!value) {
-            AFL_VERIFY(StageData);
-            StageData->SetUseFilter(value);
-        }
+    bool IsConflicting() const {
+        return ConflictingFlag;
     }
 
-    void SetMemoryGroupId(const ui64 groupId) {
-        AFL_VERIFY(!MemoryGroupId);
-        MemoryGroupId = groupId;
+    bool IsSourceInMemory() const;
+
+    bool HasSourceInMemoryFlag() const {
+        return !!IsSourceInMemoryFlag;
     }
 
-    ui64 GetMemoryGroupId() const {
-        AFL_VERIFY(!!MemoryGroupId);
-        return *MemoryGroupId;
-    }
+    void SetSourceInMemory(const bool value);
+
+    void SetMemoryGroupId(const ui64 groupId);
+
+    ui64 GetMemoryGroupId() const;
 
     virtual ui64 GetColumnsVolume(const std::set<ui32>& columnIds, const EMemType type) const = 0;
 
-    ui64 GetResourceGuardsMemory() const {
-        ui64 result = 0;
-        for (auto&& i : ResourceGuards) {
-            result += i->GetMemory();
-        }
-        return result;
-    }
+    ui64 GetResourceGuardsMemory() const;
+
     void RegisterAllocationGuard(const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& guard) {
         ResourceGuards.emplace_back(guard);
     }
+
     virtual ui64 GetColumnRawBytes(const std::set<ui32>& columnIds) const = 0;
     virtual ui64 GetColumnBlobBytes(const std::set<ui32>& columnsIds) const = 0;
 
-    void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false) {
-        if (columns->IsEmpty()) {
-            return;
-        }
-        DoAssembleColumns(columns, sequential);
-    }
+    void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false);
 
     bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 
-    void OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) {
-        AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 1, 0));
-        AFL_VERIFY(sourcePtr);
-        DoOnSourceFetchingFinishedSafe(owner, sourcePtr);
+    bool IsInFlightReleased() const {
+        return InFlightReleasedFlag;
     }
 
-    void OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
-        AFL_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
-        AFL_VERIFY(sourcePtr);
-        AFL_VERIFY(!StageResult);
-        AFL_VERIFY(StageData);
-        DoOnEmptyStageData(sourcePtr);
-        AFL_VERIFY(StageResult);
-        AFL_VERIFY(!StageData);
+    void SetInFlightReleased() {
+        AFL_VERIFY(!InFlightReleasedFlag);
+        InFlightReleasedFlag = true;
     }
+
+    void ResetSourceFinishedFlag();
+
+    void OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr);
+
+    void OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 
     template <class T>
     void BuildStageResult(const std::shared_ptr<T>& sourcePtr) {
         BuildStageResult(std::static_pointer_cast<IDataSource>(sourcePtr));
     }
 
-    void BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) {
-        TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-        AFL_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
-        AFL_VERIFY(sourcePtr);
-        AFL_VERIFY(!StageResult);
-        AFL_VERIFY(StageData);
-        DoBuildStageResult(sourcePtr);
-        AFL_VERIFY(StageResult);
-        AFL_VERIFY(!StageData);
+    void BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr);
+
+    bool AddTxConflict();
+
+    void InitStageData(std::unique_ptr<TFetchedData>&& data);
+
+    std::unique_ptr<TFetchedData> ExtractStageData();
+
+    void ClearStageData() {
+        StageData.reset();
     }
 
-    bool AddTxConflict() {
-        if (!Context->GetCommonContext()->HasLock()) {
-            return false;
-        }
-        if (DoAddTxConflict()) {
-            StageData->Clear();
-            return true;
-        }
-        return false;
-    }
+    const TFetchedData& GetStageData() const;
 
     bool HasStageData() const {
         return !!StageData;
     }
 
-    const TFetchedData& GetStageData() const {
-        AFL_VERIFY(StageData);
-        return *StageData;
-    }
-
-    TFetchedData& MutableStageData() {
-        AFL_VERIFY(StageData);
-        return *StageData;
-    }
+    TFetchedData& MutableStageData();
 
     bool HasStageResult() const {
         return !!StageResult;
     }
 
-    const TFetchedResult& GetStageResult() const {
-        AFL_VERIFY(!!StageResult);
-        return *StageResult;
+    const TFetchedResult& GetStageResult() const;
+
+    TFetchedResult& MutableStageResult();
+
+    virtual std::optional<ui64> GetPortionIdOptional() const = 0;
+
+    virtual NColumnShard::TInternalPathId GetPathId() const = 0;
+
+    ui64 GetRawPathId() const {
+        return GetPathId().GetRawValue();
     }
 
-    TFetchedResult& MutableStageResult() {
-        AFL_VERIFY(!!StageResult);
-        return *StageResult;
+    ui64 GetTabletId() const {
+        return GetContext()->GetCommonContext()->GetReadMetadata()->GetTabletId();
+    }
+
+    ui64 GetTxId() const {
+        return GetContext()->GetCommonContext()->GetReadMetadata()->GetTxId();
     }
 };
 

@@ -2,11 +2,11 @@
 
 PROGRAM()
 
-WITHOUT_LICENSE_TEXTS()
+VERSION(3.5.2)
 
-VERSION(3.3)
+LICENSE(GPL-3.0-or-later)
 
-LICENSE(GPL-2.0-only)
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
     contrib/restricted/libffi

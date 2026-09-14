@@ -1,5 +1,5 @@
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
 #include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
@@ -10,11 +10,13 @@
 #include <util/string/cast.h>
 
 namespace NKikimr {
+inline namespace Dev {
 namespace NOperationId {
 
 using namespace NUri;
 
 static const std::string QueryIdPrefix = "ydb://preparedqueryid/4?id=";
+static const std::string KindKey = "kind";
 
 std::string FormatPreparedQueryIdCompat(const std::string& in) {
     return QueryIdPrefix + in;
@@ -38,6 +40,8 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
     reflection.ListFields(proto, &fields);
     TStringStream res;
     switch (proto.kind()) {
+        case Ydb::TOperationId::UNUSED:
+            break;
         case Ydb::TOperationId::OPERATION_DDL:
         case Ydb::TOperationId::OPERATION_DML:
             res << "ydb://operation";
@@ -62,6 +66,24 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
             break;
         case Ydb::TOperationId::SCRIPT_EXECUTION:
             res << "ydb://scriptexec";
+            break;
+        case Ydb::TOperationId::INCREMENTAL_BACKUP:
+            res << "ydb://incbackup";
+            break;
+        case Ydb::TOperationId::RESTORE:
+            res << "ydb://restore";
+            break;
+        case Ydb::TOperationId::COMPACTION:
+            res << "ydb://compaction";
+            break;
+        case Ydb::TOperationId::FULL_BACKUP:
+            res << "ydb://fullbackup";
+            break;
+        case Ydb::TOperationId::ANALYZE:
+            res << "ydb://analyze";
+            break;
+        case Ydb::TOperationId::SET_NOT_NULL:
+            res << "ydb://setnotnull";
             break;
         default:
             Y_ABORT_UNLESS(false, "unexpected kind");
@@ -121,8 +143,12 @@ public:
         if (er != TState::ParsedOK) {
             ythrow yexception() << "Unable to parse input string";
         }
-        std::string path = uri.PrintS(TField::FlagPath).substr(1); // start from 1 to remove first '/'
-        if (path.length() < 1) {
+        std::string path = uri.PrintS(TField::FlagPath);
+        if (path.empty() || path[0] != '/') {
+            ythrow yexception() << "Operation ID must have a path";
+        }
+        path = path.substr(1); // start from 1 to remove first '/'
+        if (path.empty()) {
             ythrow yexception() << "Invalid path length";
         }
         int kind;
@@ -144,7 +170,7 @@ public:
                 auto data = Proto.add_data();
                 data->set_key(it.first);
                 data->set_value(it.second);
-#ifdef YDB_SDK_USE_STD_STRING
+#ifdef YDB_SDK_OSS
                 Index[it.first].push_back(&data->value());
 #else
                 Index[it.first].push_back(&data->value().ConstRef());
@@ -173,6 +199,11 @@ public:
         return Proto;
     }
 
+    void AddOptionalValue(const std::string& key, const std::string& value) {
+        NKikimr::NOperationId::AddOptionalValue(Proto, key, value);
+        AddToIndex(Proto.data(Proto.data_size() - 1));
+    }
+
     const std::vector<const std::string*>& GetValue(const std::string& key) const {
         auto it = Index.find(key);
         if (it != Index.end()) {
@@ -182,26 +213,30 @@ public:
     }
 
     std::string GetSubKind() const {
-        auto it = Index.find("kind");
+        auto it = Index.find(KindKey);
         if (it == Index.end()) {
             return std::string();
         }
 
         if (it->second.size() != 1) {
-            ythrow yexception() << "Unable to retreive sub-kind";
+            ythrow yexception() << "Unable to retrieve sub-kind";
         }
 
         return *it->second.at(0);
     }
 
 private:
+    void AddToIndex(const Ydb::TOperationId::TData& data) {
+#ifdef YDB_SDK_OSS
+        Index[data.key()].push_back(&data.value());
+#else
+        Index[data.key()].push_back(&data.value().ConstRef());
+#endif
+    }
+
     void BuildIndex() {
         for (const auto& data : Proto.data()) {
-#ifdef YDB_SDK_USE_STD_STRING
-            Index[data.key()].push_back(&data.value());
-#else
-            Index[data.key()].push_back(&data.value().ConstRef());
-#endif
+            AddToIndex(data);
         }
     }
 
@@ -256,7 +291,7 @@ std::vector<TOperationId::TData> TOperationId::GetData() const {
 }
 
 void TOperationId::AddOptionalValue(const std::string& key, const std::string& value) {
-    NKikimr::NOperationId::AddOptionalValue(Impl->GetProto(), key, value);
+    Impl->AddOptionalValue(key, value);
 }
 
 const std::vector<const std::string*>& TOperationId::GetValue(const std::string& key) const {
@@ -302,8 +337,33 @@ TOperationId::EKind ParseKind(const std::string_view value) {
         return TOperationId::SCRIPT_EXECUTION;
     }
 
+    if (value.starts_with("incbackup")) {
+        return TOperationId::INCREMENTAL_BACKUP;
+    }
+
+    if (value.starts_with("restore")) {
+        return TOperationId::RESTORE;
+    }
+
+    if (value.starts_with("compaction")) {
+        return TOperationId::COMPACTION;
+    }
+
+    if (value.starts_with("fullbackup")) {
+        return TOperationId::FULL_BACKUP;
+    }
+
+    if (value.starts_with("analyze")) {
+        return TOperationId::ANALYZE;
+    }
+
+    if (value.starts_with("setnotnull")) {
+        return TOperationId::SET_NOT_NULL;
+    }
+
     return TOperationId::UNUSED;
 }
 
-} // namespace NOperationId
-} // namespace NKikimr
+}
+}
+}

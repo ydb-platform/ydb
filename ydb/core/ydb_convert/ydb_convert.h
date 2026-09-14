@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
@@ -10,7 +11,7 @@
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <util/memory/pool.h>
 
@@ -31,11 +32,10 @@ void ConvertYdbValueToMiniKQLValue(const Ydb::Type& inputType,
 
 void ConvertYdbResultToKqpResult(const Ydb::ResultSet& input, NKikimrMiniKQL::TResult& output);
 
-void ConvertYdbParamsToMiniKQLParams(const ::google::protobuf::Map<TString, Ydb::TypedValue>& input,
-    NKikimrMiniKQL::TParams& output);
-
-void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
-    google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions> *permissions);
+void FillPermissionsFromAcl(const NKikimrSchemeOp::TDirEntry& from, const bool withEffectiveAcl,
+    Ydb::Scheme::Entry* to);
+void FillPermissionsFromAcl(const NKikimrSchemeOp::TDirEntry& from, const bool withEffectiveAcl,
+    Ydb::Scheme::ModifyPermissionsRequest* to);
 
 struct TACLAttrs {
     ui32 AccessMask;
@@ -54,7 +54,7 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
 void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl);
 
 bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Value* vp, bool allowCastFromString,
-                                TCell& c, TString& err, TMemoryPool& valueDataPool);
+                                TCell& c, TString& err, TMemoryPool& valueDataPool, bool allowInfDouble = false);
 
 void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeInfo, const TCell& cell);
 

@@ -13,7 +13,7 @@ namespace NTable {
     /**
      * A very simple comparator for part keys (extended with schema defaults)
      */
-    int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &keyDefaults) noexcept;
+    int ComparePartKeys(TCellsRef left, TCellsRef right, const TKeyCellDefaults &keyDefaults);
 
     /**
      * Bounds for a range of keys
@@ -41,12 +41,12 @@ namespace NTable {
         {
         }
 
-        void Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const noexcept;
+        void Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const;
 
         /**
          * Returns true if a is less than b without any intersections
          */
-        static bool LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaults& keyDefaults) noexcept;
+        static bool LessByKey(const TBounds& a, const TBounds& b, const TKeyCellDefaults& keyDefaults);
 
         /**
          * Compares search key and bounds first key
@@ -56,7 +56,7 @@ namespace NTable {
         static int CompareSearchKeyFirstKey(
                 TArrayRef<const TCell> key,
                 const TBounds& bounds,
-                const TKeyCellDefaults& keyDefaults) noexcept;
+                const TKeyCellDefaults& keyDefaults);
 
         /**
          * Compares bounds last key and search key
@@ -66,7 +66,7 @@ namespace NTable {
         static int CompareLastKeySearchKey(
                 const TBounds& bounds,
                 TArrayRef<const TCell> key,
-                const TKeyCellDefaults& keyDefaults) noexcept;
+                const TKeyCellDefaults& keyDefaults);
     };
 
     /**
@@ -132,7 +132,8 @@ namespace NTable {
             return EndRowId() - BeginRowId();
         }
 
-        void Describe(IOutputStream& out) const noexcept;
+        void Describe(IOutputStream& out) const;
+        void Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const;
 
         /**
          * Returns true if first row of a is less than first row of b
@@ -326,24 +327,26 @@ namespace NTable {
             return TSlicesRowsIterator(*this);
         }
 
-        void Describe(IOutputStream& out) const noexcept;
+        void Describe(IOutputStream& out) const;
+
+        void Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const;
 
         /**
          * Validate slices are correct, crash otherwise
          */
-        void Validate() const noexcept;
+        void Validate() const;
 
         /**
          * Converts run to a matching screen
          */
-        TIntrusiveConstPtr<TScreen> ToScreen() const noexcept;
+        TIntrusiveConstPtr<TScreen> ToScreen() const;
 
         /**
          * Returns a special run that includes all possible rows
          *
          * Currently only used in tests when bounds are unavailable
          */
-        static TIntrusiveConstPtr<TSlices> All() noexcept
+        static TIntrusiveConstPtr<TSlices> All()
         {
             TIntrusivePtr<TSlices> run = new TSlices;
             run->emplace_back();
@@ -363,13 +366,13 @@ namespace NTable {
         /**
          * Returns the result of removing b from a
          */
-        static TIntrusiveConstPtr<TSlices> Subtract(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept;
+        static TIntrusiveConstPtr<TSlices> Subtract(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b);
 
         /**
          * Merges two sorted runs
          * Runs may intersect in which case they are merged
          */
-        static TIntrusiveConstPtr<TSlices> Merge(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b) noexcept;
+        static TIntrusiveConstPtr<TSlices> Merge(const TIntrusiveConstPtr<TSlices>& a, const TIntrusiveConstPtr<TSlices>& b);
 
         /**
          * Cuts run using [begin,end) range of row ids, with specified keys
@@ -381,12 +384,12 @@ namespace NTable {
                 TRowId beginRowId,
                 TRowId endRowId,
                 TConstArrayRef<TCell> beginKey,
-                TConstArrayRef<TCell> endKey) noexcept;
+                TConstArrayRef<TCell> endKey);
 
         /**
          * Replaces row ranges with new slices in the specified run
          */
-        static TIntrusiveConstPtr<TSlices> Replace(TIntrusiveConstPtr<TSlices> run, TConstArrayRef<TSlice> slices) noexcept;
+        static TIntrusiveConstPtr<TSlices> Replace(TIntrusiveConstPtr<TSlices> run, TConstArrayRef<TSlice> slices);
 
         /**
          * Walks backwards until the first potential intersection with [0, rowId] range

@@ -7,5 +7,7 @@ items:
     href: start.md
   - name: Configuration
     href: configuration.md
+  - name: Init scripts
+    href: init-scripts.md
   - name: Cleanup
     href: cleanup.md

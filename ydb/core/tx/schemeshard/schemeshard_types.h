@@ -2,10 +2,13 @@
 
 #include "schemeshard_identificators.h"
 
-#include <ydb/core/base/tablet_types.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/base/row_version.h>
+#include <ydb/core/base/tablet_types.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 #include <util/generic/fwd.h>
 
@@ -41,7 +44,7 @@ struct TSchemeLimits {
     ui64 MaxTableColumns = 200;
     ui64 MaxColumnTableColumns = 10000;
     ui64 MaxTableColumnNameLength = 255;
-    ui64 MaxTableKeyColumns = 20;
+    ui64 MaxTableKeyColumns = 30;
     ui64 MaxTableIndices = 20;
     ui64 MaxTableCdcStreams = 5;
     ui64 MaxShards = 200*1000; // In each database
@@ -55,8 +58,9 @@ struct TSchemeLimits {
     ui64 MaxExports = 10;
     ui64 MaxImports = 10;
 
-    static TSchemeLimits FromProto(const NKikimrScheme::TSchemeLimits& proto);
-    NKikimrScheme::TSchemeLimits AsProto() const;
+    static TSchemeLimits FromProto(const NKikimrSubDomains::TSchemeLimits& proto);
+    void MergeFromProto(const NKikimrSubDomains::TSchemeLimits& proto);
+    NKikimrSubDomains::TSchemeLimits AsProto() const;
 };
 
 using ETabletType = TTabletTypes;
@@ -114,6 +118,7 @@ enum class ETableColumnDefaultKind : ui32 {
     None = 0,
     FromSequence = 1,
     FromLiteral = 2,
+    FromExpression = 3,
 };
 
 enum class EAttachChildResult : ui32 {
@@ -139,6 +144,8 @@ enum class EAttachChildResult : ui32 {
 
 using EServerlessComputeResourcesMode = NKikimrSubDomains::EServerlessComputeResourcesMode;
 
+using ETablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel;
+
 struct TTempDirsState {
 
     struct TRetryState {
@@ -161,6 +168,13 @@ struct TTempDirInfo {
     TString WorkingDir;
     TString Name;
     TActorId TempDirOwnerActorId;
+};
+
+enum class EShredStatus : ui32 {
+    UNSPECIFIED = 0,
+    COMPLETED = 1,
+    IN_PROGRESS = 2,
+    IN_PROGRESS_BSC = 3,
 };
 
 }

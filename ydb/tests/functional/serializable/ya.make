@@ -11,5 +11,11 @@ TEST_SRCS(test.py)
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
+IF (SANITIZER_TYPE == "thread")
+    SUPPRESSIONS(
+        ${ARCADIA_ROOT}/ydb/tests/tsan.supp
+    )
+ENDIF()
+
 SIZE(MEDIUM)
 END()

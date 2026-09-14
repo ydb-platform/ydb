@@ -23,8 +23,8 @@ private:
                 LeaderActor = msg->CurrentLeader;
             } else {
                 for (const auto& pr : msg->Followers) {
-                    if (pr.first.NodeId() == NodeId) {
-                        LeaderActor = pr.first;
+                    if (pr.Follower.NodeId() == NodeId) {
+                        LeaderActor = pr.Follower;
                         break;
                     }
                 }

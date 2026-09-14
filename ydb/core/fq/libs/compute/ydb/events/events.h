@@ -4,9 +4,9 @@
 #include <ydb/core/fq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/fq/libs/events/event_subspace.h>
 #include <ydb/core/fq/libs/protos/fq_private.pb.h>
-#include <ydb-cpp-sdk/client/query/query.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
-#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -66,6 +66,8 @@ struct TEvYdbCompute {
         EvCpuQuotaAdjust,
 
         EvCreateResourcePoolResponse,
+
+        EvUpdateAclResponse,
 
         EvEnd
     };
@@ -227,12 +229,14 @@ struct TEvYdbCompute {
                                  const TString& scope,
                                  const TString& basePath,
                                  const TString& path,
-                                 const NFq::NConfig::TYdbStorageConfig& executionConnection)
+                                 const NFq::NConfig::TYdbStorageConfig& executionConnection,
+                                 const TString& sharedFolderId = {})
             : CloudId(cloudId)
             , Scope(scope)
             , BasePath(basePath)
             , Path(path)
             , ExecutionConnection(executionConnection)
+            , SharedFolderId(sharedFolderId)
         {}
 
         TString CloudId;
@@ -240,6 +244,7 @@ struct TEvYdbCompute {
         TString BasePath;
         TString Path;
         NFq::NConfig::TYdbStorageConfig ExecutionConnection;
+        TString SharedFolderId;
     };
 
     struct TEvCreateDatabaseResponse : public NActors::TEventLocal<TEvCreateDatabaseResponse, EvCreateDatabaseResponse> {
@@ -259,6 +264,10 @@ struct TEvYdbCompute {
     };
 
     struct TEvListDatabasesRequest : public NActors::TEventLocal<TEvListDatabasesRequest, EvListDatabasesRequest> {
+        explicit TEvListDatabasesRequest(const TString& database)
+            : Database(database)
+        {}
+        TString Database;
     };
 
     struct TEvListDatabasesResponse : public NActors::TEventLocal<TEvListDatabasesResponse, EvListDatabasesResponse> {
@@ -515,6 +524,14 @@ struct TEvYdbCompute {
 
     struct TEvCreateResourcePoolResponse : public NActors::TEventLocal<TEvCreateResourcePoolResponse, EvCreateResourcePoolResponse> {
         TEvCreateResourcePoolResponse(NYdb::TStatus status)
+            : Status(std::move(status))
+        {}
+
+        NYdb::TStatus Status;
+    };
+
+    struct TEvUpdateAclResponse : public NActors::TEventLocal<TEvUpdateAclResponse, EvUpdateAclResponse> {
+        TEvUpdateAclResponse(NYdb::TStatus status)
             : Status(std::move(status))
         {}
 

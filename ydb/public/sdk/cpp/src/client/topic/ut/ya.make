@@ -1,10 +1,10 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/src/client/topic)
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+REQUIREMENTS(ram:32 cpu:4)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -12,32 +12,36 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
-    library/cpp/testing/gmock_in_unittest
-    ydb/core/testlib/default
-    ydb/public/lib/json_value
-    ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/src/client/driver
-    ydb/public/sdk/cpp/src/client/persqueue_public
-    ydb/public/sdk/cpp/src/client/persqueue_public/impl
-    ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
-
-    ydb/public/sdk/cpp/src/client/topic
-    ydb/public/sdk/cpp/src/client/topic/common
-    ydb/public/sdk/cpp/src/client/topic/impl
+    ydb/library/persqueue
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
-
-    ydb/core/tx/schemeshard/ut_helpers
-    ydb/core/persqueue/ut/common
 )
 
 YQL_LAST_ABI_VERSION()
 
 SRCS(
     basic_usage_ut.cpp
+    content_based_deduplication_ut.cpp
     describe_topic_ut.cpp
+    deferred_publication_ack_state_ut.cpp
     local_partition_ut.cpp
+    producer_deferred_publication_ut.cpp
+    read_session_credentials_ut.cpp
+    topic_deferred_publish_ut.cpp
     topic_to_table_ut.cpp
-    trace_ut.cpp
+    topic_tx_skip_conflict_ut.cpp
+    write_session_connect_ut.cpp
+    write_session_flush_ut.cpp
+    write_session_size_ut.cpp
+)
+
+RESOURCE(
+    ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_0_v24-4-2.dat topic_A_partition_0_v24-4-2.dat
+    ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_1_v24-4-2.dat topic_A_partition_1_v24-4-2.dat
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    with_direct_read_ut
+    slow
+)

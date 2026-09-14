@@ -1,4 +1,5 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 SRCS(
     activation.proto
@@ -24,6 +25,7 @@ SRCS(
     resource_manager.proto
     row_dispatcher.proto
     storage.proto
+    task_controller.proto
     test_connection.proto
     token_accessor.proto
 )
@@ -32,7 +34,6 @@ PEERDIR(
     ydb/library/folder_service/proto
     ydb/library/yql/dq/actors/protos
     yql/essentials/providers/common/proto
-    ydb/library/yql/providers/s3/proto
 )
 
 EXCLUDE_TAGS(GO_PROTO)

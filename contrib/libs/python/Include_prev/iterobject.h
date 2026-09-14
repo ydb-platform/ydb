@@ -1,0 +1,7 @@
+#pragma once
+
+#ifdef USE_PYTHON3_PREV
+#include <contrib/tools/python3_prev/Include/iterobject.h>
+#else
+#include <contrib/tools/python/src/Include/iterobject.h>
+#endif

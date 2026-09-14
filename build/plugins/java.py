@@ -3,8 +3,6 @@ import ymake
 import json
 import os
 import base64
-import six
-
 
 DELIM = '================================'
 CONTRIB_JAVA_PREFIX = 'contrib/java/'
@@ -15,30 +13,33 @@ def split_args(s):  # TODO quotes, escapes
 
 
 def extract_macro_calls(unit, macro_value_name, macro_calls_delim):
-    if not unit.get(macro_value_name):
+    value = unit.get_subst(macro_value_name)
+    if not value:
         return []
 
     return list(
         filter(
             None,
-            map(split_args, unit.get(macro_value_name).replace('$' + macro_value_name, '').split(macro_calls_delim)),
+            map(split_args, value.strip().split(macro_calls_delim)),
         )
     )
 
 
 def extract_macro_calls2(unit, macro_value_name):
-    if not unit.get(macro_value_name):
+    value = unit.get_subst(macro_value_name)
+    if not value:
         return []
 
     calls = []
-    for call_encoded_args in unit.get(macro_value_name).strip().split():
+    for call_encoded_args in value.strip().split():
         call_args = json.loads(base64.b64decode(call_encoded_args))
         calls.append(call_args)
 
     return calls
 
 
-def onjava_module(unit, *args):
+@ymake.macro
+def JAVA_MODULE(unit: ymake.Unit, *args: str):
     args_delim = unit.get('ARGS_DELIM')
 
     if unit.get('YA_IDE_IDEA') != 'yes':
@@ -58,13 +59,6 @@ def onjava_module(unit, *args):
         # TODO remove when java test dart is in prod
         'UNITTEST_DIR': unit.get('UNITTEST_DIR'),
         'JVM_ARGS': extract_macro_calls(unit, 'JVM_ARGS_VALUE', args_delim),
-        'TEST_CWD': extract_macro_calls(unit, 'TEST_CWD_VALUE', args_delim),
-        'TEST_FORK_MODE': extract_macro_calls(unit, 'TEST_FORK_MODE', args_delim),
-        'SPLIT_FACTOR': extract_macro_calls(unit, 'TEST_SPLIT_FACTOR', args_delim),
-        'TIMEOUT': extract_macro_calls(unit, 'TEST_TIMEOUT', args_delim),
-        'TAG': extract_macro_calls(unit, 'TEST_TAGS_VALUE', args_delim),
-        'SIZE': extract_macro_calls(unit, 'TEST_SIZE_NAME', args_delim),
-        'DEPENDS': extract_macro_calls(unit, 'TEST_DEPENDS_VALUE', args_delim),
         'IDEA_EXCLUDE': extract_macro_calls(unit, 'IDEA_EXCLUDE_DIRS_VALUE', args_delim),
         'IDEA_RESOURCE': extract_macro_calls(unit, 'IDEA_RESOURCE_DIRS_VALUE', args_delim),
         'IDEA_MODULE_NAME': extract_macro_calls(unit, 'IDEA_MODULE_NAME_VALUE', args_delim),
@@ -73,15 +67,15 @@ def onjava_module(unit, *args):
     }
     if unit.get('ENABLE_PREVIEW_VALUE') == 'yes' and (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION')) in (
         '17',
-        '20',
         '21',
         '22',
         '23',
+        '24',
+        '25',
     ):
         data['ENABLE_PREVIEW'] = extract_macro_calls(unit, 'ENABLE_PREVIEW_VALUE', args_delim)
 
     if unit.get('SAVE_JAVAC_GENERATED_SRCS_DIR') and unit.get('SAVE_JAVAC_GENERATED_SRCS_TAR'):
-        data['SAVE_JAVAC_GENERATED_SRCS_DIR'] = extract_macro_calls(unit, 'SAVE_JAVAC_GENERATED_SRCS_DIR', args_delim)
         data['SAVE_JAVAC_GENERATED_SRCS_TAR'] = extract_macro_calls(unit, 'SAVE_JAVAC_GENERATED_SRCS_TAR', args_delim)
 
     if unit.get('JAVA_ADD_DLLS_VALUE') == 'yes':
@@ -91,16 +85,8 @@ def onjava_module(unit, *args):
         data['ERROR_PRONE'] = extract_macro_calls(unit, 'ERROR_PRONE_VALUE', args_delim)
 
     if unit.get('WITH_KOTLIN_VALUE') == 'yes':
-        data['WITH_KOTLIN'] = extract_macro_calls(unit, 'WITH_KOTLIN_VALUE', args_delim)
-        if unit.get('KOTLIN_JVM_TARGET'):
-            data['KOTLIN_JVM_TARGET'] = extract_macro_calls(unit, 'KOTLIN_JVM_TARGET', args_delim)
-        if unit.get('KOTLINC_FLAGS_VALUE'):
-            data['KOTLINC_FLAGS'] = extract_macro_calls(unit, 'KOTLINC_FLAGS_VALUE', args_delim)
         if unit.get('KOTLINC_OPTS_VALUE'):
             data['KOTLINC_OPTS'] = extract_macro_calls(unit, 'KOTLINC_OPTS_VALUE', args_delim)
-
-    if unit.get('DIRECT_DEPS_ONLY_VALUE') == 'yes':
-        data['DIRECT_DEPS_ONLY'] = extract_macro_calls(unit, 'DIRECT_DEPS_ONLY_VALUE', args_delim)
 
     if unit.get('JAVA_EXTERNAL_DEPENDENCIES_VALUE'):
         valid = []
@@ -118,33 +104,6 @@ def onjava_module(unit, *args):
         if valid:
             data['EXTERNAL_DEPENDENCIES'] = [valid]
 
-    if unit.get('MAKE_UBERJAR_VALUE') == 'yes':
-        if unit.get('MODULE_TYPE') != 'JAVA_PROGRAM':
-            ymake.report_configure_error('{}: UBERJAR supported only for JAVA_PROGRAM module type'.format(unit.path()))
-        data['UBERJAR'] = extract_macro_calls(unit, 'MAKE_UBERJAR_VALUE', args_delim)
-        data['UBERJAR_PREFIX'] = extract_macro_calls(unit, 'UBERJAR_PREFIX_VALUE', args_delim)
-        data['UBERJAR_HIDE_EXCLUDE'] = extract_macro_calls(unit, 'UBERJAR_HIDE_EXCLUDE_VALUE', args_delim)
-        data['UBERJAR_PATH_EXCLUDE'] = extract_macro_calls(unit, 'UBERJAR_PATH_EXCLUDE_VALUE', args_delim)
-        data['UBERJAR_MANIFEST_TRANSFORMER_MAIN'] = extract_macro_calls(
-            unit, 'UBERJAR_MANIFEST_TRANSFORMER_MAIN_VALUE', args_delim
-        )
-        data['UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE'] = extract_macro_calls(
-            unit, 'UBERJAR_MANIFEST_TRANSFORMER_ATTRIBUTE_VALUE', args_delim
-        )
-        data['UBERJAR_APPENDING_TRANSFORMER'] = extract_macro_calls(
-            unit, 'UBERJAR_APPENDING_TRANSFORMER_VALUE', args_delim
-        )
-        data['UBERJAR_SERVICES_RESOURCE_TRANSFORMER'] = extract_macro_calls(
-            unit, 'UBERJAR_SERVICES_RESOURCE_TRANSFORMER_VALUE', args_delim
-        )
-
-    if unit.get('WITH_JDK_VALUE') == 'yes':
-        if unit.get('MODULE_TYPE') != 'JAVA_PROGRAM':
-            ymake.report_configure_error(
-                '{}: JDK export supported only for JAVA_PROGRAM module type'.format(unit.path())
-            )
-        data['WITH_JDK'] = extract_macro_calls(unit, 'WITH_JDK_VALUE', args_delim)
-
     # IMPORTANT before switching vcs_info.py to python3 the value was always evaluated to $YMAKE_PYTHON but no
     # code in java dart parser extracts its value only checks this key for existance.
     data['EMBED_VCS'] = [['yes']]
@@ -157,7 +116,7 @@ def onjava_module(unit, *args):
     for java_srcs_args in data['JAVA_SRCS']:
         external = None
 
-        for i in six.moves.range(len(java_srcs_args)):
+        for i in range(len(java_srcs_args)):
             arg = java_srcs_args[i]
 
             if arg == 'EXTERNAL':
@@ -177,18 +136,36 @@ def onjava_module(unit, *args):
         if external:
             unit.onpeerdir(external)
 
-    data = {k: v for k, v in six.iteritems(data) if v}
+    data = {k: v for k, v in data.items() if v}
 
-    dart = 'JAVA_DART: ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(data)))) + '\n' + DELIM + '\n'
+    _dump_java_module(unit, data)
+
+
+@ymake.macro
+def JAVA_RUNTIME_MODULE(unit: ymake.Unit, *args: str):
+    if unit.get('YA_IDE_IDEA') == 'yes':
+        _dump_java_module(
+            unit,
+            {
+                'PATH': unit.path(),
+                'RUNTIME_MANAGED_PEERS_CLOSURE': '${MANAGED_PEERS_CLOSURE}',
+            },
+        )
+
+
+def _dump_java_module(unit, data):
+    dart = 'JAVA_DART: ' + base64.b64encode(json.dumps(data).encode('utf-8')).decode('utf-8') + '\n' + DELIM + '\n'
     unit.set_property(['JAVA_DART_DATA', dart])
 
 
-def on_add_java_style_checks(unit, *args):
+@ymake.macro
+def _ADD_JAVA_STYLE_CHECKS(unit: ymake.Unit, *args: str):
     if unit.get('LINT_LEVEL_VALUE') != "none" and common.get_no_lint_value(unit) != 'none':
         unit.onadd_check(['JAVA_STYLE', unit.get('LINT_LEVEL_VALUE')] + list(args))
 
 
-def on_add_kotlin_style_checks(unit, *args):
+@ymake.macro
+def _ADD_KOTLIN_STYLE_CHECKS(unit: ymake.Unit, *args: str):
     """
     ktlint can be disabled using NO_LINT() and NO_LINT(ktlint)
     """
@@ -197,7 +174,8 @@ def on_add_kotlin_style_checks(unit, *args):
             unit.onadd_check(['ktlint'] + list(args))
 
 
-def on_add_classpath_clash_check(unit, *args):
+@ymake.macro
+def _ADD_CLASSPATH_CLASH_CHECK(unit: ymake.Unit, *args: str):
     jdeps_val = (unit.get('CHECK_JAVA_DEPS_VALUE') or '').lower()
     if jdeps_val and jdeps_val not in ('yes', 'no', 'strict'):
         ymake.report_configure_error('CHECK_JAVA_DEPS: "yes", "no" or "strict" required')
@@ -205,7 +183,26 @@ def on_add_classpath_clash_check(unit, *args):
         unit.onjava_test_deps(jdeps_val)
 
 
-def on_add_detekt_report_check(unit, *args):
+@ymake.macro
+def _ADD_CLASSPATH_CLASH_CHECK_IF_UBERJAR(unit: ymake.Unit, *args: str):
+    uberjar_val = (unit.get('MAKE_UBERJAR_VALUE') or '').lower()
+    if uberjar_val and uberjar_val not in ('yes', 'no'):
+        ymake.report_configure_error('MAKE_UBERJAR: "yes" or "no" required')
+    if uberjar_val == 'yes':
+        _ADD_CLASSPATH_CLASH_CHECK(unit, *args)
+
+
+@ymake.macro
+def _ADD_CLASSPATH_CLASH_CHECK_IF_NOT_UBERJAR(unit: ymake.Unit, *args: str):
+    uberjar_val = (unit.get('MAKE_UBERJAR_VALUE') or '').lower()
+    if uberjar_val and uberjar_val not in ('yes', 'no'):
+        ymake.report_configure_error('MAKE_UBERJAR: "yes" or "no" required')
+    if uberjar_val != 'yes':
+        _ADD_CLASSPATH_CLASH_CHECK(unit, *args)
+
+
+@ymake.macro
+def _ADD_DETEKT_REPORT_CHECK(unit: ymake.Unit, *args: str):
     if unit.get('WITH_KOTLIN_VALUE') == 'yes' and unit.get('WITH_KOTLINC_PLUGIN_DETEKT') == 'yes':
         unit.onadd_check(['detekt.report'] + list(args))
 
@@ -213,7 +210,8 @@ def on_add_detekt_report_check(unit, *args):
 # Ymake java modules related macros
 
 
-def on_check_java_srcdir(unit, *args):
+@ymake.macro
+def _CHECK_JAVA_SRCDIR(unit: ymake.Unit, *args: str):
     args = list(args)
     if 'SKIP_CHECK_SRCDIR' in args:
         return
@@ -231,21 +229,23 @@ def on_check_java_srcdir(unit, *args):
                 unit.onsrcdir(os.path.join('${ARCADIA_ROOT}', srcdir[3:]))
 
 
-def on_fill_jar_copy_resources_cmd(unit, *args):
+@ymake.macro
+def _FILL_JAR_COPY_RESOURCES_CMD(unit: ymake.Unit, *args: str):
     if len(args) == 4:
         varname, srcdir, base_classes_dir, reslist = tuple(args)
         package = ''
     else:
         varname, srcdir, base_classes_dir, package, reslist = tuple(args)
     dest_dir = os.path.join(base_classes_dir, *package.split('.')) if package else base_classes_dir
-    var = unit.get(varname)
+    var = unit.get_nosubst(varname)
     var += ' && $FS_TOOLS copy_files {} {} {}'.format(
         srcdir if srcdir.startswith('"$') else '${CURDIR}/' + srcdir, dest_dir, reslist
     )
     unit.set([varname, var])
 
 
-def on_fill_jar_gen_srcs(unit, *args):
+@ymake.macro
+def _FILL_JAR_GEN_SRCS(unit: ymake.Unit, *args: str):
     varname, jar_type, srcdir, base_classes_dir, java_list, kt_list, res_list = tuple(args[0:7])
     resolved_srcdir = unit.resolve_arc_path(srcdir)
     if not resolved_srcdir.startswith('$') or resolved_srcdir.startswith('$S'):
@@ -257,7 +257,7 @@ def on_fill_jar_gen_srcs(unit, *args):
     exclude_pos = args.index('EXCLUDE')
     globs = ' '.join(args[7:exclude_pos])
     excludes = ' '.join(args[exclude_pos + 1 :])
-    var = unit.get(varname)
+    var = unit.get_nosubst(varname)
     var += f' {args_delim} --append -d {srcdir} -s {java_list} -k {kt_list} -r {res_list} --include-patterns {globs}'
     if jar_type == 'SRC_JAR':
         var += ' --all-resources'
@@ -268,7 +268,8 @@ def on_fill_jar_gen_srcs(unit, *args):
     unit.set([varname, var])
 
 
-def on_check_run_java_prog_classpath(unit, *args):
+@ymake.macro
+def _CHECK_RUN_JAVA_PROG_CLASSPATH(unit: ymake.Unit, *args: str):
     if len(args) != 1:
         ymake.report_configure_error(
             'multiple CLASSPATH elements in RUN_JAVA_PROGRAM invocation no more supported. Use JAVA_RUNTIME_PEERDIR on the JAVA_PROGRAM module instead'
@@ -320,29 +321,33 @@ def parse_words(words):
             continue
         props.append('-B')
         if len(p) > 1:
-            props.append(six.ensure_str(base64.b64encode(six.ensure_binary("{}={}".format(p[0], ' '.join(p[1:]))))))
+            props.append(base64.b64encode("{}={}".format(p[0], ' '.join(p[1:])).encode('utf-8')).decode('utf-8'))
         else:
             ymake.report_configure_error('CUSTOM_PROPERTY "{}" value is not specified'.format(p[0]))
     for i, o in enumerate(outputs):
         yield o, templates[min(i, len(templates) - 1)], props
 
 
-def ongenerate_script(unit, *args):
+@ymake.macro
+def GENERATE_SCRIPT(unit: ymake.Unit, *args: str):
     for out, tmpl, props in parse_words(list(args)):
         unit.on_add_gen_java_script([out, tmpl] + list(props))
 
 
-def on_jdk_version_macro_check(unit, *args):
+@ymake.macro
+def _JDK_VERSION_MACRO_CHECK(unit: ymake.Unit, *args: str):
     if len(args) != 1:
         unit.message(["error", "Invalid syntax. Single argument required."])
     jdk_version = args[0]
     available_versions = (
         '11',
         '17',
-        '20',
         '21',
         '22',
         '23',
+        '24',
+        '25',
+        '26',
     )
     if jdk_version not in available_versions:
         ymake.report_configure_error(
@@ -367,26 +372,36 @@ def _maven_coords_for_project(unit, project_dir):
 
     pom_path = unit.resolve(os.path.join('$S', project_dir, 'pom.xml'))
     if os.path.exists(pom_path):
-        import xml.etree.ElementTree as et
-
         try:
-            with open(pom_path, 'rb') as f:
-                root = et.fromstring(f.read())
-            for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
-                artifact = root.find(xpath)
-                if artifact is not None:
-                    artifact = artifact.text
-                    if a != artifact and a.startswith(artifact):
-                        c = a[len(artifact) :].lstrip('-_')
-                        a = artifact
-                    break
+            # TODO(YMAKE-1694): xml is not currenly ready for Python subinterpreters, so we temporarily switch to parser implemented in ymake module
+            if hasattr(ymake, 'get_artifact_id_from_pom_xml'):
+                with open(pom_path, 'rb') as f:
+                    artifact = ymake.get_artifact_id_from_pom_xml(f.read())
+                    if artifact is not None:
+                        if a != artifact and a.startswith(artifact):
+                            c = a[len(artifact) :].lstrip('-_')
+                            a = artifact
+            else:
+                import xml.etree.ElementTree as et
+
+                with open(pom_path, 'rb') as f:
+                    root = et.fromstring(f.read())
+                for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
+                    artifact = root.find(xpath)
+                    if artifact is not None:
+                        artifact = artifact.text
+                        if a != artifact and a.startswith(artifact):
+                            c = a[len(artifact) :].lstrip('-_')
+                            a = artifact
+                        break
         except Exception as e:
             raise Exception(f"Can't parse {pom_path}: {str(e)}") from None
 
     return '{}:{}:{}:{}'.format(g, a, v, c)
 
 
-def on_setup_maven_export_coords_if_need(unit, *args):
+@ymake.macro
+def _SETUP_MAVEN_EXPORT_COORDS_IF_NEED(unit: ymake.Unit, *args: str):
     if not unit.enabled('MAVEN_EXPORT'):
         return
 
@@ -400,13 +415,46 @@ def _get_classpath(unit, dir):
         return 'project(\\":{}\\")'.format(dir.replace('/', ':'))
 
 
-def on_setup_project_coords_if_needed(unit, *args):
+@ymake.macro
+def _SETUP_PROJECT_COORDS_IF_NEEDED(unit: ymake.Unit, *args: str):
     if not unit.enabled('EXPORT_GRADLE'):
         return
 
     project_dir = args[0]
-    if project_dir.startswith(CONTRIB_JAVA_PREFIX):
-        value = '{}'.format(_get_classpath(unit, project_dir).rstrip(':'))
-    else:
-        value = 'project(\\":{}\\")'.format(project_dir.replace('/', ':'))
-    unit.set(['EXPORT_GRADLE_CLASSPATH', value])
+    unit.set(['EXPORT_GRADLE_CLASSPATH', _get_classpath(unit, project_dir)])
+
+
+@ymake.macro
+def _JAVA_RESOURCE_TAR_VALIDATE_EXTRACT_ROOT(unit: ymake.Unit, extract_root: str):
+    if extract_root == '<required>':
+        ymake.report_configure_error(
+            'Macro JAVA_RESOURCE_TAR requires to set EXTRACT_ROOT. '
+            'Usage JAVA_RESOURCE_TAR(tar_path EXTRACT_ROOT root_dir)'
+        )
+
+
+@ymake.macro
+def JAVAC_FLAGS(unit: ymake.Unit, *args: str):
+    if '-proc:full' in args or '-proc:only' in args:
+        ymake.report_configure_error(
+            'Usage -proc:full and -proc:only is forbidden in JAVAC_FLAGS, please, use ANNOTATION_PROCESSOR or USE_ANNOTATION_PROCESSOR macroses'
+        )
+
+
+@ymake.macro
+def ENABLE_KOTLIN_ABI_JAR(unit: ymake.Unit):
+    if not unit.enabled('WITH_KOTLIN_VALUE'):
+        ymake.report_configure_error('ENABLE_KOTLIN_ABI_JAR requires WITH_KOTLIN')
+        return
+
+    version = unit.get('_KOTLIN_VERSION')
+    try:
+        parsed_version = tuple(int(component) for component in version.split('.'))
+    except (AttributeError, ValueError):
+        ymake.report_configure_error(
+            'ENABLE_KOTLIN_ABI_JAR requires a numeric Kotlin version; found {}'.format(version or '<empty>')
+        )
+        return
+
+    if parsed_version < (2, 3, 10):
+        ymake.report_configure_error('ENABLE_KOTLIN_ABI_JAR requires Kotlin 2.3.10 or newer; found {}'.format(version))

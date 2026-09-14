@@ -140,6 +140,10 @@ message TVolumeConfig {
 
     // Mount requests with incorrect FillGeneration will be rejected unless filling is finished.
     optional uint64 FillGeneration = 51;
+
+    // Enables discard (ZeroBlocks) requests for the volume.
+    // If this flag is set, it should never be unset anymore!
+    optional bool VhostDiscardEnabled = 52;
 }
 
 message TUpdateVolumeConfig {

@@ -14,6 +14,7 @@
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 #include <atomic>
+#include <utility>
 
 namespace NYT {
 
@@ -87,6 +88,8 @@ public:
 
     TIntrusiveListWithAutoDelete<TItem, TDelete> TrimNoDelete();
 
+    bool IsOversized(i64 weight, i64 cookieWeight) const;
+
     bool TouchItem(TItem* item);
 
     //! Drains touch buffer. You MUST call this function before trying to remove anything from the
@@ -116,18 +119,18 @@ protected:
     void OnCookieUpdated(i64 deltaCount, i64 deltaWeight);
 
 private:
-    TIntrusiveListWithAutoDelete<TItem, TDelete> YoungerLruList;
-    TIntrusiveListWithAutoDelete<TItem, TDelete> OlderLruList;
+    TIntrusiveListWithAutoDelete<TItem, TDelete> YoungerLruList_;
+    TIntrusiveListWithAutoDelete<TItem, TDelete> OlderLruList_;
 
-    std::vector<TItem*> TouchBuffer;
-    std::atomic<int> TouchBufferPosition = 0;
+    std::vector<TItem*> TouchBuffer_;
+    std::atomic<int> TouchBufferPosition_ = 0;
 
-    i64 YoungerWeightCounter = 0;
-    i64 OlderWeightCounter = 0;
-    i64 CookieWeightCounter = 0;
+    i64 YoungerWeightCounter_ = 0;
+    i64 OlderWeightCounter_ = 0;
+    i64 CookieWeightCounter_ = 0;
 
-    std::atomic<i64> Capacity;
-    std::atomic<double> YoungerSizeFraction;
+    std::atomic<i64> Capacity_;
+    std::atomic<double> YoungerSizeFraction_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -146,6 +149,9 @@ private:
 //! pointer to this value), it returns back to the cache. This behavior may be overloaded by
 //! overriding IsResurrectionSupported() function.
 //!
+//! When oversized-item rejection is enabled, a value that cannot survive cache trimming is not
+//! admitted or resurrected. It is still returned to the caller or delivered to concurrent waiters.
+//!
 //! This cache is quite complex and has many invariants. Read about them below and change the
 //! code carefully.
 template <class TKey, class TValue, class THash = THash<TKey>>
@@ -162,12 +168,12 @@ public:
     public:
         TInsertCookie() = default;
         explicit TInsertCookie(const TKey& key);
-        TInsertCookie(TInsertCookie&& other);
+        TInsertCookie(TInsertCookie&& other) noexcept;
         TInsertCookie(const TInsertCookie& other) = delete;
         ~TInsertCookie();
 
-        TInsertCookie& operator = (TInsertCookie&& other);
-        TInsertCookie& operator = (const TInsertCookie& other) = delete;
+        TInsertCookie& operator=(TInsertCookie&& other) noexcept;
+        TInsertCookie& operator=(const TInsertCookie& other) = delete;
 
         const TKey& GetKey() const;
         TValueFuture GetValue() const;
@@ -176,6 +182,7 @@ public:
         void UpdateWeight(i64 newWeight);
 
         void Cancel(const TError& error);
+
         void EndInsert(TValuePtr value);
 
     private:
@@ -209,7 +216,11 @@ public:
     std::vector<TValuePtr> GetAll();
 
     TValuePtr Find(const TKey& key);
+    template <class THeterogenousKey>
+    TValuePtr Find(const THeterogenousKey& key);
     TValueFuture Lookup(const TKey& key);
+    template <class THeterogenousKey>
+    TValueFuture Lookup(const THeterogenousKey& key);
     void Touch(const TValuePtr& value);
 
     TInsertCookie BeginInsert(const TKey& key, i64 cookieWeight = 0);
@@ -268,9 +279,14 @@ protected:
         NProfiling::TCounter SyncHitCounter;
         NProfiling::TCounter AsyncHitCounter;
         NProfiling::TCounter MissedCounter;
+        NProfiling::TCounter RejectedOversizedCounter;
+        NProfiling::TCounter RejectedOversizedWeightCounter;
+        NProfiling::TCounter EvictedCounter;
+        NProfiling::TCounter EvictedWeightCounter;
     };
 
     //! For testing purposes only.
+    const TCounters& GetMainCounters() const;
     const TCounters& GetSmallGhostCounters() const;
     const TCounters& GetLargeGhostCounters() const;
 
@@ -297,9 +313,7 @@ private:
     struct TGhostItem
         : public TIntrusiveListItem<TGhostItem>
     {
-        explicit TGhostItem(TKey key)
-            : Key(std::move(key))
-        { }
+        explicit TGhostItem(TKey key);
 
         TKey Key;
         //! The value associated with this item. If Inserted == true and Value is null, then we refer to some
@@ -339,15 +353,17 @@ private:
     public:
         using TValuePtr = TIntrusivePtr<TValue>;
 
-        void Find(const TKey& key);
-        void Lookup(const TKey& key);
+        template <class THeterogenousKey>
+        void Find(const THeterogenousKey& key);
+        template <class THeterogenousKey>
+        void Lookup(const THeterogenousKey& key);
         void Touch(const TValuePtr& value);
 
         //! If BeginInsert() returns true, then it must be paired with either CancelInsert() or EndInsert()
         //! called with the same key. Do not call CancelInsert() or EndInsert() without matching BeginInsert().
         bool BeginInsert(const TKey& key, i64 cookieWeight);
         void CancelInsert(const TKey& key);
-        void EndInsert(const TValuePtr& value, i64 weight);
+        void EndInsert(TValuePtr value, i64 weight);
 
         //! Inserts the value back to the cache immediately. Called when the value is resurected in the
         //! main cache.
@@ -363,18 +379,20 @@ private:
 
         using TAsyncSlruCacheListManager<TGhostItem, TGhostShard>::SetTouchBufferCapacity;
 
-        void Reconfigure(i64 capacity, double youngerSizeFraction);
+        void Reconfigure(i64 capacity, double youngerSizeFraction, bool rejectOversizedItems);
 
         DEFINE_BYVAL_RW_PROPERTY(TCounters*, Counters);
 
     private:
         friend class TAsyncSlruCacheListManager<TGhostItem, TGhostShard>;
 
-        YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock);
+        YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
 
         THashMap<TKey, TGhostItem*, THash> ItemMap_;
+        bool RejectOversizedItems_ = false;
 
-        bool DoLookup(const TKey& key, bool allowAsyncHits);
+        template <class THeterogenousKey>
+        bool DoLookup(const THeterogenousKey& key, bool allowAsyncHits);
         void Trim(NThreading::TWriterGuard<NThreading::TReaderWriterSpinLock>& guard);
     };
 
@@ -398,7 +416,7 @@ private:
     //! 4. Destroying. The refcount of the value reached zero. It's not present in ItemMap and the lists, but is
     //!    still present in ValueMap. It's not allowed to return such value into the cache, and its state can be
     //!    only changed to Destroyed. To distinguish between Ready for Resurrection and Destroying, one may use
-    //!    DangerousGetPtr() on the pointer from ValueMap. If it returned null, then the state is Destroying.
+    //!    Lock() on the pointer from ValueMap. If it returned null, then the state is Destroying.
     //! 5. Destroyed. The value and its corresponding item are freed and are not present anywhere.
     class TShard
         : public TAsyncSlruCacheListManager<TItem, TShard>
@@ -409,7 +427,7 @@ private:
         //! Holds pointers to values for any given key. They are stored to allow resurrection. When the value
         //! is freed, it will be removed from ValueMap. When the value is in Destroying state, the value will still
         //! reside in ValueMap, you need to be careful with it.
-        THashMap<TKey, TValue*, THash> ValueMap;
+        THashMap<TKey, TWeakPtr<TValue>, THash> ValueMap;
 
         //! Holds pointers to items in the lists for any given key.
         THashMap<TKey, TItem*, THash> ItemMap;
@@ -420,7 +438,7 @@ private:
         TGhostShard LargeGhost;
 
         //! Returns the list of evicted items.
-        std::vector<TValuePtr> Trim(const TIntrusiveListWithAutoDelete<TItem, TDelete>& evictedItems);
+        std::vector<TValuePtr> Trim(TIntrusiveListWithAutoDelete<TItem, TDelete>&& evictedItems);
 
     protected:
         void OnYoungerUpdated(i64 deltaCount, i64 deltaWeight);
@@ -437,7 +455,7 @@ private:
     std::atomic<int> Size_ = 0;
     std::atomic<i64> Capacity_;
 
-    TCounters Counters_;
+    TCounters MainCounters_;
     TCounters SmallGhostCounters_;
     TCounters LargeGhostCounters_;
 
@@ -450,10 +468,15 @@ private:
     std::atomic<i64> CookieWeightCounter_ = 0;
 
     std::atomic<bool> GhostCachesEnabled_;
+    std::atomic<bool> RejectOversizedItems_;
 
-    TShard* GetShardByKey(const TKey& key) const;
+    template <class THeterogenousKey>
+    TShard* GetShardByKey(const THeterogenousKey& key) const;
 
-    TValueFuture DoLookup(TShard* shard, const TKey& key);
+    //! Returns the value future and indicates whether the value was found in ValueMap
+    //! and needs to be resurrected in ghost caches.
+    template <class THeterogenousKey>
+    std::pair<TValueFuture, bool> DoLookup(TShard* shard, const THeterogenousKey& key);
 
     void DoTryRemove(const TKey& key, const TValuePtr& value, bool forbidResurrection);
 

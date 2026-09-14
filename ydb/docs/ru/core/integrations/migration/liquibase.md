@@ -105,7 +105,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 - xml
 
   ```xml
-  <createIndex tableName="episodes" indexName="episodes_index" unique="false">
+  <createIndex tableName="episodes" indexName="episodes_index">
       <column name="title"/>
   </createIndex>
   ```
@@ -118,7 +118,6 @@ Changeset `createTable` отвечает за создание таблицы. �
         "createIndex": {
           "tableName": "episodes",
           "indexName": "episodes_index",
-          "unique": "false",
           "columns": {
             "column": {
               "name": "title"
@@ -135,7 +134,6 @@ Changeset `createTable` отвечает за создание таблицы. �
   - createIndex:
       tableName: episodes
       indexName: episodes_index
-      unique: false
       columns:
       - column:
           name: title
@@ -293,7 +291,7 @@ Changeset `createTable` отвечает за создание таблицы. �
 | `Interval`                              | [ISO-8601](https://en.wikipedia.org/wiki/ISO_8601#Durations), соответствует классу `java.time.Duration` в Java.                                                                                                                                           |
 | `Date`                                  | Шаблон `YYYY-MM-DD` календарной даты из стандарта [ISO-8601](https://ru.wikipedia.org/wiki/ISO_8601)                                                                                                                                                      |
 | `Datetime`                              | Шаблон `YYYY-MM-DDThh:mm:ss`, timezone будет установлена `UTC`                                                                                                                                                                                            |
-| `Timestamp`                             | Временная метка из стандарта [ISO-8601](https://ru.wikipedia.org/wiki/ISO_8601) соответствует классу `java.time.Instant` в Java, timezone будет установлена `UTC` (точность в микросекундах - ограничение типа данных `Timestamp` в {{ ydb-short-name }}) |                                                                               |
+| `Timestamp`                             | Временная метка из стандарта [ISO-8601](https://ru.wikipedia.org/wiki/ISO_8601) соответствует классу `java.time.Instant` в Java, timezone будет установлена `UTC` (точность в микросекундах - ограничение типа данных `Timestamp` в {{ ydb-short-name }}) |
 
 Пример `CSV` файла:
 
@@ -304,7 +302,7 @@ id,bool,bigint,smallint,tinyint,float,double,decimal,uint8,uint16,uint32,uint64,
 
 {% note warning %}
 
-Чтобы понять, какие SQL-конструкции может выполнять {{ ydb-short-name }} и какие существуют ограничения на типы данных, ознакомьтесь с документацией по языку запросов [YQL](](../../yql/reference/index.md)).
+Чтобы понять, какие SQL-конструкции может выполнять {{ ydb-short-name }} и какие существуют ограничения на типы данных, ознакомьтесь с документацией по языку запросов [YQL](../../yql/reference/index.md).
 
 {% endnote %}
 
@@ -389,7 +387,7 @@ url=jdbc:ydb:grpc://localhost:2136/local
         </rollback>
     </changeSet>
     <changeSet id="index_episodes_title" author="kurdyukov-kir">
-        <createIndex tableName="episodes" indexName="index_episodes_title" unique="false">
+        <createIndex tableName="episodes" indexName="index_episodes_title">
             <column name="title"/>
         </createIndex>
     </changeSet>
@@ -420,8 +418,8 @@ Liquibase command 'update' was executed successfully.
 
 | AUTHOR        | COMMENTS        | CONTEXTS | DATEEXECUTED | DEPLOYMENT_ID | DESCRIPTION                                                    | EXECTYPE | FILENAME               | ID                   | LABELS | LIQUIBASE | MD5SUM                             | ORDEREXECUTED | TAG |
 |:--------------|:----------------|:---------|:-------------|:--------------|:---------------------------------------------------------------|:---------|:-----------------------|:---------------------|:-------|:----------|:-----------------------------------|:--------------|:----|
-| kurdyukov-kir | Table episodes. |          | 12:53:27     | 1544007500    | createTable tableName=episodes                                 | EXECUTED | migration/episodes.xml | episodes             |        | 4.25.1    | 9:4067056a5ab61db09b379a93625870ca | 1             |
-| kurdyukov-kir | ""              |          | 12:53:28     | 1544007500    | createIndex indexName=index_episodes_title, tableName=episodes | EXECUTED | migration/episodes.xml | index_episodes_title |        | 4.25.1    | 9:49b8b0b22d18c7fd90a3d6b2c561455d | 2             |
+| kurdyukov-kir | Table episodes. |          | 12:53:27     | 1544007500    | createTable tableName=episodes                                 | EXECUTED | migration/episodes.xml | episodes             |        | 4.25.1    | 9:4067056a5ab61db09b379a93625870ca | 1             | |
+| kurdyukov-kir | ""              |          | 12:53:28     | 1544007500    | createIndex indexName=index_episodes_title, tableName=episodes | EXECUTED | migration/episodes.xml | index_episodes_title |        | 4.25.1    | 9:49b8b0b22d18c7fd90a3d6b2c561455d | 2             | |
 
 ### Эволюция схемы базы данных
 

@@ -3,6 +3,7 @@ items:
 - { name: Лексическая структура,        href: lexer.md }
 - { name: Выражения,                    href: expressions.md }
 - { name: ACTION,                       href: action.md }
+- { name: COMBINE,                      href: combine.md }
 - { name: COMMIT,                       href: commit.md }
 - { name: DECLARE,                      href: declare.md }
 - { name: DISCARD,                      href: discard.md }
@@ -12,7 +13,7 @@ items:
 - { name: INSERT,                       href: insert_into.md }
 - { name: INTO RESULT,                  href: into_result.md }
 - { name: JOIN,                         href: join.md }
-- { name: PRAGMA,                       href: pragma.md }
+- { name: PRAGMA,                       include: { mode: link, path: pragma/toc_p.yaml } }
 - { name: PROCESS,                      href: process.md }
 - { name: REDUCE,                       href: reduce.md }
 - { name: SELECT,                       include: { mode: link, path: select/toc_p.yaml } }
@@ -20,4 +21,5 @@ items:
 - { name: USE,                          href: use.md }
 - { name: VALUES,                       href: values.md }
 - { name: WINDOW,                       href: window.md }
+- { name: MATERIALIZE,                  href: materialize.md }
 - { name: Неподдерживаемые конструкции, href: not_yet_supported.md }

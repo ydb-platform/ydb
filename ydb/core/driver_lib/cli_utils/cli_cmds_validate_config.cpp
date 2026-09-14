@@ -12,6 +12,7 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args) {
     auto memLogInit = NConfig::MakeNoopMemLogInitializer();
     auto nodeBrokerClient = NConfig::MakeNoopNodeBrokerClient();
     auto dynConfigClient = NConfig::MakeNoopDynConfigClient();
+    auto configClient = NConfig::MakeNoopConfigClient();
     auto env = NConfig::MakeDefaultEnv();
     auto logger = NConfig::MakeNoopInitLogger();
 
@@ -22,6 +23,7 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args) {
         *memLogInit,
         *nodeBrokerClient,
         *dynConfigClient,
+        *configClient,
         *env,
         *logger,
     };
@@ -41,13 +43,14 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args) {
     NLastGetopt::TOptsParseResult parseResult(&opts, argv.size(), argv.data());
 
     initCfg->ValidateOptions(opts, parseResult);
-    initCfg->Parse(parseResult.GetFreeArgs());
+    initCfg->Parse(parseResult.GetFreeArgs(), nullptr);
 
     NKikimrConfig::TAppConfig appConfig;
     ui32 nodeId;
     TKikimrScopeId scopeId;
     TString tenantName;
     TBasicKikimrServicesMask servicesMask;
+    bool tinyMode;
     TString clusterName;
     NConfig::TConfigsDispatcherInitInfo configsDispatcherInitInfo;
 
@@ -57,8 +60,11 @@ NKikimrConfig::TAppConfig TransformConfig(const std::vector<TString>& args) {
         scopeId,
         tenantName,
         servicesMask,
+        tinyMode,
         clusterName,
         configsDispatcherInitInfo);
+
+    Y_UNUSED(tinyMode);
 
     return appConfig;
 }

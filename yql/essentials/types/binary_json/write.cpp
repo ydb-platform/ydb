@@ -1,18 +1,15 @@
 #include "write.h"
 
-#include <contrib/libs/simdjson/include/simdjson/dom/array-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/document-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
-#include <contrib/libs/simdjson/include/simdjson/ondemand.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <contrib/libs/simdjson/include/simdjson.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/json/json_reader.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/generic/stack.h>
 #include <util/generic/vector.h>
+#include <yql/essentials/minikql/dom/node.h>
+#include <yql/essentials/utils/parse_double.h>
 
 #include <cmath>
 
@@ -43,7 +40,7 @@ using namespace NYql::NDom;
 namespace {
 
 struct TContainer {
-    TContainer(EContainerType type)
+    explicit TContainer(EContainerType type)
         : Type(type)
     {
     }
@@ -182,8 +179,8 @@ struct TPODWriter {
  */
 class TBinaryJsonSerializer {
 public:
-    TBinaryJsonSerializer(TJsonIndex&& json)
-        : Json(std::move(json))
+    explicit TBinaryJsonSerializer(TJsonIndex&& json)
+        : Json_(std::move(json))
     {
     }
 
@@ -206,20 +203,20 @@ public:
         // Header consists only of THeader
         const ui32 headerSize = sizeof(THeader);
         // Each container consists of 1 TMeta and multiple TEntry. Objects also have multiple TKeyEntry
-        const ui32 keysSize = Json.TotalKeysCount * sizeof(TKeyEntry);
-        const ui32 entriesSize = (Json.TotalEntriesCount - Json.TotalKeysCount) * sizeof(TEntry);
-        const ui32 treeSize = Json.Containers.size() * sizeof(TMeta) + entriesSize + keysSize;
+        const ui32 keysSize = Json_.TotalKeysCount * sizeof(TKeyEntry);
+        const ui32 entriesSize = (Json_.TotalEntriesCount - Json_.TotalKeysCount) * sizeof(TEntry);
+        const ui32 treeSize = Json_.Containers.size() * sizeof(TMeta) + entriesSize + keysSize;
 
         // String index consists of Count and TSEntry/string body pair for each string
-        const ui32 stringIndexSize = sizeof(ui32) + (Json.Strings.size() + Json.Keys.size()) * sizeof(TSEntry) + (Json.TotalStringLength + Json.TotalKeyLength);
+        const ui32 stringIndexSize = sizeof(ui32) + (Json_.Strings.size() + Json_.Keys.size()) * sizeof(TSEntry) + (Json_.TotalStringLength + Json_.TotalKeyLength);
         // Number index consists of multiple doubles
-        const ui32 numberIndexSize = Json.Numbers.size() * sizeof(double);
+        const ui32 numberIndexSize = Json_.Numbers.size() * sizeof(double);
 
         // Allocate space for all sections
         const ui32 totalSize = headerSize + treeSize + stringIndexSize + numberIndexSize;
-        Buffer.Advance(totalSize);
+        Buffer_.Advance(totalSize);
 
-        TPODWriter writer(Buffer, 0);
+        TPODWriter writer(Buffer_, 0);
 
         // Write Header
         const ui32 stringIndexStart = headerSize + treeSize;
@@ -239,7 +236,7 @@ public:
         // Write Tree
         WriteContainer(treeWriter, 0);
 
-        return std::move(Buffer);
+        return std::move(Buffer_);
     }
 
 private:
@@ -247,8 +244,8 @@ private:
      * @brief Writes container and all its children recursively
      */
     void WriteContainer(TPODWriter& valueWriter, ui32 index) {
-        Y_DEBUG_ABORT_UNLESS(index < Json.Containers.size());
-        const auto& container = Json.Containers[index];
+        Y_DEBUG_ABORT_UNLESS(index < Json_.Containers.size());
+        const auto& container = Json_.Containers[index];
 
         switch (container.Type) {
             case EContainerType::Array:
@@ -299,7 +296,7 @@ private:
         keyValuePairs.reserve(size);
         for (ui32 i = 0; i < entriesCount; i += 2) {
             const auto keyIndex = container.Header[i].Value;
-            const auto keyOffset = StringOffsets[keyIndex];
+            const auto keyOffset = StringOffsets_[keyIndex];
             const auto& value = container.Header[i + 1];
             keyValuePairs.emplace_back(TKeyEntry(keyOffset), value);
         }
@@ -330,10 +327,10 @@ private:
             WriteContainer(valueWriter, childIndex);
         } else if (entry.Type == EEntryType::String) {
             const ui32 stringIndex = entry.Value;
-            result.Value = StringOffsets[stringIndex];
+            result.Value = StringOffsets_[stringIndex];
         } else if (entry.Type == EEntryType::Number) {
             const ui32 numberIndex = entry.Value;
-            result.Value = NumberOffsets[numberIndex];
+            result.Value = NumberOffsets_[numberIndex];
         }
 
         entryWriter.Write(result);
@@ -348,20 +345,20 @@ private:
      *  +----------------+----------+-----+--------------+---------+-----+-------------+
      */
     void WriteStringIndex(TPODWriter& writer) {
-        const ui32 stringCount = Json.Keys.size() + Json.Strings.size();
+        const ui32 stringCount = Json_.Keys.size() + Json_.Strings.size();
         writer.Write(stringCount);
 
         TPODWriter entryWriter(writer);
         writer.Skip<TSEntry>(stringCount);
 
         // Write SData and SEntry for each string
-        StringOffsets.resize(stringCount);
+        StringOffsets_.resize(stringCount);
 
-        for (const auto& it : Json.Keys) {
+        for (const auto& it : Json_.Keys) {
             const auto& currentString = it.first;
             const auto currentIndex = it.second;
 
-            StringOffsets[currentIndex] = entryWriter.Offset;
+            StringOffsets_[currentIndex] = entryWriter.Offset;
 
             // Append SData to the end of the buffer
             writer.Write(currentString.data(), currentString.length());
@@ -371,11 +368,11 @@ private:
             entryWriter.Write(TSEntry(EStringType::RawNullTerminated, writer.Offset));
         }
 
-        for (const auto& it : Json.Strings) {
+        for (const auto& it : Json_.Strings) {
             const auto& currentString = it.first;
             const auto currentIndex = it.second;
 
-            StringOffsets[currentIndex] = entryWriter.Offset;
+            StringOffsets_[currentIndex] = entryWriter.Offset;
 
             // Append SData to the end of the buffer
             writer.Write(currentString.data(), currentString.length());
@@ -395,33 +392,34 @@ private:
      *  +----------+-----+----------+
      */
     void WriteNumberIndex(TPODWriter& writer) {
-        const ui32 numberCount = Json.Numbers.size();
+        const ui32 numberCount = Json_.Numbers.size();
 
-        NumberOffsets.resize(numberCount);
-        for (const auto it : Json.Numbers) {
-            NumberOffsets[it.second] = writer.Offset;
+        NumberOffsets_.resize(numberCount);
+        for (const auto it : Json_.Numbers) {
+            NumberOffsets_[it.second] = writer.Offset;
             writer.Write(it.first);
         }
     }
 
-    TJsonIndex Json;
-    TBinaryJson Buffer;
-    TVector<ui32> StringOffsets;
-    TVector<ui32> NumberOffsets;
+    TJsonIndex Json_;
+    TBinaryJson Buffer_;
+    TVector<ui32> StringOffsets_;
+    TVector<ui32> NumberOffsets_;
 };
 
 /**
  * @brief Callbacks for textual JSON parser. Essentially wrapper around TJsonIndex methods
  */
-class TBinaryJsonCallbacks : public TJsonCallbacks {
+class TBinaryJsonCallbacks: public TJsonCallbacks {
 public:
-    TBinaryJsonCallbacks(bool throwException)
+    TBinaryJsonCallbacks(bool throwException, bool allowInf)
         : TJsonCallbacks(/* throwException */ throwException)
+        , AllowInf_(allowInf)
     {
     }
 
     bool OnNull() override {
-        Json.AddEntry(TEntry(EEntryType::Null), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(EEntryType::Null), /* createTopLevel */ true);
         return true;
     }
 
@@ -430,75 +428,78 @@ public:
         if (value) {
             type = EEntryType::BoolTrue;
         }
-        Json.AddEntry(TEntry(type), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(type), /* createTopLevel */ true);
         return true;
     }
 
     bool OnInteger(long long value) override {
-        Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(static_cast<double>(value))), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(EEntryType::Number, Json_.InternNumber(static_cast<double>(value))), /* createTopLevel */ true);
         return true;
     }
 
     bool OnUInteger(unsigned long long value) override {
-        Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(static_cast<double>(value))), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(EEntryType::Number, Json_.InternNumber(static_cast<double>(value))), /* createTopLevel */ true);
         return true;
     }
 
     bool OnDouble(double value) override {
-        if (Y_UNLIKELY(std::isinf(value))) {
+        if (Y_UNLIKELY(std::isinf(value) && !AllowInf_)) {
             if (ThrowException) {
                 ythrow yexception() << "JSON number is infinite";
             } else {
                 return false;
             }
         }
-        Json.AddEntry(TEntry(EEntryType::Number, Json.InternNumber(value)), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(EEntryType::Number, Json_.InternNumber(value)), /* createTopLevel */ true);
         return true;
     }
 
     bool OnString(const TStringBuf& value) override {
-        Json.AddEntry(TEntry(EEntryType::String, Json.InternString(value)), /* createTopLevel */ true);
+        Json_.AddEntry(TEntry(EEntryType::String, Json_.InternString(value)), /* createTopLevel */ true);
         return true;
     }
 
     bool OnOpenMap() override {
-        Json.AddContainer(EContainerType::Object);
+        Json_.AddContainer(EContainerType::Object);
         return true;
     }
 
     bool OnMapKey(const TStringBuf& value) override {
-        Json.AddEntry(TEntry(EEntryType::String, Json.InternKey(value)));
+        Json_.AddEntry(TEntry(EEntryType::String, Json_.InternKey(value)));
         return true;
     }
 
     bool OnCloseMap() override {
-        Json.RemoveContainer();
+        Json_.RemoveContainer();
         return true;
     }
 
     bool OnOpenArray() override {
-        Json.AddContainer(EContainerType::Array);
+        Json_.AddContainer(EContainerType::Array);
         return true;
     }
 
     bool OnCloseArray() override {
-        Json.RemoveContainer();
+        Json_.RemoveContainer();
         return true;
     }
 
     TJsonIndex GetResult() && {
-        return std::move(Json);
+        return std::move(Json_);
     }
 
 private:
-    TJsonIndex Json;
+    TJsonIndex Json_;
+    bool AllowInf_;
 };
 
 void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& callbacks) {
     switch (GetNodeType(value)) {
-        case ENodeType::String:
-            callbacks.OnString(value.AsStringRef());
+        case ENodeType::String: {
+            auto cleanValue = ClearUtf8Mark(value);
+            callbacks.OnString(cleanValue.AsStringRef());
             break;
+        }
         case ENodeType::Bool:
             callbacks.OnBoolean(value.Get<bool>());
             break;
@@ -537,7 +538,8 @@ void DomToJsonIndex(const NUdf::TUnboxedValue& value, TBinaryJsonCallbacks& call
                 TUnboxedValue key;
                 TUnboxedValue value;
                 while (it.NextPair(key, value)) {
-                    callbacks.OnMapKey(key.AsStringRef());
+                    auto cleanKey = ClearUtf8Mark(key);
+                    callbacks.OnMapKey(cleanKey.AsStringRef());
                     DomToJsonIndex(value, callbacks);
                 }
             }
@@ -573,8 +575,14 @@ template <typename TOnDemandValue>
             switch (value.get_number_type()) {
                 case simdjson::builtin::number_type::floating_point_number: {
                     double v;
-                    RETURN_IF_NOT_SUCCESS(value.get(v));
-                    callbacks.OnDouble(v);
+                    if (const auto& error = value.get(v); Y_UNLIKELY(error != simdjson::SUCCESS)) {
+                        if (!NYql::TryDoubleFromString((std::string_view)value.raw_json_token(), v)) {
+                            return error;
+                        }
+                    };
+                    if (Y_UNLIKELY(!callbacks.OnDouble(v))) {
+                        return simdjson::error_code::NUMBER_ERROR;
+                    }
                     break;
                 }
                 case simdjson::builtin::number_type::signed_integer: {
@@ -592,7 +600,9 @@ template <typename TOnDemandValue>
                 case simdjson::builtin::number_type::big_integer:
                     double v;
                     RETURN_IF_NOT_SUCCESS(value.get(v));
-                    callbacks.OnDouble(v);
+                    if (Y_UNLIKELY(!callbacks.OnDouble(v))) {
+                        return simdjson::error_code::NUMBER_ERROR;
+                    }
                     break;
             }
             break;
@@ -600,7 +610,7 @@ template <typename TOnDemandValue>
         case simdjson::ondemand::json_type::null: {
             auto is_null = value.is_null();
             RETURN_IF_NOT_SUCCESS(is_null.error());
-	    if (Y_UNLIKELY(!is_null.value_unsafe())) {
+            if (Y_UNLIKELY(!is_null.value_unsafe())) {
                 return simdjson::error_code::N_ATOM_ERROR;
             }
             callbacks.OnNull();
@@ -636,6 +646,8 @@ template <typename TOnDemandValue>
             callbacks.OnCloseMap();
             break;
         }
+        case simdjson::ondemand::json_type::unknown:
+            return simdjson::UNEXPECTED_ERROR;
     }
 
     return simdjson::SUCCESS;
@@ -643,81 +655,65 @@ template <typename TOnDemandValue>
 #undef RETURN_IF_NOT_SUCCESS
 }
 
-// unused, left for performance comparison
-[[maybe_unused]] [[nodiscard]] simdjson::error_code SimdJsonToJsonIndexImpl(const simdjson::dom::element& value, TBinaryJsonCallbacks& callbacks) {
-#define RETURN_IF_NOT_SUCCESS(status)              \
-    if (Y_UNLIKELY(status != simdjson::SUCCESS)) { \
-        return status;                             \
-    }
-
-    switch (value.type()) {
-        case simdjson::dom::element_type::STRING: {
-            std::string_view v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnString(v);
+void SerializeEntryCursorToBinaryJson(TBinaryJsonCallbacks& callbacks, const NBinaryJson::TEntryCursor& value) {
+    switch (value.GetType()) {
+        case NBinaryJson::EEntryType::BoolFalse:
+            callbacks.OnBoolean(false);
             break;
-        }
-        case simdjson::dom::element_type::BOOL: {
-            bool v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnBoolean(v);
+        case NBinaryJson::EEntryType::BoolTrue:
+            callbacks.OnBoolean(true);
             break;
-        }
-        case simdjson::dom::element_type::INT64: {
-            int64_t v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnInteger(v);
-            break;
-        }
-        case simdjson::dom::element_type::UINT64: {
-            uint64_t v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnUInteger(v);
-            break;
-        }
-        case simdjson::dom::element_type::DOUBLE: {
-            double v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            callbacks.OnDouble(v);
-            break;
-        }
-        case simdjson::dom::element_type::NULL_VALUE:
+        case NBinaryJson::EEntryType::Null:
             callbacks.OnNull();
             break;
-        case simdjson::dom::element_type::ARRAY: {
-            callbacks.OnOpenArray();
+        case NBinaryJson::EEntryType::String:
+            callbacks.OnString(value.GetString());
+            break;
+        case NBinaryJson::EEntryType::Number:
+            callbacks.OnDouble(value.GetNumber());
+            break;
+        case NBinaryJson::EEntryType::Container: {
+            auto container = value.GetContainer();
+            if (container.GetType() == NBinaryJson::EContainerType::Array) {
+                callbacks.OnOpenArray();
 
-            simdjson::dom::array v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            for (const auto& item : v) {
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(item, callbacks));
+                auto it = container.GetArrayIterator();
+                while (it.HasNext()) {
+                    auto value = it.Next();
+                    SerializeEntryCursorToBinaryJson(callbacks, value);
+                }
+
+                callbacks.OnCloseArray();
+
+            } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
+                callbacks.OnOpenMap();
+
+                auto it = container.GetObjectIterator();
+                while (it.HasNext()) {
+                    auto [key, value] = it.Next();
+                    if (key.GetType() != NBinaryJson::EEntryType::String) {
+                        throw yexception() << "Unexpected non-string key: " << key.GetType();
+                    }
+
+                    callbacks.OnMapKey(key.GetString());
+                    SerializeEntryCursorToBinaryJson(callbacks, value);
+                }
+
+                callbacks.OnCloseMap();
+            } else {
+                throw yexception() << "Unexpected type in container iterator: " << container.GetType();
             }
-
-            callbacks.OnCloseArray();
             break;
         }
-        case simdjson::dom::element_type::OBJECT: {
-            callbacks.OnOpenMap();
-
-            simdjson::dom::object v;
-            RETURN_IF_NOT_SUCCESS(value.get(v));
-            for (const auto& item : v) {
-                callbacks.OnMapKey(item.key);
-                RETURN_IF_NOT_SUCCESS(SimdJsonToJsonIndexImpl(item.value, callbacks));
-            }
-
-            callbacks.OnCloseMap();
-            break;
-        }
+        default:
+            throw yexception() << "Unexpected entry type: " << value.GetType();
     }
-    return simdjson::SUCCESS;
-#undef RETURN_IF_NOT_SUCCESS
 }
-}
+} // namespace
 
-std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json) {
+std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json, bool allowInf) {
     std::variant<TBinaryJson, TString> res;
-    TBinaryJsonCallbacks callbacks(/* throwException */ false);
+    TBinaryJsonCallbacks callbacks(/* throwException */ false, allowInf);
     const simdjson::padded_string paddedJson(json);
     simdjson::ondemand::parser parser;
     try {
@@ -739,15 +735,28 @@ std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf js
     return res;
 }
 
-std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json) {
-    return SerializeToBinaryJsonImpl(json);
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const TStringBuf json, bool allowInf) {
+    return SerializeToBinaryJsonImpl(json, allowInf);
 }
 
 TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {
-    TBinaryJsonCallbacks callbacks(/* throwException */ false);
+    TBinaryJsonCallbacks callbacks(/* throwException */ false, /* allowInf */ false);
     DomToJsonIndex(value, callbacks);
     TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
     return std::move(serializer).Serialize();
 }
 
+std::variant<TBinaryJson, TString> SerializeToBinaryJson(const NBinaryJson::TEntryCursor& value) {
+    TBinaryJsonCallbacks callbacks(/* throwException */ true, /* allowInf */ false);
+
+    try {
+        SerializeEntryCursorToBinaryJson(callbacks, value);
+    } catch (const yexception& ex) {
+        return TString(ex.what());
+    }
+
+    TBinaryJsonSerializer serializer(std::move(callbacks).GetResult());
+    return std::move(serializer).Serialize();
 }
+
+} // namespace NKikimr::NBinaryJson

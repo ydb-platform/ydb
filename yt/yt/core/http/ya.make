@@ -27,7 +27,7 @@ ENDIF()
 
 PEERDIR(
     yt/yt/core
-    contrib/restricted/http-parser
+    contrib/deprecated/http-parser
 )
 
 END()

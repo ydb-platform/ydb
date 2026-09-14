@@ -6,7 +6,7 @@
 #include <yql/essentials/providers/common/transform/yql_exec.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <util/generic/ptr.h>
 

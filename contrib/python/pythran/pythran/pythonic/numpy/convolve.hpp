@@ -13,8 +13,8 @@ namespace numpy
 {
 
   template <class A, class B, typename U>
-  types::ndarray<typename A::dtype, types::pshape<long>>
-  convolve(A const &inA, B const &inB, U type)
+  types::ndarray<typename A::dtype, types::pshape<long>> convolve(A const &inA, B const &inB,
+                                                                  U type)
   {
     auto inB_flipped = functor::flip{}(inB, 0);
     auto inB_flip_conj = functor::conjugate{}(inB_flipped);
@@ -22,8 +22,7 @@ namespace numpy
   }
 
   template <class A, class B>
-  types::ndarray<typename A::dtype, types::pshape<long>> convolve(A const &inA,
-                                                                  B const &inB)
+  types::ndarray<typename A::dtype, types::pshape<long>> convolve(A const &inA, B const &inB)
   {
     auto inB_flipped = functor::flip{}(inB, 0);
     auto inB_flip_conj = functor::conjugate{}(inB_flipped);

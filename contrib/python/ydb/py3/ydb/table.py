@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import abc
+from dataclasses import dataclass
 import ydb
 from abc import abstractmethod
 import logging
@@ -9,10 +10,17 @@ import typing
 from typing import (
     Any,
     Dict,
+    Generic,
     List,
     Optional,
     Tuple,
+    TYPE_CHECKING,
 )
+
+from ._typing import DriverT
+
+if TYPE_CHECKING:
+    from .driver import Driver as SyncDriver
 
 from . import (
     issues,
@@ -40,7 +48,7 @@ from .retries import (
 try:
     from . import interceptor
 except ImportError:
-    interceptor = None
+    interceptor = None  # type: ignore[assignment]
 
 _default_allow_split_transaction = False
 
@@ -327,6 +335,20 @@ class TableIndex(object):
         return self._pb
 
 
+@dataclass
+class RenameIndexItem:
+    source_name: str
+    destination_name: str
+    replace_destination: bool = False
+
+    def to_pb(self):
+        return _apis.ydb_table.RenameIndexItem(
+            source_name=self.source_name,
+            destination_name=self.destination_name,
+            replace_destination=self.replace_destination,
+        )
+
+
 class ReplicationPolicy(object):
     def __init__(self):
         self._pb = _apis.ydb_table.ReplicationPolicy()
@@ -545,6 +567,9 @@ class TableStats(object):
     def __init__(self):
         self.partitions = None
         self.store_size = 0
+        self.rows_estimate = 0
+        self.creation_time = None
+        self.modification_time = None
 
     def with_store_size(self, store_size):
         self.store_size = store_size
@@ -552,6 +577,18 @@ class TableStats(object):
 
     def with_partitions(self, partitions):
         self.partitions = partitions
+        return self
+
+    def with_rows_estimate(self, rows_estimate):
+        self.rows_estimate = rows_estimate
+        return self
+
+    def with_creation_time(self, creation_time):
+        self.creation_time = creation_time
+        return self
+
+    def with_modification_time(self, modification_time):
+        self.modification_time = modification_time
         return self
 
 
@@ -1016,6 +1053,7 @@ class ISession(abc.ABC):
         row_limit=None,
         settings=None,
         use_snapshot=None,
+        return_not_null_data_as_optional=None,
     ):
         """
         Perform an read table request.
@@ -1064,7 +1102,7 @@ class ISession(abc.ABC):
     @abstractmethod
     def explain(self, yql_text, settings=None):
         """
-        Expiremental API.
+        Experimental API.
 
         :param yql_text:
         :param settings:
@@ -1109,6 +1147,7 @@ class ISession(abc.ABC):
         alter_partitioning_settings=None,
         set_key_bloom_filter=None,
         set_read_replicas_settings=None,
+        rename_indexes=None,
     ):
         pass
 
@@ -1157,9 +1196,10 @@ class ITableClient(abc.ABC):
         pass
 
 
-class BaseTableClient(ITableClient):
-    def __init__(self, driver, table_client_settings=None):
-        # type:(ydb.Driver, ydb.TableClientSettings) -> None
+class BaseTableClient(ITableClient, Generic[DriverT]):
+    _driver: DriverT
+
+    def __init__(self, driver: DriverT, table_client_settings: Optional[TableClientSettings] = None) -> None:
         self._driver = driver
         self._table_client_settings = TableClientSettings() if table_client_settings is None else table_client_settings
 
@@ -1168,7 +1208,7 @@ class BaseTableClient(ITableClient):
         return Session(self._driver, self._table_client_settings)
 
     def scan_query(self, query, parameters=None, settings=None):
-        # type: (ydb.ScanQuery, tuple, ydb.BaseRequestSettings) -> ydb.SyncResponseIterator
+        # type: (ydb.ScanQuery, tuple, ydb.BaseRequestSettings) -> _utilities.SyncResponseIterator
         request = _scan_query_request_factory(query, parameters, settings)
         stream_it = self._driver(
             request,
@@ -1182,7 +1222,7 @@ class BaseTableClient(ITableClient):
         )
 
     def bulk_upsert(self, table_path, rows, column_types, settings=None):
-        # type: (str, list, ydb.AbstractTypeBuilder | ydb.PrimitiveType, ydb.BaseRequestSettings) -> None
+        # type: (str, list, typing.Union[ydb.AbstractTypeBuilder, ydb.PrimitiveType], ydb.BaseRequestSettings) -> Any
         """
         Bulk upsert data
 
@@ -1200,10 +1240,28 @@ class BaseTableClient(ITableClient):
             (),
         )
 
+    def describe_system_view(self, path, settings=None):
+        # type: (str, ydb.BaseRequestSettings) -> Any
+        """
+        Returns a full description of a system view by the provided path.
 
-class TableClient(BaseTableClient):
-    def __init__(self, driver, table_client_settings=None):
-        # type:(ydb.Driver, ydb.TableClientSettings) -> None
+        :param path: A system view path
+        :param settings: A request settings
+
+        :return: SystemViewSchemeEntry describing the system view
+        """
+        return self._driver(
+            _session_impl.describe_system_view_request_factory(path, settings),
+            _apis.TableService.Stub,
+            _apis.TableService.DescribeSystemView,
+            _session_impl.wrap_describe_system_view_response,
+            settings,
+            (SystemViewSchemeEntry,),
+        )
+
+
+class TableClient(BaseTableClient["SyncDriver"]):
+    def __init__(self, driver: "SyncDriver", table_client_settings: Optional[TableClientSettings] = None) -> None:
         super().__init__(driver=driver, table_client_settings=table_client_settings)
         self._pool: Optional[SessionPool] = None
 
@@ -1211,7 +1269,7 @@ class TableClient(BaseTableClient):
         self._stop_pool_if_needed()
 
     def async_scan_query(self, query, parameters=None, settings=None):
-        # type: (ydb.ScanQuery, tuple, ydb.BaseRequestSettings) -> ydb.AsyncResponseIterator
+        # type: (ydb.ScanQuery, tuple, ydb.BaseRequestSettings) -> _utilities.AsyncResponseIterator
         request = _scan_query_request_factory(query, parameters, settings)
         stream_it = self._driver(
             request,
@@ -1226,7 +1284,7 @@ class TableClient(BaseTableClient):
 
     @_utilities.wrap_async_call_exceptions
     def async_bulk_upsert(self, table_path, rows, column_types, settings=None):
-        # type: (str, list, ydb.AbstractTypeBuilder | ydb.PrimitiveType, ydb.BaseRequestSettings) -> None
+        # type: (str, list, typing.Union[ydb.AbstractTypeBuilder, ydb.PrimitiveType], ydb.BaseRequestSettings) -> None
         return self._driver.future(
             _session_impl.bulk_upsert_request_factory(table_path, rows, column_types),
             _apis.TableService.Stub,
@@ -1236,7 +1294,18 @@ class TableClient(BaseTableClient):
             (),
         )
 
-    def _init_pool_if_needed(self):
+    @_utilities.wrap_async_call_exceptions
+    def async_describe_system_view(self, path, settings=None):
+        return self._driver.future(
+            _session_impl.describe_system_view_request_factory(path, settings),
+            _apis.TableService.Stub,
+            _apis.TableService.DescribeSystemView,
+            _session_impl.wrap_describe_system_view_response,
+            settings,
+            (SystemViewSchemeEntry,),
+        )
+
+    def _init_pool_if_needed(self) -> None:
         if self._pool is None:
             self._pool = SessionPool(self._driver, 10)
 
@@ -1254,13 +1323,14 @@ class TableClient(BaseTableClient):
         Create a YDB table.
 
         :param path: A table path
-        :param table_description: TableDescription instanse.
+        :param table_description: TableDescription instance.
         :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
 
         :return: Operation or YDB error otherwise.
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         def callee(session: Session):
             return session.create_table(path=path, table_description=table_description, settings=settings)
@@ -1282,6 +1352,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         def callee(session: Session):
             return session.drop_table(path=path, settings=settings)
@@ -1306,6 +1377,7 @@ class TableClient(BaseTableClient):
         alter_partitioning_settings: Optional["ydb.PartitioningSettings"] = None,
         set_key_bloom_filter: Optional["ydb.FeatureFlag"] = None,
         set_read_replicas_settings: Optional["ydb.ReadReplicasSettings"] = None,
+        rename_indexes: Optional[List["ydb.RenameIndexItem"]] = None,
     ) -> "ydb.Operation":
         """
         Alter a YDB table.
@@ -1325,11 +1397,13 @@ class TableClient(BaseTableClient):
         :param set_compaction_policy: Compaction policy
         :param alter_partitioning_settings: ydb.PartitioningSettings to alter
         :param set_key_bloom_filter: ydb.FeatureFlag to set key bloom filter
+        :param rename_indexes: List of ydb.RenameIndexItem to rename
 
         :return: Operation or YDB error otherwise.
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         def callee(session: Session):
             return session.alter_table(
@@ -1349,6 +1423,7 @@ class TableClient(BaseTableClient):
                 alter_partitioning_settings=alter_partitioning_settings,
                 set_key_bloom_filter=set_key_bloom_filter,
                 set_read_replicas_settings=set_read_replicas_settings,
+                rename_indexes=rename_indexes,
             )
 
         return self._pool.retry_operation_sync(callee)
@@ -1368,6 +1443,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         def callee(session: Session):
             return session.describe_table(path=path, settings=settings)
@@ -1391,6 +1467,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         def callee(session: Session):
             return session.copy_table(
@@ -1416,6 +1493,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         def callee(session: Session):
             return session.copy_tables(source_destination_pairs=source_destination_pairs, settings=settings)
@@ -1437,6 +1515,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         def callee(session: Session):
             return session.rename_tables(rename_items=rename_items, settings=settings)
@@ -1577,13 +1656,55 @@ class TableSchemeEntry(scheme.SchemeEntry):
 
         self.table_stats = None
         if table_stats is not None:
+            from ._grpc.grpcwrapper.common_utils import datetime_from_proto_timestamp
+
             self.table_stats = TableStats()
+            if table_stats.creation_time:
+                self.table_stats = self.table_stats.with_creation_time(
+                    datetime_from_proto_timestamp(table_stats.creation_time)
+                )
+
+            if table_stats.modification_time:
+                self.table_stats = self.table_stats.with_modification_time(
+                    datetime_from_proto_timestamp(table_stats.modification_time)
+                )
+
+            if table_stats.rows_estimate != 0:
+                self.table_stats = self.table_stats.with_rows_estimate(table_stats.rows_estimate)
+
             if table_stats.partitions != 0:
                 self.table_stats = self.table_stats.with_partitions(table_stats.partitions)
 
             if table_stats.store_size != 0:
                 self.table_stats = self.table_stats.with_store_size(table_stats.store_size)
 
+        self.attributes = attributes
+
+
+class SystemViewSchemeEntry(scheme.SchemeEntry):
+    def __init__(
+        self,
+        name,
+        owner,
+        type,
+        effective_permissions,
+        permissions,
+        size_bytes,
+        sys_view_id,
+        sys_view_name,
+        columns,
+        primary_key,
+        attributes,
+        *args,
+        **kwargs
+    ):
+        super(SystemViewSchemeEntry, self).__init__(
+            name, owner, type, effective_permissions, permissions, size_bytes, *args, **kwargs
+        )
+        self.sys_view_id = sys_view_id
+        self.sys_view_name = sys_view_name
+        self.columns = [Column(column.name, convert.type_to_native(column.type), column.family) for column in columns]
+        self.primary_key = [pk for pk in primary_key]
         self.attributes = attributes
 
 
@@ -1652,6 +1773,7 @@ class BaseSession(ISession):
         row_limit=None,
         settings=None,
         use_snapshot=None,
+        return_not_null_data_as_optional=None,
     ):
         """
         Perform an read table request.
@@ -1674,6 +1796,7 @@ class BaseSession(ISession):
             ordered,
             row_limit,
             use_snapshot=use_snapshot,
+            return_not_null_data_as_optional=return_not_null_data_as_optional,
         )
         stream_it = self._driver(
             request,
@@ -1761,7 +1884,7 @@ class BaseSession(ISession):
 
     def explain(self, yql_text, settings=None):
         """
-        Expiremental API.
+        Experimental API.
 
         :param yql_text:
         :param settings:
@@ -1827,6 +1950,7 @@ class BaseSession(ISession):
         alter_partitioning_settings=None,
         set_key_bloom_filter=None,
         set_read_replicas_settings=None,
+        rename_indexes=None,
     ):
         return self._driver(
             _session_impl.alter_table_request_factory(
@@ -1846,6 +1970,7 @@ class BaseSession(ISession):
                 alter_partitioning_settings,
                 set_key_bloom_filter,
                 set_read_replicas_settings,
+                rename_indexes,
             ),
             _apis.TableService.Stub,
             _apis.TableService.AlterTable,
@@ -1910,6 +2035,7 @@ class Session(BaseSession):
         row_limit=None,
         settings=None,
         use_snapshot=None,
+        return_not_null_data_as_optional=None,
     ):
         """
         Perform an read table request.
@@ -1934,6 +2060,7 @@ class Session(BaseSession):
             ordered,
             row_limit,
             use_snapshot=use_snapshot,
+            return_not_null_data_as_optional=return_not_null_data_as_optional,
         )
         stream_it = self._driver(
             request,
@@ -2058,6 +2185,7 @@ class Session(BaseSession):
         alter_partitioning_settings=None,
         set_key_bloom_filter=None,
         set_read_replicas_settings=None,
+        rename_indexes=None,
     ):
         return self._driver.future(
             _session_impl.alter_table_request_factory(
@@ -2077,6 +2205,7 @@ class Session(BaseSession):
                 alter_partitioning_settings,
                 set_key_bloom_filter,
                 set_read_replicas_settings,
+                rename_indexes,
             ),
             _apis.TableService.Stub,
             _apis.TableService.AlterTable,
@@ -2432,7 +2561,7 @@ class BaseTxContext(ITxContext):
 
     def _check_split(self, allow=""):
         """
-        Deny all operaions with transaction after commit/rollback.
+        Deny all operations with transaction after commit/rollback.
         Exception: double commit and double rollbacks, because it is safe
         """
         allow_split_transaction = (

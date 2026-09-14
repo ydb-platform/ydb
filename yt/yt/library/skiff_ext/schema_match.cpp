@@ -14,9 +14,10 @@ using namespace NSkiff;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString KeySwitchColumnName = "$key_switch";
-const TString OtherColumnsName = "$other_columns";
-const TString SparseColumnsName = "$sparse_columns";
+const std::string KeySwitchColumnName = "$key_switch";
+const std::string OtherColumnsName = "$other_columns";
+const std::string SparseColumnsName = "$sparse_columns";
+const std::string RemainingRowBytesColumnName = "$remaining_row_bytes";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,12 +63,13 @@ static bool IsSkiffSpecialColumn(
     static const THashSet<std::string, THash<TStringBuf>, TEqualTo<>> specialColumns{
         KeySwitchColumnName,
         OtherColumnsName,
+        RemainingRowBytesColumnName,
         SparseColumnsName,
     };
     return specialColumns.contains(columnName) || columnName == rangeIndexColumnName || columnName == rowIndexColumnName;
 }
 
-static std::pair<std::shared_ptr<TSkiffSchema>, bool> DeoptionalizeSchema(std::shared_ptr<TSkiffSchema> skiffSchema)
+std::pair<std::shared_ptr<TSkiffSchema>, bool> DeoptionalizeSchema(std::shared_ptr<TSkiffSchema> skiffSchema)
 {
     if (skiffSchema->GetWireType() != EWireType::Variant8) {
         return std::pair(skiffSchema, true);
@@ -89,7 +91,7 @@ static TSkiffTableDescription CreateTableDescription(
     const std::string& rowIndexColumnName)
 {
     TSkiffTableDescription result;
-    THashSet<TString> topLevelNames;
+    THashSet<std::string> topLevelNames;
     std::shared_ptr<TSkiffSchema> otherColumnsField;
     std::shared_ptr<TSkiffSchema> sparseColumnsField;
 
@@ -155,6 +157,8 @@ static TSkiffTableDescription CreateTableDescription(
         } else if (childName == rangeIndexColumnName) {
             result.RangeIndexFieldIndex = i;
             result.RangeIndexMode = GetRowRangeIndexMode(child, childName);
+        } else if (childName == RemainingRowBytesColumnName) {
+            result.RemainingRowBytesFieldIndex = i;
         }
         result.DenseFieldDescriptionList.emplace_back(childName, child);
     }
@@ -205,12 +209,11 @@ static constexpr char ReferencePrefix = '$';
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TSkiffSchemaRepresentation)
+DECLARE_REFCOUNTED_STRUCT(TSkiffSchemaRepresentation)
 
-class TSkiffSchemaRepresentation
+struct TSkiffSchemaRepresentation
     : public TYsonStruct
 {
-public:
     TString Name;
     EWireType WireType;
     std::optional<std::vector<INodePtr>> Children;
@@ -233,13 +236,13 @@ DEFINE_REFCOUNTED_TYPE(TSkiffSchemaRepresentation)
 std::shared_ptr<TSkiffSchema> ParseSchema(
     const INodePtr& schemaNode,
     const IMapNodePtr& registry,
-    THashMap<TString, std::shared_ptr<TSkiffSchema>>* parsedRegistry,
-    THashSet<TString>* parseInProgressNames)
+    THashMap<std::string, std::shared_ptr<TSkiffSchema>>* parsedRegistry,
+    THashSet<std::string>* parseInProgressNames)
 {
     auto schemaNodeType = schemaNode->GetType();
     if (schemaNodeType == ENodeType::String) {
         auto name = schemaNode->AsString()->GetValue();
-        if (!name.StartsWith(ReferencePrefix)) {
+        if (!name.starts_with(ReferencePrefix)) {
             THROW_ERROR_EXCEPTION(
                 "Invalid reference %Qv, reference must start with %Qv",
                 name,
@@ -311,10 +314,10 @@ std::vector<std::shared_ptr<TSkiffSchema>> ParseSkiffSchemas(
     const NYTree::IMapNodePtr& skiffSchemaRegistry,
     const NYTree::IListNodePtr& tableSkiffSchemas)
 {
-    THashMap<TString, std::shared_ptr<TSkiffSchema>> parsedRegistry;
+    THashMap<std::string, std::shared_ptr<TSkiffSchema>> parsedRegistry;
     std::vector<std::shared_ptr<TSkiffSchema>> result;
     for (const auto& node : tableSkiffSchemas->GetChildren()) {
-        THashSet<TString> parseInProgressNames;
+        THashSet<std::string> parseInProgressNames;
         auto skiffSchema = ParseSchema(node, skiffSchemaRegistry, &parsedRegistry, &parseInProgressNames);
         result.push_back(skiffSchema);
     }
@@ -324,14 +327,14 @@ std::vector<std::shared_ptr<TSkiffSchema>> ParseSkiffSchemas(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFieldDescription::TFieldDescription(TString name, std::shared_ptr<TSkiffSchema> schema)
+TFieldDescription::TFieldDescription(std::string name, std::shared_ptr<TSkiffSchema> schema)
     : Name_(std::move(name))
     , Schema_(std::move(schema))
 { }
 
-EWireType TFieldDescription::ValidatedSimplify() const
+EWireType TFieldDescription::ValidatedGetDeoptionalizeType(bool simplify) const
 {
-    auto result = Simplify();
+    auto result = GetDeoptionalizeType(simplify);
     if (!result) {
         THROW_ERROR_EXCEPTION("Column %Qv cannot be represented with Skiff schema %Qv",
             Name_,
@@ -350,12 +353,12 @@ bool TFieldDescription::IsRequired() const
     return DeoptionalizeSchema(Schema_).second;
 }
 
-std::optional<EWireType> TFieldDescription::Simplify() const
+std::optional<EWireType> TFieldDescription::GetDeoptionalizeType(bool simplify) const
 {
     const auto& [deoptionalized, required] = DeoptionalizeSchema(Schema_);
     auto wireType = deoptionalized->GetWireType();
-    if (IsSimpleType(wireType)) {
-        if (wireType != EWireType::Nothing || required) {
+    if (wireType != EWireType::Nothing || required) {
+        if (!simplify || IsSimpleType(wireType)) {
             return wireType;
         }
     }

@@ -54,7 +54,7 @@ void TInvokerWrapper<VirtualizeBase>::SubscribeWaitTimeObserved(const IInvoker::
 template <bool VirtualizeBase>
 void TInvokerWrapper<VirtualizeBase>::UnsubscribeWaitTimeObserved(const IInvoker::TWaitTimeObserver& callback)
 {
-    return UnderlyingInvoker_->SubscribeWaitTimeObserved(callback);
+    return UnderlyingInvoker_->UnsubscribeWaitTimeObserved(callback);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -66,17 +66,26 @@ template struct NDetail::TMaybeVirtualInvokerBase<false>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TInvokerProfileWrapper::TInvokerProfileWrapper(NProfiling::IRegistryPtr registry, const TString& invokerFamily, const NProfiling::TTagSet& tagSet)
+TInvokerProfilingWrapper::TInvokerProfilingWrapper(
+    NProfiling::IRegistryPtr registry,
+    const std::string& invokerFamily,
+    const NProfiling::TTagSet& tagSet)
 {
-    auto profiler = NProfiling::TProfiler("/invoker", NProfiling::TProfiler::DefaultNamespace, tagSet, registry).WithHot();
+    auto profiler = NProfiling::TProfiler(
+        "/invoker",
+        NProfiling::TProfiler::DefaultNamespace,
+        tagSet, registry)
+        .WithHot();
     WaitTimer_ = profiler.Timer(invokerFamily + "/wait");
 }
 
-TClosure TInvokerProfileWrapper::WrapCallback(TClosure callback)
+TClosure TInvokerProfilingWrapper::WrapCallback(TClosure callback)
 {
-    auto invokedAt = GetCpuInstant();
+    if (!WaitTimer_) {
+        return callback;
+    }
 
-    return BIND([invokedAt, waitTimer = WaitTimer_, callback = std::move(callback)] {
+    return BIND([invokedAt = GetCpuInstant(), waitTimer = WaitTimer_, callback = std::move(callback)] {
         // Measure the time from WrapCallback() to callback().
         auto waitTime = CpuDurationToDuration(GetCpuInstant() - invokedAt);
         waitTimer.Record(waitTime);

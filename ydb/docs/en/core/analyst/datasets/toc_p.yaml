@@ -1,0 +1,15 @@
+items:
+  - name: Overview
+    href: index.md
+  - name: Chess Position Evaluations
+    href: chess.md
+  - name: Video Game Sales
+    href: video-games.md
+  - name: E-Commerce Behavior Data
+    href: ecommerce.md
+  - name: COVID-19 Open Research Dataset
+    href: covid.md
+  - name: Netflix Movies and TV Shows
+    href: netflix.md
+  - name: Animal Crossing New Horizons Catalog
+    href: animal-crossing.md

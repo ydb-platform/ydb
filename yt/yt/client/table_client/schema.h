@@ -3,13 +3,14 @@
 #include "public.h"
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
 
 #include <library/cpp/yt/memory/range.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <util/digest/multi.h>
 
@@ -49,8 +50,12 @@ public:
 
     TLegacyLockBitmap GetBitmap() const;
 
+    //! Returns the length of the shortest prefix containing all non-None locks
+    //! (one past the largest set index), or 0 if all locks are None.
+    int GetLockedPrefixLength() const;
+
     TLegacyLockMask(const TLegacyLockMask& other) = default;
-    TLegacyLockMask& operator= (const TLegacyLockMask& other) = default;
+    TLegacyLockMask& operator=(const TLegacyLockMask& other) = default;
 
     static constexpr int BitsPerType = 2;
     static constexpr TLegacyLockBitmap TypeMask = (1 << BitsPerType) - 1;
@@ -104,7 +109,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TLockMask& lhs, const TLockMask& rhs);
+bool operator==(const TLockMask& lhs, const TLockMask& rhs);
 
 TLockMask MaxMask(TLockMask lhs, TLockMask rhs);
 
@@ -122,7 +127,7 @@ public:
     DEFINE_BYREF_RO_PROPERTY(TLogicalTypePtr, LogicalType);
     DEFINE_BYREF_RO_PROPERTY(std::optional<ESortOrder>, SortOrder);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Lock);
-    DEFINE_BYREF_RO_PROPERTY(std::optional<TString>, Expression);
+    DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Expression);
     DEFINE_BYREF_RO_PROPERTY(std::optional<bool>, Materialized);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Aggregate);
     DEFINE_BYREF_RO_PROPERTY(std::optional<std::string>, Group);
@@ -157,7 +162,7 @@ public:
     TColumnSchema& SetSimpleLogicalType(ESimpleLogicalValueType type);
     TColumnSchema& SetSortOrder(std::optional<ESortOrder> value);
     TColumnSchema& SetLock(const std::optional<std::string>& value);
-    TColumnSchema& SetExpression(const std::optional<TString>& value);
+    TColumnSchema& SetExpression(const std::optional<std::string>& value);
     TColumnSchema& SetMaterialized(std::optional<bool> value);
     TColumnSchema& SetAggregate(const std::optional<std::string>& value);
     TColumnSchema& SetGroup(const std::optional<std::string>& value);
@@ -188,29 +193,34 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDeletedColumn
-{
-public:
-    TDeletedColumn();
-    explicit TDeletedColumn(TColumnStableName stableName);
-
-    DEFINE_BYREF_RO_PROPERTY(TColumnStableName, StableName);
-    TDeletedColumn& SetStableName(TColumnStableName stableName);
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 void FormatValue(TStringBuilderBase* builder, const TColumnSchema& schema, TStringBuf spec);
 
 void Serialize(const TColumnSchema& schema, NYson::IYsonConsumer* consumer);
+void Serialize(const TColumnSchema& schema, std::optional<std::string> constraint, NYson::IYsonConsumer* consumer);
 
 void ToProto(NProto::TColumnSchema* protoSchema, const TColumnSchema& schema);
 void FromProto(TColumnSchema* schema, const NProto::TColumnSchema& protoSchema);
 
+void PrintTo(const TColumnSchema& columnSchema, std::ostream* os);
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TDeletedColumn
+{
+    TDeletedColumn() = default;
+    explicit TDeletedColumn(TColumnStableName stableName);
+
+    DEFINE_BYREF_RW_PROPERTY(TColumnStableName, StableName);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TDeletedColumn& schema, NYson::IYsonConsumer* consumer);
+void Deserialize(TDeletedColumn& schema, NYTree::INodePtr node);
+void Deserialize(TDeletedColumn& schema, NYson::TYsonPullParserCursor* cursor);
+
 void ToProto(NProto::TDeletedColumn* protoSchema, const TDeletedColumn& schema);
 void FromProto(TDeletedColumn* schema, const NProto::TDeletedColumn& protoSchema);
-
-void PrintTo(const TColumnSchema& columnSchema, std::ostream* os);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -242,8 +252,8 @@ public:
     const std::vector<TDeletedColumn>& DeletedColumns() const;
 
     //! Strict schema forbids columns not specified in the schema.
-    DEFINE_BYVAL_RO_PROPERTY(bool, Strict, false);
-    DEFINE_BYVAL_RO_PROPERTY(bool, UniqueKeys, false);
+    DEFINE_BYVAL_RO_BOOLEAN_PROPERTY(Strict, false);
+    DEFINE_BYVAL_RO_BOOLEAN_PROPERTY(UniqueKeys, false);
     DEFINE_BYVAL_RO_PROPERTY(ETableSchemaModification, SchemaModification, ETableSchemaModification::None);
 
     //! Constructs an empty non-strict schema.
@@ -296,10 +306,12 @@ public:
     bool HasTimestampColumn() const;
     bool HasTtlColumn() const;
     bool IsSorted() const;
-    bool IsUniqueKeys() const;
     bool HasRenamedColumns() const;
     bool IsEmpty() const;
-    bool IsCGComparatorApplicable() const;
+
+    //! Checks if the first `keyColumnCount` columns
+    //! (or all if not specified) are suitable for codegen comparison.
+    bool IsCGComparatorApplicable(std::optional<int> keyColumnCount = std::nullopt) const;
 
     std::optional<int> GetTtlColumnIndex() const;
 
@@ -350,6 +362,9 @@ public:
     //! For sorted tables, return the current schema.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column.
     TTableSchemaPtr WithTabletIndex() const;
+
+    //! Returns the current schema without |(tablet_index, row_index)| columns.
+    TTableSchemaPtr ToCreate() const;
 
     //! Returns the current schema as-is.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column.
@@ -417,13 +432,11 @@ private:
         TColumnInfo(std::vector<TColumnSchema> columns, std::vector<TDeletedColumn> deletedColumns)
             : Columns(std::move(columns))
             , DeletedColumns(std::move(deletedColumns))
-        {
-        }
+        { }
 
         std::vector<TColumnSchema> Columns;
         std::vector<TDeletedColumn> DeletedColumns;
     };
-
 
     std::shared_ptr<const TColumnInfo> ColumnInfo_;
     int KeyColumnCount_ = 0;
@@ -445,6 +458,7 @@ void FormatValue(TStringBuilderBase* builder, const TTableSchema& schema, TStrin
 void FormatValue(TStringBuilderBase* builder, const TTableSchemaPtr& schema, TStringBuf spec);
 
 //! Returns serialized NTableClient.NProto.TTableSchemaExt.
+std::string SerializeToWireProto(const TTableSchema& schema);
 std::string SerializeToWireProto(const TTableSchemaPtr& schema);
 
 void DeserializeFromWireProto(TTableSchemaPtr* schema, const std::string& serializedProto);
@@ -494,11 +508,11 @@ TFormatterWrapper<TTableSchemaTruncatedFormatter> MakeTableSchemaTruncatedFormat
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool operator == (const TColumnSchema& lhs, const TColumnSchema& rhs);
+bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs);
 
-bool operator == (const TDeletedColumn& lhs, const TDeletedColumn& rhs);
+bool operator==(const TDeletedColumn& lhs, const TDeletedColumn& rhs);
 
-bool operator == (const TTableSchema& lhs, const TTableSchema& rhs);
+bool operator==(const TTableSchema& lhs, const TTableSchema& rhs);
 
 // Compat function for https://st.yandex-team.ru/YT-10668 workaround.
 bool IsEqualIgnoringRequiredness(const TTableSchema& lhs, const TTableSchema& rhs);
@@ -538,6 +552,7 @@ struct TSchemaValidationOptions
     bool AllowUnversionedUpdateColumns = false;
     bool AllowTimestampColumns = false;
     bool AllowOperationColumns = false;
+    bool AllowShuffleColumns = false;
 };
 
 void ValidateColumnSchema(
@@ -554,8 +569,13 @@ void ValidateTableSchema(
 ////////////////////////////////////////////////////////////////////////////////
 
 void ValidateNoDescendingSortOrder(const TTableSchema& schema);
+void ValidateNoDescendingSortOrder(
+    const std::vector<ESortOrder>& sortOrders,
+    const TKeyColumns& keyColumns);
 
 void ValidateNoRenamedColumns(const TTableSchema& schema);
+
+void ValidateNoAggregateStateType(const TTableSchema& schema);
 
 void ValidateColumnUniqueness(const TTableSchema& schema);
 
@@ -595,55 +615,24 @@ void FromProto(NTableClient::TColumnFilter* columnFilter, const TColumnFilter& p
 ////////////////////////////////////////////////////////////////////////////////
 
 // Incompatible < RequireValidation < FullyCompatible
-constexpr bool operator < (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
-constexpr bool operator <= (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
-constexpr bool operator > (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
-constexpr bool operator >= (ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator<(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator<=(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator>(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
+constexpr bool operator>=(ESchemaCompatibility lhs, ESchemaCompatibility rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TTableSchemaHash
 {
-    size_t operator() (const TTableSchema& schema) const;
-    size_t operator() (const TTableSchemaPtr& schema) const;
+    size_t operator()(const TTableSchema& schema) const;
+    size_t operator()(const TTableSchemaPtr& schema) const;
 };
 
 struct TTableSchemaEquals
 {
-    bool operator() (const TTableSchema& lhs, const TTableSchema& rhs) const;
-    bool operator() (const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const;
-    bool operator() (const TTableSchemaPtr& lhs, const TTableSchema& rhs) const;
-};
-
-struct TCellTaggedTableSchema
-{
-    TCellTaggedTableSchema(TTableSchema tableSchema, NObjectClient::TCellTag cellTag);
-
-    TTableSchema TableSchema;
-    NObjectClient::TCellTag CellTag;
-};
-
-struct TCellTaggedTableSchemaPtr
-{
-    TCellTaggedTableSchemaPtr(TTableSchemaPtr tableSchema, NObjectClient::TCellTag cellTag);
-
-    TTableSchemaPtr TableSchema;
-    NObjectClient::TCellTag CellTag;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TCellTaggedTableSchemaHash
-{
-    size_t operator() (const TCellTaggedTableSchema& cellTaggedSchema) const;
-    size_t operator() (const TCellTaggedTableSchemaPtr& cellTaggedSchemaPtr) const;
-};
-
-struct TCellTaggedTableSchemaEquals
-{
-    bool operator() (const TCellTaggedTableSchema& lhs, const TCellTaggedTableSchema& rhs) const;
-    bool operator() (const TCellTaggedTableSchemaPtr& lhs, const TCellTaggedTableSchemaPtr& rhs) const;
-    bool operator() (const TCellTaggedTableSchemaPtr& lhs, const TCellTaggedTableSchema& rhs) const;
+    bool operator()(const TTableSchema& lhs, const TTableSchema& rhs) const;
+    bool operator()(const TTableSchemaPtr& lhs, const TTableSchemaPtr& rhs) const;
+    bool operator()(const TTableSchemaPtr& lhs, const TTableSchema& rhs) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

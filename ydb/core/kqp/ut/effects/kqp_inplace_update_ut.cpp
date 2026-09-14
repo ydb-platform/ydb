@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -68,12 +68,7 @@ void Test(
     setting.SetValue("true");
 
     // source read and stream lookup use iterator interface, that doesn't use datashard transactions
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
-
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig)
-        .SetKqpSettings({setting});
+    auto settings = TKikimrSettings().SetKqpSettings({ setting });
 
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
@@ -106,12 +101,15 @@ void Test(
 #define ASSERT_LITERAL_PHASE(stats, phaseNo) \
     UNIT_ASSERT_C(stats.query_phases(phaseNo).table_access().empty(), stats.DebugString());
 
-#define ASSERT_PHASE(stats, phaseNo, table, readsCnt, updatesCnt) \
+#define ASSERT_PHASE_FULL(stats, phaseNo, table, readsCnt, updatesCnt, partitionsCnt) \
     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access().size(), 1, stats.DebugString());                     \
     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access(0).name(), table, stats.DebugString());                \
     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access(0).reads().rows(), readsCnt, stats.DebugString());     \
     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access(0).updates().rows(), updatesCnt, stats.DebugString()); \
-    UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access(0).partitions_count(), std::max(readsCnt, updatesCnt), stats.DebugString());
+    UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases(phaseNo).table_access(0).partitions_count(), partitionsCnt, stats.DebugString());
+
+#define ASSERT_PHASE(stats, phaseNo, table, readsCnt, updatesCnt) \
+    ASSERT_PHASE_FULL(stats, phaseNo, table, readsCnt, updatesCnt, std::max(readsCnt, updatesCnt));
 
 
 Y_UNIT_TEST(SingleRowSimple) {
@@ -131,11 +129,11 @@ Y_UNIT_TEST(SingleRowSimple) {
             [[1u];["updated"];[100u];[101.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+            ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+        },
+        &PrepareTable);
 }
 
 Y_UNIT_TEST(SingleRowStr) {
@@ -155,11 +153,11 @@ Y_UNIT_TEST(SingleRowStr) {
             [[1u];["neupdated"];[100u];[101.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+            ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+        },
+        &PrepareTable);
 }
 
 Y_UNIT_TEST(SingleRowArithm) {
@@ -182,11 +180,11 @@ Y_UNIT_TEST(SingleRowArithm) {
             [[1u];["One"];[1210u];[16.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+            ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+        },
+        &PrepareTable);
 }
 
 Y_UNIT_TEST(SingleRowIf) {
@@ -213,14 +211,13 @@ Y_UNIT_TEST(SingleRowIf) {
             [[1u];["One"];[11u];[1.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+            ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+        },
+        &PrepareTable);
 }
 
-// allow multiple keys in KqpLookupTable to enable this test
 Y_UNIT_TEST(Negative_SingleRowWithKeyCast) {
     Test(
         R"( DECLARE $key AS Uint32; -- not Uint64
@@ -238,33 +235,21 @@ Y_UNIT_TEST(Negative_SingleRowWithKeyCast) {
             [[1u];["updated"];[100u];[101.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
+        [&](const Ydb::TableStats::QueryStats& stats) {
             // if constexpr (EnableInplaceUpdate) {
             //     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
             //     ASSERT_LITERAL_PHASE(stats, 0);
             //     ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 1, 1);
             // } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 3, stats.DebugString());
-                ASSERT_LITERAL_PHASE(stats, 0);
-                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 1, 0);
-                ASSERT_PHASE(stats, 2, "/Root/InplaceUpdate", 0, 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+            ASSERT_LITERAL_PHASE(stats, 0);
+            ASSERT_PHASE_FULL(stats, 1, "/Root/InplaceUpdate", 1, 1, 2);
             // }
-        });
+        },
+        &PrepareTable);
 }
 
 Y_UNIT_TEST(Negative_SingleRowWithValueCast) {
-/*
-    (
-    (declare $key (DataType 'Uint64))
-    (declare $value (DataType 'Int32))
-    (let $1 (KqpTable '"/Root/InplaceUpdate" '"72057594046644480:11" '"" '1))
-    (let $2 (DataType 'Uint64))
-    (let $3 (KqpLookupTable $1 (Iterator (AsList (AsStruct '('"Key" $key)))) '('"Key")))
-    (return (FlatMap $3 (lambda '($4) (Just (AsStruct '('"Key" (Member $4 '"Key")) '('"ValueInt" (Just (Convert $value $2))))))))
-    )
-
-    `Convert` is not safe callable, so there is no InplaceUpdate optimization here
-*/
     Test(
         R"( DECLARE $key AS Uint64;
             DECLARE $value AS Int32; -- not Uint64
@@ -281,11 +266,11 @@ Y_UNIT_TEST(Negative_SingleRowWithValueCast) {
             [[1u];["One"];[1u];[101.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+            ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+        },
+        &PrepareTable);
 }
 
 Y_UNIT_TEST(Negative_SingleRowListFromRange) {
@@ -308,14 +293,13 @@ Y_UNIT_TEST(Negative_SingleRowListFromRange) {
             [[1u];["One1..2..3..4..5..6..7..8..9"];[100u];[101.]];
             [[20u];["Two"];[200u];[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
-        });
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+            ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
+        },
+        &PrepareTable);
 }
 
-// allow multiple keys in KqpLookupTable to enable this test
 Y_UNIT_TEST(Negative_BatchUpdate) {
     Test(
         R"( DECLARE $key1 AS Uint64;
@@ -344,19 +328,19 @@ Y_UNIT_TEST(Negative_BatchUpdate) {
             [[1u];["updated-1"];[100u];[101.]];
             [[20u];["updated-2"];[200u];[202.]]
         ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
+        [&](const Ydb::TableStats::QueryStats& stats) {
             // if constexpr (EnableInplaceUpdate) {
             //     UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 3, stats.DebugString());
             //     ASSERT_LITERAL_PHASE(stats, 0);
             //     ASSERT_LITERAL_PHASE(stats, 1);
             //     ASSERT_PHASE(stats, 2, "/Root/InplaceUpdate", 2, 2);
             // } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 3, stats.DebugString());
-                ASSERT_LITERAL_PHASE(stats, 0);
-                ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 2, 0);
-                ASSERT_PHASE(stats, 2, "/Root/InplaceUpdate", 0, 2);
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
+            ASSERT_LITERAL_PHASE(stats, 0);
+            ASSERT_PHASE_FULL(stats, 1, "/Root/InplaceUpdate", 2, 2, 4);
             // }
-        });
+        },
+        &PrepareTable);
 }
 
 Y_UNIT_TEST(BigRow) {
@@ -369,12 +353,7 @@ Y_UNIT_TEST(BigRow) {
     unsafeCommitSetting.SetValue("true");
 
     // source read use iterator interface, that doesn't use datashard transactions
-    NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
-
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig)
-        .SetKqpSettings({keysLimitSetting, unsafeCommitSetting});
+    auto settings = TKikimrSettings().SetKqpSettings({keysLimitSetting, unsafeCommitSetting});
 
     TKikimrRunner kikimr(settings);
     auto db = kikimr.GetTableClient();
@@ -440,10 +419,9 @@ Y_UNIT_TEST(SingleRowPgNotNull) {
             [[1u];["One"];"123";[101.]];
             [[20u];["Two"];"200";[202.]]
            ])",
-        [](const Ydb::TableStats::QueryStats& stats) {
-            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 2, stats.DebugString());
-            ASSERT_PHASE(stats, 0, "/Root/InplaceUpdate", 1, 0);
-            ASSERT_PHASE(stats, 1, "/Root/InplaceUpdate", 0, 1);
+        [&](const Ydb::TableStats::QueryStats& stats) {
+            UNIT_ASSERT_VALUES_EQUAL_C(stats.query_phases().size(), 1, stats.DebugString());
+            ASSERT_PHASE_FULL(stats, 0, "/Root/InplaceUpdate", 1, 1, 2);
         },
         &PreparePgTable);
 }

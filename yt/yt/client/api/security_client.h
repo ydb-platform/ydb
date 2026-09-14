@@ -2,6 +2,7 @@
 
 #include "client_common.h"
 
+#include <yt/yt/client/security_client/acl.h>
 #include <yt/yt/client/security_client/public.h>
 
 namespace NYT::NApi {
@@ -35,19 +36,20 @@ struct TCheckPermissionResult
     TError ToError(
         const std::string& user,
         NYTree::EPermission permission,
-        const std::optional<std::string>& columns = {}) const;
+        const std::optional<std::string>& column = {}) const;
 
     NSecurityClient::ESecurityAction Action;
     NObjectClient::TObjectId ObjectId;
-    std::optional<TString> ObjectName;
+    std::optional<std::string> ObjectName;
     NSecurityClient::TSubjectId SubjectId;
-    std::optional<TString> SubjectName;
+    std::optional<std::string> SubjectName;
 };
 
 struct TCheckPermissionResponse
     : public TCheckPermissionResult
 {
     std::optional<std::vector<TCheckPermissionResult>> Columns;
+    std::optional<std::vector<NSecurityClient::TRowLevelAccessControlEntry>> RowLevelAcl;
 };
 
 struct TCheckPermissionByAclOptions
@@ -56,6 +58,7 @@ struct TCheckPermissionByAclOptions
     , public TPrerequisiteOptions
 {
     bool IgnoreMissingSubjects = false;
+    bool IgnorePendingRemovalSubjects = false;
 };
 
 struct TCheckPermissionByAclResult
@@ -64,8 +67,9 @@ struct TCheckPermissionByAclResult
 
     NSecurityClient::ESecurityAction Action;
     NSecurityClient::TSubjectId SubjectId;
-    std::optional<TString> SubjectName;
-    std::vector<TString> MissingSubjects;
+    std::optional<std::string> SubjectName;
+    std::vector<std::string> MissingSubjects;
+    std::vector<std::string> PendingRemovalSubjects;
 };
 
 struct TSetUserPasswordOptions
@@ -77,7 +81,7 @@ struct TSetUserPasswordOptions
 struct TIssueTokenOptions
     : public TTimeoutOptions
 {
-    TString Description;
+    std::string Description;
 };
 
 struct TIssueTemporaryTokenOptions
@@ -88,7 +92,7 @@ struct TIssueTemporaryTokenOptions
 
 struct TIssueTokenResult
 {
-    TString Token;
+    std::string Token;
     //! Cypress node corresponding to issued token.
     //! Deleting this node will revoke the token.
     NCypressClient::TNodeId NodeId;
@@ -111,9 +115,20 @@ struct TListUserTokensOptions
 struct TListUserTokensResult
 {
     // Tokens are SHA256-encoded.
-    std::vector<TString> Tokens;
-    THashMap<TString, NYson::TYsonString> Metadata;
+    std::vector<std::string> Tokens;
+    THashMap<std::string, NYson::TYsonString> Metadata;
 };
+
+struct TGetCurrentUserOptions
+    : public TTimeoutOptions
+{ };
+
+struct TGetCurrentUserResult
+{
+    std::string User;
+};
+
+void Serialize(const TGetCurrentUserResult& result, NYson::IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -121,14 +136,18 @@ struct ISecurityClient
 {
     virtual ~ISecurityClient() = default;
 
+    //! Return information about current user.
+    virtual TFuture<TGetCurrentUserResult> GetCurrentUser(
+        const TGetCurrentUserOptions& options = {}) = 0;
+
     virtual TFuture<void> AddMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TAddMemberOptions& options = {}) = 0;
 
     virtual TFuture<void> RemoveMember(
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TRemoveMemberOptions& options = {}) = 0;
 
     virtual TFuture<TCheckPermissionResponse> CheckPermission(
@@ -147,28 +166,27 @@ struct ISecurityClient
     // and are intended to be used on clusters without third-party tokens (e.g. Yandex blackbox).
     virtual TFuture<void> SetUserPassword(
         const std::string& user,
-        const TString& currentPasswordSha256,
-        const TString& newPasswordSha256,
+        const std::string& currentPasswordSha256,
+        const std::string& newPasswordSha256,
         const TSetUserPasswordOptions& options) = 0;
 
     virtual TFuture<TIssueTokenResult> IssueToken(
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TIssueTokenOptions& options) = 0;
 
     virtual TFuture<void> RevokeToken(
         const std::string& user,
-        const TString& passwordSha256,
-        const TString& tokenSha256,
+        const std::string& passwordSha256,
+        const std::string& tokenSha256,
         const TRevokeTokenOptions& options) = 0;
 
     virtual TFuture<TListUserTokensResult> ListUserTokens(
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TListUserTokensOptions& options) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

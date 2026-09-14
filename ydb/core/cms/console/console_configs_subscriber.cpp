@@ -15,14 +15,7 @@
 
 #include <utility>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CMS_CONFIGS, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
 
 namespace NKikimr::NConsole {
 
@@ -48,7 +41,7 @@ public:
             const NKikimrConfig::TAppConfig &currentConfig,
             bool processYaml,
             ui64 version,
-            const TString &yamlConfig,
+            const TString &mainYamlConfig,
             const TMap<ui64, TString> &volatileYamlConfigs,
             const std::optional<TNodeInfo> explicitNodeInfo)
         : OwnerId(ownerId)
@@ -60,11 +53,11 @@ public:
         , CurrentConfig(currentConfig)
         , ServeYaml(processYaml)
         , Version(version)
-        , YamlConfig(yamlConfig)
+        , MainYamlConfig(mainYamlConfig)
         , VolatileYamlConfigs(volatileYamlConfigs)
     {
-        if (ServeYaml && !YamlConfig.empty()) {
-            YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
+        if (ServeYaml && !MainYamlConfig.empty()) {
+            MainYamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
             for (auto &[id, config] : VolatileYamlConfigs) {
                 VolatileYamlConfigHashes[id] = THash<TString>()(config);
             }
@@ -152,7 +145,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            BLOG_I("Generation mismatch for TEvConfigSubscriptionResponse");
+            YDB_LOG_INFO("Generation mismatch for TEvConfigSubscriptionResponse");
 
             return;
         }
@@ -180,7 +173,7 @@ public:
 
     void Handle(TEvConsole::TEvGetNodeConfigResponse::TPtr &ev, const TActorContext &ctx) {
         if (!FirstUpdateSent) {
-            ctx.ExecutorThread.Send(
+            ctx.Send(
                 new NActors::IEventHandle(
                     SelfId(),
                     ev->Sender,
@@ -202,7 +195,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            BLOG_I("Generation mismatch for TEvConfigSubscriptionNotification");
+            YDB_LOG_INFO("Generation mismatch for TEvConfigSubscriptionNotification");
 
             return;
         }
@@ -210,7 +203,7 @@ public:
         Y_ABORT_UNLESS(Pipe);
 
         if (rec.GetOrder() != (LastOrder + 1)) {
-            BLOG_I("Order mismatch, will resubscribe");
+            YDB_LOG_INFO("Order mismatch, will resubscribe");
 
             Subscribe(ctx);
 
@@ -220,10 +213,13 @@ public:
         bool notChanged = true;
 
         if (ServeYaml) {
-            if (!(rec.HasYamlConfigNotChanged() && rec.GetYamlConfigNotChanged())) {
-                if (rec.HasYamlConfig()) {
-                    YamlConfig = rec.GetYamlConfig();
-                    YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
+            if (!(rec.HasDatabaseYamlConfigNotChanged() && rec.GetDatabaseYamlConfigNotChanged())) {
+                notChanged = false;
+            }
+            if (!(rec.HasMainYamlConfigNotChanged() && rec.GetMainYamlConfigNotChanged())) {
+                if (rec.HasMainYamlConfig()) {
+                    MainYamlConfig = rec.GetMainYamlConfig();
+                    MainYamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
                 }
 
                 notChanged = false;
@@ -283,9 +279,10 @@ public:
                      Generation,
                      CurrentConfig,
                      changes,
-                     YamlConfig,
+                     MainYamlConfig,
                      VolatileYamlConfigs,
-                     CurrentDynConfig),
+                     CurrentDynConfig,
+                     rec.HasDatabaseYamlConfig() ? TMaybe<TString>(rec.GetDatabaseYamlConfig()) : TMaybe<TString>{}),
                 IEventHandle::FlagTrackDelivery, Cookie);
 
             FirstUpdateSent = true;
@@ -298,7 +295,7 @@ public:
         auto &rec = ev->Get()->Record;
 
         if (rec.GetGeneration() != Generation) {
-            BLOG_I("Generation mismatch for TEvConfigSubscriptionCanceled");
+            YDB_LOG_INFO("Generation mismatch for TEvConfigSubscriptionCanceled");
 
             return;
         }
@@ -370,8 +367,8 @@ private:
             request->Record.MutableKnownVersion()->CopyFrom(CurrentConfig.GetVersion());
 
         if (ServeYaml) {
-            if (!YamlConfig.empty()) {
-                request->Record.SetYamlVersion(YamlConfigVersion);
+            if (!MainYamlConfig.empty()) {
+                request->Record.SetMainYamlVersion(MainYamlConfigVersion);
                 for (auto &[id, hash] : VolatileYamlConfigHashes) {
                     auto *item = request->Record.AddVolatileYamlVersion();
                     item->SetId(id);
@@ -395,7 +392,7 @@ private:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, console, pipeConfig);
-        Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        Pipe = ctx.Register(pipe);
     }
 
 private:
@@ -413,9 +410,9 @@ private:
 
     bool ServeYaml = false;
     ui64 Version;
-    TString YamlConfig;
+    TString MainYamlConfig;
     TMap<ui64, TString> VolatileYamlConfigs;
-    ui64 YamlConfigVersion = 0;
+    ui64 MainYamlConfigVersion = 0;
     TMap<ui64, ui64> VolatileYamlConfigHashes;
 
     TString Tenant;

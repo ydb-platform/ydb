@@ -287,12 +287,12 @@ class TestYdbOverFq(TestYdsBase):
         with session.transaction() as tx:
             assert_that(
                 calling(tx.execute).with_args(""),
-                raises(ydb.issues.InternalError, "length is not in \\[1; 102400\\]"),
+                raises(ydb.issues.InternalError, "length is not in \\[1; 1024000\\]"),
             )
         with session.transaction() as tx:
             assert_that(
                 calling(tx.execute).with_args("BAD QUERY"),
-                raises(ydb.issues.InternalError, "Unexpected token .* : cannot match to any predicted input"),
+                raises(ydb.issues.InternalError, "(Unexpected token .* : cannot match to any predicted input)|(mismatched input .* expecting)"),
             )
         with session.transaction() as tx:
             query = "select * from {}{}".format("bindings." if yq_version == "v1" else "", "WRONG_BIND")
@@ -366,6 +366,7 @@ class TestYdbOverFq(TestYdsBase):
     @yq_all
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_insert_data_query(self, kikimr, s3, client, unique_prefix, yq_version):
+        self.make_s3_client(s3)  # makes bucket
         kikimr.control_plane.wait_bootstrap()
         connection_id = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket").result.connection_id
         bind_name = unique_prefix + "fruits_bind"

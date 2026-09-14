@@ -1,7 +1,9 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
+
+#include <ydb/core/sys_view/common/path.h>
 
 namespace {
 
@@ -150,6 +152,7 @@ public:
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
+        const bool isSystemDir = name == NSysView::SysPathName;
         NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
@@ -172,15 +175,19 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .IsValidACL(acl);
             }
 
             if (checks && !context.SS->SystemBackupSIDs.contains(owner)) {
                 checks
                     .DepthLimit()
-                    .PathsLimit()
                     .DirChildrenLimit();
+
+                if (!isSystemDir) {
+                    checks
+                        .PathsLimit();
+                }
             }
 
             if (!checks) {
@@ -259,7 +266,14 @@ public:
                 newDir->TempDirOwnerActorId, newDir->PathId);
         }
 
-        dstPath.DomainInfo()->IncPathsInside(context.SS);
+        EPathCategory pathCategory;
+        if (isSystemDir) {
+            pathCategory = EPathCategory::System;
+        } else {
+            pathCategory = EPathCategory::Regular;
+        }
+
+        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, pathCategory);
         IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         context.OnComplete.ActivateTx(OperationId);

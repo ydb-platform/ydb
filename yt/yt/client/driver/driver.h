@@ -13,6 +13,7 @@
 #include <yt/yt/core/concurrency/async_stream.h>
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/net/address.h>
 
@@ -22,6 +23,8 @@
 #include <yt/yt/core/yson/writer.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/logging/tag.h>
 
 namespace NYT::NDriver {
 
@@ -34,10 +37,10 @@ struct TDriverRequest
     explicit TDriverRequest(TRefCountedPtr holder);
 
     //! Request identifier to be logged.
-    std::variant<ui64, TGuid> Id = static_cast<ui64>(0);
+    TGuid Id;
 
     //! Command name to execute.
-    TString CommandName;
+    std::string CommandName;
 
     //! Stream used for reading command input.
     //! The stream must stay alive for the duration of #IDriver::Execute.
@@ -59,16 +62,16 @@ struct TDriverRequest
     std::optional<std::string> UserTag;
 
     //! Filled in the context of HTTP proxy.
-    std::optional<NNet::TNetworkAddress> UserRemoteAddress;
+    std::optional<std::string> UserRemoteAddress;
 
     //! User token.
-    std::optional<TString> UserToken;
+    std::optional<std::string> UserToken;
 
     //! TVM service ticket.
-    std::optional<TString> ServiceTicket;
+    std::optional<std::string> ServiceTicket;
 
     //! Additional logging tags.
-    std::optional<std::string> LoggingTags;
+    NLogging::TLoggingTagList LoggingTags;
 
     //! Provides means to return arbitrary structured data from any command.
     //! Must be filled before writing data to output stream.
@@ -77,6 +80,9 @@ struct TDriverRequest
     //! Invoked after driver is done producing response parameters and
     //! before first write to output stream.
     std::function<void()> ResponseParametersFinishedCallback;
+
+    //! Memory usage tracker.
+    IMemoryUsageTrackerPtr MemoryUsageTracker = GetNullMemoryUsageTracker();
 
     void Reset();
 
@@ -94,7 +100,7 @@ private:
 struct TCommandDescriptor
 {
     //! Name of the command.
-    TString CommandName;
+    std::string CommandName;
 
     //! Type of data expected by the command at #TDriverRequest::InputStream.
     NFormats::EDataType InputType;
@@ -128,15 +134,15 @@ struct IDriver
 
     //! Returns a descriptor for the command with a given name or
     //! Null if no command with this name is registered.
-    virtual std::optional<TCommandDescriptor> FindCommandDescriptor(const TString& commandName) const = 0;
+    virtual std::optional<TCommandDescriptor> FindCommandDescriptor(const std::string& commandName) const = 0;
 
     //! Returns a descriptor for then command with a given name.
     //! Fails if no command with this name is registered.
-    TCommandDescriptor GetCommandDescriptor(const TString& commandName) const;
+    TCommandDescriptor GetCommandDescriptor(const std::string& commandName) const;
 
     //! Returns a descriptor for then command with a given name.
     //! Throws if no command with this name is registered.
-    TCommandDescriptor GetCommandDescriptorOrThrow(const TString& commandName) const;
+    TCommandDescriptor GetCommandDescriptorOrThrow(const std::string& commandName) const;
 
     //! Returns the list of descriptors for all supported commands.
     virtual const std::vector<TCommandDescriptor> GetCommandDescriptors() const = 0;
@@ -152,9 +158,7 @@ struct IDriver
     //! Returns the underlying connection.
     virtual NApi::IConnectionPtr GetConnection() = 0;
 
-    virtual NSignature::TSignatureGeneratorBasePtr GetSignatureGenerator() = 0;
-
-    virtual NSignature::TSignatureValidatorBasePtr GetSignatureValidator() = 0;
+    virtual NSignature::ISignatureValidatorPtr GetSignatureValidator() = 0;
 
     //! Terminates the underlying connection.
     virtual void Terminate() = 0;
@@ -167,8 +171,7 @@ DEFINE_REFCOUNTED_TYPE(IDriver)
 IDriverPtr CreateDriver(
     NApi::IConnectionPtr connection,
     TDriverConfigPtr config,
-    NSignature::TSignatureGeneratorBasePtr signatureGenerator,
-    NSignature::TSignatureValidatorBasePtr signatureValidator);
+    NSignature::ISignatureValidatorPtr signatureValidator);
 
 ////////////////////////////////////////////////////////////////////////////////
 

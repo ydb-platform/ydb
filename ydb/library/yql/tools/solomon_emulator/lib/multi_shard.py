@@ -26,4 +26,4 @@ class MultiShard(object):
 
     @staticmethod
     def _compose_key(project, cluster, service) -> str:
-        return "/".join([project, cluster, service])
+        return f"{project}/{cluster}/{service}"

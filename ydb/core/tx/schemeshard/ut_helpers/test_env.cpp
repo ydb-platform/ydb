@@ -1,6 +1,8 @@
 #include "test_env.h"
+
 #include "helpers.h"
 
+#include <ydb/core/base/backtrace.h>
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -8,14 +10,19 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/sequenceproxy/sequenceproxy.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/test_tablet/test_tablet.h>
+
 #include <ydb/services/metadata/ds_table/service.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -37,7 +44,7 @@ class TFakeBlockStoreVolume : public TActor<TFakeBlockStoreVolume>, public NTabl
 public:
     TFakeBlockStoreVolume(const TActorId& tablet, TTabletStorageInfo* info)
         : TActor(&TThis::StateInit)
-          , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
+        , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
     {}
 
     void DefaultSignalTabletActive(const TActorContext&) override {
@@ -79,6 +86,41 @@ private:
         response->Record.SetOrigin(TabletID());
         response->Record.SetStatus(NKikimrBlockStore::OK);
         ctx.Send(ev->Sender, response.Release());
+    }
+};
+
+// BlockStorePartitionDirect mock for testing schemeshard
+class TFakeBlockStorePartitionDirect : public TActor<TFakeBlockStorePartitionDirect>, public NTabletFlatExecutor::TTabletExecutedFlat {
+public:
+    TFakeBlockStorePartitionDirect(const TActorId& tablet, TTabletStorageInfo* info)
+        : TActor(&TThis::StateInit)
+        , TTabletExecutedFlat(info, tablet,  new NMiniKQL::TMiniKQLFactory)
+    {}
+
+    void DefaultSignalTabletActive(const TActorContext&) override {
+        // must be empty
+    }
+
+    void OnActivateExecutor(const TActorContext& ctx) override {
+        Become(&TThis::StateWork);
+        SignalTabletActive(ctx);
+    }
+
+    void OnDetach(const TActorContext& ctx) override {
+        Die(ctx);
+    }
+
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override {
+        Y_UNUSED(ev);
+        Die(ctx);
+    }
+
+    STFUNC(StateInit) {
+        StateInitImpl(ev, SelfId());
+    }
+
+    STFUNC(StateWork) {
+        HandleDefaultEvents(ev, SelfId());
     }
 };
 
@@ -133,8 +175,9 @@ private:
 
 class TFakeConfigDispatcher : public TActor<TFakeConfigDispatcher> {
 public:
-    TFakeConfigDispatcher()
+    TFakeConfigDispatcher(const NKikimrConfig::TAppConfig& config = NKikimrConfig::TAppConfig())
         : TActor<TFakeConfigDispatcher>(&TFakeConfigDispatcher::StateWork)
+        , Config(config)
     {
     }
 
@@ -146,8 +189,12 @@ public:
 
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        ctx.Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationRequest(), 0, ev->Cookie);
+        auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *event->Record.MutableConfig() = Config;
+        ctx.Send(ev->Sender, event.Release(), 0, ev->Cookie);
     }
+private:
+    NKikimrConfig::TAppConfig Config;
 };
 
 // Automatically resend notification requests to Schemeshard if it gets restarted
@@ -486,7 +533,7 @@ private:
         TAllocChunkSerializer serializer;
         const bool success = message->SerializeToArcadiaStream(&serializer);
         Y_ABORT_UNLESS(success);
-        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo());
+        TIntrusivePtr<TEventSerializedData> data = serializer.Release(message->CreateSerializationInfo(false));
         return TPreSerializedMessage(message->Type(), data);
     }
 
@@ -540,14 +587,23 @@ void SetupKqpProxy(TTestActorRuntime& runtime, ui32 nodeIdx) {
     NKikimrConfig::TTableServiceConfig tableServiceConfig;
     SetupKqpResourceManager(runtime, tableServiceConfig, nodeIdx);
 
+    // Used by KqpComputeSchedulerService
+    {
+        NKikimrConfig::TAppConfig appConfig;
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        runtime.GetAppData(nodeIdx).KqpComputeScheduler = NKqp::CreateKqpComputeScheduler(counters, appConfig);
+    }
+
     NKikimrConfig::TLogConfig logConfig;
     NKikimrConfig::TQueryServiceConfig queryServiceConfig;
     auto federatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
 
+    NKikimrConfig::TTliConfig tliConfig;
     IActor* kqpProxyService = NKqp::CreateKqpProxyService(
         logConfig,
         tableServiceConfig,
         queryServiceConfig,
+        tliConfig,
         {}, // kqp settings
         nullptr, // query replay factory
         nullptr, // kqp proxy shared resources
@@ -566,6 +622,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     , CoordinatorState(new TFakeCoordinator::TState)
     , ChannelsCount(opts.NChannels_)
 {
+    EnableYDBBacktraceFormat();
     ui64 hive = TTestTxConfig::Hive;
     ui64 schemeRoot = TTestTxConfig::SchemeShard;
     ui64 coordinator = TTestTxConfig::Coordinator;
@@ -574,7 +631,6 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     TAppPrepare app(dsExportFactory ? dsExportFactory : static_cast<std::shared_ptr<NKikimr::NDataShard::IExportFactory>>(std::make_shared<TDataShardExportFactory>()));
 
     app.SetEnableDataColumnForIndexTable(true);
-    app.SetEnableSystemViews(opts.EnableSystemViews_);
     app.SetEnablePersistentQueryStats(opts.EnablePersistentQueryStats_);
     app.SetEnablePersistentPartitionStats(opts.EnablePersistentPartitionStats_);
     app.SetAllowUpdateChannelsBindingOfSolomonPartitions(opts.AllowUpdateChannelsBindingOfSolomonPartitions_);
@@ -585,16 +641,27 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBorrowedSplitCompaction(opts.EnableBorrowedSplitCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
     app.FeatureFlags.SetEnableTableDatetime64(true);
-    app.FeatureFlags.SetEnableVectorIndex(true);
+    app.FeatureFlags.SetEnableAddUniqueIndex(true);
+    app.FeatureFlags.SetEnableOnlineAddUniqueIndex(true);
+    app.FeatureFlags.SetEnableFulltextIndex(true);
+    app.FeatureFlags.SetEnableFulltextIndexPrefix(opts.EnableFulltextIndexPrefix_);
+    app.FeatureFlags.SetEnableFulltextIndexRowId(opts.EnableFulltextIndexRowId_);
+    if (opts.EnableCompactFulltextIndex_) {
+        app.FeatureFlags.SetEnableCompactFulltextIndex(*opts.EnableCompactFulltextIndex_);
+    }
+    app.FeatureFlags.SetEnableSuperLemmer(opts.EnableSuperLemmer_);
+    app.FeatureFlags.SetEnableJsonIndex(true);
+    app.FeatureFlags.SetEnableSetColumnConstraint(true);
     app.FeatureFlags.SetEnableColumnStore(true);
-    app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);    
+    app.FeatureFlags.SetEnableColumnStatistics(true);
+    app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
+    app.FeatureFlags.SetDisableFileStoreSSDSystemSpaceAccounting(opts.DisableFileStoreSSDSystemSpaceAccounting_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
     app.SetEnableAlterDatabaseCreateHiveFirst(opts.EnableAlterDatabaseCreateHiveFirst_);
     app.SetEnableTopicDiskSubDomainQuota(opts.EnableTopicDiskSubDomainQuota_);
-    app.SetEnablePQConfigTransactionsAtSchemeShard(opts.EnablePQConfigTransactionsAtSchemeShard_);
-    app.SetEnableTopicSplitMerge(opts.EnableTopicSplitMerge_);
+    app.FeatureFlags.SetEnableTopicMessageLevelParallelism(opts.EnableTopicMessageLevelParallelism_.value_or(false));
     app.SetEnableChangefeedDynamoDBStreamsFormat(opts.EnableChangefeedDynamoDBStreamsFormat_);
     app.SetEnableChangefeedDebeziumJsonFormat(opts.EnableChangefeedDebeziumJsonFormat_);
     app.SetEnableTablePgTypes(opts.EnableTablePgTypes_);
@@ -604,16 +671,45 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableChangefeedsOnIndexTables(opts.EnableChangefeedsOnIndexTables_);
     app.SetEnableTieringInColumnShard(opts.EnableTieringInColumnShard_);
     app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
-    app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
-    app.SetEnableExportChecksums(true);
-    app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
+    app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
+    app.SetEnableReplication(opts.EnableReplication_);
+    app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
+    app.SetEnableLocalDBBtreeIndex(opts.EnableLocalDBBtreeIndex_);
+    app.SetEnableSystemNamesProtection(opts.EnableSystemNamesProtection_);
+    app.SetEnableRealSystemViewPaths(opts.EnableRealSystemViewPaths_);
+    app.FeatureFlags.SetEnableAlterDatabase(opts.EnableAlterDatabase_);
+    app.SetEnableAccessToIndexImplTables(opts.EnableAccessToIndexImplTables_);
+    app.SetEnableIndexMaterialization(opts.EnableIndexMaterialization_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
+
+    if (!app.ColumnShardConfig.HasStatistics()) {
+        app.ColumnShardConfig.MutableStatistics()->SetReportBaseStatisticsPeriodMs(1000);
+        app.ColumnShardConfig.MutableStatistics()->SetReportExecutorStatisticsPeriodMs(1000);
+    }
 
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);
         app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+    }
+
+    app.FeatureFlags.SetEnableDataShardSplitHistogramSorting(opts.EnableDataShardSplitHistogramSorting_);
+    app.FeatureFlags.SetEnableDataShardSplitKeySelection(opts.EnableDataShardSplitKeySelection_);
+    app.FeatureFlags.SetEnableDataShardSplitHistogramOmission(opts.EnableDataShardSplitHistogramOmission_);
+
+    app.FeatureFlags.SetEnableConditionalEraseResponseBatching(opts.EnableConditionalEraseResponseBatching_);
+    if (opts.CondEraseResponseBatchSize_) {
+        app.SchemeShardConfig.SetCondEraseResponseBatchSize(*opts.CondEraseResponseBatchSize_);
+    }
+    if (opts.CondEraseResponseBatchMaxTimeMs_) {
+        app.SchemeShardConfig.SetCondEraseResponseBatchMaxTimeMs(*opts.CondEraseResponseBatchMaxTimeMs_);
+    }
+    if (opts.MaxBuildIndexShardsInFlight_) {
+        app.SchemeShardConfig.SetMaxBuildIndexShardsInFlight(*opts.MaxBuildIndexShardsInFlight_);
+    }
+    if (opts.MaxStoredIndexBuilds_) {
+        app.SchemeShardConfig.SetMaxStoredIndexBuilds(*opts.MaxStoredIndexBuilds_);
     }
 
     // graph settings
@@ -644,7 +740,12 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.AddSystemBackupSID(sid);
     }
 
-    AddDomain(runtime, app, TTestTxConfig::DomainUid, hive, schemeRoot);
+    if (opts.DataShardStatsReportIntervalSeconds_) {
+        app.DataShardConfig.SetStatsReportIntervalSeconds(
+            *opts.DataShardStatsReportIntervalSeconds_);
+    }
+
+    AddDomain(runtime, app, TTestTxConfig::DomainUid, hive, schemeRoot, opts.NStoragePools_);
 
     SetupLogging(runtime);
     SetupChannelProfiles(app, ChannelsCount);
@@ -653,7 +754,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         SetupSchemeCache(runtime, node, app.Domains->GetDomain(TTestTxConfig::DomainUid).Name);
     }
 
-    SetupTabletServices(runtime, &app);
+    SetupTabletServices(runtime, &app, !opts.DSProxies_.empty(), {}, nullptr, false, opts.DSProxies_);
     if (opts.EnablePipeRetries_) {
         EnableSchemeshardPipeRetriesGuard = EnableSchemeshardPipeRetries(runtime);
     }
@@ -661,7 +762,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     if (opts.RunFakeConfigDispatcher_) {
         for (ui32 node = 0; node < runtime.GetNodeCount(); ++node) {
             runtime.RegisterService(NConsole::MakeConfigsDispatcherID(runtime.GetNodeId(node)),
-                runtime.Register(new TFakeConfigDispatcher(), node), node);
+                runtime.Register(new TFakeConfigDispatcher(GetAppConfig()), node), node);
         }
     }
 
@@ -670,12 +771,23 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         runtime.GetAppData().YdbDriver = YdbDriver.Get();
     }
 
+    // Create Observer to catch an event of system views update finished.
+    // For more info, see comments in ydb/core/testlib/test_client.cpp
+    if (app.FeatureFlags.GetEnableRealSystemViewPaths()) {
+        AddSysViewsRosterUpdateObserver(runtime);
+    }
+
     TActorId sender = runtime.AllocateEdgeActor();
     //CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(TTestTxConfig::DomainUid), TTabletTypes::BSController), &CreateFlatBsController);
     BootSchemeShard(runtime, schemeRoot);
     BootTxAllocator(runtime, txAllocator);
     BootFakeCoordinator(runtime, coordinator, CoordinatorState);
     BootFakeHive(runtime, hive, HiveState, &GetTabletCreationFunc);
+
+    // Wait until schemeshard completes creating system view paths
+    if (app.FeatureFlags.GetEnableRealSystemViewPaths()) {
+        WaitForSysViewsRosterUpdate(runtime);
+    }
 
     InitRootStoragePools(runtime, schemeRoot, sender, TTestTxConfig::DomainUid);
 
@@ -707,11 +819,10 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 }
 
 NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime &runtime, ui32 nchannels, bool enablePipeRetries,
-        NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory, bool enableSystemViews)
+        NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory)
     : TTestEnv(runtime, TTestEnvOptions()
         .NChannels(nchannels)
-        .EnablePipeRetries(enablePipeRetries)
-        .EnableSystemViews(enableSystemViews), ssFactory)
+        .EnablePipeRetries(enablePipeRetries), ssFactory)
 {
 }
 
@@ -781,7 +892,7 @@ void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) 
     }
 }
 
-void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAppPrepare &app, ui32 domainUid, ui64 hive, ui64 schemeRoot) {
+void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAppPrepare &app, ui32 domainUid, ui64 hive, ui64 schemeRoot, ui32 storagePoolCount) {
     app.ClearDomainsAndHive();
     ui32 planResolution = 50;
     auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(
@@ -790,7 +901,7 @@ void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAp
                 TVector<ui64>{TTestTxConfig::Coordinator},
                 TVector<ui64>{},
                 TVector<ui64>{TTestTxConfig::TxAllocator},
-                DefaultPoolKinds(2));
+                DefaultPoolKinds(storagePoolCount));
 
     TVector<ui64> ids = runtime.GetTxAllocatorTabletIds();
     ids.insert(ids.end(), domain->TxAllocators.begin(), domain->TxAllocators.end());
@@ -916,6 +1027,41 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActor
     TestWaitShardDeletion(runtime, TTestTxConfig::SchemeShard, std::move(localIds));
 }
 
+void NSchemeShardUT_Private::TTestEnv::AddSysViewsRosterUpdateObserver(NActors::TTestActorRuntime& runtime) {
+    if (!runtime.IsRealThreads()) {
+        SysViewsRosterUpdateFinished = false;
+        SysViewsRosterUpdateObserver = runtime.AddObserver<NSysView::TEvSysView::TEvRosterUpdateFinished>([this](auto&) {
+            SysViewsRosterUpdateFinished = true;
+        });
+    }
+}
+
+void NSchemeShardUT_Private::TTestEnv::WaitForSysViewsRosterUpdate(NActors::TTestActorRuntime& runtime) {
+    if (!runtime.IsRealThreads()) {
+        runtime.WaitFor("SysViewsRoster update finished", [this] {
+            return SysViewsRosterUpdateFinished;
+        });
+        SysViewsRosterUpdateObserver.Remove();
+    }
+}
+
+void NSchemeShardUT_Private::TTestEnv::AddExtSubdomainCleanupObserver(NActors::TTestActorRuntime& runtime, const TPathId& subdomainPathId) {
+    Cerr << "TESTENV: subdomain cleanup, start waiting, subdomain " << subdomainPathId << Endl;
+    ExtSubdomainCleanupComplete.erase(subdomainPathId);
+    ExtSubdomainCleanupObserver = runtime.AddObserver<TEvPrivate::TEvTestNotifySubdomainCleanup>([this](const auto& ev) {
+        ExtSubdomainCleanupComplete.insert(ev->Get()->SubdomainPathId);
+    });
+}
+
+void NSchemeShardUT_Private::TTestEnv::WaitForExtSubdomainCleanup(NActors::TTestActorRuntime& runtime, const TPathId& subdomainPathId) {
+    runtime.WaitFor("ExtSubdomainCleanup", [this, &subdomainPathId] {
+        return ExtSubdomainCleanupComplete.contains(subdomainPathId);
+    });
+    ExtSubdomainCleanupComplete.erase(subdomainPathId);
+    ExtSubdomainCleanupObserver.Remove();
+    Cerr << "TESTENV: subdomain cleanup, wait complete, subdomain " << subdomainPathId << Endl;
+}
+
 void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) {
     auto sender = runtime.AllocateEdgeActor();
     runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
@@ -925,13 +1071,21 @@ void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime 
 std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStorageInfo *)> NSchemeShardUT_Private::TTestEnv::GetTabletCreationFunc(ui32 type) {
     switch (type) {
     case TTabletTypes::BlockStoreVolume:
+    case TTabletTypes::BlockStoreVolumeDirect:
         return [](const TActorId& tablet, TTabletStorageInfo* info) {
             return new TFakeBlockStoreVolume(tablet, info);
+        };
+    case TTabletTypes::BlockStorePartitionDirect:
+        return [](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TFakeBlockStorePartitionDirect(tablet, info);
         };
     case TTabletTypes::FileStore:
         return [](const TActorId& tablet, TTabletStorageInfo* info) {
             return new TFakeFileStore(tablet, info);
         };
+    case TTabletTypes::TestShard:
+        return &NKikimr::NTestShard::CreateTestShard;
+
     default:
         return nullptr;
     }
@@ -1017,6 +1171,13 @@ void NSchemeShardUT_Private::TTestEnv::BootTxAllocator(NActors::TTestActorRuntim
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::TxAllocator), &CreateTxAllocator);
 }
 
+NKikimrConfig::TAppConfig NSchemeShardUT_Private::TTestEnv::GetAppConfig() const {
+    NKikimrConfig::TAppConfig appConfig;
+    auto* queryServiceConfig = appConfig.MutableQueryServiceConfig();
+    queryServiceConfig->SetAllExternalDataSourcesAreAvailable(true);
+    return appConfig;
+}
+
 NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory)
     : EnvOpts(GetDefaultTestEnvOptions())
     , SchemeShardFactory(ssFactory)
@@ -1041,6 +1202,29 @@ NSchemeShardUT_Private::TTestWithReboots::TTestWithReboots(bool killOnCommit, NS
     TabletIds.push_back(datashard+6);
     TabletIds.push_back(datashard+7);
     TabletIds.push_back(datashard+8);
+
+    // Events used exclusively by test frameworks.
+    // No need for reboots on these as they aren't used in real operation mode.
+    NoRebootEventTypes.insert(TEvPrivate::EvTestNotifySubdomainCleanup);
+    NoRebootEventTypes.insert(TEvFakeHive::EvSubscribeToTabletDeletion);
+    NoRebootEventTypes.insert(TEvFakeHive::EvNotifyTabletDeleted);
+    NoRebootEventTypes.insert(TEvFakeHive::EvRequestDomainInfo);
+    NoRebootEventTypes.insert(TEvFakeHive::EvRequestDomainInfoReply);
+
+    NoRebootEventTypes.insert(TEvSchemeShard::EvModifySchemeTransaction);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvDescribeScheme);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvNotifyTxCompletion);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvMeasureSelfResponseTime);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvWakeupToMeasureSelfResponseTime);
+    NoRebootEventTypes.insert(TEvTablet::EvLocalMKQL);
+    NoRebootEventTypes.insert(TEvFakeHive::EvSubscribeToTabletDeletion);
+    NoRebootEventTypes.insert(TEvSchemeShard::EvCancelTx);
+    NoRebootEventTypes.insert(TEvExport::EvCreateExportRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvCreateRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvGetRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvCancelRequest);
+    NoRebootEventTypes.insert(TEvIndexBuilder::EvForgetRequest);
+    NoRebootEventTypes.insert(TEvSetColumnConstraint::EvCreateRequest);
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::Run(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
@@ -1075,31 +1259,51 @@ struct NSchemeShardUT_Private::TTestWithReboots::TFinalizer {
 };
 
 void NSchemeShardUT_Private::TTestWithReboots::RunWithTabletReboots(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
-    RunTestWithReboots(TabletIds,
-                       [&]() {
-        return PassUserRequests;
-    },
-    [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(*this);
-        Prepare(dispatchName, setup, activeZone);
+    RunTestWithReboots(
+        TabletIds,
+        // filterFactory
+        [&]() {
+            return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                return PassUserRequests(runtime, event);
+            };
+        },
+        // testFunc
+        [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+            TFinalizer finalizer(*this);
+            Prepare(dispatchName, setup, activeZone);
 
-        activeZone = true;
-        testScenario(*Runtime, activeZone);
-    }, Max<ui32>(), Max<ui64>(), 0, 0, KillOnCommit);
+            activeZone = true;
+            testScenario(*Runtime, activeZone);
+        },
+        Max<ui32>(),
+        Max<ui64>(),
+        Bucket,
+        TotalBuckets,
+        KillOnCommit
+    );
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::RunWithPipeResets(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
-    RunTestWithPipeResets(TabletIds,
-                          [&]() {
-        return PassUserRequests;
-    },
-    [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(*this);
-        Prepare(dispatchName, setup, activeZone);
+    RunTestWithPipeResets(
+        TabletIds,
+        // filterFactory
+        [&]() {
+            return [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
+                return PassUserRequests(runtime, event);
+            };
+        },
+        // testFunc
+        [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+            TFinalizer finalizer(*this);
+            Prepare(dispatchName, setup, activeZone);
 
-        activeZone = true;
-        testScenario(*Runtime, activeZone);
-    });
+            activeZone = true;
+            testScenario(*Runtime, activeZone);
+        },
+        Max<ui32>(),
+        Bucket,
+        TotalBuckets
+    );
 }
 
 void NSchemeShardUT_Private::TTestWithReboots::RunWithDelays(std::function<void (TTestActorRuntime &, bool &)> testScenario) {
@@ -1118,13 +1322,13 @@ void NSchemeShardUT_Private::TTestWithReboots::RestoreLogging() {
 }
 
 NSchemeShardUT_Private::TTestEnv* NSchemeShardUT_Private::TTestWithReboots::CreateTestEnv() {
-    return new TTestEnv(*Runtime, GetTestEnvOptions());
+    return new TTestEnv(*Runtime, GetTestEnvOptions().RunFakeConfigDispatcher(true));
 }
 
 
 
 void NSchemeShardUT_Private::TTestWithReboots::Prepare(const TString &dispatchName, std::function<void (TTestActorRuntime &)> setup, bool &outActiveZone) {
-    Cdbg << Endl << "=========== RUN: "<< dispatchName << " ===========" << Endl;
+    Cdbg << Endl << "======" << TInstant::Now() << "===== RUN: "<< dispatchName << " ===========" << Endl;
 
     outActiveZone = false;
 
@@ -1160,20 +1364,7 @@ void NSchemeShardUT_Private::TTestWithReboots::Finalize() {
 
 bool NSchemeShardUT_Private::TTestWithReboots::PassUserRequests(TTestActorRuntimeBase &runtime, TAutoPtr<IEventHandle> &event) {
     Y_UNUSED(runtime);
-    return event->Type == TEvSchemeShard::EvModifySchemeTransaction ||
-           event->Type == TEvSchemeShard::EvDescribeScheme ||
-           event->Type == TEvSchemeShard::EvNotifyTxCompletion ||
-           event->Type == TEvSchemeShard::EvMeasureSelfResponseTime ||
-           event->Type == TEvSchemeShard::EvWakeupToMeasureSelfResponseTime ||
-           event->Type == TEvTablet::EvLocalMKQL ||
-           event->Type == TEvFakeHive::EvSubscribeToTabletDeletion ||
-           event->Type == TEvSchemeShard::EvCancelTx ||
-           event->Type == TEvExport::EvCreateExportRequest ||
-           event->Type == TEvIndexBuilder::EvCreateRequest ||
-           event->Type == TEvIndexBuilder::EvGetRequest ||
-           event->Type == TEvIndexBuilder::EvCancelRequest ||
-           event->Type == TEvIndexBuilder::EvForgetRequest
-        ;
+    return NoRebootEventTypes.contains(event->Type);
 }
 
 NSchemeShardUT_Private::TTestEnvOptions& NSchemeShardUT_Private::TTestWithReboots::GetTestEnvOptions() {

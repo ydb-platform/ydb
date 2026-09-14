@@ -1,18 +1,20 @@
 """Utilities for truncating assertion output.
 
 Current default behaviour is to truncate assertion explanations at
-~8 terminal lines, unless running in "-vv" mode or running on CI.
+terminal lines, unless running with an assertions verbosity level of at least 2 or running on CI.
 """
+
 from typing import List
 from typing import Optional
 
 from _pytest.assertion import util
+from _pytest.config import Config
 from _pytest.nodes import Item
 
 
 DEFAULT_MAX_LINES = 8
 DEFAULT_MAX_CHARS = 8 * 80
-USAGE_MSG = "use '-vv' to show"
+USAGE_MSG = "use '--pytest-args=-vv' to show"
 
 
 def truncate_if_required(
@@ -26,7 +28,7 @@ def truncate_if_required(
 
 def _should_truncate_item(item: Item) -> bool:
     """Whether or not this test item is eligible for truncation."""
-    verbose = item.config.option.verbose
+    verbose = item.config.get_verbosity(Config.VERBOSITY_ASSERTIONS)
     return verbose < 2 and not util.running_on_ci()
 
 
@@ -52,7 +54,7 @@ def _truncate_explanation(
     # removed but is at least 68 characters:
     # The real value is
     # 64 (for the base message:
-    # '...\n...Full output truncated (1 line hidden), use '-vv' to show")'
+    # '...\n...Full output truncated (1 line hidden), use '--pytest-args=-vv' to show")'
     # )
     # + 1 (for plural)
     # + int(math.log10(len(input_lines) - max_lines)) (number of hidden line, at least 1)

@@ -54,14 +54,17 @@ public:
     }
     void Handle(typename TEvRequestInternalResult::TPtr& ev) {
         if (!ev->Get()->GetFuture().HasValue() || ev->Get()->GetFuture().HasException()) {
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot receive result on initialization";
+            YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_PROVIDER, "Cannot receive result on initialization");
             OnInternalResultError(Ydb::StatusIds::INTERNAL_ERROR, "cannot receive result from future");
             return;
         }
         auto f = ev->Get()->GetFuture();
         TResponse response = f.ExtractValue();
         if (!TOperatorChecker<TResponse>::IsSuccess(response)) {
-            AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("event", "unexpected reply")("error_message", response.DebugString())("request", ProtoRequest.DebugString());
+            YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_PROVIDER, "",
+                {"event", "unexpected reply"},
+                {"errorMessage", response.DebugString()},
+                {"request", ProtoRequest.DebugString()});
             NYql::TIssues issue;
             NYql::IssuesFromMessage(response.operation().issues(), issue);
             OnInternalResultError(response.operation().status(), issue.ToString());
@@ -76,7 +79,7 @@ public:
         using TRpcRequest = NGRpcService::TGrpcRequestOperationCall<TRequest, TResponse>;
         auto request = ProtoRequest;
         NACLib::TUserToken uToken("metadata@system", {});
-        auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), AppData()->TenantName, uToken.SerializeAsString(), aSystem);
+        auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), AppData()->TenantName, uToken.SerializeAsString(), aSystem, /*internalCall*/ true);
         const NActors::TActorId selfId = TBase::SelfId();
         const auto replyCallback = [aSystem, selfId](const NThreading::TFuture<TResponse>& f) {
             aSystem->Send(selfId, new TEvRequestInternalResult(f));

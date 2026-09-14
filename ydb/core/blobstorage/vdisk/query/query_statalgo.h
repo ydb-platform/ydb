@@ -1,11 +1,41 @@
 #pragma once
 
 #include "defs.h"
+#include "query_stat_yield.h"
+
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 
 #include <util/stream/length.h>
 
 namespace NKikimr {
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TDbStatRecordMerger
+    // Passes every physical record for the current key to a DB-stat aggregator.
+    ////////////////////////////////////////////////////////////////////////////
+    template <class TAggr, class TKey, class TMemRec>
+    class TDbStatRecordMerger {
+    public:
+        explicit TDbStatRecordMerger(TAggr* aggr)
+            : Aggr(aggr)
+        {}
+
+        void AddFromFresh(const TMemRec& memRec, const TRope*, const TKey& key, ui64) {
+            Aggr->Update(key, memRec);
+        }
+
+        void AddFromSegment(const TMemRec& memRec, const TDiskPart*, const TKey& key, ui64, const void*) {
+            Aggr->Update(key, memRec);
+        }
+
+        static constexpr bool HaveToMergeData() {
+            return false;
+        }
+
+    private:
+        TAggr* Aggr;
+    };
 
     ////////////////////////////////////////////////////////////////////////////
     // TraverseDbWithoutMerge
@@ -50,13 +80,107 @@ namespace NKikimr {
             TMemIterator c(p.SstPtr.Get());
             c.SeekToFirst();
             while (c.Valid()) {
-                aggr->UpdateLevel(p, c->Key, c->MemRec);
+                aggr->UpdateLevel(p, c.GetCurKey(), c.GetMemRec());
                 c.Next();
             }
             it.Next();
         }
 
         aggr->Finish();
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    // TraverseDbWithoutMerge with yielding
+    //
+    // Traverses all physical records in reverse key order. Every quantum
+    // processes at least one complete key before checking whether to yield.
+    // The returned key is independent of a snapshot and can therefore be used
+    // to resume after the old snapshot is released and a new one is acquired.
+    ////////////////////////////////////////////////////////////////////////////
+    template <class TAggr, class TKey, class TMemRec, class TShouldStop>
+    std::optional<TDbStatYieldedState<TKey, TMemRec>> TraverseDbWithoutMergeImpl(
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            TAggr* aggr,
+            const ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>& snap,
+            std::optional<TDbStatYieldedState<TKey, TMemRec>> yieldedState,
+            std::optional<TDbStatYieldPolicy> yieldPolicy,
+            TShouldStop&& shouldStop,
+            TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> monotonicTimeProvider = {})
+    {
+        using TYieldedState = TDbStatYieldedState<TKey, TMemRec>;
+        using TBackwardIterator = typename TLevelIndexSnapshot<TKey, TMemRec>::TBackwardIterator;
+
+        TBackwardIterator iterator(hullCtx, &snap);
+        THeapIterator<TKey, TMemRec, false> heap(&iterator);
+        if (yieldedState) {
+            heap.Seek(yieldedState->LastProcessedKey);
+            // The saved key was completely processed in the previous quantum.
+            if (heap.Valid() && heap.GetCurKey() == yieldedState->LastProcessedKey) {
+                heap.Prev();
+            }
+        } else {
+            heap.SeekToLast();
+        }
+
+        TDbStatRecordMerger<TAggr, TKey, TMemRec> merger(aggr);
+        TDbStatYieldChecker yieldChecker(std::move(yieldPolicy), std::move(monotonicTimeProvider));
+        while (heap.Valid()) {
+            const TKey key = heap.GetCurKey();
+            heap.PutToMergerAndAdvance(&merger);
+
+            if (heap.Valid() && shouldStop()) {
+                return TYieldedState{key};
+            }
+
+            // Do not yield after the final key; finish in the current quantum.
+            if (heap.Valid() && yieldChecker.StepAndCheckForYield()) {
+                return TYieldedState{key};
+            }
+        }
+
+        aggr->Finish();
+        return std::nullopt;
+    }
+
+    template <class TAggr, class TKey, class TMemRec>
+    std::optional<TDbStatYieldedState<TKey, TMemRec>> TraverseDbWithoutMerge(
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            TAggr* aggr,
+            const ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>& snap,
+            std::optional<TDbStatYieldedState<TKey, TMemRec>> yieldedState,
+            std::optional<TDbStatYieldPolicy> yieldPolicy,
+            TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> monotonicTimeProvider = {})
+    {
+        return TraverseDbWithoutMergeImpl(
+            hullCtx,
+            aggr,
+            snap,
+            std::move(yieldedState),
+            std::move(yieldPolicy),
+            [] { return false; },
+            std::move(monotonicTimeProvider));
+    }
+
+    template <class TAggr, class TKey, class TMemRec, class TShouldStop>
+    std::optional<TDbStatYieldedState<TKey, TMemRec>> TraverseDbWithoutMergeUntil(
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            TAggr* aggr,
+            const ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>& snap,
+            std::optional<TDbStatYieldedState<TKey, TMemRec>> yieldedState,
+            std::optional<TDbStatYieldPolicy> yieldPolicy,
+            TShouldStop&& shouldStop,
+            TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> monotonicTimeProvider = {})
+    {
+        // Like the time-based variant above, the stop predicate is checked only
+        // after all physical records for the current key have been processed.
+        return TraverseDbWithoutMergeImpl(
+            hullCtx,
+            aggr,
+            snap,
+            std::move(yieldedState),
+            std::move(yieldPolicy),
+            std::forward<TShouldStop>(shouldStop),
+            std::move(monotonicTimeProvider));
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -129,7 +253,7 @@ namespace NKikimr {
             }
 
             void AddFromFresh(const TMemRec& memRec, const TRope* /*data*/, const TKey& key, ui64 /*lsn*/) {
-                Y_ABORT_UNLESS(key == CurKey);
+                Y_VERIFY_S(key == CurKey, HullCtx->VCtx->VDiskLogPrefix);
                 if (!Constraint || Constraint->Check(CurKey)) {
                     auto mr = memRec.ToString(HullCtx->IngressCache.Get(), nullptr);
                     auto ing = IngressToString(HullCtx->VCtx->Top.get(), HullCtx->VCtx->ShortSelfVDisk, CurKey, memRec);
@@ -204,14 +328,14 @@ namespace NKikimr {
                         return;
                     }
                     const auto& c = *MemIt;
-                    if (!Constraint || Constraint->Check(c->Key)) {
-                        auto mr = c->MemRec.ToString(HullCtx->IngressCache.Get(), c.GetSstPtr()->GetOutbound());
+                    if (!Constraint || Constraint->Check(c.GetCurKey())) {
+                        auto mr = c.GetMemRec().ToString(HullCtx->IngressCache.Get(), c.GetSstPtr()->GetOutbound());
                         auto ing = IngressToString(HullCtx->VCtx->Top.get(), HullCtx->VCtx->ShortSelfVDisk,
-                                c->Key, c->MemRec);
+                                c.GetCurKey(), c.GetMemRec());
                         str << Prefix
                             << "L: " << p.Level
                             << " ID: " << p.SstPtr->AssignedSstId
-                            << " Key: " << c->Key.ToString()
+                            << " Key: " << c.GetCurKey().ToString()
                             << " Ingress: " << ing
                             << " MemRec: " << mr
                             << "\n";
@@ -324,4 +448,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

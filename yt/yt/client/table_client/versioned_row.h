@@ -102,7 +102,7 @@ static_assert(
 ////////////////////////////////////////////////////////////////////////////////
 
 size_t GetByteSize(const TVersionedValue& value);
-size_t GetDataWeight(const TVersionedValue& value);
+i64 GetDataWeight(const TVersionedValue& value);
 
 size_t ReadValue(const char* input, TVersionedValue* value);
 size_t WriteValue(char* output, const TVersionedValue& value);
@@ -271,7 +271,7 @@ static_assert(
     sizeof(TVersionedRow) == sizeof(intptr_t),
     "TVersionedRow size must match that of a pointer.");
 
-size_t GetDataWeight(TVersionedRow row);
+i64 GetDataWeight(TVersionedRow row);
 
 //! Checks that #row is a valid client-side versioned data row. Throws on failure.
 /*!
@@ -479,13 +479,9 @@ public:
 
     explicit TVersionedOwningRow(TVersionedRow other);
 
-    TVersionedOwningRow(const TVersionedOwningRow& other)
-        : Data_(other.Data_)
-    { }
+    TVersionedOwningRow(const TVersionedOwningRow& other) noexcept = default;
 
-    TVersionedOwningRow(TVersionedOwningRow&& other)
-        : Data_(std::move(other.Data_))
-    { }
+    TVersionedOwningRow(TVersionedOwningRow&& other) noexcept = default;
 
     explicit operator bool() const
     {
@@ -600,7 +596,7 @@ public:
         return *this;
     }
 
-    TVersionedOwningRow& operator=(TVersionedOwningRow&& other)
+    TVersionedOwningRow& operator=(TVersionedOwningRow&& other) noexcept
     {
         Data_ = std::move(other.Data_);
         return *this;

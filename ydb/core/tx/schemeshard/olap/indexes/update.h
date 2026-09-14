@@ -7,11 +7,29 @@
 
 namespace NKikimr::NSchemeShard {
 
+    class TOlapMoveIndex {
+    private:
+        YDB_READONLY_DEF(TString, SourceName);
+        YDB_READONLY_DEF(TString, DestinationName);
+        YDB_READONLY(bool, ReplaceDestination, false);
+
+    public:
+        TOlapMoveIndex() = default;
+
+        TOlapMoveIndex(TString sourceName, TString destinationName, const bool replaceDestination)
+            : SourceName(std::move(sourceName))
+            , DestinationName(std::move(destinationName))
+            , ReplaceDestination(replaceDestination)
+        {
+        }
+    };
+
     class TOlapIndexUpsert {
     private:
         YDB_READONLY_DEF(TString, Name);
         YDB_READONLY_DEF(TString, TypeName);
         YDB_READONLY_DEF(std::optional<TString>, StorageId);
+        YDB_READONLY_DEF(std::optional<bool>, InheritPortionStorage);
     protected:
         NBackgroundTasks::TInterfaceProtoContainer<NOlap::NIndexes::IIndexMetaConstructor> IndexConstructor;
     public:
@@ -29,6 +47,7 @@ namespace NKikimr::NSchemeShard {
     private:
         YDB_READONLY_DEF(TVector<TOlapIndexUpsert>, UpsertIndexes);
         YDB_READONLY_DEF(TSet<TString>, DropIndexes);
+        YDB_READONLY_DEF(TVector<TOlapMoveIndex>, MoveIndexes);
     public:
         bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors);
     };

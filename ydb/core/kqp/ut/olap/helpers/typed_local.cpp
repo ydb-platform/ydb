@@ -112,7 +112,7 @@ NKikimr::NKqp::TTypedLocalHelper::TDistribution TTypedLocalHelper::GetDistributi
 }
 
 void TTypedLocalHelper::GetVolumes(
-    ui64& rawBytes, ui64& bytes, const bool verbose /*= false*/, const std::vector<TString> columnNames /*= {}*/) {
+    ui64& rawBytes, ui64& bytes, ui64& portionsCount, const bool verbose /*= false*/, const std::vector<TString> columnNames /*= {}*/) {
     TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_stats` WHERE Activity == 1";
     if (columnNames.size()) {
         selectQuery += " AND EntityName IN ('" + JoinSeq("','", columnNames) + "')";
@@ -122,6 +122,7 @@ void TTypedLocalHelper::GetVolumes(
 
     std::optional<ui64> rawBytesPred;
     std::optional<ui64> bytesPred;
+    std::set<ui32> portionIds;
     while (true) {
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
         rawBytes = 0;
@@ -140,6 +141,9 @@ void TTypedLocalHelper::GetVolumes(
                 if (verbose) {
                     Cerr << c.first << ":" << Endl << c.second.GetProto().DebugString() << Endl;
                 }
+                if (c.first == "PortionId") {
+                    portionIds.emplace(GetUint64(c.second));
+                }
             }
         }
         if (rawBytesPred && *rawBytesPred == rawBytes && bytesPred && *bytesPred == bytes) {
@@ -151,7 +155,8 @@ void TTypedLocalHelper::GetVolumes(
             Sleep(TDuration::Seconds(5));
         }
     }
-    Cerr << bytes << "/" << rawBytes << Endl;
+    portionsCount = portionIds.size();
+    Cerr << bytes << "/" << rawBytes << "/" << portionIds.size() << Endl;
 }
 
 void TTypedLocalHelper::GetCount(ui64& count) {
@@ -174,6 +179,14 @@ void TTypedLocalHelper::FillPKOnly(const double pkKff /*= 0*/, const ui32 numRow
     builders.emplace_back(
         NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable(
             "pk_int", numRows * pkKff));
+    if (TypeName) {
+        builders.emplace_back(
+            NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TStringPoolFiller>::BuildNotNullable(
+                "field", NArrow::NConstruction::TStringPoolFiller(1, 1, "abcde", 1)));
+    }
+    builders.emplace_back(
+        NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::TimestampType>>::BuildNotNullable(
+            "ts", numRows * pkKff));
     NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
     std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
     TBase::SendDataViaActorSystem(TablePath, batch);

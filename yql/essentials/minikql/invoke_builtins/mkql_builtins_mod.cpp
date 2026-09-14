@@ -1,14 +1,13 @@
-#include "mkql_builtins_impl.h"  // Y_IGNORE
+#include "mkql_builtins_impl.h" // Y_IGNORE
 
 #include <cmath>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-template<typename TLeft, typename TRight, typename TOutput>
-struct TMod : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMod<TLeft, TRight, TOutput>> {
+template <typename TLeft, typename TRight, typename TOutput>
+struct TMod: public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMod<TLeft, TRight, TOutput>> {
     static_assert(std::is_floating_point<TOutput>::value, "expected floating point");
 
     static constexpr auto NullMode = TKernel::ENullMode::Default;
@@ -21,8 +20,8 @@ struct TMod : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMod<TLeft,
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        ctx.Codegen.AddGlobalMapping("fmod", reinterpret_cast<const void*>(static_cast<double(*)(double, double)>(&std::fmod)));
-        ctx.Codegen.AddGlobalMapping("fmodf", reinterpret_cast<const void*>(static_cast<float(*)(float, float)>(&std::fmod)));
+        ctx.Codegen.AddGlobalMapping("fmod", reinterpret_cast<const void*>(static_cast<double (*)(double, double)>(&std::fmod)));
+        ctx.Codegen.AddGlobalMapping("fmodf", reinterpret_cast<const void*>(static_cast<float (*)(float, float)>(&std::fmod)));
         return BinaryOperator::CreateFRem(left, right, "frem", block);
     }
 #endif
@@ -85,7 +84,7 @@ struct TIntegralMod {
 #endif
 };
 
-}
+} // namespace
 
 void RegisterMod(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryRealFunctionOpt<TMod, TBinaryArgsOpt>(registry, "Mod");
@@ -96,5 +95,4 @@ void RegisterMod(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["Mod"] = std::make_unique<TBinaryNumericKernelFamily<TIntegralMod, TMod>>();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

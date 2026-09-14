@@ -25,18 +25,25 @@ TPeriodicExecutorBase<TInvocationTimePolicy>::TPeriodicExecutorBase(
 template <CInvocationTimePolicy TInvocationTimePolicy>
 void TPeriodicExecutorBase<TInvocationTimePolicy>::Start()
 {
+    YT_UNUSED_FUTURE(StartAndGetFirstExecutedEvent());
+}
+
+template <CInvocationTimePolicy TInvocationTimePolicy>
+TFuture<void> TPeriodicExecutorBase<TInvocationTimePolicy>::StartAndGetFirstExecutedEvent()
+{
     auto guard = Guard(SpinLock_);
 
-    if (Started_) {
-        return;
+    if (!Started_) {
+        FirstExecutedEventPromise_ = NewPromise<void>();
+        ExecutedPromise_ = TPromise<void>();
+        IdlePromise_ = TPromise<void>();
+        Started_ = true;
+        if (TInvocationTimePolicy::IsEnabled()) {
+            PostDelayedCallback(TInvocationTimePolicy::GenerateKickstartDeadline());
+        }
     }
 
-    ExecutedPromise_ = TPromise<void>();
-    IdlePromise_ = TPromise<void>();
-    Started_ = true;
-    if (TInvocationTimePolicy::IsEnabled()) {
-        PostDelayedCallback(TInvocationTimePolicy::KickstartDeadline());
-    }
+    return FirstExecutedEventPromise_.ToFuture().ToUncancelable();
 }
 
 template <CInvocationTimePolicy TInvocationTimePolicy>
@@ -58,6 +65,7 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::DoStop(TGuard<NThreading::TSp
     TInvocationTimePolicy::Reset();
 
     auto executedPromise = ExecutedPromise_;
+    auto firstExecutedEventPromise = FirstExecutedEventPromise_;
     auto executionCanceler = ExecutionCanceler_;
     TDelayedExecutor::CancelAndClear(Cookie_);
 
@@ -66,6 +74,8 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::DoStop(TGuard<NThreading::TSp
     if (executedPromise) {
         executedPromise.TrySet(MakeStoppedError());
     }
+
+    firstExecutedEventPromise.TrySet(MakeStoppedError());
 
     if (executionCanceler) {
         executionCanceler(MakeStoppedError());
@@ -83,7 +93,7 @@ TFuture<void> TPeriodicExecutorBase<TInvocationTimePolicy>::Stop()
         return idlePromise;
     } else {
         DoStop(guard);
-        return VoidFuture;
+        return OKFuture;
     }
 }
 
@@ -156,18 +166,17 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::PostDelayedCallback(TInstant 
 template <CInvocationTimePolicy TInvocationTimePolicy>
 void TPeriodicExecutorBase<TInvocationTimePolicy>::PostCallback()
 {
-    GuardedInvoke(
-        Invoker_,
-        [this, weakThis = MakeWeak(this)] {
+    Invoker_->Invoke(MakeGuardedCallback(
+        BIND_NO_PROPAGATE([this, weakThis = MakeWeak(this)] {
             if (auto this_ = weakThis.Lock()) {
                 RunCallback();
             }
-        },
-        [this, weakThis = MakeWeak(this)] {
+        }),
+        BIND_NO_PROPAGATE([this, weakThis = MakeWeak(this)] {
             if (auto this_ = weakThis.Lock()) {
                 OnCallbackCancelled();
             }
-        });
+        })));
 }
 
 template <CInvocationTimePolicy TInvocationTimePolicy>
@@ -207,9 +216,11 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::RunCallback()
         }
 
         TPromise<void> idlePromise;
+        TPromise<void> firstExecutedEventPromise;
         {
             auto guard = Guard(SpinLock_);
             idlePromise = IdlePromise_;
+            firstExecutedEventPromise = FirstExecutedEventPromise_;
             ExecutingCallback_ = false;
             ExecutionCanceler_.Reset();
         }
@@ -221,6 +232,8 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::RunCallback()
         if (executedPromise) {
             executedPromise.TrySet();
         }
+
+        firstExecutedEventPromise.TrySet();
 
         auto guard = Guard(SpinLock_);
 
@@ -237,7 +250,7 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::RunCallback()
             guard.Release();
             PostCallback();
         } else if (TInvocationTimePolicy::IsEnabled()) {
-            PostDelayedCallback(TInvocationTimePolicy::NextDeadline());
+            PostDelayedCallback(TInvocationTimePolicy::GenerateNextDeadline());
         }
     };
 
@@ -268,7 +281,7 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::OnCallbackCancelled()
     }
 
     if (TInvocationTimePolicy::IsEnabled()) {
-        PostDelayedCallback(TInvocationTimePolicy::NextDeadline());
+        PostDelayedCallback(TInvocationTimePolicy::GenerateNextDeadline());
     }
 }
 
@@ -285,7 +298,7 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::SetOptions(TPartialOptions...
     if (Started_ && !Busy_ && TInvocationTimePolicy::ShouldKickstart(options...)) {
         TInvocationTimePolicy::SetOptions(std::move(options)...);
 
-        PostDelayedCallback(TInvocationTimePolicy::KickstartDeadline());
+        PostDelayedCallback(TInvocationTimePolicy::GenerateKickstartDeadline());
     } else {
         TInvocationTimePolicy::SetOptions(std::move(options)...);
     }
@@ -304,9 +317,14 @@ void TPeriodicExecutorBase<TInvocationTimePolicy>::DoRunCallback()
 {
     if constexpr (std::same_as<TCallbackResult, void>) {
         Callback_();
+
+        auto guard = Guard(SpinLock_);
         TInvocationTimePolicy::ProcessResult();
     } else {
-        TInvocationTimePolicy::ProcessResult(Callback_());
+        auto&& result = Callback_();
+
+        auto guard = Guard(SpinLock_);
+        TInvocationTimePolicy::ProcessResult(std::forward<decltype(result)>(result));
     }
 }
 

@@ -239,6 +239,23 @@ void CSVRowInputFormat::readPrefix()
         }
         else
         {
+            if (!format_settings.csv.file_column_names.empty())
+            {
+                column_mapping->read_columns.assign(header.columns(), false);
+                for (const auto& name : format_settings.csv.file_column_names)
+                {
+                    addInputColumn(name);
+                }
+                for (auto read_column : column_mapping->read_columns)
+                {
+                    if (!read_column)
+                    {
+                        column_mapping->have_always_default_columns = true;
+                        break;
+                    }
+                }
+                return;
+            }
             skipRow(in, format_settings.csv, num_columns);
             setupAllColumnsByTableSchema();
         }

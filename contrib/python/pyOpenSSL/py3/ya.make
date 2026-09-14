@@ -2,13 +2,14 @@
 
 PY3_LIBRARY()
 
-VERSION(21.0.0)
+SUBSCRIBER(g:python-contrib)
+
+VERSION(25.1.0)
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/python/cryptography
-    contrib/python/six
 )
 
 NO_LINT()
@@ -28,6 +29,7 @@ RESOURCE_FILES(
     PREFIX contrib/python/pyOpenSSL/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    OpenSSL/py.typed
 )
 
 END()

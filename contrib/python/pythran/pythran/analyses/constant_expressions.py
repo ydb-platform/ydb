@@ -11,14 +11,11 @@ import gast as ast
 
 
 
-class ConstantExpressions(NodeAnalysis):
+class ConstantExpressions(NodeAnalysis[Globals, Locals, Aliases, PureFunctions]):
 
     """Identify constant expressions."""
 
-    def __init__(self):
-        self.result = set()
-        super(ConstantExpressions, self).__init__(Globals, Locals, Aliases,
-                                                  PureFunctions)
+    ResultType = set
 
     def add(self, node):
         self.result.add(node)

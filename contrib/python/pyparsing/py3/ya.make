@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 PROVIDES(pyparsing)
 
-VERSION(3.2.1)
+VERSION(3.3.2)
 
 LICENSE(MIT)
 
@@ -18,6 +18,9 @@ PY_SRCS(
     TOP_LEVEL
     pyparsing/__init__.py
     pyparsing/actions.py
+    pyparsing/ai/__init__.py
+    pyparsing/ai/show_best_practices/__init__.py
+    pyparsing/ai/show_best_practices/__main__.py
     pyparsing/common.py
     pyparsing/core.py
     pyparsing/diagram/__init__.py
@@ -25,14 +28,18 @@ PY_SRCS(
     pyparsing/helpers.py
     pyparsing/results.py
     pyparsing/testing.py
+    pyparsing/tools/__init__.py
+    pyparsing/tools/cvt_pyparsing_pep8_names.py
     pyparsing/unicode.py
     pyparsing/util.py
+    pyparsing/warnings.py
 )
 
 RESOURCE_FILES(
     PREFIX contrib/python/pyparsing/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    pyparsing/ai/best_practices.md
     pyparsing/py.typed
 )
 

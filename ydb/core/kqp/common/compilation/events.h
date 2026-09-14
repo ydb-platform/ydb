@@ -11,6 +11,7 @@
 #include <ydb/core/kqp/common/simple/query_ast.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/protos/kqp_physical.pb.h>
 
 namespace NKikimr::NKqp::NPrivateEvents {
 
@@ -20,7 +21,8 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings, const TMaybe<TString>& applicationName,
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing(),
-        bool split = false, NYql::TExprContext* splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr)
+        bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
+        bool isWarmupCompilation = false, bool usePessimisticLocks = false)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -39,8 +41,10 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , CollectDiagnostics(collectDiagnostics)
         , QueryAst(queryAst)
         , Split(split)
-        , SplitCtx(splitCtx)
-        , SplitExpr(splitExpr)
+        , SplitCtx(std::move(splitCtx))
+        , SplitExpr(std::move(splitExpr))
+        , IsWarmupCompilation(isWarmupCompilation)
+        , UsePessimisticLocks(usePessimisticLocks)
     {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }
@@ -70,8 +74,11 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
     TMaybe<TQueryAst> QueryAst;
     bool Split = false;
 
-    NYql::TExprContext* SplitCtx = nullptr;
+    std::shared_ptr<NYql::TExprContext> SplitCtx = nullptr;
     NYql::TExprNode::TPtr SplitExpr = nullptr;
+
+    bool IsWarmupCompilation = false;
+    bool UsePessimisticLocks = false;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
@@ -80,7 +87,8 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         TKqpDbCountersPtr dbCounters, const TGUCSettings::TPtr& gUCSettings, const TMaybe<TString>& applicationName,
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, TKqpTempTablesState::TConstPtr tempTablesState = nullptr, TMaybe<TQueryAst> queryAst = Nothing(),
-        bool split = false, NYql::TExprContext* splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr)
+        bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
+        bool usePessimisticLocks = false)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -96,8 +104,9 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         , IntrestedInResult(std::move(intrestedInResult))
         , QueryAst(queryAst)
         , Split(split)
-        , SplitCtx(splitCtx)
-        , SplitExpr(splitExpr)
+        , SplitCtx(std::move(splitCtx))
+        , SplitExpr(std::move(splitExpr))
+        , UsePessimisticLocks(usePessimisticLocks)
     {
     }
 
@@ -121,21 +130,20 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
     TMaybe<TQueryAst> QueryAst;
     bool Split = false;
 
-    NYql::TExprContext* SplitCtx = nullptr;
+    std::shared_ptr<NYql::TExprContext> SplitCtx = nullptr;
     NYql::TExprNode::TPtr SplitExpr = nullptr;
+    bool UsePessimisticLocks = false;
 };
 
 struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {
-    TEvCompileResponse(const TKqpCompileResult::TConstPtr& compileResult, NLWTrace::TOrbit orbit = {}, const std::optional<TString>& replayMessage = std::nullopt)
+    TEvCompileResponse(const TKqpCompileResult::TConstPtr& compileResult, NLWTrace::TOrbit orbit = {})
         : CompileResult(compileResult)
-        , ReplayMessage(replayMessage)
         , Orbit(std::move(orbit)) {
     }
 
     TKqpCompileResult::TConstPtr CompileResult;
     TKqpStatsCompile Stats;
     std::optional<TString> ReplayMessage;
-    std::optional<TString> ReplayMessageUserView;
 
     NLWTrace::TOrbit Orbit;
 };

@@ -37,7 +37,7 @@ struct TRefCountedCookieHolder
 
 template <class T>
 struct TRefCountedWrapper final
-    : public T
+    : public std::remove_const_t<T>
     , public TRefTracked<T>
 {
     template <class... TArgs>
@@ -55,7 +55,7 @@ struct TRefCountedWrapper final
 
 template <class T, class TDeleter>
 class TRefCountedWrapperWithDeleter final
-    : public T
+    : public std::remove_const_t<T>
     , public TRefTracked<T>
 {
 public:
@@ -78,7 +78,7 @@ private:
 
 template <class T>
 struct TRefCountedWrapperWithCookie final
-    : public T
+    : public std::remove_const_t<T>
     , public TRefCountedCookieHolder
 {
     template <class... TArgs>
@@ -309,18 +309,15 @@ Y_FORCE_INLINE TIntrusivePtr<T> NewWithDeleter(TDeleter deleter, As&&... args)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T, class TTag, int Counter, class... As>
+template <class T, auto LocationLite, class... As>
 Y_FORCE_INLINE TIntrusivePtr<T> NewWithLocation(
-    const TSourceLocation& location,
     As&&... args)
 {
     using TWrapper = TRefCountedWrapperWithCookie<T>;
     void* ptr = NYT::NDetail::AllocateConstSizeAlignedOrCrash<sizeof(TWrapper), alignof(TWrapper)>();
     auto* instance = NYT::NDetail::NewEpilogue<TWrapper>(ptr, std::forward<As>(args)...);
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
-    instance->InitializeTracking(GetRefCountedTypeCookieWithLocation<T, TTag, Counter>(location));
-#else
-    Y_UNUSED(location);
+    instance->InitializeTracking(GetRefCountedTypeCookieWithLocation<T, LocationLite>());
 #endif
     return TIntrusivePtr<T>(instance, /*addReference*/ false);
 }
@@ -340,12 +337,17 @@ void* TWithExtraSpace<T>::GetExtraSpacePtr()
 }
 
 template <class T>
-size_t TWithExtraSpace<T>::GetUsableSpaceSize() const
+std::optional<size_t> TWithExtraSpace<T>::GetUsableSpaceSize() const
 {
 #ifdef _win_
     return 0;
 #else
-    return malloc_usable_size(const_cast<T*>(static_cast<const T*>(this))) - sizeof(T);
+    size_t usableSize = malloc_usable_size(const_cast<T*>(static_cast<const T*>(this)));
+    if (usableSize == 0) {
+        return std::nullopt;
+    }
+    YT_ASSERT(usableSize >= sizeof(T));
+    return usableSize - sizeof(T);
 #endif
 }
 

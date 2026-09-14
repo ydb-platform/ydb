@@ -13,19 +13,19 @@ SPLIT_FACTOR(10)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:16 cpu:4)
+ELSE()
+    REQUIREMENTS(cpu:2)
 ENDIF()
-
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

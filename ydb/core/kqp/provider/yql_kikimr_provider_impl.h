@@ -1,17 +1,12 @@
 #pragma once
 
-#include "yql_kikimr_provider.h"
+#include "yql_kikimr_expr_nodes.h"
 
-#include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-#include <ydb/core/kqp/provider/yql_kikimr_results.h>
-
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-
+#include <yql/essentials/core/yql_graph_transformer.h>
 
 namespace NYql {
 
-class TKiSourceVisitorTransformer: public TSyncTransformerBase {
+class TKiSourceVisitorTransformer : public TSyncTransformerBase {
 public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
@@ -26,11 +21,13 @@ private:
 
 class TKiSinkVisitorTransformer : public TSyncTransformerBase {
 public:
-    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override;
 
     void Rewind() override {
     }
 private:
+    virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) = 0;
+
     virtual TStatus HandleWriteTable(NNodes::TKiWriteTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleUpdateTable(NNodes::TKiUpdateTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleDeleteTable(NNodes::TKiDeleteTable node, TExprContext& ctx) = 0;
@@ -74,6 +71,7 @@ private:
     virtual TStatus HandleDropSequence(NNodes::TKiDropSequence node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterSequence(NNodes::TKiAlterSequence node, TExprContext& ctx) = 0;
 
+    virtual TStatus HandleTruncateTable(NNodes::TKiTruncateTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleModifyPermissions(NNodes::TKiModifyPermissions node, TExprContext& ctx) = 0;
 
     virtual TStatus HandleReturningList(NNodes::TKiReturningList node, TExprContext& ctx) = 0;
@@ -86,11 +84,16 @@ private:
     virtual TStatus HandleBackup(NNodes::TKiBackup node, TExprContext& ctx) = 0;
     virtual TStatus HandleBackupIncremental(NNodes::TKiBackupIncremental node, TExprContext& ctx) = 0;
     virtual TStatus HandleRestore(NNodes::TKiRestore node, TExprContext& ctx) = 0;
+    // secrets
+    virtual TStatus HandleCreateSecret(NNodes::TKiCreateSecret node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterSecret(NNodes::TKiAlterSecret node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropSecret(NNodes::TKiDropSecret node, TExprContext& ctx) = 0;
 };
 
 class TKikimrKey {
 public:
     enum class Type {
+        Database,
         Table,
         TableList,
         TableScheme,
@@ -103,6 +106,7 @@ public:
         BackupCollection,
         Sequence,
         Transfer,
+        Secret,
     };
 
     struct TViewDescription {
@@ -127,6 +131,12 @@ public:
     TString GetTablePath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Table || KeyType == Type::TableScheme);
+        return Target;
+    }
+
+    TString GetDatabasePath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Database);
         return Target;
     }
 
@@ -212,6 +222,12 @@ public:
             };
     }
 
+    const TString& GetSecretPath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Secret);
+        return Target;
+    }
+
     bool Extract(const TExprNode& key);
 
 private:
@@ -251,10 +267,44 @@ struct TWriteBackupCollectionSettings {
     {}
 };
 
+struct TWriteSecretSettings {
+public:
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Value;
+    NNodes::TMaybeNode<NNodes::TCoAtom> ValueParamName;
+    NNodes::TMaybeNode<NNodes::TCoAtom> InheritPermissions;
+    bool HasError = false;
+
+public:
+    TWriteSecretSettings(
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& mode,
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& value,
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& valueParamName,
+        NNodes::TMaybeNode<NNodes::TCoAtom>&& inheritPermissions
+    )
+        : Mode(std::move(mode))
+        , Value(std::move(value))
+        , ValueParamName(std::move(valueParamName))
+        , InheritPermissions(std::move(inheritPermissions))
+    {
+    }
+
+    static TWriteSecretSettings CreateWithError() {
+        TWriteSecretSettings result;
+        result.HasError = true;
+        return result;
+    }
+
+private:
+    TWriteSecretSettings() = default;
+};
+
 TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types);
+TAutoPtr<IGraphTransformer> CreateKiSourceConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+TAutoPtr<IGraphTransformer> CreateKiSinkConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
 TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
@@ -274,8 +324,6 @@ TAutoPtr<IGraphTransformer> CreateKiSinkCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor);
-
-TAutoPtr<IGraphTransformer> CreateKiSinkPlanInfoTransformer(TIntrusivePtr<IKikimrQueryExecutor> queryExecutor);
 
 NNodes::TCoAtomList BuildColumnsList(const TKikimrTableDescription& table, TPositionHandle pos,
     TExprContext& ctx, bool withSystemColumns, bool ignoreWriteOnlyColumns);
@@ -298,18 +346,16 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 
 Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance);
 Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity);
-Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);  
+Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);
 
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);
 void FillLiteralProto(const NNodes::TCoDataCtor& literal, Ydb::TypedValue& proto);
-// todo gvit switch to ydb typed value.
-void FillLiteralProto(const NNodes::TCoDataCtor& literal, NKqpProto::TKqpPhyLiteralValue& proto);
-void FillLiteralProto(const NNodes::TCoPgConst& literal, NKqpProto::TKqpPhyLiteralValue& proto);
+void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto);
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
-    TTypeAnnotationContext& types, bool sequentialResults);
+    TTypeAnnotationContext& types, bool concurrentResults, bool isolateEffects = false);
 TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx);
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions();
@@ -329,6 +375,21 @@ bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content);
 TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource);
 
+// Single source of truth for the SHOW CREATE setting names attached to
+// KiReadTable nodes and the corresponding PathType values understood by
+// the .sys/show_create system view.
+bool IsShowCreateSettingName(TStringBuf name);
+// Returns the PathType ("Table" / "View" / "ExternalDataSource" /
+// "ExternalTable") for a SHOW CREATE setting name, or an empty string-buf
+// if `name` is not one of the known SHOW CREATE settings.
+TStringBuf ShowCreateSettingToPathType(TStringBuf name);
+// Returns the first SHOW CREATE setting name found in `settings`, or an
+// empty string-buf if none is present. The returned view is backed by static
+// storage and outlives any TExprNode.
+TStringBuf GetShowCreateSetting(const TExprNode& settings);
+
 TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
+
+TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& ctx);
 
 } // namespace NYql

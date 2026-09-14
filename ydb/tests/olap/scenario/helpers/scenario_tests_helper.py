@@ -10,13 +10,17 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from abc import abstractmethod, ABC
 from typing import Set, List, Dict, Any, Callable, Optional
 from time import sleep
-from ydb.tests.olap.lib.utils import get_external_param
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 class TestContext:
     """Scenario test execution context.
 
     The class is created by the test execution system and used by {ScenarioTestHelper}."""
+
+    __test__ = False
 
     def __init__(self, suite_name: str, test_name: str, scenario: Callable) -> None:
         """Constructor.
@@ -59,7 +63,7 @@ class ScenarioTestHelper:
         )
         assert sth.get_table_rows_count(table_name) == 2
         sth.bulk_upsert(table_name, dg.DataGeneratorPerColumn(schema, 100), comment="100 sequetial ids")
-        sth.execute_scheme_query(DropTable(table_name))
+        sth.execute_scheme_query(DropTable(table_name), retries=5)
     """
 
     DEFAULT_RETRIABLE_ERRORS = {
@@ -309,17 +313,17 @@ class ScenarioTestHelper:
             Full path.
         """
 
-        def _add_not_empty(p: str, dir: str):
-            if dir is None or dir == '':
-                return p
-            return os.path.join(p, dir)
+        def _add_not_empty(p: list[str], dir: str):
+            if dir:
+                p.append(dir)
 
-        result = os.path.join('/', YdbCluster.ydb_database, YdbCluster.tables_path)
+        result = [f'/{YdbCluster.ydb_database}']
+        _add_not_empty(result, YdbCluster.get_tables_path())
         if self.test_context is not None:
-            result = _add_not_empty(result, self.test_context.suite)
-            result = _add_not_empty(result, self.test_context.test) + get_external_param("table_suffix", "")
-        result = _add_not_empty(result, path)
-        return result
+            _add_not_empty(result, self.test_context.suite)
+            _add_not_empty(result, self.test_context.test)
+        _add_not_empty(result, path)
+        return '/'.join(result)
 
     @staticmethod
     def _run_with_expected_status(
@@ -327,6 +331,9 @@ class ScenarioTestHelper:
         expected_status: ydb.StatusCode | Set[ydb.StatusCode],
         retriable_status: ydb.StatusCode | Set[ydb.StatusCode] = {},
         n_retries=0,
+        fail_on_error=True,
+        return_error=False,
+        ignore_error: Set[str] = set(),
     ):
         if isinstance(expected_status, ydb.StatusCode):
             expected_status = {expected_status}
@@ -339,37 +346,54 @@ class ScenarioTestHelper:
         for _ in range(n_retries + 1):
             try:
                 result = operation()
+                logger.info("Success operation")
                 error = None
                 status = ydb.StatusCode.SUCCESS
             except ydb.issues.Error as e:
                 result = None
                 error = e
+                logger.info(e)
                 status = error.status
                 allure.attach(f'{repr(status)}: {error}', 'request status', allure.attachment_type.TEXT)
+
+            if error and any(sub in str(error) for sub in ignore_error):
+                return error if return_error else result
 
             if status in expected_status:
                 return result
             if status not in retriable_status:
-                pytest.fail(f'Unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
+                if fail_on_error:
+                    pytest.fail(f'Unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
             sleep(3)
-        pytest.fail(f'Retries exceeded with unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
+        if fail_on_error:
+            pytest.fail(f'Retries exceeded with unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
+        return 1
 
     def _bulk_upsert_impl(
         self, tablename: str, data_generator: ScenarioTestHelper.IDataGenerator, expected_status: ydb.StatusCode | Set[ydb.StatusCode]
     ):
         fullpath = self.get_full_path(tablename)
+        expect_success = (expected_status == ydb.StatusCode.SUCCESS)
+
+        def _call_upsert(data):
+            YdbCluster.get_ydb_driver().table_client.bulk_upsert(fullpath, data, data_generator.get_bulk_upsert_columns())
 
         def _upsert():
             data = data_generator.generate_data_portion(1000)
             allure.attach(repr(data), 'data', allure.attachment_type.TEXT)
-            YdbCluster.get_ydb_driver().table_client.bulk_upsert(
-                fullpath, data, data_generator.get_bulk_upsert_columns()
-            )
+            if expect_success:
+                ydb.retry_operation_sync(lambda: _call_upsert(data))
+            else:
+                _call_upsert(data)
 
         while not data_generator.EOF():
             self._run_with_expected_status(
                 lambda: _upsert(),
                 expected_status,
+                {
+                    ydb.StatusCode.SCHEME_ERROR
+                },
+                3,
             )
 
     @staticmethod
@@ -429,7 +453,7 @@ class ScenarioTestHelper:
     @classmethod
     @allure.step('Execute scan query')
     def execute_scan_query(
-        cls, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS
+        cls, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, timeout=None
     ):
         """Run a scanning query on the tested database.
 
@@ -449,7 +473,7 @@ class ScenarioTestHelper:
 
         allure.attach(yql, 'request', allure.attachment_type.TEXT)
         it = cls._run_with_expected_status(
-            lambda: YdbCluster.get_ydb_driver().table_client.scan_query(yql), expected_status
+            lambda: YdbCluster.get_ydb_driver().table_client.scan_query(yql, settings=ydb.BaseRequestSettings().with_timeout(timeout)), expected_status
         )
         rows = None
         ret = None
@@ -464,7 +488,7 @@ class ScenarioTestHelper:
 
     @allure.step('Execute query')
     def execute_query(
-        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0
+        self, yql: str, expected_status: ydb.StatusCode | Set[ydb.StatusCode] = ydb.StatusCode.SUCCESS, retries=0, fail_on_error=True, return_error=False, ignore_error: Set[str] = set()
     ):
         """Run a query on the tested database.
 
@@ -480,7 +504,17 @@ class ScenarioTestHelper:
 
         allure.attach(yql, 'request', allure.attachment_type.TEXT)
         with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as pool:
-            self._run_with_expected_status(lambda: pool.execute_with_retries(yql, None, ydb.RetrySettings(max_retries=retries)), expected_status)
+            return self._run_with_expected_status(
+                lambda: pool.execute_with_retries(
+                    yql,
+                    None,
+                    ydb.RetrySettings(max_retries=retries),
+                ),
+                expected_status,
+                fail_on_error=fail_on_error,
+                return_error=return_error,
+                ignore_error=ignore_error,
+            )
 
     def drop_if_exist(self, names: List[str], operation) -> None:
         """Erase entities in the tested database, if it exists.
@@ -634,8 +668,15 @@ class ScenarioTestHelper:
                 'table': tablename,
             },
         ):
-            result_set = self.execute_scan_query(f'SELECT count(*) FROM `{self.get_full_path(tablename)}`')
-            return result_set.result_set.rows[0][0]
+            result = self.execute_query(
+                f'SELECT count(*) FROM `{self.get_full_path(tablename)}`',
+                fail_on_error=False,
+                return_error=True,
+                ignore_error={''},
+            )
+            if isinstance(result, ydb.issues.Error):
+                raise result
+            return result[0].rows[0][0]
 
     @allure.step('Describe table {path}')
     def describe_table(self, path: str, settings: ydb.DescribeTableSettings = None) -> ydb.TableSchemeEntry:
@@ -676,8 +717,20 @@ class ScenarioTestHelper:
         if self_descr is None:
             return []
 
+        kind_order = [
+            ydb.SchemeEntryType.COLUMN_TABLE,
+            ydb.SchemeEntryType.COLUMN_STORE,
+            ydb.SchemeEntryType.EXTERNAL_DATA_SOURCE,
+        ]
+
+        def kind_order_key_reversed(kind):
+            try:
+                return -kind_order.index(kind)
+            except ValueError:
+                return -len(kind_order)
+
         if self_descr.is_directory():
-            return list(reversed(YdbCluster.list_directory(root_path, path))) + [self_descr]
+            return list(reversed(YdbCluster.list_directory(root_path, path, kind_order_key_reversed))) + [self_descr]
         else:
             return self_descr
 
@@ -698,27 +751,36 @@ class ScenarioTestHelper:
         import ydb.tests.olap.scenario.helpers.drop_helper as dh
 
         root_path = self.get_full_path(folder)
+        secret_type = getattr(ydb.SchemeEntryType, 'SECRET', None)
         for e in self.list_path(path, folder):
             if e.is_any_table():
-                self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)))
+                self.execute_scheme_query(dh.DropTable(os.path.join(folder, e.name)), retries=5)
             elif e.is_column_store():
-                self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)))
+                self.execute_scheme_query(dh.DropTableStore(os.path.join(folder, e.name)), retries=5)
+            elif e.is_external_data_source():
+                self.execute_scheme_query(dh.DropExternalDataSource(os.path.join(folder, e.name)), retries=5)
+            elif secret_type is not None and e.type == secret_type:
+                self.execute_scheme_query(dh.DropSecret(os.path.join(folder, e.name)), retries=5)
             elif e.is_directory():
                 self._run_with_expected_status(
                     lambda: YdbCluster.get_ydb_driver().scheme_client.remove_directory(os.path.join(root_path, e.name)),
                     ydb.StatusCode.SUCCESS,
+                    ydb.StatusCode.SCHEME_ERROR,
+                    n_retries=10,
                 )
             else:
                 pytest.fail(f'Cannot remove type {repr(e.type)} for path {os.path.join(root_path, e.name)}')
 
     def get_volumes_columns(self, table_name: str, name_column: str) -> tuple[int, int]:
-        query = f'''SELECT * FROM `{ScenarioTestHelper(self.test_context).get_full_path(table_name)}/.sys/primary_index_stats` WHERE Activity == 1'''
+        path = table_name if table_name.startswith('/') else self.get_full_path(table_name)
+        query = f'''SELECT SUM(RawBytes) AS RawBytes, SUM(BlobRangeSize) AS BlobRangeSize FROM `{path}/.sys/primary_index_stats` WHERE Activity == 1'''
         if (len(name_column)):
             query += f' AND EntityName = \"{name_column}\"'
-        result_set = self.execute_scan_query(query, {ydb.StatusCode.SUCCESS}).result_set
+        result_sets = self.execute_query(query)
         raw_bytes = 0
         bytes = 0
-        for row in result_set.rows:
-            raw_bytes += row["RawBytes"]
-            bytes += row["BlobRangeSize"]
+        for result_set in result_sets:
+            for row in result_set.rows:
+                raw_bytes += row["RawBytes"]
+                bytes += row["BlobRangeSize"]
         return raw_bytes, bytes

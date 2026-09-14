@@ -1,18 +1,18 @@
 from devtools.yamaker.project import CMakeNinjaNixProject
 
-
 croaring = CMakeNinjaNixProject(
     owners=["g:cpp-contrib"],
     arcdir="contrib/libs/croaring",
     nixattr="croaring",
     copy_sources=[
-        "cpp/*.hh",
+        "cpp/roaring/*.hh",
     ],
     disable_includes=[
+        "stdfil.h",
         "sys/byteorder.h",
     ],
     addincl_global={
         ".": ["./include"],
     },
-    inclink={"include/roaring": ["cpp/*.hh"]},
+    inclink={"include/roaring": ["cpp/roaring/*.hh"]},
 )

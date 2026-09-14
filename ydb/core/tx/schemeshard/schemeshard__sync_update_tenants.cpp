@@ -113,6 +113,11 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
                 Self->PersistSubDomainDatabaseQuotas(db, Self->RootPathId(), *subdomain);
             }
 
+            if (record.HasSchemeLimits()) {
+                subdomain->MergeSchemeLimits(record.GetSchemeLimits(), Self);
+                Self->PersistSchemeLimits(db, Self->RootPathId(), *subdomain);
+            }
+
             if (record.HasAuditSettings()) {
                 subdomain->SetAuditSettings(record.GetAuditSettings());
                 Self->PersistSubDomainAuditSettings(db, Self->RootPathId(), *subdomain);
@@ -121,6 +126,11 @@ struct TSchemeShard::TTxUpdateTenant : public TSchemeShard::TRwTxBase {
             if (record.HasServerlessComputeResourcesMode()) {
                 subdomain->SetServerlessComputeResourcesMode(record.GetServerlessComputeResourcesMode());
                 Self->PersistSubDomainServerlessComputeResourcesMode(db, Self->RootPathId(), *subdomain);
+            }
+
+            if (record.HasTablesMetricsLevel()) {
+                subdomain->SetTablesMetricsLevel(record.GetTablesMetricsLevel());
+                Self->PersistSubDomainTablesMetricsLevel(db, Self->RootPathId(), *subdomain);
             }
 
             Self->PersistStoragePools(db, Self->RootPathId(), *subdomain);

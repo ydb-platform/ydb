@@ -19,7 +19,7 @@
 /*18*/ SELECT UserID, m, SearchPhrase, COUNT(*) as cnt FROM $data GROUP BY UserID, DateTime::GetMinute(Cast(EventTime as Timestamp)) AS m, SearchPhrase ORDER BY cnt DESC, UserID, m, SearchPhrase LIMIT 10;
 /*19*/ SELECT UserID FROM $data WHERE UserID = 435090932899640449;
 /*20*/ SELECT COUNT(*) FROM $data WHERE URL LIKE '%google%';
-/*21*/ SELECT SearchPhrase, MIN(URL), COUNT(*) AS c FROM $data WHERE URL LIKE '%google%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;
+/*21*/ SELECT SearchPhrase, MIN(URL), COUNT(*) AS c FROM $data WHERE URL LIKE '%google%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC, SearchPhrase LIMIT 10;
 /*22*/ SELECT SearchPhrase, MIN(URL), MIN(Title), COUNT(*) AS c, COUNT(DISTINCT UserID) FROM $data WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC, SearchPhrase, column1, column2 LIMIT 10;
 /*23*/ SELECT * FROM $data WHERE URL LIKE '%google%' ORDER BY EventTime LIMIT 10;
 /*24*/ SELECT SearchPhrase, EventTime FROM $data WHERE SearchPhrase <> '' ORDER BY EventTime, SearchPhrase LIMIT 10;

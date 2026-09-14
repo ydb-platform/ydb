@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2023 Antony Polukhin
+// Copyright (c) 2016-2025 Antony Polukhin
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -10,15 +10,18 @@
 
 #include <pfr/detail/config.hpp>
 
+#if !defined(PFR_USE_MODULES) || defined(PFR_INTERFACE_UNIT)
+
 #include <pfr/detail/core.hpp>
-
-#include <type_traits>
-#include <utility>      // metaprogramming stuff
-
 #include <pfr/detail/sequence_tuple.hpp>
 #include <pfr/detail/io.hpp>
 #include <pfr/detail/make_integer_sequence.hpp>
 #include <pfr/tuple_size.hpp>
+
+#if !defined(PFR_INTERFACE_UNIT)
+#include <type_traits>
+#include <utility>      // metaprogramming stuff
+#endif
 
 /// \file pfr/io_fields.hpp
 /// Contains IO manipulator \forcedlink{io_fields} to read/write any \aggregate field-by-field.
@@ -52,6 +55,7 @@ struct io_fields_impl {
     T value;
 };
 
+PFR_BEGIN_MODULE_EXPORT
 
 template <class Char, class Traits, class T>
 std::basic_ostream<Char, Traits>& operator<<(std::basic_ostream<Char, Traits>& out, io_fields_impl<const T&>&& x) {
@@ -130,7 +134,11 @@ std::basic_istream<Char, Traits>& operator>>(std::basic_istream<Char, Traits>& i
     return in;
 }
 
+PFR_END_MODULE_EXPORT
+
 } // namespace detail
+
+PFR_BEGIN_MODULE_EXPORT
 
 /// IO manipulator to read/write \aggregate `value` field-by-field.
 ///
@@ -159,6 +167,10 @@ auto io_fields(T&& value) noexcept {
     return detail::io_fields_impl<T>{std::forward<T>(value)};
 }
 
+PFR_END_MODULE_EXPORT
+
 } // namespace pfr
+
+#endif  // #if !defined(PFR_USE_MODULES) || defined(PFR_INTERFACE_UNIT)
 
 #endif // PFR_IO_FIELDS_HPP

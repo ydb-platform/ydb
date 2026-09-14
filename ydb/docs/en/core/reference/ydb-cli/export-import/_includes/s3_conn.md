@@ -16,8 +16,8 @@ Except when you import data from a public bucket, to connect, log in with an acc
 
 You need two parameters to authenticate with S3:
 
-- ID of the access key (access_key_id).
-- Secret access key (secret_access_key).
+- Access key ID (`--access-key`).
+- Secret access key (`--secret-key`).
 
 The YDB CLI takes values of these parameters from the following sources (listed in descending priority):
 
@@ -47,11 +47,11 @@ If a certain authentication parameter is omitted in the command line and cannot 
 
 ### {{ yandex-cloud }}
 
-Below is an example of getting access keys for the [{{ yandex-cloud }} Object Storage]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/storage/){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/storage/){% endif %} using the {{ yandex-cloud }} CLI.
+Below is an example of getting access keys for the [{{ yandex-cloud }} Object Storage](https://yandex.cloud/docs/storage/) using the {{ yandex-cloud }} CLI.
 
-1. [Install and set up]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/cli/quickstart){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/cli/quickstart){% endif %} the {{ yandex-cloud }} CLI.
+1. [Install and set up](https://yandex.cloud/docs/cli/quickstart) the {{ yandex-cloud }} CLI.
 
-2. Use the following command to get the ID of your cloud folder (you'll need to add it to the below commands):
+2. Use the following command to get the ID of your cloud folder (`folder-id`) (you'll need to add it to the commands below):
 
    ```bash
    yc config list
@@ -63,15 +63,23 @@ Below is an example of getting access keys for the [{{ yandex-cloud }} Object St
    folder-id: b2ge70qdcff4bo9q6t19
    ```
 
-3. To [create a service account]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/create){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/create){% endif %}, run the command:
+3. To [create a service account](https://yandex.cloud/docs/iam/operations/sa/create), run the command:
 
    ```bash
    yc iam service-account create --name s3account
    ```
 
-   You can indicate any account name except `s3account`, or use your existing account name (be sure to replace it when copying the commands below).
+   You can indicate any account name instead of `s3account`, or use your existing account name (be sure to replace it when copying the commands below).
 
-3. [Grant roles to your service account]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/assign-role-for-sa){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/assign-role-for-sa){% endif %} according to your intended S3 access level by running the command:
+   Account id will be printed on creation.
+
+   To get the id of an existing account, use this command:
+
+   ```bash
+   yc iam service-account get --name <account-name>
+   ```
+
+4. [Grant roles to your service account](https://yandex.cloud/docs/iam/operations/sa/assign-role-for-sa) according to your intended S3 access level by running the command:
 
    {% list tabs %}
 
@@ -79,23 +87,23 @@ Below is an example of getting access keys for the [{{ yandex-cloud }} Object St
 
       ```bash
       yc resource-manager folder add-access-binding <folder-id> \
-        --role storage.viewer --subject serviceAccount:s3account
+        --role storage.viewer --subject serviceAccount:<s3-account-id>
       ```
 
    - Write (to export data from the YDB database)
 
       ```bash
       yc resource-manager folder add-access-binding <folder-id> \
-        --role storage.editor --subject serviceAccount:s3account
+        --role storage.editor --subject serviceAccount:<s3-account-id>
       ```
 
    {% endlist %}
 
-   Where `<folder-id>` is the cloud folder ID that you retrieved at step 2.
+   Where `<folder-id>` is the cloud folder ID that you retrieved at step 2 and `<s3-account-id>` is the id of the account you created at step 3.
 
-   You can also read a [full list]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/concepts/access-control/roles#object-storage){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/concepts/access-control/roles#object-storage){% endif %} of {{ yandex-cloud }} roles.
+   You can also read a [full list](https://yandex.cloud/docs/iam/concepts/access-control/roles#object-storage) of {{ yandex-cloud }} roles.
 
-4. Get [static access keys]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/create-access-key){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/create-access-key){% endif %} by running the command:
+5. Get [static access keys](https://yandex.cloud/docs/iam/operations/sa/create-access-key) by running the command:
 
    ```bash
    yc iam access-key create --service-account-name s3account
@@ -114,7 +122,7 @@ Below is an example of getting access keys for the [{{ yandex-cloud }} Object St
 
    In this result:
 
-   - `access_key.key_id` is the access key ID
-   - `secret` is the secret access key
+   - `access_key.key_id` is the access key ID (`--access-key`).
+   - `secret` is the secret access key (`--secret-key`).
 
 {% include [s3_conn_procure_overlay.md](s3_conn_procure_overlay.md) %}

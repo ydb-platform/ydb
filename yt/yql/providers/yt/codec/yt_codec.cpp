@@ -1,4 +1,5 @@
 #include "yt_codec.h"
+#include "yt_codec_tz.h"
 
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
@@ -10,9 +11,17 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/utils/swap_bytes.h>
 #include <yql/essentials/core/yql_type_annotation.h>
+#include <yql/essentials/public/result_format/yql_codec_results.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/decimal/yql_decimal_serialize.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
+
+#include <yt/yt/library/decimal/decimal.h>
 
 #include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/yson/detail.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
@@ -28,6 +37,7 @@ namespace NYql {
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
+using namespace NYson::NDetail;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -222,6 +232,9 @@ void TMkqlIOSpecs::LoadSpecInfo(bool inputSpec, const NYT::TNode& attrs, NCommon
     if (attrs.HasKey(YqlDynamicAttribute)) {
         info.Dynamic = attrs[YqlDynamicAttribute].AsBool();
     }
+    if (attrs.HasKey(YqlRLSAttribute)) {
+        info.RLS = attrs[YqlRLSAttribute].AsBool();
+    }
     if (attrs.HasKey(YqlSysColumnPrefix)) {
         for (auto& n: attrs[YqlSysColumnPrefix].AsList()) {
             const TString sys = n.AsString();
@@ -263,6 +276,7 @@ void TMkqlIOSpecs::InitDecoder(NCommon::TCodecContext& codecCtx,
     decoder.StructSize = structColumns.size();
     decoder.NativeYtTypeFlags = specInfo.NativeYtTypeFlags;
     decoder.Dynamic = specInfo.Dynamic;
+    decoder.RLS = specInfo.RLS;
     THashSet<ui32> virtualColumns;
 
     if (specInfo.SysColumns.contains("path")) {
@@ -293,6 +307,13 @@ void TMkqlIOSpecs::InitDecoder(NCommon::TCodecContext& codecCtx,
         if (auto pos = rowType->FindMemberIndex(YqlSysColumnKeySwitch)) {
             virtualColumns.insert(*pos);
             decoder.FillSysColumnKeySwitch = pos;
+        }
+    }
+
+    if (InputBlockRepresentation_ == EBlockRepresentation::BlockStruct) {
+        if (auto pos = rowType->FindMemberIndex(BlockLengthColumnName)) {
+            virtualColumns.insert(*pos);
+            decoder.FillBlockStructSize = pos;
         }
     }
 
@@ -435,6 +456,7 @@ void TMkqlIOSpecs::InitInput(NCommon::TCodecContext& codecCtx,
             TSpecInfo localSpecInfo;
             TSpecInfo* specInfo = &localSpecInfo;
             TString decoderRefName = TStringBuilder() << "_internal" << inputIndex;
+            bool newSpec = false;
             if (inputSpecs[inputIndex].IsString()) {
                 auto refName = inputSpecs[inputIndex].AsString();
                 decoderRefName = refName;
@@ -444,9 +466,14 @@ void TMkqlIOSpecs::InitInput(NCommon::TCodecContext& codecCtx,
                     Y_ENSURE(inAttrs.HasKey(YqlIOSpecRegistry) && inAttrs[YqlIOSpecRegistry].HasKey(refName), "Bad input registry reference: " << refName);
                     specInfo = &specInfoRegistry[refName];
                     LoadSpecInfo(true, inAttrs[YqlIOSpecRegistry][refName], codecCtx, *specInfo);
+                    newSpec = true;
                 }
             } else {
                 LoadSpecInfo(true, inputSpecs[inputIndex], codecCtx, localSpecInfo);
+                newSpec = true;
+            }
+            if (InputBlockRepresentation_ == EBlockRepresentation::BlockStruct && newSpec) {
+                specInfo->Type = codecCtx.Builder.NewStructType(specInfo->Type, BlockLengthColumnName, TDataType::Create(NUdf::TDataType<ui64>::Id, codecCtx.Env));
             }
 
             TStructType* inStruct = AS_TYPE(TStructType, specInfo->Type);
@@ -673,6 +700,1942 @@ TMkqlIOCache::TMkqlIOCache(const TMkqlIOSpecs& specs, const THolderFactory& hold
             DecoderCache_[i].LastFields_.push_back(&field);
         }
     }
+}
+
+template <typename T>
+T ReadYsonFloatNumberInTableFormat(char cmd, NCommon::TInputBuf& buf) {
+    CHECK_EXPECTED(cmd, DoubleMarker);
+    double dbl;
+    buf.ReadMany((char*)&dbl, sizeof(dbl));
+    return dbl;
+}
+
+namespace {
+
+// YT format
+template<typename T>
+NUdf::TUnboxedValuePod ReadTz(bool native, NCommon::TInputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    TLayout value;
+    ui16 tzId;
+    if (native) {
+        ReadTzNative<T>(buf, value, tzId);
+    } else {
+        YQL_ENSURE(ReadTzYql<T>(buf, value, tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid payload length");
+    }
+    YQL_ENSURE(NUdf::IsValidLayoutValue<T>(value), "Failed to read " << NUdf::TDataType<T>::Slot << ": time value " << value << " is invalid");
+    YQL_ENSURE(NKikimr::NMiniKQL::IsValidTimezoneId(tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid time zone id " << tzId);
+    NUdf::TUnboxedValuePod result(value);
+    result.SetTimezoneId(tzId);
+    return result;
+}
+
+template<typename T>
+void WriteTz(bool native, const NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    if (native) {
+        WriteTzNative<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    } else {
+        WriteTzYql<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    }
+}
+
+// table format
+template<typename T>
+NUdf::TUnboxedValuePod ReadTzTable(bool native, NCommon::TInputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    TLayout value;
+    ui16 tzId;
+    if (native) {
+        YQL_ENSURE(ReadTzTableNative<T>(buf, value, tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid timezone string");
+    } else {
+        YQL_ENSURE(ReadTzYqlTable<T>(buf, value, tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid payload length");
+        YQL_ENSURE(NKikimr::NMiniKQL::IsValidTimezoneId(tzId), "Failed to read " << NUdf::TDataType<T>::Slot << ": invalid time zone id " << tzId);
+    }
+    YQL_ENSURE(NUdf::IsValidLayoutValue<T>(value), "Failed to read " << NUdf::TDataType<T>::Slot << ": time value " << value << " is invalid");
+    NUdf::TUnboxedValuePod result(value);
+    result.SetTimezoneId(tzId);
+    return result;
+}
+
+template<typename T>
+void WriteTzTable(bool native, const NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    using TLayout = NUdf::TDataType<T>::TLayout;
+    if (native) {
+        WriteTzTableNative<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    } else {
+        WriteTzYqlTable<T>(buf, value.Get<TLayout>(), value.GetTimezoneId());
+    }
+}
+
+}
+
+NUdf::TUnboxedValue ReadYsonValueInTableFormat(TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, char cmd, NCommon::TInputBuf& buf) {
+    switch (type->GetKind()) {
+    case TType::EKind::Variant: {
+        auto varType = static_cast<TVariantType*>(type);
+        auto underlyingType = varType->GetUnderlyingType();
+        if (nativeYtTypeFlags & NTCF_COMPLEX) {
+            CHECK_EXPECTED(cmd, BeginListSymbol);
+            cmd = buf.Read();
+            TType* type = nullptr;
+            i64 index = 0;
+            if (cmd == StringMarker) {
+                YQL_ENSURE(underlyingType->IsStruct(), "Expected struct as underlying type");
+                auto structType = static_cast<TStructType*>(underlyingType);
+                auto nameBuffer = ReadNextString(cmd, buf);
+                auto foundIndex = structType->FindMemberIndex(nameBuffer);
+                YQL_ENSURE(foundIndex.Defined(), "Unexpected member: " << nameBuffer);
+                index = *foundIndex;
+                type = varType->GetAlternativeType(index);
+            } else {
+                YQL_ENSURE(cmd == Int64Marker || cmd == Uint64Marker);
+                YQL_ENSURE(underlyingType->IsTuple(), "Expected tuple as underlying type");
+                if (cmd == Uint64Marker) {
+                    index = buf.ReadVarUI64();
+                } else {
+                    index = buf.ReadVarI64();
+                }
+                YQL_ENSURE(0 <= index && index < varType->GetAlternativesCount(), "Unexpected member index: " << index);
+                type = varType->GetAlternativeType(index);
+            }
+            cmd = buf.Read();
+            CHECK_EXPECTED(cmd, ListItemSeparatorSymbol);
+            cmd = buf.Read();
+            auto value = ReadYsonValueInTableFormat(type, nativeYtTypeFlags, holderFactory, cmd, buf);
+            cmd = buf.Read();
+            if (cmd != EndListSymbol) {
+                CHECK_EXPECTED(cmd, ListItemSeparatorSymbol);
+                cmd = buf.Read();
+                CHECK_EXPECTED(cmd, EndListSymbol);
+            }
+            return holderFactory.CreateVariantHolder(value.Release(), index);
+        } else {
+            if (cmd == StringMarker) {
+                YQL_ENSURE(underlyingType->IsStruct(), "Expected struct as underlying type");
+                auto name = ReadNextString(cmd, buf);
+                auto index = static_cast<TStructType*>(underlyingType)->FindMemberIndex(name);
+                YQL_ENSURE(index, "Unexpected member: " << name);
+                YQL_ENSURE(static_cast<TStructType*>(underlyingType)->GetMemberType(*index)->IsVoid(), "Expected Void as underlying type");
+                return holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod::Zero(), *index);
+            }
+
+            CHECK_EXPECTED(cmd, BeginListSymbol);
+            cmd = buf.Read();
+            i64 index = 0;
+            YQL_ENSURE(cmd == Int64Marker || cmd == Uint64Marker);
+            if (cmd == Uint64Marker) {
+                index = buf.ReadVarUI64();
+            } else {
+                index = buf.ReadVarI64();
+            }
+
+            YQL_ENSURE(index < varType->GetAlternativesCount(), "Bad variant alternative: " << index << ", only " <<
+                varType->GetAlternativesCount() << " are available");
+            YQL_ENSURE(underlyingType->IsTuple() || underlyingType->IsStruct(), "Wrong underlying type");
+            TType* itemType;
+            if (underlyingType->IsTuple()) {
+                itemType = static_cast<TTupleType*>(underlyingType)->GetElementType(index);
+            }
+            else {
+                itemType = static_cast<TStructType*>(underlyingType)->GetMemberType(index);
+            }
+
+            EXPECTED(buf, ListItemSeparatorSymbol);
+            cmd = buf.Read();
+            auto value = ReadYsonValueInTableFormat(itemType, nativeYtTypeFlags, holderFactory, cmd, buf);
+            cmd = buf.Read();
+            if (cmd == ListItemSeparatorSymbol) {
+                cmd = buf.Read();
+            }
+
+            CHECK_EXPECTED(cmd, EndListSymbol);
+            return holderFactory.CreateVariantHolder(value.Release(), index);
+        }
+    }
+
+    case TType::EKind::Data: {
+        auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
+        switch (schemeType) {
+        case NUdf::TDataType<bool>::Id:
+            YQL_ENSURE(cmd == FalseMarker || cmd == TrueMarker, "Expected either true or false, but got: " << TString(cmd).Quote());
+            return NUdf::TUnboxedValuePod(cmd == TrueMarker);
+
+        case NUdf::TDataType<ui8>::Id:
+            CHECK_EXPECTED(cmd, Uint64Marker);
+            return NUdf::TUnboxedValuePod(ui8(buf.ReadVarUI64()));
+
+        case NUdf::TDataType<i8>::Id:
+            CHECK_EXPECTED(cmd, Int64Marker);
+            return NUdf::TUnboxedValuePod(i8(buf.ReadVarI64()));
+
+        case NUdf::TDataType<ui16>::Id:
+            CHECK_EXPECTED(cmd, Uint64Marker);
+            return NUdf::TUnboxedValuePod(ui16(buf.ReadVarUI64()));
+
+        case NUdf::TDataType<i16>::Id:
+            CHECK_EXPECTED(cmd, Int64Marker);
+            return NUdf::TUnboxedValuePod(i16(buf.ReadVarI64()));
+
+        case NUdf::TDataType<i32>::Id:
+            CHECK_EXPECTED(cmd, Int64Marker);
+            return NUdf::TUnboxedValuePod(i32(buf.ReadVarI64()));
+
+        case NUdf::TDataType<ui32>::Id:
+            CHECK_EXPECTED(cmd, Uint64Marker);
+            return NUdf::TUnboxedValuePod(ui32(buf.ReadVarUI64()));
+
+        case NUdf::TDataType<i64>::Id:
+            CHECK_EXPECTED(cmd, Int64Marker);
+            return NUdf::TUnboxedValuePod(buf.ReadVarI64());
+
+        case NUdf::TDataType<ui64>::Id:
+            CHECK_EXPECTED(cmd, Uint64Marker);
+            return NUdf::TUnboxedValuePod(buf.ReadVarUI64());
+
+        case NUdf::TDataType<float>::Id:
+            return NUdf::TUnboxedValuePod(ReadYsonFloatNumberInTableFormat<float>(cmd, buf));
+
+        case NUdf::TDataType<double>::Id:
+            return NUdf::TUnboxedValuePod(ReadYsonFloatNumberInTableFormat<double>(cmd, buf));
+
+        case NUdf::TDataType<NUdf::TUtf8>::Id:
+        case NUdf::TDataType<char*>::Id:
+        case NUdf::TDataType<NUdf::TJson>::Id:
+        case NUdf::TDataType<NUdf::TDyNumber>::Id:
+        case NUdf::TDataType<NUdf::TUuid>::Id: {
+            auto nextString = ReadNextString(cmd, buf);
+            return NUdf::TUnboxedValue(MakeString(NUdf::TStringRef(nextString)));
+        }
+
+        case NUdf::TDataType<NUdf::TDecimal>::Id: {
+            auto nextString = ReadNextString(cmd, buf);
+            if (nativeYtTypeFlags & NTCF_DECIMAL) {
+                auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
+                if (params.first < 10) {
+                    // The YQL format differs from the YT format in the inf/nan values. NDecimal::FromYtDecimal converts nan/inf
+                    NDecimal::TInt128 res = NDecimal::FromYtDecimal(NYT::NDecimal::TDecimal::ParseBinary32(params.first, nextString));
+                    YQL_ENSURE(!NDecimal::IsError(res));
+                    return NUdf::TUnboxedValuePod(res);
+                } else if (params.first < 19) {
+                    NDecimal::TInt128 res = NDecimal::FromYtDecimal(NYT::NDecimal::TDecimal::ParseBinary64(params.first, nextString));
+                    YQL_ENSURE(!NDecimal::IsError(res));
+                    return NUdf::TUnboxedValuePod(res);
+                } else {
+                    YQL_ENSURE(params.first < 36);
+                    NYT::NDecimal::TDecimal::TValue128 tmpRes = NYT::NDecimal::TDecimal::ParseBinary128(params.first, nextString);
+                    NDecimal::TInt128 res;
+                    static_assert(sizeof(NDecimal::TInt128) == sizeof(NYT::NDecimal::TDecimal::TValue128));
+                    memcpy(&res, &tmpRes, sizeof(NDecimal::TInt128));
+                    res = NDecimal::FromYtDecimal(res);
+                    YQL_ENSURE(!NDecimal::IsError(res));
+                    return NUdf::TUnboxedValuePod(res);
+                }
+            }
+            else {
+                const auto& des = NDecimal::Deserialize(nextString.data(), nextString.size());
+                YQL_ENSURE(!NDecimal::IsError(des.first));
+                YQL_ENSURE(nextString.size() == des.second);
+                return NUdf::TUnboxedValuePod(des.first);
+            }
+        }
+
+        case NUdf::TDataType<NUdf::TYson>::Id: {
+            auto& yson = buf.YsonBuffer();
+            yson.clear();
+            CopyYsonWithAttrs(cmd, buf, yson);
+
+            return NUdf::TUnboxedValue(MakeString(NUdf::TStringRef(yson)));
+        }
+
+        case NUdf::TDataType<NUdf::TDate>::Id:
+            CHECK_EXPECTED(cmd, Uint64Marker);
+            return NUdf::TUnboxedValuePod((ui16)buf.ReadVarUI64());
+
+        case NUdf::TDataType<NUdf::TDatetime>::Id:
+            CHECK_EXPECTED(cmd, Uint64Marker);
+            return NUdf::TUnboxedValuePod((ui32)buf.ReadVarUI64());
+
+        case NUdf::TDataType<NUdf::TTimestamp>::Id:
+            CHECK_EXPECTED(cmd, Uint64Marker);
+            return NUdf::TUnboxedValuePod(buf.ReadVarUI64());
+
+        case NUdf::TDataType<NUdf::TInterval>::Id:
+            CHECK_EXPECTED(cmd, Int64Marker);
+            return NUdf::TUnboxedValuePod(buf.ReadVarI64());
+
+        case NUdf::TDataType<NUdf::TTzDate>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+
+        case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            CHECK_EXPECTED(cmd, Int64Marker);
+            return NUdf::TUnboxedValuePod((i32)buf.ReadVarI64());
+
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+            CHECK_EXPECTED(cmd, Int64Marker);
+            return NUdf::TUnboxedValuePod(buf.ReadVarI64());
+
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            return ValueFromString(EDataSlot::JsonDocument, ReadNextString(cmd, buf));
+        }
+
+        case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
+
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
+
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
+            CHECK_EXPECTED(cmd, StringMarker);
+            return ReadTzTable<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
+
+        default:
+            YQL_ENSURE(false, "Unsupported data type: " << schemeType);
+        }
+    }
+
+    case TType::EKind::Struct: {
+        YQL_ENSURE(cmd == BeginListSymbol || cmd == BeginMapSymbol);
+        auto structType = static_cast<TStructType*>(type);
+        NUdf::TUnboxedValue* items;
+        NUdf::TUnboxedValue ret = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), items);
+        if (cmd == BeginListSymbol) {
+            cmd = buf.Read();
+
+            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                items[i] = ReadYsonValueInTableFormat(structType->GetMemberType(i), nativeYtTypeFlags, holderFactory, cmd, buf);
+
+                cmd = buf.Read();
+                if (cmd == ListItemSeparatorSymbol) {
+                    cmd = buf.Read();
+                }
+            }
+
+            CHECK_EXPECTED(cmd, EndListSymbol);
+            return ret;
+        } else {
+            cmd = buf.Read();
+
+            for (;;) {
+                if (cmd == EndMapSymbol) {
+                    break;
+                }
+
+                auto keyBuffer = ReadNextString(cmd, buf);
+                auto pos = structType->FindMemberIndex(keyBuffer);
+                EXPECTED(buf, KeyValueSeparatorSymbol);
+                cmd = buf.Read();
+                if (pos && cmd != '#') {
+                    auto memberType = structType->GetMemberType(*pos);
+                    auto unwrappedType = memberType;
+                    if (!(nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) && unwrappedType->IsOptional()) {
+                        unwrappedType = static_cast<TOptionalType*>(unwrappedType)->GetItemType();
+                    }
+
+                    items[*pos] = ReadYsonValueInTableFormat(unwrappedType, nativeYtTypeFlags, holderFactory, cmd, buf);
+                } else {
+                    SkipYson(cmd, buf);
+                }
+
+                cmd = buf.Read();
+                if (cmd == KeyedItemSeparatorSymbol) {
+                    cmd = buf.Read();
+                }
+            }
+
+            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                auto memberType = structType->GetMemberType(i);
+                if (items[i] || memberType->IsVoid() || memberType->IsNull()) {
+                    continue;
+                }
+
+                YQL_ENSURE(memberType->IsOptional(), "Missing required field: " << structType->GetMemberName(i));
+            }
+
+            return ret;
+        }
+    }
+
+    case TType::EKind::List: {
+        auto itemType = static_cast<TListType*>(type)->GetItemType();
+        TDefaultListRepresentation items;
+        CHECK_EXPECTED(cmd, BeginListSymbol);
+        cmd = buf.Read();
+
+        for (;;) {
+            if (cmd == EndListSymbol) {
+                break;
+            }
+
+            items = items.Append(ReadYsonValueInTableFormat(itemType, nativeYtTypeFlags, holderFactory, cmd, buf));
+
+            cmd = buf.Read();
+            if (cmd == ListItemSeparatorSymbol) {
+                cmd = buf.Read();
+            }
+        }
+
+        return holderFactory.CreateDirectListHolder(std::move(items));
+    }
+
+    case TType::EKind::Optional: {
+        if (cmd == EntitySymbol) {
+            return NUdf::TUnboxedValuePod();
+        }
+        auto itemType = static_cast<TOptionalType*>(type)->GetItemType();
+        if (nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) {
+            if (itemType->GetKind() == TType::EKind::Optional || itemType->GetKind() == TType::EKind::Pg) {
+                CHECK_EXPECTED(cmd, BeginListSymbol);
+                cmd = buf.Read();
+                auto value = ReadYsonValueInTableFormat(itemType, nativeYtTypeFlags, holderFactory, cmd, buf);
+                cmd = buf.Read();
+                if (cmd == ListItemSeparatorSymbol) {
+                    cmd = buf.Read();
+                }
+                CHECK_EXPECTED(cmd, EndListSymbol);
+                return value.Release().MakeOptional();
+            } else {
+                return ReadYsonValueInTableFormat(itemType, nativeYtTypeFlags, holderFactory, cmd, buf).Release().MakeOptional();
+            }
+        } else {
+            if (cmd != BeginListSymbol) {
+                auto value = ReadYsonValueInTableFormat(itemType, nativeYtTypeFlags, holderFactory, cmd, buf);
+                return value.Release().MakeOptional();
+            }
+
+            cmd = buf.Read();
+            if (cmd == EndListSymbol) {
+                return NUdf::TUnboxedValuePod();
+            }
+
+            auto value = ReadYsonValueInTableFormat(itemType, nativeYtTypeFlags, holderFactory, cmd, buf);
+            cmd = buf.Read();
+            if (cmd == ListItemSeparatorSymbol) {
+                cmd = buf.Read();
+            }
+
+            CHECK_EXPECTED(cmd, EndListSymbol);
+            return value.Release().MakeOptional();
+        }
+    }
+
+    case TType::EKind::Dict: {
+        auto dictType = static_cast<TDictType*>(type);
+        auto keyType = dictType->GetKeyType();
+        auto payloadType = dictType->GetPayloadType();
+        TKeyTypes types;
+        bool isTuple;
+        bool encoded;
+        bool useIHash;
+        GetDictionaryKeyTypes(keyType, types, isTuple, encoded, useIHash);
+
+        TMaybe<TValuePacker> packer;
+        if (encoded) {
+            packer.ConstructInPlace(true, keyType);
+        }
+
+        YQL_ENSURE(cmd == BeginListSymbol || cmd == BeginMapSymbol, "Expected '{' or '[', but read: " << TString(cmd).Quote());
+        if (cmd == BeginMapSymbol) {
+            bool unusedIsOptional;
+            auto unpackedType = UnpackOptional(keyType, unusedIsOptional);
+            YQL_ENSURE(unpackedType->IsData() &&
+                (static_cast<TDataType*>(unpackedType)->GetSchemeType() == NUdf::TDataType<char*>::Id ||
+                static_cast<TDataType*>(unpackedType)->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id),
+                "Expected String or Utf8 type as dictionary key type");
+
+            auto filler = [&](TValuesDictHashMap& map) {
+                cmd = buf.Read();
+
+                for (;;) {
+                    if (cmd == EndMapSymbol) {
+                        break;
+                    }
+
+                    auto keyBuffer = ReadNextString(cmd, buf);
+                    auto keyStr = NUdf::TUnboxedValue(MakeString(keyBuffer));
+                    EXPECTED(buf, KeyValueSeparatorSymbol);
+                    cmd = buf.Read();
+                    auto payload = ReadYsonValueInTableFormat(payloadType, nativeYtTypeFlags, holderFactory, cmd, buf);
+                    map.emplace(std::move(keyStr), std::move(payload));
+
+                    cmd = buf.Read();
+                    if (cmd == KeyedItemSeparatorSymbol) {
+                        cmd = buf.Read();
+                    }
+                }
+            };
+
+            const NUdf::IHash* hash = holderFactory.GetHash(*keyType, useIHash);
+            const NUdf::IEquate* equate = holderFactory.GetEquate(*keyType, useIHash);
+            return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, true, nullptr, hash, equate);
+        }
+        else {
+            auto filler = [&](TValuesDictHashMap& map) {
+                cmd = buf.Read();
+
+                for (;;) {
+                    if (cmd == EndListSymbol) {
+                        break;
+                    }
+
+                    CHECK_EXPECTED(cmd, BeginListSymbol);
+                    cmd = buf.Read();
+                    auto key = ReadYsonValueInTableFormat(keyType, nativeYtTypeFlags, holderFactory, cmd, buf);
+                    EXPECTED(buf, ListItemSeparatorSymbol);
+                    cmd = buf.Read();
+                    auto payload = ReadYsonValueInTableFormat(payloadType, nativeYtTypeFlags, holderFactory, cmd, buf);
+                    cmd = buf.Read();
+                    if (cmd == ListItemSeparatorSymbol) {
+                        cmd = buf.Read();
+                    }
+
+                    CHECK_EXPECTED(cmd, EndListSymbol);
+                    if (packer) {
+                        key = MakeString(packer->Pack(key));
+                    }
+
+                    map.emplace(std::move(key), std::move(payload));
+
+                    cmd = buf.Read();
+                    if (cmd == ListItemSeparatorSymbol) {
+                        cmd = buf.Read();
+                    }
+                }
+            };
+
+            const NUdf::IHash* hash = holderFactory.GetHash(*keyType, useIHash);
+            const NUdf::IEquate* equate = holderFactory.GetEquate(*keyType, useIHash);
+            return holderFactory.CreateDirectHashedDictHolder(filler, types, isTuple, true, encoded ? keyType : nullptr,
+                hash, equate);
+        }
+    }
+
+    case TType::EKind::Tuple: {
+        auto tupleType = static_cast<TTupleType*>(type);
+        NUdf::TUnboxedValue* items;
+        NUdf::TUnboxedValue ret = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), items);
+        CHECK_EXPECTED(cmd, BeginListSymbol);
+        cmd = buf.Read();
+
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            items[i] = ReadYsonValueInTableFormat(tupleType->GetElementType(i), nativeYtTypeFlags, holderFactory, cmd, buf);
+
+            cmd = buf.Read();
+            if (cmd == ListItemSeparatorSymbol) {
+                cmd = buf.Read();
+            }
+        }
+
+
+        CHECK_EXPECTED(cmd, EndListSymbol);
+        return ret;
+    }
+
+    case TType::EKind::Void: {
+        if (cmd == EntitySymbol) {
+            return NUdf::TUnboxedValuePod::Void();
+        }
+
+        auto nextString = ReadNextString(cmd, buf);
+        YQL_ENSURE(nextString == NResult::TYsonResultWriter::VoidString, "Expected Void");
+        return NUdf::TUnboxedValuePod::Void();
+    }
+
+    case TType::EKind::Null: {
+        CHECK_EXPECTED(cmd, EntitySymbol);
+        return NUdf::TUnboxedValuePod();
+    }
+
+    case TType::EKind::EmptyList: {
+        CHECK_EXPECTED(cmd, BeginListSymbol);
+        cmd = buf.Read();
+        CHECK_EXPECTED(cmd, EndListSymbol);
+        return holderFactory.GetEmptyContainerLazy();
+    }
+
+    case TType::EKind::EmptyDict: {
+        YQL_ENSURE(cmd == BeginListSymbol || cmd == BeginMapSymbol, "Expected '{' or '[', but read: " << TString(cmd).Quote());
+        if (cmd == BeginListSymbol) {
+            cmd = buf.Read();
+            CHECK_EXPECTED(cmd, EndListSymbol);
+        } else {
+            cmd = buf.Read();
+            CHECK_EXPECTED(cmd, EndMapSymbol);
+        }
+
+        return holderFactory.GetEmptyContainerLazy();
+    }
+
+    case TType::EKind::Pg: {
+        auto pgType = static_cast<TPgType*>(type);
+        return ReadYsonValueInTableFormatPg(pgType, cmd, buf);
+    }
+
+    case TType::EKind::Tagged: {
+        auto taggedType = static_cast<TTaggedType*>(type);
+        return ReadYsonValueInTableFormat(taggedType->GetBaseType(), nativeYtTypeFlags, holderFactory, cmd, buf);
+    }
+
+    default:
+        YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
+    }
+}
+
+TMaybe<NUdf::TUnboxedValue> ParseYsonValueInTableFormat(const THolderFactory& holderFactory,
+    const TStringBuf& yson, TType* type, ui64 nativeYtTypeFlags, IOutputStream* err) {
+    try {
+        class TReader : public NCommon::IBlockReader {
+        public:
+            TReader(const TStringBuf& yson)
+                : Yson_(yson)
+            {}
+
+            void SetDeadline(TInstant deadline) override {
+                Y_UNUSED(deadline);
+            }
+
+            std::pair<const char*, const char*> NextFilledBlock() override {
+                if (FirstBuffer_) {
+                    FirstBuffer_ = false;
+                    return{ Yson_.begin(), Yson_.end() };
+                }
+                else {
+                    return{ nullptr, nullptr };
+                }
+            }
+
+            void ReturnBlock() override {
+            }
+
+            bool Retry(const TMaybe<ui32>& rangeIndex, const TMaybe<ui64>& rowIndex, const std::exception_ptr& error) override {
+                Y_UNUSED(rangeIndex);
+                Y_UNUSED(rowIndex);
+                Y_UNUSED(error);
+                return false;
+            }
+
+        private:
+            TStringBuf Yson_;
+            bool FirstBuffer_ = true;
+        };
+
+        TReader reader(yson);
+        NCommon::TInputBuf buf(reader, nullptr);
+        char cmd = buf.Read();
+        return ReadYsonValueInTableFormat(type, nativeYtTypeFlags, holderFactory, cmd, buf);
+    }
+    catch (const yexception& e) {
+        if (err) {
+            *err << "YSON parsing failed: " << e.what();
+        }
+        return Nothing();
+    }
+}
+
+TMaybe<NUdf::TUnboxedValue> ParseYsonNode(const THolderFactory& holderFactory,
+    const NYT::TNode& node, TType* type, ui64 nativeYtTypeFlags, IOutputStream* err) {
+    return ParseYsonValueInTableFormat(holderFactory, NYT::NodeToYsonString(node, NYson::EYsonFormat::Binary), type, nativeYtTypeFlags, err);
+}
+
+extern "C" void ReadYsonContainerValue(TType* type, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf, bool wrapOptional) {
+    // yson content
+    ui32 size;
+    buf.ReadMany((char*)&size, sizeof(size));
+    CHECK_STRING_LENGTH_UNSIGNED(size);
+    YQL_ENSURE(size > 0);
+    char cmd = buf.Read();
+    auto tmp = ReadYsonValueInTableFormat(type, 0, holderFactory, cmd, buf);
+    if (!wrapOptional) {
+        value = std::move(tmp);
+    } else {
+        value = tmp.Release().MakeOptional();
+    }
+}
+
+extern "C" void ReadContainerNativeYtValue(TType* type, ui64 nativeYtTypeFlags, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf, bool wrapOptional) {
+    auto tmp = ReadSkiffComplexValue(type, nativeYtTypeFlags, holderFactory, buf);
+    if (!wrapOptional) {
+        value = std::move(tmp);
+    } else {
+        value = tmp.Release().MakeOptional();
+    }
+}
+
+void WriteYsonValueInTableFormat(NCommon::TOutputBuf& buf, TType* type, ui64 nativeYtTypeFlags, const NUdf::TUnboxedValuePod& value, bool topLevel) {
+    // Table format, very compact
+    switch (type->GetKind()) {
+    case TType::EKind::Variant: {
+        buf.Write(BeginListSymbol);
+        auto varType = static_cast<TVariantType*>(type);
+        auto underlyingType = varType->GetUnderlyingType();
+        auto index = value.GetVariantIndex();
+        YQL_ENSURE(index < varType->GetAlternativesCount(), "Bad variant alternative: " << index << ", only " << varType->GetAlternativesCount() << " are available");
+        YQL_ENSURE(underlyingType->IsTuple() || underlyingType->IsStruct(), "Wrong underlying type");
+        TType* itemType;
+        if (underlyingType->IsTuple()) {
+            itemType = static_cast<TTupleType*>(underlyingType)->GetElementType(index);
+        }
+        else {
+            itemType = static_cast<TStructType*>(underlyingType)->GetMemberType(index);
+        }
+        if (!(nativeYtTypeFlags & NTCF_COMPLEX) || underlyingType->IsTuple()) {
+            buf.Write(Uint64Marker);
+            buf.WriteVarUI64(index);
+        } else {
+            auto structType = static_cast<TStructType*>(underlyingType);
+            auto varName = structType->GetMemberName(index);
+            buf.Write(StringMarker);
+            buf.WriteVarI32(varName.size());
+            buf.WriteMany(varName);
+        }
+        buf.Write(ListItemSeparatorSymbol);
+        WriteYsonValueInTableFormat(buf, itemType, nativeYtTypeFlags, value.GetVariantItem(), false);
+        buf.Write(ListItemSeparatorSymbol);
+        buf.Write(EndListSymbol);
+        break;
+    }
+
+    case TType::EKind::Data: {
+        auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
+        switch (schemeType) {
+        case NUdf::TDataType<bool>::Id: {
+            buf.Write(value.Get<bool>() ? TrueMarker : FalseMarker);
+            break;
+        }
+
+        case NUdf::TDataType<ui8>::Id:
+            buf.Write(Uint64Marker);
+            buf.WriteVarUI64(value.Get<ui8>());
+            break;
+
+        case NUdf::TDataType<i8>::Id:
+            buf.Write(Int64Marker);
+            buf.WriteVarI64(value.Get<i8>());
+            break;
+
+        case NUdf::TDataType<ui16>::Id:
+            buf.Write(Uint64Marker);
+            buf.WriteVarUI64(value.Get<ui16>());
+            break;
+
+        case NUdf::TDataType<i16>::Id:
+            buf.Write(Int64Marker);
+            buf.WriteVarI64(value.Get<i16>());
+            break;
+
+        case NUdf::TDataType<i32>::Id:
+            buf.Write(Int64Marker);
+            buf.WriteVarI64(value.Get<i32>());
+            break;
+
+        case NUdf::TDataType<ui32>::Id:
+            buf.Write(Uint64Marker);
+            buf.WriteVarUI64(value.Get<ui32>());
+            break;
+
+        case NUdf::TDataType<i64>::Id:
+            buf.Write(Int64Marker);
+            buf.WriteVarI64(value.Get<i64>());
+            break;
+
+        case NUdf::TDataType<ui64>::Id:
+            buf.Write(Uint64Marker);
+            buf.WriteVarUI64(value.Get<ui64>());
+            break;
+
+        case NUdf::TDataType<float>::Id: {
+            buf.Write(DoubleMarker);
+            double val = value.Get<float>();
+            buf.WriteMany((const char*)&val, sizeof(val));
+            break;
+        }
+
+        case NUdf::TDataType<double>::Id: {
+            buf.Write(DoubleMarker);
+            double val = value.Get<double>();
+            buf.WriteMany((const char*)&val, sizeof(val));
+            break;
+        }
+
+        case NUdf::TDataType<NUdf::TUtf8>::Id:
+        case NUdf::TDataType<char*>::Id:
+        case NUdf::TDataType<NUdf::TJson>::Id:
+        case NUdf::TDataType<NUdf::TDyNumber>::Id:
+        case NUdf::TDataType<NUdf::TUuid>::Id: {
+            buf.Write(StringMarker);
+            auto str = value.AsStringRef();
+            buf.WriteVarI32(str.Size());
+            buf.WriteMany(str);
+            break;
+        }
+
+        case NUdf::TDataType<NUdf::TDecimal>::Id: {
+            buf.Write(StringMarker);
+            if (nativeYtTypeFlags & NTCF_DECIMAL){
+                auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
+                const NDecimal::TInt128 data128 = value.GetInt128();
+                char tmpBuf[NYT::NDecimal::TDecimal::MaxBinarySize];
+                if (params.first < 10) {
+                    // The YQL format differs from the YT format in the inf/nan values. NDecimal::FromYtDecimal converts nan/inf
+                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary32(params.first, NDecimal::ToYtDecimal<i32>(data128), tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
+                    buf.WriteVarI32(resBuf.size());
+                    buf.WriteMany(resBuf.data(), resBuf.size());
+                } else if (params.first < 19) {
+                    TStringBuf resBuf = NYT::NDecimal::TDecimal::WriteBinary64(params.first, NDecimal::ToYtDecimal<i64>(data128), tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
+                    buf.WriteVarI32(resBuf.size());
+                    buf.WriteMany(resBuf.data(), resBuf.size());
+                } else {
+                    YQL_ENSURE(params.first < 36);
+                    NYT::NDecimal::TDecimal::TValue128 val;
+                    auto data128Converted = NDecimal::ToYtDecimal<NDecimal::TInt128>(data128);
+                    memcpy(&val, &data128Converted, sizeof(val));
+                    auto resBuf = NYT::NDecimal::TDecimal::WriteBinary128(params.first, val, tmpBuf, NYT::NDecimal::TDecimal::MaxBinarySize);
+                    buf.WriteVarI32(resBuf.size());
+                    buf.WriteMany(resBuf.data(), resBuf.size());
+                }
+            } else {
+                char data[sizeof(NDecimal::TInt128)];
+                const ui32 size = NDecimal::Serialize(value.GetInt128(), data);
+                buf.WriteVarI32(size);
+                buf.WriteMany(data, size);
+            }
+            break;
+        }
+
+        case NUdf::TDataType<NUdf::TYson>::Id: {
+            // embed content
+            buf.WriteMany(value.AsStringRef());
+            break;
+        }
+
+        case NUdf::TDataType<NUdf::TDate>::Id:
+            buf.Write(Uint64Marker);
+            buf.WriteVarUI64(value.Get<ui16>());
+            break;
+
+        case NUdf::TDataType<NUdf::TDatetime>::Id:
+            buf.Write(Uint64Marker);
+            buf.WriteVarUI64(value.Get<ui32>());
+            break;
+
+        case NUdf::TDataType<NUdf::TTimestamp>::Id:
+            buf.Write(Uint64Marker);
+            buf.WriteVarUI64(value.Get<ui64>());
+            break;
+
+        case NUdf::TDataType<NUdf::TInterval>::Id:
+        case NUdf::TDataType<NUdf::TInterval64>::Id:
+        case NUdf::TDataType<NUdf::TDatetime64>::Id:
+        case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+            buf.Write(Int64Marker);
+            buf.WriteVarI64(value.Get<i64>());
+            break;
+
+        case NUdf::TDataType<NUdf::TDate32>::Id:
+            buf.Write(Int64Marker);
+            buf.WriteVarI64(value.Get<i32>());
+            break;
+
+        case NUdf::TDataType<NUdf::TTzDate>::Id:
+            WriteTzTable<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
+            break;
+
+        case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+            WriteTzTable<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
+            break;
+
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            WriteTzTable<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
+            break;
+
+        case NUdf::TDataType<NUdf::TTzDate32>::Id:
+            WriteTzTable<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
+            break;
+
+        case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+            WriteTzTable<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
+            break;
+
+        case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
+            WriteTzTable<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
+            break;
+
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            buf.Write(StringMarker);
+            NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
+            auto str = json.AsStringRef();
+            buf.WriteVarI32(str.Size());
+            buf.WriteMany(str);
+            break;
+        }
+
+        default:
+            YQL_ENSURE(false, "Unsupported data type: " << schemeType);
+        }
+
+        break;
+    }
+
+    case TType::EKind::Struct: {
+        auto structType = static_cast<TStructType*>(type);
+        if (nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) {
+            buf.Write(BeginMapSymbol);
+            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                buf.Write(StringMarker);
+                auto key = structType->GetMemberName(i);
+                buf.WriteVarI32(key.size());
+                buf.WriteMany(key);
+                buf.Write(KeyValueSeparatorSymbol);
+                WriteYsonValueInTableFormat(buf, structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), false);
+                buf.Write(KeyedItemSeparatorSymbol);
+            }
+            buf.Write(EndMapSymbol);
+        } else {
+            buf.Write(BeginListSymbol);
+            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                WriteYsonValueInTableFormat(buf, structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), false);
+                buf.Write(ListItemSeparatorSymbol);
+            }
+            buf.Write(EndListSymbol);
+        }
+        break;
+    }
+
+    case TType::EKind::List: {
+        auto itemType = static_cast<TListType*>(type)->GetItemType();
+        const auto iter = value.GetListIterator();
+        buf.Write(BeginListSymbol);
+        for (NUdf::TUnboxedValue item; iter.Next(item); buf.Write(ListItemSeparatorSymbol)) {
+            WriteYsonValueInTableFormat(buf, itemType, nativeYtTypeFlags, item, false);
+        }
+
+        buf.Write(EndListSymbol);
+        break;
+    }
+
+    case TType::EKind::Optional: {
+        auto itemType = static_cast<TOptionalType*>(type)->GetItemType();
+        if (nativeYtTypeFlags & ENativeTypeCompatFlags::NTCF_COMPLEX) {
+            if (value) {
+                if (itemType->GetKind() == TType::EKind::Optional || itemType->GetKind() == TType::EKind::Pg) {
+                    buf.Write(BeginListSymbol);
+                }
+                WriteYsonValueInTableFormat(buf, itemType, nativeYtTypeFlags, value.GetOptionalValue(), false);
+                if (itemType->GetKind() == TType::EKind::Optional || itemType->GetKind() == TType::EKind::Pg) {
+                    buf.Write(ListItemSeparatorSymbol);
+                    buf.Write(EndListSymbol);
+                }
+            } else {
+                buf.Write(EntitySymbol);
+            }
+        } else {
+            if (!value) {
+                if (topLevel) {
+                    buf.Write(BeginListSymbol);
+                    buf.Write(EndListSymbol);
+                }
+                else {
+                    buf.Write(EntitySymbol);
+                }
+            }
+            else {
+                buf.Write(BeginListSymbol);
+                WriteYsonValueInTableFormat(buf, itemType, nativeYtTypeFlags, value.GetOptionalValue(), false);
+                buf.Write(ListItemSeparatorSymbol);
+                buf.Write(EndListSymbol);
+            }
+        }
+        break;
+    }
+
+    case TType::EKind::Dict: {
+        auto dictType = static_cast<TDictType*>(type);
+        const auto iter = value.GetDictIterator();
+        buf.Write(BeginListSymbol);
+        for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
+            buf.Write(BeginListSymbol);
+            WriteYsonValueInTableFormat(buf, dictType->GetKeyType(), nativeYtTypeFlags, key, false);
+            buf.Write(ListItemSeparatorSymbol);
+            WriteYsonValueInTableFormat(buf, dictType->GetPayloadType(), nativeYtTypeFlags, payload, false);
+            buf.Write(ListItemSeparatorSymbol);
+            buf.Write(EndListSymbol);
+            buf.Write(ListItemSeparatorSymbol);
+        }
+
+        buf.Write(EndListSymbol);
+        break;
+    }
+
+    case TType::EKind::Tuple: {
+        auto tupleType = static_cast<TTupleType*>(type);
+        buf.Write(BeginListSymbol);
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            WriteYsonValueInTableFormat(buf, tupleType->GetElementType(i), nativeYtTypeFlags, value.GetElement(i), false);
+            buf.Write(ListItemSeparatorSymbol);
+        }
+
+        buf.Write(EndListSymbol);
+        break;
+    }
+
+    case TType::EKind::Void: {
+        buf.Write(EntitySymbol);
+        break;
+    }
+
+    case TType::EKind::Null: {
+        buf.Write(EntitySymbol);
+        break;
+    }
+
+    case TType::EKind::EmptyList: {
+        buf.Write(BeginListSymbol);
+        buf.Write(EndListSymbol);
+        break;
+    }
+
+    case TType::EKind::EmptyDict: {
+        buf.Write(BeginListSymbol);
+        buf.Write(EndListSymbol);
+        break;
+    }
+
+    case TType::EKind::Pg: {
+        auto pgType = static_cast<TPgType*>(type);
+        WriteYsonValueInTableFormatPg(buf, pgType, value, topLevel);
+        break;
+    }
+
+    default:
+        YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
+    }
+}
+
+///////////////////////////////////////////
+//
+// Initial state first = last = &dummy
+//
+// +1 block first = &dummy, last = newPage, first.next = newPage, newPage.next= &dummy
+// +1 block first = &dummy, last = newPage2, first.next = newPage, newPage.next = newPage2, newPage2.next = &dummy
+//
+///////////////////////////////////////////
+class TTempBlockWriter : public NCommon::IBlockWriter {
+public:
+    TTempBlockWriter()
+        : Pool_(*TlsAllocState)
+        , Last_(&Dummy_)
+    {
+        Dummy_.Avail_ = 0;
+        Dummy_.Next_ = &Dummy_;
+    }
+
+    ~TTempBlockWriter() {
+        auto current = Dummy_.Next_; // skip dummy node
+        while (current != &Dummy_) {
+            auto next = current->Next_;
+            Pool_.ReturnPage(current);
+            current = next;
+        }
+    }
+
+    void SetRecordBoundaryCallback(std::function<void()> callback) override {
+        Y_UNUSED(callback);
+    }
+
+    void WriteBlocks(NCommon::TOutputBuf& buf) const {
+        auto current = Dummy_.Next_; // skip dummy node
+        while (current != &Dummy_) {
+            auto next = current->Next_;
+            buf.WriteMany((const char*)(current + 1), current->Avail_);
+            current = next;
+        }
+    }
+
+    TTempBlockWriter(const TTempBlockWriter&) = delete;
+    void operator=(const TTempBlockWriter&) = delete;
+
+    std::pair<char*, char*> NextEmptyBlock() override {
+        auto newPage = NYql::NUdf::SanitizerMakeRegionAccessible(Pool_.GetPage(), TAlignedPagePool::POOL_PAGE_SIZE);
+        auto header = (TPageHeader*)newPage;
+        header->Avail_ = 0;
+        header->Next_ = &Dummy_;
+        Last_->Next_ = header;
+        Last_ = header;
+        return std::make_pair((char*)(header + 1), (char*)newPage + TAlignedPagePool::POOL_PAGE_SIZE);
+    }
+
+    void ReturnBlock(size_t avail, std::optional<size_t> lastRecordBoundary) override {
+        Y_UNUSED(lastRecordBoundary);
+        YQL_ENSURE(avail <= TAlignedPagePool::POOL_PAGE_SIZE - sizeof(TPageHeader));
+        Last_->Avail_ = avail;
+    }
+
+    void Finish() override {
+    }
+
+private:
+    struct TPageHeader {
+        TPageHeader* Next_ = nullptr;
+        ui32 Avail_ = 0;
+    };
+
+    NKikimr::TAlignedPagePool& Pool_;
+    TPageHeader* Last_;
+    TPageHeader Dummy_;
+};
+
+extern "C" void WriteYsonContainerValue(TType* type, const NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    TTempBlockWriter blockWriter;
+    NCommon::TOutputBuf ysonBuf(blockWriter, nullptr);
+    WriteYsonValueInTableFormat(ysonBuf, type, 0, value, true);
+    ysonBuf.Flush();
+    ui32 size = ysonBuf.GetWrittenBytes();
+    buf.WriteMany((const char*)&size, sizeof(size));
+    blockWriter.WriteBlocks(buf);
+}
+
+void SkipSkiffData(TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf) {
+    auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
+    switch (schemeType) {
+    case NUdf::TDataType<bool>::Id:
+        buf.SkipMany(sizeof(ui8));
+        break;
+
+    case NUdf::TDataType<ui8>::Id:
+    case NUdf::TDataType<ui16>::Id:
+    case NUdf::TDataType<ui32>::Id:
+    case NUdf::TDataType<ui64>::Id:
+    case NUdf::TDataType<NUdf::TDate>::Id:
+    case NUdf::TDataType<NUdf::TDatetime>::Id:
+    case NUdf::TDataType<NUdf::TTimestamp>::Id:
+        buf.SkipMany(sizeof(ui64));
+        break;
+
+    case NUdf::TDataType<i8>::Id:
+    case NUdf::TDataType<i16>::Id:
+    case NUdf::TDataType<i32>::Id:
+    case NUdf::TDataType<i64>::Id:
+    case NUdf::TDataType<NUdf::TInterval>::Id:
+    case NUdf::TDataType<NUdf::TDate32>::Id:
+    case NUdf::TDataType<NUdf::TDatetime64>::Id:
+    case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+    case NUdf::TDataType<NUdf::TInterval64>::Id:
+        buf.SkipMany(sizeof(i64));
+        break;
+
+    case NUdf::TDataType<float>::Id:
+    case NUdf::TDataType<double>::Id:
+        buf.SkipMany(sizeof(double));
+        break;
+
+    case NUdf::TDataType<NUdf::TUtf8>::Id:
+    case NUdf::TDataType<char*>::Id:
+    case NUdf::TDataType<NUdf::TJson>::Id:
+    case NUdf::TDataType<NUdf::TYson>::Id:
+    case NUdf::TDataType<NUdf::TUuid>::Id:
+    case NUdf::TDataType<NUdf::TDyNumber>::Id:
+    case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+        ui32 size;
+        buf.ReadMany((char*)&size, sizeof(size));
+        CHECK_STRING_LENGTH_UNSIGNED(size);
+        buf.SkipMany(size);
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTzDate>::Id:
+    case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+    case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
+        if (nativeYtTypeFlags & NTCF_TZDATE) {
+            buf.SkipMany(NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).FixedSize + sizeof(ui16));
+        } else {
+            ui32 size;
+            buf.ReadMany((char*)&size, sizeof(size));
+            CHECK_STRING_LENGTH_UNSIGNED(size);
+            buf.SkipMany(size);
+        }
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTzDate32>::Id:
+    case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+    case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+        if (nativeYtTypeFlags & NTCF_BIGTZDATE) {
+            buf.SkipMany(NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).FixedSize + sizeof(ui16));
+        } else {
+            ui32 size;
+            buf.ReadMany((char*)&size, sizeof(size));
+            CHECK_STRING_LENGTH_UNSIGNED(size);
+            buf.SkipMany(size);
+        }
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TDecimal>::Id: {
+        if (nativeYtTypeFlags & NTCF_DECIMAL) {
+            auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
+            if (params.first < 10) {
+                buf.SkipMany(sizeof(i32));
+            } else if (params.first < 19) {
+                buf.SkipMany(sizeof(i64));
+            } else {
+                YQL_ENSURE(params.first < 36);
+                buf.SkipMany(sizeof(NDecimal::TInt128));
+            }
+        } else {
+            ui32 size;
+            buf.ReadMany((char*)&size, sizeof(size));
+            CHECK_STRING_LENGTH_UNSIGNED(size);
+            buf.SkipMany(size);
+        }
+        break;
+    }
+
+    default:
+        YQL_ENSURE(false, "Unsupported data type: " << schemeType);
+    }
+}
+
+void SkipSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf) {
+    if (type->IsData()) {
+        SkipSkiffData(type, nativeYtTypeFlags, buf);
+        return;
+    }
+
+    if (type->IsPg()) {
+        SkipSkiffPg(static_cast<TPgType*>(type), buf);
+        return;
+    }
+
+    if (type->IsOptional()) {
+        auto marker = buf.Read();
+        if (!marker) {
+            return;
+        }
+        SkipSkiffComplexValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, buf);
+        return;
+    }
+
+    if (type->IsVoid() || type->IsNull() || type->IsEmptyList() || type->IsEmptyDict()) {
+        return;
+    }
+
+    if (type->IsStruct()) {
+        auto structType = AS_TYPE(TStructType, type);
+        const std::vector<size_t>* reorder = nullptr;
+        if (auto cookie = structType->GetCookie()) {
+            reorder = (const std::vector<size_t>*)cookie;
+        }
+        for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+            SkipSkiffComplexValue(structType->GetMemberType(reorder ? reorder->at(i) : i), nativeYtTypeFlags, buf);
+        }
+        return;
+    }
+
+    if (type->IsTuple()) {
+        auto tupleType = AS_TYPE(TTupleType, type);
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            SkipSkiffComplexValue(tupleType->GetElementType(i), nativeYtTypeFlags, buf);
+        }
+        return;
+    }
+
+    if (type->IsList()) {
+        auto itemType = AS_TYPE(TListType, type)->GetItemType();
+        while (buf.Read() == '\0') {
+            SkipSkiffComplexValue(itemType, nativeYtTypeFlags, buf);
+        }
+        return;
+    }
+
+    if (type->IsVariant()) {
+        auto varType = AS_TYPE(TVariantType, type);
+        ui16 data = 0;
+        if (varType->GetAlternativesCount() < 256) {
+            buf.ReadMany((char*)&data, 1);
+        } else {
+            buf.ReadMany((char*)&data, sizeof(data));
+        }
+        if (varType->GetUnderlyingType()->IsTuple()) {
+            auto tupleType = AS_TYPE(TTupleType, varType->GetUnderlyingType());
+            YQL_ENSURE(data < tupleType->GetElementsCount());
+            SkipSkiffComplexValue(tupleType->GetElementType(data), nativeYtTypeFlags, buf);
+        } else {
+            auto structType = AS_TYPE(TStructType, varType->GetUnderlyingType());
+            if (auto cookie = structType->GetCookie()) {
+                data = ((const std::vector<size_t>*)cookie)->at(data);
+            }
+            YQL_ENSURE(data < structType->GetMembersCount());
+            SkipSkiffComplexValue(structType->GetMemberType(data), nativeYtTypeFlags, buf);
+        }
+        return;
+    }
+
+    if (type->IsDict()) {
+        auto dictType = AS_TYPE(TDictType, type);
+        while (buf.Read() == '\0') {
+            SkipSkiffComplexValue(dictType->GetKeyType(), nativeYtTypeFlags, buf);
+            SkipSkiffComplexValue(dictType->GetPayloadType(), nativeYtTypeFlags, buf);
+        }
+        return;
+    }
+
+    YQL_ENSURE(false, "Unsupported type for skip: " << type->GetKindAsStr());
+}
+
+bool IsOptionalSingular(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags) {
+    if (nativeYtTypeFlags & NTCF_COMPLEX) {
+        return false;
+    }
+
+    if (!type->IsOptional()) {
+        return false;
+    }
+
+    auto itemType = AS_TYPE(TOptionalType, type)->GetItemType();
+    return itemType->IsVoid() || itemType->IsNull();
+}
+
+void SkipSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf) {
+    TType* unwrappedType = type;
+    if (type->IsOptional()) {
+        unwrappedType = AS_TYPE(TOptionalType, type)->GetItemType();
+        if (!IsOptionalSingular(type, nativeYtTypeFlags)) {
+            auto marker = buf.Read();
+            if (!marker) {
+                return;
+            }
+        }
+    }
+
+    if (unwrappedType->IsVoid() || unwrappedType->IsNull()) {
+        return;
+    }
+
+    if (unwrappedType->IsData()) {
+        SkipSkiffData(unwrappedType, nativeYtTypeFlags, buf);
+    } else if (!type->IsOptional() && unwrappedType->IsPg()) {
+        SkipSkiffPg(static_cast<TPgType*>(unwrappedType), buf);
+    } else {
+        // yson content
+        ui32 size;
+        buf.ReadMany((char*)&size, sizeof(size));
+        CHECK_STRING_LENGTH_UNSIGNED(size);
+        buf.SkipMany(size);
+    }
+}
+
+NKikimr::NUdf::TUnboxedValue ReadSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NCommon::TInputBuf& buf, bool withDefVal)
+{
+    const bool isOptional = withDefVal || type->IsOptional();
+    TType* uwrappedType = type;
+    if (type->IsOptional()) {
+        uwrappedType = static_cast<TOptionalType*>(type)->GetItemType();
+    }
+
+    if (isOptional && !IsOptionalSingular(type, nativeYtTypeFlags)) {
+        auto marker = buf.Read();
+        if (!marker) {
+            return NUdf::TUnboxedValue();
+        }
+    }
+
+    if (uwrappedType->IsVoid()) {
+        // Incorrect backward-compatible behavior TODO: switch
+        // return isOptional ? NUdf::TUnboxedValuePod::Zero().MakeOptional() : NUdf::TUnboxedValuePod::Zero();
+        return NUdf::TUnboxedValuePod();
+    }
+
+    if (uwrappedType->IsNull()) {
+        // Incorrect backward-compatible behavior TODO: switch
+        // return isOptional ? NUdf::TUnboxedValuePod().MakeOptional() : NUdf::TUnboxedValuePod();
+        return NUdf::TUnboxedValuePod();
+    }
+
+    if (uwrappedType->IsData()) {
+        return ReadSkiffData(uwrappedType, nativeYtTypeFlags, buf);
+    } else if (!isOptional && uwrappedType->IsPg()) {
+        return NCommon::ReadSkiffPg(static_cast<TPgType*>(uwrappedType), buf);
+    } else {
+        // yson content
+        ui32 size;
+        buf.ReadMany((char*)&size, sizeof(size));
+        CHECK_STRING_LENGTH_UNSIGNED(size);
+        // parse binary yson...
+        YQL_ENSURE(size > 0);
+        char cmd = buf.Read();
+        auto value = ReadYsonValueInTableFormat(uwrappedType, 0, holderFactory, cmd, buf);
+        return isOptional ? value.Release().MakeOptional() : value;
+    }
+}
+
+NKikimr::NUdf::TUnboxedValue ReadSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NCommon::TInputBuf& buf)
+{
+    if (type->IsData()) {
+        return ReadSkiffData(type, nativeYtTypeFlags, buf);
+    }
+
+    if (type->IsPg()) {
+        return ReadSkiffPg(static_cast<TPgType*>(type), buf);
+    }
+
+    if (type->IsOptional()) {
+        auto marker = buf.Read();
+        if (!marker) {
+            return NUdf::TUnboxedValue();
+        }
+
+        auto value = ReadSkiffComplexValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, holderFactory, buf);
+        return value.Release().MakeOptional();
+    }
+
+    if (type->IsTuple()) {
+        auto tupleType = AS_TYPE(TTupleType, type);
+        NUdf::TUnboxedValue* items;
+        auto value = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), items);
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+            items[i] = ReadSkiffComplexValue(tupleType->GetElementType(i), nativeYtTypeFlags, holderFactory, buf);
+        }
+
+        return value;
+    }
+
+    if (type->IsStruct()) {
+        auto structType = AS_TYPE(TStructType, type);
+        NUdf::TUnboxedValue* items;
+        auto value = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), items);
+
+        if (auto cookie = type->GetCookie()) {
+            const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie);
+            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                const auto ndx = reorder[i];
+                items[ndx] = ReadSkiffComplexValue(structType->GetMemberType(ndx), nativeYtTypeFlags, holderFactory, buf);
+            }
+        } else {
+            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                items[i] = ReadSkiffComplexValue(structType->GetMemberType(i), nativeYtTypeFlags, holderFactory, buf);
+            }
+        }
+
+        return value;
+    }
+
+    if (type->IsList()) {
+        auto itemType = AS_TYPE(TListType, type)->GetItemType();
+        TDefaultListRepresentation items;
+        while (buf.Read() == '\0') {
+            items = items.Append(ReadSkiffComplexValue(itemType, nativeYtTypeFlags, holderFactory, buf));
+        }
+
+        return holderFactory.CreateDirectListHolder(std::move(items));
+    }
+
+    if (type->IsVariant()) {
+        auto varType = AS_TYPE(TVariantType, type);
+        ui16 data = 0;
+        if (varType->GetAlternativesCount() < 256) {
+            buf.ReadMany((char*)&data, 1);
+        } else {
+            buf.ReadMany((char*)&data, sizeof(data));
+        }
+        if (varType->GetUnderlyingType()->IsTuple()) {
+            auto tupleType = AS_TYPE(TTupleType, varType->GetUnderlyingType());
+            YQL_ENSURE(data < tupleType->GetElementsCount());
+            auto item = ReadSkiffComplexValue(tupleType->GetElementType(data), nativeYtTypeFlags, holderFactory, buf);
+            return holderFactory.CreateVariantHolder(item.Release(), data);
+        }
+        else {
+            auto structType = AS_TYPE(TStructType, varType->GetUnderlyingType());
+            if (auto cookie = structType->GetCookie()) {
+                const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie);
+                data = reorder[data];
+            }
+            YQL_ENSURE(data < structType->GetMembersCount());
+
+            auto item = ReadSkiffComplexValue(structType->GetMemberType(data), nativeYtTypeFlags, holderFactory, buf);
+            return holderFactory.CreateVariantHolder(item.Release(), data);
+        }
+    }
+
+    if (type->IsVoid()) {
+        return NUdf::TUnboxedValue::Zero();
+    }
+
+    if (type->IsNull()) {
+        return NUdf::TUnboxedValue();
+    }
+
+    if (type->IsEmptyList() || type->IsEmptyDict()) {
+        return holderFactory.GetEmptyContainerLazy();
+    }
+
+    if (type->IsDict()) {
+        auto dictType = AS_TYPE(TDictType, type);
+        auto keyType = dictType->GetKeyType();
+        auto payloadType = dictType->GetPayloadType();
+
+        auto builder = holderFactory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
+        while (buf.Read() == '\0') {
+            auto key = ReadSkiffComplexValue(keyType, nativeYtTypeFlags, holderFactory, buf);
+            auto payload = ReadSkiffComplexValue(payloadType, nativeYtTypeFlags, holderFactory, buf);
+            builder->Add(std::move(key), std::move(payload));
+        }
+
+        return builder->Build();
+    }
+
+    YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
+}
+
+NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf) {
+    auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
+    switch (schemeType) {
+    case NUdf::TDataType<bool>::Id: {
+        ui8 data;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return NUdf::TUnboxedValuePod(data != 0);
+    }
+
+    case NUdf::TDataType<ui8>::Id: {
+        ui64 data;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return NUdf::TUnboxedValuePod(ui8(data));
+    }
+
+    case NUdf::TDataType<i8>::Id: {
+        i64 data;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return NUdf::TUnboxedValuePod(i8(data));
+    }
+
+    case NUdf::TDataType<NUdf::TDate>::Id:
+    case NUdf::TDataType<ui16>::Id: {
+        ui64 data;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return NUdf::TUnboxedValuePod(ui16(data));
+    }
+
+    case NUdf::TDataType<i16>::Id: {
+        i64 data;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return NUdf::TUnboxedValuePod(i16(data));
+    }
+
+    case NUdf::TDataType<NUdf::TDate32>::Id:
+    case NUdf::TDataType<i32>::Id: {
+        i64 data;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return NUdf::TUnboxedValuePod(i32(data));
+    }
+
+    case NUdf::TDataType<NUdf::TDatetime>::Id:
+    case NUdf::TDataType<ui32>::Id: {
+        ui64 data;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return NUdf::TUnboxedValuePod(ui32(data));
+    }
+
+    case NUdf::TDataType<NUdf::TInterval>::Id:
+    case NUdf::TDataType<NUdf::TInterval64>::Id:
+    case NUdf::TDataType<NUdf::TDatetime64>::Id:
+    case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+    case NUdf::TDataType<i64>::Id: {
+        i64 data;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return NUdf::TUnboxedValuePod(data);
+    }
+
+    case NUdf::TDataType<NUdf::TTimestamp>::Id:
+    case NUdf::TDataType<ui64>::Id: {
+        ui64 data;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return NUdf::TUnboxedValuePod(data);
+    }
+
+    case NUdf::TDataType<float>::Id: {
+        double data;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return NUdf::TUnboxedValuePod(float(data));
+    }
+
+    case NUdf::TDataType<double>::Id: {
+        double data;
+        buf.ReadMany((char*)&data, sizeof(data));
+        return NUdf::TUnboxedValuePod(data);
+    }
+
+    case NUdf::TDataType<NUdf::TUtf8>::Id:
+    case NUdf::TDataType<char*>::Id:
+    case NUdf::TDataType<NUdf::TJson>::Id:
+    case NUdf::TDataType<NUdf::TYson>::Id:
+    case NUdf::TDataType<NUdf::TDyNumber>::Id:
+    case NUdf::TDataType<NUdf::TUuid>::Id: {
+        ui32 size;
+        buf.ReadMany((char*)&size, sizeof(size));
+        CHECK_STRING_LENGTH_UNSIGNED(size);
+        auto str = NUdf::TUnboxedValue(MakeStringNotFilled(size));
+        buf.ReadMany(str.AsStringRef().Data(), size);
+        return str;
+    }
+
+    case NUdf::TDataType<NUdf::TDecimal>::Id: {
+        if (nativeYtTypeFlags & NTCF_DECIMAL) {
+            auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
+            if (params.first < 10) {
+                i32 data;
+                buf.ReadMany((char*)&data, sizeof(data));
+                return NUdf::TUnboxedValuePod(NDecimal::FromYtDecimal(data));
+            } else if (params.first < 19) {
+                i64 data;
+                buf.ReadMany((char*)&data, sizeof(data));
+                return NUdf::TUnboxedValuePod(NDecimal::FromYtDecimal(data));
+            } else {
+                YQL_ENSURE(params.first < 36);
+                NDecimal::TInt128 data;
+                buf.ReadMany((char*)&data, sizeof(data));
+                return NUdf::TUnboxedValuePod(NDecimal::FromYtDecimal(data));
+            }
+        } else {
+            ui32 size;
+            buf.ReadMany(reinterpret_cast<char*>(&size), sizeof(size));
+            const auto maxSize = sizeof(NDecimal::TInt128);
+            YQL_ENSURE(size > 0U && size <= maxSize, "Bad decimal field size: " << size);
+            char data[maxSize];
+            buf.ReadMany(data, size);
+            const auto& v = NDecimal::Deserialize(data, size);
+            YQL_ENSURE(!NDecimal::IsError(v.first), "Bad decimal field data: " << data);
+            YQL_ENSURE(size == v.second, "Bad decimal field size: " << size);
+            return NUdf::TUnboxedValuePod(v.first);
+        }
+    }
+
+    case NUdf::TDataType<NUdf::TTzDate>::Id:
+        return ReadTz<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+        return ReadTz<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+        return ReadTz<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzDate32>::Id:
+        return ReadTz<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzDatetime64>::Id:
+        return ReadTz<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
+    case NUdf::TDataType<NUdf::TTzTimestamp64>::Id:
+        return ReadTz<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, buf);
+
+    case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+        ui32 size;
+        buf.ReadMany((char*)&size, sizeof(size));
+        CHECK_STRING_LENGTH_UNSIGNED(size);
+        auto json = NUdf::TUnboxedValue(MakeStringNotFilled(size));
+        buf.ReadMany(json.AsStringRef().Data(), size);
+        return ValueFromString(EDataSlot::JsonDocument, json.AsStringRef());
+    }
+
+    default:
+        YQL_ENSURE(false, "Unsupported data type: " << schemeType);
+    }
+}
+
+void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
+    switch (schemeType) {
+    case NUdf::TDataType<bool>::Id: {
+        ui8 data = value.Get<ui8>();
+        buf.Write(data);
+        break;
+    }
+
+    case NUdf::TDataType<ui8>::Id: {
+        ui64 data = value.Get<ui8>();
+        buf.WriteMany((const char*)&data, sizeof(data));
+        break;
+    }
+
+    case NUdf::TDataType<i8>::Id: {
+        i64 data = value.Get<i8>();
+        buf.WriteMany((const char*)&data, sizeof(data));
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TDate>::Id:
+    case NUdf::TDataType<ui16>::Id: {
+        ui64 data = value.Get<ui16>();
+        buf.WriteMany((const char*)&data, sizeof(data));
+        break;
+    }
+
+    case NUdf::TDataType<i16>::Id: {
+        i64 data = value.Get<i16>();
+        buf.WriteMany((const char*)&data, sizeof(data));
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TDate32>::Id:
+    case NUdf::TDataType<i32>::Id: {
+        i64 data = value.Get<i32>();
+        buf.WriteMany((const char*)&data, sizeof(data));
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TDatetime>::Id:
+    case NUdf::TDataType<ui32>::Id: {
+        ui64 data = value.Get<ui32>();
+        buf.WriteMany((const char*)&data, sizeof(data));
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TInterval>::Id:
+    case NUdf::TDataType<NUdf::TInterval64>::Id:
+    case NUdf::TDataType<NUdf::TDatetime64>::Id:
+    case NUdf::TDataType<NUdf::TTimestamp64>::Id:
+    case NUdf::TDataType<i64>::Id: {
+        i64 data = value.Get<i64>();
+        buf.WriteMany((const char*)&data, sizeof(data));
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTimestamp>::Id:
+    case NUdf::TDataType<ui64>::Id: {
+        ui64 data = value.Get<ui64>();
+        buf.WriteMany((const char*)&data, sizeof(data));
+        break;
+    }
+
+    case NUdf::TDataType<float>::Id: {
+        double data = value.Get<float>();
+        buf.WriteMany((const char*)&data, sizeof(data));
+        break;
+    }
+
+    case NUdf::TDataType<double>::Id: {
+        double data = value.Get<double>();
+        buf.WriteMany((const char*)&data, sizeof(data));
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TUtf8>::Id:
+    case NUdf::TDataType<char*>::Id:
+    case NUdf::TDataType<NUdf::TJson>::Id:
+    case NUdf::TDataType<NUdf::TYson>::Id:
+    case NUdf::TDataType<NUdf::TDyNumber>::Id:
+    case NUdf::TDataType<NUdf::TUuid>::Id: {
+        auto str = value.AsStringRef();
+        ui32 size = str.Size();
+        buf.WriteMany((const char*)&size, sizeof(size));
+        buf.WriteMany(str);
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TDecimal>::Id: {
+        if (nativeYtTypeFlags & NTCF_DECIMAL) {
+            auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
+            const NDecimal::TInt128 data128 = value.GetInt128();
+            if (params.first < 10) {
+                auto data = NDecimal::ToYtDecimal<i32>(data128);
+                buf.WriteMany((const char*)&data, sizeof(data));
+            } else if (params.first < 19) {
+                auto data = NDecimal::ToYtDecimal<i64>(data128);
+                buf.WriteMany((const char*)&data, sizeof(data));
+            } else {
+                YQL_ENSURE(params.first < 36);
+                auto data = NDecimal::ToYtDecimal<NDecimal::TInt128>(data128);
+                buf.WriteMany((const char*)&data, sizeof(data));
+            }
+        } else {
+            char data[sizeof(NDecimal::TInt128)];
+            const ui32 size = NDecimal::Serialize(value.GetInt128(), data);
+            buf.WriteMany(reinterpret_cast<const char*>(&size), sizeof(size));
+            buf.WriteMany(data, size);
+        }
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTzDate>::Id: {
+        WriteTz<NUdf::TTzDate>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
+        WriteTz<NUdf::TTzDatetime>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
+        WriteTz<NUdf::TTzTimestamp>(nativeYtTypeFlags & NTCF_TZDATE, value, buf);
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTzDate32>::Id: {
+        WriteTz<NUdf::TTzDate32>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTzDatetime64>::Id: {
+        WriteTz<NUdf::TTzDatetime64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TTzTimestamp64>::Id: {
+        WriteTz<NUdf::TTzTimestamp64>(nativeYtTypeFlags & NTCF_BIGTZDATE, value, buf);
+        break;
+    }
+
+    case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+        NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
+        auto str = json.AsStringRef();
+        ui32 size = str.Size();
+        buf.WriteMany((const char*)&size, sizeof(size));
+        buf.WriteMany(str);
+        break;
+    }
+
+    default:
+        YQL_ENSURE(false, "Unsupported data type: " << schemeType);
+    }
+}
+
+void WriteSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf, bool wasOptional) {
+    if (type->IsVoid() || type->IsNull()) {
+        return;
+    } else if (type->IsData()) {
+        WriteSkiffData(type, nativeYtTypeFlags, value, buf);
+    } else if (!wasOptional && type->IsPg()) {
+        NCommon::WriteSkiffPg(static_cast<TPgType*>(type), value, buf);
+    } else {
+        // yson content
+        WriteYsonContainerValue(type, value, buf);
+    }
+}
+
+void WriteSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    if (type->IsData()) {
+        WriteSkiffData(type, nativeYtTypeFlags, value, buf);
+    } else if (type->IsPg()) {
+        WriteSkiffPgValue(static_cast<TPgType*>(type), value, buf);
+    } else if (type->IsOptional()) {
+        if (!value) {
+            buf.Write('\0');
+            return;
+        }
+
+        buf.Write('\1');
+        WriteSkiffComplexValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, value.GetOptionalValue(), buf);
+    } else if (type->IsList()) {
+        auto itemType = AS_TYPE(TListType, type)->GetItemType();
+        auto elements = value.GetElements();
+        if (elements) {
+            ui32 size = value.GetListLength();
+            for (ui32 i = 0; i < size; ++i) {
+                buf.Write('\0');
+                WriteSkiffComplexValue(itemType, nativeYtTypeFlags, elements[i], buf);
+            }
+        } else {
+            NUdf::TUnboxedValue item;
+            for (auto iter = value.GetListIterator(); iter.Next(item); ) {
+                buf.Write('\0');
+                WriteSkiffComplexValue(itemType, nativeYtTypeFlags, item, buf);
+            }
+        }
+
+        buf.Write('\xff');
+    } else if (type->IsTuple()) {
+        auto tupleType = AS_TYPE(TTupleType, type);
+        auto elements = value.GetElements();
+        if (elements) {
+            for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+                WriteSkiffComplexValue(tupleType->GetElementType(i), nativeYtTypeFlags, elements[i], buf);
+            }
+        } else {
+            for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+                WriteSkiffComplexValue(tupleType->GetElementType(i), nativeYtTypeFlags, value.GetElement(i), buf);
+            }
+        }
+    } else if (type->IsStruct()) {
+        auto structType = AS_TYPE(TStructType, type);
+        auto elements = value.GetElements();
+        if (auto cookie = type->GetCookie()) {
+            const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie);
+            if (elements) {
+                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                    const auto ndx = reorder[i];
+                    WriteSkiffComplexValue(structType->GetMemberType(ndx), nativeYtTypeFlags, elements[ndx], buf);
+                }
+            } else {
+                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                    const auto ndx = reorder[i];
+                    WriteSkiffComplexValue(structType->GetMemberType(ndx), nativeYtTypeFlags, value.GetElement(ndx), buf);
+                }
+            }
+        } else {
+            if (elements) {
+                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                    WriteSkiffComplexValue(structType->GetMemberType(i), nativeYtTypeFlags, elements[i], buf);
+                }
+            } else {
+                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                    WriteSkiffComplexValue(structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), buf);
+                }
+            }
+        }
+    } else if (type->IsVariant()) {
+        auto varType = AS_TYPE(TVariantType, type);
+        ui16 index = (ui16)value.GetVariantIndex();
+        if (varType->GetAlternativesCount() < 256) {
+            buf.WriteMany((const char*)&index, 1);
+        } else {
+            buf.WriteMany((const char*)&index, sizeof(index));
+        }
+
+        if (varType->GetUnderlyingType()->IsTuple()) {
+            auto tupleType = AS_TYPE(TTupleType, varType->GetUnderlyingType());
+            WriteSkiffComplexValue(tupleType->GetElementType(index), nativeYtTypeFlags, value.GetVariantItem(), buf);
+        } else {
+            auto structType = AS_TYPE(TStructType, varType->GetUnderlyingType());
+            if (auto cookie = structType->GetCookie()) {
+                const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie);
+                index = reorder[index];
+            }
+            YQL_ENSURE(index < structType->GetMembersCount());
+
+            WriteSkiffComplexValue(structType->GetMemberType(index), nativeYtTypeFlags, value.GetVariantItem(), buf);
+        }
+    } else if (type->IsVoid() || type->IsNull() || type->IsEmptyList() || type->IsEmptyDict()) {
+    } else if (type->IsDict()) {
+        auto dictType = AS_TYPE(TDictType, type);
+        auto keyType = dictType->GetKeyType();
+        auto payloadType = dictType->GetPayloadType();
+        NUdf::TUnboxedValue key, payload;
+        for (auto iter = value.GetDictIterator(); iter.NextPair(key, payload); ) {
+            buf.Write('\0');
+            WriteSkiffComplexValue(keyType, nativeYtTypeFlags, key, buf);
+            WriteSkiffComplexValue(payloadType, nativeYtTypeFlags, payload, buf);
+        }
+
+        buf.Write('\xff');
+    } else {
+        YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
+    }
+}
+
+extern "C" void WriteContainerNativeYtValue(TType* type, ui64 nativeYtTypeFlags, const NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
+    WriteSkiffComplexValue(type, nativeYtTypeFlags, value, buf);
 }
 
 } // NYql

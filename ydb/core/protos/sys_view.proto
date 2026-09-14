@@ -3,6 +3,7 @@ package NKikimrSysView;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/protos/labeled_counters.proto";
+import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/core/protos/tablet.proto";
 
 message TPartitionStatsKey {
@@ -42,17 +43,26 @@ message TPartitionStats {
     optional uint64 PlannedTxCompleted = 17;
     optional uint64 TxRejectedByOverload = 18;
     optional uint64 TxRejectedBySpace = 19;
+    optional uint64 TxCompleteLagMsec = 26;
 
     optional TTtlStats TtlStats = 20;
 
     optional uint64 ByKeyFilterSize = 21;
     optional uint32 FollowerId = 22;
+
+    optional uint64 LocksAcquired = 23;
+    optional uint64 LocksWholeShard = 24;
+    optional uint64 LocksBroken = 25;
 }
 
 message TPartitionStatsResult {
     optional TPartitionStatsKey Key = 1;
     repeated TPartitionStats Stats = 2;
     optional string Path = 3;
+}
+
+message TPartitionStatsFilter {
+    optional TPartitionStats NotLess = 1;
 }
 
 message TEvGetPartitionStats {
@@ -66,6 +76,8 @@ message TEvGetPartitionStats {
     optional bool ToInclusive = 6;
 
     optional bool IncludePathColumn = 7;
+
+    optional TPartitionStatsFilter Filter = 8;
 }
 
 message TEvGetPartitionStatsResult {
@@ -110,6 +122,9 @@ message TQueryStats {
     optional uint64 TotalCpuTimeUs = 15;
     optional string Type = 16;
     optional uint64 RequestUnits = 17;
+    optional uint64 LocksBrokenAsBreaker = 18;
+    optional uint64 LocksBrokenAsVictim = 19;
+    optional string TraceId = 20;
 }
 
 message TTopQueryStats {
@@ -127,8 +142,10 @@ enum EStatsType {
     METRICS_ONE_HOUR = 8;
     TOP_REQUEST_UNITS_ONE_MINUTE = 9;
     TOP_REQUEST_UNITS_ONE_HOUR = 10;
-    TOP_PARTITIONS_ONE_MINUTE = 11;
-    TOP_PARTITIONS_ONE_HOUR = 12;
+    TOP_PARTITIONS_BY_CPU_ONE_MINUTE = 11;
+    TOP_PARTITIONS_BY_CPU_ONE_HOUR = 12;
+    TOP_PARTITIONS_BY_TLI_ONE_MINUTE = 13;
+    TOP_PARTITIONS_BY_TLI_ONE_HOUR = 14;
 }
 
 message TEvGetQueryStats {
@@ -169,11 +186,15 @@ message TPDiskInfo {
     optional string StatusV2 = 12;
     optional uint64 StatusChangeTimestamp = 13;
     optional uint64 EnforcedDynamicSlotSize = 14;
-    optional uint32 ExpectedSlotCount = 15;
+    optional uint32 ExpectedSlotCount = 15; // either inferred or user-defined
     optional uint32 NumActiveSlots = 16;
     optional uint64 Category = 17;
     optional string DecommitStatus = 18;
     optional string State = 19;
+    optional uint32 SlotSizeInUnits = 20; // either inferred or user-defined
+    reserved 21;
+    optional string MaintenanceStatus = 22;
+    optional uint64 ExpectedSlotSize = 23; // either inferred or user-defined, 0 if not set
     // metrics ?
     // physical location ?
     // config ?
@@ -221,6 +242,7 @@ message TVSlotInfo {
     optional string State = 17;
     optional bool IsThrottling = 18;
     optional uint32 ThrottlingRate = 19;
+    optional bool PhantomOnly = 20;
 }
 
 message TVSlotEntry {
@@ -265,6 +287,21 @@ message TGroupInfo {
     // desired disk categories ?
     // down/persisted down ?
     // metrics ?
+    optional bool LayoutCorrect = 16 [default = true];  // is the group layout correct?
+    optional string OperatingStatus = 17;
+    optional string ExpectedStatus = 18;
+    optional uint32 ProxyGroupId = 19;
+    optional uint32 BridgePileId = 20;
+    optional uint32 GroupSizeInUnits = 21;
+
+    optional string BridgeSyncStage = 22; // current stage of bridge sync (only for bridged groups)
+    optional double BridgeDataSyncProgress = 23; // [0, 1] for WRITE_KEEP_BARRIER_DONOTKEEP_DATA
+    optional bool BridgeDataSyncErrors = 24; // have we seen data errors during this stage?
+    optional string BridgeSyncLastError = 25; // last reported error during this stage
+    optional uint64 BridgeSyncLastErrorTimestamp = 26; // when was it reported?
+    optional uint64 BridgeSyncFirstErrorTimestamp = 27; // first error timestamp
+    optional uint32 BridgeSyncErrorCount = 28; // number of errors reported during this stage
+    optional bool BridgeSyncRunning = 29; // is the syncer running right now?
 }
 
 message TGroupEntry {
@@ -303,6 +340,7 @@ message TStoragePoolInfo {
     optional string VDiskKindV2 = 12;
     optional string PDiskFilter = 13;
     optional bytes PDiskFilterData = 14;
+    optional uint32 DefaultGroupSizeInUnits = 15;
     // metrics ?
 }
 
@@ -330,8 +368,17 @@ message TStorageStatsEntry {
     optional uint32 CurrentGroupsCreated = 4;
     optional uint64 CurrentAllocatedSize = 5;
     optional uint64 CurrentAvailableSize = 6;
+
+    // estimated number of groups BSC is able to create if DriveStatus and MaintenanceStatus are ignored
     optional uint32 AvailableGroupsToCreate = 7;
-    optional uint64 AvailableSizeToCreate = 8; // total space of newly created groups, if they would've been created
+    // estimated total space of groups BSC is able to create if DriveStatus and MaintenanceStatus are ignored
+    optional uint64 AvailableSizeToCreate = 8;
+
+    // estimated number of groups BSC is able to create
+    optional uint32 ImmediateGroupsToCreate = 10;
+    // estimated total space of groups BSC is able to create
+    optional uint64 ImmediateSizeToCreate = 11;
+
     optional bytes PDiskFilterData = 9;
 }
 
@@ -395,6 +442,8 @@ message TQueryMetrics {
     optional TMetrics UpdateBytes = 8;
     optional TMetrics DeleteRows = 9;
     optional TMetrics RequestUnits = 10;
+    optional uint64 LocksBrokenAsBreaker = 11;
+    optional uint64 LocksBrokenAsVictim = 12;
 }
 
 // node -> sysview processor tablet
@@ -518,6 +567,23 @@ message TDbTabletCounters {
     optional TDbCounters MaxAppCounters = 5;
 }
 
+message TDetailedTableCounters {
+    message TLeaf {
+        optional uint64 TabletId = 1;
+        optional uint32 FollowerId = 2;
+        optional TDbTabletCounters Counters = 3;
+    }
+
+    optional string TablePath = 3;
+    optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel Level = 4;
+
+    // Set iff Level == MetricsLevelTable
+    optional TDbTabletCounters TableCounters = 5;
+
+    // Set iff Level == MetricsLevelPartition
+    repeated TLeaf Leaves = 6;
+}
+
 message TDbGRpcCounters {
     optional string GRpcService = 1;
     optional string GRpcRequest = 2;
@@ -601,6 +667,9 @@ message TTopPartitionsInfo {
     optional uint64 IndexSize = 8;
     optional uint32 InFlightTxCount = 9;
     optional uint32 FollowerId = 10;
+    optional uint64 LocksAcquired = 11;
+    optional uint64 LocksWholeShard = 12;
+    optional uint64 LocksBroken = 13;
 }
 
 message TTopPartitionsEntry {
@@ -627,6 +696,7 @@ message TEvGetTopPartitionsResponse {
 
 // partitions stats collector -> SVP
 message TEvSendTopPartitions {
-    repeated TTopPartitionsInfo Partitions = 1;
+    repeated TTopPartitionsInfo PartitionsByCpu = 1;
+    repeated TTopPartitionsInfo PartitionsByTli = 3;
     optional uint64 TimeUs = 2;
 }

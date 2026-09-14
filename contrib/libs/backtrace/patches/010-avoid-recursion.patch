@@ -1,0 +1,215 @@
+commit 8d7954369c2f1ef62fee65057da9af4dee17032d (HEAD -> pr-8661314, arcadia/users/mikailbag/submit-ac578483-dd24a51-10986d8a-96572213)
+merge: ec02af38d2b9facf29be0e6cb9130bd73b2eccf9 1ba32821f8f7452cb6c8b354d82ffb7e2b2f74aa
+author: mikailbag
+date: 2025-05-05T19:22:33+03:00
+
+    submit for PR 8661314
+    
+    arc up from 1ba32821f8
+
+diff --git a/dwarf.c b/dwarf.c
+--- a/dwarf.c
++++ b/dwarf.c
+@@ -1615,8 +1615,7 @@ unit_addrs_search (const void *vkey, const void *ventry)
+ 
+ static int
+ resolve_unit_addrs_overlap_walk (struct backtrace_state *state,
+-				 size_t *pfrom, size_t *pto,
+-				 struct unit_addrs *enclosing,
++				 struct backtrace_vector *enclosing,
+ 				 struct unit_addrs_vector *old_vec,
+ 				 backtrace_error_callback error_callback,
+ 				 void *data,
+@@ -1627,25 +1626,36 @@ resolve_unit_addrs_overlap_walk (struct backtrace_state *state,
+   struct unit_addrs *new_addrs;
+   size_t from;
+   size_t to;
++  size_t enclosing_count;
+ 
+   old_addrs = (struct unit_addrs *) old_vec->vec.base;
+   old_count = old_vec->count;
+   new_addrs = (struct unit_addrs *) new_vec->vec.base;
+ 
+-  for (from = *pfrom, to = *pto; from < old_count; from++, to++)
++  enclosing_count = 0;
++
++  to = 0;
++  for (from = 0; from < old_count; from++)
+     {
+-      /* If we are in the scope of a larger range that can no longer
+-	 cover any further ranges, return back to the caller.  */
++      struct unit_addrs *current_enclosing;
++      new_addrs[to] = old_addrs[from];
++      to++;
++
++      /* While we are in the scope of a larger range that can no longer
++      	 cover any further ranges, pop it from the enclosing stack.  */
++      while (enclosing_count > 0
++        && ((struct unit_addrs**)enclosing->base)[enclosing_count-1]->high <= old_addrs[from].low)
++        {
++          enclosing_count--;
++          enclosing->alc += sizeof (struct unit_addrs*);
++        }
++      if (enclosing_count > 0) {
++        current_enclosing = ((struct unit_addrs**)enclosing->base)[enclosing_count-1];
++      } else {
++        current_enclosing = NULL;
++      }
+ 
+-      if (enclosing != NULL
+-	  && enclosing->high <= old_addrs[from].low)
+-	{
+-	  *pfrom = from;
+-	  *pto = to;
+-	  return 1;
+-	}
+ 
+-      new_addrs[to] = old_addrs[from];
+ 
+       /* If we are in scope of a larger range, fill in any gaps
+ 	 between this entry and the next one.
+@@ -1653,65 +1663,63 @@ resolve_unit_addrs_overlap_walk (struct backtrace_state *state,
+ 	 There is an extra entry at the end of the vector, so it's
+ 	 always OK to refer to from + 1.  */
+ 
+-      if (enclosing != NULL
+-	  && enclosing->high > old_addrs[from].high
+-	  && old_addrs[from].high < old_addrs[from + 1].low)
+-	{
+-	  void *grew;
+-	  size_t new_high;
++      if (current_enclosing != NULL
++	      && current_enclosing->high > old_addrs[from].high
++	      && old_addrs[from].high < old_addrs[from + 1].low)
++	      {
++	        void *grew;
++	        size_t new_high;
+ 
+-	  grew = backtrace_vector_grow (state, sizeof (struct unit_addrs),
++	        grew = backtrace_vector_grow (state, sizeof (struct unit_addrs),
+ 					error_callback, data, &new_vec->vec);
+-	  if (grew == NULL)
+-	    return 0;
+-	  new_addrs = (struct unit_addrs *) new_vec->vec.base;
+-	  to++;
+-	  new_addrs[to].low = old_addrs[from].high;
+-	  new_high = old_addrs[from + 1].low;
+-	  if (enclosing->high < new_high)
+-	    new_high = enclosing->high;
+-	  new_addrs[to].high = new_high;
+-	  new_addrs[to].u = enclosing->u;
+-	}
++	        if (grew == NULL)
++	          return 0;
++	        new_addrs = (struct unit_addrs *) new_vec->vec.base;
++	        new_addrs[to].low = old_addrs[from].high;
++	        new_high = old_addrs[from + 1].low;
++	        if (current_enclosing->high < new_high)
++	          new_high = current_enclosing->high;
++	        new_addrs[to].high = new_high;
++	        new_addrs[to].u = current_enclosing->u;
++          to++;
++	      }
+ 
+       /* If this range has a larger scope than the next one, use it to
+-	 fill in any gaps.  */
++	     fill in any gaps.  */
+ 
+       if (old_addrs[from].high > old_addrs[from + 1].high)
+-	{
+-	  *pfrom = from + 1;
+-	  *pto = to + 1;
+-	  if (!resolve_unit_addrs_overlap_walk (state, pfrom, pto,
+-						&old_addrs[from], old_vec,
+-						error_callback, data, new_vec))
+-	    return 0;
+-	  from = *pfrom;
+-	  to = *pto;
+-
+-	  /* Undo the increment the loop is about to do.  */
+-	  from--;
+-	  to--;
+-	}
++	      {
++	        void* grew;
++          struct unit_addrs **enclosing_top;
++
++          grew = backtrace_vector_grow (state, sizeof (struct unit_addrs *),
++                error_callback, data, enclosing);
++          if (grew == NULL)
++            return 0;
++          enclosing_top = ((struct unit_addrs **) (enclosing->base)) + enclosing_count;
++    
++          *enclosing_top = &old_addrs[from];
++	      }
+     }
+ 
+-  if (enclosing == NULL)
+-    {
+-      struct unit_addrs *pa;
++  
++  
++  struct unit_addrs *pa;
+ 
+-      /* Add trailing entry.  */
++  /* Add trailing entry.  */
+ 
+-      pa = ((struct unit_addrs *)
+-	    backtrace_vector_grow (state, sizeof (struct unit_addrs),
+-				   error_callback, data, &new_vec->vec));
+-      if (pa == NULL)
+-	return 0;
+-      pa->low = 0;
+-      --pa->low;
+-      pa->high = pa->low;
+-      pa->u = NULL;
++  pa = ((struct unit_addrs *)
++	backtrace_vector_grow (state, sizeof (struct unit_addrs),
++				error_callback, data, &new_vec->vec));
++  if (pa == NULL)
++	  return 0;
++  pa->low = 0;
++  --pa->low;
++  pa->high = pa->low;
++  pa->u = NULL;
+ 
+-      new_vec->count = to;
+-    }
++  new_vec->count = to;
++  
+ 
+   return 1;
+ }
+@@ -1756,8 +1764,8 @@ resolve_unit_addrs_overlap (struct backtrace_state *state,
+   size_t i;
+   struct unit_addrs_vector new_vec;
+   void *grew;
+-  size_t from;
+-  size_t to;
++  int walk_ok;
++  struct backtrace_vector enclosing;
+ 
+   addrs = (struct unit_addrs *) addrs_vec->vec.base;
+   count = addrs_vec->count;
+@@ -1787,15 +1795,16 @@ resolve_unit_addrs_overlap (struct backtrace_state *state,
+ 				error_callback, data, &new_vec.vec);
+   if (grew == NULL)
+     return 0;
++  memset (&enclosing, 0, sizeof enclosing);
+ 
+-  from = 0;
+-  to = 0;
+-  resolve_unit_addrs_overlap_walk (state, &from, &to, NULL, addrs_vec,
++  walk_ok = resolve_unit_addrs_overlap_walk (state, &enclosing, addrs_vec,
+ 				   error_callback, data, &new_vec);
+   backtrace_vector_free (state, &addrs_vec->vec, error_callback, data);
+-  *addrs_vec = new_vec;
++  backtrace_vector_free (state, &enclosing, error_callback, data);
++  if (walk_ok)
++    *addrs_vec = new_vec;
+ 
+-  return 1;
++  return walk_ok;
+ }
+ 
+ /* Sort the line vector by PC.  We want a stable sort here to maintain

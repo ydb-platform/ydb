@@ -10,6 +10,7 @@
 ydb-dstool -e <bs_endpoint> pool list
 ```
 
+`<bs_endpoint>` - эндпоинт произвольного [узла хранения](../../concepts/glossary.md#storage-node) кластера.
 >Пример результата:
 >
 >```text

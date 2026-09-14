@@ -18,18 +18,9 @@ protected:
 public:
     ITxShardInitReader(const TString& name, TColumnShard* shard)
         : TBase(name)
-        , Self(shard) {
+        , Self(shard)
+    {
     }
-};
-
-class TInsertTableInitializer: public ITxShardInitReader {
-private:
-    using TBase = ITxShardInitReader;
-    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-
-public:
-    using TBase::TBase;
 };
 
 class TTxControllerInitializer: public ITxShardInitReader {
@@ -61,15 +52,6 @@ private:
 public:
     using TBase::TBase;
 };
-class TLongTxInitializer: public ITxShardInitReader {
-private:
-    using TBase = ITxShardInitReader;
-    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-    virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
-
-public:
-    using TBase::TBase;
-};
 
 class TDBLocksInitializer: public ITxShardInitReader {
 private:
@@ -85,6 +67,7 @@ class TBackgroundSessionsInitializer: public ITxShardInitReader {
 private:
     using TBase = ITxShardInitReader;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }
@@ -97,6 +80,7 @@ class TSharingSessionsInitializer: public ITxShardInitReader {
 private:
     using TBase = ITxShardInitReader;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }
@@ -109,6 +93,7 @@ class TInFlightReadsInitializer: public ITxShardInitReader {
 private:
     using TBase = ITxShardInitReader;
     virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override;
+
     virtual bool DoPrecharge(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }

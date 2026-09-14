@@ -25,7 +25,7 @@ void ValidateToken(TStringBuf token)
     }
 }
 
-std::optional<TString> LoadTokenFromFile(TStringBuf tokenPath)
+std::optional<std::string> LoadTokenFromFile(TStringBuf tokenPath)
 {
     TFsPath path(tokenPath);
     if (path.IsFile()) {
@@ -37,9 +37,9 @@ std::optional<TString> LoadTokenFromFile(TStringBuf tokenPath)
     }
 }
 
-std::optional<TString> LoadToken()
+std::optional<std::string> LoadToken()
 {
-    std::optional<TString> token;
+    std::optional<std::string> token;
     if (auto envToken = GetEnv("YT_TOKEN")) {
         token = envToken;
     } else if (auto envToken = GetEnv("YT_SECURE_VAULT_YT_TOKEN")) {

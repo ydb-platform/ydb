@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/fwd.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fwd.h>
 
 #include "credentials.h"
 
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 
 #include <util/datetime/base.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 constexpr TDuration DEFAULT_JWT_TOKEN_TTL = TDuration::Hours(1);
 
@@ -36,7 +36,7 @@ struct TJwtTokenSourceParams {
     class ISigningAlgorithm {
     public:
         virtual ~ISigningAlgorithm() = default;
-#ifdef YDB_SDK_USE_NEW_JWT
+#ifdef YDB_SDK_OSS
         virtual std::string sign(const std::string& data, std::error_code& ec) const = 0;
 #else
         virtual std::string sign(const std::string& data) const = 0;
@@ -54,7 +54,7 @@ struct TJwtTokenSourceParams {
         {
         }
 
-#ifdef YDB_SDK_USE_NEW_JWT
+#ifdef YDB_SDK_OSS
         std::string sign(const std::string& data, std::error_code& ec) const override {
             return Alg.sign(data, ec);
         }

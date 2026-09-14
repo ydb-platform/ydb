@@ -1,11 +1,11 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/persqueue/config/config.h>
+#include <ydb/core/persqueue/public/config.h>
 
 namespace {
 
@@ -117,7 +117,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateSolomonVolume);
 
-        auto solomonVol = context.SS->SolomonVolumes[txState->TargetPathId];
+        auto solomonVol = context.SS->SolomonVolumes.at(txState->TargetPathId);
         Y_VERIFY_S(solomonVol, "solomon volume is null. PathId: " << txState->TargetPathId);
         Y_ABORT_UNLESS(solomonVol->Partitions.size() == txState->Shards.size(),
                  "%" PRIu64 "solomon shards expected, %" PRIu64 " created",
@@ -301,7 +301,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
@@ -364,10 +364,9 @@ public:
             return result;
         }
 
-        context.SS->SolomonVolumes[newSolomon->PathId] = solomonVolume;
+        context.SS->SolomonVolumes.Set(newSolomon->PathId, solomonVolume);
         context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_VOLUME_COUNT].Add(1);
         context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_PARTITIONS_COUNT].Add(solomonVolume->Partitions.size());
-        context.SS->IncrementPathDbRefCount(newSolomon->PathId);
 
         TShardInfo solomonPartitionInfo = TShardInfo::SolomonPartitionInfo(OperationId.GetTxId(), newSolomon->PathId);
         solomonPartitionInfo.BindedChannels = channelsBinding;

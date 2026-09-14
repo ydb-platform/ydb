@@ -12,8 +12,29 @@
  */
 #include "c.h"
 
+#include <limits.h>
+
 #include "mb/pg_wchar.h"
 #include "utils/ascii.h"
+
+
+/*
+ * In today's multibyte encodings other than UTF8, this two-byte sequence
+ * ensures pg_encoding_mblen() == 2 && pg_encoding_verifymbstr() == 0.
+ *
+ * For historical reasons, several verifychar implementations opt to reject
+ * this pair specifically.  Byte pair range constraints, in encoding
+ * originator documentation, always excluded this pair.  No core conversion
+ * could translate it.  However, longstanding verifychar implementations
+ * accepted any non-NUL byte.  big5_to_euc_tw and big5_to_mic even translate
+ * pairs not valid per encoding originator documentation.  To avoid tightening
+ * core or non-core conversions in a security patch, we sought this one pair.
+ *
+ * PQescapeString() historically used spaces for BYTE1; many other values
+ * could suffice for BYTE1.
+ */
+#define NONUTF8_INVALID_BYTE0 (0x8d)
+#define NONUTF8_INVALID_BYTE1 (' ')
 
 
 /*
@@ -41,6 +62,9 @@
  * width -1. It is recommended that non-ASCII encodings refer their ASCII
  * subset to the ASCII routines to ensure consistency.
  */
+
+/* No error-reporting facility.  Ignore incomplete trailing byte sequence. */
+#define MB2CHAR_NEED_AT_LEAST(len, need) if ((len) < (need)) break
 
 /*
  * SQL/ASCII
@@ -87,22 +111,24 @@ pg_euc2wchar_with_len(const unsigned char *from, pg_wchar *to, int len)
 
 	while (len > 0 && *from)
 	{
-		if (*from == SS2 && len >= 2)	/* JIS X 0201 (so called "1 byte
-										 * KANA") */
+		if (*from == SS2)		/* JIS X 0201 (so called "1 byte KANA") */
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 2);
 			from++;
 			*to = (SS2 << 8) | *from++;
 			len -= 2;
 		}
-		else if (*from == SS3 && len >= 3)	/* JIS X 0212 KANJI */
+		else if (*from == SS3)	/* JIS X 0212 KANJI */
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 3);
 			from++;
 			*to = (SS3 << 16) | (*from++ << 8);
 			*to |= *from++;
 			len -= 3;
 		}
-		else if (IS_HIGHBIT_SET(*from) && len >= 2) /* JIS X 0208 KANJI */
+		else if (IS_HIGHBIT_SET(*from)) /* JIS X 0208 KANJI */
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 2);
 			*to = *from++ << 8;
 			*to |= *from++;
 			len -= 2;
@@ -214,22 +240,25 @@ pg_euccn2wchar_with_len(const unsigned char *from, pg_wchar *to, int len)
 
 	while (len > 0 && *from)
 	{
-		if (*from == SS2 && len >= 3)	/* code set 2 (unused?) */
+		if (*from == SS2)		/* code set 2 (unused?) */
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 3);
 			from++;
 			*to = (SS2 << 16) | (*from++ << 8);
 			*to |= *from++;
 			len -= 3;
 		}
-		else if (*from == SS3 && len >= 3)	/* code set 3 (unused ?) */
+		else if (*from == SS3)	/* code set 3 (unused ?) */
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 3);
 			from++;
 			*to = (SS3 << 16) | (*from++ << 8);
 			*to |= *from++;
 			len -= 3;
 		}
-		else if (IS_HIGHBIT_SET(*from) && len >= 2) /* code set 1 */
+		else if (IS_HIGHBIT_SET(*from)) /* code set 1 */
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 2);
 			*to = *from++ << 8;
 			*to |= *from++;
 			len -= 2;
@@ -246,12 +275,22 @@ pg_euccn2wchar_with_len(const unsigned char *from, pg_wchar *to, int len)
 	return cnt;
 }
 
+/*
+ * mbverifychar does not accept SS2 or SS3 (CS2 and CS3 are not defined for
+ * EUC_CN), but mb2wchar_with_len does.  Tell a coherent story for code that
+ * relies on agreement between mb2wchar_with_len and mblen.  Invalid text
+ * datums (e.g. from shared catalogs) reach this.
+ */
 static int
 pg_euccn_mblen(const unsigned char *s)
 {
 	int			len;
 
-	if (IS_HIGHBIT_SET(*s))
+	if (*s == SS2)
+		len = 3;
+	else if (*s == SS3)
+		len = 3;
+	else if (IS_HIGHBIT_SET(*s))
 		len = 2;
 	else
 		len = 1;
@@ -281,23 +320,26 @@ pg_euctw2wchar_with_len(const unsigned char *from, pg_wchar *to, int len)
 
 	while (len > 0 && *from)
 	{
-		if (*from == SS2 && len >= 4)	/* code set 2 */
+		if (*from == SS2)		/* code set 2 */
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 4);
 			from++;
 			*to = (((uint32) SS2) << 24) | (*from++ << 16);
 			*to |= *from++ << 8;
 			*to |= *from++;
 			len -= 4;
 		}
-		else if (*from == SS3 && len >= 3)	/* code set 3 (unused?) */
+		else if (*from == SS3)	/* code set 3 (unused?) */
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 3);
 			from++;
 			*to = (SS3 << 16) | (*from++ << 8);
 			*to |= *from++;
 			len -= 3;
 		}
-		else if (IS_HIGHBIT_SET(*from) && len >= 2) /* code set 2 */
+		else if (IS_HIGHBIT_SET(*from)) /* code set 2 */
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 2);
 			*to = *from++ << 8;
 			*to |= *from++;
 			len -= 2;
@@ -434,8 +476,7 @@ pg_utf2wchar_with_len(const unsigned char *from, pg_wchar *to, int len)
 		}
 		else if ((*from & 0xe0) == 0xc0)
 		{
-			if (len < 2)
-				break;			/* drop trailing incomplete char */
+			MB2CHAR_NEED_AT_LEAST(len, 2);
 			c1 = *from++ & 0x1f;
 			c2 = *from++ & 0x3f;
 			*to = (c1 << 6) | c2;
@@ -443,8 +484,7 @@ pg_utf2wchar_with_len(const unsigned char *from, pg_wchar *to, int len)
 		}
 		else if ((*from & 0xf0) == 0xe0)
 		{
-			if (len < 3)
-				break;			/* drop trailing incomplete char */
+			MB2CHAR_NEED_AT_LEAST(len, 3);
 			c1 = *from++ & 0x0f;
 			c2 = *from++ & 0x3f;
 			c3 = *from++ & 0x3f;
@@ -453,8 +493,7 @@ pg_utf2wchar_with_len(const unsigned char *from, pg_wchar *to, int len)
 		}
 		else if ((*from & 0xf8) == 0xf0)
 		{
-			if (len < 4)
-				break;			/* drop trailing incomplete char */
+			MB2CHAR_NEED_AT_LEAST(len, 4);
 			c1 = *from++ & 0x07;
 			c2 = *from++ & 0x3f;
 			c3 = *from++ & 0x3f;
@@ -717,28 +756,32 @@ pg_mule2wchar_with_len(const unsigned char *from, pg_wchar *to, int len)
 
 	while (len > 0 && *from)
 	{
-		if (IS_LC1(*from) && len >= 2)
+		if (IS_LC1(*from))
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 2);
 			*to = *from++ << 16;
 			*to |= *from++;
 			len -= 2;
 		}
-		else if (IS_LCPRV1(*from) && len >= 3)
+		else if (IS_LCPRV1(*from))
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 3);
 			from++;
 			*to = *from++ << 16;
 			*to |= *from++;
 			len -= 3;
 		}
-		else if (IS_LC2(*from) && len >= 3)
+		else if (IS_LC2(*from))
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 3);
 			*to = *from++ << 16;
 			*to |= *from++ << 8;
 			*to |= *from++;
 			len -= 3;
 		}
-		else if (IS_LCPRV2(*from) && len >= 4)
+		else if (IS_LCPRV2(*from))
 		{
+			MB2CHAR_NEED_AT_LEAST(len, 4);
 			from++;
 			*to = *from++ << 16;
 			*to |= *from++ << 8;
@@ -1526,6 +1569,11 @@ pg_big5_verifychar(const unsigned char *s, int len)
 	if (len < l)
 		return -1;
 
+	if (l == 2 &&
+		s[0] == NONUTF8_INVALID_BYTE0 &&
+		s[1] == NONUTF8_INVALID_BYTE1)
+		return -1;
+
 	while (--l > 0)
 	{
 		if (*++s == '\0')
@@ -1575,6 +1623,11 @@ pg_gbk_verifychar(const unsigned char *s, int len)
 	if (len < l)
 		return -1;
 
+	if (l == 2 &&
+		s[0] == NONUTF8_INVALID_BYTE0 &&
+		s[1] == NONUTF8_INVALID_BYTE1)
+		return -1;
+
 	while (--l > 0)
 	{
 		if (*++s == '\0')
@@ -1622,6 +1675,11 @@ pg_uhc_verifychar(const unsigned char *s, int len)
 	l = mbl = pg_uhc_mblen(s);
 
 	if (len < l)
+		return -1;
+
+	if (l == 2 &&
+		s[0] == NONUTF8_INVALID_BYTE0 &&
+		s[1] == NONUTF8_INVALID_BYTE1)
 		return -1;
 
 	while (--l > 0)
@@ -2069,6 +2127,19 @@ pg_utf8_islegal(const unsigned char *source, int length)
 
 
 /*
+ * Fills the provided buffer with two bytes such that:
+ *   pg_encoding_mblen(dst) == 2 && pg_encoding_verifymbstr(dst) == 0
+ */
+void
+pg_encoding_set_invalid(int encoding, char *dst)
+{
+	Assert(pg_encoding_max_length(encoding) > 1);
+
+	dst[0] = (encoding == PG_UTF8 ? 0xc0 : NONUTF8_INVALID_BYTE0);
+	dst[1] = NONUTF8_INVALID_BYTE1;
+}
+
+/*
  *-------------------------------------------------------------------
  * encoding info table
  * XXX must be sorted by the same order as enum pg_enc (in mb/pg_wchar.h)
@@ -2077,7 +2148,7 @@ pg_utf8_islegal(const unsigned char *source, int length)
 const pg_wchar_tbl pg_wchar_table[] = {
 	{pg_ascii2wchar_with_len, pg_wchar2single_with_len, pg_ascii_mblen, pg_ascii_dsplen, pg_ascii_verifychar, pg_ascii_verifystr, 1},	/* PG_SQL_ASCII */
 	{pg_eucjp2wchar_with_len, pg_wchar2euc_with_len, pg_eucjp_mblen, pg_eucjp_dsplen, pg_eucjp_verifychar, pg_eucjp_verifystr, 3},	/* PG_EUC_JP */
-	{pg_euccn2wchar_with_len, pg_wchar2euc_with_len, pg_euccn_mblen, pg_euccn_dsplen, pg_euccn_verifychar, pg_euccn_verifystr, 2},	/* PG_EUC_CN */
+	{pg_euccn2wchar_with_len, pg_wchar2euc_with_len, pg_euccn_mblen, pg_euccn_dsplen, pg_euccn_verifychar, pg_euccn_verifystr, 3},	/* PG_EUC_CN */
 	{pg_euckr2wchar_with_len, pg_wchar2euc_with_len, pg_euckr_mblen, pg_euckr_dsplen, pg_euckr_verifychar, pg_euckr_verifystr, 3},	/* PG_EUC_KR */
 	{pg_euctw2wchar_with_len, pg_wchar2euc_with_len, pg_euctw_mblen, pg_euctw_dsplen, pg_euctw_verifychar, pg_euctw_verifystr, 4},	/* PG_EUC_TW */
 	{pg_eucjp2wchar_with_len, pg_wchar2euc_with_len, pg_eucjp_mblen, pg_eucjp_dsplen, pg_eucjp_verifychar, pg_eucjp_verifystr, 3},	/* PG_EUC_JIS_2004 */
@@ -2122,10 +2193,27 @@ const pg_wchar_tbl pg_wchar_table[] = {
 /*
  * Returns the byte length of a multibyte character.
  *
- * Caution: when dealing with text that is not certainly valid in the
- * specified encoding, the result may exceed the actual remaining
- * string length.  Callers that are not prepared to deal with that
- * should use pg_encoding_mblen_bounded() instead.
+ * Choose "mblen" functions based on the input string characteristics.
+ * pg_encoding_mblen() can be used when ANY of these conditions are met:
+ *
+ * - The input string is zero-terminated
+ *
+ * - The input string is known to be valid in the encoding (e.g., string
+ *   converted from database encoding)
+ *
+ * - The encoding is not GB18030 (e.g., when only database encodings are
+ *   passed to 'encoding' parameter)
+ *
+ * encoding==GB18030 requires examining up to two bytes to determine character
+ * length.  Therefore, callers satisfying none of those conditions must use
+ * pg_encoding_mblen_or_incomplete() instead, as access to mbstr[1] cannot be
+ * guaranteed to be within allocation bounds.
+ *
+ * When dealing with text that is not certainly valid in the specified
+ * encoding, the result may exceed the actual remaining string length.
+ * Callers that are not prepared to deal with that should use Min(remaining,
+ * pg_encoding_mblen_or_incomplete()).  For zero-terminated strings, that and
+ * pg_encoding_mblen_bounded() are interchangeable.
  */
 int
 pg_encoding_mblen(int encoding, const char *mbstr)
@@ -2136,8 +2224,28 @@ pg_encoding_mblen(int encoding, const char *mbstr)
 }
 
 /*
- * Returns the byte length of a multibyte character; but not more than
- * the distance to end of string.
+ * Returns the byte length of a multibyte character (possibly not
+ * zero-terminated), or INT_MAX if too few bytes remain to determine a length.
+ */
+int
+pg_encoding_mblen_or_incomplete(int encoding, const char *mbstr,
+								size_t remaining)
+{
+	/*
+	 * Define zero remaining as too few, even for single-byte encodings.
+	 * pg_gb18030_mblen() reads one or two bytes; single-byte encodings read
+	 * zero; others read one.
+	 */
+	if (remaining < 1 ||
+		(encoding == PG_GB18030 && IS_HIGHBIT_SET(*mbstr) && remaining < 2))
+		return INT_MAX;
+	return pg_encoding_mblen(encoding, mbstr);
+}
+
+/*
+ * Returns the byte length of a multibyte character; but not more than the
+ * distance to the terminating zero byte.  For input that might lack a
+ * terminating zero, use Min(remaining, pg_encoding_mblen_or_incomplete()).
  */
 int
 pg_encoding_mblen_bounded(int encoding, const char *mbstr)
@@ -2190,5 +2298,11 @@ pg_encoding_max_length(int encoding)
 {
 	Assert(PG_VALID_ENCODING(encoding));
 
-	return pg_wchar_table[encoding].maxmblen;
+	/*
+	 * Check for the encoding despite the assert, due to some mingw versions
+	 * otherwise issuing bogus warnings.
+	 */
+	return PG_VALID_ENCODING(encoding) ?
+		pg_wchar_table[encoding].maxmblen :
+		pg_wchar_table[PG_SQL_ASCII].maxmblen;
 }

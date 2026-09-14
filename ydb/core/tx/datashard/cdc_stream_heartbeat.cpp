@@ -1,9 +1,7 @@
 #include "cdc_stream_heartbeat.h"
 #include "datashard_impl.h"
 
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "[CdcStreamHeartbeat] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr::NDataShard {
 
@@ -37,9 +35,9 @@ public:
             return true;
         }
 
-        LOG_I("Emit change records"
-            << ": edge# " << Edge
-            << ", at tablet# " << Self->TabletID());
+        YDB_LOG_INFO("[CdcStreamHeartbeat] Emitting CDC stream heartbeat change records",
+            {"edge", Edge},
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
         const auto heartbeats = Self->GetCdcStreamHeartbeatManager().EmitHeartbeats(txc.DB, Edge);
@@ -74,8 +72,9 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        LOG_I("Enqueue " << ChangeRecords.size() << " change record(s)"
-            << ": at tablet# " << Self->TabletID());
+        YDB_LOG_INFO("[CdcStreamHeartbeat] Enqueuing CDC stream heartbeat change records",
+            {"changeRecordsCount", ChangeRecords.size()},
+            {"tabletId", Self->TabletID()});
         Self->EnqueueChangeRecords(std::move(ChangeRecords));
         Self->EmitHeartbeats();
     }
@@ -83,8 +82,8 @@ public:
 }; // TTxCdcStreamEmitHeartbeats
 
 void TDataShard::EmitHeartbeats() {
-    LOG_D("Emit heartbeats"
-        << ": at tablet# " << TabletID());
+    YDB_LOG_DEBUG("[CdcStreamHeartbeat] Scheduling CDC stream heartbeat emission",
+        {"tabletId", TabletID()});
 
     if (State != TShardState::Ready) {
         return;
@@ -148,7 +147,7 @@ bool TCdcStreamHeartbeatManager::Load(NIceDb::TNiceDb& db) {
             rowset.GetValue<Schema::CdcStreamHeartbeats::LastTxId>()
         );
 
-        Y_ABORT_UNLESS(!CdcStreams.contains(streamPathId));
+        Y_ENSURE(!CdcStreams.contains(streamPathId));
         CdcStreams.emplace(streamPathId, THeartbeatInfo{
             .TablePathId = tablePathId,
             .Interval = interval,
@@ -170,7 +169,7 @@ void TCdcStreamHeartbeatManager::AddCdcStream(NTable::TDatabase& db,
 {
     const auto last = TRowVersion::Min();
 
-    Y_ABORT_UNLESS(!CdcStreams.contains(streamPathId));
+    Y_ENSURE(!CdcStreams.contains(streamPathId));
     auto res = CdcStreams.emplace(streamPathId, THeartbeatInfo{
         .TablePathId = tablePathId,
         .Interval = heartbeatInterval,
@@ -239,7 +238,7 @@ THashMap<TPathId, TCdcStreamHeartbeatManager::THeartbeatInfo> TCdcStreamHeartbea
         }
 
         auto it = CdcStreams.find(top.StreamPathId);
-        Y_ABORT_UNLESS(it != CdcStreams.end());
+        Y_ENSURE(it != CdcStreams.end());
 
         const auto& streamPathId = it->first;
         auto& info = it->second;
@@ -279,3 +278,7 @@ void TCdcStreamHeartbeatManager::PersistRemove(NIceDb::TNiceDb& db,
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -1,17 +1,15 @@
 LIBRARY()
 
+HEADERS(common.h)
+
 PEERDIR(
     contrib/libs/protobuf
-)
-
-SRCS(
-    common.cpp
+    yql/essentials/parser/common
 )
 
 END()
 
 RECURSE(
-    antlr3
     antlr4
     collect_issues
     gen

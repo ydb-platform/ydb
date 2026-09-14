@@ -1,5 +1,6 @@
 #include "base_handler.h"
 #include "http.h"
+#include "http_dump.h"
 #include "json_proxy.h"
 #include "json_proxy_config_items.h"
 #include "json_proxy_config_updates.h"
@@ -9,6 +10,7 @@
 #include "json_proxy_operations.h"
 #include "json_proxy_proto.h"
 #include "json_proxy_sentinel.h"
+#include "json_proxy_ddisk.h"
 #include "json_proxy_toggle_config_validator.h"
 #include "walle.h"
 
@@ -20,6 +22,8 @@
 #include <ydb/library/actors/core/mon.h>
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/resource/resource.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
 
@@ -41,7 +45,7 @@ public:
         Become(&TThis::StateWork);
         NActors::TMon *mon = AppData(ctx)->Mon;
         if (mon) {
-            mon->RegisterActorPage(nullptr, "cms", "Cluster Management System", false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+            mon->RegisterActorPage(nullptr, "cms", "Cluster Management System", false, ctx.ActorSystem(), ctx.SelfID);
 
             ApiHandlers["/api/clusterstaterequest"] = new TApiMethodHandler<TJsonProxyCms<TEvCms::TEvClusterStateRequest,
                                                                                           TEvCms::TEvClusterStateResponse>>;
@@ -93,6 +97,9 @@ public:
             ApiHandlers["/api/json/configupdates"] = new TApiMethodHandler<TJsonProxyConfigUpdates>;
             ApiHandlers["/api/json/proto"] = new TApiMethodHandler<TJsonProxyProto>;
             ApiHandlers["/api/json/sentinel"] = new TApiMethodHandler<TJsonProxySentinel>;
+            ApiHandlers["/api/json/ddisk/tablets"] = new TApiMethodHandler<TJsonProxyDDisk>;
+            ApiHandlers["/api/json/ddisk/tablet"] = new TApiMethodHandler<TJsonProxyDDisk>;
+            ApiHandlers["/api/json/ddisk/disks"] = new TApiMethodHandler<TJsonProxyDDisk>;
 
             ApiHandlers["/api/datashard/json/getinfo"]
                 = new TApiMethodHandler<TJsonProxyDataShard<TEvDataShard::TEvGetInfoRequest,
@@ -162,53 +169,25 @@ private:
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
     }
 
-    static bool IsHiddenHeader(const TString& headerName) {
-        return stricmp(headerName.data(), "Authorization") == 0
-            || stricmp(headerName.data(), "X-Ya-Service-Ticket") == 0;
-    }
-
-    static TString DumpRequest(const NMonitoring::IMonHttpRequest& request) {
-        TStringBuilder result;
-        result << "{";
-
-        result << " Method: " << request.GetMethod()
-               << " Uri: " << request.GetUri();
-
-        result << " Headers {";
-        for (const auto& header : request.GetHeaders()) {
-            if (IsHiddenHeader(header.Name())) {
-                continue;
-            }
-
-            result << " " << header.ToString();
-        }
-        result << " }";
-
-        result << " Body: " << request.GetPostContent().Head(1000);
-
-        result << " }";
-        return result;
-    }
-
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ctx);
 
         NMon::TEvHttpInfo *msg = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS, "HTTP request"
-            << ": dump# " << DumpRequest(msg->Request));
+        YDB_LOG_DEBUG_CTX(ctx, "HTTP request",
+            {"request", DumpRequest(msg->Request)});
 
         // Check for API call.
         if (msg->Request.GetPathInfo().StartsWith("/api/")) {
             // Check for Wall-E call.
             if (msg->Request.GetPathInfo().StartsWith(WALLE_API_URL_PREFIX)) {
-                ctx.ExecutorThread.RegisterActor(ApiHandlers.find(WALLE_API_URL_PREFIX)->second->CreateHandlerActor(ev));
+                ctx.Register(ApiHandlers.find(WALLE_API_URL_PREFIX)->second->CreateHandlerActor(ev));
                 return;
             }
 
             auto it = ApiHandlers.find(msg->Request.GetPathInfo());
             if (it != ApiHandlers.end()) {
-                ctx.ExecutorThread.RegisterActor(it->second->CreateHandlerActor(ev));
+                ctx.Register(it->second->CreateHandlerActor(ev));
                 return;
             }
 

@@ -33,7 +33,7 @@ inline constexpr T floor_pos_impl(T arg) noexcept
 
     T result = 1;
 
-    if(result < arg)
+    if(result <= arg)
     {
         while(result < arg)
         {

@@ -21,6 +21,7 @@ protected:
     TSerializableLogger Logger;
 
     TLoggerOwner() = default;
+    TLoggerOwner(TSerializableLogger logger);
 
     PHOENIX_DECLARE_TYPE(TLoggerOwner, 0x9feb0be1);
 };

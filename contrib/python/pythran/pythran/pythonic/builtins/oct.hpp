@@ -17,13 +17,7 @@ namespace builtins
   types::str oct(T const &v)
   {
     std::ostringstream oss;
-    oss <<
-#if defined(__PYTHRAN__) && __PYTHRAN__ == 3
-        "0o"
-#else
-        '0'
-#endif
-        << std::oct << v;
+    oss << "0o" << std::oct << v;
     return oss.str();
   }
 } // namespace builtins

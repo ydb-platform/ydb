@@ -1,8 +1,8 @@
 items:
   - name: Аутентификация
     href: auth.md
-  - name: Чтение и запись
-    href: read-write.md
+  - name: Примеры чтения и записи
+    href: examples.md
   - name: Kafka Connect
     include: { mode: link, path: ./connect/toc_p.yaml }
   - name: Ограничения

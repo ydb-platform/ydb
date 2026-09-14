@@ -4,8 +4,10 @@ VERSION(1.3.1)
 
 LICENSE(CDDL-1.0)
 
-
 JAR_RESOURCE(545709491)
+
 SRC_RESOURCE(545709503)
+
+ORIGINAL_SOURCE(https://github.com/javaee/javax.annotation)
 
 END()

@@ -5,6 +5,7 @@
 
 #include <util/charset/utf8.h>
 #include <util/generic/hash.h>
+#include <util/generic/yexception.h>
 #include <util/stream/output.h> // for IOutputStream
 #include <util/string/ascii.h>
 
@@ -212,7 +213,7 @@ public:
     }
 
     static TRawTypeValue ToRawTypeValue(const ::TString& value) {
-        Y_ABORT_UNLESS(value.size() <= MaxSize);
+        Y_ENSURE(value.size() <= MaxSize);
         return TRawTypeValue((const void*)value.data(), value.size(), TypeId);
     }
 };

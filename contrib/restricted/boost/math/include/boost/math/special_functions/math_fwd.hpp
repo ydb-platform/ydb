@@ -562,6 +562,18 @@ namespace boost
    BOOST_MATH_GPU_ENABLED tools::promote_args_t<RT1, RT2> gamma_q(RT1 a, RT2 z, const Policy&);
 
    template <class RT1, class RT2>
+   BOOST_MATH_GPU_ENABLED tools::promote_args_t<RT1, RT2> lgamma_q(RT1 a, RT2 z);
+
+   template <class RT1, class RT2, class Policy>
+   BOOST_MATH_GPU_ENABLED tools::promote_args_t<RT1, RT2> lgamma_q(RT1 a, RT2 z, const Policy&);
+
+   template <class RT1, class RT2>
+   BOOST_MATH_GPU_ENABLED tools::promote_args_t<RT1, RT2> lgamma_p(RT1 a, RT2 z);
+
+   template <class RT1, class RT2, class Policy>
+   BOOST_MATH_GPU_ENABLED tools::promote_args_t<RT1, RT2> lgamma_p(RT1 a, RT2 z, const Policy&);
+
+   template <class RT1, class RT2>
    BOOST_MATH_GPU_ENABLED tools::promote_args_t<RT1, RT2> gamma_p(RT1 a, RT2 z);
 
    template <class RT1, class RT2, class Policy>
@@ -636,9 +648,17 @@ namespace boost
    BOOST_MATH_GPU_ENABLED tools::promote_args_t<T1, T2>
          hypot(T1 x, T2 y);
 
-   template <class T1, class T2, class Policy>
+   template <class T1, class T2, class Policy, boost::math::enable_if_t<policies::is_policy_v<Policy>, bool> = true>
    BOOST_MATH_GPU_ENABLED tools::promote_args_t<T1, T2>
          hypot(T1 x, T2 y, const Policy&);
+
+   template <class T1, class T2, class T3, boost::math::enable_if_t<!policies::is_policy_v<T3>, bool> = true>
+   BOOST_MATH_GPU_ENABLED tools::promote_args_t<T1, T2, T3>
+      hypot(T1 x, T2 y, T3 z);
+
+   template <class T1, class T2, class T3, class Policy>
+   BOOST_MATH_GPU_ENABLED tools::promote_args_t<T1, T2, T3>
+      hypot(T1 x, T2 y, T3 z, const Policy& pol);
 
    // cbrt - cube root.
    template <class RT>
@@ -1510,6 +1530,12 @@ namespace boost
    BOOST_MATH_GPU_ENABLED inline boost::math::tools::promote_args_t<RT1, RT2> gamma_q(RT1 a, RT2 z){ return boost::math::gamma_q(a, z, Policy()); }\
 \
    template <class RT1, class RT2>\
+   BOOST_MATH_GPU_ENABLED inline boost::math::tools::promote_args_t<RT1, RT2> lgamma_q(RT1 a, RT2 z){ return boost::math::lgamma_q(a, z, Policy()); }\
+\
+   template <class RT1, class RT2>\
+   BOOST_MATH_GPU_ENABLED inline boost::math::tools::promote_args_t<RT1, RT2> lgamma_p(RT1 a, RT2 z){ return boost::math::lgamma_p(a, z, Policy()); }\
+\
+   template <class RT1, class RT2>\
    BOOST_MATH_GPU_ENABLED inline boost::math::tools::promote_args_t<RT1, RT2> gamma_p(RT1 a, RT2 z){ return boost::math::gamma_p(a, z, Policy()); }\
 \
    template <class T1, class T2>\
@@ -1716,19 +1742,19 @@ template <class OutputIterator, class T>\
    inline boost::math::tools::promote_args_t<RT1, RT2> owens_t(RT1 a, RT2 z){ return boost::math::owens_t(a, z, Policy()); }\
    \
    template <class T1, class T2>\
-   inline BOOST_MATH_GPU_ENABLED boost::math::complex<typename boost::math::detail::bessel_traits<T1, T2, Policy >::result_type> cyl_hankel_1(T1 v, T2 x)\
+   BOOST_MATH_GPU_ENABLED inline boost::math::complex<typename boost::math::detail::bessel_traits<T1, T2, Policy >::result_type> cyl_hankel_1(T1 v, T2 x)\
    {  return boost::math::cyl_hankel_1(v, x, Policy()); }\
    \
    template <class T1, class T2>\
-   inline BOOST_MATH_GPU_ENABLED boost::math::complex<typename boost::math::detail::bessel_traits<T1, T2, Policy >::result_type> cyl_hankel_2(T1 v, T2 x)\
+   BOOST_MATH_GPU_ENABLED inline boost::math::complex<typename boost::math::detail::bessel_traits<T1, T2, Policy >::result_type> cyl_hankel_2(T1 v, T2 x)\
    { return boost::math::cyl_hankel_2(v, x, Policy()); }\
    \
    template <class T1, class T2>\
-   inline BOOST_MATH_GPU_ENABLED boost::math::complex<typename boost::math::detail::bessel_traits<T1, T2, Policy >::result_type> sph_hankel_1(T1 v, T2 x)\
+   BOOST_MATH_GPU_ENABLED inline boost::math::complex<typename boost::math::detail::bessel_traits<T1, T2, Policy >::result_type> sph_hankel_1(T1 v, T2 x)\
    { return boost::math::sph_hankel_1(v, x, Policy()); }\
    \
    template <class T1, class T2>\
-   inline BOOST_MATH_GPU_ENABLED boost::math::complex<typename boost::math::detail::bessel_traits<T1, T2, Policy >::result_type> sph_hankel_2(T1 v, T2 x)\
+   BOOST_MATH_GPU_ENABLED inline boost::math::complex<typename boost::math::detail::bessel_traits<T1, T2, Policy >::result_type> sph_hankel_2(T1 v, T2 x)\
    { return boost::math::sph_hankel_2(v, x, Policy()); }\
    \
    template <class T>\

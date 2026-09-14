@@ -27,6 +27,10 @@
  * Windows Common RunTime Library.
  */
 
+#ifdef TIFF_DO_NOT_USE_NON_EXT_ALLOC_FUNCTIONS
+#undef TIFF_DO_NOT_USE_NON_EXT_ALLOC_FUNCTIONS
+#endif
+
 #include "tif_config.h"
 
 #ifdef HAVE_SYS_TYPES_H
@@ -73,18 +77,22 @@ static tmsize_t _tiffReadProc(thandle_t fd, void *buf, tmsize_t size)
         return (tmsize_t)-1;
     }
     fdh.h = fd;
-    for (bytes_read = 0; bytes_read < bytes_total; bytes_read += count)
+    for (bytes_read = 0; bytes_read < bytes_total; bytes_read += (size_t)count)
     {
         char *buf_offset = (char *)buf + bytes_read;
-        size_t io_size = bytes_total - bytes_read;
+        size_t io_size = (size_t)(bytes_total - bytes_read);
         if (io_size > TIFF_IO_MAX)
             io_size = TIFF_IO_MAX;
+        /* Below is an obvious false positive of Coverity Scan */
+        /* coverity[overflow_sink] */
         count = read(fdh.fd, buf_offset, (TIFFIOSize_t)io_size);
         if (count <= 0)
             break;
     }
     if (count < 0)
         return (tmsize_t)-1;
+    /* Silence Coverity Scan warning about unsigned to signed underflow. */
+    /* coverity[return_overflow:SUPPRESS] */
     return (tmsize_t)bytes_read;
 }
 
@@ -100,18 +108,23 @@ static tmsize_t _tiffWriteProc(thandle_t fd, void *buf, tmsize_t size)
         return (tmsize_t)-1;
     }
     fdh.h = fd;
-    for (bytes_written = 0; bytes_written < bytes_total; bytes_written += count)
+    for (bytes_written = 0; bytes_written < bytes_total;
+         bytes_written += (size_t)count)
     {
         const char *buf_offset = (char *)buf + bytes_written;
-        size_t io_size = bytes_total - bytes_written;
+        size_t io_size = (size_t)(bytes_total - bytes_written);
         if (io_size > TIFF_IO_MAX)
             io_size = TIFF_IO_MAX;
+        /* Below is an obvious false positive of Coverity Scan */
+        /* coverity[overflow_sink] */
         count = write(fdh.fd, buf_offset, (TIFFIOSize_t)io_size);
         if (count <= 0)
             break;
     }
     if (count < 0)
         return (tmsize_t)-1;
+    /* Silence Coverity Scan warning about unsigned to signed underflow. */
+    /* coverity[return_overflow:SUPPRESS] */
     return (tmsize_t)bytes_written;
     /* return ((tmsize_t) write(fdh.fd, buf, bytes_total)); */
 }
@@ -162,7 +175,7 @@ static int _tiffMapProc(thandle_t fd, void **pbase, toff_t *psize)
             (void *)mmap(0, (size_t)sizem, PROT_READ, MAP_SHARED, fdh.fd, 0);
         if (*pbase != (void *)-1)
         {
-            *psize = (tmsize_t)sizem;
+            *psize = (toff_t)sizem;
             return (1);
         }
     }
@@ -172,7 +185,7 @@ static int _tiffMapProc(thandle_t fd, void **pbase, toff_t *psize)
 static void _tiffUnmapProc(thandle_t fd, void *base, toff_t size)
 {
     (void)fd;
-    (void)munmap(base, (off_t)size);
+    (void)munmap(base, (size_t)size);
 }
 #else  /* !HAVE_MMAP */
 static int _tiffMapProc(thandle_t fd, void **pbase, toff_t *psize)
@@ -258,7 +271,7 @@ TIFF *TIFFOpenExt(const char *name, const char *mode, TIFFOpenOptions *opts)
     return tif;
 }
 
-#ifdef __WIN32__
+#ifdef _WIN32
 #include <windows.h>
 /*
  * Open a TIFF file with a Unicode filename, for read/writing.
@@ -350,7 +363,8 @@ int _TIFFmemcmp(const void *p1, const void *p2, tmsize_t c)
     return (memcmp(p1, p2, (size_t)c));
 }
 
-static void unixWarningHandler(const char *module, const char *fmt, va_list ap)
+static void TIFF_ATTRIBUTE((__format__(__printf__, 2, 0)))
+    unixWarningHandler(const char *module, const char *fmt, va_list ap)
 {
     if (module != NULL)
         fprintf(stderr, "%s: ", module);
@@ -360,7 +374,8 @@ static void unixWarningHandler(const char *module, const char *fmt, va_list ap)
 }
 TIFFErrorHandler _TIFFwarningHandler = unixWarningHandler;
 
-static void unixErrorHandler(const char *module, const char *fmt, va_list ap)
+static void TIFF_ATTRIBUTE((__format__(__printf__, 2, 0)))
+    unixErrorHandler(const char *module, const char *fmt, va_list ap)
 {
     if (module != NULL)
         fprintf(stderr, "%s: ", module);

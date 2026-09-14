@@ -2,7 +2,7 @@
 
 Group the `SELECT` results by the values of the specified columns or expressions. `GROUP BY` is often combined with [aggregate functions](../builtins/aggregation.md) (`COUNT`, `MAX`, `MIN`, `SUM`, `AVG`) to perform calculations in each group.
 
-### Syntax
+#### Syntax
 
 ```yql
 SELECT                             -- In SELECT, you can use:
@@ -31,7 +31,7 @@ Aggregate functions ignore `NULL` in their arguments, except for `COUNT`.
 
 YQL also provides aggregation factories implemented by the functions [`AGGREGATION_FACTORY`](../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../builtins/aggregation.md#aggregateby).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT key, COUNT(*) FROM my_table
@@ -60,7 +60,9 @@ GROUP BY
 
 {% note warning %}
 
-Specifying a name for a column or expression in `GROUP BY .. AS foo` it is an extension on top of YQL. Such a name becomes visible in `WHERE` despite the fact that filtering by `WHERE` is executed [before](select/where.md) the grouping. For example, if the `T` table includes two columns, `foo` and `bar`, then the query `SELECT foo FROM T WHERE foo > 0 GROUP BY bar AS foo` would actually filter data by the `bar` column from the source table.
+Specifying a name for a column or expression in `GROUP BY .. AS foo` it is an extension on top of YQL.
+
+Before language version [2025.02](../changelog/2025.02.md) such a name was visible in `WHERE` despite the fact that filtering by `WHERE` is executed [before](select/where.md) the grouping. For example, if the `T` table includes two columns, `foo` and `bar`, then the query `SELECT foo FROM T WHERE foo > 0 GROUP BY bar AS foo` would actually filter data by the `bar` column from the source table.
 
 {% endnote %}
 
@@ -111,7 +113,7 @@ Where:
 
 Using the extended version of SessionWindow, you can, for example, do the following: divide a partition into sessions, as in the SessionWindow use case with two arguments, but with the maximum session length limited by a certain constant:
 
-### Example
+#### Example
 
 ```yql
 $max_len = 1000; -- is the maximum session length.
@@ -140,7 +142,7 @@ You can use `SessionWindow` in `GROUP BY` only once.
 
 The results of calculating the aggregate function as subtotals for the groups and overall totals over individual columns or whole table.
 
-### Syntax
+#### Syntax
 
 ```yql
 SELECT
@@ -169,7 +171,7 @@ The values of columns not used in calculations are replaced with `NULL` in the s
 * `0`: If `NULL` is used for the original empty value.
 * `1`: If `NULL` is added for a subtotal or overall total.
 
-### Example
+#### Example
 
 ```yql
 SELECT
@@ -220,7 +222,7 @@ Applying `DISTINCT` to calculated values is not currently implemented. For this 
 
 {% endnote %}
 
-### Example
+#### Example
 
 ```yql
 SELECT
@@ -240,7 +242,7 @@ Improves aggregation efficiency if the query author knows in advance that none o
 
 Unlike the usual GROUP BY, the Map-side combiner stage and additional Reduce are disabled for each field with [DISTINCT](../syntax/group_by.md#distinct) aggregation.
 
-### Example
+#### Example
 
 ```yql
 SELECT
@@ -256,7 +258,7 @@ LIMIT 3;
 
 Filtering a `SELECT` based on the calculation results of [aggregate functions](../builtins/aggregation.md). The syntax is similar to [WHERE](select/where.md).
 
-### Example
+#### Example
 
 ```yql
 SELECT

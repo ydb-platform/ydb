@@ -1,13 +1,16 @@
 #pragma once
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/datashard/datashard.h>
+
+#include <ydb/library/accessor/accessor.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+
 #include <optional>
 
 namespace NKikimr::NTxUT {
@@ -23,15 +26,21 @@ private:
     THashMap<TString, ui64> ResultStats;
     std::optional<NKikimrSSA::TProgram> ProgramProto;
     std::optional<TString> SerializedProgram;
-    YDB_ACCESSOR(bool, Reverse, false);
+    // Unset means the request carries no Reverse field at all, which is how KQP asks for a scan whose
+    // output needs no order: TTxScan then derives ERequestSorting::NONE.
+    YDB_ACCESSOR(std::optional<bool>, Reverse, false);
     YDB_ACCESSOR(ui32, Limit, 0);
-    std::vector<TString> ReplyColumns;
     std::vector<TSerializedTableRange> Ranges;
+    std::optional<NKikimrKqp::TEvKqpScanCursor> StartCursor;
+    NKikimrKqp::TEvKqpScanCursor LastCursor;
 
     std::unique_ptr<TEvDataShard::TEvKqpScan> BuildStartEvent() const;
 
     std::vector<std::shared_ptr<arrow::RecordBatch>> ResultBatches;
     YDB_READONLY(ui32, IterationsCount, 0);
+
+    std::vector<Ydb::Issue::IssueMessage> Errors;
+
 public:
     ui64 GetReadStat(const TString& paramName) const {
         AFL_VERIFY(IsCorrectlyFinished());
@@ -48,13 +57,29 @@ public:
         Ranges.emplace_back(r);
     }
 
+    // Resumes the scan from a point another reader stopped at, the way kqp does it when it has to
+    // restart a scan on a shard.
+    TShardReader& SetScanCursor(const NKikimrKqp::TEvKqpScanCursor& cursor) {
+        AFL_VERIFY(!ScanActorId);
+        StartCursor = cursor;
+        return *this;
+    }
+
+    const NKikimrKqp::TEvKqpScanCursor& GetLastCursor() const {
+        return LastCursor;
+    }
+
+    // Everything received so far. GetResult is not usable for a reader that was stopped in the
+    // middle of a scan, it requires the scan to be finished.
+    const std::vector<std::shared_ptr<arrow::RecordBatch>>& GetReceivedBatches() const {
+        return ResultBatches;
+    }
+
     ui32 GetRecordsCount() const {
         AFL_VERIFY(IsFinished());
         auto r = GetResult();
         return r ? r->num_rows() : 0;
     }
-
-    TShardReader& SetReplyColumns(const std::vector<TString>& replyColumns);
 
     TShardReader& SetReplyColumnIds(const std::vector<ui32>& replyColumnIds);
 
@@ -76,8 +101,8 @@ public:
         : Runtime(runtime)
         , TabletId(tabletId)
         , PathId(pathId)
-        , Snapshot(snapshot) {
-
+        , Snapshot(snapshot)
+    {
     }
 
     bool IsFinished() const {
@@ -92,6 +117,10 @@ public:
         return IsFinished() && *Finished == -1;
     }
 
+    const std::vector<Ydb::Issue::IssueMessage>& GetErrors() const {
+        return Errors;
+    }
+
     bool InitializeScanner() {
         AFL_VERIFY(!ScanActorId);
         const TActorId sender = Runtime.AllocateEdgeActor();
@@ -104,6 +133,9 @@ public:
             ScanActorId = ActorIdFromProto(msg.GetScanActorId());
             return true;
         } else if (auto* evError = std::get<1>(event)) {
+            for (auto issue : evError->Record.GetIssues()) {
+                Errors.emplace_back(issue);
+            }
             Finished = -1;
         } else {
             AFL_VERIFY(false);
@@ -125,7 +157,7 @@ public:
         if (auto* evData = std::get<0>(event)) {
             auto b = evData->ArrowBatch;
             if (b) {
-                ResultBatches.push_back(NArrow::ToBatch(b, true));
+                ResultBatches.push_back(NArrow::ToBatch(b));
                 NArrow::TStatusValidator::Validate(ResultBatches.back()->ValidateFull());
             } else {
                 AFL_VERIFY(evData->Finished);
@@ -134,8 +166,13 @@ public:
                 AFL_VERIFY(evData->StatsOnFinished);
                 ResultStats = evData->StatsOnFinished->GetMetrics();
                 Finished = 1;
+            } else {
+                LastCursor = evData->LastCursorProto;
             }
         } else if (auto* evError = std::get<1>(event)) {
+            for (auto issue : evError->Record.GetIssues()) {
+                Errors.emplace_back(issue);
+            }
             Finished = -1;
         } else {
             AFL_VERIFY(false);
@@ -173,4 +210,4 @@ public:
     }
 };
 
-} //namespace NKikimr::NTxUT
+}   //namespace NKikimr::NTxUT

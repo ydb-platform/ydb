@@ -1,16 +1,15 @@
 #include "proc.h"
-#include "common.h"
-#include "string.h"
 
 #include <yt/yt/core/logging/log.h>
 
 #include <yt/yt/core/misc/common.h>
-#include <yt/yt/core/misc/error_code.h>
 #include <yt/yt/core/misc/fs.h>
 
 #include <yt/yt/core/ytree/convert.h>
 
 #include <yt/yt/core/misc/fs.h>
+
+#include <library/cpp/yt/error/error_code.h>
 
 #include <library/cpp/yt/misc/enum.h>
 
@@ -22,9 +21,12 @@
 #include <util/string/strip.h>
 #include <util/string/vector.h>
 
+#include <util/system/getpid.h>
 #include <util/system/info.h>
 #include <util/system/fs.h>
 #include <util/system/fstat.h>
+#include <util/system/thread.h>
+
 #include <util/folder/iterator.h>
 #include <util/folder/filelist.h>
 
@@ -32,6 +34,7 @@
     #include <stdio.h>
     #include <dirent.h>
     #include <errno.h>
+    #include <grp.h>
     #include <pwd.h>
     #include <sys/ioctl.h>
     #include <sys/types.h>
@@ -45,7 +48,6 @@
     #include <fcntl.h>
     #include <pty.h>
     #include <pwd.h>
-    #include <grp.h>
     #include <utmp.h>
     #include <sys/prctl.h>
     #include <sys/sysmacros.h>
@@ -55,6 +57,9 @@
 #ifdef _darwin_
     #include <util.h>
     #include <pthread.h>
+#endif
+#ifdef _win_
+    #include <util/system/winint.h>
 #endif
 
 #ifdef _linux_
@@ -72,9 +77,9 @@ namespace NYT {
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Proc");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Proc");
 
-TString LinuxErrorCodeFormatter(int code)
+std::string LinuxErrorCodeFormatter(int code)
 {
     return TEnumTraits<ELinuxErrorCode>::ToString(static_cast<ELinuxErrorCode>(code));
 }
@@ -106,12 +111,59 @@ bool IsSystemError(const TError& error)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptor fd) noexcept
+    : FD_(fd)
+{ }
+
+TFileDescriptorGuard::~TFileDescriptorGuard()
+{
+    Reset();
+}
+
+TFileDescriptorGuard::TFileDescriptorGuard(TFileDescriptorGuard&& other) noexcept
+    : FD_(other.FD_)
+{
+    other.FD_ = -1;
+}
+
+TFileDescriptorGuard& TFileDescriptorGuard::operator=(TFileDescriptorGuard&& other) noexcept
+{
+    if (this != &other) {
+        Reset();
+        FD_ = other.FD_;
+        other.FD_ = -1;
+    }
+    return *this;
+}
+
+TFileDescriptor TFileDescriptorGuard::Get() const noexcept
+{
+    return FD_;
+}
+
+TFileDescriptor TFileDescriptorGuard::Release() noexcept
+{
+    TFileDescriptor fd = FD_;
+    FD_ = -1;
+    return fd;
+}
+
+void TFileDescriptorGuard::Reset() noexcept
+{
+    if (FD_ != -1) {
+        YT_VERIFY(TryClose(FD_, /*ignoreBadFD*/ false));
+        FD_ = -1;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 std::optional<int> GetParentPid(int pid)
 {
     TFileInput in(Format("/proc/%v/status", pid));
     TString line;
     while (in.ReadLine(line)) {
-        const TString ppidMarker = "PPid:\t";
+        const std::string ppidMarker = "PPid:\t";
         if (line.StartsWith(ppidMarker)) {
             line = line.substr(ppidMarker.size());
             return FromString<int>(line);
@@ -126,7 +178,7 @@ std::vector<int> GetNamespacePids(int pid)
     TFileInput in(Format("/proc/%v/status", pid));
     TString line;
     while (in.ReadLine(line)) {
-        const TString nstgidMarker = "NStgid:\t";
+        const std::string nstgidMarker = "NStgid:\t";
         if (line.StartsWith(nstgidMarker)) {
             line = line.substr(nstgidMarker.size());
             auto pidFields = SplitString(line, " ");
@@ -278,28 +330,6 @@ std::vector<int> GetPidsUnderParent(int targetPid)
 #endif
 }
 
-size_t GetCurrentProcessId()
-{
-#if defined(_linux_)
-    return getpid();
-#else
-    YT_ABORT();
-#endif
-}
-
-size_t GetCurrentThreadId()
-{
-#if defined(_linux_)
-    return static_cast<size_t>(::syscall(SYS_gettid));
-#elif defined(_darwin_)
-    uint64_t tid;
-    YT_VERIFY(pthread_threadid_np(nullptr, &tid) == 0);
-    return static_cast<size_t>(tid);
-#else
-    return ::GetCurrentThreadId();
-#endif
-}
-
 std::vector<size_t> GetCurrentProcessThreadIds()
 {
 #ifdef __linux__
@@ -313,7 +343,8 @@ std::vector<size_t> GetCurrentProcessThreadIds()
             }
         }
     } catch (const std::exception& ex) {
-        YT_LOG_ERROR(ex, "Error listing /proc/self/task");
+        YT_TLOG_ERROR("Error listing /proc/self/task")
+            .With(ex);
         return {};
     }
     return result;
@@ -324,10 +355,20 @@ std::vector<size_t> GetCurrentProcessThreadIds()
 
 bool IsUserspaceThread(size_t tid)
 {
-#ifdef __linux__
+#if defined(_linux_)
     TFileInput file(Format("/proc/%v/stat", tid));
-    auto statFields = SplitString(file.ReadLine(), " ");
-    constexpr int StartStackIndex = 27;
+    auto line = file.ReadLine();
+    // The format of /proc/PID/stat is: "pid (comm) state ...".
+    // Field 2 (comm) is the process name wrapped in parentheses and may contain
+    // spaces and even parentheses. The kernel always closes it with ')', so we
+    // find the last ')' and split only the fields that follow it.
+    auto closeParenPos = line.rfind(')');
+    auto statFields = SplitString(
+        closeParenPos != TString::npos ? line.substr(closeParenPos + 2) : line,
+        " ");
+    // Fields are now 0-indexed starting from field 3 (state). StartStackIndex
+    // is field 28 (0-indexed as 25) in the original 1-based numbering.
+    constexpr int StartStackIndex = 25;
     if (statFields.size() < StartStackIndex) {
         return false;
     }
@@ -336,19 +377,50 @@ bool IsUserspaceThread(size_t tid)
     return startStack != 0;
 #else
     Y_UNUSED(tid);
-    return false;
+    return true;
 #endif
 }
 
-void ChownChmodDirectory(const TString& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
+std::string GetCurrentProcessName()
+{
+#if defined(_linux_)
+    return std::string(Trim(TUnbufferedFileInput("/proc/self/comm").ReadAll(), "\n"));
+#elif defined(_win_)
+    char path[MAX_PATH];
+    DWORD length = ::GetModuleFileNameA(nullptr, path, MAX_PATH);
+    if (length == 0) {
+        return "(unknown)";
+    }
+    std::string fullPath(path, length);
+    auto pos = fullPath.find_last_of("\\/");
+    return pos == std::string::npos ? fullPath : fullPath.substr(pos + 1);
+#else
+    return "(unknown)";
+#endif
+}
+
+std::string GetCurrentProcessCommandLine()
+{
+#if defined(_linux_)
+    auto cmdline = TUnbufferedFileInput("/proc/self/cmdline").ReadAll();
+    auto delimiterPos = cmdline.find('\0');
+    return delimiterPos == std::string::npos ? cmdline : cmdline.substr(0, delimiterPos);
+#elif defined(_win_)
+    return ::GetCommandLineA();
+#else
+    return "(unknown)";
+#endif
+}
+
+void ChownChmodDirectory(const std::string& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
 {
 #ifdef _unix_
     if (userId) {
         auto res = HandleEintr(::chown, path.data(), *userId, -1);
         if (res != 0) {
             THROW_ERROR_EXCEPTION("Failed to change owner for directory %v", path)
-                << TErrorAttribute("owner_uid", *userId)
-                << TError::FromSystem();
+                .With("owner_uid", *userId)
+                .With(TError::FromSystem());
         }
     }
 
@@ -356,8 +428,8 @@ void ChownChmodDirectory(const TString& path, const std::optional<uid_t>& userId
         auto res = HandleEintr(::chmod, path.data(), *permissions);
         if (res != 0) {
             THROW_ERROR_EXCEPTION("Failed to set permissions for directory %v", path)
-                << TErrorAttribute("permissions", *permissions)
-                << TError::FromSystem();
+                .With("permissions", *permissions)
+                .With(TError::FromSystem());
         }
     }
 #else
@@ -365,7 +437,7 @@ void ChownChmodDirectory(const TString& path, const std::optional<uid_t>& userId
 #endif
 }
 
-void ChownChmodDirectoriesRecursively(const TString& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
+void ChownChmodDirectoriesRecursively(const std::string& path, const std::optional<uid_t>& userId, const std::optional<int>& permissions)
 {
 #ifdef _unix_
     for (const auto& directoryPath : NFS::EnumerateDirectories(path)) {
@@ -385,7 +457,7 @@ void SetThreadPriority(int tid, int priority)
     auto res = ::setpriority(PRIO_PROCESS, tid, priority);
     if (res != 0) {
         THROW_ERROR_EXCEPTION("Failed to set priority for thread %v",
-            tid) << TError::FromSystem();
+            tid).With(TError::FromSystem());
     }
 #else
     YT_ABORT();
@@ -395,7 +467,7 @@ void SetThreadPriority(int tid, int priority)
 TMemoryUsage GetProcessMemoryUsage(int pid)
 {
 #ifdef _linux_
-    TString path = "/proc/self/statm";
+    std::string path = "/proc/self/statm";
     if (pid != -1) {
         path = Format("/proc/%v/statm", pid);
     }
@@ -415,7 +487,7 @@ TMemoryUsage GetProcessMemoryUsage(int pid)
 std::vector<TProcessCgroup> GetProcessCgroups(int pid)
 {
 #ifdef _linux_
-    TString path = "/proc/self/cgroup";
+    std::string path = "/proc/self/cgroup";
     if (pid != -1) {
         path = Format("/proc/%v/cgroup", pid);
     }
@@ -431,14 +503,14 @@ std::vector<TProcessCgroup> GetProcessCgroups(int pid)
         auto fields = SplitString(line, ":", 3, KEEP_EMPTY_TOKENS);
         if (fields.size() != 3) {
             THROW_ERROR_EXCEPTION("Failed parse process cgroups")
-                << TErrorAttribute("line", line)
-                << TErrorAttribute("fields", fields);
+                .With("line", line)
+                .With("fields", fields);
         }
 
         TProcessCgroup group;
         group.HierarchyId = FromString<ui64>(fields[0]);
         group.ControllersName = fields[1];
-        group.Controllers = SplitString(fields[1], ",");
+        group.Controllers = StringSplitter(fields[1]).Split(',');
         group.Path = fields[2];
 
         groups.push_back(group);
@@ -452,12 +524,12 @@ std::vector<TProcessCgroup> GetProcessCgroups(int pid)
 }
 
 TCgroupCpuStat GetCgroupCpuStat(
-    const TString& controllerName,
-    const TString& cgroupPath,
-    const TString& cgroupMountPoint)
+    const std::string& controllerName,
+    const std::string& cgroupPath,
+    const std::string& cgroupMountPoint)
 {
 #ifdef _linux_
-    TString path = cgroupMountPoint + "/" + controllerName + cgroupPath + "/cpu.stat";
+    std::string path = cgroupMountPoint + "/" + controllerName + cgroupPath + "/cpu.stat";
 
     TCgroupCpuStat stat;
 
@@ -490,11 +562,11 @@ TCgroupCpuStat GetCgroupCpuStat(
 }
 
 TCgroupMemoryStat GetCgroupMemoryStat(
-    const TString& cgroupPath,
-    const TString& cgroupMountPoint)
+    const std::string& cgroupPath,
+    const std::string& cgroupMountPoint)
 {
 #ifdef _linux_
-    TString path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.stat";
+    std::string path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.stat";
 
     TCgroupMemoryStat stat;
 
@@ -532,24 +604,23 @@ TCgroupMemoryStat GetCgroupMemoryStat(
 }
 
 std::optional<i64> GetCgroupAnonymousMemoryLimit(
-    const TString& cgroupPath,
-    const TString& cgroupMountPoint)
+    const std::string& cgroupPath,
+    const std::string& cgroupMountPoint)
 {
 #ifdef _linux_
-    TString path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.anon.limit";
-    auto content = Trim(TUnbufferedFileInput(path).ReadAll(), "\n");
-    return FromString<i64>(content);
+    std::string path = cgroupMountPoint + "/memory" + cgroupPath + "/memory.anon.limit";
+    return FromString<i64>(Trim(TUnbufferedFileInput(path).ReadAll(), "\n"));
 #else
     Y_UNUSED(cgroupPath, cgroupMountPoint);
     return {};
 #endif
 }
 
-THashMap<TString, i64> GetVmstat()
+THashMap<std::string, i64> GetVmstat()
 {
 #ifdef _linux_
-    THashMap<TString, i64> result;
-    TString path = "/proc/vmstat";
+    THashMap<std::string, i64> result;
+    std::string path = "/proc/vmstat";
     TFileInput vmstatFile(path);
     auto data = vmstatFile.ReadAll();
     auto lines = SplitString(data, "\n");
@@ -570,7 +641,7 @@ THashMap<TString, i64> GetVmstat()
 ui64 GetProcessCumulativeMajorPageFaults(int pid)
 {
 #ifdef _linux_
-    TString path = "/proc/self/stat";
+    std::string path = "/proc/self/stat";
     if (pid != -1) {
         path = Format("/proc/%v/stat", pid);
     }
@@ -584,27 +655,27 @@ ui64 GetProcessCumulativeMajorPageFaults(int pid)
 #endif
 }
 
-TString GetProcessName(int pid)
+std::string GetProcessName(int pid)
 {
 #ifdef _linux_
-    TString path = Format("/proc/%v/comm", pid);
-    return Trim(TUnbufferedFileInput(path).ReadAll(), "\n");
+    std::string path = Format("/proc/%v/comm", pid);
+    return std::string(Trim(TUnbufferedFileInput(path).ReadAll(), "\n"));
 #else
     Y_UNUSED(pid);
     return "";
 #endif
 }
 
-std::vector<TString> GetProcessCommandLine(int pid)
+std::vector<std::string> GetProcessCommandLine(int pid)
 {
 #ifdef _linux_
-    TString path = Format("/proc/%v/cmdline", pid);
+    std::string path = Format("/proc/%v/cmdline", pid);
     auto raw = TUnbufferedFileInput(path).ReadAll();
-    std::vector<TString> result;
+    std::vector<std::string> result;
     auto begin = 0;
     while (begin < std::ssize(raw)) {
         auto end = raw.find('\0', begin);
-        if (end == TString::npos) {
+        if (end == std::string::npos) {
             result.push_back(raw.substr(begin));
             begin = raw.length();
         } else {
@@ -616,7 +687,7 @@ std::vector<TString> GetProcessCommandLine(int pid)
     return result;
 #else
     Y_UNUSED(pid);
-    return std::vector<TString>();
+    return std::vector<std::string>();
 #endif
 }
 
@@ -639,21 +710,21 @@ TError StatusToError(int status)
             EProcessErrorCode::Signal,
             "Process terminated by signal %v",
             signalNumber)
-            << TErrorAttribute("signal", signalNumber);
+            .With("signal", signalNumber);
     } else if (WIFSTOPPED(status)) {
         int signalNumber = WSTOPSIG(status);
         return TError(
             EProcessErrorCode::Signal,
             "Process stopped by signal %v",
             signalNumber)
-            << TErrorAttribute("signal", signalNumber);
+            .With("signal", signalNumber);
     } else if (WIFEXITED(status)) {
         int exitCode = WEXITSTATUS(status);
         return TError(
             EProcessErrorCode::NonZeroExitCode,
             "Process exited with code %v",
             exitCode)
-            << TErrorAttribute("exit_code", exitCode);
+            .With("exit_code", exitCode);
     } else {
         return TError("Unknown status %v", status);
     }
@@ -672,7 +743,7 @@ TError ProcessInfoToError(const siginfo_t& processInfo)
                     EProcessErrorCode::NonZeroExitCode,
                     "Process exited with code %v",
                     exitCode)
-                    << TErrorAttribute("exit_code", exitCode);
+                    .With("exit_code", exitCode);
             }
         }
 
@@ -683,8 +754,8 @@ TError ProcessInfoToError(const siginfo_t& processInfo)
                 EProcessErrorCode::Signal,
                 "Process terminated by signal %v",
                 signal)
-                << TErrorAttribute("signal", signal)
-                << TErrorAttribute("core_dumped", processInfo.si_code == CLD_DUMPED);
+                .With("signal", signal)
+                .With("core_dumped", processInfo.si_code == CLD_DUMPED);
         }
 
         default:
@@ -748,9 +819,9 @@ void SafeDup2(int oldFD, int newFD)
 {
     if (!TryDup2(oldFD, newFD)) {
         THROW_ERROR_EXCEPTION("dup2 failed")
-            << TErrorAttribute("old_fd", oldFD)
-            << TErrorAttribute("new_fd", newFD)
-            << TError::FromSystem();
+            .With("old_fd", oldFD)
+            .With("new_fd", newFD)
+            .With(TError::FromSystem());
     }
 }
 
@@ -759,13 +830,13 @@ void SafeSetCloexec(int fd)
     int getResult = ::fcntl(fd, F_GETFD);
     if (getResult == -1) {
         THROW_ERROR_EXCEPTION("Error creating pipe: fcntl failed to get descriptor flags")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 
     int setResult = ::fcntl(fd, F_SETFD, getResult | FD_CLOEXEC);
     if (setResult == -1) {
         THROW_ERROR_EXCEPTION("Error creating pipe: fcntl failed to set descriptor flags")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -774,7 +845,12 @@ void SetUid(int uid)
     // Set unprivileged uid for user process.
     if (setuid(0) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set zero uid")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
+    }
+
+    if (setgroups(0, nullptr) != 0) {
+        THROW_ERROR_EXCEPTION("Unable to clear supplementary groups")
+            .With(TError::FromSystem());
     }
 
     errno = 0;
@@ -786,27 +862,27 @@ void SetUid(int uid)
 
     if (setresgid(gid, gid, gid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set gids")
-            << TErrorAttribute("uid", uid)
-            << TErrorAttribute("gid", gid)
-            << TError::FromSystem();
+            .With("uid", uid)
+            .With("gid", gid)
+            .With(TError::FromSystem());
     }
 
     if (setresuid(uid, uid, uid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set uids")
-            << TErrorAttribute("uid", uid)
-            << TError::FromSystem();
+            .With("uid", uid)
+            .With(TError::FromSystem());
     }
 #else
     if (setuid(uid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set uid")
-            << TErrorAttribute("uid", uid)
-            << TError::FromSystem();
+            .With("uid", uid)
+            .With(TError::FromSystem());
     }
 
     if (setgid(uid) != 0) {
         THROW_ERROR_EXCEPTION("Unable to set gid")
-            << TErrorAttribute("gid", uid)
-            << TError::FromSystem();
+            .With("gid", uid)
+            .With(TError::FromSystem());
     }
 #endif
 }
@@ -817,14 +893,14 @@ void SafePipe(int fd[2])
     auto result = ::pipe2(fd, O_CLOEXEC);
     if (result == -1) {
         THROW_ERROR_EXCEPTION("Error creating pipe")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 #else
     {
         int result = ::pipe(fd);
         if (result == -1) {
             THROW_ERROR_EXCEPTION("Error creating pipe")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
     SafeSetCloexec(fd[0]);
@@ -837,7 +913,7 @@ int SafeDup(int fd)
     auto result = ::dup(fd);
     if (result == -1) {
         THROW_ERROR_EXCEPTION("Error duplicating fd")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
     return result;
 }
@@ -866,7 +942,7 @@ void SafeOpenPty(int* masterFD, int* slaveFD, int height, int width)
         int result = ::openpty(masterFD, slaveFD, nullptr, &tt, wsPtr);
         if (result == -1) {
             THROW_ERROR_EXCEPTION("Error creating pty: pty creation failed")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
     SafeSetCloexec(*masterFD);
@@ -882,7 +958,7 @@ void SafeLoginTty(int slaveFD)
     int result = ::login_tty(slaveFD);
     if (result == -1) {
         THROW_ERROR_EXCEPTION("Error attaching pty to standard streams")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 #else
     Y_UNUSED(slaveFD);
@@ -897,7 +973,7 @@ void SafeSetTtyWindowSize(int fd, int height, int width)
         int result = ::ioctl(fd, TIOCGWINSZ, &ws);
         if (result == -1) {
             THROW_ERROR_EXCEPTION("Error reading tty window size")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
         if (ws.ws_row != height || ws.ws_col != width) {
             ws.ws_row = height;
@@ -905,7 +981,7 @@ void SafeSetTtyWindowSize(int fd, int height, int width)
             result = ::ioctl(fd, TIOCSWINSZ, &ws);
             if (result == -1) {
                 THROW_ERROR_EXCEPTION("Error setting tty window size")
-                    << TError::FromSystem();
+                    .With(TError::FromSystem());
             }
         }
     }
@@ -932,7 +1008,7 @@ void SafeMakeNonblocking(int fd)
 {
     if (!TryMakeNonblocking(fd)) {
         THROW_ERROR_EXCEPTION("Failed to set nonblocking mode for descriptor %v", fd)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -953,7 +1029,7 @@ void SafeSetPipeCapacity(int fd, int capacity)
 {
     if (!TrySetPipeCapacity(fd, capacity)) {
         THROW_ERROR_EXCEPTION("Failed to set capacity for descriptor %v", fd)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -983,7 +1059,7 @@ void SafeEnableEmptyPipeEpollEvent(TFileDescriptor fd)
 {
     if (!TryEnableEmptyPipeEpollEvent(fd)) {
         THROW_ERROR_EXCEPTION("Failed to enable empty pipe epoll event for descriptor %v", fd)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
@@ -1007,16 +1083,16 @@ void SafeSetUid(int uid)
 {
     if (!TrySetUid(uid)) {
         THROW_ERROR_EXCEPTION("Failed to set uid to %v", uid)
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
 }
 
-TString SafeGetUsernameByUid(int uid)
+std::string SafeGetUsernameByUid(int uid)
 {
     int bufferSize = ::sysconf(_SC_GETPW_R_SIZE_MAX);
     if (bufferSize < 0) {
         THROW_ERROR_EXCEPTION("Failed to get username, sysconf(_SC_GETPW_R_SIZE_MAX) failed")
-            << TError::FromSystem();
+            .With(TError::FromSystem());
     }
     char buffer[bufferSize];
     struct passwd pwd, * pwdptr = nullptr;
@@ -1113,13 +1189,13 @@ void SafeSetUid(int /*uid*/)
     YT_UNIMPLEMENTED();
 }
 
-TString SafeGetUsernameByUid(int /*uid*/)
+std::string SafeGetUsernameByUid(int /*uid*/)
 {
     YT_UNIMPLEMENTED();
 }
 #endif
 
-void CloseAllDescriptors(const std::vector<int>& exceptFor)
+std::vector<int> CloseAllDescriptors(const std::vector<int>& exceptFor)
 {
 #ifdef _linux_
     std::vector<int> fds;
@@ -1143,8 +1219,11 @@ void CloseAllDescriptors(const std::vector<int>& exceptFor)
     for (int fd : fds) {
         YT_VERIFY(TryClose(fd, ignoreBadFD));
     }
+
+    return fds;
 #else
     Y_UNUSED(exceptFor);
+    return {};
 #endif
 }
 
@@ -1161,19 +1240,40 @@ int GetFileDescriptorCount()
         // Don't count opened /proc/self/fd.
         --descriptorCount;
     } catch (const std::exception& ex) {
-        YT_LOG_ERROR(ex, "Error listing /proc/self/fd");
+        YT_TLOG_ERROR("Error listing /proc/self/fd")
+            .With(ex);
     }
 #endif
     return descriptorCount;
 }
 
-void SafeCreateStderrFile(TString fileName)
+std::optional<i64> GetFileDescriptorLimit()
+{
+#ifdef _unix_
+    struct rlimit limit;
+    if (getrlimit(RLIMIT_NOFILE, &limit) != 0) {
+        YT_TLOG_ERROR("Error getting RLIMIT_NOFILE")
+            .With(TError::FromSystem());
+        return std::nullopt;
+    }
+
+    if (limit.rlim_cur == RLIM_INFINITY) {
+        return std::nullopt;
+    }
+
+    return static_cast<i64>(limit.rlim_cur);
+#else
+    return std::nullopt;
+#endif
+}
+
+void SafeCreateStderrFile(std::string fileName)
 {
 #ifdef _unix_
     if (freopen(fileName.data(), "a", stderr) == nullptr) {
         auto lastError = TError::FromSystem();
         THROW_ERROR_EXCEPTION("Stderr redirection failed")
-            << lastError;
+            .With(lastError);
     }
 #endif
 }
@@ -1212,7 +1312,7 @@ TNetworkInterfaceStatisticsMap GetNetworkInterfaceStatistics()
     TNetworkInterfaceStatisticsMap interfaceToStatistics;
     for (TString line; procNetDev.ReadLine(line) != 0; ) {
         TNetworkInterfaceStatistics statistics;
-        TVector<TString> lineParts = StringSplitter(line).SplitBySet(": ").SkipEmpty();
+        std::vector<std::string> lineParts = StringSplitter(line).SplitBySet(": ").SkipEmpty();
         YT_VERIFY(lineParts.size() == 1 + sizeof(TNetworkInterfaceStatistics) / sizeof(ui64));
         auto interfaceName = lineParts[0];
 
@@ -1244,7 +1344,7 @@ TNetworkInterfaceStatisticsMap GetNetworkInterfaceStatistics()
 #endif
 }
 
-void SendSignal(const std::vector<int>& pids, const TString& signalName)
+void SendSignal(const std::vector<int>& pids, const std::string& signalName)
 {
 #ifdef _unix_
     ValidateSignalName(signalName);
@@ -1252,7 +1352,7 @@ void SendSignal(const std::vector<int>& pids, const TString& signalName)
     for (int pid : pids) {
         if (kill(pid, *sig) != 0 && errno != ESRCH) {
             THROW_ERROR_EXCEPTION("Unable to kill process %v", pid)
-                << TError::FromSystem();
+                .With(TError::FromSystem());
         }
     }
 #else
@@ -1260,9 +1360,9 @@ void SendSignal(const std::vector<int>& pids, const TString& signalName)
 #endif
 }
 
-std::optional<int> FindSignalIdBySignalName(const TString& signalName)
+std::optional<int> FindSignalIdBySignalName(const std::string& signalName)
 {
-    static const THashMap<TString, int> SignalNameToNumber{
+    static const THashMap<std::string, int> SignalNameToNumber{
         { "SIGTERM", SIGTERM },
         { "SIGINT",  SIGINT },
         { "SIGALRM", SIGALRM },
@@ -1279,7 +1379,7 @@ std::optional<int> FindSignalIdBySignalName(const TString& signalName)
     return it == SignalNameToNumber.end() ? std::nullopt : std::make_optional(it->second);
 }
 
-void ValidateSignalName(const TString& signalName)
+void ValidateSignalName(const std::string& signalName)
 {
     auto signal = FindSignalIdBySignalName(signalName);
     if (!signal) {
@@ -1320,9 +1420,9 @@ TMemoryMappingStatistics operator+(TMemoryMappingStatistics lhs, const TMemoryMa
     return lhs;
 }
 
-std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps)
+std::vector<TMemoryMapping> ParseMemoryMappings(const std::string& rawSMaps)
 {
-    auto parseMemoryAmount = [] (const TString& strValue, const TString& unit) {
+    auto parseMemoryAmount = [] (const std::string& strValue, const std::string& unit) {
         YT_VERIFY(unit == "kB");
         auto value = FromString<ui64>(strValue);
         return value * 1_KB;
@@ -1340,13 +1440,14 @@ std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps)
             if (!condition) {
                 Cerr << "Failed to parse smaps: " << rawSMaps << Endl;
                 Cerr << "Failed line: " << line << Endl;
-                YT_LOG_ERROR("Failed to parse smaps (SMaps: %v)", rawSMaps);
-                YT_LOG_ERROR("Failed line (Line: %v)", line);
+                YT_TLOG_ERROR("Failed to parse smaps")
+                    .With("SMaps", rawSMaps)
+                    .With("Line", line);
                 YT_ABORT();
             }
         };
 
-        std::vector<TString> words;
+        std::vector<std::string> words;
         StringSplitter(line).SplitBySet(" \t").SkipEmpty().Collect(&words);
 
         // Memory mapping description starts with boundary addresses which consists of lowercase
@@ -1422,7 +1523,7 @@ std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps)
                 mapping.ProtectionKey = FromString<ui64>(words[1]);
             } else if (property == "VmFlags") {
                 for (const auto& flag : words) {
-                    if (auto optionalEnumFlag = TEnumTraits<EVMFlag>::FindValueByLiteral(to_upper(flag))) {
+                    if (auto optionalEnumFlag = TEnumTraits<EVMFlag>::FindValueByLiteral(to_upper(TString(flag)))) {
                         mapping.VMFlags |= *optionalEnumFlag;
                     } else {
                         // Unknown flag, do not crash.
@@ -1475,13 +1576,15 @@ std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps)
                 TStringBuf majorStr;
                 TStringBuf minorStr;
                 verify(device.TrySplit(':', majorStr, minorStr));
-                ui16 major;
-                ui16 minor;
+                ui32 major;
+                ui32 minor;
                 verify(TryIntFromString<16>(majorStr, major));
                 verify(TryIntFromString<16>(minorStr, minor));
+                // NB: 0:0 - anonymous, 0:m - virtual fs (tmpfs, overlayfs, etc)
+                // TODO(khlebnikov): Remove std::optional
                 if (major != 0 || minor != 0) {
 #ifdef _linux_
-                    memoryMapping.DeviceId = makedev(major, minor);
+                    memoryMapping.DeviceId = {major, minor};
 #endif
                 }
             }
@@ -1514,7 +1617,7 @@ std::vector<TMemoryMapping> GetProcessMemoryMappings(int pid)
 }
 
 template <typename TField>
-static bool TryParseField(const TVector<TString>& fields, int index, TField& field)
+static bool TryParseField(const std::vector<TStringBuf>& fields, int index, TField& field)
 {
     if (std::ssize(fields) <= index) {
         return false;
@@ -1522,7 +1625,7 @@ static bool TryParseField(const TVector<TString>& fields, int index, TField& fie
     return TryFromString(fields[index], field);
 }
 
-static bool TryParseField(const TVector<TString>& fields, int index, TDuration& field)
+static bool TryParseField(const std::vector<TStringBuf>& fields, int index, TDuration& field)
 {
     i64 value = 0;
     if (TryParseField(fields, index, value)) {
@@ -1532,58 +1635,9 @@ static bool TryParseField(const TVector<TString>& fields, int index, TDuration& 
     return false;
 }
 
-TDiskStat ParseDiskStat(const TString& statLine)
+TBlockDeviceStat ParseBlockDeviceStat(const std::string& statLine)
 {
-    auto buffer = SplitString(statLine, " ");
-    TDiskStat result;
-    TryParseField(buffer, 0, result.MajorNumber);
-    TryParseField(buffer, 1, result.MinorNumber);
-    TryParseField(buffer, 2, result.DeviceName);
-    TryParseField(buffer, 3, result.ReadsCompleted);
-    TryParseField(buffer, 4, result.ReadsMerged);
-    TryParseField(buffer, 5, result.SectorsRead);
-    TryParseField(buffer, 6, result.TimeSpentReading);
-    TryParseField(buffer, 7, result.WritesCompleted);
-    TryParseField(buffer, 8, result.WritesMerged);
-    TryParseField(buffer, 9, result.SectorsWritten);
-    TryParseField(buffer, 10, result.TimeSpentWriting);
-    TryParseField(buffer, 11, result.IOCurrentlyInProgress);
-    TryParseField(buffer, 12, result.TimeSpentDoingIO);
-    TryParseField(buffer, 13, result.WeightedTimeSpentDoingIO);
-    TryParseField(buffer, 14, result.DiscardsCompleted);
-    TryParseField(buffer, 15, result.DiscardsMerged);
-    TryParseField(buffer, 16, result.SectorsDiscarded);
-    TryParseField(buffer, 17, result.TimeSpentDiscarding);
-    return result;
-}
-
-THashMap<TString, TDiskStat> GetDiskStats()
-{
-#ifdef _linux_
-    THashMap<TString, TDiskStat> result;
-    static const TString path("/proc/diskstats");
-    TFileInput diskStatsFile(path);
-    auto data = diskStatsFile.ReadAll();
-    auto lines = SplitString(data, "\n");
-
-    for (const auto& line : lines) {
-        auto strippedLine = Strip(line);
-        if (strippedLine.empty()) {
-            continue;
-        }
-        auto parsed = ParseDiskStat(line);
-        result[parsed.DeviceName] = parsed;
-    }
-
-    return result;
-#else
-    return {};
-#endif
-}
-
-TBlockDeviceStat ParseBlockDeviceStat(const TString& statLine)
-{
-    auto buffer = SplitString(statLine, " ");
+    std::vector<TStringBuf> buffer = StringSplitter(statLine).Split(' ');
     TBlockDeviceStat result;
     TryParseField(buffer, 0, result.ReadsCompleted);
     TryParseField(buffer, 1, result.ReadsMerged);
@@ -1605,10 +1659,10 @@ TBlockDeviceStat ParseBlockDeviceStat(const TString& statLine)
     return result;
 }
 
-std::optional<TBlockDeviceStat> GetBlockDeviceStat(const TString& deviceName)
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(const std::string& deviceName)
 {
 #ifdef _linux_
-    const TString path = Format("/sys/block/%v/stat", deviceName);
+    const auto path = Format("/sys/block/%v/stat", deviceName);
     TFileInput diskStatsFile(path);
     auto data = diskStatsFile.ReadAll();
     return ParseBlockDeviceStat(Strip(data));
@@ -1618,10 +1672,57 @@ std::optional<TBlockDeviceStat> GetBlockDeviceStat(const TString& deviceName)
 #endif
 }
 
-std::vector<TString> ListDisks()
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(NFS::TDeviceId deviceId)
 {
 #ifdef _linux_
-    std::vector<TString> disks;
+    if (deviceId.first != NFS::UnnamedDeviceMajor) {
+        const std::string path = Format("/sys/dev/block/%v:%v/stat", deviceId.first, deviceId.second);
+        TFileInput diskStatsFile(path);
+        auto data = diskStatsFile.ReadAll();
+        return ParseBlockDeviceStat(Strip(data));
+    }
+#else
+    Y_UNUSED(deviceId);
+#endif
+    return std::nullopt;
+}
+
+NFS::TDeviceId GetBlockDeviceId(const std::string& deviceName)
+{
+#ifdef _linux_
+    const auto path = Format("/sys/block/%v/dev", deviceName);
+    TFileInput blockDevFile(path);
+    auto majorMinor = SplitString(Strip(blockDevFile.ReadAll()), ":", 2);
+    ui32 major, minor;
+    if (majorMinor.size() == 2 &&
+        TryFromString(majorMinor[0], major) &&
+        TryFromString(majorMinor[1], minor))
+    {
+        return {major, minor};
+    }
+#else
+    Y_UNUSED(deviceName);
+#endif
+    return {0, 0};
+}
+
+std::string GetBlockDeviceName(NFS::TDeviceId deviceId)
+{
+#ifdef _linux_
+    if (deviceId.first != NFS::UnnamedDeviceMajor) {
+        auto link = NFs::ReadLink(Format("/sys/dev/block/%v:%v", deviceId.first, deviceId.second));
+        return std::string(NFS::GetFileName(link));
+    }
+#else
+    Y_UNUSED(deviceId);
+#endif
+    return "";
+}
+
+std::vector<std::string> ListDisks()
+{
+#ifdef _linux_
+    std::vector<std::string> disks;
 
     for (const auto& entry : TDirIterator("/sys/block", TDirIterator::TOptions().SetMaxLevel(1))) {
         if (entry.fts_info == FTS_D || entry.fts_info == FTS_DP) {
@@ -1641,7 +1742,7 @@ std::vector<TString> ListDisks()
 TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
 {
 #ifdef _linux_
-    static const TString path = "/proc/thread-self/io";
+    static const std::string path = "/proc/thread-self/io";
     static std::atomic<bool> supported = true;
 
     TTaskDiskStatistics stat;
@@ -1668,7 +1769,8 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
         } catch (const TSystemError& ex) {
             if (ex.Status() == ENOENT) {
                 supported = false;
-                YT_LOG_WARNING(ex, "Task I/O accounting is not supported by kernel");
+                YT_TLOG_WARNING("Task I/O accounting is not supported by kernel")
+                    .With(ex);
             } else {
                 throw;
             }
@@ -1683,13 +1785,13 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFile MemfdCreate(const TString& name)
+TFile MemfdCreate(const std::string& name)
 {
 #ifdef _linux_
     int fd = memfd_create(name.c_str(), 0);
     if (fd == -1) {
         THROW_ERROR_EXCEPTION("Unable to create memfd")
-                << TError::FromSystem();
+                .With(TError::FromSystem());
     }
 
     return TFile{fd};
@@ -1702,10 +1804,10 @@ TFile MemfdCreate(const TString& name)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& GetLinuxKernelVersion()
+const std::string& GetLinuxKernelVersion()
 {
 #ifdef _linux_
-    static TString release = [] () -> TString {
+    static std::string release = [] () -> std::string {
         utsname buf{};
         if (uname(&buf) != 0) {
             return "unknown";
@@ -1717,8 +1819,49 @@ const TString& GetLinuxKernelVersion()
 
     return release;
 #else
-    static TString release = "unknown";
+    static std::string release = "unknown";
     return release;
+#endif
+}
+
+std::vector<int> ParseLinuxKernelVersion()
+{
+#ifdef _linux_
+    const auto& version = GetLinuxKernelVersion();
+    if (version == "unknown") {
+        return {};
+    }
+
+    std::vector<int> parsedVersion;
+
+    auto significantVersion = version.substr(0, version.find_first_not_of("0123456789."));
+
+    StringSplitter(significantVersion).Split('.').ParseInto(&parsedVersion);
+
+    return parsedVersion;
+#else
+    return {};
+#endif
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool IsUringEnabled()
+{
+#ifdef _linux_
+    try {
+        TFileInput stream("/proc/sys/kernel/io_uring_perm");
+
+        return stream.ReadLine() != "0";
+    } catch (const TSystemError& ex) {
+        if (ex.Status() == ENOENT) {
+            return false;
+        } else {
+            throw;
+        }
+    }
+#else
+    return false;
 #endif
 }
 

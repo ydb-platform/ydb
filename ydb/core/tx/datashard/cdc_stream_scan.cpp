@@ -7,12 +7,12 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
+#include <ydb/library/aclib/user_context.h>
+
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
-#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan][" << TabletID() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan][" << TabletID() << "] " << stream)
-#define LOG_W(stream) LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "[CdcStreamScan][" << TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr::NDataShard {
 
@@ -44,7 +44,7 @@ bool TCdcStreamScanManager::Load(NIceDb::TNiceDb& db) {
             rowset.GetValue<Schema::CdcStreamScans::StreamPathId>()
         );
 
-        Y_ABORT_UNLESS(!Scans.contains(streamPathId));
+        Y_ENSURE(!Scans.contains(streamPathId));
         auto& info = Scans[streamPathId];
 
         info.SnapshotVersion = TRowVersion(
@@ -54,7 +54,7 @@ bool TCdcStreamScanManager::Load(NIceDb::TNiceDb& db) {
 
         if (rowset.HaveValue<Schema::CdcStreamScans::LastKey>()) {
             info.LastKey.ConstructInPlace();
-            Y_ABORT_UNLESS(TSerializedCellVec::TryParse(rowset.GetValue<Schema::CdcStreamScans::LastKey>(), *info.LastKey));
+            Y_ENSURE(TSerializedCellVec::TryParse(rowset.GetValue<Schema::CdcStreamScans::LastKey>(), *info.LastKey));
         }
 
         info.Stats.RowsProcessed = rowset.GetValueOrDefault<Schema::CdcStreamScans::RowsProcessed>(0);
@@ -71,7 +71,7 @@ bool TCdcStreamScanManager::Load(NIceDb::TNiceDb& db) {
 void TCdcStreamScanManager::Add(NTable::TDatabase& db, const TPathId& tablePathId, const TPathId& streamPathId,
         const TRowVersion& snapshotVersion)
 {
-    Y_ABORT_UNLESS(!Scans.contains(streamPathId));
+    Y_ENSURE(!Scans.contains(streamPathId));
     auto& info = Scans[streamPathId];
     info.SnapshotVersion = snapshotVersion;
 
@@ -85,7 +85,7 @@ void TCdcStreamScanManager::Forget(NTable::TDatabase& db, const TPathId& tablePa
 }
 
 void TCdcStreamScanManager::Enqueue(const TPathId& streamPathId, ui64 txId, ui64 scanId) {
-    Y_ABORT_UNLESS(Scans.contains(streamPathId));
+    Y_ENSURE(Scans.contains(streamPathId));
     auto& info = Scans.at(streamPathId);
     info.TxId = txId;
     info.ScanId = scanId;
@@ -93,7 +93,7 @@ void TCdcStreamScanManager::Enqueue(const TPathId& streamPathId, ui64 txId, ui64
 }
 
 void TCdcStreamScanManager::Register(ui64 txId, const TActorId& actorId) {
-    Y_ABORT_UNLESS(TxIdToPathId.contains(txId));
+    Y_ENSURE(TxIdToPathId.contains(txId));
     Scans[TxIdToPathId.at(txId)].ActorId = actorId;
 }
 
@@ -109,7 +109,7 @@ void TCdcStreamScanManager::Complete(const TPathId& streamPathId) {
 }
 
 void TCdcStreamScanManager::Complete(ui64 txId) {
-    Y_ABORT_UNLESS(TxIdToPathId.contains(txId));
+    Y_ENSURE(TxIdToPathId.contains(txId));
     Complete(TxIdToPathId.at(txId));
 }
 
@@ -118,7 +118,7 @@ bool TCdcStreamScanManager::IsCompleted(const TPathId& streamPathId) const {
 }
 
 const TCdcStreamScanManager::TStats& TCdcStreamScanManager::GetCompletedStats(const TPathId& streamPathId) const {
-    Y_ABORT_UNLESS(CompletedScans.contains(streamPathId));
+    Y_ENSURE(CompletedScans.contains(streamPathId));
     return CompletedScans.at(streamPathId);
 }
 
@@ -188,11 +188,11 @@ class TDataShard::TTxCdcStreamScanProgress
     static TVector<TUpdateOp> MakeUpdates(TArrayRef<const TCell> cells, TArrayRef<const TTag> tags, TUserTable::TCPtr table) {
         TVector<TUpdateOp> updates(Reserve(cells.size()));
 
-        Y_ABORT_UNLESS(cells.size() == tags.size());
+        Y_ENSURE(cells.size() == tags.size());
         for (TPos pos = 0; pos < cells.size(); ++pos) {
             const auto tag = tags.at(pos);
             auto it = table->Columns.find(tag);
-            Y_ABORT_UNLESS(it != table->Columns.end());
+            Y_ENSURE(it != table->Columns.end());
             updates.emplace_back(tag, ECellOp::Set, TRawTypeValue(cells.at(pos).AsRef(), it->second.Type.GetTypeId()));
         }
 
@@ -230,13 +230,15 @@ public:
         const auto& readVersion = ev.ReadVersion;
         const auto& valueTags = ev.ValueTags;
 
-        LOG_D("Progress"
-            << ": streamPathId# " << streamPathId
-            << ", rows# " << ev.Rows.size());
+        YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Processing CDC stream scan progress batch",
+            {"tabletId", TabletID()},
+            {"streamPathId", streamPathId},
+            {"rowCount", ev.Rows.size()});
 
         if (!Self->GetUserTables().contains(tablePathId.LocalPathId)) {
-            LOG_W("Cannot progress on unknown table"
-                << ": tablePathId# " << tablePathId);
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] CDC stream scan skipped: unknown table",
+                {"tabletId", TabletID()},
+                {"tablePathId", tablePathId});
             return true;
         }
 
@@ -244,8 +246,9 @@ public:
 
         auto it = table->CdcStreams.find(streamPathId);
         if (it == table->CdcStreams.end()) {
-            LOG_W("Cannot progress on unknown cdc stream"
-                << ": streamPathId# " << streamPathId);
+            YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] CDC stream scan skipped: unknown stream",
+                {"tabletId", TabletID()},
+                {"streamPathId", streamPathId});
             return true;
         }
 
@@ -256,19 +259,22 @@ public:
         }
 
         if (!ev.ReservationCookie) {
-            LOG_I("Cannot reserve change queue capacity");
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan rescheduled: failed to reserve change queue capacity",
+                {"tabletId", TabletID()});
             Reschedule = true;
             return true;
         }
 
         if (Self->GetFreeChangeQueueCapacity(ev.ReservationCookie) < ev.Rows.size()) {
-            LOG_I("Not enough change queue capacity");
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan rescheduled: insufficient change queue capacity",
+                {"tabletId", TabletID()});
             Reschedule = true;
             return true;
         }
 
         if (Self->CheckChangesQueueOverflow(ev.ReservationCookie)) {
-            LOG_I("Change queue overflow");
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan rescheduled: change queue overflow",
+                {"tabletId", TabletID()});
             Reschedule = true;
             return true;
         }
@@ -318,7 +324,7 @@ public:
                     break;
                 }
                 default:
-                    Y_FAIL_S("Invalid stream mode: " << static_cast<ui32>(it->second.Mode));
+                    Y_ENSURE(false, "Invalid stream mode: " << static_cast<ui32>(it->second.Mode));
             }
 
             auto recordPtr = TChangeRecordBuilder(TChangeRecord::EKind::CdcDataChange)
@@ -331,6 +337,7 @@ public:
                 .WithSchemaVersion(table->GetTableSchemaVersion())
                 .WithBody(body.SerializeAsString())
                 .WithSource(TChangeRecord::ESource::InitialScan)
+                .WithUserCtx(NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_INITIAL_SCAN).Build())
                 .Build();
 
             const auto& record = *recordPtr;
@@ -356,7 +363,7 @@ public:
             const auto& [key, _] = ev.Rows.back();
 
             auto* info = Self->CdcStreamScanManager.Get(streamPathId);
-            Y_ABORT_UNLESS(info);
+            Y_ENSURE(info);
 
             info->LastKey = key;
             info->Stats = ev.Stats;
@@ -369,14 +376,17 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Response) {
-            LOG_I("Enqueue " << ChangeRecords.size() << " change record(s)"
-                << ": streamPathId# " << Request->Get()->StreamPathId);
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] Enqueuing CDC stream scan change records",
+                {"tabletId", TabletID()},
+                {"changeRecordsCount", ChangeRecords.size()},
+                {"streamPathId", Request->Get()->StreamPathId});
 
             Self->EnqueueChangeRecords(std::move(ChangeRecords), Request->Get()->ReservationCookie);
             ctx.Send(Request->Sender, Response.Release());
         } else if (Reschedule) {
-            LOG_I("Re-schedule progress tx"
-                << ": streamPathId# " << Request->Get()->StreamPathId);
+            YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] CDC stream scan progress rescheduled",
+                {"tabletId", TabletID()},
+                {"streamPathId", Request->Get()->StreamPathId});
 
             // re-schedule tx
             ctx.TActivationContext::Schedule(TDuration::Seconds(1), Request->Forward(ctx.SelfID));
@@ -385,7 +395,7 @@ public:
 
 }; // TTxCdcStreamScanProgress
 
-class TCdcStreamScan: public IActorCallback, public IScan {
+class TCdcStreamScan: public IActorCallback, public IActorExceptionHandler, public IScan {
     using TStats = TCdcStreamScanManager::TStats;
 
     struct TDataShardId {
@@ -455,7 +465,7 @@ public:
     {
     }
 
-    void Describe(IOutputStream& o) const noexcept override {
+    void Describe(IOutputStream& o) const override {
         o << "CdcStreamScan {"
           << " TxId: " << TxId
           << " TablePathId: " << TablePathId
@@ -463,10 +473,10 @@ public:
         << " }";
     }
 
-    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
         Driver = driver;
-        Y_ABORT_UNLESS(!LastKey || LastKey->GetCells().size() == scheme->Tags(true).size());
+        Y_ENSURE(!LastKey || LastKey->GetCells().size() == scheme->Tags(true).size());
         return {EScan::Feed, {}};
     }
 
@@ -474,7 +484,7 @@ public:
         sys->Send(DataShard.ActorId, new TDataShard::TEvPrivate::TEvCdcStreamScanRegistered(TxId, SelfId()));
     }
 
-    EScan Seek(TLead& lead, ui64) noexcept override {
+    EScan Seek(TLead& lead, ui64) override {
         if (LastKey) {
             lead.To(ValueTags, LastKey->GetCells(), ESeek::Upper);
         } else {
@@ -484,7 +494,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
         Buffer.AddRow(key, *row);
         if (Buffer.Bytes() < Limits.BatchMaxBytes) {
             if (Buffer.Rows() < Limits.BatchMaxRows) {
@@ -500,7 +510,7 @@ public:
         return EScan::Sleep;
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         NoMoreData = true;
 
         if (!Buffer) {
@@ -511,8 +521,9 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        if (abort != EAbort::None) {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        // TODO: https://github.com/ydb-platform/ydb/issues/18806
+        if (status != EStatus::Done) {
             Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::ABORTED);
         } else {
             Reply(NKikimrTxDataShard::TEvCdcStreamScanResponse::DONE);
@@ -520,6 +531,14 @@ public:
 
         PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
 private:
@@ -567,8 +586,9 @@ public:
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
 
-        LOG_D("Run"
-            << ": ev# " << record.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "[CdcStreamScan] Handling CDC stream scan request",
+            {"tabletId", TabletID()},
+            {"requestRecord", record.ShortDebugString()});
 
         const auto tablePathId = TPathId::FromProto(record.GetTablePathId());
         if (!Self->GetUserTables().contains(tablePathId.LocalPathId)) {
@@ -655,7 +675,7 @@ public:
         }
 
         const auto* info = Self->CdcStreamScanManager.Get(streamPathId);
-        Y_ABORT_UNLESS(info);
+        Y_ENSURE(info);
 
         auto* appData = AppData(ctx);
         const auto& taskName = appData->DataShardConfig.GetCdcInitialScanTaskName();
@@ -672,10 +692,10 @@ public:
         }
 
         const auto snapshotVersion = TRowVersion(snapshotKey.Step, snapshotKey.TxId);
-        Y_ABORT_UNLESS(info->SnapshotVersion == snapshotVersion);
+        Y_ENSURE(info->SnapshotVersion == snapshotVersion);
 
         // Note: cdc stream is added with a schema transaction and those wait for volatile txs
-        Y_ABORT_UNLESS(!Self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(snapshotVersion));
+        Y_ENSURE(!Self->GetVolatileTxManager().HasVolatileTxsAtSnapshot(snapshotVersion));
 
         const ui64 localTxId = Self->NextTieBreakerIndex++;
         auto scan = MakeHolder<TCdcStreamScan>(Self, Request->Sender, localTxId,
@@ -688,8 +708,9 @@ public:
         );
         Self->CdcStreamScanManager.Enqueue(streamPathId, localTxId, scanId);
 
-        LOG_I("Run scan"
-            << ": streamPathId# " << streamPathId);
+        YDB_LOG_INFO_CTX(ctx, "[CdcStreamScan] Starting CDC stream scan",
+            {"tabletId", TabletID()},
+            {"streamPathId", streamPathId});
 
         Response = MakeResponse(ctx, NKikimrTxDataShard::TEvCdcStreamScanResponse::ACCEPTED);
         return true;
@@ -709,7 +730,9 @@ void TDataShard::Handle(TEvDataShard::TEvCdcStreamScanRequest::TPtr& ev, const T
 
 void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanRegistered::TPtr& ev, const TActorContext& ctx) {
     if (!CdcStreamScanManager.Has(ev->Get()->TxId)) {
-        LOG_W("Unknown cdc stream scan actor registered");
+        YDB_LOG_WARN_CTX(ctx, "[CdcStreamScan] Ignoring CDC stream scan registration for unknown transaction",
+            {"tabletId", TabletID()},
+            {"txId", ev->Get()->TxId});
         return;
     }
 
@@ -721,3 +744,7 @@ void TDataShard::Handle(TEvPrivate::TEvCdcStreamScanProgress::TPtr& ev, const TA
 }
 
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

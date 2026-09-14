@@ -1,12 +1,12 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/persqueue/public/config.h>
 
 namespace {
 
@@ -56,9 +56,8 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
         item->ApplyACL(acl);
     }
     context.SS->PersistPath(db, item->PathId);
-    context.SS->KesusInfos[pathId] = kesus;
+    context.SS->KesusInfos.Set(pathId, kesus);
     context.SS->PersistKesusInfo(db, pathId, kesus);
-    context.SS->IncrementPathDbRefCount(pathId);
 
     context.SS->PersistTxState(db, operationId);
     context.SS->PersistUpdateNextPathId(db);
@@ -140,7 +139,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        TKesusInfo::TPtr kesus = context.SS->KesusInfos[txState->TargetPathId];
+        TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(txState->TargetPathId);
         Y_VERIFY_S(kesus, "kesus is null. PathId: " << txState->TargetPathId);
 
 
@@ -351,7 +350,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()

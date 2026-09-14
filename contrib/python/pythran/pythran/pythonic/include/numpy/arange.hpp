@@ -70,8 +70,7 @@ namespace numpy
       {
         return index_ < other.index_;
       }
-      arange_simd_iterator &
-      operator=(arange_simd_iterator const &other) = default;
+      arange_simd_iterator &operator=(arange_simd_iterator const &other) = default;
     };
 #endif
     template <class T>
@@ -120,9 +119,7 @@ namespace numpy
       {
         auto ns = s.normalize(size);
         arange_index r{start + s.lower * step, step * ns.step, ns.size()};
-        return {
-            types::numpy_expr<pythonic::operator_::functor::pos, arange_index>{
-                r}};
+        return {types::numpy_expr<pythonic::operator_::functor::pos, arange_index>{r}};
       }
       types::ndarray<dtype, shape_t> operator()(types::slice s) const
       {
@@ -130,33 +127,26 @@ namespace numpy
       }
 
       template <long stride>
-      types::ndarray<dtype, shape_t>
-      operator[](types::cstride_slice<stride> s) const
+      types::ndarray<dtype, shape_t> operator[](types::cstride_slice<stride> s) const
       {
         auto ns = s.normalize(size);
         arange_index r{start + s.lower * step, step * stride, ns.size()};
-        return {
-            types::numpy_expr<pythonic::operator_::functor::pos, arange_index>{
-                r}};
+        return {types::numpy_expr<pythonic::operator_::functor::pos, arange_index>{r}};
       }
 
       template <long stride>
-      types::ndarray<dtype, shape_t>
-      operator()(types::cstride_slice<stride> s) const
+      types::ndarray<dtype, shape_t> operator()(types::cstride_slice<stride> s) const
       {
         return operator[](s);
       }
 
       template <class... S>
-      auto operator()(S const &...s) const ->
-          typename std::enable_if<
-              (sizeof...(S) > 1),
-              decltype(std::declval<types::ndarray<dtype, shape_t>>()(
-                  s...))>::type
+      auto operator()(S const &...s) const
+          -> std::enable_if_t<(sizeof...(S) > 1),
+                              decltype(std::declval<types::ndarray<dtype, shape_t>>()(s...))>
       {
         return types::ndarray<dtype, shape_t>{
-            types::numpy_expr<pythonic::operator_::functor::pos, arange_index>{
-                *this}}(s...);
+            types::numpy_expr<pythonic::operator_::functor::pos, arange_index>{*this}}(s...);
       }
       const_iterator begin() const
       {
@@ -180,8 +170,7 @@ namespace numpy
 
   template <class T, class U, class S = long,
             class dtype = types::dtype_t<typename __combined<T, U, S>::type>>
-  types::numpy_expr<pythonic::operator_::functor::pos,
-                    details::arange_index<typename dtype::type>>
+  types::numpy_expr<pythonic::operator_::functor::pos, details::arange_index<typename dtype::type>>
   arange(T begin, U end, S step = S(1), dtype d = dtype());
 
   template <class T>

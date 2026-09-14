@@ -1,5 +1,11 @@
 ====================BSL-1.0====================
  * Distributed under the Boost Software License, Version 1.0. (See
+        * accompanying file LICENSE_1_0.txt or copy at
+ * http://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+ * Distributed under the Boost Software License, Version 1.0. (See
  * accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
 
@@ -96,6 +102,18 @@
 
 
 ====================COPYRIGHT====================
+ * Copyright Matt Borland 2022 - 2025.
+ * Distributed under the Boost Software License, Version 1.0. (See
+        * accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
+ * Copyright Matt Borland 2025.
+ * Distributed under the Boost Software License, Version 1.0. (See
+        * accompanying file LICENSE_1_0.txt or copy at
+
+
+====================COPYRIGHT====================
  * Copyright Sebastiano Vigna 2015.
  * Copyright Matt Borland 2022.
  * Distributed under the Boost Software License, Version 1.0. (See
@@ -128,3 +146,9 @@
 
 ====================COPYRIGHT====================
  * Copyright Thijs van den Berg 2014
+
+
+====================COPYRIGHT====================
+ * Copyright Young Geun Kim 2025
+ * Distributed under the Boost Software License, Version 1.0. (See
+ * accompanying file LICENSE_1_0.txt or copy at

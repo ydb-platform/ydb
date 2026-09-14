@@ -1,0 +1,494 @@
+#include "yql_yt_coordinator_proto_helpers.h"
+#include <library/cpp/yson/node/node_io.h>
+
+namespace NYql::NFmr {
+
+NProto::THeartbeatRequest HeartbeatRequestToProto(const THeartbeatRequest& heartbeatRequest) {
+    NProto::THeartbeatRequest protoHeartbeatRequest;
+    protoHeartbeatRequest.SetWorkerId(heartbeatRequest.WorkerId);
+    protoHeartbeatRequest.SetVolatileId(heartbeatRequest.VolatileId);
+    std::vector<NProto::TTaskState> taskStates;
+    for (size_t i = 0; i < heartbeatRequest.TaskStates.size(); ++i) {
+        auto protoTaskState = TaskStateToProto(*heartbeatRequest.TaskStates[i]);
+        protoHeartbeatRequest.AddTaskStates();
+        protoHeartbeatRequest.MutableTaskStates(i)->Swap(&protoTaskState);
+    }
+    protoHeartbeatRequest.SetAvailableSlots(heartbeatRequest.AvailableSlots);
+    return protoHeartbeatRequest;
+}
+
+THeartbeatRequest HeartbeatRequestFromProto(const NProto::THeartbeatRequest protoHeartbeatRequest) {
+    THeartbeatRequest heartbeatRequest;
+    heartbeatRequest.WorkerId = protoHeartbeatRequest.GetWorkerId();
+    heartbeatRequest.VolatileId = protoHeartbeatRequest.GetVolatileId();
+    std::vector<TTaskState::TPtr> taskStates;
+    for (size_t i = 0; i < protoHeartbeatRequest.TaskStatesSize(); ++i) {
+        TTaskState curTaskState = TaskStateFromProto(protoHeartbeatRequest.GetTaskStates(i));
+        taskStates.emplace_back(TIntrusivePtr<TTaskState>(new TTaskState(curTaskState)));
+    }
+    heartbeatRequest.TaskStates = taskStates;
+    heartbeatRequest.AvailableSlots = protoHeartbeatRequest.GetAvailableSlots();
+    return heartbeatRequest;
+}
+
+NProto::THeartbeatResponse HeartbeatResponseToProto(const THeartbeatResponse& heartbeatResponse) {
+    NProto::THeartbeatResponse protoHeartbeatResponse;
+    for (size_t i = 0; i < heartbeatResponse.TasksToRun.size(); ++i) {
+        auto protoTask = TaskToProto(*heartbeatResponse.TasksToRun[i]);
+        auto * taskToRun = protoHeartbeatResponse.AddTasksToRun();
+        taskToRun->Swap(&protoTask);
+    }
+    for (auto& id: heartbeatResponse.TaskToDeleteIds) {
+        protoHeartbeatResponse.AddTaskToDeleteIds(id);
+    }
+    protoHeartbeatResponse.SetNeedToRestart(heartbeatResponse.NeedToRestart);
+    return protoHeartbeatResponse;
+}
+
+THeartbeatResponse HeartbeatResponseFromProto(const NProto::THeartbeatResponse& protoHeartbeatResponse) {
+    THeartbeatResponse heartbeatResponse;
+    std::vector<TTask::TPtr> tasksToRun;
+    std::unordered_set<TString> taskToDeleteIds;
+    for (size_t i = 0; i < protoHeartbeatResponse.TasksToRunSize(); ++i) {
+        TTask curTask = TaskFromProto(protoHeartbeatResponse.GetTasksToRun(i));
+        tasksToRun.emplace_back(TIntrusivePtr<TTask>(new TTask(curTask)));
+    }
+    for (size_t i = 0; i < protoHeartbeatResponse.TaskToDeleteIdsSize(); ++i) {
+        taskToDeleteIds.emplace(protoHeartbeatResponse.GetTaskToDeleteIds(i));
+    }
+
+    heartbeatResponse.TasksToRun = tasksToRun;
+    heartbeatResponse.TaskToDeleteIds = taskToDeleteIds;
+    heartbeatResponse.NeedToRestart = protoHeartbeatResponse.GetNeedToRestart();
+    return heartbeatResponse;
+}
+
+NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperationRequest& startOperationRequest) {
+    NProto::TStartOperationRequest protoStartOperationRequest;
+    protoStartOperationRequest.SetOperationType(static_cast<NProto::EOperationType>(startOperationRequest.OperationType));
+    auto protoOperationParams = OperationParamsToProto(startOperationRequest.OperationParams);
+    protoStartOperationRequest.MutableOperationParams()->Swap(&protoOperationParams);
+
+    protoStartOperationRequest.SetSessionId(startOperationRequest.SessionId);
+    if (startOperationRequest.IdempotencyKey) {
+        protoStartOperationRequest.SetIdempotencyKey(*startOperationRequest.IdempotencyKey);
+    }
+    protoStartOperationRequest.SetNumRetries(startOperationRequest.NumRetries);
+    auto& clusterConnections = *protoStartOperationRequest.MutableClusterConnections();
+    for (auto& [tableName, conn]: startOperationRequest.ClusterConnections) {
+        clusterConnections[tableName.Id] = ClusterConnectionToProto(conn);
+    }
+    if (startOperationRequest.FmrOperationSpec) {
+        protoStartOperationRequest.SetFmrOperationSpec(NYT::NodeToYsonString(*startOperationRequest.FmrOperationSpec));
+    }
+    for (auto& fileInfo: startOperationRequest.Files) {
+        auto protoFileInfo = FileInfoToProto(fileInfo);
+        protoStartOperationRequest.AddFiles()->Swap(&protoFileInfo);
+    }
+    for (auto& ytResourceInfo: startOperationRequest.YtResources) {
+        auto protoYtResourceInfo = YtResourceInfoToProto(ytResourceInfo);
+        protoStartOperationRequest.AddYtResources()->Swap(&protoYtResourceInfo);
+    }
+    for (auto& fmrResourceInfo: startOperationRequest.FmrResources) {
+        auto protoFmrResourceOperationInfo = FmrResourceOperationInfoToProto(fmrResourceInfo);
+        protoStartOperationRequest.AddFmrResources()->Swap(&protoFmrResourceOperationInfo);
+    }
+    if (startOperationRequest.FmrJob) {
+        auto protoFmrJob = YtResourceInfoToProto(*startOperationRequest.FmrJob);
+        protoStartOperationRequest.MutableFmrJob()->Swap(&protoFmrJob);
+    }
+    return protoStartOperationRequest;
+}
+
+TPrepareOperationRequest PrepareOperationRequestFromProto(const NProto::TPrepareOperationRequest& protoPrepareOperationRequest) {
+    TPrepareOperationRequest PrepareOperationRequest;
+    PrepareOperationRequest.OperationType = static_cast<EOperationType>(protoPrepareOperationRequest.GetOperationType());
+    PrepareOperationRequest.OperationParams = OperationParamsFromProto(protoPrepareOperationRequest.GetOperationParams());
+    std::unordered_map<TFmrTableId, TClusterConnection> PrepareOperationRequestClusterConnections;
+    for (auto& [tableName, conn]: protoPrepareOperationRequest.GetClusterConnections()) {
+        PrepareOperationRequestClusterConnections[tableName] = ClusterConnectionFromProto(conn);
+    }
+    PrepareOperationRequest.ClusterConnections = PrepareOperationRequestClusterConnections;
+    if (protoPrepareOperationRequest.HasFmrOperationSpec()) {
+        PrepareOperationRequest.FmrOperationSpec = NYT::NodeFromYsonString(protoPrepareOperationRequest.GetFmrOperationSpec());
+    }
+    return PrepareOperationRequest;
+}
+
+NProto::TPrepareOperationRequest PrepareOperationRequestToProto(const TPrepareOperationRequest& PrepareOperationRequest) {
+    NProto::TPrepareOperationRequest protoPrepareOperationRequest;
+    protoPrepareOperationRequest.SetOperationType(static_cast<NProto::EOperationType>(PrepareOperationRequest.OperationType));
+    auto protoOperationParams = OperationParamsToProto(PrepareOperationRequest.OperationParams);
+    protoPrepareOperationRequest.MutableOperationParams()->Swap(&protoOperationParams);
+
+    auto& clusterConnections = *protoPrepareOperationRequest.MutableClusterConnections();
+    for (auto& [tableName, conn]: PrepareOperationRequest.ClusterConnections) {
+        clusterConnections[tableName.Id] = ClusterConnectionToProto(conn);
+    }
+    if (PrepareOperationRequest.FmrOperationSpec) {
+        protoPrepareOperationRequest.SetFmrOperationSpec(NYT::NodeToYsonString(*PrepareOperationRequest.FmrOperationSpec));
+    }
+    return protoPrepareOperationRequest;
+}
+
+NProto::TPrepareOperationResponse PrepareOperationResponseToProto(const TPrepareOperationResponse& PrepareOperationResponse) {
+    NProto::TPrepareOperationResponse protoPrepareOperationResponse;
+    protoPrepareOperationResponse.SetPartitionId(PrepareOperationResponse.PartitionId);
+    protoPrepareOperationResponse.SetTasksNum(PrepareOperationResponse.TasksNum);
+    for (const auto& errorMessage : PrepareOperationResponse.ErrorMessages) {
+        auto* curError = protoPrepareOperationResponse.AddErrorMessages();
+        auto protoError = FmrErrorToProto(errorMessage);
+        curError->Swap(&protoError);
+    }
+    return protoPrepareOperationResponse;
+}
+
+TPrepareOperationResponse PrepareOperationResponseFromProto(const NProto::TPrepareOperationResponse& protoPrepareOperationResponse) {
+    TPrepareOperationResponse prepareOperationResponse;
+    prepareOperationResponse.PartitionId = protoPrepareOperationResponse.GetPartitionId();
+    prepareOperationResponse.TasksNum = protoPrepareOperationResponse.GetTasksNum();
+    for (size_t i = 0; i < protoPrepareOperationResponse.ErrorMessagesSize(); ++i) {
+        prepareOperationResponse.ErrorMessages.emplace_back(FmrErrorFromProto(protoPrepareOperationResponse.GetErrorMessages(i)));
+    }
+    return prepareOperationResponse;
+}
+
+TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperationRequest& protoStartOperationRequest) {
+    TStartOperationRequest startOperationRequest;
+    startOperationRequest.OperationType = static_cast<EOperationType>(protoStartOperationRequest.GetOperationType());
+    startOperationRequest.OperationParams = OperationParamsFromProto(protoStartOperationRequest.GetOperationParams());
+    startOperationRequest.SessionId = protoStartOperationRequest.GetSessionId();
+    if (protoStartOperationRequest.HasIdempotencyKey()) {
+        startOperationRequest.IdempotencyKey = protoStartOperationRequest.GetIdempotencyKey();
+    }
+    startOperationRequest.NumRetries = protoStartOperationRequest.GetNumRetries();
+    std::unordered_map<TFmrTableId, TClusterConnection> startOperationRequestClusterConnections;
+    for (auto& [tableName, conn]: protoStartOperationRequest.GetClusterConnections()) {
+        startOperationRequestClusterConnections[tableName] = ClusterConnectionFromProto(conn);
+    }
+    startOperationRequest.ClusterConnections = startOperationRequestClusterConnections;
+    if (protoStartOperationRequest.HasFmrOperationSpec()) {
+        startOperationRequest.FmrOperationSpec = NYT::NodeFromYsonString(protoStartOperationRequest.GetFmrOperationSpec());
+    }
+    for (ui64 i = 0; i < protoStartOperationRequest.FilesSize(); ++i) {
+        startOperationRequest.Files.emplace_back(FileInfoFromProto(protoStartOperationRequest.GetFiles(i)));
+    }
+    for (ui64 i = 0; i < protoStartOperationRequest.YtResourcesSize(); ++i) {
+        startOperationRequest.YtResources.emplace_back(YtResourceInfoFromProto(protoStartOperationRequest.GetYtResources(i)));
+    }
+    for (ui64 i = 0; i < protoStartOperationRequest.FmrResourcesSize(); ++i) {
+        startOperationRequest.FmrResources.emplace_back(FmrResourceOperationInfoFromProto(protoStartOperationRequest.GetFmrResources(i)));
+    }
+    if (protoStartOperationRequest.HasFmrJob()) {
+        startOperationRequest.FmrJob = YtResourceInfoFromProto(protoStartOperationRequest.GetFmrJob());
+    }
+    return startOperationRequest;
+}
+
+NProto::TStartOperationResponse StartOperationResponseToProto(const TStartOperationResponse& startOperationResponse) {
+    NProto::TStartOperationResponse protoStartOperationResponse;
+    protoStartOperationResponse.SetOperationId(startOperationResponse.OperationId);
+    protoStartOperationResponse.SetStatus(static_cast<NProto::EOperationStatus>(startOperationResponse.Status));
+    for (const auto& errorMessage : startOperationResponse.ErrorMessages) {
+        auto* curError = protoStartOperationResponse.AddErrorMessages();
+        auto protoError = FmrErrorToProto(errorMessage);
+        curError->Swap(&protoError);
+    }
+    return protoStartOperationResponse;
+}
+
+TStartOperationResponse StartOperationResponseFromProto(const NProto::TStartOperationResponse& protoStartOperationResponse) {
+    TStartOperationResponse startOperationResponse;
+    startOperationResponse.Status = static_cast<EOperationStatus>(protoStartOperationResponse.GetStatus());
+    startOperationResponse.OperationId = protoStartOperationResponse.GetOperationId();
+    for (size_t i = 0; i < protoStartOperationResponse.ErrorMessagesSize(); ++i) {
+        startOperationResponse.ErrorMessages.emplace_back(FmrErrorFromProto(protoStartOperationResponse.GetErrorMessages(i)));
+    }
+    return startOperationResponse;
+}
+
+NProto::TGetOperationResponse GetOperationResponseToProto(const TGetOperationResponse& getOperationResponse) {
+    NProto::TGetOperationResponse protoGetOperationResponse;
+    protoGetOperationResponse.SetStatus(static_cast<NProto::EOperationStatus>(getOperationResponse.Status));
+    for (auto& errorMessage: getOperationResponse.ErrorMessages) {
+        auto* curError = protoGetOperationResponse.AddErrorMessages();
+        auto protoError = FmrErrorToProto(errorMessage);
+        curError->Swap(&protoError);
+    }
+    for (auto& tableStats: getOperationResponse.OutputTablesStats) {
+        auto* curTableStats = protoGetOperationResponse.AddTableStats();
+        auto protoTableStats = TableStatsToProto(tableStats);
+        curTableStats->Swap(&protoTableStats);
+    }
+    for (auto& operationResult: getOperationResponse.OperationResultsYson) {
+        protoGetOperationResponse.AddOperationResultsYson(operationResult);
+    }
+    auto* protoJobCounters = protoGetOperationResponse.MutableJobCounters();
+    protoJobCounters->SetTotal(getOperationResponse.JobCounters.Total);
+    protoJobCounters->SetPending(getOperationResponse.JobCounters.Pending);
+    protoJobCounters->SetRunning(getOperationResponse.JobCounters.Running);
+    protoJobCounters->SetCompleted(getOperationResponse.JobCounters.Completed);
+    protoJobCounters->SetFailed(getOperationResponse.JobCounters.Failed);
+    protoJobCounters->SetLost(getOperationResponse.JobCounters.Lost);
+    return protoGetOperationResponse;
+}
+
+TGetOperationResponse GetOperationResponseFromProto(const NProto::TGetOperationResponse protoGetOperationReponse) {
+    TGetOperationResponse getOperationResponse;
+    getOperationResponse.Status = static_cast<EOperationStatus>(protoGetOperationReponse.GetStatus());
+    std::vector<TFmrError> errorMessages;
+    std::vector<TTableStats> outputTableStats;
+    std::vector<TString> operationResultsYson;
+    for (size_t i = 0; i < protoGetOperationReponse.ErrorMessagesSize(); ++i) {
+        TFmrError errorMessage = FmrErrorFromProto(protoGetOperationReponse.GetErrorMessages(i));
+        errorMessages.emplace_back(errorMessage);
+    }
+    for (size_t i = 0; i < protoGetOperationReponse.TableStatsSize(); ++i) {
+        TTableStats tableStats = TableStatsFromProto(protoGetOperationReponse.GetTableStats(i));
+        outputTableStats.emplace_back(tableStats);
+    }
+    for (size_t i = 0; i < protoGetOperationReponse.OperationResultsYsonSize(); ++i) {
+        TString operationResult = protoGetOperationReponse.GetOperationResultsYson(i);
+        operationResultsYson.emplace_back(operationResult);
+    }
+    getOperationResponse.ErrorMessages = errorMessages;
+    getOperationResponse.OutputTablesStats = outputTableStats;
+    getOperationResponse.OperationResultsYson = operationResultsYson;
+    if (protoGetOperationReponse.HasJobCounters()) {
+        const auto& protoJobCounters = protoGetOperationReponse.GetJobCounters();
+        getOperationResponse.JobCounters = TJobCounters{
+            .Total = protoJobCounters.GetTotal(),
+            .Pending = protoJobCounters.GetPending(),
+            .Running = protoJobCounters.GetRunning(),
+            .Completed = protoJobCounters.GetCompleted(),
+            .Failed = protoJobCounters.GetFailed(),
+            .Lost = protoJobCounters.GetLost(),
+        };
+    }
+    return getOperationResponse;
+}
+
+NProto::TDeleteOperationResponse DeleteOperationResponseToProto(const TDeleteOperationResponse& deleteOperationResponse) {
+    NProto::TDeleteOperationResponse protoDeleteOperationResponse;
+    protoDeleteOperationResponse.SetStatus(static_cast<NProto::EOperationStatus>(deleteOperationResponse.Status));
+    return protoDeleteOperationResponse;
+}
+
+TDeleteOperationResponse DeleteOperationResponseFromProto(const NProto::TDeleteOperationResponse& protoDeleteOperationResponse) {
+    return TDeleteOperationResponse{.Status = static_cast<EOperationStatus>(protoDeleteOperationResponse.GetStatus())};
+}
+
+NProto::TGetFmrTableInfoRequest GetFmrTableInfoRequestToProto(const TGetFmrTableInfoRequest& getFmrTableInfoRequest) {
+    NProto::TGetFmrTableInfoRequest protoRequest;
+    protoRequest.SetTableId(getFmrTableInfoRequest.TableId);
+    protoRequest.SetSessionId(getFmrTableInfoRequest.SessionId);
+    return protoRequest;
+}
+
+TGetFmrTableInfoRequest GetFmrTableInfoRequestFromProto(const NProto::TGetFmrTableInfoRequest& protoGetFmrTableInfoRequest) {
+    return TGetFmrTableInfoRequest{
+        .TableId = protoGetFmrTableInfoRequest.GetTableId(),
+        .SessionId = protoGetFmrTableInfoRequest.GetSessionId()
+    };
+}
+
+NProto::TGetFmrTableInfoResponse GetFmrTableInfoResponseToProto(const TGetFmrTableInfoResponse& getFmrTableInfoResponse) {
+    NProto::TGetFmrTableInfoResponse protoGetFmrTableInfoResponse;
+    NProto::TTableStats protoTableStats = TableStatsToProto(getFmrTableInfoResponse.TableStats);
+    protoGetFmrTableInfoResponse.MutableTableStats()->Swap(&protoTableStats);
+    for (auto& errorMessage: getFmrTableInfoResponse.ErrorMessages) {
+        auto* curError = protoGetFmrTableInfoResponse.AddErrorMessages();
+        auto protoError = FmrErrorToProto(errorMessage);
+        curError->Swap(&protoError);
+    }
+    return protoGetFmrTableInfoResponse;
+}
+
+TGetFmrTableInfoResponse GetFmrTableInfoResponseFromProto(const NProto::TGetFmrTableInfoResponse& protoGetFmrTableInfoResponse) {
+    TGetFmrTableInfoResponse getFmrTableInfoResponse;
+    getFmrTableInfoResponse.TableStats = TableStatsFromProto(protoGetFmrTableInfoResponse.GetTableStats());
+    std::vector<TFmrError> errorMessages;
+    for (size_t i = 0; i < protoGetFmrTableInfoResponse.ErrorMessagesSize(); ++i) {
+        TFmrError errorMessage = FmrErrorFromProto(protoGetFmrTableInfoResponse.GetErrorMessages(i));
+        errorMessages.emplace_back(errorMessage);
+    }
+    getFmrTableInfoResponse.ErrorMessages = errorMessages;
+    return getFmrTableInfoResponse;
+}
+
+NProto::TClearSessionRequest ClearSessionRequestToProto(const TClearSessionRequest& request) {
+    NProto::TClearSessionRequest protoRequest;
+    protoRequest.SetSessionId(request.SessionId);
+    return protoRequest;
+}
+
+TClearSessionRequest ClearSessionRequestFromProto(const NProto::TClearSessionRequest& protoRequest) {
+    return TClearSessionRequest{.SessionId = protoRequest.GetSessionId()};
+}
+
+NProto::TDropTablesRequest DropTablesRequestToProto(const TDropTablesRequest& request) {
+    NProto::TDropTablesRequest protoRequest;
+    for (const auto& tableId : request.TableIds) {
+        protoRequest.AddTableIds(tableId);
+    }
+    protoRequest.SetSessionId(request.SessionId);
+    return protoRequest;
+}
+
+TDropTablesRequest DropTablesRequestFromProto(const NProto::TDropTablesRequest& protoRequest) {
+    TDropTablesRequest request;
+    request.SessionId = protoRequest.GetSessionId();
+    for (const auto& tableId : protoRequest.GetTableIds()) {
+        request.TableIds.push_back(tableId);
+    }
+    return request;
+}
+
+NProto::TDropTablesResponse DropTablesResponseToProto(const TDropTablesResponse& response) {
+    Y_UNUSED(response);
+    return NProto::TDropTablesResponse();
+}
+
+TDropTablesResponse DropTablesResponseFromProto(const NProto::TDropTablesResponse& protoResponse) {
+    Y_UNUSED(protoResponse);
+    return TDropTablesResponse{};
+}
+
+NProto::TOpenSessionRequest OpenSessionRequestToProto(const TOpenSessionRequest& request) {
+    NProto::TOpenSessionRequest protoRequest;
+    protoRequest.SetSessionId(request.SessionId);
+    return protoRequest;
+}
+
+TOpenSessionRequest OpenSessionRequestFromProto(const NProto::TOpenSessionRequest& protoRequest) {
+    return TOpenSessionRequest{.SessionId = protoRequest.GetSessionId()};
+}
+
+NProto::TOpenSessionResponse OpenSessionResponseToProto(const TOpenSessionResponse& response) {
+    Y_UNUSED(response);
+    NProto::TOpenSessionResponse protoResponse;
+    return protoResponse;
+}
+
+TOpenSessionResponse OpenSessionResponseFromProto(const NProto::TOpenSessionResponse& protoResponse) {
+    Y_UNUSED(protoResponse);
+    return TOpenSessionResponse{};
+}
+
+NProto::TPingSessionRequest PingSessionRequestToProto(const TPingSessionRequest& request) {
+    NProto::TPingSessionRequest protoRequest;
+    protoRequest.SetSessionId(request.SessionId);
+    return protoRequest;
+}
+
+TPingSessionRequest PingSessionRequestFromProto(const NProto::TPingSessionRequest& protoRequest) {
+    return TPingSessionRequest{.SessionId = protoRequest.GetSessionId()};
+}
+
+NProto::TPingSessionResponse PingSessionResponseToProto(const TPingSessionResponse& response) {
+    NProto::TPingSessionResponse protoResponse;
+    protoResponse.SetSuccess(response.Success);
+    return protoResponse;
+}
+
+TPingSessionResponse PingSessionResponseFromProto(const NProto::TPingSessionResponse& protoResponse) {
+    return TPingSessionResponse{.Success = protoResponse.GetSuccess()};
+}
+
+NProto::TListSessionsRequest ListSessionsRequestToProto(const TListSessionsRequest&) {
+    NProto::TListSessionsRequest protoRequest;
+    return protoRequest;
+}
+
+TListSessionsRequest ListSessionsRequestFromProto(const NProto::TListSessionsRequest&) {
+    return TListSessionsRequest{};
+}
+
+NProto::TListSessionsResponse ListSessionsResponseToProto(const TListSessionsResponse& response) {
+    NProto::TListSessionsResponse protoResponse;
+    for (const auto& sessionId : response.SessionIds) {
+        protoResponse.AddSessionIds(sessionId);
+    }
+    return protoResponse;
+}
+
+TListSessionsResponse ListSessionsResponseFromProto(const NProto::TListSessionsResponse& protoResponse) {
+    TListSessionsResponse response;
+    for (ui64 i = 0; i < protoResponse.SessionIdsSize(); ++i) {
+        response.SessionIds.push_back(protoResponse.GetSessionIds(i));
+    }
+    return response;
+}
+
+NProto::TWaitForOperationsRequest WaitForOperationsRequestToProto(const TWaitForOperationsRequest& request) {
+    NProto::TWaitForOperationsRequest protoRequest;
+    for (const auto& operationId : request.OperationIds) {
+        protoRequest.AddOperationIds(operationId);
+    }
+    protoRequest.SetTimeoutMs(request.Timeout.MilliSeconds());
+    return protoRequest;
+}
+
+TWaitForOperationsRequest WaitForOperationsRequestFromProto(const NProto::TWaitForOperationsRequest& protoRequest) {
+    TWaitForOperationsRequest request;
+    for (ui64 i = 0; i < protoRequest.OperationIdsSize(); ++i) {
+        request.OperationIds.push_back(protoRequest.GetOperationIds(i));
+    }
+    request.Timeout = TDuration::MilliSeconds(protoRequest.GetTimeoutMs());
+    return request;
+}
+
+NProto::TWaitForOperationsResponse WaitForOperationsResponseToProto(const TWaitForOperationsResponse& response) {
+    NProto::TWaitForOperationsResponse protoResponse;
+    for (const auto& opStatus : response.FinalizedOperations) {
+        auto* protoOpStatus = protoResponse.AddFinalizedOperations();
+        protoOpStatus->SetOperationId(opStatus.OperationId);
+        protoOpStatus->SetStatus(static_cast<NProto::EOperationStatus>(opStatus.Status));
+        for (const auto& error : opStatus.ErrorMessages) {
+            auto protoError = FmrErrorToProto(error);
+            protoOpStatus->AddErrorMessages()->Swap(&protoError);
+        }
+    }
+    return protoResponse;
+}
+
+TWaitForOperationsResponse WaitForOperationsResponseFromProto(const NProto::TWaitForOperationsResponse& protoResponse) {
+    TWaitForOperationsResponse response;
+    for (ui64 i = 0; i < protoResponse.FinalizedOperationsSize(); ++i) {
+        const auto& protoOpStatus = protoResponse.GetFinalizedOperations(i);
+        TOperationIdWithStatus opStatus;
+        opStatus.OperationId = protoOpStatus.GetOperationId();
+        opStatus.Status = static_cast<EOperationStatus>(protoOpStatus.GetStatus());
+        for (ui64 j = 0; j < protoOpStatus.ErrorMessagesSize(); ++j) {
+            opStatus.ErrorMessages.push_back(FmrErrorFromProto(protoOpStatus.GetErrorMessages(j)));
+        }
+        response.FinalizedOperations.push_back(std::move(opStatus));
+    }
+    return response;
+}
+
+NProto::TWaitForTasksRequest WaitForTasksRequestToProto(const TWaitForTasksRequest& request) {
+    NProto::TWaitForTasksRequest protoRequest;
+    protoRequest.SetAvailableSlots(request.AvailableSlots);
+    protoRequest.SetTimeoutMs(request.Timeout.MilliSeconds());
+    return protoRequest;
+}
+
+TWaitForTasksRequest WaitForTasksRequestFromProto(const NProto::TWaitForTasksRequest& protoRequest) {
+    return TWaitForTasksRequest{
+        .AvailableSlots = protoRequest.GetAvailableSlots(),
+        .Timeout = TDuration::MilliSeconds(protoRequest.GetTimeoutMs()),
+    };
+}
+
+NProto::TWaitForTasksResponse WaitForTasksResponseToProto(const TWaitForTasksResponse& response) {
+    NProto::TWaitForTasksResponse protoResponse;
+    protoResponse.SetAvailableTasksCount(response.AvailableTasksCount);
+    return protoResponse;
+}
+
+TWaitForTasksResponse WaitForTasksResponseFromProto(const NProto::TWaitForTasksResponse& protoResponse) {
+    return TWaitForTasksResponse{.AvailableTasksCount = protoResponse.GetAvailableTasksCount()};
+}
+
+} // namespace NYql::NFmr

@@ -6,6 +6,8 @@ SRCS(
     keyvalue_collect_operation.h
     keyvalue_collector.cpp
     keyvalue_collector.h
+    keyvalue_copy_blob.cpp
+    keyvalue_copy_blob.h
     keyvalue_const.h
     keyvalue.cpp
     keyvalue_data.cpp
@@ -32,12 +34,15 @@ SRCS(
     keyvalue_state.cpp
     keyvalue_state.h
     keyvalue_state_collect.cpp
+    keyvalue_state_move_data.cpp
     keyvalue_storage_read_request.cpp
     keyvalue_storage_request.cpp
     keyvalue_storage_request.h
     keyvalue_stored_state_data.cpp
     keyvalue_stored_state_data.h
     keyvalue_trash_key_arbitrary.h
+    keyvalue_utils.cpp
+    keyvalue_utils.h
 )
 
 PEERDIR(

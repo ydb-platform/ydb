@@ -21,7 +21,7 @@ namespace NKikimr {
     struct TSmallBlobChunkIdxExtractor<TMemRecLogoBlob> {
         template<typename TIterator>
         TMaybe<TChunkIdx> ExtractChunkIdx(TIterator& it) {
-            if (it->MemRec.GetType() == TBlobType::DiskBlob) {
+            if (it.GetMemRec().GetType() == TBlobType::DiskBlob) {
                 TDiskDataExtractor extr;
                 it.GetDiskData(&extr);
                 const TDiskPart& part = extr.SwearOne();
@@ -112,6 +112,7 @@ namespace NKikimr {
         ui32 RestToReadIndex;
         ui32 RestToReadOutbound;
         TAllChunksBuilder Chunks;
+        TTrackableVector<typename TLevelSegment::TRec> LinearIndex;
 
         friend class TActorBootstrapped<TThis>;
 
@@ -130,14 +131,11 @@ namespace NKikimr {
         TString ToString() const {
             TStringStream str;
             {
-                typedef typename TLevelSegment::TRec TRec;
-                const char *b = LevelSegment->LoadedIndex.Data();
-                const char *e = b + LevelSegment->LoadedIndex.Size();
-                const TRec *begin = (const TRec *)b;
-                const TRec *end = (const TRec *)e;
-                str << "LOADER(" << (const void*)this << "): INDEX: ";
-                for (const TRec *i = begin; i != end; i++) {
-                    str << " " << i->ToString();
+                str << "LOADER(" << (const void*)this << "): INDEX:";
+                typename TLevelSegment::TMemIterator it(LevelSegment);
+                it.SeekToFirst();
+                while (it.IsValid()) {
+                    str << " " << it.GetKey().ToString();
                 }
             }
             {
@@ -158,7 +156,13 @@ namespace NKikimr {
         }
 
         void Finish(const TActorContext &ctx) {
-            Y_ABORT_UNLESS(RestToReadIndex == 0 && RestToReadOutbound == 0);
+            Y_VERIFY_S(RestToReadIndex == 0 && RestToReadOutbound == 0, VCtx->VDiskLogPrefix);
+
+            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
+                LevelSegment->LoadLinearIndex(LinearIndex);
+            } else {
+                LevelSegment->LoadedIndex.swap(LinearIndex);
+            }
 
             // add data chunks to ChunksBuilder
             typedef typename TLevelSegment::TMemIterator TMemIterator;
@@ -177,7 +181,7 @@ namespace NKikimr {
                 if (first) {
                     first = false;
                 } else {
-                    Y_ABORT_UNLESS(prevKey < key && !prevKey.IsSameAs(key));
+                    Y_VERIFY_S(prevKey < key && !prevKey.IsSameAs(key), VCtx->VDiskLogPrefix);
                 }
                 prevKey = key;
 
@@ -190,14 +194,14 @@ namespace NKikimr {
         }
 
         void AppendIndexData(const char *data, size_t size) {
-            Y_DEBUG_ABORT_UNLESS(data && size && RestToReadIndex >= size);
+            Y_VERIFY_DEBUG_S(data && size && RestToReadIndex >= size, VCtx->VDiskLogPrefix);
 
             RestToReadIndex -= size;
-            memcpy(reinterpret_cast<char *>(LevelSegment->LoadedIndex.data()) + RestToReadIndex, data, size);
+            memcpy(reinterpret_cast<char *>(LinearIndex.data()) + RestToReadIndex, data, size);
         }
 
         void AppendData(const char *data, size_t size) {
-            Y_DEBUG_ABORT_UNLESS(data && size);
+            Y_VERIFY_DEBUG_S(data && size, VCtx->VDiskLogPrefix);
 
             if (RestToReadOutbound) {
                 if (RestToReadOutbound >= size) {
@@ -231,12 +235,12 @@ namespace NKikimr {
                 // copy placeholder data, because otherwise we get unaligned access
                 TIdxDiskPlaceHolder placeHolder(0);
                 size_t partSize = data.Size() - sizeof(TIdxDiskPlaceHolder);
-                memcpy(&placeHolder, data.DataPtr<const TIdxDiskPlaceHolder>(partSize), sizeof(TIdxDiskPlaceHolder));
+                memcpy(&placeHolder, data.DataPtr<const ui8>(partSize), sizeof(TIdxDiskPlaceHolder));
 
-                Y_ABORT_UNLESS(placeHolder.MagicNumber == TIdxDiskPlaceHolder::Signature);
+                Y_VERIFY_S(placeHolder.MagicNumber == TIdxDiskPlaceHolder::Signature, VCtx->VDiskLogPrefix);
                 RestToReadIndex = placeHolder.Info.IdxTotalSize;
                 RestToReadOutbound = placeHolder.Info.OutboundItems * sizeof(TDiskPart);
-                LevelSegment->LoadedIndex.resize(placeHolder.Info.Items);
+                LinearIndex.resize(placeHolder.Info.Items);
                 LevelSegment->LoadedOutbound.resize(placeHolder.Info.OutboundItems);
                 LevelSegment->Info = placeHolder.Info;
                 LevelSegment->AssignedSstId = placeHolder.SstId;
@@ -257,7 +261,7 @@ namespace NKikimr {
             } else {
                 TIdxDiskLinker linker;
                 size_t partSize = data.Size() - sizeof(TIdxDiskLinker);
-                memcpy(&linker, data.DataPtr<const TIdxDiskLinker>(partSize), sizeof(TIdxDiskLinker));
+                memcpy(&linker, data.DataPtr<const char>(partSize, sizeof(TIdxDiskLinker)), sizeof(TIdxDiskLinker));
 
                 // TODO(alexvru, fomichev): this logic seems to work incorrectly -- data must be prepended
                 AppendData(data.DataPtr<const char>(0, partSize), partSize);
@@ -308,6 +312,7 @@ namespace NKikimr {
             , RestToReadIndex(0)
             , RestToReadOutbound(0)
             , Chunks()
+            , LinearIndex(TMemoryConsumer(vctx->SstIndex))
         {
             const TDiskPart& entry = LevelSegment->GetEntryPoint();
             Y_DEBUG_ABORT_UNLESS(!entry.Empty());

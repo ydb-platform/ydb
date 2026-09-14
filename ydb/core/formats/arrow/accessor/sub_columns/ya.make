@@ -1,0 +1,58 @@
+LIBRARY()
+
+PEERDIR(
+    library/cpp/containers/absl
+    ydb/core/formats/arrow/accessor/abstract
+    ydb/core/formats/arrow/accessor/plain
+    ydb/core/formats/arrow/accessor/sparsed
+    ydb/core/formats/arrow/accessor/dictionary
+    ydb/core/formats/arrow/accessor/composite_serial
+    ydb/core/formats/arrow/serializer
+    ydb/core/formats/arrow/filter
+    ydb/core/formats/arrow/save_load
+    ydb/core/formats/arrow/container/filterable
+    ydb/library/signals
+    ydb/library/formats/arrow
+    ydb/library/formats/arrow/protos
+    yql/essentials/minikql/jsonpath
+    yql/essentials/types/binary_json
+)
+
+SRCS(
+    GLOBAL constructor.cpp
+    GLOBAL request.cpp
+    header.cpp
+    partial.cpp
+    data_extractor.cpp
+    json_extractors.cpp
+    json_value_path.cpp
+    accessor.cpp
+    dense_encoding/encoding.cpp
+    dense_encoding/constructors.cpp
+    direct_builder.cpp
+    types.cpp
+    settings.cpp
+    stats.cpp
+    others_storage.cpp
+    columns_storage.cpp
+    iterators.cpp
+    signals.cpp
+)
+
+YQL_LAST_ABI_VERSION()
+
+CFLAGS(
+    -Wno-assume
+)
+
+END()
+
+RECURSE(
+    tools
+    ut_common
+)
+
+RECURSE_FOR_TESTS(
+    ut
+    dense_encoding/ut
+)

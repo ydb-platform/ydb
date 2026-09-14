@@ -17,7 +17,7 @@ struct TLogWriterCacheKey
     ELogFamily Family;
 };
 
-bool operator == (const TLogWriterCacheKey& lhs, const TLogWriterCacheKey& rhs);
+bool operator==(const TLogWriterCacheKey& lhs, const TLogWriterCacheKey& rhs);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -32,6 +32,7 @@ public:
     static TLogManager* Get();
 
     void Configure(TLogManagerConfigPtr config, bool sync = true);
+    bool IsDefaultConfigured();
 
     void ConfigureFromEnv();
     bool IsConfiguredFromEnv();
@@ -45,11 +46,11 @@ public:
         TLoggingAnchor* position,
         ::TSourceLocation sourceLocation,
         TStringBuf anchorMessage) override;
-    TLoggingAnchor* RegisterDynamicAnchor(TString anchorMessage);
+    TLoggingAnchor* RegisterDynamicAnchor(std::string anchorMessage);
     void UpdateAnchor(TLoggingAnchor* position) override;
 
-    void RegisterWriterFactory(const TString& typeName, const ILogWriterFactoryPtr& factory);
-    void UnregisterWriterFactory(const TString& typeName);
+    void RegisterWriterFactory(const std::string& typeName, const ILogWriterFactoryPtr& factory);
+    void UnregisterWriterFactory(const std::string& typeName);
 
     int GetVersion() const;
     bool GetAbortOnAlert() const override;
@@ -62,6 +63,8 @@ public:
     void SuppressRequest(NTracing::TRequestId requestId);
 
     void Synchronize(TInstant deadline = TInstant::Max());
+
+    double GetBacklogQueueFillFraction() const;
 
 private:
     TLogManager();
@@ -76,6 +79,7 @@ private:
 
 //! Sets the minimum logging level for all messages in current fiber.
 class TFiberMinLogLevelGuard
+    : private TMoveOnly
 {
 public:
     explicit TFiberMinLogLevelGuard(ELogLevel minLogLevel);
@@ -83,6 +87,34 @@ public:
 
 private:
     const ELogLevel OldMinLogLevel_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Sets additional message tags for all messages in current fiber.
+class TFiberMessageTagGuard
+    : private TMoveOnly
+{
+public:
+    enum class EMode
+    {
+        Prepend, // Default.
+        Replace,
+    };
+
+    explicit TFiberMessageTagGuard(TLoggingTagList messageTags);
+    TFiberMessageTagGuard(TLoggingTagList messageTags, EMode mode);
+
+    // For use with std::optional in tests.
+    TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noexcept;
+    TFiberMessageTagGuard& operator=(TFiberMessageTagGuard&& other) = delete;
+
+    ~TFiberMessageTagGuard();
+
+private:
+    // NB: Keeping it non-const to allow moving from in the dtor.
+    TLoggingTagList OldMessageTags_;
+    bool Active_ = true;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -101,10 +133,10 @@ struct TSingletonTraits<NYT::NLogging::TLogManager>
 template <>
 struct THash<NYT::NLogging::TLogWriterCacheKey>
 {
-    size_t operator () (const NYT::NLogging::TLogWriterCacheKey& obj) const
+    size_t operator()(const NYT::NLogging::TLogWriterCacheKey& obj) const
     {
         size_t hash = 0;
-        NYT::HashCombine(hash, THash<TString>()(obj.Category));
+        NYT::HashCombine(hash, THash<std::string>()(obj.Category));
         NYT::HashCombine(hash, static_cast<size_t>(obj.LogLevel));
         NYT::HashCombine(hash, static_cast<size_t>(obj.Family));
         return hash;

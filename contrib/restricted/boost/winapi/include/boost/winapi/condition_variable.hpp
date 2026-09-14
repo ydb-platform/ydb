@@ -18,33 +18,52 @@
 #if BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN6
 
 #include <boost/winapi/basic_types.hpp>
+#include <boost/winapi/srw_lock.hpp>
+#include <boost/winapi/critical_section.hpp>
+#include <boost/winapi/detail/cast_ptr.hpp>
 #include <boost/winapi/detail/header.hpp>
 
-#if !defined( BOOST_USE_WINDOWS_H )
+#if !defined(BOOST_USE_WINDOWS_H)
 extern "C" {
+#if !defined(BOOST_WINAPI_IS_MINGW)
 struct _RTL_CONDITION_VARIABLE;
-struct _RTL_CRITICAL_SECTION;
-struct _RTL_SRWLOCK;
+namespace boost {
+namespace winapi {
+namespace detail {
+typedef ::_RTL_CONDITION_VARIABLE winsdk_condition_variable;
+}
+}
+}
+#else
+// Legacy MinGW does not define _RTL_CONDITION_VARIABLE types and instead defines PCONDITION_VARIABLE to PVOID
+namespace boost {
+namespace winapi {
+namespace detail {
+typedef VOID_ winsdk_condition_variable;
+}
+}
+}
+#endif
 
 BOOST_WINAPI_IMPORT boost::winapi::VOID_ BOOST_WINAPI_WINAPI_CC
-InitializeConditionVariable(::_RTL_CONDITION_VARIABLE* ConditionVariable);
+InitializeConditionVariable(boost::winapi::detail::winsdk_condition_variable* ConditionVariable);
 
 BOOST_WINAPI_IMPORT boost::winapi::VOID_ BOOST_WINAPI_WINAPI_CC
-WakeConditionVariable(::_RTL_CONDITION_VARIABLE* ConditionVariable);
+WakeConditionVariable(boost::winapi::detail::winsdk_condition_variable* ConditionVariable);
 
 BOOST_WINAPI_IMPORT boost::winapi::VOID_ BOOST_WINAPI_WINAPI_CC
-WakeAllConditionVariable(::_RTL_CONDITION_VARIABLE* ConditionVariable);
+WakeAllConditionVariable(boost::winapi::detail::winsdk_condition_variable* ConditionVariable);
 
 BOOST_WINAPI_IMPORT boost::winapi::BOOL_ BOOST_WINAPI_WINAPI_CC
 SleepConditionVariableCS(
-    ::_RTL_CONDITION_VARIABLE* ConditionVariable,
-    ::_RTL_CRITICAL_SECTION* CriticalSection,
+    boost::winapi::detail::winsdk_condition_variable* ConditionVariable,
+    boost::winapi::detail::winsdk_critical_section* CriticalSection,
     boost::winapi::DWORD_ dwMilliseconds);
 
 BOOST_WINAPI_IMPORT boost::winapi::BOOL_ BOOST_WINAPI_WINAPI_CC
 SleepConditionVariableSRW(
-    ::_RTL_CONDITION_VARIABLE* ConditionVariable,
-    ::_RTL_SRWLOCK* SRWLock,
+    boost::winapi::detail::winsdk_condition_variable* ConditionVariable,
+    boost::winapi::detail::winsdk_srwlock* SRWLock,
     boost::winapi::DWORD_ dwMilliseconds,
     boost::winapi::ULONG_ Flags);
 }
@@ -57,8 +76,13 @@ typedef struct BOOST_MAY_ALIAS _RTL_CONDITION_VARIABLE {
     PVOID_ Ptr;
 } CONDITION_VARIABLE_, *PCONDITION_VARIABLE_;
 
-#if defined( BOOST_USE_WINDOWS_H )
+#if defined(BOOST_USE_WINDOWS_H)
+#if !defined(BOOST_WINAPI_IS_MINGW)
 #define BOOST_WINAPI_CONDITION_VARIABLE_INIT CONDITION_VARIABLE_INIT
+#else
+// Legacy MinGW does not define CONDITION_VARIABLE_INIT
+#define BOOST_WINAPI_CONDITION_VARIABLE_INIT 0
+#endif
 #else
 #define BOOST_WINAPI_CONDITION_VARIABLE_INIT {0}
 #endif
@@ -68,17 +92,17 @@ struct _RTL_SRWLOCK;
 
 BOOST_FORCEINLINE VOID_ InitializeConditionVariable(PCONDITION_VARIABLE_ ConditionVariable)
 {
-    ::InitializeConditionVariable(reinterpret_cast< ::_RTL_CONDITION_VARIABLE* >(ConditionVariable));
+    ::InitializeConditionVariable(winapi::detail::cast_ptr(ConditionVariable));
 }
 
 BOOST_FORCEINLINE VOID_ WakeConditionVariable(PCONDITION_VARIABLE_ ConditionVariable)
 {
-    ::WakeConditionVariable(reinterpret_cast< ::_RTL_CONDITION_VARIABLE* >(ConditionVariable));
+    ::WakeConditionVariable(winapi::detail::cast_ptr(ConditionVariable));
 }
 
 BOOST_FORCEINLINE VOID_ WakeAllConditionVariable(PCONDITION_VARIABLE_ ConditionVariable)
 {
-    ::WakeAllConditionVariable(reinterpret_cast< ::_RTL_CONDITION_VARIABLE* >(ConditionVariable));
+    ::WakeAllConditionVariable(winapi::detail::cast_ptr(ConditionVariable));
 }
 
 BOOST_FORCEINLINE BOOL_ SleepConditionVariableCS(
@@ -87,8 +111,8 @@ BOOST_FORCEINLINE BOOL_ SleepConditionVariableCS(
     DWORD_ dwMilliseconds)
 {
     return ::SleepConditionVariableCS(
-        reinterpret_cast< ::_RTL_CONDITION_VARIABLE* >(ConditionVariable),
-        reinterpret_cast< ::_RTL_CRITICAL_SECTION* >(CriticalSection),
+        winapi::detail::cast_ptr(ConditionVariable),
+        winapi::detail::cast_ptr(CriticalSection),
         dwMilliseconds);
 }
 
@@ -99,17 +123,18 @@ BOOST_FORCEINLINE BOOL_ SleepConditionVariableSRW(
     ULONG_ Flags)
 {
     return ::SleepConditionVariableSRW(
-        reinterpret_cast< ::_RTL_CONDITION_VARIABLE* >(ConditionVariable),
-        reinterpret_cast< ::_RTL_SRWLOCK* >(SRWLock),
+        winapi::detail::cast_ptr(ConditionVariable),
+        winapi::detail::cast_ptr(SRWLock),
         dwMilliseconds,
         Flags);
 }
 
-#if defined( BOOST_USE_WINDOWS_H )
+// Legacy MinGW does not define CONDITION_VARIABLE_LOCKMODE_SHARED
+#if defined(BOOST_USE_WINDOWS_H) && !defined(BOOST_WINAPI_IS_MINGW)
 BOOST_CONSTEXPR_OR_CONST ULONG_ CONDITION_VARIABLE_LOCKMODE_SHARED_ = CONDITION_VARIABLE_LOCKMODE_SHARED;
-#else // defined( BOOST_USE_WINDOWS_H )
+#else
 BOOST_CONSTEXPR_OR_CONST ULONG_ CONDITION_VARIABLE_LOCKMODE_SHARED_ = 0x00000001;
-#endif // defined( BOOST_USE_WINDOWS_H )
+#endif
 
 BOOST_CONSTEXPR_OR_CONST ULONG_ condition_variable_lockmode_shared = CONDITION_VARIABLE_LOCKMODE_SHARED_;
 

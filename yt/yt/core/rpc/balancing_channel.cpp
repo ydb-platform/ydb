@@ -1,19 +1,19 @@
 #include "balancing_channel.h"
 #include "channel.h"
-#include "caching_channel_factory.h"
 #include "config.h"
 #include "roaming_channel.h"
 #include "dynamic_channel_pool.h"
 #include "dispatcher.h"
 #include "hedging_channel.h"
+#include "peer_priority_provider.h"
 
 #include <yt/yt/core/service_discovery/service_discovery.h>
 
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
-#include <yt/yt/core/misc/hedging_manager.h>
-
 #include <yt/yt/core/net/address.h>
+
+#include <yt/yt/core/misc/lazy_ptr.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -28,7 +28,41 @@ using namespace NNet;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = RpcClientLogger;
+constinit const auto Logger = RpcClientLogger;
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+struct TPeerPriorityProviderSelectionResult
+{
+    IPeerPriorityProviderPtr PeerPriorityProvider;
+
+    // Can be null.
+    IMapPeerPriorityProviderPtr MapPeerPriorityProvider;
+};
+
+static TPeerPriorityProviderSelectionResult SelectPeerPriorityProvider(const TBalancingChannelConfigPtr& config)
+{
+    TPeerPriorityProviderSelectionResult result;
+    switch (config->PeerPriorityStrategy) {
+        case EPeerPriorityStrategy::PreferLocal:
+            if (config->Addresses) {
+                result.PeerPriorityProvider = GetYPClusterMatchingPeerPriorityProvider();
+            } else {
+                result.MapPeerPriorityProvider = CreateYPClusterMatchingPeerPriorityProviderWithOverrides();
+                result.PeerPriorityProvider = result.MapPeerPriorityProvider;
+            }
+            break;
+        case EPeerPriorityStrategy::None:
+            result.PeerPriorityProvider = GetDummyPeerPriorityProvider();
+            break;
+    }
+
+    return result;
+}
+
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -45,7 +79,8 @@ public:
         const std::string& endpointDescription,
         IAttributeDictionaryPtr endpointAttributes,
         std::string serviceName,
-        IPeerDiscoveryPtr peerDiscovery)
+        IPeerDiscoveryPtr peerDiscovery,
+        const TPeerPriorityProviderSelectionResult& peerPriorityProviderSelectionResult)
         : Config_(std::move(config))
         , EndpointDescription_(endpointDescription)
         , EndpointAttributes_(ConvertToAttributes(BuildYsonStringFluently()
@@ -60,12 +95,13 @@ public:
             EndpointDescription_,
             EndpointAttributes_,
             ServiceName_,
-            peerDiscovery))
+            peerDiscovery,
+            peerPriorityProviderSelectionResult.PeerPriorityProvider))
     {
         if (Config_->Addresses) {
             ConfigureFromAddresses();
         } else if (Config_->Endpoints) {
-            ConfigureFromEndpoints();
+            ConfigureFromEndpoints(peerPriorityProviderSelectionResult.MapPeerPriorityProvider);
         } else {
             // Must not happen for a properly validated configuration.
             Pool_->SetPeerDiscoveryError(TError("No endpoints configured"));
@@ -77,7 +113,7 @@ public:
         auto hedgingOptions = Config_->HedgingDelay
             ? std::make_optional(
                 THedgingChannelOptions{
-                    .HedgingManager = CreateSimpleHedgingManager(*Config_->HedgingDelay),
+                    .HedgingDelay = *Config_->HedgingDelay,
                     .CancelPrimaryOnHedging = Config_->CancelPrimaryRequestOnHedging,
                 })
             : std::nullopt;
@@ -98,7 +134,7 @@ private:
     const TBalancingChannelConfigPtr Config_;
     const std::string EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
-    const TString ServiceName_;
+    const std::string ServiceName_;
 
     const TDynamicChannelPoolPtr Pool_;
 
@@ -110,7 +146,7 @@ private:
         Pool_->SetPeers(*Config_->Addresses);
     }
 
-    void ConfigureFromEndpoints()
+    void ConfigureFromEndpoints(IMapPeerPriorityProviderPtr peerPriorityProvider)
     {
         ServiceDiscovery_ = TDispatcher::Get()->GetServiceDiscovery();
         if (!ServiceDiscovery_) {
@@ -120,14 +156,19 @@ private:
 
         EndpointsUpdateExecutor_ = New<TPeriodicExecutor>(
             TDispatcher::Get()->GetHeavyInvoker(),
-            BIND(&TBalancingChannelSubprovider::UpdateEndpoints, MakeWeak(this)),
+            BIND(
+                &TBalancingChannelSubprovider::UpdateEndpoints,
+                MakeWeak(this),
+                std::move(peerPriorityProvider)),
             Config_->Endpoints->UpdatePeriod);
         EndpointsUpdateExecutor_->Start();
     }
 
-    void UpdateEndpoints()
+    void UpdateEndpoints(const IMapPeerPriorityProviderPtr& peerPriorityProvider)
     {
         std::vector<TFuture<TEndpointSet>> asyncEndpointSets;
+        asyncEndpointSets.reserve(Config_->Endpoints->Clusters.size());
+
         for (const auto& cluster : Config_->Endpoints->Clusters) {
             asyncEndpointSets.push_back(ServiceDiscovery_->ResolveEndpoints(
                 cluster,
@@ -135,19 +176,32 @@ private:
         }
 
         AllSet(asyncEndpointSets)
-            .Subscribe(BIND(&TBalancingChannelSubprovider::OnEndpointsResolved, MakeWeak(this)));
+            .Subscribe(BIND(
+                &TBalancingChannelSubprovider::OnEndpointsResolved,
+                MakeWeak(this),
+                peerPriorityProvider));
     }
 
-    void OnEndpointsResolved(const TErrorOr<std::vector<TErrorOr<TEndpointSet>>>& endpointSetsOrError)
+    void OnEndpointsResolved(
+        const IMapPeerPriorityProviderPtr& peerPriorityProvider,
+        const TErrorOr<std::vector<TErrorOr<TEndpointSet>>>& endpointSetsOrError)
     {
         const auto& endpointSets = endpointSetsOrError.ValueOrThrow();
+        const auto& clusters = Config_->Endpoints->Clusters;
+
+        int endpointSetCount = std::ssize(endpointSets);
+        YT_VERIFY(std::ssize(clusters) == endpointSetCount);
 
         std::vector<std::string> allAddresses;
         std::vector<TError> errors;
-        for (const auto& endpointSetOrError : endpointSets) {
+        THashMap<std::string, std::string> addressToClusterOverride;
+
+        for (int i = 0; i < endpointSetCount; ++i) {
+            const auto& endpointSetOrError = endpointSets[i];
             if (!endpointSetOrError.IsOK()) {
                 errors.push_back(endpointSetOrError);
-                YT_LOG_WARNING(endpointSetOrError, "Could not resolve endpoints from cluster");
+                YT_TLOG_WARNING("Could not resolve endpoints from cluster")
+                    .With(endpointSetOrError);
                 continue;
             }
 
@@ -155,13 +209,25 @@ private:
                 endpointSetOrError.Value(),
                 Config_->Endpoints->UseIPv4,
                 Config_->Endpoints->UseIPv6);
+
             allAddresses.insert(allAddresses.end(), addresses.begin(), addresses.end());
+
+            if (peerPriorityProvider) {
+                const auto& cluster = clusters[i];
+                for (const auto& address : addresses) {
+                    addressToClusterOverride.emplace(address, cluster);
+                }
+            }
         }
 
-        if (errors.size() == endpointSets.size()) {
+        if (std::ssize(errors) == endpointSetCount) {
             Pool_->SetPeerDiscoveryError(
-                TError("Endpoints could not be resolved in any cluster") << errors);
+                TError("Endpoints could not be resolved in any cluster").With(errors));
             return;
+        }
+
+        if (peerPriorityProvider) {
+            peerPriorityProvider->SetAddressToClusterOverride(std::move(addressToClusterOverride));
         }
 
         Pool_->SetPeers(allAddresses);
@@ -172,27 +238,25 @@ DEFINE_REFCOUNTED_TYPE(TBalancingChannelSubprovider)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelProvider
+class TBalancingChannelProviderBase
     : public IRoamingChannelProvider
 {
 public:
-    TBalancingChannelProvider(
+    TBalancingChannelProviderBase(
         TBalancingChannelConfigPtr config,
-        IChannelFactoryPtr channelFactory,
         const std::string& endpointDescription,
-        IAttributeDictionaryPtr endpointAttributes,
-        IPeerDiscoveryPtr peerDiscovery)
+        IAttributeDictionaryPtr endpointAttributes)
         : Config_(std::move(config))
-        , ChannelFactory_(std::move(channelFactory))
-        , EndpointDescription_(Format("%v%v",
-            endpointDescription,
-            Config_->Addresses))
-        , EndpointAttributes_(ConvertToAttributes(BuildYsonStringFluently()
-            .BeginMap()
-                .Item("addresses").Value(Config_->Addresses)
-                .Items(*endpointAttributes)
-            .EndMap()))
-        , PeerDiscovery_(std::move(peerDiscovery))
+        , EndpointDescription_(
+            Format("%v%v",
+                endpointDescription,
+                Config_->Addresses))
+        , EndpointAttributes_(
+            ConvertToAttributes(BuildYsonStringFluently()
+                .BeginMap()
+                    .Item("addresses").Value(Config_->Addresses)
+                    .Items(*endpointAttributes)
+                .EndMap()))
     { }
 
     const std::string& GetEndpointDescription() const override
@@ -205,16 +269,35 @@ public:
         return *EndpointAttributes_;
     }
 
+protected:
+    const TBalancingChannelConfigPtr Config_;
+    const std::string EndpointDescription_;
+    const IAttributeDictionaryPtr EndpointAttributes_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TBalancingChannelProvider
+    : public TBalancingChannelProviderBase
+{
+public:
+    TBalancingChannelProvider(
+        TBalancingChannelConfigPtr config,
+        IChannelFactoryPtr channelFactory,
+        const std::string& endpointDescription,
+        IAttributeDictionaryPtr endpointAttributes,
+        IPeerDiscoveryPtr peerDiscovery)
+        : TBalancingChannelProviderBase(
+            std::move(config),
+            endpointDescription,
+            std::move(endpointAttributes))
+        , ChannelFactory_(std::move(channelFactory))
+        , PeerDiscovery_(std::move(peerDiscovery))
+    { }
+
     TFuture<IChannelPtr> GetChannel(const IClientRequestPtr& request) override
     {
-        if (Config_->DisableBalancingOnSingleAddress &&
-            Config_->Addresses &&
-            Config_->Addresses->size() == 1)
-        {
-            return MakeFuture(ChannelFactory_->CreateChannel((*Config_->Addresses)[0]));
-        } else {
-            return GetSubprovider(request->GetService())->GetChannel(request);
-        }
+        return GetSubprovider(request->GetService())->GetChannel(request);
     }
 
     TFuture<IChannelPtr> GetChannel(std::string serviceName) override
@@ -243,11 +326,7 @@ public:
     }
 
 private:
-    const TBalancingChannelConfigPtr Config_;
     const IChannelFactoryPtr ChannelFactory_;
-
-    const std::string EndpointDescription_;
-    const IAttributeDictionaryPtr EndpointAttributes_;
     const IPeerDiscoveryPtr PeerDiscovery_;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
@@ -277,7 +356,8 @@ private:
                 EndpointDescription_,
                 EndpointAttributes_,
                 serviceName,
-                PeerDiscovery_);
+                PeerDiscovery_,
+                SelectPeerPriorityProvider(Config_));
             EmplaceOrCrash(SubproviderMap_, serviceName, subprovider);
             return subprovider;
         }
@@ -285,6 +365,55 @@ private:
 };
 
 DEFINE_REFCOUNTED_TYPE(TBalancingChannelProvider)
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSinglePeerBalancingChannelProvider
+    : public TBalancingChannelProviderBase
+{
+public:
+    TSinglePeerBalancingChannelProvider(
+        TBalancingChannelConfigPtr config,
+        IChannelFactoryPtr channelFactory,
+        const std::string& endpointDescription,
+        IAttributeDictionaryPtr endpointAttributes)
+        : TBalancingChannelProviderBase(
+            std::move(config),
+            endpointDescription,
+            std::move(endpointAttributes))
+        , Channel_(BIND([this, channelFactory = std::move(channelFactory)] () {
+            return channelFactory->CreateChannel(Config_->Addresses->front());
+        }))
+    { }
+
+    TFuture<IChannelPtr> GetChannel(const IClientRequestPtr& /*request*/) override
+    {
+        return GetChannel();
+    }
+
+    TFuture<IChannelPtr> GetChannel(std::string /*serviceName*/) override
+    {
+        return GetChannel();
+    }
+
+    TFuture<IChannelPtr> GetChannel() override
+    {
+        // Always create a new future since its channel can be moved via .AsUnique() call.
+        return MakeFuture(Channel_.Value());
+    }
+
+    void Terminate(const TError& error) override
+    {
+        if (Channel_.HasValue()) {
+            Channel_->Terminate(error);
+        }
+    }
+
+private:
+    const TLazyIntrusivePtr<IChannel> Channel_;
+};
+
+DEFINE_REFCOUNTED_TYPE(TSinglePeerBalancingChannelProvider)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -315,6 +444,17 @@ IRoamingChannelProviderPtr CreateBalancingChannelProvider(
     YT_VERIFY(config);
     YT_VERIFY(channelFactory);
     YT_VERIFY(peerDiscovery);
+
+    if (config->DisableBalancingOnSingleAddress &&
+        config->Addresses &&
+        config->Addresses->size() == 1)
+    {
+        return New<TSinglePeerBalancingChannelProvider>(
+            std::move(config),
+            std::move(channelFactory),
+            endpointDescription,
+            std::move(endpointAttributes));
+    }
 
     return New<TBalancingChannelProvider>(
         std::move(config),

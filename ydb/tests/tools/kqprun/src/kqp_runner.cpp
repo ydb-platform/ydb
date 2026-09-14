@@ -1,93 +1,29 @@
 #include "kqp_runner.h"
 #include "ydb_setup.h"
 
+#include <fmt/format.h>
+
 #include <library/cpp/colorizer/colors.h>
-#include <library/cpp/json/json_reader.h>
+#include <library/cpp/protobuf/json/json2proto.h>
 
-#include <ydb/core/blob_depot/mon_main.h>
-#include <ydb/core/fq/libs/compute/common/utils.h>
-
-#include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
-
+using namespace NKikimrRun;
 
 namespace NKqpRun {
-
-namespace {
-
-// Function adds thousands separators
-// 123456789 -> 123.456.789
-TString FormatNumber(i64 number) {
-    struct TSeparator : public std::numpunct<char> {
-        char do_thousands_sep() const final {
-            return '.';
-        }
-
-        std::string do_grouping() const final {
-            return "\03";
-        }
-    };
-
-    std::ostringstream stream;
-    stream.imbue(std::locale(stream.getloc(), new TSeparator()));
-    stream << number;
-    return stream.str();
-}
-
-void PrintStatistics(const TString& fullStat, const THashMap<TString, i64>& flatStat, const NFq::TPublicStat& publicStat, IOutputStream& output) {
-    output << "\nFlat statistics:" << Endl;
-    for (const auto& [propery, value] : flatStat) {
-        TString valueString = ToString(value);
-        if (propery.Contains("Bytes")) {
-            valueString = NKikimr::NBlobDepot::FormatByteSize(value);
-        } else if (propery.Contains("TimeUs")) {
-            valueString = NFq::FormatDurationUs(value);
-        } else if (propery.Contains("TimeMs")) {
-            valueString = NFq::FormatDurationMs(value);
-        } else {
-            valueString = FormatNumber(value);
-        }
-        output << propery << " = " << valueString << Endl;
-    }
-
-    output << "\nPublic statistics:" << Endl;
-    if (auto memoryUsageBytes = publicStat.MemoryUsageBytes) {
-        output << "MemoryUsage = " << NKikimr::NBlobDepot::FormatByteSize(*memoryUsageBytes) << Endl;
-    }
-    if (auto cpuUsageUs = publicStat.CpuUsageUs) {
-        output << "CpuUsage = " << NFq::FormatDurationUs(*cpuUsageUs) << Endl;
-    }
-    if (auto inputBytes = publicStat.InputBytes) {
-        output << "InputSize = " << NKikimr::NBlobDepot::FormatByteSize(*inputBytes) << Endl;
-    }
-    if (auto outputBytes = publicStat.OutputBytes) {
-        output << "OutputSize = " << NKikimr::NBlobDepot::FormatByteSize(*outputBytes) << Endl;
-    }
-    if (auto sourceInputRecords = publicStat.SourceInputRecords) {
-        output << "SourceInputRecords = " << FormatNumber(*sourceInputRecords) << Endl;
-    }
-    if (auto sinkOutputRecords = publicStat.SinkOutputRecords) {
-        output << "SinkOutputRecords = " << FormatNumber(*sinkOutputRecords) << Endl;
-    }
-    if (auto runningTasks = publicStat.RunningTasks) {
-        output << "RunningTasks = " << FormatNumber(*runningTasks) << Endl;
-    }
-
-    output << "\nFull statistics:" << Endl;
-    NJson::TJsonValue statsJson;
-    NJson::ReadJsonTree(fullStat, &statsJson);
-    NJson::WriteJson(&output, &statsJson, true, true, true);
-    output << Endl;
-}
-
-}  // anonymous namespace
-
 
 //// TKqpRunner::TImpl
 
 class TKqpRunner::TImpl {
-    using EVerbose = TYdbSetupSettings::EVerbose;
+    using EVerbosity = TYdbSetupSettings::EVerbosity;
+    using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
+
+    static constexpr TDuration RETRY_PERIOD = TDuration::MilliSeconds(100);
+    static constexpr TDuration SCRIPT_RETRY_CYCLE = TDuration::Minutes(1);
+
+    struct TStreamingMeta : public TQueryMeta {
+        TString Name;
+        TString Database;
+        TString ExecutionStatus;
+    };
 
 public:
     enum class EQueryType {
@@ -98,17 +34,52 @@ public:
 
     explicit TImpl(const TRunnerOptions& options)
         : Options_(options)
-        , VerboseLevel_(Options_.YdbSettings.VerboseLevel)
+        , VerbosityLevel_(Options_.YdbSettings.VerbosityLevel)
         , YdbSetup_(options.YdbSettings)
-        , StatProcessor_(NFq::CreateStatProcessor("stat_full"))
+        , StatsPrinter_(Options_.PlanOutputFormat)
         , CerrColors_(NColorizer::AutoColors(Cerr))
         , CoutColors_(NColorizer::AutoColors(Cout))
-    {}
+    {
+        if (const auto& retryStatuses = Options_.RetryableStatuses; !retryStatuses.empty()) {
+            NKikimrKqp::TScriptExecutionRetryState::TMapping mapping;
+            mapping.MutableStatusCode()->Assign(retryStatuses.begin(), retryStatuses.end());
 
-    bool ExecuteSchemeQuery(const TRequestOptions& query) const {
+            auto& policy = *mapping.MutableBackoffPolicy();
+            policy.SetRetryPeriodMs(SCRIPT_RETRY_CYCLE.MilliSeconds());
+            policy.SetBackoffPeriodMs(RETRY_PERIOD.MilliSeconds());
+
+            // Minimal retry rate limit for infinite retries
+            policy.SetRetryRateLimit((1.0 + std::sqrt(1.0 + 4.0 * policy.GetRetryPeriodMs() / policy.GetBackoffPeriodMs())) / 2.0);
+
+            RetryMapping_ = {mapping};
+        }
+    }
+
+    bool ExecuteWithRetries(std::function<Ydb::StatusIds::StatusCode()> queryRunner) {
+        RetryState_ = nullptr;
+        while (true) {
+            const auto status = queryRunner();
+            if (status == Ydb::StatusIds::SUCCESS) {
+                return true;
+            }
+
+            if (!RetryState_) {
+                SetupRetryState();
+            }
+
+            if (const auto delay = RetryState_->GetNextRetryDelay(status)) {
+                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Retrying query execution in " << *delay << "..." << CoutColors_.Default() << Endl;
+                Sleep(*delay);
+            } else {
+                return false;
+            }
+        }
+    }
+
+    Ydb::StatusIds::StatusCode ExecuteSchemeQuery(const TRequestOptions& query) const {
         StartSchemeTraceOpt();
 
-        if (VerboseLevel_ >= EVerbose::QueriesText) {
+        if (VerbosityLevel_ >= EVerbosity::QueriesText) {
             Cout << CoutColors_.Cyan() << "Starting scheme request:\n" << CoutColors_.Default() << query.Query << Endl;
         }
 
@@ -120,37 +91,37 @@ public:
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to execute scheme query, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
-            return false;
+            return status.Status;
         }
 
-        return true;
+        return Ydb::StatusIds::SUCCESS;
     }
 
-    bool ExecuteScript(const TRequestOptions& script) {
+    Ydb::StatusIds::StatusCode ExecuteScript(const TRequestOptions& script, TDuration* duration) {
         StartScriptTraceOpt(script.QueryId);
 
-        if (VerboseLevel_ >= EVerbose::QueriesText) {
+        if (VerbosityLevel_ >= EVerbosity::QueriesText) {
             Cout << CoutColors_.Cyan() << "Starting script request:\n" << CoutColors_.Default() << script.Query << Endl;
         }
 
-        TRequestResult status = YdbSetup_.ScriptRequest(script, ExecutionOperation_);
+        TRequestResult status = YdbSetup_.ScriptRequest({.Options = script, .RetryMapping = RetryMapping_}, ExecutionOperation_);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to start script execution, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
-            return false;
+            return status.Status;
         }
 
         ExecutionMeta_ = TExecutionMeta();
         ExecutionMeta_.Database = script.Database;
 
-        return WaitScriptExecutionOperation(script.QueryId);
+        return WaitScriptExecutionOperation(script.QueryId, duration, script.UserSID);
     }
 
-    bool ExecuteQuery(const TRequestOptions& query, EQueryType queryType) {
+    Ydb::StatusIds::StatusCode ExecuteQuery(const TRequestOptions& query, EQueryType queryType, TDuration* duration) {
         StartScriptTraceOpt(query.QueryId);
         StartTime_ = TInstant::Now();
 
-        if (VerboseLevel_ >= EVerbose::QueriesText) {
+        if (VerbosityLevel_ >= EVerbosity::QueriesText) {
             Cout << CoutColors_.Cyan() << "Starting query request:\n" << CoutColors_.Default() << query.Query << Endl;
         }
 
@@ -170,7 +141,7 @@ public:
 
         case EQueryType::AsyncQuery:
             YdbSetup_.QueryRequestAsync(query);
-            return true;
+            return Ydb::StatusIds::SUCCESS;
         }
 
         TYdbSetup::StopTraceOpt();
@@ -182,18 +153,66 @@ public:
         PrintScriptAst(query.QueryId, meta.Ast);
         PrintScriptProgress(query.QueryId, meta.Plan);
         PrintScriptPlan(query.QueryId, meta.Plan);
-        PrintScriptFinish(meta, queryTypeStr);
+        PrintScriptFinish(meta, queryTypeStr, duration);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to execute query, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
-            return false;
+            return status.Status;
         }
 
         if (!status.Issues.Empty()) {
             Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
         }
 
-        return true;
+        return Ydb::StatusIds::SUCCESS;
+    }
+
+    Ydb::StatusIds::StatusCode ExecuteStreaming(const TRequestOptions& query, const TString& queryName, TDuration* duration) {
+        using namespace fmt::literals;
+
+        if (query.Action != NKikimrKqp::QUERY_ACTION_EXECUTE) {
+            ythrow yexception() << "Invalid execution action for streaming query: " << NKikimrKqp::EQueryAction_Name(query.Action) << ", only allowed action is execute";
+        }
+
+        if (!query.Params.empty()) {
+            ythrow yexception() << "Streaming query does not support parameters";
+        }
+
+        StartScriptTraceOpt(query.QueryId);
+
+        if (VerbosityLevel_ >= EVerbosity::QueriesText) {
+            Cout << CoutColors_.Cyan() << "Starting streaming request '" << queryName << "':\n" << CoutColors_.Default() << query.Query << Endl;
+        }
+
+        TRequestResult status = YdbSetup_.QueryRequest({
+            .Query = fmt::format(R"(
+                CREATE OR REPLACE STREAMING QUERY `{query_name}` WITH (
+                    RESOURCE_POOL = "{pool}"
+                ) AS DO BEGIN
+                {query}
+                END DO)",
+                "query_name"_a = queryName,
+                "pool"_a = query.PoolId,
+                "query"_a = query.Query
+            ),
+            .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
+            .TraceId = query.TraceId,
+            .UserSID = query.UserSID,
+            .Database = query.Database,
+            .Timeout = query.Timeout,
+            .GroupSIDs = query.GroupSIDs,
+        });
+
+        if (!status.IsSuccess()) {
+            Cerr << CerrColors_.Red() << "Failed to create streaming query '" << queryName << "', reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            return status.Status;
+        }
+
+        StreamingMeta_ = TStreamingMeta();
+        StreamingMeta_.Name = queryName;
+        StreamingMeta_.Database = query.Database ? query.Database : YdbSetup_.GetDefaultDatabase();
+
+        return WaitStreamingQueryExecution(query.QueryId, duration, query.UserSID);
     }
 
     void FinalizeRunner() const {
@@ -201,13 +220,13 @@ public:
         YdbSetup_.CloseSessions();
     }
 
-    bool FetchScriptResults() {
+    bool FetchScriptResults(const TString& userSID) {
         TYdbSetup::StopTraceOpt();
 
         ResultSets_.clear();
         ResultSets_.resize(ExecutionMeta_.ResultSetsCount);
         for (i32 resultSetId = 0; resultSetId < ExecutionMeta_.ResultSetsCount; ++resultSetId) {
-            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionMeta_.Database, ExecutionOperation_, resultSetId, ResultSets_[resultSetId]);
+            TRequestResult status = YdbSetup_.FetchScriptExecutionResultsRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID, resultSetId, ResultSets_[resultSetId]);
 
             if (!status.IsSuccess()) {
                 Cerr << CerrColors_.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -218,10 +237,10 @@ public:
         return true;
     }
 
-    bool ForgetExecutionOperation() {
+    bool ForgetExecutionOperation(const TString& userSID) const {
         TYdbSetup::StopTraceOpt();
 
-        TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_);
+        TRequestResult status = YdbSetup_.ForgetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors_.Red() << "Failed to forget script execution operation, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
@@ -235,30 +254,54 @@ public:
         return true;
     }
 
+    bool ForgetStreamingQuery(const TString& userSID) const {
+        TYdbSetup::StopTraceOpt();
+
+        TRequestResult status = YdbSetup_.QueryRequest({
+            .Query = TStringBuilder() << "DROP STREAMING QUERY IF EXISTS `" << StreamingMeta_.Name << "`",
+            .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
+            .TraceId = "streaming-control::forget",
+            .UserSID = userSID,
+            .Database = StreamingMeta_.Database,
+        });
+
+        if (!status.IsSuccess()) {
+            Cerr << CerrColors_.Red() << "Failed to drop streaming query '" << StreamingMeta_.Name << "', reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            return false;
+        }
+
+        if (!status.Issues.Empty()) {
+            Cerr << CerrColors_.Red() << "Drop streaming query finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
+        }
+
+        return true;
+    }
+
     void PrintScriptResults() const {
         if (Options_.ResultOutput) {
             Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing script query results..." << CoutColors_.Default() << Endl;
             for (size_t i = 0; i < ResultSets_.size(); ++i) {
-                if (ResultSets_.size() > 1 && Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
+                if (ResultSets_.size() > 1 && VerbosityLevel_ >= EVerbosity::Info) {
                     *Options_.ResultOutput << CoutColors_.Cyan() << "Result set " << i + 1 << ":" << CoutColors_.Default() << Endl;
                 }
-                PrintScriptResult(ResultSets_[i]);
+                PrintResultSet(Options_.ResultOutputFormat, *Options_.ResultOutput, ResultSets_[i]);
             }
         }
     }
 
 private:
-    bool WaitScriptExecutionOperation(ui64 queryId) {
+    Ydb::StatusIds::StatusCode WaitScriptExecutionOperation(ui64 queryId, TDuration* duration, const TString& userSID) {
         StartTime_ = TInstant::Now();
+        Y_DEFER {
+            TYdbSetup::StopTraceOpt();
+        };
 
-        TDuration getOperationPeriod = TDuration::Seconds(1);
-        if (auto progressStatsPeriodMs = Options_.YdbSettings.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
-            getOperationPeriod = TDuration::MilliSeconds(progressStatsPeriodMs);
-        }
+        const auto getOperationPeriod = GetPingPeriod();
 
         TRequestResult status;
+        TString previousIssues;
         while (true) {
-            status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, ExecutionMeta_);
+            status = YdbSetup_.GetScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID, ExecutionMeta_);
             PrintScriptProgress(queryId, ExecutionMeta_.Plan);
 
             if (ExecutionMeta_.Ready) {
@@ -267,38 +310,157 @@ private:
 
             if (!status.IsSuccess()) {
                 Cerr << CerrColors_.Red() << "Failed to get script execution operation, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
-                return false;
+                return status.Status;
+            }
+
+            if (const auto newIssues = status.Issues.ToString(); newIssues && previousIssues != newIssues && Options_.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
+                previousIssues = newIssues;
+                Cerr << CerrColors_.Red() << "Script execution issues updated:" << CerrColors_.Default() << Endl << newIssues << Endl;
             }
 
             if (Options_.ScriptCancelAfter && TInstant::Now() - StartTime_ > Options_.ScriptCancelAfter) {
                 Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Cancelling script execution..." << CoutColors_.Default() << Endl;
-                TRequestResult cancelStatus = YdbSetup_.CancelScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_);
+                TRequestResult cancelStatus = YdbSetup_.CancelScriptExecutionOperationRequest(ExecutionMeta_.Database, ExecutionOperation_, userSID);
                 if (!cancelStatus.IsSuccess()) {
                     Cerr << CerrColors_.Red() << "Failed to cancel script execution operation, reason:" << CerrColors_.Default() << Endl << cancelStatus.ToString() << Endl;
-                    return false;
+                    return cancelStatus.Status;
                 }
             }
 
             Sleep(getOperationPeriod);
         }
 
-        TYdbSetup::StopTraceOpt();
-
         PrintScriptAst(queryId, ExecutionMeta_.Ast);
         PrintScriptProgress(queryId, ExecutionMeta_.Plan);
         PrintScriptPlan(queryId, ExecutionMeta_.Plan);
-        PrintScriptFinish(ExecutionMeta_, "Script");
+        PrintScriptFinish(ExecutionMeta_, "Script", duration);
 
         if (!status.IsSuccess() || ExecutionMeta_.ExecutionStatus != NYdb::NQuery::EExecStatus::Completed) {
-            Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
-            return false;
+            Cerr << CerrColors_.Red() << "Failed to execute script, invalid final status " << ExecutionMeta_.ExecutionStatus << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            return status.Status;
         }
 
         if (!status.Issues.Empty()) {
             Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
         }
 
-        return true;
+        return Ydb::StatusIds::SUCCESS;
+    }
+
+    Ydb::StatusIds::StatusCode WaitStreamingQueryExecution(ui64 queryId, TDuration* duration, const TString& userSID) {
+        StartTime_ = TInstant::Now();
+        Y_DEFER {
+            TYdbSetup::StopTraceOpt();
+        };
+
+        const auto fetchPeriod = GetPingPeriod();
+        TString fullQueryName = StreamingMeta_.Name;
+        if (const auto& database = NKikimr::CanonizePath(StreamingMeta_.Database); !fullQueryName.StartsWith(database)) {
+            fullQueryName = NKikimr::JoinPath({database, fullQueryName});
+        }
+
+        TRequestResult status;
+        TString previousIssues;
+        while (true) {
+            TQueryMeta meta;
+            std::vector<Ydb::ResultSet> resultSets;
+            status = YdbSetup_.QueryRequest({
+                .Query = TStringBuilder() << "SELECT * FROM `.sys/streaming_queries` WHERE Path = \"" << fullQueryName << "\"",
+                .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
+                .TraceId = "streaming-control::fetch",
+                .UserSID = BUILTIN_ACL_METADATA,
+                .Database = StreamingMeta_.Database,
+            }, meta, resultSets, nullptr);
+
+            if (!status.IsSuccess()) {
+                Cerr << CerrColors_.Red() << "Failed to fetch streaming query, reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+                return status.Status;
+            }
+
+            if (resultSets.size() != 1) {
+                ythrow yexception() << "Unexpected result set size " << resultSets.size() << ", expected 1 for fetch streaming query request";
+            }
+
+            NYdb::TResultSetParser parser(resultSets[0]);
+            if (!parser.TryNextRow()) {
+                Cerr << CerrColors_.Red() << "Failed to fetch streaming query, query '" << fullQueryName << "' not found" << CerrColors_.Default() << Endl;
+                return Ydb::StatusIds::NOT_FOUND;
+            }
+
+            if (const auto& ast = parser.ColumnParser("Ast").GetOptionalUtf8()) {
+                StreamingMeta_.Ast = *ast;
+            }
+
+            if (const auto& plan = parser.ColumnParser("Plan").GetOptionalUtf8()) {
+                StreamingMeta_.Plan = *plan;
+            }
+
+            PrintScriptProgress(queryId, StreamingMeta_.Plan);
+
+            if (const auto& status = parser.ColumnParser("Status").GetOptionalUtf8()) {
+                StreamingMeta_.ExecutionStatus = *status;
+            } else {
+                ythrow yexception() << "Unexpected streaming query fetch response, missing 'Status' column";
+            }
+
+            if (const auto& issues = parser.ColumnParser("Issues").GetOptionalUtf8()) {
+                Ydb::Issue::IssueMessage rootMessage = NProtobufJson::Json2Proto<Ydb::Issue::IssueMessage>(*issues);
+                NYql::TIssue root = NYql::IssueFromMessage(rootMessage);
+
+                for (const auto& issuePtr : root.GetSubIssues()) {
+                    status.Issues.AddIssue(*issuePtr);
+                }
+            }
+
+            if (IsIn({"COMPLETED", "FAILED", "STOPPED", "CREATED"}, StreamingMeta_.ExecutionStatus)) {
+                if (StreamingMeta_.ExecutionStatus == "FAILED") {
+                    status.Status = Ydb::StatusIds::GENERIC_ERROR;
+                } else if (StreamingMeta_.ExecutionStatus == "STOPPED") {
+                    status.Status = Ydb::StatusIds::CANCELLED;
+                } else if (StreamingMeta_.ExecutionStatus == "CREATED") {
+                    status.Status = Ydb::StatusIds::PRECONDITION_FAILED;
+                }
+                break;
+            }
+
+            if (const auto newIssues = status.Issues.ToString(); newIssues && previousIssues != newIssues && Options_.YdbSettings.VerbosityLevel >= EVerbosity::Info) {
+                previousIssues = newIssues;
+                Cerr << CerrColors_.Red() << "Streaming query issues updated:" << CerrColors_.Default() << Endl << newIssues << Endl;
+            }
+
+            if (Options_.ScriptCancelAfter && TInstant::Now() - StartTime_ > Options_.ScriptCancelAfter) {
+                Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Cancelling streaming query..." << CoutColors_.Default() << Endl;
+                TRequestResult cancelStatus = YdbSetup_.QueryRequest({
+                    .Query = TStringBuilder() << "ALTER STREAMING QUERY IF EXISTS `" << StreamingMeta_.Name << "` SET (RUN = FALSE)",
+                    .Action = NKikimrKqp::QUERY_ACTION_EXECUTE,
+                    .TraceId = "streaming-control::cancel",
+                    .UserSID = userSID,
+                    .Database = StreamingMeta_.Database,
+                });
+                if (!cancelStatus.IsSuccess()) {
+                    Cerr << CerrColors_.Red() << "Failed to cancel streaming query, reason:" << CerrColors_.Default() << Endl << cancelStatus.ToString() << Endl;
+                    return cancelStatus.Status;
+                }
+            }
+
+            Sleep(fetchPeriod);
+        }
+
+        PrintScriptAst(queryId, StreamingMeta_.Ast);
+        PrintScriptProgress(queryId, StreamingMeta_.Plan);
+        PrintScriptPlan(queryId, StreamingMeta_.Plan);
+        PrintScriptFinish(StreamingMeta_, "Streaming", duration);
+
+        if (!status.IsSuccess() || StreamingMeta_.ExecutionStatus != "COMPLETED") {
+            Cerr << CerrColors_.Red() << "Failed to execute streaming query, invalid final status " << StreamingMeta_.ExecutionStatus << ", reason:" << CerrColors_.Default() << Endl << status.ToString() << Endl;
+            return status.Status;
+        }
+
+        if (!status.Issues.Empty()) {
+            Cerr << CerrColors_.Red() << "Request finished with issues:" << CerrColors_.Default() << Endl << status.Issues.ToString() << Endl;
+        }
+
+        return Ydb::StatusIds::SUCCESS;
     }
 
     void StartSchemeTraceOpt() const {
@@ -321,82 +483,42 @@ private:
 
     void PrintSchemeQueryAst(const TString& ast) const {
         if (Options_.SchemeQueryAstOutput) {
-            if (Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
+            if (VerbosityLevel_ >= EVerbosity::Info) {
                 Cout << CoutColors_.Cyan() << "Writing scheme query ast" << CoutColors_.Default() << Endl;
             }
             Options_.SchemeQueryAstOutput->Write(ast);
+            Options_.SchemeQueryAstOutput->Flush();
         }
     }
 
     void PrintScriptAst(size_t queryId, const TString& ast) const {
         if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryAstOutputs, nullptr)) {
-            if (Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
+            if (VerbosityLevel_ >= EVerbosity::Info) {
                 Cout << CoutColors_.Cyan() << "Writing script query ast" << CoutColors_.Default() << Endl;
             }
             output->Write(ast);
+            output->Flush();
         }
-    }
-
-    void PrintPlan(const TString& plan, IOutputStream* output) const {
-        if (!plan) {
-            return;
-        }
-
-        NJson::TJsonValue planJson;
-        NJson::ReadJsonTree(plan, &planJson, true);
-        if (!planJson.GetMapSafe().contains("meta")) {
-            return;
-        }
-
-        NYdb::NConsoleClient::TQueryPlanPrinter printer(Options_.PlanOutputFormat, true, *output);
-        printer.Print(plan);
     }
 
     void PrintScriptPlan(size_t queryId, const TString& plan) const {
         if (const auto output = GetValue<IOutputStream*>(queryId, Options_.ScriptQueryPlanOutputs, nullptr)) {
-            if (Options_.YdbSettings.VerboseLevel >= EVerbose::Info) {
+            if (VerbosityLevel_ >= EVerbosity::Info) {
                 Cout << CoutColors_.Cyan() << "Writing script query plan" << CoutColors_.Default() << Endl;
             }
-            PrintPlan(plan, output);
+            StatsPrinter_.PrintPlan(plan, *output);
         }
     }
 
     void PrintScriptProgress(size_t queryId, const TString& plan) const {
         if (const auto& output = GetValue<TString>(queryId, Options_.InProgressStatisticsOutputFiles, {})) {
             TFileOutput outputStream(output);
-            outputStream << TInstant::Now().ToIsoStringLocal() << " Script in progress statistics" << Endl;
-
-            auto convertedPlan = plan;
-            try {
-                convertedPlan = StatProcessor_->ConvertPlan(plan);
-            } catch (const NJson::TJsonException& ex) {
-                outputStream << "Error plan conversion: " << ex.what() << Endl;
-            }
-
-            try {
-                double cpuUsage = 0.0;
-                auto fullStat = StatProcessor_->GetQueryStat(convertedPlan, cpuUsage, nullptr);
-                auto flatStat = StatProcessor_->GetFlatStat(convertedPlan);
-                auto publicStat = StatProcessor_->GetPublicStat(fullStat);
-
-                outputStream << "\nCPU usage: " << cpuUsage << Endl;
-                PrintStatistics(fullStat, flatStat, publicStat, outputStream);
-            } catch (const NJson::TJsonException& ex) {
-                outputStream << "Error stat conversion: " << ex.what() << Endl;
-            }
-
-            outputStream << "\nPlan visualization:" << Endl;
-            PrintPlan(convertedPlan, &outputStream);
-
+            StatsPrinter_.PrintInProgressStatistics(plan, outputStream);
             outputStream.Finish();
         }
         if (const auto& output = GetValue<TString>(queryId, Options_.ScriptQueryTimelineFiles, {})) {
             TFileOutput outputStream(output);
-
-            TPlanVisualizer planVisualizer;
-            planVisualizer.LoadPlans(plan);
-            outputStream.Write(planVisualizer.PrintSvg());
-
+            StatsPrinter_.PrintTimeline(plan, outputStream);
             outputStream.Finish();
         }
     }
@@ -409,60 +531,67 @@ private:
         };
     }
 
-    void PrintScriptResult(const Ydb::ResultSet& resultSet) const {
-        switch (Options_.ResultOutputFormat) {
-        case TRunnerOptions::EResultOutputFormat::RowsJson: {
-            NYdb::TResultSet result(resultSet);
-            NYdb::TResultSetParser parser(result);
-            while (parser.TryNextRow()) {
-                NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, Options_.ResultOutput);
-                writer.SetWriteNanAsString(true);
-                NYdb::FormatResultRowJson(parser, result.GetColumnsMeta(), writer, NYdb::EBinaryStringEncoding::Unicode);
-                *Options_.ResultOutput << Endl;
-            }
-            break;
-        }
-
-        case TRunnerOptions::EResultOutputFormat::FullJson:
-            resultSet.PrintJSON(*Options_.ResultOutput);
-            *Options_.ResultOutput << Endl;
-            break;
-
-        case TRunnerOptions::EResultOutputFormat::FullProto:
-            TString resultSetString;
-            google::protobuf::TextFormat::Printer printer;
-            printer.SetSingleLineMode(false);
-            printer.SetUseUtf8StringEscaping(true);
-            printer.PrintToString(resultSet, &resultSetString);
-            *Options_.ResultOutput << resultSetString;
-            break;
-        }
-    }
-
-    void PrintScriptFinish(const TQueryMeta& meta, const TString& queryType) const {
-        if (Options_.YdbSettings.VerboseLevel < EVerbose::Info) {
+    void PrintScriptFinish(const TQueryMeta& meta, const TString& queryType, TDuration* duration = nullptr) const {
+        if (Options_.YdbSettings.VerbosityLevel < EVerbosity::Info) {
             return;
         }
         Cout << CoutColors_.Cyan() << queryType << " request finished.";
         if (meta.TotalDuration) {
+            if (duration) {
+                *duration = meta.TotalDuration;
+            }
             Cout << " Total duration: " << meta.TotalDuration;
         } else {
-            Cout << " Estimated duration: " << TInstant::Now() - StartTime_;
+            auto d = TInstant::Now() - StartTime_;
+            if (duration) {
+                *duration = d;
+            }
+            Cout << " Estimated duration: " << d;
         }
         Cout << CoutColors_.Default() << Endl;
     }
 
+    void SetupRetryState() {
+        if (!RetryPolicy_) {
+            const auto retryFunc = [this](Ydb::StatusIds::StatusCode status) {
+                if (Options_.RetryableStatuses.contains(status)) {
+                    return ERetryErrorClass::ShortRetry;
+                }
+                return ERetryErrorClass::NoRetry;
+            };
+            RetryPolicy_ = IRetryPolicy::GetExponentialBackoffPolicy(
+                retryFunc,
+                RETRY_PERIOD,
+                RETRY_PERIOD,
+                TDuration::Seconds(1)
+            );
+        }
+        RetryState_ = RetryPolicy_->CreateRetryState();
+    }
+
+    TDuration GetPingPeriod() const {
+        TDuration pingPeriod = TDuration::Seconds(1);
+        if (auto progressStatsPeriodMs = Options_.YdbSettings.AppConfig.GetQueryServiceConfig().GetProgressStatsPeriodMs()) {
+            pingPeriod = TDuration::MilliSeconds(progressStatsPeriodMs);
+        }
+        return pingPeriod;
+    }
+
 private:
     TRunnerOptions Options_;
-    EVerbose VerboseLevel_;
+    EVerbosity VerbosityLevel_;
+    IRetryPolicy::TPtr RetryPolicy_;
+    IRetryPolicy::IRetryState::TPtr RetryState_;
+    std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> RetryMapping_;
 
     TYdbSetup YdbSetup_;
-    std::unique_ptr<NFq::IPlanStatProcessor> StatProcessor_;
+    TStatsPrinter StatsPrinter_;
     NColorizer::TColors CerrColors_;
     NColorizer::TColors CoutColors_;
 
     TString ExecutionOperation_;
     TExecutionMeta ExecutionMeta_;
+    TStreamingMeta StreamingMeta_;
     std::vector<Ydb::ResultSet> ResultSets_;
     TInstant StartTime_;
 };
@@ -475,35 +604,53 @@ TKqpRunner::TKqpRunner(const TRunnerOptions& options)
 {}
 
 bool TKqpRunner::ExecuteSchemeQuery(const TRequestOptions& query) const {
-    return Impl_->ExecuteSchemeQuery(query);
+    return Impl_->ExecuteWithRetries([this, query]() {
+        return Impl_->ExecuteSchemeQuery(query);
+    });
 }
 
-bool TKqpRunner::ExecuteScript(const TRequestOptions& script) const {
-    return Impl_->ExecuteScript(script);
+bool TKqpRunner::ExecuteScript(const TRequestOptions& script, TDuration& duration) const {
+    return Impl_->ExecuteWithRetries([this, script, &duration]() {
+        return Impl_->ExecuteScript(script, &duration);
+    });
 }
 
-bool TKqpRunner::ExecuteQuery(const TRequestOptions& query) const {
-    return Impl_->ExecuteQuery(query, TImpl::EQueryType::ScriptQuery);
+bool TKqpRunner::ExecuteQuery(const TRequestOptions& query, TDuration& duration) const {
+    return Impl_->ExecuteWithRetries([this, query, &duration]() {
+        return Impl_->ExecuteQuery(query, TImpl::EQueryType::ScriptQuery, &duration);
+    });
 }
 
-bool TKqpRunner::ExecuteYqlScript(const TRequestOptions& query) const {
-    return Impl_->ExecuteQuery(query, TImpl::EQueryType::YqlScriptQuery);
+bool TKqpRunner::ExecuteYqlScript(const TRequestOptions& query, TDuration& duration) const {
+    return Impl_->ExecuteWithRetries([this, query, &duration]() {
+        return Impl_->ExecuteQuery(query, TImpl::EQueryType::YqlScriptQuery, &duration);
+    });
 }
 
 void TKqpRunner::ExecuteQueryAsync(const TRequestOptions& query) const {
-    Impl_->ExecuteQuery(query, TImpl::EQueryType::AsyncQuery);
+    Impl_->ExecuteQuery(query, TImpl::EQueryType::AsyncQuery, nullptr);
+}
+
+bool TKqpRunner::ExecuteStreaming(const TRequestOptions& query, const TString& queryName, TDuration& duration) const {
+    return Impl_->ExecuteWithRetries([this, query, queryName, &duration]() {
+        return Impl_->ExecuteStreaming(query, queryName, &duration);
+    });
 }
 
 void TKqpRunner::FinalizeRunner() const {
     Impl_->FinalizeRunner();
 }
 
-bool TKqpRunner::FetchScriptResults() {
-    return Impl_->FetchScriptResults();
+bool TKqpRunner::FetchScriptResults(const TString& userSID) {
+    return Impl_->FetchScriptResults(userSID);
 }
 
-bool TKqpRunner::ForgetExecutionOperation() {
-    return Impl_->ForgetExecutionOperation();
+bool TKqpRunner::ForgetExecutionOperation(const TString& userSID) {
+    return Impl_->ForgetExecutionOperation(userSID);
+}
+
+bool TKqpRunner::ForgetStreamingQuery(const TString& userSID) {
+    return Impl_->ForgetStreamingQuery(userSID);
 }
 
 void TKqpRunner::PrintScriptResults() const {

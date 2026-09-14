@@ -6,7 +6,7 @@
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/library/accessor/accessor.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
@@ -156,8 +156,6 @@ Y_UNIT_TEST_SUITE(Secret) {
         ui32 msgbPort = pm.GetPort();
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;
@@ -253,7 +251,6 @@ Y_UNIT_TEST_SUITE(Secret) {
         ui32 msgbPort = pm.GetPort();
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
 
         NKikimrProto::TAuthConfig authConfig;
         authConfig.SetUseBuiltinDomain(true);
@@ -288,13 +285,13 @@ Y_UNIT_TEST_SUITE(Secret) {
             lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`", false);
             lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`");
             lHelper.StartSchemaRequest("ALTER OBJECT secret1 (TYPE SECRET) SET value = `abcde`");
-            lHelper.StartSchemaRequest("CREATE OBJECT `secret1:test@test1` (TYPE SECRET_ACCESS)");
-            lHelper.StartSchemaRequest("CREATE OBJECT `secret2:test@test1` (TYPE SECRET_ACCESS)", false);
-            lHelper.StartSchemaRequest("CREATE OBJECT IF NOT EXISTS `secret1:test@test1` (TYPE SECRET_ACCESS)");
+            lHelper.StartSchemaRequest("CREATE OBJECT `secret1:test@builtin` (TYPE SECRET_ACCESS)");
+            lHelper.StartSchemaRequest("CREATE OBJECT `secret2:test@builtin` (TYPE SECRET_ACCESS)", false);
+            lHelper.StartSchemaRequest("CREATE OBJECT IF NOT EXISTS `secret1:test@builtin` (TYPE SECRET_ACCESS)");
             lHelper.StartSchemaRequest("DROP OBJECT `secret1` (TYPE SECRET)", false);
             lHelper.StartDataRequest("SELECT * FROM `/Root/.metadata/secrets/values`", false);
 
-            lHelper.SetAuthToken("test@test1");
+            lHelper.SetAuthToken("test@builtin");
             lHelper.StartSchemaRequest("CREATE OBJECT secret1 (TYPE SECRET) WITH value = `100`", false);
             lHelper.StartSchemaRequest("UPSERT OBJECT secret1 (TYPE SECRET) WITH value = `100`", false);
             lHelper.StartSchemaRequest("CREATE OBJECT secret2 (TYPE SECRET) WITH value = `100`");
@@ -323,8 +320,6 @@ Y_UNIT_TEST_SUITE(Secret) {
         ui32 msgbPort = pm.GetPort();
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;

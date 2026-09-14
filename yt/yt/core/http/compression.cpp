@@ -5,6 +5,7 @@
 #include <yt/yt/core/ytree/serialize.h>
 
 #include <yt/yt/core/compression/dictionary_codec.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <library/cpp/streams/brotli/brotli.h>
 
@@ -39,17 +40,17 @@ DEFINE_REFCOUNTED_TYPE(TStreamHolder)
 TFuture<void> TSharedRefOutputStream::Write(const TSharedRef& buffer)
 {
     Parts_.push_back(TSharedRef::MakeCopy<TDefaultSharedBlobTag>(buffer));
-    return VoidFuture;
+    return OKFuture;
 }
 
 TFuture<void> TSharedRefOutputStream::Flush()
 {
-    return VoidFuture;
+    return OKFuture;
 }
 
 TFuture<void> TSharedRefOutputStream::Close()
 {
-    return VoidFuture;
+    return OKFuture;
 }
 
 std::vector<TSharedRef> TSharedRefOutputStream::Finish()
@@ -119,7 +120,7 @@ private:
             return;
         }
 
-        if (ContentEncoding_.StartsWith("z-")) {
+        if (ContentEncoding_.starts_with("z-")) {
             Compressor_.reset(new NBlockCodecs::TCodedOutput(
                 this,
                 NBlockCodecs::Codec(ContentEncoding_.substr(2)),
@@ -142,12 +143,13 @@ private:
             return;
         }
 
-        if (Compressor_ = TryDetectOptionalCompressors(ContentEncoding_, this)) {
+        Compressor_ = TryDetectOptionalCompressors(ContentEncoding_, this);
+        if (Compressor_) {
             return;
         }
 
         THROW_ERROR_EXCEPTION("Unsupported content encoding")
-            << TErrorAttribute("content_encoding", ToString(ContentEncoding_));
+            .With("content_encoding", ToString(ContentEncoding_));
     }
 
     void DoWriteCompressor(const TSharedRef& buffer)
@@ -243,7 +245,7 @@ private:
             return;
         }
 
-        if (ContentEncoding_.StartsWith("z-")) {
+        if (ContentEncoding_.starts_with("z-")) {
             Decompressor_.reset(new NBlockCodecs::TDecodedInput(
                 this,
                 NBlockCodecs::Codec(ContentEncoding_.substr(2))));
@@ -260,12 +262,13 @@ private:
             return;
         }
 
-        if (Decompressor_ = TryDetectOptionalDecompressors(ContentEncoding_, this)) {
+        Decompressor_ = TryDetectOptionalDecompressors(ContentEncoding_, this);
+        if (Decompressor_) {
             return;
         }
 
         THROW_ERROR_EXCEPTION("Unsupported content encoding")
-            << TErrorAttribute("content_encoding", ContentEncoding_);
+            .With("content_encoding", ContentEncoding_);
     }
 
     size_t DoReadDecompressor(const TSharedMutableRef& uncompressedBuffer)
@@ -325,7 +328,7 @@ DEFINE_REFCOUNTED_TYPE(TDecompressingInputStream)
 
 bool IsContentEncodingSupported(const TContentEncoding& contentEncoding)
 {
-    if (contentEncoding.StartsWith("z-")) {
+    if (contentEncoding.starts_with("z-")) {
         try {
             NBlockCodecs::Codec(contentEncoding.substr(2));
             return true;
@@ -346,7 +349,7 @@ const std::vector<TContentEncoding>& GetSupportedContentEncodings()
     static const auto result = [] {
         auto result = GetInternallySupportedContentEncodings();
         for (auto blockCodec : NBlockCodecs::ListAllCodecs()) {
-            result.push_back(TString("z-") + blockCodec);
+            result.push_back(std::string("z-") + std::string(blockCodec));
         }
         return result;
     }();
@@ -354,13 +357,13 @@ const std::vector<TContentEncoding>& GetSupportedContentEncodings()
 }
 
 // NB: Does not implement the spec, but a reasonable approximation.
-TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(const TString& clientAcceptEncodingHeader)
+TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(TStringBuf clientAcceptEncodingHeader)
 {
-    auto bestPosition = TString::npos;
+    auto bestPosition = std::string::npos;
     std::optional<TContentEncoding> bestEncoding;
 
-    auto checkCandidate = [&] (const TString& candidate, size_t position) {
-        if (position != TString::npos && (bestPosition == TString::npos || position < bestPosition)) {
+    auto checkCandidate = [&] (const auto& candidate, size_t position) {
+        if (position != std::string::npos && (bestPosition == std::string::npos || position < bestPosition)) {
             bestEncoding = candidate;
             bestPosition = position;
         }
@@ -376,7 +379,7 @@ TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(const TString& clientA
     }
 
     for (const auto& blockcodec : NBlockCodecs::ListAllCodecs()) {
-        auto candidate = TString("z-") + blockcodec;
+        auto candidate = std::string("z-") + std::string(blockcodec);
 
         auto position = clientAcceptEncodingHeader.find(candidate);
         checkCandidate(candidate, position);
@@ -384,7 +387,7 @@ TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(const TString& clientA
 
     if (!bestEncoding) {
         return TError("Could not determine feasible content encoding given accept encoding constraints")
-            << TErrorAttribute("client_accept_encoding", clientAcceptEncodingHeader);
+            .With("client_accept_encoding", clientAcceptEncodingHeader);
     }
 
     return *bestEncoding;

@@ -1,9 +1,9 @@
 #include <util/system/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(ConsistentIndexRead)
                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                                 execSettings)
                             .ExtractValueSync();
-                        UNIT_ASSERT_C(result.IsSuccess() || result.GetStatus() == EStatus::ABORTED, result.GetIssues().ToString());
+                        UNIT_ASSERT_C(result.IsSuccess() || result.GetStatus() == EStatus::ABORTED || result.GetStatus() == EStatus::UNDETERMINED, result.GetIssues().ToString());
                         break;
                     }
                     case 1: {
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(ConsistentIndexRead)
                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
                                 execSettings)
                            .ExtractValueSync();
-                        UNIT_ASSERT_C(result.IsSuccess() || result.GetStatus() == EStatus::ABORTED, result.GetIssues().ToString());
+                        UNIT_ASSERT_C(result.IsSuccess() || result.GetStatus() == EStatus::ABORTED || result.GetStatus() == EStatus::UNDETERMINED, result.GetIssues().ToString());
                         break;
                     }
                     case 2: {

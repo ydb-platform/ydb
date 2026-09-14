@@ -1,0 +1,339 @@
+#pragma once
+#include "settings.h"
+#include "types.h"
+
+#include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
+#include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
+
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/log.h>
+
+#include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_binary.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <util/generic/string.h>
+#include <util/stream/output.h>
+
+namespace NKikimr::NArrow::NAccessor::NSubColumns {
+
+class TDictStats {
+public:
+    struct TResolvedPath {
+        ui32 ColumnIndex;
+        EValueType ValueType;
+        TString RemainingPath;
+
+        bool operator==(const TResolvedPath&) const = default;
+
+        static bool IsBetterOrEqualMatchThan(const TResolvedPath& first, const TResolvedPath& second) {
+            return first.RemainingPath.size() <= second.RemainingPath.size();
+        }
+
+        friend IOutputStream& operator<<(IOutputStream& out, const TResolvedPath& pathInfo) {
+            return out << "{ " << pathInfo.ColumnIndex << ", " << static_cast<ui32>(pathInfo.ValueType) << ", " << pathInfo.RemainingPath << " }";
+        }
+    };
+
+private:
+    std::shared_ptr<arrow::RecordBatch> Original;
+    std::shared_ptr<arrow::BinaryArray> DataNames;
+    std::shared_ptr<arrow::UInt32Array> DataRecordsCount;
+    std::shared_ptr<arrow::UInt32Array> DataSize;
+    std::shared_ptr<arrow::UInt8Array> AccessorType;
+    std::shared_ptr<arrow::UInt8Array> ValueType;
+    // keys are references to DataNames array values
+    absl::flat_hash_map<std::string_view, ui32> ColumnIndexes;
+
+public:
+    std::optional<ui32> GetExactKeyIndexOptional(const std::string_view name) const {
+        const auto it = ColumnIndexes.find(name);
+        if (it != ColumnIndexes.end()) {
+            return it->second;
+        }
+        return std::nullopt;
+    }
+
+    ui32 GetExactKeyIndexVerified(const std::string_view keyName) const {
+        const auto idx = GetExactKeyIndexOptional(keyName);
+        AFL_VERIFY(idx.has_value());
+        return *idx;
+    }
+
+    ui32 GetFilledValuesCount() const {
+        ui32 result = 0;
+        for (ui32 i = 0; i < (ui32)DataRecordsCount->length(); ++i) {
+            result += DataRecordsCount->Value(i);
+        }
+        return result;
+    }
+
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("key_names", NArrow::DebugJson(DataNames, 1000000, 1000000)["data"]);
+        result.InsertValue("records", NArrow::DebugJson(DataRecordsCount, 1000000, 1000000)["data"]);
+        result.InsertValue("size", NArrow::DebugJson(DataSize, 1000000, 1000000)["data"]);
+        result.InsertValue("accessor", NArrow::DebugJson(AccessorType, 1000000, 1000000)["data"]);
+        result.InsertValue("value_type", NArrow::DebugJson(ValueType, 1000000, 1000000)["data"]);
+        return result;
+    }
+    static TDictStats BuildEmpty();
+    TString SerializeAsString(const std::shared_ptr<NSerialization::ISerializer>& serializer) const;
+
+    // Deserialize a stats blob, transparently accepting both the current (5-column, with value_type)
+    // and the legacy (4-column) layout via try-decode-fallback.
+    static TDictStats DeserializeFromBlob(const TString& blob);
+
+    template <class TColumnPredicate>
+    TConclusion<std::optional<TResolvedPath>> ResolvePath(const TParsedJsonPath& jsonPath, const TColumnPredicate& isColumnAvailable) const {
+        const auto& [pathItems, pathTypes, startPositions] = jsonPath.Items;
+        AFL_VERIFY(pathItems.size() == pathTypes.size());
+        AFL_VERIFY(pathItems.size() == startPositions.size());
+
+        TString columnName;
+        columnName.reserve(EstimateSubcolumnNameSize(jsonPath.Source, pathItems.size()));
+        std::optional<ui32> columnIndex;
+        ui32 matchedItemsCount = 0;
+        for (ui32 i = 0; i < pathItems.size(); ++i) {
+            if (pathTypes[i] != NYql::NJsonPath::EJsonPathItemType::MemberAccess) {
+                break;
+            }
+            AppendSubcolumnName(columnName, pathItems[i]);
+            if (auto index = GetExactKeyIndexOptional(columnName); index && isColumnAvailable(*index)) {
+                columnIndex = index;
+                matchedItemsCount = i + 1;
+            }
+        }
+        if (!columnIndex) {
+            return std::optional<TResolvedPath>();
+        }
+
+        TString remainingPath;
+        // strict is required, because there is a memory problem in NYql::NJsonPath::ExecuteJsonPath with lax and BinaryJson
+        if (matchedItemsCount < startPositions.size()) {
+            remainingPath = "strict $" + TString(jsonPath.Source.data() + startPositions[matchedItemsCount], jsonPath.Source.size() - startPositions[matchedItemsCount]);
+        }
+        return std::optional<TResolvedPath>(TResolvedPath{ *columnIndex, GetValueType(*columnIndex), std::move(remainingPath) });
+    }
+
+    template <class TColumnPredicate>
+    TConclusion<std::optional<TResolvedPath>> ResolvePath(const TJsonPathBuf jsonPath, const TColumnPredicate& isColumnAvailable) const {
+        auto parsed = ParseJsonPath(jsonPath);
+        if (parsed.IsFail()) {
+            return TConclusionStatus::Fail(parsed.GetErrorMessage());
+        }
+        return ResolvePath(parsed.GetResult(), isColumnAvailable);
+    }
+
+    TConclusion<std::optional<TResolvedPath>> ResolvePath(const TParsedJsonPath& jsonPath) const {
+        return ResolvePath(jsonPath, [](const ui32) {
+            return true;
+        });
+    }
+
+    TConclusion<std::optional<TResolvedPath>> ResolvePath(const TJsonPathBuf jsonPath) const {
+        return ResolvePath(jsonPath, [](const ui32) {
+            return true;
+        });
+    }
+
+    // Returns the longest stored member-wise prefix; malformed paths do not match.
+    std::optional<ui32> GetKeyOrPrefixIndexOptional(const std::string_view keyName) const {
+        auto pathInfoResult = ResolvePath(ToJsonPath(keyName));
+        if (pathInfoResult.IsFail()) {
+            return std::nullopt;
+        }
+        auto pathInfo = pathInfoResult.DetachResult();
+        if (!pathInfo) {
+            return std::nullopt;
+        }
+        return pathInfo->ColumnIndex;
+    }
+
+    class TRTStatsValue {
+    private:
+        YDB_READONLY(ui32, RecordsCount, 0);
+        YDB_READONLY(ui32, DataSize, 0);
+        std::optional<EValueType> DeducedValueType;
+
+    public:
+        TRTStatsValue() = default;
+        TRTStatsValue(const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType)
+            : RecordsCount(recordsCount)
+            , DataSize(dataSize)
+            , DeducedValueType(valueType) {
+        }
+
+        EValueType GetValueType() const {
+            return DeducedValueType.value_or(EValueType::BinaryJson);
+        }
+
+        void AddValue(const std::string_view str) {
+            ++RecordsCount;
+            DataSize += str.size();
+        }
+
+        void Add(const TDictStats& stats, const ui32 idx) {
+            RecordsCount += stats.GetColumnRecordsCount(idx);
+            DataSize += stats.GetColumnSize(idx);
+            DeducedValueType = MergeValueTypes(DeducedValueType, stats.GetValueType(idx));
+        }
+
+        // Decides only the Array-vs-Sparsed axis and never returns Dictionary,
+        // because dictionary decision is deferred until the values are materialized.
+        IChunkedArray::EType GetAccessorType(const TSettings& settings, const ui32 recordsCount) const {
+            return settings.IsSparsed(RecordsCount, recordsCount) ? IChunkedArray::EType::SparsedArray : IChunkedArray::EType::Array;
+        }
+    };
+
+    class TRTStats: public TRTStatsValue {
+    private:
+        using TBase = TRTStatsValue;
+        YDB_READONLY_DEF(TString, KeyName);
+
+    public:
+        TRTStats(const TString& keyName)
+            : KeyName(keyName) {
+        }
+        TRTStats(const TString& keyName, const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType)
+            : TBase(recordsCount, dataSize, valueType)
+            , KeyName(keyName) {
+        }
+
+        TRTStats(const std::string_view keyName)
+            : KeyName(keyName.data(), keyName.size()) {
+        }
+        TRTStats(const std::string_view keyName, const ui32 recordsCount, const ui32 dataSize, const std::optional<EValueType>& valueType)
+            : TBase(recordsCount, dataSize, valueType)
+            , KeyName(keyName.data(), keyName.size()) {
+        }
+
+        bool operator<(const TRTStats& item) const {
+            return KeyName < item.KeyName;
+        }
+    };
+
+    static TDictStats Merge(const std::vector<TDictStats>& stats, const TSettings& settings, const ui32 recordsCount);
+
+    // Selects which keys become separated columns;
+    // the rest fall into the Others store, whose stats are built by the caller.
+    TDictStats SelectSeparatedColumns(const TSettings& settings, const ui32 recordsCount) const;
+
+    class TBuilder: TNonCopyable {
+    private:
+        std::vector<std::unique_ptr<arrow::ArrayBuilder>> Builders;
+        arrow::BinaryBuilder* Names;
+        arrow::UInt32Builder* Records;
+        arrow::UInt32Builder* DataSize;
+        arrow::UInt8Builder* AccessorType;
+        arrow::UInt8Builder* ValueType;
+
+        std::optional<TString> LastKeyName;
+        ui32 RecordsCount = 0;
+
+    public:
+        TBuilder();
+        void Add(const TString& name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType,
+            const EValueType valueType);
+        void Add(const std::string_view name, const ui32 recordsCount, const ui32 dataSize, const IChunkedArray::EType accessorType,
+            const EValueType valueType);
+        TDictStats Finish();
+    };
+
+    static TBuilder MakeBuilder() {
+        return TBuilder();
+    }
+
+    std::shared_ptr<arrow::Schema> BuildColumnsSchema() const {
+        arrow::FieldVector fields;
+        for (ui32 i = 0; i < DataNames->length(); ++i) {
+            fields.emplace_back(GetField(i));
+        }
+        return std::make_shared<arrow::Schema>(fields);
+    }
+
+    std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
+        AFL_VERIFY(index < DataNames->length());
+        auto name = DataNames->GetView(index);
+        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetArrowTypeForValueType(GetValueType(index)));
+    }
+
+    TRTStats GetRTStats(const ui32 index) const {
+        auto view = GetColumnName(index);
+        return TRTStats(TString(view.data(), view.size()), GetColumnRecordsCount(index), GetColumnSize(index), GetValueType(index));
+    }
+
+    ui32 GetDataNamesCount() const {
+        return DataNames->length();
+    }
+
+    ui32 GetColumnsCount() const {
+        return Original->num_rows();
+    }
+
+    // The serialization constructor for `columnIndex`. encodingParams selects the offset/index
+    // re-encoding for binary-backed Array/Dictionary columns; a disabled params yields the plain
+    // accessor constructor. Since the encoding lives in the accessor settings (not the stats blob),
+    // it is supplied per call rather than stored here.
+    TConstructorContainer GetAccessorConstructor(const ui32 columnIndex, const TEncodingParams& encodingParams) const;
+    IChunkedArray::EType GetAccessorType(const ui32 columnIndex) const;
+    EValueType GetValueType(const ui32 columnIndex) const;
+
+    std::string_view GetColumnName(const ui32 index) const;
+    TString GetColumnNameString(const ui32 index) const {
+        auto view = GetColumnName(index);
+        return TString(view.data(), view.size());
+    }
+    ui32 GetColumnRecordsCount(const ui32 index) const;
+    ui32 GetColumnSize(const ui32 index) const;
+
+    static std::shared_ptr<arrow::Schema> GetStatsSchema() {
+        static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::binary()),
+            std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()),
+            std::make_shared<arrow::Field>("accessor_type", arrow::uint8()), std::make_shared<arrow::Field>("value_type", arrow::uint8()) };
+        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(fields);
+        return result;
+    }
+
+    // Legacy schema without value_type; used only as the fallback when deserializing blobs written
+    // before native scalar columns existed.
+    static std::shared_ptr<arrow::Schema> GetStatsSchemaLegacy() {
+        static arrow::FieldVector fields = { std::make_shared<arrow::Field>("name", arrow::binary()),
+            std::make_shared<arrow::Field>("count", arrow::uint32()), std::make_shared<arrow::Field>("size", arrow::uint32()),
+            std::make_shared<arrow::Field>("accessor_type", arrow::uint8()) };
+        static std::shared_ptr<arrow::Schema> result = std::make_shared<arrow::Schema>(fields);
+        return result;
+    }
+
+    TDictStats(const std::shared_ptr<arrow::RecordBatch>& original);
+};
+
+struct TResolvedPathMatch {
+    TDictStats::TResolvedPath Path;
+    bool IsColumn = false;
+};
+
+inline TConclusion<std::optional<TResolvedPathMatch>> ResolveBestPath(
+    const TDictStats& columnsStats, const TDictStats& othersStats, const TJsonPathBuf path) {
+    auto parsed = ParseJsonPath(path);
+    if (parsed.IsFail()) {
+        return TConclusionStatus::Fail(parsed.GetErrorMessage());
+    }
+    auto columnsResult = columnsStats.ResolvePath(parsed.GetResult());
+    if (columnsResult.IsFail()) {
+        return TConclusionStatus::Fail(columnsResult.GetErrorMessage());
+    }
+    auto othersResult = othersStats.ResolvePath(parsed.GetResult());
+    if (othersResult.IsFail()) {
+        return TConclusionStatus::Fail(othersResult.GetErrorMessage());
+    }
+    const auto columnsPath = columnsResult.DetachResult();
+    const auto othersPath = othersResult.DetachResult();
+    if (!othersPath || (columnsPath && TDictStats::TResolvedPath::IsBetterOrEqualMatchThan(*columnsPath, *othersPath))) {
+        return columnsPath ? std::optional<TResolvedPathMatch>(TResolvedPathMatch{ *columnsPath, true }) : std::nullopt;
+    }
+    return TResolvedPathMatch{ *othersPath, false };
+}
+
+}   // namespace NKikimr::NArrow::NAccessor::NSubColumns

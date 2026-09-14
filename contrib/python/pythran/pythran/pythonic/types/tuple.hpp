@@ -51,11 +51,9 @@ std::tuple<Types0..., Types1...> operator+(std::tuple<Types0...> const &t0,
 }
 
 template <class... Types0, class... Types1>
-std::tuple<Types0..., Types1...> operator+(std::tuple<Types0...> &&t0,
-                                           std::tuple<Types1...> &&t1)
+std::tuple<Types0..., Types1...> operator+(std::tuple<Types0...> &&t0, std::tuple<Types1...> &&t1)
 {
-  return std::tuple_cat(std::forward<Types0...>(t0),
-                        std::forward<Types1...>(t1));
+  return std::tuple_cat(std::forward<Types0...>(t0), std::forward<Types1...>(t1));
 }
 
 PYTHONIC_NS_BEGIN
@@ -69,12 +67,11 @@ namespace types
   template <class S, class... Stail>
   std::tuple<Stail...> tuple_tail(std::tuple<S, Stail...> const &t)
   {
-    return make_tuple_tail<0>(t,
-                              utils::make_index_sequence<sizeof...(Stail)>{});
+    return make_tuple_tail<0>(t, std::make_index_sequence<sizeof...(Stail)>{});
   }
 
   template <class T, size_t N, class V, class A, size_t... I>
-  array_base<T, N, V> array_to_array(A const &a, utils::index_sequence<I...>)
+  array_base<T, N, V> array_to_array(A const &a, std::index_sequence<I...>)
   {
     return {(T)std::get<I>(a)...};
   }
@@ -120,8 +117,7 @@ namespace types
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_iterator
-  array_base<T, N, V>::begin() const noexcept
+  typename array_base<T, N, V>::const_iterator array_base<T, N, V>::begin() const noexcept
   {
     return {data()};
   }
@@ -133,79 +129,68 @@ namespace types
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_iterator
-  array_base<T, N, V>::end() const noexcept
+  typename array_base<T, N, V>::const_iterator array_base<T, N, V>::end() const noexcept
   {
     return {data() + N};
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::reverse_iterator
-  array_base<T, N, V>::rbegin() noexcept
+  typename array_base<T, N, V>::reverse_iterator array_base<T, N, V>::rbegin() noexcept
   {
     return reverse_iterator(end());
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_reverse_iterator
-  array_base<T, N, V>::rbegin() const noexcept
+  typename array_base<T, N, V>::const_reverse_iterator array_base<T, N, V>::rbegin() const noexcept
   {
     return const_reverse_iterator(end());
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::reverse_iterator
-  array_base<T, N, V>::rend() noexcept
+  typename array_base<T, N, V>::reverse_iterator array_base<T, N, V>::rend() noexcept
   {
     return reverse_iterator(begin());
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_reverse_iterator
-  array_base<T, N, V>::rend() const noexcept
+  typename array_base<T, N, V>::const_reverse_iterator array_base<T, N, V>::rend() const noexcept
   {
     return const_reverse_iterator(begin());
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_iterator
-  array_base<T, N, V>::cbegin() const noexcept
+  typename array_base<T, N, V>::const_iterator array_base<T, N, V>::cbegin() const noexcept
   {
     return {&(buffer[0])};
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_iterator
-  array_base<T, N, V>::cend() const noexcept
+  typename array_base<T, N, V>::const_iterator array_base<T, N, V>::cend() const noexcept
   {
     return {&(buffer[N])};
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_reverse_iterator
-  array_base<T, N, V>::crbegin() const noexcept
+  typename array_base<T, N, V>::const_reverse_iterator array_base<T, N, V>::crbegin() const noexcept
   {
     return const_reverse_iterator(end());
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_reverse_iterator
-  array_base<T, N, V>::crend() const noexcept
+  typename array_base<T, N, V>::const_reverse_iterator array_base<T, N, V>::crend() const noexcept
   {
     return const_reverse_iterator(begin());
   }
 
   // Capacity.
   template <typename T, size_t N, class V>
-  constexpr typename array_base<T, N, V>::size_type
-  array_base<T, N, V>::size() const noexcept
+  constexpr typename array_base<T, N, V>::size_type array_base<T, N, V>::size() const noexcept
   {
     return N;
   }
 
   template <typename T, size_t N, class V>
-  constexpr typename array_base<T, N, V>::size_type
-  array_base<T, N, V>::max_size() const noexcept
+  constexpr typename array_base<T, N, V>::size_type array_base<T, N, V>::max_size() const noexcept
   {
     return N;
   }
@@ -225,8 +210,7 @@ namespace types
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_reference
-  array_base<T, N, V>::fast(long n) const noexcept
+  typename array_base<T, N, V>::const_reference array_base<T, N, V>::fast(long n) const noexcept
   {
     assert(n < (long)size());
     return buffer[n];
@@ -235,16 +219,14 @@ namespace types
 #ifdef USE_XSIMD
   template <typename T, size_t N, class V>
   template <class vectorizer>
-  typename array_base<T, N, V>::simd_iterator
-  array_base<T, N, V>::vbegin(vectorizer) const
+  typename array_base<T, N, V>::simd_iterator array_base<T, N, V>::vbegin(vectorizer) const
   {
     return {&buffer[0]};
   }
 
   template <typename T, size_t N, class V>
   template <class vectorizer>
-  typename array_base<T, N, V>::simd_iterator
-  array_base<T, N, V>::vend(vectorizer) const
+  typename array_base<T, N, V>::simd_iterator array_base<T, N, V>::vend(vectorizer) const
   {
     using vector_type = typename xsimd::batch<dtype>;
     static const std::size_t vector_size = vector_type::size;
@@ -253,8 +235,7 @@ namespace types
 #endif
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::reference
-  array_base<T, N, V>::operator[](long __n)
+  typename array_base<T, N, V>::reference array_base<T, N, V>::operator[](long __n)
   {
     auto const index = __n < 0 ? (__n + size()) : __n;
     assert(0 <= index && index < size());
@@ -277,8 +258,7 @@ namespace types
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_reference
-  array_base<T, N, V>::front() const
+  typename array_base<T, N, V>::const_reference array_base<T, N, V>::front() const
   {
     return *begin();
   }
@@ -290,8 +270,7 @@ namespace types
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_reference
-  array_base<T, N, V>::back() const
+  typename array_base<T, N, V>::const_reference array_base<T, N, V>::back() const
   {
     return N ? *(end() - 1) : *end();
   }
@@ -303,8 +282,7 @@ namespace types
   }
 
   template <typename T, size_t N, class V>
-  typename array_base<T, N, V>::const_pointer
-  array_base<T, N, V>::data() const noexcept
+  typename array_base<T, N, V>::const_pointer array_base<T, N, V>::data() const noexcept
   {
     return &(buffer[0]);
   }
@@ -327,8 +305,7 @@ namespace types
   template <size_t M>
   bool array_base<T, N, V>::operator<(array_base<T, M, V> const &other) const
   {
-    return std::lexicographical_compare(begin(), end(), other.begin(),
-                                        other.end());
+    return std::lexicographical_compare(begin(), end(), other.begin(), other.end());
   }
 
   template <typename T, size_t N, class V>
@@ -345,23 +322,22 @@ namespace types
   template <class... Types>
   array_base<T, N, V>::operator std::tuple<Types...>() const
   {
-    return array_to_tuple(*this, utils::make_index_sequence<N>{},
+    return array_to_tuple(*this, std::make_index_sequence<N>{},
                           typename utils::type_sequence<Types...>{});
   }
   template <typename T, size_t N, class V>
   template <typename Tp>
   array_base<T, N, V>::operator array_base<Tp, N, V>() const
   {
-    return array_to_array<Tp, N, V>(*this, utils::make_index_sequence<N>{});
+    return array_to_array<Tp, N, V>(*this, std::make_index_sequence<N>{});
   }
 
   template <typename T, size_t N, class V>
   auto array_base<T, N, V>::to_tuple() const
-      -> decltype(array_to_tuple(*this, utils::make_index_sequence<N>{},
+      -> decltype(array_to_tuple(*this, std::make_index_sequence<N>{},
                                  utils::make_repeated_type<T, N>()))
   {
-    return array_to_tuple(*this, utils::make_index_sequence<N>{},
-                          utils::make_repeated_type<T, N>());
+    return array_to_tuple(*this, std::make_index_sequence<N>{}, utils::make_repeated_type<T, N>());
   }
 
   template <typename T, size_t N, class V>
@@ -373,8 +349,7 @@ namespace types
 
   /* array */
   template <typename T, size_t N, class V>
-  std::ostream &operator<<(std::ostream &os,
-                           types::array_base<T, N, V> const &v)
+  std::ostream &operator<<(std::ostream &os, types::array_base<T, N, V> const &v)
   {
     os << "(["[std::is_same<V, types::list_version>::value];
     auto iter = v.begin();
@@ -387,24 +362,21 @@ namespace types
   }
 
   template <class T, size_t N, class V, class... Types>
-  auto operator+(std::tuple<Types...> const &t,
-                 types::array_base<T, N, V> const &lt)
+  auto operator+(std::tuple<Types...> const &t, types::array_base<T, N, V> const &lt)
       -> decltype(std::tuple_cat(t, lt.to_tuple()))
   {
     return std::tuple_cat(t, lt.to_tuple());
   }
 
   template <class T, size_t N, class V, class... Types>
-  auto operator+(types::array_base<T, N, V> const &lt,
-                 std::tuple<Types...> const &t)
+  auto operator+(types::array_base<T, N, V> const &lt, std::tuple<Types...> const &t)
       -> decltype(std::tuple_cat(lt.to_tuple(), t))
   {
     return std::tuple_cat(lt.to_tuple(), t);
   }
 
   template <class T, size_t N>
-  dynamic_tuple<T> array_base_slicer::operator()(array_tuple<T, N> const &b,
-                                                 slice const &s)
+  dynamic_tuple<T> array_base_slicer::operator()(array_tuple<T, N> const &b, slice const &s)
   {
     normalized_slice ns = s.normalize(b.size());
     array_tuple<T, N> tmp;
@@ -450,22 +422,18 @@ namespace
   }
 
   template <size_t index, class... types>
-  size_t
-  hash_impl<index, types...>::operator()(size_t a,
-                                         const std::tuple<types...> &t) const
+  size_t hash_impl<index, types...>::operator()(size_t a, const std::tuple<types...> &t) const
   {
-    using nexttype =
-        typename std::tuple_element<index, std::tuple<types...>>::type;
+    using nexttype = std::tuple_element_t<index, std::tuple<types...>>;
     hash_impl<index - 1, types...> next;
     size_t b = std::hash<nexttype>()(std::get<index>(t));
     return next(hash_combiner(a, b), t);
   }
 
   template <class... types>
-  size_t hash_impl<0, types...>::operator()(size_t a,
-                                            const std::tuple<types...> &t) const
+  size_t hash_impl<0, types...>::operator()(size_t a, const std::tuple<types...> &t) const
   {
-    using nexttype = typename std::tuple_element<0, std::tuple<types...>>::type;
+    using nexttype = std::tuple_element_t<0, std::tuple<types...>>;
     size_t b = std::hash<nexttype>()(std::get<0>(t));
     return hash_combiner(a, b);
   }
@@ -475,8 +443,7 @@ namespace
 namespace std
 {
   template <class... Types>
-  size_t
-  hash<std::tuple<Types...>>::operator()(std::tuple<Types...> const &t) const
+  size_t hash<std::tuple<Types...>>::operator()(std::tuple<Types...> const &t) const
   {
     const size_t begin = std::tuple_size<std::tuple<Types...>>::value - 1;
     return hash_impl<begin, Types...>()(1, t); // 1 should be some largervalue
@@ -519,8 +486,7 @@ namespace std
   ostream &operator<<(ostream &os, tuple<Args...> const &t)
   {
     os << '(';
-    pythonic::types::print_tuple(os, t,
-                                 pythonic::utils::int_<sizeof...(Args) - 1>());
+    pythonic::types::print_tuple(os, t, pythonic::utils::int_<sizeof...(Args) - 1>());
     return os << ')';
   }
 } // namespace std
@@ -532,6 +498,11 @@ namespace std
 
 PYTHONIC_NS_BEGIN
 
+#ifdef Py_LIMITED_API
+#define PyTuple_SET_ITEM PyTuple_SetItem
+#define PyList_SET_ITEM PyList_SetItem
+#endif
+
 template <typename K, typename V>
 PyObject *to_python<std::pair<K, V>>::convert(std::pair<K, V> const &t)
 {
@@ -542,8 +513,7 @@ PyObject *to_python<std::pair<K, V>>::convert(std::pair<K, V> const &t)
 }
 
 template <typename... Tys>
-PyObject *
-to_python<types::pshape<Tys...>>::convert(types::pshape<Tys...> const &t)
+PyObject *to_python<types::pshape<Tys...>>::convert(types::pshape<Tys...> const &t)
 {
   return ::to_python(t.array());
 }
@@ -552,7 +522,7 @@ template <typename... Types>
 template <size_t... S>
 PyObject *to_python<std::tuple<Types...>>::
 
-    do_convert(std::tuple<Types...> const &t, utils::index_sequence<S...>)
+    do_convert(std::tuple<Types...> const &t, std::index_sequence<S...>)
 {
   PyObject *out = PyTuple_New(sizeof...(Types));
   (void)std::initializer_list<bool>{
@@ -561,16 +531,15 @@ PyObject *to_python<std::tuple<Types...>>::
 }
 
 template <typename... Types>
-PyObject *
-to_python<std::tuple<Types...>>::convert(std::tuple<Types...> const &t)
+PyObject *to_python<std::tuple<Types...>>::convert(std::tuple<Types...> const &t)
 {
-  return do_convert(t, utils::make_index_sequence<sizeof...(Types)>());
+  return do_convert(t, std::make_index_sequence<sizeof...(Types)>());
 }
 
 template <typename T, size_t N>
 template <size_t... S>
-PyObject *to_python<types::array_tuple<T, N>>::do_convert(
-    types::array_tuple<T, N> const &t, utils::index_sequence<S...>)
+PyObject *to_python<types::array_tuple<T, N>>::do_convert(types::array_tuple<T, N> const &t,
+                                                          std::index_sequence<S...>)
 {
   PyObject *out = PyTuple_New(N);
   (void)std::initializer_list<bool>{
@@ -580,8 +549,8 @@ PyObject *to_python<types::array_tuple<T, N>>::do_convert(
 
 template <typename T, size_t N>
 template <size_t... S>
-PyObject *to_python<types::static_list<T, N>>::do_convert(
-    types::static_list<T, N> const &t, utils::index_sequence<S...>)
+PyObject *to_python<types::static_list<T, N>>::do_convert(types::static_list<T, N> const &t,
+                                                          std::index_sequence<S...>)
 {
   PyObject *out = PyList_New(N);
   (void)std::initializer_list<bool>{
@@ -590,40 +559,44 @@ PyObject *to_python<types::static_list<T, N>>::do_convert(
 }
 
 template <typename T, size_t N>
-PyObject *
-to_python<types::array_tuple<T, N>>::convert(types::array_tuple<T, N> const &t)
+PyObject *to_python<types::array_tuple<T, N>>::convert(types::array_tuple<T, N> const &t)
 {
-  return do_convert(t, utils::make_index_sequence<N>());
+  return do_convert(t, std::make_index_sequence<N>());
 }
 
 template <typename T, size_t N>
-PyObject *
-to_python<types::static_list<T, N>>::convert(types::static_list<T, N> const &t)
+PyObject *to_python<types::static_list<T, N>>::convert(types::static_list<T, N> const &t)
 {
-  return do_convert(t, utils::make_index_sequence<N>());
+  return do_convert(t, std::make_index_sequence<N>());
 }
 
 template <typename... Types>
 template <size_t... S>
 bool from_python<std::tuple<Types...>>
 
-    ::do_is_convertible(PyObject *obj, typename utils::index_sequence<S...>)
+    ::do_is_convertible(PyObject *obj, typename std::index_sequence<S...>)
 {
-  bool checks[] = {::is_convertible<
-      typename std::tuple_element<S, std::tuple<Types...>>::type>(
-      PyTuple_GET_ITEM(obj, S))...};
-  return std::find(std::begin(checks), std::end(checks), false) ==
-         std::end(checks);
+  bool checks[] = {::is_convertible<std::tuple_element_t<S, std::tuple<Types...>>>(
+#ifdef Py_LIMITED_API
+      PyTuple_GetItem(obj, S)
+#else
+      PyTuple_GET_ITEM(obj, S)
+#endif
+          )...};
+  return std::find(std::begin(checks), std::end(checks), false) == std::end(checks);
 }
 
 template <typename... Types>
 bool from_python<std::tuple<Types...>>::is_convertible(PyObject *obj)
 {
   if (PyTuple_Check(obj)) {
+#ifdef Py_LIMITED_API
+    auto n = PyTuple_Size(obj);
+#else
     auto n = PyTuple_GET_SIZE(obj);
+#endif
     if (n == sizeof...(Types)) {
-      return do_is_convertible(obj,
-                               utils::make_index_sequence<sizeof...(Types)>());
+      return do_is_convertible(obj, std::make_index_sequence<sizeof...(Types)>());
     }
   }
   return false;
@@ -631,17 +604,21 @@ bool from_python<std::tuple<Types...>>::is_convertible(PyObject *obj)
 
 template <typename... Types>
 template <size_t... S>
-std::tuple<Types...> from_python<std::tuple<Types...>>::do_convert(
-    PyObject *obj, typename utils::index_sequence<S...>)
+std::tuple<Types...>
+from_python<std::tuple<Types...>>::do_convert(PyObject *obj, typename std::index_sequence<S...>)
 {
-  return std::tuple<Types...>{
-      ::from_python<typename std::tuple_element<S, std::tuple<Types...>>::type>(
-          PyTuple_GET_ITEM(obj, S))...};
+  return std::tuple<Types...>{::from_python<std::tuple_element_t<S, std::tuple<Types...>>>(
+#ifdef Py_LIMITED_API
+      PyTuple_GetItem(obj, S)
+#else
+      PyTuple_GET_ITEM(obj, S)
+#endif
+          )...};
 }
 template <typename... Types>
 std::tuple<Types...> from_python<std::tuple<Types...>>::convert(PyObject *obj)
 {
-  return do_convert(obj, utils::make_index_sequence<sizeof...(Types)>());
+  return do_convert(obj, std::make_index_sequence<sizeof...(Types)>());
 }
 
 template <typename T, size_t N>
@@ -650,9 +627,19 @@ bool from_python<types::array_tuple<T, N>>::
     is_convertible(PyObject *obj)
 {
   if (PyTuple_Check(obj)) {
+#ifdef Py_LIMITED_API
+    auto n = PyTuple_Size(obj);
+#else
     auto n = PyTuple_GET_SIZE(obj);
+#endif
     if (n == N) {
-      return ::is_convertible<T>(PyTuple_GET_ITEM(obj, 0));
+      return ::is_convertible<T>(
+#ifdef Py_LIMITED_API
+          PyTuple_GetItem(obj, 0)
+#else
+          PyTuple_GET_ITEM(obj, 0)
+#endif
+      );
     }
   }
   return false;
@@ -660,18 +647,29 @@ bool from_python<types::array_tuple<T, N>>::
 
 template <typename T, size_t N>
 template <size_t... S>
-types::array_tuple<T, N> from_python<types::array_tuple<T, N>>::do_convert(
-    PyObject *obj, typename utils::index_sequence<S...>)
+types::array_tuple<T, N>
+from_python<types::array_tuple<T, N>>::do_convert(PyObject *obj, typename std::index_sequence<S...>)
 {
-  return {::from_python<T>(PyTuple_GET_ITEM(obj, S))...};
+  return {::from_python<T>(
+#ifdef Py_LIMITED_API
+      PyTuple_GetItem(obj, S)
+#else
+      PyTuple_GET_ITEM(obj, S)
+#endif
+          )...};
 }
 template <typename T, size_t N>
 types::array_tuple<T, N> from_python<types::array_tuple<T, N>>::
 
     convert(PyObject *obj)
 {
-  return do_convert(obj, utils::make_index_sequence<N>());
+  return do_convert(obj, std::make_index_sequence<N>());
 }
+
+#ifdef Py_LIMITED_API
+#undef PyTuple_SET_ITEM
+#undef PyList_SET_ITEM
+#endif
 PYTHONIC_NS_END
 #endif
 

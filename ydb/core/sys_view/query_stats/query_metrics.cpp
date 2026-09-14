@@ -2,6 +2,7 @@
 
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/processor_scan.h>
+#include <ydb/core/sys_view/common/registry.h>
 
 namespace NKikimr::NSysView {
 
@@ -58,10 +59,18 @@ struct TQueryMetricsExtractorsMap :
         ADD_METRICS(DeleteRows, DeleteRows);
         ADD_METRICS(RequestUnits, RequestUnits);
 #undef ADD_METRICS
+
+        insert({S::LocksBrokenAsBreaker::ColumnId, [] (const E& entry) {
+            return TCell::Make<ui64>(entry.GetMetrics().GetLocksBrokenAsBreaker());
+        }});
+        insert({S::LocksBrokenAsVictim::ColumnId, [] (const E& entry) {
+            return TCell::Make<ui64>(entry.GetMetrics().GetLocksBrokenAsVictim());
+        }});
     }
 };
 
-THolder<NActors::IActor> CreateQueryMetricsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateQueryMetricsScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
     using TQueryMetricsScan = TProcessorScan<
@@ -75,7 +84,7 @@ THolder<NActors::IActor> CreateQueryMetricsScan(const NActors::TActorId& ownerId
         ui32
     >;
 
-    return MakeHolder<TQueryMetricsScan>(ownerId, scanId, tableId, tableRange, columns,
+    return MakeHolder<TQueryMetricsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
         NKikimrSysView::METRICS_ONE_MINUTE);
 }
 

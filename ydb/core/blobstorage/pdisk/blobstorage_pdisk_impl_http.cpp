@@ -80,14 +80,30 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                         }
                     }
                 }
+                TABLER() {
+                    TABLED() {str << "PlainDataChunks";}
+                    TABLED() {
+                        if (Format.IsPlainDataChunks()) {
+                            GREEN_TEXT(str, "Plain data chunks are in use");
+                            if (!Cfg->PlainDataChunks) {
+                                YELLOW_TEXT(str, "notice: config is set for encrypted chunks");
+                            }
+                        } else {
+                            GREEN_TEXT(str, "Encrypted data chunks are in use");
+                            if (Cfg->PlainDataChunks) {
+                                YELLOW_TEXT(str, "notice: config is set for plain chunks");
+                            }
+                        }
+                    }
+                }
             }
         }
         TAG(TH4) {str << "State description"; }
         if (Cfg->SectorMap) {
             PARA() {str << "Note - this is SectorMap device<br>"; }
         }
-        if (!Cfg->EnableSectorEncryption) {
-            PARA() {str << "Note - PDisk sector enctyption is disabled<br>"; }
+        if (!Cfg->FeatureFlags.GetEnablePDiskDataEncryption()) {
+            PARA() {str << "Note - PDisk sector encryption is disabled<br>"; }
         }
         PARA() {str << httpInfo.ErrorStr; }
         TAG(TH4) {str << "Uptime"; }
@@ -114,7 +130,7 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                     function toggleButtonColor() {
                         var checkbox = document.getElementById("ignoreChecks");
                         var okButton = document.getElementById("restartOkButton");
-                        
+
                         if (checkbox.checked) {
                             okButton.classList.remove("btn-primary");
                             okButton.classList.add("btn-danger");
@@ -151,7 +167,7 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
             )___";
 
             str << R"___(
-                <button type="button" class="btn btn-default" style="background: LightGray; margin: 5px" 
+                <button type="button" class="btn btn-default" style="background: LightGray; margin: 5px"
                         data-toggle="modal" data-target="#restartModal">
                     Restart
                 </button>
@@ -286,6 +302,7 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                 TABLER() {
                     TABLEH() { str << "OwnerId";}
                     TABLEH() { str << "VDiskId"; }
+                    TABLEH() { str << "GroupSizeInUnits"; }
                     TABLEH() { str << "ChunksOwned"; }
                     TABLEH() { str << "CutLogId"; }
                     TABLEH() { str << "WhiteboardProxyId"; }
@@ -306,6 +323,7 @@ void TPDisk::OutputHtmlOwners(TStringStream &str) {
                         TABLER() {
                             TABLED() { str << (ui32) owner;}
                             TABLED() { str << data.VDiskId.ToStringWOGeneration() << "<br/>(" << data.VDiskId.GroupID << ")"; }
+                            TABLED() { str << data.GroupSizeInUnits; }
                             TABLED() { str << chunksOwned[owner]; }
                             TABLED() { str << data.CutLogId.ToString(); }
                             TABLED() { str << data.WhiteboardProxyId; }

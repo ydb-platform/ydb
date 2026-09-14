@@ -3,6 +3,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 using namespace NKikimr;
 
 /////////////////////////////////////////////////////////////////////////////////////////////
@@ -27,7 +29,7 @@ protected:
         TSyncRunner::TReturnValue ret;
         ret = SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &dataSet,
                               PDiskPutStatusHandlerDefault, 100));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
+        YDB_LOG_NOTICE_CTX(ctx, "Data is loaded");
     }
 
 public:

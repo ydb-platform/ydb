@@ -1,0 +1,9 @@
+RECURSE(
+    common
+    diagnostics
+    kikimr
+    service
+    storage
+    throttling
+    vhost
+)

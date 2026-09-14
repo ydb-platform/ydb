@@ -424,8 +424,8 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         auto observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
             NSharedCache::TEvRequest *msg = ev->Get();
             Cerr << "Captured pages request" << Endl;
-            for (auto pageId : msg->Fetch->Pages) {
-                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+            for (auto pageId : msg->Pages) {
+                auto type = NTable::NPage::EPage(msg->PageCollection->Page(pageId).Type);
                 UNIT_ASSERT_C(type != NTable::EPage::BTreeIndex && type != NTable::EPage::FlatIndex, "Index pages should be preload during a part switch");
             }
         });
@@ -503,8 +503,8 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         TVector<THolder<IEventHandle>> blockedReads;
         auto observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
             NSharedCache::TEvRequest *msg = ev->Get();
-            for (auto pageId : msg->Fetch->Pages) {
-                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+            for (auto pageId : msg->Pages) {
+                auto type = NTable::NPage::EPage(msg->PageCollection->Page(pageId).Type);
                 if (type == NTable::NPage::EPage::Schem2) {
                     Cerr << "... blocking part load read" << Endl;
                     blockedReads.emplace_back(ev.Release());
@@ -545,8 +545,8 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         ui32 readDataPages = 0;
         observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
             NSharedCache::TEvRequest *msg = ev->Get();
-            for (auto pageId : msg->Fetch->Pages) {
-                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+            for (auto pageId : msg->Pages) {
+                auto type = NTable::NPage::EPage(msg->PageCollection->Page(pageId).Type);
                 readDataPages += type == NTable::NPage::EPage::DataPage;
             }
         });
@@ -632,8 +632,8 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         TVector<THolder<IEventHandle>> blockedReads;
         auto observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
             NSharedCache::TEvRequest *msg = ev->Get();
-            for (auto pageId : msg->Fetch->Pages) {
-                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+            for (auto pageId : msg->Pages) {
+                auto type = NTable::NPage::EPage(msg->PageCollection->Page(pageId).Type);
                 if (type == NTable::NPage::EPage::Schem2) {
                     Cerr << "... blocking part load read" << Endl;
                     blockedReads.emplace_back(ev.Release());
@@ -673,8 +673,8 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
         ui32 readDataPages = 0;
         observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
             NSharedCache::TEvRequest *msg = ev->Get();
-            for (auto pageId : msg->Fetch->Pages) {
-                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+            for (auto pageId : msg->Pages) {
+                auto type = NTable::NPage::EPage(msg->PageCollection->Page(pageId).Type);
                 readDataPages += type == NTable::NPage::EPage::DataPage;
             }
         });
@@ -703,8 +703,8 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         observer = runtime.AddObserver<NSharedCache::TEvRequest>([&](NSharedCache::TEvRequest::TPtr& ev) {
             NSharedCache::TEvRequest *msg = ev->Get();
-            for (auto pageId : msg->Fetch->Pages) {
-                auto type = NTable::NPage::EPage(msg->Fetch->PageCollection->Page(pageId).Type);
+            for (auto pageId : msg->Pages) {
+                auto type = NTable::NPage::EPage(msg->PageCollection->Page(pageId).Type);
                 UNIT_ASSERT_C(type != NTable::NPage::EPage::DataPage, "Shouldn't read any data");
             }
         });

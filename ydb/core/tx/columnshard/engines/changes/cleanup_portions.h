@@ -2,6 +2,8 @@
 #include "abstract/abstract.h"
 #include "abstract/remove_portions.h"
 
+#include <ydb/core/tx/columnshard/common/path_id.h>
+
 namespace NKikimr::NOlap {
 
 class TCleanupPortionsColumnEngineChanges: public TColumnEngineChanges,
@@ -11,7 +13,8 @@ private:
     THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;
     std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
     TRemovePortionsChange PortionsToRemove;
-    THashSet<ui64> TablesToDrop;
+    THashSet<TInternalPathId> TablesToDrop;
+    TSnapshot MinSnapshotForNewReads = TSnapshot::Zero();
 
 protected:
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
@@ -23,21 +26,28 @@ protected:
     virtual void DoStart(NColumnShard::TColumnShard& self) override;
     virtual void DoOnFinish(NColumnShard::TColumnShard& self, TChangesFinishContext& context) override;
     virtual void DoDebugString(TStringOutput& out) const override;
+
     virtual void DoCompile(TFinalizationContext& /*context*/) override {
     }
+
     virtual TConclusionStatus DoConstructBlobs(TConstructionContext& /*context*/) noexcept override {
         return TConclusionStatus::Success();
     }
+
     virtual bool NeedConstruction() const override {
         return false;
     }
+
     virtual NColumnShard::ECumulativeCounters GetCounterIndex(const bool isSuccess) const override;
+
     virtual ui64 DoCalcMemoryForUsage() const override {
         return 0;
     }
+
     virtual NDataLocks::ELockCategory GetLockCategory() const override {
         return NDataLocks::ELockCategory::Cleanup;
     }
+
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLock() const override {
         auto portionsDropLock = std::make_shared<NDataLocks::TListPortionsLock>(
             TypeString() + "::PORTIONS_DROP::" + GetTaskIdentifier(), PortionsToDrop, NDataLocks::ELockCategory::Cleanup);
@@ -50,10 +60,11 @@ protected:
 
 public:
     TCleanupPortionsColumnEngineChanges(const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS) {
+        : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS)
+    {
     }
 
-    void AddTableToDrop(const ui64 pathId) {
+    void AddTableToDrop(const TInternalPathId pathId) {
         TablesToDrop.emplace(pathId);
     }
 
@@ -61,22 +72,28 @@ public:
         return PortionsToDrop;
     }
 
+    void SetMinSnapshotForNewReads(const TSnapshot& snapshot) {
+        MinSnapshotForNewReads = snapshot;
+    }
+
     void AddPortionToDrop(const TPortionInfo::TConstPtr& portion) {
         PortionsToDrop.emplace_back(portion);
-        PortionsToAccess->AddPortion(portion);
+        PortionsToAccess.emplace_back(portion);
     }
 
     void AddPortionToRemove(const TPortionInfo::TConstPtr& portion) {
         PortionsToRemove.AddPortion(portion);
-        PortionsToAccess->AddPortion(portion);
+        PortionsToAccess.emplace_back(portion);
     }
 
     virtual ui32 GetWritePortionsCount() const override {
         return 0;
     }
+
     virtual TWritePortionInfoWithBlobsResult* GetWritePortionInfo(const ui32 /*index*/) override {
         return nullptr;
     }
+
     virtual bool NeedWritePortion(const ui32 /*index*/) const override {
         return false;
     }

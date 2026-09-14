@@ -61,7 +61,7 @@ AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1) == 1);
 AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2) == 2);
 AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2, 3) == 3);
 
-#define AWS_CACHE_LINE 64
+enum { AWS_CACHE_LINE = 64 };
 /**
  * Format macro for strings of a specified length.
  * Allows non null-terminated strings to be used with the printf family of functions.
@@ -114,6 +114,20 @@ AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2, 3) == 3);
 #endif
 
 #if defined(__has_feature)
+#    if __has_feature(hwaddress_sanitizer)
+#        define AWS_SUPPRESS_HWASAN __attribute__((no_sanitize("hwaddress")))
+#    endif
+#elif defined(__SANITIZE_HWADDRESS__)
+#    if defined(__GNUC__)
+#        define AWS_SUPPRESS_HWASAN __attribute__((no_sanitize("hwaddress")))
+#    endif
+#endif
+
+#if !defined(AWS_SUPPRESS_HWASAN)
+#    define AWS_SUPPRESS_HWASAN
+#endif
+
+#if defined(__has_feature)
 #    if __has_feature(thread_sanitizer)
 #        define AWS_SUPPRESS_TSAN __attribute__((no_sanitize("thread")))
 #    endif
@@ -129,6 +143,33 @@ AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2, 3) == 3);
 
 #if !defined(AWS_SUPPRESS_TSAN)
 #    define AWS_SUPPRESS_TSAN
+#endif
+
+#if defined(__has_feature)
+#    if __has_feature(undefined_behavior_sanitizer)
+#        define AWS_SUPPRESS_UBSAN __attribute__((no_sanitize("undefined")))
+#    endif
+#elif defined(__SANITIZE_UNDEFINED__)
+#    if defined(__GNUC__)
+#        define AWS_SUPPRESS_UBSAN __attribute__((no_sanitize_undefined))
+#    else
+#        define AWS_SUPPRESS_UBSAN
+#    endif
+#else
+#    define AWS_SUPPRESS_UBSAN
+#endif
+
+#if !defined(AWS_SUPPRESS_UBSAN)
+#    define AWS_SUPPRESS_UBSAN
+#endif
+
+#if defined(__has_feature)
+#    if __has_feature(memory_sanitizer)
+#        define AWS_SUPPRESS_MSAN __attribute__((no_sanitize("memory")))
+#    endif
+#endif
+#if !defined(AWS_SUPPRESS_MSAN)
+#    define AWS_SUPPRESS_MSAN
 #endif
 
 /* If this is C++, restrict isn't supported. If this is not at least C99 on gcc and clang, it isn't supported.
@@ -160,6 +201,6 @@ AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2, 3) == 3);
  * this will get you back to the pointer of the object. member is the name of
  * the instance of struct aws_linked_list_node in your struct.
  */
-#define AWS_CONTAINER_OF(ptr, type, member) ((type *)((uint8_t *)(ptr)-offsetof(type, member)))
+#define AWS_CONTAINER_OF(ptr, type, member) ((type *)((uint8_t *)(ptr) - offsetof(type, member)))
 
 #endif /* AWS_COMMON_MACROS_H */

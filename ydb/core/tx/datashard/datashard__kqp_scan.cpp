@@ -12,6 +12,8 @@
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -30,7 +32,7 @@ constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
 class TKqpScanResult : public IDestructable {};
 
-class TKqpScan : public TActor<TKqpScan>, public NTable::IScan {
+class TKqpScan : public TActor<TKqpScan>, public IActorExceptionHandler, public NTable::IScan {
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_TABLE_SCAN;
@@ -78,8 +80,8 @@ public:
         }
 
         for (auto& range : TableRanges) {
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "--> Scan range: "
-                << DebugPrintRange(TableInfo->KeyColumnTypes, range.ToTableRange(), *AppData()->TypeRegistry));
+            YDB_LOG_TRACE("--> Scan range",
+                {"range", DebugPrintRange(TableInfo->KeyColumnTypes, range.ToTableRange(), *AppData()->TypeRegistry)});
         }
     }
 
@@ -92,21 +94,26 @@ private:
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
             default:
-                Y_ABORT("TKqpScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                Y_ENSURE(false, "TKqpScan: unexpected event " << Hex(ev->GetTypeRewrite()));
         }
     }
 
     void HandleScan(TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
         if (!Driver) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got ScanDataAck while driver not set");
+            YDB_LOG_ERROR("Got ScanDataAck while driver not set");
             PassAway();
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got ScanDataAck"
-            << ", at: " << ScanActorId << ", scanId: " << ScanId << ", table: " << TablePath
-            << ", gen: " << ev->Get()->Generation << ", tablet: " << DatashardActorId
-            << ", freeSpace: " << ev->Get()->FreeSpace << ";" << ChunksLimiter.DebugString());
+        YDB_LOG_DEBUG("Got ScanDataAck",
+            {"at", ScanActorId},
+            {"scanId", ScanId},
+            {"table", TablePath},
+            {"gen", ev->Get()->Generation},
+            {"tabletId", TabletId},
+            {"datashardActorId", DatashardActorId},
+            {"freeSpace", ev->Get()->FreeSpace},
+            {"chunksLimiter", ChunksLimiter.DebugString()});
 
         YQL_ENSURE(ev->Get()->Generation == Generation, "expected: " << Generation << ", got: " << ev->Get()->Generation);
 
@@ -121,20 +128,22 @@ private:
             }
             if (Sleep) {
                 Sleep = false;
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Wakeup driver at: " << ScanActorId);
+                YDB_LOG_DEBUG("Wakeup driver",
+                    {"at", ScanActorId});
                 Driver->Touch(EScan::Feed);
             }
         }
     }
 
     void HandleScan(TEvKqpCompute::TEvKillScanTablet::TPtr&) {
-        LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Kill self tablet " << DatashardActorId);
+        YDB_LOG_CRIT("Kill self tablet",
+            {"datashardActorId", DatashardActorId});
         Send(DatashardActorId, new TEvents::TEvPoison);
     }
 
     void HandleScan(TEvKqp::TEvAbortExecution::TPtr& ev) {
         if (!Driver) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got AbortExecution while driver not set");
+            YDB_LOG_ERROR("Got AbortExecution while driver not set");
             PassAway();
             return;
         }
@@ -142,11 +151,14 @@ private:
         auto& msg = ev->Get()->Record;
 
         auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
-        LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Got AbortExecution"
-            << ", at: " << ScanActorId << ", tablet: " << DatashardActorId
-            << ", scanId: " << ScanId << ", table: " << TablePath
-            << ", code: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-            << ", reason: " << ev->Get()->GetIssues().ToOneLineString());
+        YDB_LOG(prio, "Got AbortExecution",
+            {"at", ScanActorId},
+            {"tabletId", TabletId},
+            {"datashardActorId", DatashardActorId},
+            {"scanId", ScanId},
+            {"table", TablePath},
+            {"code", NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())},
+            {"reason", ev->Get()->GetIssues().ToOneLineString()});
 
         AbortEvent = ev->Release();
         Driver->Touch(EScan::Final);
@@ -158,9 +170,13 @@ private:
             return;
         }
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Undelivered event: " << ev->GetTypeRewrite()
-            << ", at: " << ScanActorId << ", tablet: " << DatashardActorId
-            << ", scanId: " << ScanId << ", table: " << TablePath);
+        YDB_LOG_ERROR("Undelivered",
+            {"event", ev->GetTypeRewrite()},
+            {"at", ScanActorId},
+            {"tabletId", TabletId},
+            {"datashardActorId", DatashardActorId},
+            {"scanId", ScanId},
+            {"table", TablePath});
 
         switch (ev->GetTypeRewrite()) {
             case TEvKqpCompute::TEvScanInitActor::EventType:
@@ -170,8 +186,10 @@ private:
     }
 
     void HandleScan(TEvents::TEvWakeup::TPtr&) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Guard execution timeout at: " << ScanActorId
-            << ", scanId: " << ScanId << ", table: " << TablePath);
+        YDB_LOG_ERROR("Guard execution timeout",
+            {"at", ScanActorId},
+            {"scanId", ScanId},
+            {"table", TablePath});
 
         TimeoutActorId = {};
 
@@ -183,9 +201,9 @@ private:
     }
 
 private:
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept final {
-        Y_ABORT_UNLESS(scheme);
-        Y_ABORT_UNLESS(driver);
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) final {
+        Y_ENSURE(scheme);
+        Y_ENSURE(driver);
 
         Driver = driver;
         ScanActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
@@ -208,22 +226,26 @@ private:
             StartWaitTime = TInstant::Now();
         }
 
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Start scan"
-            << ", at: " << ScanActorId << ", tablet: " << DatashardActorId
-            << ", scanId: " << ScanId << ", table: " << TablePath << ", gen: " << Generation
-            << ", deadline: " << Deadline);
+        YDB_LOG_INFO("Start scan",
+            {"at", ScanActorId},
+            {"tabletId", TabletId},
+            {"datashardActorId", DatashardActorId},
+            {"scanId", ScanId},
+            {"table", TablePath},
+            {"gen", Generation},
+            {"deadline", Deadline});
 
         return startConfig;
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept final {
+    EScan Seek(TLead& lead, ui64 seq) final {
         YQL_ENSURE(seq == CurrentRange);
 
         if (CurrentRange == TableRanges.size()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                "TableRanges is over"
-                << ", at: " << ScanActorId << ", scanId: " << ScanId
-                << ", table: " << TablePath);
+            YDB_LOG_DEBUG("TableRanges is over",
+                {"at", ScanActorId},
+                {"scanId", ScanId},
+                {"table", TablePath});
             return EScan::Final;
         }
 
@@ -259,10 +281,10 @@ private:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         LastKey = TOwnedCellVec(key);
 
-        Y_ABORT_UNLESS(SkipNullKeys.size() <= key.size());
+        Y_ENSURE(SkipNullKeys.size() <= key.size());
         for (ui32 i = 0; i < SkipNullKeys.size(); ++i) {
             if (SkipNullKeys[i] && key[i].IsNull()) {
                 return EScan::Feed;
@@ -298,23 +320,19 @@ private:
         return EScan::Feed; // sent by rows limit, can send one more batch
     }
 
-    EScan Exhausted() noexcept override {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-            "Range " << CurrentRange << " of " << TableRanges.size() << " exhausted: try next one."
-            << " table: " << TablePath
-            << " range: " << DebugPrintRange(
-                TableInfo->KeyColumnTypes, TableRanges[CurrentRange].ToTableRange(), *AppData()->TypeRegistry
-                )
-            << " next range: " << ((CurrentRange + 1) >= TableRanges.size() ? "<none>" : DebugPrintRange(
-                TableInfo->KeyColumnTypes, TableRanges[CurrentRange + 1].ToTableRange(), *AppData()->TypeRegistry
-                ))
-        );
+    EScan Exhausted() override {
+        YDB_LOG_DEBUG("Range exhausted: try next one",
+            {"currentRange", CurrentRange},
+            {"tableRangesCount", TableRanges.size()},
+            {"table", TablePath},
+            {"range", DebugPrintRange(                 TableInfo->KeyColumnTypes, TableRanges[CurrentRange].ToTableRange(), *AppData()->TypeRegistry                 )},
+            {"nextRange", ((CurrentRange + 1) >= TableRanges.size() ? "<none>" : DebugPrintRange(                 TableInfo->KeyColumnTypes, TableRanges[CurrentRange + 1].ToTableRange(), *AppData()->TypeRegistry                 ))});
 
         ++CurrentRange;
         return EScan::Reset;
     }
 
-    EScan PageFault() noexcept override final {
+    EScan PageFault() override final {
         ++PageFaults;
         if (Result && !Result->Rows.empty()) {
             bool sent = SendResult(/* pageFault */ true);
@@ -332,14 +350,16 @@ private:
     }
 
 private:
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
-        auto prio = abort == EAbort::None ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
-        LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Finish scan"
-            << ", at: " << ScanActorId << ", scanId: " << ScanId
-            << ", table: " << TablePath << ", reason: " << (int) abort
-            << ", abortEvent: " << (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>")));
+    TAutoPtr<IDestructable> Finish(EStatus status) final {
+        auto prio = status == EStatus::Done ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
+        YDB_LOG(prio, "Finish scan",
+            {"at", ScanActorId},
+            {"scanId", ScanId},
+            {"table", TablePath},
+            {"reason", status},
+            {"abortEvent", (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>"))});
 
-        if (abort != EAbort::None || AbortEvent) {
+        if (status != EStatus::Done || AbortEvent) {
             auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(Generation, TabletId);
 
             if (AbortEvent) {
@@ -351,9 +371,13 @@ private:
                 }
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             } else {
-                ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
-                auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED, TStringBuilder()
-                    << "Table " << TablePath << " scan failed, reason: " << ToString((int) abort));
+                ev->Record.SetStatus(status == NTable::EStatus::Exception
+                    ? Ydb::StatusIds::INTERNAL_ERROR
+                    : Ydb::StatusIds::ABORTED);
+                TStringBuilder error;
+                auto issueId = status == NTable::EStatus::Exception ? NYql::TIssuesIds::DEFAULT_ERROR : NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED;
+                auto issue = NYql::YqlIssue({}, issueId, TStringBuilder()
+                    << "Table " << TablePath << " scan failed, reason: " << status);
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             }
 
@@ -378,7 +402,15 @@ private:
         return new TKqpScanResult();
     }
 
-    void Describe(IOutputStream& out) const noexcept final {
+    bool OnUnhandledException(const std::exception& exc) final {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
+    }
+
+    void Describe(IOutputStream& out) const final {
         out << "TExecuteKqpScanTxUnit, TKqpScan";
     }
 
@@ -422,7 +454,7 @@ private:
         }
     }
 
-    bool SendResult(bool pageFault, bool finish = false) noexcept {
+    bool SendResult(bool pageFault, bool finish = false) {
         if (Rows >= MAX_BATCH_ROWS || CellvecBytes >= ChunksLimiter.GetRemainedBytes() ||
             (pageFault && (Rows >= MIN_BATCH_ROWS_ON_PAGEFAULT || CellvecBytes >= MIN_BATCH_SIZE_ON_PAGEFAULT)) || finish)
         {
@@ -446,25 +478,30 @@ private:
 
             PageFaults = 0;
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Send ScanData"
-                << ", from: " << ScanActorId << ", to: " << ComputeActorId
-                << ", scanId: " << ScanId << ", table: " << TablePath
-                << ", bytes: " << sendBytes << ", rows: " << Rows << ", page faults: " << Result->PageFaults
-                << ", finished: " << Result->Finished << ", pageFault: " << Result->PageFault);
+            YDB_LOG_DEBUG("Send ScanData",
+                {"from", ScanActorId},
+                {"to", ComputeActorId},
+                {"scanId", ScanId},
+                {"table", TablePath},
+                {"bytes", sendBytes},
+                {"rows", Rows},
+                {"pageFaults", Result->PageFaults},
+                {"finished", Result->Finished},
+                {"pageFault", Result->PageFault});
 
             if (sendBytes >= 48_MB) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Query size limit exceeded.");
+                YDB_LOG_ERROR("Query size limit exceeded");
                 if (finish) {
                     bool sent = Send(ComputeActorId, new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
-                    Y_ABORT_UNLESS(sent);
+                    Y_ENSURE(sent);
 
                     ReportDatashardStats();
                     return true;
                 } else {
                     bool sent = Send(SelfId(), new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
-                    Y_ABORT_UNLESS(sent);
+                    Y_ENSURE(sent);
 
                     ReportDatashardStats();
                     return false;
@@ -472,7 +509,7 @@ private:
             }
 
             if (!finish) {
-                Y_ABORT_UNLESS(ChunksLimiter.Take(sendBytes));
+                Y_ENSURE(ChunksLimiter.Take(sendBytes));
                 Result->RequestedBytesLimitReached = !ChunksLimiter.HasMore();
             }
 
@@ -579,18 +616,18 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
     auto infoIt = TableInfos.find(request.GetLocalPathId());
 
-    auto reportError = [this, scanComputeActor, generation] (const TString& table, const TString& detailedReason) {
+    auto reportError = [this, scanComputeActor, generation] (const NYql::TIssuesIds_EIssueCode issueCode, const TString& detailedReason) {
         auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation, TabletID());
         ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
-        auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() <<
-            "Table '" << table << "' scheme changed.");
+        auto issue = NYql::YqlIssue({}, issueCode, detailedReason);
         IssueToMessage(issue, ev->Record.MutableIssues()->Add());
         Send(scanComputeActor, ev.Release(), IEventHandle::FlagTrackDelivery);
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, detailedReason);
+        YDB_LOG_ERROR("Error",
+            {"detailedReason", detailedReason});
     };
 
     if (infoIt == TableInfos.end()) {
-        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+        reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Can not find table '" << request.GetTablePath() << "'"
             << " by LocalPathId " << request.GetLocalPathId() << " at " << TabletID());
         return;
@@ -598,12 +635,12 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
     auto tableInfo = infoIt->second; // copy table info ptr here
     auto& tableColumns = tableInfo->Columns;
-    Y_ABORT_UNLESS(request.GetColumnTags().size() == request.GetColumnTypes().size());
+    Y_ENSURE(request.GetColumnTags().size() == request.GetColumnTypes().size());
 
     if (tableInfo->GetTableSchemaVersion() != 0 &&
         request.GetSchemaVersion() != tableInfo->GetTableSchemaVersion())
     {
-        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+        reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Table '" << request.GetTablePath() << "'"
             << " schema version changed at " << TabletID());
         return;
@@ -612,7 +649,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
     for (int i = 0; i < request.GetColumnTags().size(); ++i) {
         auto* column = tableColumns.FindPtr(request.GetColumnTags(i));
         if (!column) {
-            reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+            reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
                 << " Cant find table '" << request.GetTablePath() << "'"
                 << " column " << request.GetColumnTags(i)  << " at " << TabletID());
             return;
@@ -620,7 +657,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
         const auto& typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(request.GetColumnTypes(i), &request.GetColumnTypeInfos(i));
         if (column->Type != typeInfoMod.TypeInfo || column->TypeMod != typeInfoMod.TypeMod) {
-            reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+            reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
                 << " Table '" << request.GetTablePath() << "'"
                 << " column " << request.GetColumnTags(i)  << " type mismatch at " << TabletID());
             return;
@@ -630,7 +667,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
     if (request.HasOlapProgram()) {
         auto msg = TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Unexpected process program in datashard scan at " << TabletID();
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, msg);
+        YDB_LOG_ERROR(msg);
 
         auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(generation, TabletID());
         ev->Record.SetStatus(Ydb::StatusIds::INTERNAL_ERROR);
@@ -644,13 +681,13 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
     auto snapshotKey = TSnapshotKey(PathOwnerId, request.GetLocalPathId(), snapshot.GetStep(), snapshot.GetTxId());
     if (!SnapshotManager.FindAvailable(snapshotKey)) {
-        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+        reportError(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Snapshot is not valid, tabletId: " << TabletID() << ", step: " << snapshot.GetStep());
         return;
     }
 
     if (!IsStateActive()) {
-        reportError(request.GetTablePath(), TStringBuilder() << "TxId: " << request.GetTxId() << "."
+        reportError(NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH, TStringBuilder() << "TxId: " << request.GetTxId() << "."
             << " Shard " << TabletID() << " is not ready to process requests.");
         return;
     }
@@ -690,3 +727,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorCont
 
 }
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

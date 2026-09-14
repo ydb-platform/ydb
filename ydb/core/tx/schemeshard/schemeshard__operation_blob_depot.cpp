@@ -1,9 +1,9 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/blob_depot/events.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -58,7 +58,7 @@ namespace NKikimr::NSchemeShard {
                     auto path = TPath::Init(txState->TargetPathId, context.SS);
                     Y_ABORT_UNLESS(path.IsResolved());
 
-                    auto blobDepotInfo = context.SS->BlobDepots[path->PathId];
+                    auto blobDepotInfo = context.SS->BlobDepots.at(path->PathId);
                     Y_ABORT_UNLESS(blobDepotInfo);
 
                     for (auto& shard : txState->Shards) {
@@ -281,7 +281,7 @@ namespace NKikimr::NSchemeShard {
 
                     if (checks) {
                         checks
-                            .IsValidLeafName()
+                            .IsValidLeafName(context.UserToken.Get())
                             .DepthLimit()
                             .PathsLimit()
                             .DirChildrenLimit()
@@ -355,9 +355,8 @@ namespace NKikimr::NSchemeShard {
                 }
                 context.SS->PersistPath(db, dstPath->PathId);
 
-                context.SS->BlobDepots[pathId] = blobDepot;
+                context.SS->BlobDepots.Set(pathId, blobDepot);
                 context.SS->PersistBlobDepot(db, pathId, *blobDepot);
-                context.SS->IncrementPathDbRefCount(pathId);
 
                 context.SS->PersistTxState(db, OperationId);
                 context.SS->PersistUpdateNextPathId(db);

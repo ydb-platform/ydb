@@ -6,6 +6,8 @@
 #include <yt/cpp/mapreduce/http/http_client.h>
 #include <yt/cpp/mapreduce/http/requests.h>
 
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
+
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -28,7 +30,6 @@ public:
     TRetrylessWriter(
         const TClientContext& context,
         const TTransactionId& parentId,
-        const TString& command,
         const TMaybe<TFormat>& format,
         const TRichYPath& path,
         size_t bufferSize,
@@ -36,27 +37,7 @@ public:
         : BufferSize_(bufferSize)
         , AutoFinish_(options.AutoFinish_)
     {
-        THttpHeader header("PUT", command);
-        header.SetInputFormat(format);
-        header.MergeParameters(FormIORequestParameters(path, options));
-        header.AddTransactionId(parentId);
-        header.SetRequestCompression(ToString(context.Config->ContentEncoding));
-        if (context.ServiceTicketAuth) {
-            header.SetServiceTicket(context.ServiceTicketAuth->Ptr->IssueServiceTicket());
-        } else {
-            header.SetToken(context.Token);
-        }
-
-        if (context.ImpersonationUser) {
-            header.SetImpersonationUser(*context.ImpersonationUser);
-        }
-
-        TString requestId = CreateGuidAsString();
-
-        auto hostName = GetProxyForHeavyRequest(context);
-        UpdateHeaderForProxyIfNeed(hostName, context, header);
-        Request_ = context.HttpClient->StartRequest(GetFullUrl(hostName, context, header), requestId, header);
-        BufferedOutput_ = std::make_unique<TBufferedOutput>(Request_->GetStream(), BufferSize_);
+        Output_ = NDetail::NRawClient::WriteTable(context, parentId, path, format, options);
     }
 
     ~TRetrylessWriter() override;
@@ -74,8 +55,7 @@ private:
     const bool AutoFinish_;
 
     bool Running_ = true;
-    NHttpClient::IHttpRequestPtr Request_;
-    std::unique_ptr<TBufferedOutput> BufferedOutput_;
+    std::unique_ptr<IOutputStream> Output_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -5,10 +5,9 @@
 namespace NKikimr::NReplication::NController {
 
 TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry::TAddEntry(
-        const TString& srcPath, const TString& dstPath, TReplication::ETargetKind kind)
-    : SrcPath(srcPath)
-    , DstPath(dstPath)
-    , Kind(kind)
+        TReplication::ETargetKind kind, const TReplication::ITarget::IConfig::TPtr& config)
+    : Kind(kind)
+    , Config(config)
 {
 }
 
@@ -130,14 +129,14 @@ TString TEvPrivate::TEvUpdateTenantNodes::ToString() const {
     << " }";
 }
 
-TEvPrivate::TEvResolveSecretResult::TEvResolveSecretResult(ui64 rid, const TString& secretValue)
+TEvPrivate::TResolveValueResult::TResolveValueResult(ui64 rid, const TString& value)
     : ReplicationId(rid)
-    , SecretValue(secretValue)
+    , Value(value)
     , Success(true)
 {
 }
 
-TEvPrivate::TEvResolveSecretResult::TEvResolveSecretResult(ui64 rid, bool success, const TString& error)
+TEvPrivate::TResolveValueResult::TResolveValueResult(ui64 rid, bool success, const TString& error)
     : ReplicationId(rid)
     , Success(success)
     , Error(error)
@@ -145,16 +144,24 @@ TEvPrivate::TEvResolveSecretResult::TEvResolveSecretResult(ui64 rid, bool succes
     Y_ABORT_UNLESS(!success);
 }
 
-TString TEvPrivate::TEvResolveSecretResult::ToString() const {
-    return TStringBuilder() << ToStringHeader() << " {"
+TString TEvPrivate::TResolveValueResult::ToString() const {
+    return TStringBuilder() << " {"
         << " ReplicationId: " << ReplicationId
         << " Success: " << Success
         << " Error: " << Error
     << " }";
 }
 
-bool TEvPrivate::TEvResolveSecretResult::IsSuccess() const {
+bool TEvPrivate::TResolveValueResult::IsSuccess() const {
     return Success;
+}
+
+TString TEvPrivate::TEvResolveSecretResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << TResolveValueResult::ToString();
+}
+
+TString TEvPrivate::TEvResolveResourceIdResult::ToString() const {
+    return TStringBuilder() << ToStringHeader() << TResolveValueResult::ToString();
 }
 
 TEvPrivate::TEvAlterDstResult::TEvAlterDstResult(ui64 rid, ui64 tid, NKikimrScheme::EStatus status, const TString& error)
@@ -169,6 +176,19 @@ TString TEvPrivate::TEvAlterDstResult::ToString() const {
 TEvPrivate::TEvRemoveWorker::TEvRemoveWorker(ui64 rid, ui64 tid, ui64 wid)
     : Id(rid, tid, wid)
 {
+}
+
+TEvPrivate::TEvCompleteWorkerSet::TEvCompleteWorkerSet(ui64 rid, ui64 tid)
+    : ReplicationId(rid)
+    , TargetId(tid)
+{
+}
+
+TString TEvPrivate::TEvCompleteWorkerSet::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " ReplicationId: " << ReplicationId
+        << " TargetId: " << TargetId
+    << " }";
 }
 
 TString TEvPrivate::TEvRemoveWorker::ToString() const {
@@ -193,7 +213,7 @@ TString TEvPrivate::TEvDescribeTargetsResult::ToString() const {
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TAddEntry, stream, value) {
-    stream << value.SrcPath << " (" << value.Kind << ")";
+    stream << value.Config->GetSrcPath() << " (" << value.Kind << ")";
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::NController::TEvPrivate::TEvDiscoveryTargetsResult::TFailedEntry, stream, value) {

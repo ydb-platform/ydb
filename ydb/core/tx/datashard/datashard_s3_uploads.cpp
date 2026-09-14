@@ -18,7 +18,7 @@ bool TS3UploadsManager::Load(NIceDb::TNiceDb& db) {
             const TString uploadId = rowset.GetValue<Schema::S3Uploads::UploadId>();
 
             auto res = Uploads.emplace(txId, TS3Upload(uploadId));
-            Y_VERIFY_S(res.second, "Unexpected duplicate s3 upload"
+            Y_ENSURE(res.second, "Unexpected duplicate s3 upload"
                 << ": txId# " << txId
                 << ", uploadId# " << uploadId);
 
@@ -45,7 +45,7 @@ bool TS3UploadsManager::Load(NIceDb::TNiceDb& db) {
             const ui64 txId = rowset.GetValue<Schema::S3UploadedParts::TxId>();
 
             auto it = Uploads.find(txId);
-            Y_VERIFY_S(it != Uploads.end(), "Unknown s3 upload part"
+            Y_ENSURE(it != Uploads.end(), "Unknown s3 upload part"
                 << ": txId# " << txId);
 
             auto& parts = it->second.Parts;
@@ -82,7 +82,7 @@ const TS3Upload* TS3UploadsManager::Find(ui64 txId) const {
 const TS3Upload& TS3UploadsManager::Add(NIceDb::TNiceDb& db, ui64 txId, const TString& uploadId) {
     using Schema = TDataShard::Schema;
 
-    Y_ABORT_UNLESS(!Uploads.contains(txId));
+    Y_ENSURE(!Uploads.contains(txId));
     auto res = Uploads.emplace(txId, TS3Upload(uploadId));
 
     db.Table<Schema::S3Uploads>().Key(txId).Update<Schema::S3Uploads::UploadId>(uploadId);
@@ -96,7 +96,7 @@ const TS3Upload& TS3UploadsManager::ChangeStatus(NIceDb::TNiceDb& db, ui64 txId,
     using Schema = TDataShard::Schema;
 
     auto it = Uploads.find(txId);
-    Y_ABORT_UNLESS(it != Uploads.end());
+    Y_ENSURE(it != Uploads.end());
 
     auto& upload = it->second;
     upload.Status = status;

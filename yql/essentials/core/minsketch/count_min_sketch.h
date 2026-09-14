@@ -2,21 +2,17 @@
 
 #include <util/system/types.h>
 #include <util/generic/strbuf.h>
+#include <util/generic/maybe.h>
 
 namespace NKikimr {
 
 class TCountMinSketch {
 private:
-    ui64 Width;
-    ui64 Depth;
-    ui64 ElementCount;
+    ui64 Width_;
+    ui64 Depth_;
+    ui64 ElementCount_;
 
-private:
     static ui64 Hash(const char* data, size_t size, size_t hashIndex);
-
-    static size_t StaticSize(ui64 width, ui64 depth) {
-        return sizeof(TCountMinSketch) + width * depth * sizeof(ui32);
-    }
 
     const ui32* Buckets() const {
         return reinterpret_cast<const ui32*>(this + 1);
@@ -36,19 +32,23 @@ public:
     TCountMinSketch(const TCountMinSketch&) = delete;
 
     size_t GetSize() const {
-        return StaticSize(Width, Depth);
+        return StaticSize(Width_, Depth_);
+    }
+
+    static size_t StaticSize(ui64 width, ui64 depth) {
+        return sizeof(TCountMinSketch) + width * depth * sizeof(ui32);
     }
 
     size_t GetWidth() const {
-        return Width;
+        return Width_;
     }
 
     size_t GetDepth() const {
-        return Depth;
+        return Depth_;
     }
 
     size_t GetElementCount() const {
-        return ElementCount;
+        return ElementCount_;
     }
 
     TStringBuf AsStringBuf() const {
@@ -59,9 +59,11 @@ public:
 
     ui32 Probe(const char* data, size_t size) const;
 
+    TMaybe<ui32> GetOverlappingCardinality(const TCountMinSketch& rhs) const;
+
     TCountMinSketch& operator+=(const TCountMinSketch& rhs);
 };
 
 static_assert(sizeof(TCountMinSketch) == 24);
 
-} // NKikimr
+} // namespace NKikimr

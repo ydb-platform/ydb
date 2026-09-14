@@ -29,7 +29,7 @@ NTableClient::TUnversionedOwningRow MakeRow(std::vector<int> values)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
-TString DumpToYson(T obj)
+std::string DumpToYson(T obj)
 {
     return ConvertToYsonString(obj, NYson::EYsonFormat::Text).ToString();
 }

@@ -21,8 +21,6 @@
 
 #include <stdint.h>
 
-#include <algorithm>
-#include <memory>
 #include <set>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
@@ -34,7 +32,9 @@
 #include "envoy/config/cluster/v3/cluster.upbdefs.h"
 #include "envoy/extensions/clusters/aggregate/v3/cluster.upbdefs.h"
 #include "envoy/extensions/transport_sockets/tls/v3/tls.upbdefs.h"
-#include "upb/def.h"
+#include "upb/reflection/def.h"
+
+#include <grpc/support/json.h>
 
 #include "src/core/ext/filters/client_channel/lb_policy/outlier_detection/outlier_detection.h"
 #include "src/core/ext/xds/xds_bootstrap.h"
@@ -47,9 +47,6 @@
 #include "src/core/lib/json/json.h"
 
 namespace grpc_core {
-
-bool XdsCustomLbPolicyEnabled();
-bool XdsOverrideHostEnabled();
 
 struct XdsClusterResource : public XdsResourceType::ResourceData {
   struct Eds {

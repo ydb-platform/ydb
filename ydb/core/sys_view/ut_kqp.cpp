@@ -1,12 +1,12 @@
 #include "ut_common.h"
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/core/tx/datashard/datashard.h>
-
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/library/testlib/common/test_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -14,83 +14,22 @@ namespace NKikimr {
 namespace NSysView {
 
 using namespace NYdb;
-using namespace NYdb::NTable;
+using namespace NYdb::NDump;
 using namespace NYdb::NScheme;
+using namespace NYdb::NTable;
+using namespace NTestUtils;
 
 namespace {
 
-void CreateTenant(TTestEnv& env, const TString& tenantName, bool extSchemeShard = true) {
-    auto subdomain = GetSubDomainDeclareSettings(tenantName);
-    if (extSchemeShard) {
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-            env.GetClient().CreateExtSubdomain("/Root", subdomain));
-    } else {
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-            env.GetClient().CreateSubdomain("/Root", subdomain));
-    }
-
-    env.GetTenants().Run("/Root/" + tenantName, 2);
-
-    auto subdomainSettings = GetSubDomainDefaultSettings(tenantName, env.GetPools());
-    subdomainSettings.SetExternalSysViewProcessor(true);
-
-    if (extSchemeShard) {
-        subdomainSettings.SetExternalSchemeShard(true);
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-            env.GetClient().AlterExtSubdomain("/Root", subdomainSettings));
-    } else {
-        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
-            env.GetClient().AlterSubdomain("/Root", subdomainSettings));
-    }
-}
-
-void CreateTenants(TTestEnv& env, bool extSchemeShard = true) {
-    CreateTenant(env, "Tenant1", extSchemeShard);
-    CreateTenant(env, "Tenant2", extSchemeShard);
-}
-
-void CreateTable(auto& session, const TString& name, ui64 partitionCount = 1) {
-    auto desc = TTableBuilder()
-        .AddNullableColumn("Key", EPrimitiveType::Uint64)
-        .AddNullableColumn("Value", EPrimitiveType::String)
-        .SetPrimaryKeyColumns({"Key"})
-        .Build();
-
-    auto settings = TCreateTableSettings();
-    settings.PartitioningPolicy(TPartitioningPolicy().UniformPartitions(partitionCount));
-
-    session.CreateTable(name, std::move(desc), std::move(settings)).GetValueSync();
-}
-
-void CreateTables(TTestEnv& env, ui64 partitionCount = 1) {
+void FillRootTable(TTestEnv& env, ui16 tableNum = 0) {
     TTableClient client(env.GetDriver());
     auto session = client.CreateSession().GetValueSync().GetSession();
-
-    CreateTable(session, "Root/Table0", partitionCount);
-    NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-        REPLACE INTO `Root/Table0` (Key, Value) VALUES
-            (0u, "Z");
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
-
-    CreateTable(session, "Root/Tenant1/Table1", partitionCount);
-    NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-        REPLACE INTO `Root/Tenant1/Table1` (Key, Value) VALUES
-            (1u, "A"),
-            (2u, "B"),
-            (3u, "C");
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
-
-    CreateTable(session, "Root/Tenant2/Table2", partitionCount);
-    NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-        REPLACE INTO `Root/Tenant2/Table2` (Key, Value) VALUES
-            (4u, "D"),
-            (5u, "E");
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync());
-}
-
-void CreateTenantsAndTables(TTestEnv& env, bool extSchemeShard = true, ui64 partitionCount = 1) {
-    CreateTenants(env, extSchemeShard);
-    CreateTables(env, partitionCount);
+    NKqp::AssertSuccessResult(session.ExecuteDataQuery(Sprintf(R"(
+        REPLACE INTO `/Root/Table%u` (Key, Value) VALUES
+            (0u, "X"),
+            (1u, "Y"),
+            (2u, "Z");
+    )", tableNum), TTxControl::BeginTx().CommitTx()).GetValueSync());
 }
 
 void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = false, ui16 tableNum = 0) {
@@ -102,50 +41,113 @@ void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = fa
         UniformPartitionsCount: %lu
     )", tableNum, partitionCount));
 
-    if (fillTable) {
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-            REPLACE INTO `Root/Table0` (Key, Value) VALUES
-                (0u, "X"),
-                (1u, "Y"),
-                (2u, "Z");
-        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+    if (fillTable)
+        FillRootTable(env, tableNum);
+}
+
+void CreateRootColumnTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = false, ui16 tableNum = 0) {
+    NQuery::TQueryClient client(env.GetDriver());
+    auto result = client.ExecuteQuery(Sprintf(R"(
+        CREATE TABLE `/Root/Table%u` (
+            Key Int32 NOT NULL,
+            Value Utf8,
+            PRIMARY KEY(Key)
+        ) WITH (STORE=COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = %lu);
+    )", tableNum, partitionCount), NQuery::TTxControl::NoTx()).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    if (fillTable)
+        FillRootTable(env, tableNum);
+}
+
+void BreakLock(TSession& session, const TString& tableName) {
+    std::optional<TTransaction> tx1;
+
+    {  // tx0: write test data
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "UPSERT INTO `" << tableName << "` (Key, Value) VALUES (55u, \"Fifty five\")",
+        TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {  // tx0: read all data
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "SELECT * FROM `" << tableName << "`",
+        TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    while (!tx1) {
+    // tx1: start reading
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "SELECT * FROM `" << tableName << "` WHERE Key = 55u",
+        TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        TString yson = FormatResultSetYson(result.GetResultSet(0));
+        if (yson == "[]") {
+            continue;
+        }
+
+        NKqp::CompareYson(R"([
+            [[55u];["Fifty five"]];
+        ])", yson);
+        tx1 = result.GetTransaction();
+        UNIT_ASSERT(tx1);
+    }
+
+    {  // tx2: write + commit
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "UPSERT INTO `" << tableName << "` (Key, Value) VALUES (55u, \"NewValue1\")",
+        TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {  // tx1: try to commit
+        auto result = tx1->Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 }
 
-void SetupAuthEnvironment(TTestEnv& env) {
-    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
-    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
-    CreateTenantsAndTables(env, true);
+size_t GetRowCount(TTableClient& client, const TString& tableName, const TString& condition = {}) {
+    TStringBuilder query;
+    query << "SELECT * FROM `" << tableName << "`";
+    if (!condition.empty())
+        query << " WHERE " << condition;
+    auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    auto ysonString = NKqp::StreamResultToYson(it);
+    auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
+    UNIT_ASSERT(node.IsList());
+    return node.AsList().size();
 }
 
-void SetupAuthAccessEnvironment(TTestEnv& env) {
-    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
-    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
-    env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("root@builtin");
-    env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.emplace_back("user1rootadmin");
-    env.GetClient().SetSecurityToken("root@builtin");
-    CreateTenantsAndTables(env, true);
+ui64 GetIntervalEnd(TTableClient& client, const TString& name) {
+    TStringBuilder query;
+    query << "SELECT MAX(IntervalEnd) FROM `" << name << "`";
+    auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    auto ysonString = NKqp::StreamResultToYson(it);
+    auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
+    UNIT_ASSERT(node.IsList());
+    UNIT_ASSERT(node.AsList().size() == 1);
+    auto row = node.AsList()[0];
+    UNIT_ASSERT(row.IsList());
+    UNIT_ASSERT(row.AsList().size() == 1);
+    auto value = row.AsList()[0];
+    UNIT_ASSERT(value.IsList());
+    UNIT_ASSERT(value.AsList().size() == 1);
+    return value.AsList()[0].AsUint64();
+}
 
-    env.GetClient().CreateUser("/Root", "user1rootadmin", "password1");
-    env.GetClient().CreateUser("/Root", "user2", "password2");
-    env.GetClient().CreateUser("/Root/Tenant1", "user3", "password3");
-    env.GetClient().CreateUser("/Root/Tenant1", "user4", "password4");
-
-    {
-        NACLib::TDiffACL acl;
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1rootadmin");
-        acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
-        env.GetClient().ModifyACL("", "Root", acl.SerializeAsString());
+void WaitForStats(TTableClient& client, const TString& tableName, const TString& condition = {}) {
+    size_t rowCount = 0;
+    for (size_t iter = 0; iter < 30; ++iter) {
+        if (rowCount = GetRowCount(client, tableName, condition))
+            break;
+        Sleep(TDuration::Seconds(5));
     }
+    UNIT_ASSERT_GE(rowCount, 0);
 }
-
-void CheckAuthAdministratorAccessIsRequired(TScanQueryPartIterator& it) {
-    NKqp::StreamResultToYson(it, false, EStatus::INTERNAL_ERROR, 
-        "Administrator access is required");
-}
-
 class TYsonFieldChecker {
     NYT::TNode Root;
     NYT::TNode::TListType::const_iterator RowIterator;
@@ -267,116 +269,133 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
     Y_UNIT_TEST(PartitionStatsOneSchemeShard) {
         TTestEnv env;
-        CreateTenantsAndTables(env, false);
-        TTableClient client(env.GetDriver());
+        CreateTenantsAndTables(env, true);
+        auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Table0");
+        const auto table0PathId = describeResult.GetPathId();
+
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant1/Table1");
+        const auto table1PathId = describeResult.GetPathId();
+
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Table2");
+        const auto table2PathId = describeResult.GetPathId();
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off);
+        auto driver = TDriver(driverConfig);
+
         {
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `Root/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `/Root/.sys/partition_stats`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-            NKqp::CompareYson(R"([
-                [[4u];[0u];["/Root/Table0"]]
-            ])", NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Table0"]]
+            ])", table0PathId), NKqp::StreamResultToYson(it));
         }
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `Root/Tenant1/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `/Root/Tenant1/.sys/partition_stats`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-            NKqp::CompareYson(R"([
-                [[9u];[0u];["/Root/Tenant1/Table1"]]
-            ])", NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Tenant1/Table1"]]
+            ])", table1PathId), NKqp::StreamResultToYson(it));
         }
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `Root/Tenant2/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `/Root/Tenant2/.sys/partition_stats`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-            NKqp::CompareYson(R"([
-                [[10u];[0u];["/Root/Tenant2/Table2"]]
-            ])", NKqp::StreamResultToYson(it));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Tenant2/Table2"]]
+            ])", table2PathId), NKqp::StreamResultToYson(it));
         }
     }
 
     Y_UNIT_TEST(PartitionStatsOneSchemeShardDataQuery) {
         TTestEnv env;
-        CreateTenantsAndTables(env, false);
+        CreateTenantsAndTables(env, true);
+        auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Table0");
+        const auto table0PathId = describeResult.GetPathId();
+
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant1/Table1");
+        const auto table1PathId = describeResult.GetPathId();
+
+        describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Table2");
+        const auto table2PathId = describeResult.GetPathId();
 
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
 
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off);
+        auto driver = TDriver(driverConfig);
+
         {
+            TTableClient client(driver, TClientSettings().Database("/Root"));
+            auto session = client.CreateSession().GetValueSync().GetSession();
+
             auto result = session.ExecuteDataQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `Root/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `/Root/.sys/partition_stats`;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            NKqp::CompareYson(R"([
-                [[4u];[0u];["/Root/Table0"]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Table0"]]
+            ])", table0PathId), FormatResultSetYson(result.GetResultSet(0)));
         }
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
+            auto session = client.CreateSession().GetValueSync().GetSession();
+
             auto result = session.ExecuteDataQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `Root/Tenant1/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `/Root/Tenant1/.sys/partition_stats`;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT(result.IsSuccess());
-            NKqp::CompareYson(R"([
-                [[9u];[0u];["/Root/Tenant1/Table1"]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Tenant1/Table1"]]
+            ])", table1PathId), FormatResultSetYson(result.GetResultSet(0)));
         }
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
+            auto session = client.CreateSession().GetValueSync().GetSession();
+
             auto result = session.ExecuteDataQuery(R"(
-                SELECT PathId, PartIdx, Path FROM `Root/Tenant2/.sys/partition_stats`;
+                SELECT PathId, PartIdx, Path FROM `/Root/Tenant2/.sys/partition_stats`;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
             UNIT_ASSERT(result.IsSuccess());
-            NKqp::CompareYson(R"([
-                [[10u];[0u];["/Root/Tenant2/Table2"]]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
-
-    Y_UNIT_TEST(PgTablesOneSchemeShardDataQuery) {
-        TTestEnv env;
-        CreateRootTable(env, 1, false, 0);
-        CreateRootTable(env, 2, false, 1);
-
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
-        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
-
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
-        {
-            auto result = session.ExecuteDataQuery(R"(
-                SELECT schemaname, tablename, tableowner, tablespace, hasindexes, hasrules, hastriggers, rowsecurity FROM `Root/.sys/pg_tables` WHERE tablename = PgName("Table0") OR tablename = PgName("Table1") ORDER BY tablename;
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            NKqp::CompareYson(R"([
-                ["public";"Table0";"root@builtin";#;"t";"f";"f";"f"];
-                ["public";"Table1";"root@builtin";#;"t";"f";"f";"f"]
-            ])", FormatResultSetYson(result.GetResultSet(0)));
+            NKqp::CompareYson(Sprintf(R"([
+                [[%luu];[0u];["/Root/Tenant2/Table2"]]
+            ])", table2PathId), FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
     Y_UNIT_TEST(Nodes) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);
-        TTableClient client(env.GetDriver());
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off);
+        auto driver = TDriver(driverConfig);
+
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Host, NodeId
-                FROM `Root/Tenant1/.sys/nodes`;
+                FROM `/Root/Tenant1/.sys/nodes`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -390,9 +409,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Host, NodeId
-                FROM `Root/Tenant2/.sys/nodes`;
+                FROM `/Root/Tenant2/.sys/nodes`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -406,9 +426,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
         {
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Host, NodeId
-                FROM `Root/.sys/nodes`;
+                FROM `/Root/.sys/nodes`;
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -475,11 +496,16 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         makeQueryEvent(staticNode, buckets[0], "g", 700);
 
-        TTableClient client(env.GetDriver());
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off);
+        auto driver = TDriver(driverConfig);
+
         {
+            TTableClient client(driver, TClientSettings().Database("/Root"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT IntervalEnd, QueryText, Rank, ReadBytes
-                FROM `Root/.sys/top_queries_by_read_bytes_one_minute`;
+                FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`;
             )").GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -491,9 +517,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NKqp::CompareYson(result, NKqp::StreamResultToYson(it));
         }
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT IntervalEnd, QueryText, Rank, ReadBytes
-                FROM `Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute`;
+                FROM `/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute`;
             )").GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -509,9 +536,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
             NKqp::CompareYson(result, NKqp::StreamResultToYson(it));
         }
         {
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant2"));
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT IntervalEnd, QueryText, Rank, ReadBytes
-                FROM `Root/Tenant2/.sys/top_queries_by_read_bytes_one_minute`;
+                FROM `/Root/Tenant2/.sys/top_queries_by_read_bytes_one_minute`;
             )").GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -525,10 +553,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             TStringBuilder query;
             query << "SELECT IntervalEnd, QueryText, Rank, ReadBytes ";
-            query << "FROM `Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
+            query << "FROM `/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
             query << "WHERE IntervalEnd >= CAST(" << buckets[1] << "ul as Timestamp) ";
             query << "AND IntervalEnd < CAST(" << buckets[3] << "ul as Timestamp);";
 
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -545,10 +574,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             TStringBuilder query;
             query << "SELECT IntervalEnd, QueryText, Rank, ReadBytes ";
-            query << "FROM `Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
+            query << "FROM `/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
             query << "WHERE IntervalEnd > CAST(" << buckets[1] << "ul as Timestamp) ";
             query << "AND IntervalEnd <= CAST(" << buckets[3] << "ul as Timestamp);";
 
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -565,10 +595,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             TStringBuilder query;
             query << "SELECT IntervalEnd, QueryText, Rank, ReadBytes ";
-            query << "FROM `Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
+            query << "FROM `/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
             query << "WHERE IntervalEnd = CAST(" << buckets[2] << "ul as Timestamp) ";
             query << "AND Rank >= 1u AND Rank < 3u";
 
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -583,10 +614,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             TStringBuilder query;
             query << "SELECT IntervalEnd, QueryText, Rank, ReadBytes ";
-            query << "FROM `Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
+            query << "FROM `/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute` ";
             query << "WHERE IntervalEnd = CAST(" << buckets[2] << "ul as Timestamp) ";
             query << "AND Rank > 1u AND Rank <= 3u";
 
+            TTableClient client(driver, TClientSettings().Database("/Root/Tenant1"));
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -606,7 +638,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TString queryText("SELECT * FROM `Root/Table0`");
+        TString queryText("SELECT * FROM `/Root/Table0`");
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -645,7 +677,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UpdateBytes,
                 UpdateRows,
                 UserSID
-            FROM `Root/.sys/top_queries_by_read_bytes_one_minute`;
+            FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -703,14 +735,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
         NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-            "REPLACE INTO `Root/Table0` (Key, CreatedAt) VALUES (0u, CAST(0 AS Timestamp));",
+            "REPLACE INTO `/Root/Table0` (Key, CreatedAt) VALUES (0u, CAST(0 AS Timestamp));",
             TTxControl::BeginTx().CommitTx()
         ).GetValueSync());
 
         // wait for conditional erase
         for (size_t iter = 0; iter < 70; ++iter) {
             auto result = session.ExecuteDataQuery(
-                "SELECT * FROM `Root/Table0`;", TTxControl::BeginTx().CommitTx()
+                "SELECT * FROM `/Root/Table0`;", TTxControl::BeginTx().CommitTx()
             ).ExtractValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -740,18 +772,96 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(1u); // LastTtlRowsErased
     }
 
-    Y_UNIT_TEST(PartitionStatsFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+    Y_UNIT_TEST_TWIN(PartitionStatsAfterDropTable, UseColumnTable) {
+        TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
+        if (UseColumnTable)
+            CreateRootColumnTable(env);
+        else
+            CreateRootTable(env);
 
+        TTableClient client(env.GetDriver());
+
+        WaitForStats(client, "/Root/.sys/partition_stats", "Path = '/Root/Table0'");
+
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            DROP TABLE `/Root/Table0`;
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // Verify Table0 is removed from partition_stats
+        auto table0Count = GetRowCount(client, "/Root/.sys/partition_stats", "Path = '/Root/Table0'");
+        UNIT_ASSERT_VALUES_EQUAL(table0Count, 0);
+    }
+
+    Y_UNIT_TEST(PartitionStatsLocksFields) {
+        TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
+        CreateRootTable(env, /* partitionCount */ 1, /* fillTable */ true);
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        BreakLock(session, "/Root/Table0");
+
+        WaitForStats(client, "/Root/.sys/partition_stats", "LocksBroken != 0");
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT
+                LocksAcquired,
+                LocksWholeShard,
+                LocksBroken
+            FROM `/Root/.sys/partition_stats`;
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto ysonString = NKqp::StreamResultToYson(it);
+        TYsonFieldChecker check(ysonString, 3);
+
+        check.Uint64(1); // LocksAcquired
+        check.Uint64(0); // LocksWholeShard
+        check.Uint64(1); // LocksBroken
+    }
+
+    Y_UNIT_TEST_TWIN(PartitionStatsAfterRenameTable, UseColumnTable) {
+        TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
+        if (UseColumnTable)
+            CreateRootColumnTable(env);
+        else
+            CreateRootTable(env);
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        WaitForStats(client, "/Root/.sys/partition_stats", "Path = '/Root/Table0'");
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            ALTER TABLE `/Root/Table0` RENAME TO `/Root/Table1`;
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        WaitForStats(client, "/Root/.sys/partition_stats", "Path = '/Root/Table1'");
+
+        // Verify Table0 is no longer in partition_stats
+        auto table0Count = GetRowCount(client, "/Root/.sys/partition_stats", "Path = '/Root/Table0'");
+        UNIT_ASSERT_VALUES_EQUAL(table0Count, 0);
+
+        // Verify Table1 exists in partition_stats
+        auto table1Count = GetRowCount(client, "/Root/.sys/partition_stats", "Path = '/Root/Table1'");
+        UNIT_ASSERT_VALUES_EQUAL(table1Count, 1);
+    }
+
+    Y_UNIT_TEST(PartitionStatsFields) {
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env;
+        TTestEnv env({.DataShardStatsReportIntervalSeconds = 0});
         CreateRootTable(env);
+        const auto describeResult = env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Table0");
+        const auto tablePathId = describeResult.GetPathId();
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
         NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-            "REPLACE INTO `Root/Table0` (Key, Value) VALUES (0u, \"A\");",
+            "REPLACE INTO `/Root/Table0` (Key, Value) VALUES (0u, \"A\");",
             TTxControl::BeginTx().CommitTx()
         ).GetValueSync());
 
@@ -794,14 +904,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 TabletId,
                 TxRejectedByOutOfStorage,
                 TxRejectedByOverload,
+                TxCompleteLag,
                 FollowerId,
+                LocksAcquired,
+                LocksWholeShard,
+                LocksBroken,
                 UpdateTime
             FROM `/Root/.sys/partition_stats`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto ysonString = NKqp::StreamResultToYson(it);
-        TYsonFieldChecker check(ysonString, 24);
+        TYsonFieldChecker check(ysonString, 28);
 
         check.Uint64GreaterOrEquals(nowUs); // AccessTime
         check.DoubleGreaterOrEquals(0.0); // CPUCores
@@ -814,7 +928,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(72057594046644480ull); // OwnerId
         check.Uint64(0u); // PartIdx
         check.String("/Root/Table0"); // Path
-        check.Uint64(2u); // PathId
+        check.Uint64(tablePathId); // PathId
         check.Uint64(0u); // RangeReadRows
         check.Uint64(0u); // RangeReads
         check.Uint64(1u); // RowCount
@@ -825,7 +939,11 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64Greater(0u); // TabletId
         check.Uint64(0u); // TxRejectedByOutOfStorage
         check.Uint64(0u); // TxRejectedByOverload
+        check.Int64(0); // TxCompleteLag
         check.Uint64(0u); // FollowerId
+        check.Uint64(0u); // LocksAcquired
+        check.Uint64(0u); // LocksWholeShard
+        check.Uint64(0u); // LocksBroken
         check.Uint64GreaterOrEquals(nowUs); // UpdateTime
     }
 
@@ -837,7 +955,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             TTableClient client(env.GetDriver());
             auto session = client.CreateSession().GetValueSync().GetSession();
             NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-                "SELECT * FROM `Root/Table0`", TTxControl::BeginTx().CommitTx()
+                "SELECT * FROM `/Root/Table0`", TTxControl::BeginTx().CommitTx()
             ).GetValueSync());
 
             auto it = client.StreamExecuteScanQuery(queryText).GetValueSync();
@@ -847,21 +965,76 @@ Y_UNIT_TEST_SUITE(SystemView) {
             ])", NKqp::StreamResultToYson(it));
         };
 
-        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_read_bytes_one_minute`");
-        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_read_bytes_one_hour`");
-        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_duration_one_minute`");
-        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_duration_one_hour`");
-        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_cpu_time_one_minute`");
-        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_cpu_time_one_hour`");
-        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_request_units_one_minute`");
-        check("SELECT ReadBytes FROM `Root/.sys/top_queries_by_request_units_one_hour`");
+        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`");
+        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_read_bytes_one_hour`");
+        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_duration_one_minute`");
+        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_duration_one_hour`");
+        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_cpu_time_one_minute`");
+        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_cpu_time_one_hour`");
+        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_request_units_one_minute`");
+        check("SELECT ReadBytes FROM `/Root/.sys/top_queries_by_request_units_one_hour`");
+    }
+
+    Y_UNIT_TEST(SysViewScanBackPressure) {
+        NKikimrConfig::TTableServiceConfig tableServiceConfig;
+        tableServiceConfig.MutableResourceManager()->SetChannelBufferSize(1_KB);
+
+        TTestEnv env({
+            .EnableSVP = true,
+            .ShowCreateTable = true,
+            .TableServiceConfig = tableServiceConfig,
+        });
+        CreateTenant(env, "Tenant1", true, /* nodesCount */ 1);
+
+        TDriver driver(TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase("/Root/Tenant1"));
+        NQuery::TQueryClient queryClient(driver);
+
+        // PAYLOAD_SIZE * NUMBER_OF_QUERIES should be greater than BatchSizeLimit in TSysViewProcessor (4 MB)
+        constexpr ui64 PAYLOAD_SIZE = 100_KB;
+        constexpr ui64 NUMBER_OF_QUERIES = 100;
+
+        auto& actorSystem = *env.GetServer().GetRuntime()->GetActorSystem(env.GetTenants().List("/Root/Tenant1")[0]);
+        ui64 amountSize = 0;
+        const std::string payload(PAYLOAD_SIZE, 'X');
+        for (ui64 i = 0; i < NUMBER_OF_QUERIES; ++i) {
+            const auto queryText = TStringBuilder() << "SELECT * FROM `/Root/Tenant1/Table0` /* " << i << " = " << payload << " */";
+            amountSize += queryText.size();
+
+            auto collectEv = std::make_unique<NSysView::TEvSysView::TEvCollectQueryStats>();
+            collectEv->Database = "/Root/Tenant1";
+            collectEv->QueryStats.SetQueryTextHash(i);
+            collectEv->QueryStats.SetQueryText(queryText);
+            collectEv->QueryStats.SetEndTimeMs(TInstant::Now().MilliSeconds());
+            actorSystem.Send(NSysView::MakeSysViewServiceID(actorSystem.NodeId), collectEv.release());
+        }
+
+        WaitFor(TDuration::Minutes(1), "statistics delivery", [&](TString& error) {
+            const auto result = queryClient.ExecuteQuery(
+                "SELECT SUM(Len(QueryText)) FROM `/Root/Tenant1/.sys/query_metrics_one_minute`",
+                NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ClientTimeout(TDuration::Minutes(1))
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            auto resultSet = result.GetResultSetParser(0);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+            UNIT_ASSERT(resultSet.TryNextRow());
+
+            const auto currentSum = resultSet.ColumnParser(0).GetOptionalUint64().value_or(0);
+            error = TStringBuilder() << "currentSum = " << currentSum << ", expectedSum = " << amountSize;
+            return currentSum >= amountSize;
+        });
     }
 
     Y_UNIT_TEST(QueryStatsRetries) {
         TTestEnv env;
         CreateRootTable(env);
 
-        TString queryText("SELECT * FROM `Root/Table0`");
+        TString queryText("SELECT * FROM `/Root/Table0`");
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -875,7 +1048,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT
                 ReadBytes
-            FROM `Root/.sys/top_queries_by_read_bytes_one_minute`;
+            FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -894,7 +1067,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto future0 = client.StreamExecuteScanQuery(R"(
                 SELECT
                     ReadBytes
-                FROM `Root/.sys/top_queries_by_read_bytes_one_minute`;
+                FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`;
             )");
             futures.push_back(future0);
         }
@@ -926,21 +1099,24 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 SELECT
                     AvailableSize,
                     BoxId,
+                    DecommitStatus,
+                    ExpectedSlotCount,
+                    ExpectedSlotSize,
                     Guid,
                     Kind,
+                    MaintenanceStatus,
                     NodeId,
-                    PDiskId,
+                    NumActiveSlots,
                     Path,
+                    PDiskId,
                     ReadCentric,
                     SharedWithOS,
+                    SlotSizeInUnits,
                     State,
                     Status,
                     StatusChangeTimestamp,
                     TotalSize,
-                    Type,
-                    ExpectedSlotCount,
-                    NumActiveSlots,
-                    DecommitStatus
+                    Type
                 FROM `/Root/.sys/ds_pdisks`
                 WHERE BoxId IS NOT NULL;
             )").GetValueSync();
@@ -957,25 +1133,28 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 17);
+        TYsonFieldChecker check(ysonString, 20);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
+        check.String("DECOMMIT_NONE"); // DecommitStatus
+        check.Uint64(16); // ExpectedSlotCount
+        check.Uint64(0); // ExpectedSlotSize
         check.Uint64(123u); // Guid
         check.Uint64(0u); // Kind
+        check.String("NO_REQUEST"); // MaintenanceStatus
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
-        check.Uint64(1u); // PDiskId
+        check.Uint64(2); // NumActiveSlots
         check.StringContains("pdisk_1.dat"); // Path
+        check.Uint64(1u); // PDiskId
         check.Bool(false); // ReadCentric
         check.Bool(false); // SharedWithOS
+        check.Uint64(0u); // SlotSizeInUnits
         check.String("Initial"); // State
         check.String("ACTIVE"); // Status
         check.Null(); // StatusChangeTimestamp
         check.Uint64(0u); // TotalSize
         check.String("ROT"); // Type
-        check.Uint64(16); // ExpectedSlotCount
-        check.Uint64(2); // NumActiveSlots
-        check.String("DECOMMIT_NONE"); // DecommitStatus
     }
 
     Y_UNIT_TEST(VSlotsFields) {
@@ -999,6 +1178,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     NodeId,
                     PDiskId,
                     Replicated,
+                    PhantomOnly,
                     State,
                     Status,
                     VDisk,
@@ -1018,7 +1198,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 15);
+        TYsonFieldChecker check(ysonString, 16);
 
         check.Uint64(0u, true); // AllocatedSize
         check.Uint64(0u, true); // AvailableSize
@@ -1031,6 +1211,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(env.GetServer().GetRuntime()->GetNodeId(0)); // NodeId
         check.Uint64(1u); // PDiskId
         check.Null(); // Replicated
+        check.Bool(false); // PhantomOnly
         check.Null(); // State
         check.Null(); // Status
         check.Uint64(0u); // VDisk
@@ -1055,10 +1236,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     Generation,
                     GetFastLatency,
                     GroupId,
+                    GroupSizeInUnits,
                     LifeCyclePhase,
                     PutTabletLogLatency,
                     PutUserDataLatency,
-                    StoragePoolId
+                    StoragePoolId,
+                    LayoutCorrect,
+                    OperatingStatus,
+                    ExpectedStatus
                 FROM `/Root/.sys/ds_groups` WHERE GroupId >= 0x80000000;
             )").GetValueSync();
 
@@ -1074,7 +1259,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 12);
+        TYsonFieldChecker check(ysonString, 16);
 
         check.Uint64(0u); // AllocatedSize
         check.Uint64GreaterOrEquals(0u); // AvailableSize
@@ -1084,10 +1269,14 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(1u); // Generation
         check.Null(); // GetFastLatency
         check.Uint64(2181038080u); // GroupId
+        check.Uint64(0u); // GroupSizeInUnits
         check.Uint64(0u); // LifeCyclePhase
         check.Null(); // PutTabletLogLatency
         check.Null(); // PutUserDataLatency
         check.Uint64(2u); // StoragePoolId
+        check.Bool(true); // LayoutCorrect
+        check.String("DISINTEGRATED"); // OperatingStatus
+        check.String("DISINTEGRATED"); // ExpectedStatus
     }
 
     Y_UNIT_TEST(StoragePoolsFields) {
@@ -1101,6 +1290,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT
                     BoxId,
+                    DefaultGroupSizeInUnits,
                     EncryptionMode,
                     ErasureSpecies,
                     Generation,
@@ -1126,9 +1316,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 11);
+        TYsonFieldChecker check(ysonString, 12);
 
         check.Uint64(999u); // BoxId
+        check.Uint64(0u); // DefaultGroupSizeInUnits
         check.Uint64(0u); // EncryptionMode
         check.String("none"); // ErasureSpecies
         check.Uint64(1u); // Generation
@@ -1213,46 +1404,19 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    size_t GetRowCount(TTableClient& client, const TString& tableName, const TString& condition = {}) {
-        TStringBuilder query;
-        query << "SELECT * FROM `" << tableName << "`";
-        if (!condition.empty())
-            query << " WHERE " << condition;
-        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        auto ysonString = NKqp::StreamResultToYson(it);
-        auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
-        UNIT_ASSERT(node.IsList());
-        return node.AsList().size();
-    }
-
-    ui64 GetIntervalEnd(TTableClient& client, const TString& name) {
-        TStringBuilder query;
-        query << "SELECT MAX(IntervalEnd) FROM `" << name << "`";
-        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        auto ysonString = NKqp::StreamResultToYson(it);
-        auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
-        UNIT_ASSERT(node.IsList());
-        UNIT_ASSERT(node.AsList().size() == 1);
-        auto row = node.AsList()[0];
-        UNIT_ASSERT(row.IsList());
-        UNIT_ASSERT(row.AsList().size() == 1);
-        auto value = row.AsList()[0];
-        UNIT_ASSERT(value.IsList());
-        UNIT_ASSERT(value.AsList().size() == 1);
-        return value.AsList()[0].AsUint64();
-    }
-
-    Y_UNIT_TEST(TopPartitionsFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
+    Y_UNIT_TEST(TopPartitionsByCpuFields) {
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env(1, 4, {.EnableSVP = true});
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env);
 
-        TTableClient client(env.GetDriver());
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase("/Root/Tenant1");
+        auto driver = TDriver(driverConfig);
+
+        TTableClient client(driver);
         size_t rowCount = 0;
         for (size_t iter = 0; iter < 30 && !rowCount; ++iter) {
             rowCount = GetRowCount(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
@@ -1296,15 +1460,19 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(0); // InFlightTxCount
     }
 
-    Y_UNIT_TEST(TopPartitionsTables) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
+    Y_UNIT_TEST(TopPartitionsByCpuTables) {
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, {.EnableSVP = true});
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env, true, partitionCount);
 
-        TTableClient client(env.GetDriver());
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase("/Root/Tenant1");
+        auto driver = TDriver(driverConfig);
+
+        TTableClient client(driver);
         size_t rowCount = 0;
         for (size_t iter = 0; iter < 30 && rowCount < partitionCount; ++iter) {
             rowCount = GetRowCount(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
@@ -1326,15 +1494,19 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check("/Root/Tenant1/.sys/top_partitions_one_hour");
     }
 
-    Y_UNIT_TEST(TopPartitionsRanges) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
+    Y_UNIT_TEST(TopPartitionsByCpuRanges) {
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, {.EnableSVP = true});
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
         CreateTenantsAndTables(env, true, partitionCount);
 
-        TTableClient client(env.GetDriver());
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase("/Root/Tenant1");
+        auto driver = TDriver(driverConfig);
+
+        TTableClient client(driver);
         size_t rowCount = 0;
         for (size_t iter = 0; iter < 30 && rowCount < partitionCount; ++iter) {
             rowCount = GetRowCount(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
@@ -1407,22 +1579,31 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
-    Y_UNIT_TEST(TopPartitionsFollowers) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
+    Y_UNIT_TEST(TopPartitionsByCpuFollowers) {
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env(1, 4, {.EnableSVP = true, .EnableForceFollowers = true});
+        TTestEnv env(1, 4, {
+            .EnableSVP = true,
+            .EnableForceFollowers = true,
+            .DataShardStatsReportIntervalSeconds = 0,
+        });
 
         auto& runtime = *env.GetServer().GetRuntime();
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
 
-        TTableClient client(env.GetDriver());
+        CreateTenant(env, "Tenant1", true);
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase("/Root/Tenant1");
+        auto driver = TDriver(driverConfig);
+
+        TTableClient client(driver);
         auto session = client.CreateSession().GetValueSync().GetSession();
 
-        CreateTenant(env, "Tenant1", true);
         auto desc = TTableBuilder()
             .AddNullableColumn("Key", EPrimitiveType::Uint64)
             .SetPrimaryKeyColumn("Key")
@@ -1437,16 +1618,16 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         Cerr << "... UPSERT" << Endl;
         NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
-            UPSERT INTO `Root/Tenant1/Table1` (Key) VALUES (1u), (2u), (3u);
+            UPSERT INTO `/Root/Tenant1/Table1` (Key) VALUES (1u), (2u), (3u);
         )", TTxControl::BeginTx().CommitTx()).GetValueSync());
 
         Cerr << "... SELECT from leader" << Endl;
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 1;
+                SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 1;
             )", TTxControl::BeginTx().CommitTx()).GetValueSync();
             NKqp::AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             NKqp::CompareYson(R"([
                 [[1u]]
@@ -1456,15 +1637,15 @@ Y_UNIT_TEST_SUITE(SystemView) {
         Cerr << "... SELECT from follower" << Endl;
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT * FROM `Root/Tenant1/Table1` WHERE Key = 2;
+                SELECT * FROM `/Root/Tenant1/Table1` WHERE Key = 2;
             )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
             NKqp::AssertSuccessResult(result);
-            
+
             TString actual = FormatResultSetYson(result.GetResultSet(0));
             NKqp::CompareYson(R"([
                 [[2u]]
             ])", actual);
-        }        
+        }
 
         size_t rowCount = 0;
         for (size_t iter = 0; iter < 30; ++iter) {
@@ -1476,7 +1657,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                SELECT                     
+                SELECT
                     IntervalEnd,
                     Rank,
                     TabletId,
@@ -1579,8 +1760,64 @@ Y_UNIT_TEST_SUITE(SystemView) {
             check.Uint64(0); // IndexSize
             check.Uint64(0); // InFlightTxCount
             check.Uint64Greater(0); // FollowerId
-        }        
-    }    
+        }
+    }
+
+    Y_UNIT_TEST(TopPartitionsByTliFields) {
+        TTestEnv env(1, 4, {.EnableSVP = true, .DataShardStatsReportIntervalSeconds = 0});
+        CreateTenantsAndTables(env);
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
+            .SetDatabase("/Root/Tenant1");
+        auto driver = TDriver(driverConfig);
+
+        TTableClient client(driver);
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        const TString tableName = "/Root/Tenant1/Table1";
+        const TString viewName = "/Root/Tenant1/.sys/top_partitions_by_tli_one_minute";
+
+        BreakLock(session, tableName);
+
+        WaitForStats(client, viewName, "LocksAcquired != 0");
+
+        ui64 intervalEnd = GetIntervalEnd(client, viewName);
+
+        TStringBuilder query;
+        query << R"(
+            SELECT
+                IntervalEnd,
+                Rank,
+                TabletId,
+                Path,
+                LocksAcquired,
+                LocksWholeShard,
+                LocksBroken,
+                NodeId,
+                DataSize,
+                RowCount,
+                IndexSize)"
+            << " FROM `" << viewName << "`"
+            << " WHERE IntervalEnd = CAST(" << intervalEnd << "ul as Timestamp)"
+            << " AND Path=\"" << tableName << "\"";
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto ysonString = NKqp::StreamResultToYson(it);
+        TYsonFieldChecker check(ysonString, 11);
+        check.Uint64(intervalEnd); // IntervalEnd
+        check.Uint64(1); // Rank
+        check.Uint64Greater(0); // TabletId
+        check.String(tableName); // Path
+        check.Uint64GreaterOrEquals(1); // LocksAcquired
+        check.Uint64(0); // LocksWholeShard
+        check.Uint64GreaterOrEquals(1); // LocksBroken
+        check.Uint64Greater(0); // NodeId
+        check.Uint64Greater(0); // DataSize
+        check.Uint64(4); // RowCount
+        check.Uint64(0); // IndexSize
+    }
 
     Y_UNIT_TEST(Describe) {
         TTestEnv env;
@@ -1589,38 +1826,32 @@ Y_UNIT_TEST_SUITE(SystemView) {
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
         {
-            auto settings = TDescribeTableSettings()
-                .WithKeyShardBoundary(true)
-                .WithTableStatistics(true)
-                .WithPartitionStatistics(true);
-
-            auto result = session.DescribeTable("/Root/.sys/partition_stats", settings).GetValueSync();
+            auto result = session.DescribeSystemView("/Root/.sys/partition_stats").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            const auto& table = result.GetTableDescription();
-            const auto& columns = table.GetTableColumns();
-            const auto& keyColumns = table.GetPrimaryKeyColumns();
+            const auto& systemView = result.GetSystemViewDescription();
 
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 27);
+            UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewId(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(systemView.GetSysViewName(), "partition_stats");
+
+            const auto& columns = systemView.GetTableColumns();
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 31);
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
             UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
+            const auto& keyColumns = systemView.GetPrimaryKeyColumns();
             UNIT_ASSERT_VALUES_EQUAL(keyColumns.size(), 4);
             UNIT_ASSERT_STRINGS_EQUAL(keyColumns[0], "OwnerId");
-
-            UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionStats().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(table.GetPartitionsCount(), 0);
         }
 
         TSchemeClient schemeClient(env.GetDriver());
-
         {
             auto result = schemeClient.DescribePath("/Root/.sys/partition_stats").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             auto entry = result.GetEntry();
             UNIT_ASSERT_VALUES_EQUAL(entry.Name, "partition_stats");
-            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
+            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
         }
         {
             auto result = schemeClient.ListDirectory("/Root/.sys/partition_stats").GetValueSync();
@@ -1628,15 +1859,33 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             auto entry = result.GetEntry();
             UNIT_ASSERT_VALUES_EQUAL(entry.Name, "partition_stats");
-            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Table);
+            UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SysView);
         }
     }
 
     Y_UNIT_TEST(SystemViewFailOps) {
         TTestEnv env;
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 
-        TTableClient client(env.GetDriver());
-        auto session = client.CreateSession().GetValueSync().GetSession();
+        // Make AdministrationAllowedSIDs non-empty to deny any user cluster admin privilege.
+        // That can cause side effects, especially when dealing with system reserved names.
+        // Using an authorized non-admin user helps avoid these side effects.
+        env.GetServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
+
+        TTableClient adminClient(env.GetDriver(), TClientSettings().AuthToken("root@builtin"));
+        auto adminSession = adminClient.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                GRANT 'ydb.generic.full' ON `/Root` TO `user@builtin`;
+                )";
+            auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        TTableClient userClient(env.GetDriver(), TClientSettings().AuthToken("user@builtin"));
+        auto userSession = userClient.CreateSession().GetValueSync().GetSession();
 
         {
             auto desc = TTableBuilder()
@@ -1644,12 +1893,12 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 .SetPrimaryKeyColumn("Column1")
                 .Build();
 
-            auto result = session.CreateTable("/Root/.sys/partition_stats", std::move(desc)).GetValueSync();
+            auto result = userSession.CreateTable("/Root/.sys/partition_stats", std::move(desc)).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = session.CopyTable("/Root/.sys/partition_stats", "/Root/Table0").GetValueSync();
+            auto result = userSession.CopyTable("/Root/.sys/partition_stats", "/Root/Table0").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
@@ -1657,24 +1906,24 @@ Y_UNIT_TEST_SUITE(SystemView) {
             auto settings = TAlterTableSettings()
                 .AppendDropColumns("OwnerId");
 
-            auto result = session.AlterTable("/Root/.sys/partition_stats", settings).GetValueSync();
+            auto result = userSession.AlterTable("/Root/.sys/partition_stats", settings).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = session.DropTable("/Root/.sys/partition_stats").GetValueSync();
+            auto result = userSession.DropTable("/Root/.sys/partition_stats").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = session.ExecuteSchemeQuery(R"(
+            auto result = userSession.ExecuteSchemeQuery(R"(
                 DROP TABLE `/Root/.sys/partition_stats`;
             )").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = session.ReadTable("/Root/.sys/partition_stats").GetValueSync();
+            auto result = userSession.ReadTable("/Root/.sys/partition_stats").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
             TReadTableResultPart streamPart = result.ReadNext().GetValueSync();
@@ -1684,47 +1933,55 @@ Y_UNIT_TEST_SUITE(SystemView) {
         {
             TValueBuilder rows;
             rows.BeginList().EndList();
-            auto result = client.BulkUpsert("/Root/.sys/partition_stats", rows.Build()).GetValueSync();
+            auto result = userClient.BulkUpsert("/Root/.sys/partition_stats", rows.Build()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
 
-        TSchemeClient schemeClient(env.GetDriver());
-
+        auto driverConfig = env.GetDriver().GetConfig();
+        driverConfig.SetAuthToken("user@builtin");
+        const auto driver = TDriver(driverConfig);
+        auto userSchemeClient = TSchemeClient(driver);
         {
-            auto result = schemeClient.MakeDirectory("/Root/.sys").GetValueSync();
+            auto result = userSchemeClient.MakeDirectory("/Root/.sys").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "path exist", result.GetIssues().ToString());
+            result.GetIssues().PrintTo(Cerr);
+        }
+        {
+            auto result = userSchemeClient.MakeDirectory("/Root/.sys/partition_stats").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = schemeClient.MakeDirectory("/Root/.sys/partition_stats").GetValueSync();
+            auto result = userSchemeClient.RemoveDirectory("/Root/.sys").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
-            auto result = schemeClient.RemoveDirectory("/Root/.sys").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
-            result.GetIssues().PrintTo(Cerr);
-        }
-        {
-            auto result = schemeClient.RemoveDirectory("/Root/.sys/partition_stats").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            auto result = userSchemeClient.RemoveDirectory("/Root/.sys/partition_stats").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
             result.GetIssues().PrintTo(Cerr);
         }
         {
             TModifyPermissionsSettings settings;
-            auto result = schemeClient.ModifyPermissions("/Root/.sys/partition_stats", settings).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            auto result = userSchemeClient.ModifyPermissions("/Root/.sys/partition_stats", settings).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             result.GetIssues().PrintTo(Cerr);
         }
     }
 
     Y_UNIT_TEST(DescribeSystemFolder) {
         TTestEnv env;
-        CreateTenantsAndTables(env, false);
+        CreateTenantsAndTables(env, true);
 
-        TSchemeClient schemeClient(env.GetDriver());
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off);
+        auto driver = TDriver(driverConfig);
+
         {
+            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root"));
             auto result = schemeClient.ListDirectory("/Root").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -1733,27 +1990,32 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
+            SortBy(children, [](const auto& entry) { return entry.Name; });
             UNIT_ASSERT_VALUES_EQUAL(children.size(), 5);
             UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, ".metadata");
-            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, "Table0");
-            UNIT_ASSERT_STRINGS_EQUAL(children[2].Name, "Tenant1");
-            UNIT_ASSERT_STRINGS_EQUAL(children[3].Name, "Tenant2");
-            UNIT_ASSERT_STRINGS_EQUAL(children[4].Name, ".sys");
+            UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, ".sys");
+            UNIT_ASSERT_STRINGS_EQUAL(children[2].Name, "Table0");
+            UNIT_ASSERT_STRINGS_EQUAL(children[3].Name, "Tenant1");
+            UNIT_ASSERT_STRINGS_EQUAL(children[4].Name, "Tenant2");
         }
         {
+            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
             auto result = schemeClient.ListDirectory("/Root/Tenant1").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             auto entry = result.GetEntry();
-            UNIT_ASSERT_VALUES_EQUAL(entry.Name, "Tenant1");
+            UNIT_ASSERT_VALUES_EQUAL(entry.Name, "Root/Tenant1");
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::SubDomain);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 2);
-            UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, "Table1");
+            SortBy(children, [](const auto& entry) { return entry.Name; });
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 3);
+            UNIT_ASSERT_STRINGS_EQUAL(children[0].Name, ".metadata");
             UNIT_ASSERT_STRINGS_EQUAL(children[1].Name, ".sys");
+            UNIT_ASSERT_STRINGS_EQUAL(children[2].Name, "Table1");
         }
         {
+            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root"));
             auto result = schemeClient.ListDirectory("/Root/.sys").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -1762,16 +2024,18 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 29);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 33);
 
             THashSet<TString> names;
             for (const auto& child : children) {
                 names.insert(TString{child.Name});
-                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
+                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("udf_modules"));
         }
         {
+            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
             auto result = schemeClient.ListDirectory("/Root/Tenant1/.sys").GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -1780,16 +2044,19 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 23);
+
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
 
             THashSet<TString> names;
             for (const auto& child : children) {
                 names.insert(TString{child.Name});
-                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::Table);
+                UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("udf_modules"));
         }
         {
+            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
             auto result = schemeClient.ListDirectory("/Root/Tenant1/Table1/.sys").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
             result.GetIssues().PrintTo(Cerr);
@@ -1802,39 +2069,49 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
             .SetAuthToken("user0@builtin");
         auto driver = TDriver(driverConfig);
 
-        TSchemeClient schemeClient(driver);
         {
-            auto result = schemeClient.ListDirectory("/Root").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-            result.GetIssues().PrintTo(Cerr);
+            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root"));
+
+            {
+                auto result = schemeClient.ListDirectory("/Root").GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+                result.GetIssues().PrintTo(Cerr);
+            }
+
+            {
+                auto result = schemeClient.ListDirectory("/Root/.sys").GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+                result.GetIssues().PrintTo(Cerr);
+            }
+
+            {
+                auto result = schemeClient.DescribePath("/Root/.sys/partition_stats").GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+                result.GetIssues().PrintTo(Cerr);
+            }
         }
         {
-            auto result = schemeClient.ListDirectory("/Root/Tenant1").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-            result.GetIssues().PrintTo(Cerr);
-        }
-        {
-            auto result = schemeClient.ListDirectory("/Root/.sys").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-            result.GetIssues().PrintTo(Cerr);
-        }
-        {
-            auto result = schemeClient.ListDirectory("/Root/Tenant1/.sys").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-            result.GetIssues().PrintTo(Cerr);
-        }
-        {
-            auto result = schemeClient.DescribePath("/Root/.sys/partition_stats").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-            result.GetIssues().PrintTo(Cerr);
-        }
-        {
-            auto result = schemeClient.DescribePath("/Root/Tenant1/.sys/partition_stats").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
-            result.GetIssues().PrintTo(Cerr);
+            TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
+
+            {
+                auto result = schemeClient.ListDirectory("/Root/Tenant1").GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+                result.GetIssues().PrintTo(Cerr);
+            }
+            {
+                auto result = schemeClient.ListDirectory("/Root/Tenant1/.sys").GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+                result.GetIssues().PrintTo(Cerr);
+            }
+            {
+                auto result = schemeClient.DescribePath("/Root/Tenant1/.sys/partition_stats").GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNAUTHORIZED);
+                result.GetIssues().PrintTo(Cerr);
+            }
         }
     }
 
@@ -2038,7 +2315,8 @@ Y_UNIT_TEST_SUITE(SystemView) {
         TString query = R"(
             SELECT FollowerId, TabletId
             FROM `/Root/.sys/hive_tablets`
-            WHERE TabletId <= 72075186224037888ul OR TabletId >= 72075186224037890ul;
+            WHERE TabletId <= 72075186224037888ul OR TabletId >= 72075186224037890ul
+            ORDER BY TabletId, FollowerId
         )";
 
         TString expected = R"([
@@ -2066,13 +2344,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
         TTestEnv env(1, 0);
         CreateRootTable(env, 1, /* fillTable */ true);
 
-        TString query("SELECT * FROM `Root/Table0`");
+        TString query("SELECT * FROM `/Root/Table0`");
         execQuery(env, query);
 
         TTableClient client(env.GetDriver());
         auto it = client.StreamExecuteScanQuery(R"(
             SELECT QueryText, Type, ReadRows
-            FROM `Root/.sys/top_queries_by_read_bytes_one_minute`
+            FROM `/Root/.sys/top_queries_by_read_bytes_one_minute`
             ORDER BY ReadRows DESC
             LIMIT 1
             ;
@@ -2114,32 +2392,29 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }, "script");
     }
 
-    // TODO: make a test when tenant support is provided
-    void QueryMetricsSimple() {
-        TTestEnv env(1, 2);
+    Y_UNIT_TEST(QueryMetricsSimple) {
+        TTestEnv env(1, 2, {.EnableSVP = true});
         CreateTenant(env, "Tenant1", true);
-        {
-            TTableClient client(env.GetDriver());
-            auto session = client.CreateSession().GetValueSync().GetSession();
-
-            NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-                CREATE TABLE `Root/Tenant1/Table1` (
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )").GetValueSync());
-        }
 
         auto driverConfig = TDriverConfig()
             .SetEndpoint(env.GetEndpoint())
+            .SetDiscoveryMode(EDiscoveryMode::Off)
             .SetDatabase("/Root/Tenant1");
         auto driver = TDriver(driverConfig);
 
         TTableClient client(driver);
         auto session = client.CreateSession().GetValueSync().GetSession();
+
+        NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Tenant1/Table1` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync());
+
         NKqp::AssertSuccessResult(session.ExecuteDataQuery(
-            "SELECT * FROM `Root/Tenant1/Table1`", TTxControl::BeginTx().CommitTx()
+            "SELECT * FROM `/Root/Tenant1/Table1`", TTxControl::BeginTx().CommitTx()
         ).GetValueSync());
 
         size_t rowCount = 0;
@@ -2147,7 +2422,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
         for (size_t iter = 0; iter < 30 && !rowCount; ++iter) {
             auto it = client.StreamExecuteScanQuery(R"(
-                SELECT SumReadBytes FROM `Root/Tenant1/.sys/query_metrics`;
+                SELECT SumReadBytes
+                FROM `/Root/Tenant1/.sys/query_metrics_one_minute`
+                WHERE QueryText = 'SELECT * FROM `/Root/Tenant1/Table1`';
             )").GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -2158,2024 +2435,95 @@ Y_UNIT_TEST_SUITE(SystemView) {
             rowCount = node.AsList().size();
 
             if (!rowCount) {
-                Sleep(TDuration::Seconds(1));
+                Sleep(TDuration::Seconds(5));
             }
         }
 
+        UNIT_ASSERT_GE(rowCount, 0);
         NKqp::CompareYson(R"([
             [[0u]];
         ])", ysonString);
     }
 
-    Y_UNIT_TEST(AuthUsers) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
+    Y_UNIT_TEST(UdfModulesEmpty) {
+        TTestEnv env(1, 0);
         TTableClient client(env.GetDriver());
-
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
-        env.GetClient().CreateGroup("/Root", "group1");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group2");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group3");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group4");
-
-        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid, IsEnabled, IsLockedOut, LastSuccessfulAttemptAt, LastFailedAttemptAt, FailedAttemptCount
-                FROM `Root/.sys/auth_users`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user1"];[%true];[%false];[0u];[0u];[0u]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT PasswordHash
-                FROM `Root/.sys/auth_users`
-            )").GetValueSync();
-
-            auto actual = NKqp::StreamResultToYson(it);
-            UNIT_ASSERT_STRING_CONTAINS(actual, "hash");
-            UNIT_ASSERT_STRING_CONTAINS(actual, "salt");
-            UNIT_ASSERT_STRING_CONTAINS(actual, "type");
-            UNIT_ASSERT_STRING_CONTAINS(actual, "argon2id");
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid, IsEnabled, IsLockedOut, LastSuccessfulAttemptAt, LastFailedAttemptAt, FailedAttemptCount
-                FROM `Root/Tenant1/.sys/auth_users`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user2"];[%true];[%false];[0u];[0u];[0u]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid, IsEnabled, IsLockedOut, LastSuccessfulAttemptAt, LastFailedAttemptAt, FailedAttemptCount
-                FROM `Root/Tenant2/.sys/auth_users`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user3"];[%true];[%false];[0u];[0u];[0u]];
-                [["user4"];[%true];[%false];[0u];[0u];[0u]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
-
-    Y_UNIT_TEST(AuthUsers_Access) {
-        TTestEnv env;
-        SetupAuthAccessEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint());
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_users`
-            )").GetValueSync();
-
-            auto expected = R"([
-
-            ])";
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-        
-        { // user1rootadmin is /Root admin
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint())
-                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                    .User = "user1rootadmin",
-                    .Password = "password1",
-                }));
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT Sid
-                    FROM `Root/.sys/auth_users`
-                )").GetValueSync();
-
-                auto expected = R"([
-                    [["user1rootadmin"]];
-                    [["user2"]];
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_users`
-                )").GetValueSync();
-
-                auto expected = R"([
-                    [["user3"]];
-                    [["user4"]];
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-        }
-
-        { // user2 isn't /Root admin
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint())
-                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                    .User = "user2",
-                    .Password = "password2",
-                }));
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT Sid
-                    FROM `Root/.sys/auth_users`
-                )").GetValueSync();
-
-                auto expected = R"([
-                    [["user2"]];
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_users`
-                )").GetValueSync();
-
-                auto expected = R"([
-
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-        }
-
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
-    }
-
-    Y_UNIT_TEST(AuthUsers_ResultOrder) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        for (auto user : {
-            "user3",
-            "user1",
-            "user2",
-            "user",
-            "user33",
-            "user21",
-            "user22",
-            "userrr",
-            "u",
-            "asdf",
-        }) {
-            env.GetClient().CreateUser("/Root", user, "password");
-        }
 
         auto it = client.StreamExecuteScanQuery(R"(
-            SELECT Sid
-            FROM `Root/.sys/auth_users`
+            SELECT Uid, Name, ModuleType, CompileStatus
+            FROM `/Root/.sys/udf_modules`;
         )").GetValueSync();
 
-        auto expected = R"([
-            [["asdf"]];
-            [["u"]];
-            [["user"]];
-            [["user1"]];
-            [["user2"]];
-            [["user21"]];
-            [["user22"]];
-            [["user3"]];
-            [["user33"]];
-            [["userrr"]];
-        ])";
-
-        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        NKqp::CompareYson(R"([])", NKqp::StreamResultToYson(it));
     }
+}
+Y_UNIT_TEST_SUITE(ViewQuerySplit) {
+
+Y_UNIT_TEST(Basic) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery("select 1", split, issues), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation, "");
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select 1");
+}
+
+Y_UNIT_TEST(WithPragmaTablePathPrefix) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "pragma tablepathprefix = \"/foo/bar\";\n"
+        "select 1",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation, "pragma tablepathprefix = \"/foo/bar\";\n");
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select 1");
+}
+
+Y_UNIT_TEST(WithPairedPragmaTablePathPrefix) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "pragma tablepathprefix (\"foo\", \"/bar/baz\");\n"
+        "select 1",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation, "pragma tablepathprefix (\"foo\", \"/bar/baz\");\n");
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select 1");
+}
+
+Y_UNIT_TEST(WithComments) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "-- what does the fox say?\n"
+        "pragma tablepathprefix = \"/foo/bar\";\n"
+        "select * from t",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation,
+        "-- what does the fox say?\n"
+        "pragma tablepathprefix = \"/foo/bar\";\n"
+    );
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select * from t");
+}
+
+Y_UNIT_TEST(Joins) {
+    NYql::TIssues issues;
+    TViewQuerySplit split;
+    UNIT_ASSERT_C(SplitViewQuery(
+        "$x = \"/t\";\n"
+        "$y = \"/tt\";\n"
+        "select * from $x as x join $y as y on x.key == y.key",
+        split, issues
+    ), issues.ToString());
+    UNIT_ASSERT_STRINGS_EQUAL(split.ContextRecreation,
+        "$x = \"/t\";\n"
+        "$y = \"/tt\";\n"
+    );
+    UNIT_ASSERT_STRINGS_EQUAL(split.Select, "select * from $x as x join $y as y on x.key == y.key");
+}
 
-    Y_UNIT_TEST(AuthUsers_TableRange) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        for (auto user : {
-            "user1",
-            "user2",
-            "user3",
-            "user4"
-        }) {
-            env.GetClient().CreateUser("/Root", user, "password");
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_users`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user1"]];
-                [["user2"]];
-                [["user3"]];
-                [["user4"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_users`
-                WHERE Sid >= "user2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user2"]];
-                [["user3"]];
-                [["user4"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_users`
-                WHERE Sid > "user2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user3"]];
-                [["user4"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_users`
-                WHERE Sid <= "user3"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user1"]];
-                [["user2"]];
-                [["user3"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_users`
-                WHERE Sid < "user3"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user1"]];
-                [["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_users`
-                WHERE Sid > "user1" AND Sid <= "user3"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user2"]];
-                [["user3"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_users`
-                WHERE Sid >= "user2" AND Sid < "user3"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
-
-    Y_UNIT_TEST(AuthGroups) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
-        env.GetClient().CreateGroup("/Root", "group1");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group2");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group3");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group4");
-
-        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_groups`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group1"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/Tenant1/.sys/auth_groups`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/Tenant2/.sys/auth_groups`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group3"]];
-                [["group4"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
-
-    Y_UNIT_TEST(AuthGroups_Access) {
-        TTestEnv env;
-        SetupAuthAccessEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        env.GetClient().CreateGroup("/Root", "group1");
-        env.GetClient().CreateGroup("/Root", "group2");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group3");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group4");
-
-        { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint());
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_groups`
-            )").GetValueSync();
-
-            CheckAuthAdministratorAccessIsRequired(it);
-        }
-
-        { // user1rootadmin is /Root admin
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint())
-                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                    .User = "user1rootadmin",
-                    .Password = "password1",
-                }));
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT Sid
-                    FROM `Root/.sys/auth_groups`
-                )").GetValueSync();
-
-                auto expected = R"([
-                    [["group1"]];
-                    [["group2"]];
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_groups`
-                )").GetValueSync();
-
-                auto expected = R"([
-                    [["group3"]];
-                    [["group4"]];
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-        }
-
-        { // user2 isn't /Root admin
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint())
-                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                    .User = "user2",
-                    .Password = "password2",
-                }));
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT Sid
-                    FROM `Root/.sys/auth_groups`
-                )").GetValueSync();
-
-                CheckAuthAdministratorAccessIsRequired(it);
-            }
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT Sid
-                    FROM `Root/Tenant1/.sys/auth_groups`
-                )").GetValueSync();
-
-                CheckAuthAdministratorAccessIsRequired(it);
-            }
-        }
-
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
-    }
-
-    Y_UNIT_TEST(AuthGroups_ResultOrder) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        for (auto group : {
-            "group3",
-            "group1",
-            "group2",
-            "group",
-            "group33",
-            "group21",
-            "group22",
-            "grouprr",
-            "g",
-            "asdf",
-        }) {
-            env.GetClient().CreateGroup("/Root", group);
-        }
-
-        auto it = client.StreamExecuteScanQuery(R"(
-            SELECT *
-            FROM `Root/.sys/auth_groups`
-        )").GetValueSync();
-
-        auto expected = R"([
-            [["asdf"]];
-            [["g"]];
-            [["group"]];
-            [["group1"]];
-            [["group2"]];
-            [["group21"]];
-            [["group22"]];
-            [["group3"]];
-            [["group33"]];
-            [["grouprr"]];
-        ])";
-
-        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-    }
-
-    Y_UNIT_TEST(AuthGroups_TableRange) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        for (auto group : {
-            "group1",
-            "group2",
-            "group3",
-            "group4",
-        }) {
-            env.GetClient().CreateGroup("/Root", group);
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid
-                FROM `Root/.sys/auth_groups`
-                WHERE Sid > "group1" AND Sid <= "group3"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group2"]];
-                [["group3"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
-
-    Y_UNIT_TEST(AuthGroupMembers) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
-        env.GetClient().CreateGroup("/Root", "group1");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group2");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group3");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group4");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group5");
-
-        env.GetClient().AddGroupMembership("/Root", "group1", "user1");
-        env.GetClient().AddGroupMembership("/Root/Tenant1", "group2", "user2");
-        env.GetClient().AddGroupMembership("/Root/Tenant2", "group3", "user4");
-        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "user3");
-        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "user4");
-        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "group3");
-        env.GetClient().AddGroupMembership("/Root/Tenant2", "group4", "group4");
-
-        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
-        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2").DebugString() << Endl;
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group1"];["user1"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/Tenant1/.sys/auth_group_members`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group2"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/Tenant2/.sys/auth_group_members`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group3"];["user4"]];
-                [["group4"];["group3"]];
-                [["group4"];["group4"]];
-                [["group4"];["user3"]];
-                [["group4"];["user4"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
-
-    Y_UNIT_TEST(AuthGroupMembers_Access) {
-        TTestEnv env;
-        SetupAuthAccessEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        env.GetClient().CreateGroup("/Root", "group1");
-        env.GetClient().CreateGroup("/Root", "group2");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group3");
-        env.GetClient().CreateGroup("/Root/Tenant1", "group4");
-
-        env.GetClient().AddGroupMembership("/Root", "group1", "user1rootadmin");
-        env.GetClient().AddGroupMembership("/Root", "group2", "user2");
-        env.GetClient().AddGroupMembership("/Root/Tenant1", "group3", "user3");
-        env.GetClient().AddGroupMembership("/Root/Tenant1", "group4", "user4");
-
-        { // anonymous login doesn't give administrative access as `AdministrationAllowedSIDs` isn't empty
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint());
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-            )").GetValueSync();
-
-            CheckAuthAdministratorAccessIsRequired(it);
-        }
-
-        { // user1rootadmin is /Root admin
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint())
-                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                    .User = "user1rootadmin",
-                    .Password = "password1",
-                }));
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT *
-                    FROM `Root/.sys/auth_group_members`
-                )").GetValueSync();
-
-                auto expected = R"([
-                    [["group1"];["user1rootadmin"]];
-                    [["group2"];["user2"]];
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT *
-                    FROM `Root/Tenant1/.sys/auth_group_members`
-                )").GetValueSync();
-
-                auto expected = R"([
-                    [["group3"];["user3"]];
-                    [["group4"];["user4"]];
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-        }
-
-        { // user2 isn't /Root admin
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint())
-                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                    .User = "user2",
-                    .Password = "password2",
-                }));
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT *
-                    FROM `Root/.sys/auth_group_members`
-                )").GetValueSync();
-
-                CheckAuthAdministratorAccessIsRequired(it);
-            }
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT *
-                    FROM `Root/Tenant1/.sys/auth_group_members`
-                )").GetValueSync();
-
-                CheckAuthAdministratorAccessIsRequired(it);
-            }
-        }
-
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
-    }
-
-    Y_UNIT_TEST(AuthGroupMembers_ResultOrder) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        for (auto group : {
-            "group3",
-            "group1",
-            "group2",
-            "group",
-        }) {
-            env.GetClient().CreateGroup("/Root", group);
-        }
-
-        for (auto user : {
-            "user1",
-            "user2",
-            "user"
-        }) {
-            env.GetClient().CreateUser("/Root", user, "password");
-        }
-
-        for (auto membership : TVector<std::pair<TString, TString>>{
-            {"group3", "user1"},
-            {"group3", "user2"},
-            {"group2", "user"},
-            {"group2", "user1"},
-            {"group2", "user2"},
-            {"group", "user2"},
-        }) {
-            env.GetClient().AddGroupMembership("/Root", membership.first, membership.second);
-        }
-        
-        auto it = client.StreamExecuteScanQuery(R"(
-            SELECT *
-            FROM `Root/.sys/auth_group_members`
-        )").GetValueSync();
-
-        auto expected = R"([
-            [["group"];["user2"]];
-            [["group2"];["user"]];
-            [["group2"];["user1"]];
-            [["group2"];["user2"]];
-            [["group3"];["user1"]];
-            [["group3"];["user2"]];
-        ])";
-
-        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-    }
-
-    Y_UNIT_TEST(AuthGroupMembers_TableRange) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        for (auto group : {
-            "group1",
-            "group2",
-            "group3",
-        }) {
-            env.GetClient().CreateGroup("/Root", group);
-        }
-
-        for (auto user : {
-            "user1",
-            "user2",
-            "user3"
-        }) {
-            env.GetClient().CreateUser("/Root", user, "password");
-        }
-
-        for (auto membership : TVector<std::pair<TString, TString>>{
-            {"group1", "user1"},
-            {"group1", "user2"},
-            {"group2", "user1"},
-            {"group2", "user2"},
-            {"group2", "user3"},
-            {"group3", "user1"},
-            {"group3", "user2"},
-        }) {
-            env.GetClient().AddGroupMembership("/Root", membership.first, membership.second);
-        }
-        
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group1"];["user1"]];
-                [["group1"];["user2"]];
-                [["group2"];["user1"]];
-                [["group2"];["user2"]];
-                [["group2"];["user3"]];
-                [["group3"];["user1"]];
-                [["group3"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-                WHERE GroupSid > "group1" AND GroupSid <= "group3"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group2"];["user1"]];
-                [["group2"];["user2"]];
-                [["group2"];["user3"]];
-                [["group3"];["user1"]];
-                [["group3"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-                WHERE GroupSid >= "group2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group2"];["user1"]];
-                [["group2"];["user2"]];
-                [["group2"];["user3"]];
-                [["group3"];["user1"]];
-                [["group3"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-                WHERE GroupSid > "group2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group3"];["user1"]];
-                [["group3"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-                WHERE GroupSid <= "group2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group1"];["user1"]];
-                [["group1"];["user2"]];
-                [["group2"];["user1"]];
-                [["group2"];["user2"]];
-                [["group2"];["user3"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-                WHERE GroupSid < "group2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group1"];["user1"]];
-                [["group1"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-                WHERE GroupSid = "group2" AND MemberSid >= "user2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group2"];["user2"]];
-                [["group2"];["user3"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-                WHERE GroupSid = "group2" AND MemberSid > "user2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group2"];["user3"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-                WHERE GroupSid = "group2" AND MemberSid <= "user2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group2"];["user1"]];
-                [["group2"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_group_members`
-                WHERE GroupSid = "group2" AND MemberSid < "user2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["group2"];["user1"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
-
-    Y_UNIT_TEST(AuthOwners) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group1");
-
-        env.GetClient().MkDir("/Root", "Dir1/SubDir1");
-        env.GetClient().ModifyOwner("/Root", "Dir1", "user1");
-        env.GetClient().ModifyOwner("/Root/Dir1", "SubDir1", "user1");
-
-        env.GetClient().MkDir("/Root/Tenant1", "Dir2/SubDir2");
-        env.GetClient().ModifyOwner("/Root/Tenant1", "Dir2", "user2");
-        env.GetClient().ModifyOwner("/Root/Tenant1/Dir2", "SubDir2", "user2");
-
-        env.GetClient().MkDir("/Root/Tenant2", "Dir3/SubDir33");
-        env.GetClient().MkDir("/Root/Tenant2", "Dir3/SubDir34");
-        env.GetClient().MkDir("/Root/Tenant2", "Dir4/SubDir45");
-        env.GetClient().MkDir("/Root/Tenant2", "Dir4/SubDir46");
-        env.GetClient().ModifyOwner("/Root/Tenant2", "Dir3", "user3");
-        env.GetClient().ModifyOwner("/Root/Tenant2", "Dir4", "user4");
-        env.GetClient().ModifyOwner("/Root/Tenant2/Dir3", "SubDir33", "group1");
-        env.GetClient().ModifyOwner("/Root/Tenant2/Dir4", "SubDir46", "user4");
-
-        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
-        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2").DebugString() << Endl;
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root"];["root@builtin"]];
-                [["/Root/.metadata"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                [["/Root/Dir1"];["user1"]];
-                [["/Root/Dir1/SubDir1"];["user1"]];
-                [["/Root/Table0"];["root@builtin"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/Tenant1/.sys/auth_owners`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Tenant1"];["root@builtin"]];
-                [["/Root/Tenant1/Dir2"];["user2"]];
-                [["/Root/Tenant1/Dir2/SubDir2"];["user2"]];
-                [["/Root/Tenant1/Table1"];["root@builtin"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/Tenant2/.sys/auth_owners`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Tenant2"];["root@builtin"]];
-                [["/Root/Tenant2/Dir3"];["user3"]];
-                [["/Root/Tenant2/Dir3/SubDir33"];["group1"]];
-                [["/Root/Tenant2/Dir3/SubDir34"];["root@builtin"]];
-                [["/Root/Tenant2/Dir4"];["user4"]];
-                [["/Root/Tenant2/Dir4/SubDir45"];["root@builtin"]];
-                [["/Root/Tenant2/Dir4/SubDir46"];["user4"]];
-                [["/Root/Tenant2/Table2"];["root@builtin"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
-
-    Y_UNIT_TEST(AuthOwners_Access) {
-        TTestEnv env;
-        SetupAuthAccessEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        env.GetClient().MkDir("/Root", "Dir1");
-        env.GetClient().MkDir("/Root", "Dir2");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir3");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir4");
-        env.GetClient().ModifyOwner("/Root", "Dir1", "user1rootadmin");
-        env.GetClient().ModifyOwner("/Root/Tenant1", "Dir3", "user3");
-
-        { // anonymous login gives `ydb.granular.describe_schema` access
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint());
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root"];["root@builtin"]];
-                [["/Root/.metadata"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                [["/Root/Dir1"];["user1rootadmin"]];
-                [["/Root/Dir2"];["root@builtin"]];
-                [["/Root/Table0"];["root@builtin"]]
-            ])";
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        { // user1rootadmin has /Root GenericUse access
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint())
-                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                    .User = "user1rootadmin",
-                    .Password = "password1",
-                }));
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT *
-                    FROM `Root/.sys/auth_owners`
-                )").GetValueSync();
-
-                auto expected = R"([
-                    [["/Root"];["root@builtin"]];
-                    [["/Root/.metadata"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                    [["/Root/Dir1"];["user1rootadmin"]];
-                    [["/Root/Dir2"];["root@builtin"]];
-                    [["/Root/Table0"];["root@builtin"]]
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT *
-                    FROM `Root/Tenant1/.sys/auth_owners`
-                )").GetValueSync();
-
-                auto expected = R"([
-                    [["/Root/Tenant1"];["root@builtin"]];
-                    [["/Root/Tenant1/Dir3"];["user3"]];
-                    [["/Root/Tenant1/Dir4"];["root@builtin"]];
-                    [["/Root/Tenant1/Table1"];["root@builtin"]]
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-        }
-
-        { // revoke user1rootadmin /Root/Dir2 GenericUse access
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "user1rootadmin");
-            env.GetClient().ModifyACL("/Root", "Dir2", acl.SerializeAsString());
-
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint())
-                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                    .User = "user1rootadmin",
-                    .Password = "password1",
-                }));
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root"];["root@builtin"]];
-                [["/Root/.metadata"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                [["/Root/Dir1"];["user1rootadmin"]];
-                [["/Root/Table0"];["root@builtin"]]
-            ])";
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
-    }
-
-    Y_UNIT_TEST(AuthOwners_ResultOrder) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        for (auto path : {
-            "Dir2/SubDir2",
-            "Dir1/SubDir1",
-            "Dir2/SubDir1",
-            "Dir1/SubDir2",
-            "Dir2/SubDir3",
-            "Dir1/SubDir3",
-            "Dir11/SubDir",
-            "Dir/SubDir",
-        }) {
-            env.GetClient().MkDir("/Root", path);
-        }
-        
-        auto it = client.StreamExecuteScanQuery(R"(
-            SELECT *
-            FROM `Root/.sys/auth_owners`
-        )").GetValueSync();
-
-        auto expected = R"([
-            [["/Root"];["root@builtin"]];
-            [["/Root/.metadata"];["metadata@system"]];
-            [["/Root/.metadata/workload_manager"];["metadata@system"]];
-            [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-            [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-            [["/Root/Dir"];["root@builtin"]];
-            [["/Root/Dir/SubDir"];["root@builtin"]];
-            [["/Root/Dir1"];["root@builtin"]];
-            [["/Root/Dir1/SubDir1"];["root@builtin"]];
-            [["/Root/Dir1/SubDir2"];["root@builtin"]];
-            [["/Root/Dir1/SubDir3"];["root@builtin"]];
-            [["/Root/Dir11"];["root@builtin"]];
-            [["/Root/Dir11/SubDir"];["root@builtin"]];
-            [["/Root/Dir2"];["root@builtin"]];
-            [["/Root/Dir2/SubDir1"];["root@builtin"]];
-            [["/Root/Dir2/SubDir2"];["root@builtin"]];
-            [["/Root/Dir2/SubDir3"];["root@builtin"]];
-            [["/Root/Table0"];["root@builtin"]]
-        ])";
-
-        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-    }
-
-    Y_UNIT_TEST(AuthOwners_TableRange) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        for (auto path : {
-            "Dir0/SubDir0",
-            "Dir0/SubDir1",
-            "Dir0/SubDir2",
-            "Dir1/SubDir0",
-            "Dir1/SubDir1",
-            "Dir1/SubDir2",
-            "Dir2/SubDir0",
-            "Dir2/SubDir1",
-            "Dir2/SubDir2",
-            "Dir3/SubDir0",
-            "Dir3/SubDir1",
-            "Dir3/SubDir2",
-        }) {
-            env.GetClient().MkDir("/Root", path);
-        }
-        env.GetClient().CreateUser("/Root", "user0", "password0");
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root", "user2", "password2");
-        env.GetClient().ModifyOwner("/Root/Dir1", "SubDir0", "user0");
-        env.GetClient().ModifyOwner("/Root/Dir1", "SubDir1", "user1");
-        env.GetClient().ModifyOwner("/Root/Dir1", "SubDir2", "user2");
-        
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root"];["root@builtin"]];
-                [["/Root/.metadata"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                [["/Root/Dir0"];["root@builtin"]];
-                [["/Root/Dir0/SubDir0"];["root@builtin"]];
-                [["/Root/Dir0/SubDir1"];["root@builtin"]];
-                [["/Root/Dir0/SubDir2"];["root@builtin"]];
-                [["/Root/Dir1"];["root@builtin"]];
-                [["/Root/Dir1/SubDir0"];["user0"]];
-                [["/Root/Dir1/SubDir1"];["user1"]];
-                [["/Root/Dir1/SubDir2"];["user2"]];
-                [["/Root/Dir2"];["root@builtin"]];
-                [["/Root/Dir2/SubDir0"];["root@builtin"]];
-                [["/Root/Dir2/SubDir1"];["root@builtin"]];
-                [["/Root/Dir2/SubDir2"];["root@builtin"]];
-                [["/Root/Dir3"];["root@builtin"]];
-                [["/Root/Dir3/SubDir0"];["root@builtin"]];
-                [["/Root/Dir3/SubDir1"];["root@builtin"]];
-                [["/Root/Dir3/SubDir2"];["root@builtin"]];
-                [["/Root/Table0"];["root@builtin"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path >= "/A" AND Path <= "/Z"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root"];["root@builtin"]];
-                [["/Root/.metadata"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools"];["metadata@system"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["metadata@system"]];
-                [["/Root/Dir0"];["root@builtin"]];
-                [["/Root/Dir0/SubDir0"];["root@builtin"]];
-                [["/Root/Dir0/SubDir1"];["root@builtin"]];
-                [["/Root/Dir0/SubDir2"];["root@builtin"]];
-                [["/Root/Dir1"];["root@builtin"]];
-                [["/Root/Dir1/SubDir0"];["user0"]];
-                [["/Root/Dir1/SubDir1"];["user1"]];
-                [["/Root/Dir1/SubDir2"];["user2"]];
-                [["/Root/Dir2"];["root@builtin"]];
-                [["/Root/Dir2/SubDir0"];["root@builtin"]];
-                [["/Root/Dir2/SubDir1"];["root@builtin"]];
-                [["/Root/Dir2/SubDir2"];["root@builtin"]];
-                [["/Root/Dir3"];["root@builtin"]];
-                [["/Root/Dir3/SubDir0"];["root@builtin"]];
-                [["/Root/Dir3/SubDir1"];["root@builtin"]];
-                [["/Root/Dir3/SubDir2"];["root@builtin"]];
-                [["/Root/Table0"];["root@builtin"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path >= "/Root/Dir1" AND Path < "/Root/Dir3"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1"];["root@builtin"]];
-                [["/Root/Dir1/SubDir0"];["user0"]];
-                [["/Root/Dir1/SubDir1"];["user1"]];
-                [["/Root/Dir1/SubDir2"];["user2"]];
-                [["/Root/Dir2"];["root@builtin"]];
-                [["/Root/Dir2/SubDir0"];["root@builtin"]];
-                [["/Root/Dir2/SubDir1"];["root@builtin"]];
-                [["/Root/Dir2/SubDir2"];["root@builtin"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path >= "/Root/Dir1/SubDir1" AND Path <= "/Root/Dir2/SubDir1"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["user1"]];
-                [["/Root/Dir1/SubDir2"];["user2"]];
-                [["/Root/Dir2"];["root@builtin"]];
-                [["/Root/Dir2/SubDir0"];["root@builtin"]];
-                [["/Root/Dir2/SubDir1"];["root@builtin"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path > "/Root/Dir1/SubDir1" AND Path < "/Root/Dir2/SubDir1"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir2"];["user2"]];
-                [["/Root/Dir2"];["root@builtin"]];
-                [["/Root/Dir2/SubDir0"];["root@builtin"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path = "/Root/Dir1/SubDir1"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["user1"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path >= "/Root/Dir1/SubDir0" AND Sid >= "user1" AND Path < "/Root/Dir2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["user1"]];
-                [["/Root/Dir1/SubDir2"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid > "user0"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["user1"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid < "user2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["user1"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid >= "user1"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["user1"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid <= "user1"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["user1"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid > "user1"
-            )").GetValueSync();
-
-            auto expected = R"([
-
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid < "user1"
-            )").GetValueSync();
-
-            auto expected = R"([
-
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_owners`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid = "user1"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["user1"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT Sid, Path
-                FROM `Root/.sys/auth_owners`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid >= "user1"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["user1"];["/Root/Dir1/SubDir1"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
-
-    Y_UNIT_TEST(AuthPermissions) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
-        env.GetClient().CreateUser("/Root/Tenant2", "user3", "password3");
-        env.GetClient().CreateUser("/Root/Tenant2", "user4", "password4");
-        env.GetClient().CreateGroup("/Root/Tenant2", "group1");
-
-        env.GetClient().MkDir("/Root", "Dir1/SubDir1");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir2/SubDir2");
-        env.GetClient().MkDir("/Root/Tenant2", "Dir3/SubDir3");
-        env.GetClient().MkDir("/Root/Tenant2", "Dir4/SubDir4");
-
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-            env.GetClient().ModifyACL("/", "Root", acl.SerializeAsString());
-            env.GetClient().ModifyACL("/Root", "Dir1", acl.SerializeAsString());
-        }
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1");
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user1");
-            env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
-        }
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Deny, NACLib::UpdateRow, "user1");
-            env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
-        }
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user2");
-            env.GetClient().ModifyACL("/Root", "Tenant1", acl.SerializeAsString());
-            env.GetClient().ModifyACL("/Root/Tenant1/Dir2", "SubDir2", acl.SerializeAsString());
-        }
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user3");
-            env.GetClient().ModifyACL("/Root", "Tenant2", acl.SerializeAsString());
-            env.GetClient().ModifyACL("/Root/Tenant2", "Dir3", acl.SerializeAsString());
-        }
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user4");
-            env.GetClient().ModifyACL("/Root/Tenant2/Dir4", "SubDir4", acl.SerializeAsString());
-        }
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "group1");
-            env.GetClient().ModifyACL("/Root/Tenant2", "Dir4", acl.SerializeAsString());
-        }
-        
-        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Dir4").DebugString() << Endl;
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_permissions`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user1"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user1"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/Tenant1/.sys/auth_permissions`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Tenant1"];["ydb.generic.use"];["user2"]];
-                [["/Root/Tenant1/Dir2/SubDir2"];["ydb.generic.use"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/Tenant2/.sys/auth_permissions`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Tenant2"];["ydb.generic.use"];["user3"]];
-                [["/Root/Tenant2/Dir3"];["ydb.generic.use"];["user3"]];
-                [["/Root/Tenant2/Dir4"];["ydb.generic.use"];["group1"]];
-                [["/Root/Tenant2/Dir4/SubDir4"];["ydb.generic.use"];["user4"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
-
-    Y_UNIT_TEST(AuthPermissions_Access) {
-        TTestEnv env;
-        SetupAuthAccessEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        env.GetClient().MkDir("/Root", "Dir1");
-        env.GetClient().MkDir("/Root", "Dir2");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir3");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir4");
-        
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1rootadmin");
-            env.GetClient().ModifyACL("/Root", "Dir1", acl.SerializeAsString());
-        }
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user2");
-            env.GetClient().ModifyACL("/Root", "Dir2", acl.SerializeAsString());
-        }
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user3");
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user4");
-            env.GetClient().ModifyACL("/Root/Tenant1", "Dir3", acl.SerializeAsString());
-        }
-
-        { // anonymous login gives `ydb.granular.describe_schema` access
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint());
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_permissions`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
-                [["/Root"];["ydb.generic.use"];["user2"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
-                [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
-                [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]];
-            ])";
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        { // user1rootadmin has /Root GenericUse access
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint())
-                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                    .User = "user1rootadmin",
-                    .Password = "password1",
-                }));
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT *
-                    FROM `Root/.sys/auth_permissions`
-                )").GetValueSync();
-
-                auto expected = R"([
-                    [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
-                    [["/Root"];["ydb.generic.use"];["user2"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                    [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
-                    [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
-                    [["/Root/Dir2"];["ydb.granular.erase_row"];["user2"]];
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-
-            {
-                auto it = client.StreamExecuteScanQuery(R"(
-                    SELECT *
-                    FROM `Root/Tenant1/.sys/auth_permissions`
-                )").GetValueSync();
-
-                auto expected = R"([
-                    [["/Root/Tenant1/Dir3"];["ydb.granular.select_row"];["user3"]];
-                    [["/Root/Tenant1/Dir3"];["ydb.granular.erase_row"];["user4"]];
-                ])";
-                NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-            }
-        }
-
-        { // revoke user1rootadmin /Root/Dir2 GenericUse access
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Deny, NACLib::GenericUse, "user1rootadmin");
-            env.GetClient().ModifyACL("/Root", "Dir2", acl.SerializeAsString());
-
-            auto driverConfig = TDriverConfig()
-                .SetEndpoint(env.GetEndpoint())
-                .SetCredentialsProviderFactory(NYdb::CreateLoginCredentialsProviderFactory({
-                    .User = "user1rootadmin",
-                    .Password = "password1",
-                }));
-            auto driver = TDriver(driverConfig);
-            TTableClient client(driver);
-
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_permissions`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root"];["ydb.generic.use"];["user1rootadmin"]];
-                [["/Root"];["ydb.generic.use"];["user2"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.full"];["user1rootadmin"]];
-                [["/Root/Dir1"];["ydb.granular.select_row"];["user1rootadmin"]];
-            ])";
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        // TODO: fix https://github.com/ydb-platform/ydb/issues/13730
-        // and test tenant user and tenant admin
-    }
-
-    Y_UNIT_TEST(AuthPermissions_ResultOrder) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        for (auto user : {
-            "user1",
-            "user2",
-            "user"
-        }) {
-            env.GetClient().CreateUser("/Root", user, "password");
-        }
-
-        for (auto dir : {
-            "Dir",
-            "Dir1",
-            "Dir2",
-            "Dir/SubDir1",
-            "Dir/SubDir2"
-        }) {
-            env.GetClient().MkDir("/Root", dir);
-        }
-        
-        for (auto acl : TVector<std::tuple<TString, TString, TString, NACLib::EAccessRights>>{
-            {"/", "Root", "user1", NACLib::SelectRow},
-            {"/", "Root", "user1", NACLib::EraseRow},
-            {"/", "Root", "user1", NACLib::AlterSchema},
-            {"/", "Root", "user2", NACLib::GenericUse},
-            {"/Root", "Dir1", "user2", NACLib::GenericUse},
-            {"/Root", "Dir1", "user1", NACLib::GenericUse},
-            {"/Root", "Dir2", "user2", NACLib::GenericUse},
-            {"/Root", "Dir2", "user", NACLib::GenericUse},
-            {"/Root", "Dir2", "user1", NACLib::GenericUse},
-            {"/Root", "Dir", "user1", NACLib::GenericUse},
-            {"/Root", "Dir1", "user1", NACLib::AlterSchema},
-            {"/Root/Dir1", "SubDir1", "user1", NACLib::AlterSchema},
-            {"/Root/Dir1", "SubDir2", "user2", NACLib::AlterSchema},
-            {"/Root/Dir1", "SubDir2", "user1", NACLib::AlterSchema}
-        }) {
-            NACLib::TDiffACL diffAcl;
-            diffAcl.AddAccess(NACLib::EAccessType::Allow, std::get<3>(acl), std::get<2>(acl));
-            env.GetClient().ModifyACL(std::get<0>(acl), std::get<1>(acl), diffAcl.SerializeAsString());
-        }
-
-        auto it = client.StreamExecuteScanQuery(R"(
-            SELECT Path, Sid, Permission
-            FROM `Root/.sys/auth_permissions`
-        )").GetValueSync();
-
-        auto expected = R"([
-            [["/Root"];["user1"];["ydb.granular.alter_schema"]];
-            [["/Root"];["user1"];["ydb.granular.erase_row"]];
-            [["/Root"];["user1"];["ydb.granular.select_row"]];
-            [["/Root"];["user2"];["ydb.generic.use"]];
-            [["/Root/.metadata/workload_manager/pools/default"];["all-users@well-known"];["ydb.granular.describe_schema"]];
-            [["/Root/.metadata/workload_manager/pools/default"];["all-users@well-known"];["ydb.granular.select_row"]];
-            [["/Root/.metadata/workload_manager/pools/default"];["root@builtin"];["ydb.granular.describe_schema"]];
-            [["/Root/.metadata/workload_manager/pools/default"];["root@builtin"];["ydb.granular.select_row"]];
-            [["/Root/Dir"];["user1"];["ydb.generic.use"]];
-            [["/Root/Dir1"];["user1"];["ydb.generic.use"]];
-            [["/Root/Dir1"];["user1"];["ydb.granular.alter_schema"]];
-            [["/Root/Dir1"];["user2"];["ydb.generic.use"]];
-            [["/Root/Dir2"];["user"];["ydb.generic.use"]];
-            [["/Root/Dir2"];["user1"];["ydb.generic.use"]];
-            [["/Root/Dir2"];["user2"];["ydb.generic.use"]];
-        ])";
-
-        NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-    }
-
-    Y_UNIT_TEST(AuthEffectivePermissions) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root/Tenant1", "user2", "password2");
-
-        env.GetClient().MkDir("/Root", "Dir1");
-        env.GetClient().MkDir("/Root/Tenant1", "Dir2");
-
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-            env.GetClient().ModifyACL("/", "Root", acl.SerializeAsString());
-        }
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user2");
-            env.GetClient().ModifyACL("/Root/Tenant1", "Dir2", acl.SerializeAsString());
-        }
-        
-        // Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root/Tenant2/Dir4").DebugString() << Endl;
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_effective_permissions`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata/workload_manager"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata/workload_manager/pools"];["ydb.generic.use"];["user1"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["all-users@well-known"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.describe_schema"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.granular.select_row"];["root@builtin"]];
-                [["/Root/.metadata/workload_manager/pools/default"];["ydb.generic.use"];["user1"]];
-                [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
-                [["/Root/Table0"];["ydb.generic.use"];["user1"]]
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/Tenant1/.sys/auth_effective_permissions`
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Tenant1"];["ydb.generic.use"];["user1"]];
-                [["/Root/Tenant1/Dir2"];["ydb.generic.use"];["user1"]];
-                [["/Root/Tenant1/Dir2"];["ydb.granular.select_row"];["user2"]];
-                [["/Root/Tenant1/Table1"];["ydb.generic.use"];["user1"]]
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
-
-    Y_UNIT_TEST(AuthPermissions_Selects) {
-        TTestEnv env;
-        SetupAuthEnvironment(env);
-        TTableClient client(env.GetDriver());
-
-        env.GetClient().CreateUser("/Root", "user1", "password1");
-        env.GetClient().CreateUser("/Root", "user2", "password2");
-
-        env.GetClient().MkDir("/Root", "Dir1/SubDir1");
-        env.GetClient().MkDir("/Root", "Dir1/SubDir2");
-
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user1");
-            env.GetClient().ModifyACL("/", "Root", acl.SerializeAsString());
-            env.GetClient().ModifyACL("/Root", "Dir1", acl.SerializeAsString());
-        }
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user2");
-            env.GetClient().ModifyACL("/Root", "Dir1", acl.SerializeAsString());
-            env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
-        }
-        {
-            NACLib::TDiffACL acl;
-            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::EraseRow, "user2");
-            env.GetClient().ModifyACL("/Root/Dir1", "SubDir1", acl.SerializeAsString());
-        }
-        
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_permissions`
-                WHERE Path = "/Root/Dir1"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
-                [["/Root/Dir1"];["ydb.granular.select_row"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_permissions`
-                WHERE Sid = "user2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1"];["ydb.granular.select_row"];["user2"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user2"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_permissions`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid >= "user2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user2"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_permissions`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid = "user2"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user2"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_permissions`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid = "user2" AND Permission >= "ydb.granular.erase_row"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["ydb.granular.erase_row"];["user2"]];
-                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                SELECT *
-                FROM `Root/.sys/auth_permissions`
-                WHERE Path = "/Root/Dir1/SubDir1" AND Sid = "user2" AND Permission > "ydb.granular.erase_row"
-            )").GetValueSync();
-
-            auto expected = R"([
-                [["/Root/Dir1/SubDir1"];["ydb.granular.select_row"];["user2"]];
-            ])";
-
-            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
-        }
-    }
 }
 
 } // NSysView

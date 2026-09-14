@@ -11,6 +11,14 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+class TPropagatingStorageImpl;
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
 //! Fiber-local key-value storage that is able to propagate between fibers.
 //!
 //! When a new callback is created via BIND, then a copy is made into its bind state. So,
@@ -25,18 +33,11 @@ class TPropagatingStorage
 {
 public:
     //! Creates a null storage.
-    TPropagatingStorage();
+    TPropagatingStorage() = default;
 
     //! Creates an empty, non-null storage.
     static TPropagatingStorage Create();
 
-    ~TPropagatingStorage();
-
-    TPropagatingStorage(const TPropagatingStorage& other);
-    TPropagatingStorage(TPropagatingStorage&& other);
-
-    TPropagatingStorage& operator=(const TPropagatingStorage& other);
-    TPropagatingStorage& operator=(TPropagatingStorage&& other);
 
     //! Returns true if the storage is null.
     //!
@@ -67,17 +68,17 @@ public:
     template <class T>
     std::optional<T> Remove();
 
-    void RecordLocation(TSourceLocation loc);
-    void PrintModificationLocationsToStderr();
-
     DECLARE_SIGNAL(void(), OnAfterInstall);
     DECLARE_SIGNAL(void(), OnBeforeUninstall);
 
 private:
-    class TImpl;
-    TIntrusivePtr<TImpl> Impl_;
+    // NB: TPropagatingStorageImpl is forward-declared here; its full definition is
+    // in propagating_storage-inl.h. That header is included at the end of this file,
+    // so all clients see the complete type and the special members + read paths
+    // are inlined.
+    TIntrusivePtr<NDetail::TPropagatingStorageImpl> Impl_;
 
-    explicit TPropagatingStorage(TIntrusivePtr<TImpl> impl);
+    explicit TPropagatingStorage(TIntrusivePtr<NDetail::TPropagatingStorageImpl> impl);
 
     const std::any* FindRaw(const std::type_info& typeInfo) const;
     std::optional<std::any> ExchangeRaw(std::any value);
@@ -88,7 +89,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPropagatingStorage& GetCurrentPropagatingStorage();
+TPropagatingStorage& CurrentPropagatingStorage();
+const TPropagatingStorage& GetCurrentPropagatingStorage();
 const TPropagatingStorage* TryGetPropagatingStorage(const NConcurrency::TFls& fls);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -106,8 +108,7 @@ void InstallGlobalPropagatingStorageSwitchHandler(
 class TPropagatingStorageGuard
 {
 public:
-    explicit TPropagatingStorageGuard(
-        TPropagatingStorage storage, TSourceLocation loc = YT_CURRENT_SOURCE_LOCATION);
+    explicit TPropagatingStorageGuard(TPropagatingStorage storage);
     ~TPropagatingStorageGuard();
 
     TPropagatingStorageGuard(const TPropagatingStorageGuard& other) = delete;
@@ -118,8 +119,13 @@ public:
     const TPropagatingStorage& GetOldStorage() const;
 
 private:
+    // NB: Declared before OldStorage_ so that it is zero-initialized first
+    // (before SwitchPropagatingStorage fills it in via the OldStorage_ mem-init).
+    // Caches the current fiber's TFls pointer across install (in ctor) and
+    // restore (in dtor) — those calls run in the same fiber context so the
+    // TLS lookup is invariant.
+    TFls* CachedFls_ = nullptr;
     TPropagatingStorage OldStorage_;
-    TSourceLocation OldLocation_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -128,7 +134,7 @@ class TNullPropagatingStorageGuard
     : public TPropagatingStorageGuard
 {
 public:
-    TNullPropagatingStorageGuard(TSourceLocation loc = YT_CURRENT_SOURCE_LOCATION);
+    TNullPropagatingStorageGuard();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -148,12 +154,6 @@ public:
 private:
     std::optional<T> OldValue_;
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-TSourceLocation SwitchPropagatingStorageLocation(TSourceLocation loc);
-
-void PrintLocationToStderr();
 
 ////////////////////////////////////////////////////////////////////////////////
 

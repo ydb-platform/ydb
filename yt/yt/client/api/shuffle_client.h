@@ -2,6 +2,10 @@
 
 #include "client_common.h"
 
+#include <yt/yt/client/table_client/schema.h>
+
+#include <yt/yt/core/yson/string.h>
+
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -15,6 +19,17 @@ struct TShuffleHandle
     std::string Medium;
     int PartitionCount;
     int ReplicationFactor;
+    bool UsePushBasedShuffle = false;
+    //! The schema is the single source of the column name-to-id mapping shared
+    //! by writers and readers. Currently required for push-based shuffle; for
+    //! pull-based it may be null (schemaless) for backward compatibility, but a
+    //! schema will eventually be required there too.
+    NTableClient::TTableSchemaPtr Schema;
+
+    //! YSON-serialized TShuffleConfig.
+    // COMPAT(apollo1321): Make this field required in 26.3; a 26.1 coordinator mints handles
+    // without it.
+    std::optional<NYson::TYsonString> Config;
 
     REGISTER_YSON_STRUCT(TShuffleHandle);
 
@@ -22,6 +37,8 @@ struct TShuffleHandle
 };
 
 DEFINE_REFCOUNTED_TYPE(TShuffleHandle)
+
+YT_DEFINE_STRONG_TYPEDEF(TSignedShuffleHandlePtr, NSignature::TSignaturePtr);
 
 void FormatValue(TStringBuilderBase* builder, const TShuffleHandlePtr& shuffleHandle, TStringBuf spec);
 
@@ -32,29 +49,49 @@ struct TStartShuffleOptions
 {
     std::optional<std::string> Medium;
     std::optional<int> ReplicationFactor;
+    bool UsePushBasedShuffle = false;
+    //! Required when UsePushBasedShuffle is set.
+    NTableClient::TTableSchemaPtr Schema;
+    //! YSON-serialized TShuffleConfig.
+    std::optional<NYson::TYsonString> Config;
+};
+
+struct TShuffleReaderOptions
+{ };
+
+struct TShuffleWriterOptions
+{
+    bool OverwriteExistingWriterData = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IShuffleClient
 {
+    using TIndexRange = std::pair<int, int>;
+
     virtual ~IShuffleClient() = default;
 
-    virtual TFuture<TShuffleHandlePtr> StartShuffle(
+    virtual TFuture<TSignedShuffleHandlePtr> StartShuffle(
         const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) = 0;
 
+    //! logicalWriterIndexRange is a half-open range of caller-assigned logical writer indices.
     virtual TFuture<IRowBatchReaderPtr> CreateShuffleReader(
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        const NTableClient::TTableReaderConfigPtr& config = New<NTableClient::TTableReaderConfig>()) = 0;
+        std::optional<TIndexRange> logicalWriterIndexRange = {},
+        const TShuffleReaderOptions& options = {}) = 0;
 
+    //! logicalWriterIndex is a stable caller-assigned identity shared by retries
+    //! of one logical writer.
     virtual TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
-        const TShuffleHandlePtr& shuffleHandle,
+        const TSignedShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        const NTableClient::TTableWriterConfigPtr& config = New<NTableClient::TTableWriterConfig>()) = 0;
+        std::optional<int> logicalWriterIndex = {},
+        const TShuffleWriterOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

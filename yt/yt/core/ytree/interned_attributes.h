@@ -22,7 +22,7 @@ public:
     // May return #InvalidInternedAttribute if the attribute is not interned.
     static TInternedAttributeKey Lookup(TStringBuf uninternedKey);
 
-    const TString& Unintern() const;
+    const std::string& Unintern() const;
 
     void Save(TStreamSaveContext& context) const;
     void Load(TStreamLoadContext& context);
@@ -38,12 +38,14 @@ constexpr TInternedAttributeKey CountInternedAttribute{1};
 
 //! Interned attribute registry initialization. Should be called once per attribute.
 //! Both interned and uninterned keys must be unique.
-void InternAttribute(const TString& uninternedKey, TInternedAttributeKey internedKey);
+void InternAttribute(const std::string& uninternedKey, TInternedAttributeKey internedKey);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 #define REGISTER_INTERNED_ATTRIBUTE(uninternedKey, internedKey) \
-    YT_STATIC_INITIALIZER(::NYT::NYTree::InternAttribute(#uninternedKey, internedKey));
+    YT_STATIC_INITIALIZER({ \
+        ::NYT::NYTree::InternAttribute(#uninternedKey, internedKey); \
+    })
 
 ////////////////////////////////////////////////////////////////////////////////
 

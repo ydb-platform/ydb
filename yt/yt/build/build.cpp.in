@@ -41,6 +41,12 @@ Y_WEAK const char* GetVersion()
     return version.c_str();
 }
 
+const char* GetQueryTrackerVersion()
+{
+    static auto version = CreateYTVersion(@QT_VERSION_MAJOR@, @QT_VERSION_MINOR@, @QT_VERSION_PATCH@, "@YT_VERSION_BRANCH@");
+    return version.c_str();
+}
+
 const char* GetBuildHost()
 {
     static auto buildHost = GetYaHostName();

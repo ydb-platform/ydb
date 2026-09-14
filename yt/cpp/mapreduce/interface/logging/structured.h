@@ -1,0 +1,21 @@
+#pragma once
+
+#include <yt/yt/core/logging/log_manager.h>
+
+namespace NYT::NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+inline static const TString StructuredLogTypeName = "yt_structured";
+
+////////////////////////////////////////////////////////////////////////////////
+
+void InitializeStructuredLogging(
+    NLogging::TLogManagerConfigPtr logManagerConfig,
+    const TString& structuredLogPath);
+
+void RegisterStructuredLogWriterFactory();
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NDetail

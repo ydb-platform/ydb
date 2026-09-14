@@ -3,6 +3,7 @@
 #include "actorsystem.h"
 #include "executor_pool_basic.h"
 #include "scheduler_basic.h"
+#include "debug.h"
 #include "actor_bootstrapped.h"
 
 #include <ydb/library/actors/testlib/test_runtime.h>
@@ -27,11 +28,13 @@ struct TTestEndDecorator : TDecorator {
         , Pad(pad)
         , ActorsAlive(actorsAlive)
     {
-        AtomicIncrement(*ActorsAlive);
+        auto x = AtomicIncrement(*ActorsAlive);
+        ACTORLIB_DEBUG(EDebugLevel::Test, "TTestEndDecorator::TTestEndDecorator: alive ", x);
     }
 
-    ~TTestEndDecorator() {
+    virtual ~TTestEndDecorator() {
         auto alive = AtomicDecrement(*ActorsAlive);
+        ACTORLIB_DEBUG(EDebugLevel::Test, "TTestEndDecorator::~TTestEndDecorator: alive ", alive);
         if (alive == 0) {
             Pad->Unpark();
         }
@@ -71,10 +74,9 @@ struct TActorBenchmark {
         Follower
     };
 
-    struct TEvOwnedPing : TEvents::TEvPing {
+    struct TEvOwnedPing : TEventLocal<TEvOwnedPing, TEvents::TEvPing::EventType> {
         TEvOwnedPing(TActorId owner)
-            : TEvPing()
-            , Owner(owner)
+            : Owner(owner)
         {}
 
         TActorId Owner;
@@ -121,6 +123,7 @@ struct TActorBenchmark {
     };
 
     class TSendReceiveActor : public TActorBootstrapped<TSendReceiveActor> {
+        using TBase = TActorBootstrapped<TSendReceiveActor>;
     public:
         static constexpr auto ActorActivityType() {
             return IActorCallback::EActivityType::ACTORLIB_COMMON;
@@ -143,7 +146,8 @@ struct TActorBenchmark {
             , DelayForScheduling(params.DelayForScheduling)
         {}
 
-        ~TSendReceiveActor() {
+        virtual ~TSendReceiveActor() {
+            ACTORLIB_DEBUG(EDebugLevel::Test, "TSendReceiveActor::~TSendReceiveActor: ", this->SelfId());
         }
 
         void StoreCounters(std::vector<NThreading::TPadded<std::atomic<ui64>>> &dest) {
@@ -153,6 +157,7 @@ struct TActorBenchmark {
         }
 
         void Bootstrap(const TActorContext &ctx) {
+            ACTORLIB_DEBUG(EDebugLevel::Test, "TSendReceiveActor::Bootstrap: ", this->SelfId());
             if (SharedCounters && IsLeader) {
                 ui32 count = --SharedCounters->NotStarted;
                 if (!count) {
@@ -180,6 +185,7 @@ struct TActorBenchmark {
             EventsCounter++;
             if (own) {
                 --OwnEventsCounter;
+                ACTORLIB_DEBUG(EDebugLevel::Test, "TSendReceiveActor::SpecialSend: own; ", OwnEventsCounter + 1, " -> ", OwnEventsCounter);
             }
             if (ToSchedule) {
                 TActivationContext::Schedule(DelayForScheduling, ev.Release());
@@ -193,6 +199,7 @@ struct TActorBenchmark {
         }
 
         void Stop() {
+            ACTORLIB_DEBUG(EDebugLevel::Test, "TSendReceiveActor::Stop: ", this->SelfId());
             if (SharedCounters && IsLeader) {
                 if (!SharedCounters->NotStarted++) {
                     StoreCounters(SharedCounters->EndedCounters);
@@ -209,8 +216,14 @@ struct TActorBenchmark {
             this->PassAway();
         }
 
+        void PassAway() override {
+            ACTORLIB_DEBUG(EDebugLevel::Test, "TSendReceiveActor::PassAway: ", this->SelfId());
+            TBase::PassAway();
+        }
+
         bool CheckWorkIsDone() {
             if (OwnEventsCounter || OtherEventsCounter || EndlessSending) {
+                ACTORLIB_DEBUG(EDebugLevel::Test, "TSendReceiveActor::CheckWorkIsDone: ", this->SelfId(), " OwnEventsCounter: ", OwnEventsCounter, " OtherEventsCounter: ", OtherEventsCounter, " EndlessSending: ", EndlessSending);
                 return false;
             }
             Stop();
@@ -218,6 +231,7 @@ struct TActorBenchmark {
         }
 
         STFUNC(StateFunc) {
+            ACTORLIB_DEBUG(EDebugLevel::Test, "TSendReceiveActor::StateFunc: ", this->SelfId());
             ++EventsCounter;
             ui32 counter = ++ReceiveTurn;
             if (SharedCounters) {
@@ -275,6 +289,7 @@ struct TActorBenchmark {
         basic.PoolId = setup->GetExecutorsCount();
         basic.PoolName = TStringBuilder() << "b" << basic.PoolId;
         basic.Threads = threads;
+        basic.MaxThreadCount = threads;
         basic.SpinThreshold = TSettings::DefaultSpinThreshold;
         basic.TimePerMailbox = TDuration::Hours(1);
         basic.HasSharedThread = hasSharedThread;
@@ -432,8 +447,10 @@ struct TActorBenchmark {
         ui64 MaxPairSentEvents;
     };
 
-    static auto BenchContentedThreads(ui32 threads, ui32 actorsPairsCount, EPoolType poolType, ESendingType sendingType, TDuration testDuration = TDuration::Zero(), ui32 inFlight = 1) {
+    static auto BenchContentedThreads(ui32 threads, ui32 actorsPairsCount, EPoolType poolType, ESendingType sendingType,
+            TDuration testDuration = TDuration::Zero(), ui32 inFlight = 1, bool enableWaker = false) {
         THolder<TActorSystemSetup> setup = InitActorSystemSetup(poolType, 1, threads, false);
+        setup->CpuManager.Basic.back().EnableWaker = enableWaker;
         TActorSystem actorSystem(setup);
         actorSystem.Start();
 
@@ -705,14 +722,14 @@ struct TActorBenchmark {
         }
     }
 
-    static void RunSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &inFlights, TDuration subtestDuration) {
+    static void RunSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &inFlights, TDuration subtestDuration, ui32 attempts = 3) {
         Cout << "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs" << Endl;
         for (ui32 threads : threadsList) {
             for (ui32 actorPairs : actorPairsList) {
                 for (ui32 inFlight : inFlights) {
                     auto stats = CountStats([threads, actorPairs, inFlight, subtestDuration] {
                         return BenchContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common, subtestDuration, inFlight);
-                    }, 3);
+                    }, attempts);
                     double elapsedSeconds = stats.ElapsedTime.Mean / 1e9;
                     ui64 eventsPerSecond = stats.SentEvents.Mean / elapsedSeconds;
                     Cout << threads << "," << actorPairs << "," << inFlight << "," << eventsPerSecond << "," << elapsedSeconds << "," << stats.MinPairSentEvents.Min << "," << stats.MaxPairSentEvents.Max << Endl;
@@ -722,14 +739,14 @@ struct TActorBenchmark {
     }
 
 
-    static void RunStarSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &starsList) {
+    static void RunStarSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &starsList, TDuration duration = TDuration::Seconds(1), ui32 attempts = 3) {
         Cout << "threads,actorPairs,star_multiply,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs" << Endl;
         for (ui32 threads : threadsList) {
             for (ui32 actorPairs : actorPairsList) {
                 for (ui32 stars : starsList) {
-                    auto stats = CountStats([threads, actorPairs, stars] {
-                        return BenchStarContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common, TDuration::Seconds(1), stars);
-                    }, 3);
+                    auto stats = CountStats([threads, actorPairs, stars, duration] {
+                        return BenchStarContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common, duration, stars);
+                    }, attempts);
                     double elapsedSeconds = stats.ElapsedTime.Mean / 1e9;
                     ui64 eventsPerSecond = stats.SentEvents.Mean / elapsedSeconds;
                     Cout << threads << "," << actorPairs << "," << stars << "," << eventsPerSecond << "," << elapsedSeconds << "," << stats.MinPairSentEvents.Min << "," << stats.MaxPairSentEvents.Max << Endl;

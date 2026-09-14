@@ -5,6 +5,7 @@ from pythran.interval import UNKNOWN_RANGE, bool_values
 from pythran.types.signature import extract_combiner
 from pythran.typing import Any, Union, Fun, Generator
 
+from itertools import repeat, chain
 import gast as ast
 
 
@@ -16,8 +17,21 @@ class UnboundValueType(object):
 
 UnboundValue = UnboundValueType()
 
-# FIXME: we should find a better way to implement default behavior
-DefaultArgNum = 20
+class defaultlist:
+    DefaultLen = 20
+    def __init__(self, content=None, *, default):
+        self.content = [] if content is None else content
+        self.default = default
+
+    def __iter__(self):
+        return chain(self.content, repeat(self.default(), len(self) -
+                                          len(self.content)))
+
+    def __getitem__(self, i):
+        return self.content[i] if i < len(self.content) else self.default()
+
+    def __len__(self):
+        return max(len(self.content), defaultlist.DefaultLen)
 
 
 class UpdateEffect(object):
@@ -51,7 +65,7 @@ class Intrinsic(object):
 
     def __init__(self, **kwargs):
         self.argument_effects = kwargs.get('argument_effects',
-                                           (UpdateEffect(),) * DefaultArgNum)
+                                           defaultlist(default=UpdateEffect))
         self.global_effects = kwargs.get('global_effects', False)
         self.return_alias = kwargs.get('return_alias',
                                        lambda x: {UnboundValue})
@@ -151,27 +165,27 @@ class UserFunction(FunctionIntr):
 class ConstFunctionIntr(FunctionIntr):
     def __init__(self, **kwargs):
         kwargs.setdefault('argument_effects',
-                          (ReadEffect(),) * DefaultArgNum)
+                          defaultlist(default=ReadEffect))
         super(ConstFunctionIntr, self).__init__(**kwargs)
 
 
 class ConstExceptionIntr(ConstFunctionIntr):
     def __init__(self, **kwargs):
         kwargs.setdefault('argument_effects',
-                          (ReadEffect(),) * DefaultArgNum)
+                          defaultlist(default=ReadEffect))
         super(ConstExceptionIntr, self).__init__(**kwargs)
 
 
 class ReadOnceFunctionIntr(ConstFunctionIntr):
     def __init__(self, **kwargs):
         super(ReadOnceFunctionIntr, self).__init__(
-            argument_effects=(ReadOnceEffect(),) * DefaultArgNum, **kwargs)
+            argument_effects=defaultlist(default=ReadOnceEffect), **kwargs)
 
 
 class MethodIntr(FunctionIntr):
     def __init__(self, *combiners, **kwargs):
         kwargs.setdefault('argument_effects',
-                          (UpdateEffect(),) + (ReadEffect(),) * DefaultArgNum)
+                          defaultlist((UpdateEffect(),), default=ReadEffect))
         kwargs['combiners'] = combiners
         super(MethodIntr, self).__init__(**kwargs)
 
@@ -184,14 +198,14 @@ class MethodIntr(FunctionIntr):
 
 class ConstMethodIntr(MethodIntr):
     def __init__(self, *combiners, **kwargs):
-        kwargs.setdefault('argument_effects', (ReadEffect(),) * DefaultArgNum)
+        kwargs.setdefault('argument_effects', defaultlist(default=ReadEffect))
         super(ConstMethodIntr, self).__init__(*combiners, **kwargs)
 
 
 class ReadOnceMethodIntr(ConstMethodIntr):
     def __init__(self, **kwargs):
         super(ReadOnceMethodIntr, self).__init__(
-            argument_effects=(ReadOnceEffect(),) * DefaultArgNum, **kwargs)
+            argument_effects=defaultlist(default=ReadOnceEffect), **kwargs)
 
 
 class AttributeIntr(Intrinsic):

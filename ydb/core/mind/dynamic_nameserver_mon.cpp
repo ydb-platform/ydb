@@ -21,6 +21,19 @@ TString ToString(TInstant t)
     return t.FormatLocalTime("%d %b %Y %H:%M:%S %Z");
 }
 
+TString ToString(EProtocolState s)
+{
+    switch (s) {
+        case EProtocolState::Connecting:
+            return "Connecting";
+        case EProtocolState::UseEpochProtocol:
+            return "EpochProtocol";
+        case EProtocolState::UseDeltaProtocol:
+            return "DeltaProtocol";
+    }
+    return "Unknown";
+}
+
 void OutputStaticContent(IOutputStream &str)
 {
     str << R"__(
@@ -78,6 +91,7 @@ void OutputNodeInfo(ui32 nodeId,
                     const TTableNameserverSetup::TNodeInfo &info,
                     IOutputStream &str,
                     TInstant expire = TInstant::Zero(),
+                    ENodeLiveness liveness = ENodeLiveness::Alive,
                     const TString &cl = "")
 {
     str << "<tr class='" << cl << "'>" << Endl
@@ -89,6 +103,20 @@ void OutputNodeInfo(ui32 nodeId,
         << "  <td>" << info.Location.ToString() << "</td>" << Endl;
     if (expire)
         str << "<td>" << ToString(expire) << "</td>" << Endl;
+    str << "<td>" << (liveness == ENodeLiveness::Alive ? "Alive" : "Dead") << "</td>" << Endl;
+    str << "</tr>" << Endl;
+}
+
+void OutputExpiredNodeInfo(ui32 nodeId,IOutputStream &str, const TString &cl = "")
+{
+    str << "<tr class='" << cl << "'>" << Endl
+    << "  <td>" << nodeId << "</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl
+    << "  <td>N/A</td>" << Endl;
+    str << "<td>N/A</td>" << Endl;
     str << "</tr>" << Endl;
 }
 
@@ -116,7 +144,8 @@ void OutputStaticNodes(const TTableNameserverSetup &setup,
 
 void OutputDynamicNodes(const TString &domain,
                         TDynamicConfigPtr config,
-                        IOutputStream &str)
+                        IOutputStream &str,
+                        bool enableLongLease)
 {
     str << "<div><table class='nodes'>" << Endl
         << "  <caption>Dynamic nodes in " << domain
@@ -133,6 +162,7 @@ void OutputDynamicNodes(const TString &domain,
         << "      <th>Rack</th>" << Endl
         << "      <th>Body</th>" << Endl
         << "      <th>Expire</th>" << Endl
+        << "      <th>Liveness</th>" << Endl
         << "    </tr>" << Endl
         << "  </thead>" << Endl
         << "  <tbody class='center-align'>" << Endl;
@@ -142,15 +172,14 @@ void OutputDynamicNodes(const TString &domain,
         ids.insert(pr.first);
     for (auto id : ids) {
         auto &node = config->DynamicNodes.at(id);
-        OutputNodeInfo(id, node, str, node.Expire);
+        OutputNodeInfo(id, node, str, node.EffectiveExpire(enableLongLease), node.Liveness);
     }
 
     ids.clear();
-    for (auto &pr : config->ExpiredNodes)
-        ids.insert(pr.first);
+    for (auto id : config->ExpiredNodes)
+        ids.insert(id);
     for (auto id : ids) {
-        auto &node = config->ExpiredNodes.at(id);
-        OutputNodeInfo(id, node, str, node.Expire, "gray");
+        OutputExpiredNodeInfo(id, str, "gray");
     }
 
     str << "  </tbody>" << Endl
@@ -182,13 +211,21 @@ void TDynamicNameserver::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext
                 << "      <td class='right-align'>Max dynamic node ID:</td>" << Endl
                 << "      <td>" << config->MaxDynamicNodeId << "</td>" << Endl
                 << "    </tr>" << Endl
+                << "    <tr>" << Endl
+                << "      <td class='right-align'>Protocol state:</td>" << Endl
+                << "      <td>" << ToString(ProtocolState) << "</td>" << Endl
+                << "    </tr>" << Endl
+                << "    <tr>" << Endl
+                << "      <td class='right-align'>EnableNodeBrokerLongLease:</td>" << Endl
+                << "      <td>" << (EnableLongLease ? "true" : "false") << "</td>" << Endl
+                << "    </tr>" << Endl
                 << "  </tbody>" << Endl
                 << "</table></div>" << Endl;
 
         OutputStaticNodes(*StaticConfig, str);
 
         if (const auto& domain = AppData(ctx)->DomainsInfo->Domain) {
-            OutputDynamicNodes(domain->Name, DynamicConfigs[domain->DomainUid], str);
+            OutputDynamicNodes(domain->Name, DynamicConfigs[domain->DomainUid], str, EnableLongLease);
         }
     }
     ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

@@ -1,4 +1,3 @@
-/* postgres can not */
 $ns = ($set) -> {
     RETURN ListSort(DictKeys($set));
 };

@@ -1,12 +1,17 @@
 #pragma once
+#include "bridge.h"
 #include "defs.h"
 #include "events.h"
 #include <ydb/core/protos/statestorage.pb.h>
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/util/numerical_maybe.h>
 #include <ydb/library/actors/interconnect/event_filter.h>
 #include <util/stream/str.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
+
+namespace NKikimrConfig {
+    class TStateStorageConfig;
+}
 
 namespace NKikimr {
 
@@ -28,6 +33,9 @@ struct TEvStateStorage {
         EvListStateStorage,
         EvBoardInfoUpdate,
         EvPublishActorGone,
+        EvRingGroupPassAway,
+        EvConfigVersionInfo,
+        EvListBoard,
 
         // replies (local, from proxy)
         EvInfo = EvLookup + 512,
@@ -37,6 +45,7 @@ struct TEvStateStorage {
         EvDeleteResult,
         EvListSchemeBoardResult,
         EvListStateStorageResult,
+        EvListBoardResult,
 
         // replicas interface
         EvReplicaLookup = EvLock + 2 * 512,
@@ -49,6 +58,7 @@ struct TEvStateStorage {
         EvReplicaUnregFollower,
         EvReplicaDelete,
         EvReplicaCleanup,
+        EvReplicaUpdateConfig,
 
         EvReplicaInfo = EvLock + 3 * 512,
         EvReplicaShutdown,
@@ -101,6 +111,12 @@ struct TEvStateStorage {
             , ProxyOptions(proxyOptions)
         {}
 
+        TEvLookup(const TEvLookup& ev)
+            : TabletID(ev.TabletID)
+            , Cookie(ev.Cookie)
+            , ProxyOptions(ev.ProxyOptions)
+        {}
+
         TString ToString() const {
             TStringStream str;
             str << "{EvLookup TabletID: " << TabletID;
@@ -111,6 +127,18 @@ struct TEvStateStorage {
         }
     };
 
+    class TSignature {
+        THashMap<TActorId, ui64> ReplicasSignature;
+
+    public:
+        ui32 Size() const;
+        bool HasReplicaSignature(const TActorId &replicaId) const;
+        ui64 GetReplicaSignature(const TActorId &replicaId) const;
+        void SetReplicaSignature(const TActorId &replicaId, ui64 signature);
+        void Merge(const TEvStateStorage::TSignature& signature);
+        TString ToString() const;
+    };
+
     struct TEvUpdate : public TEventLocal<TEvUpdate, EvUpdate> {
         const ui64 TabletID;
         const ui64 Cookie;
@@ -118,22 +146,31 @@ struct TEvStateStorage {
         const TActorId ProposedLeaderTablet;
         const ui32 ProposedGeneration;
         const ui32 ProposedStep;
-        const ui32 SignatureSz;
-        const TArrayHolder<ui64> Signature;
+        const TSignature Signature;
         const TProxyOptions ProxyOptions;
 
-        TEvUpdate(ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, const ui64 *sig, ui32 sigsz, const TProxyOptions &proxyOptions = TProxyOptions())
+        TEvUpdate(ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, const TSignature &sig, const TProxyOptions &proxyOptions = TProxyOptions())
             : TabletID(tabletId)
             , Cookie(cookie)
             , ProposedLeader(leader)
             , ProposedLeaderTablet(leaderTablet)
             , ProposedGeneration(gen)
             , ProposedStep(step)
-            , SignatureSz(sigsz)
-            , Signature(new ui64[sigsz])
+            , Signature(sig)
             , ProxyOptions(proxyOptions)
         {
-            Copy(sig, sig + sigsz, Signature.Get());
+        }
+
+        TEvUpdate(const TEvUpdate& ev)
+            : TabletID(ev.TabletID)
+            , Cookie(ev.Cookie)
+            , ProposedLeader(ev.ProposedLeader)
+            , ProposedLeaderTablet(ev.ProposedLeaderTablet)
+            , ProposedGeneration(ev.ProposedGeneration)
+            , ProposedStep(ev.ProposedStep)
+            , Signature(ev.Signature)
+            , ProxyOptions(ev.ProxyOptions)
+        {
         }
 
         TString ToString() const {
@@ -144,14 +181,7 @@ struct TEvStateStorage {
             str << " ProposedLeaderTablet: " << ProposedLeaderTablet.ToString();
             str << " ProposedGeneration: " << ProposedGeneration;
             str << " ProposedStep: " << ProposedStep;
-            str << " SignatureSz: " << SignatureSz;
-            if (SignatureSz) {
-                str << " Signature: {" << Signature[0];
-                for (size_t i = 1; i < SignatureSz; ++i) {
-                    str << ", " << Signature[i];
-                }
-                str << "}";
-            }
+            str << " Signature: " << Signature.ToString();
             str << " ProxyOptions: " << ProxyOptions.ToString();
             str << "}";
             return str.Str();
@@ -209,20 +239,27 @@ struct TEvStateStorage {
         const ui64 Cookie;
         const TActorId ProposedLeader;
         const ui32 ProposedGeneration;
-        const ui32 SignatureSz;
-        const TArrayHolder<ui64> Signature;
+        const TSignature Signature;
         const TProxyOptions ProxyOptions;
 
-        TEvLock(ui64 tabletId, ui64 cookie, const TActorId &leader, ui32 gen, const ui64 *sig, ui32 sigsz, const TProxyOptions &proxyOptions = TProxyOptions())
+        TEvLock(ui64 tabletId, ui64 cookie, const TActorId &leader, ui32 gen, const TSignature &sig, const TProxyOptions &proxyOptions = TProxyOptions())
             : TabletID(tabletId)
             , Cookie(cookie)
             , ProposedLeader(leader)
             , ProposedGeneration(gen)
-            , SignatureSz(sigsz)
-            , Signature(new ui64[sigsz])
+            , Signature(sig)
             , ProxyOptions(proxyOptions)
         {
-            Copy(sig, sig + sigsz, Signature.Get());
+        }
+
+        TEvLock(const TEvLock& ev)
+            : TabletID(ev.TabletID)
+            , Cookie(ev.Cookie)
+            , ProposedLeader(ev.ProposedLeader)
+            , ProposedGeneration(ev.ProposedGeneration)
+            , Signature(ev.Signature)
+            , ProxyOptions(ev.ProxyOptions)
+        {
         }
 
         TString ToString() const {
@@ -231,30 +268,81 @@ struct TEvStateStorage {
             str << " Cookie: " << Cookie;
             str << " ProposedLeader: " << ProposedLeader.ToString();
             str << " ProposedGeneration: " << ProposedGeneration;
-            str << " SignatureSz: " << SignatureSz;
-            if (SignatureSz) {
-                str << " Signature: {" << Signature[0];
-                for (size_t i = 1; i < SignatureSz; ++i) {
-                    str << ", " << Signature[i];
-                }
-                str << "}";
-            }
+            str << " Signature: " << Signature.ToString();
             str << " ProxyOptions: " << ProxyOptions.ToString();
             str << "}";
             return str.Str();
         }
     };
 
-    inline static void MakeFilteredSignatureCopy(const ui64 *sig, ui32 sigsz, ui64 *target) {
-        for (ui32 i = 0; i != sigsz; ++i) {
-            if (sig[i] != Max<ui64>())
-                target[i] = sig[i];
-            else
-                target[i] = 0;
-        }
-    }
+    struct TEvConfigVersionInfo : public TEventLocal<TEvConfigVersionInfo, EvConfigVersionInfo> {
+        const ui64 ClusterStateGeneration;
+        const ui64 ClusterStateGuid;
+
+        TEvConfigVersionInfo(ui64 clusterStateGeneration, ui64 clusterStateGuid)
+            : ClusterStateGeneration(clusterStateGeneration)
+            , ClusterStateGuid(clusterStateGuid)
+        {}
+    };
 
     struct TEvInfo : public TEventLocal<TEvInfo, EvInfo> {
+        /**
+         * The special holder for follower IDs.
+         *
+         * @warning This type relies on the fact that Hive does not use 0 as a follower ID.
+         *          The value of 0 is designed for the leader only. Thus, using 0 to indicate
+         *          the absence of the follower ID allows saving some memory space,
+         *          which would be required for the bool flag, if TMaybe were to be used
+         *          instead of TNumericalMaybe.
+         */
+        using TFollowerIdHolder = TNumericalMaybe<ui32, 0>;
+
+        /**
+         * The information about a follower for the given tablet.
+         */
+        struct TFollowerInfo {
+            /**
+             * The actor ID for the follower itself.
+             */
+            TActorId Follower;
+
+            /**
+             * The actor ID for the follower tablet;
+             */
+            TActorId FollowerTablet;
+
+            /**
+             * The follower ID for the given follower.
+             *
+             * @warning There are some situations, when this value is not known.
+             *          For example, this may happen, if the given follower is running
+             *          on an older node, which does not support reporting follower IDs.
+             */
+            TFollowerIdHolder FollowerId;
+
+            TFollowerInfo(const TActorId& follower, const TActorId& followerTablet, const TFollowerIdHolder& followerId)
+                : Follower(follower)
+                , FollowerTablet(followerTablet)
+                , FollowerId(followerId)
+            {
+            }
+
+            TFollowerInfo(const TFollowerInfo&) = default;
+            TFollowerInfo(TFollowerInfo&&) = default;
+            TFollowerInfo& operator=(const TFollowerInfo&) = default;
+
+            TString ToString() const {
+                TStringStream str;
+
+                str << "{Follower: " << Follower.ToString();
+                str << " FollowerTablet: " << FollowerTablet.ToString();
+                str << " FollowerId: " << FollowerId;
+                str << '}';
+
+                return str.Str();
+            }
+        };
+
         const NKikimrProto::EReplyStatus Status;
         const ui64 TabletID;
         const ui64 Cookie;
@@ -264,11 +352,10 @@ struct TEvStateStorage {
         const ui32 CurrentStep;
         const bool Locked;
         const ui64 LockedFor;
-        const ui32 SignatureSz;
-        TArrayHolder<ui64> Signature;
-        TVector<std::pair<TActorId, TActorId>> Followers;
+        const TSignature Signature;
+        TVector<TFollowerInfo> Followers;
 
-        TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const ui64 *sig, ui32 sigsz, const TMap<TActorId, TActorId> &followers)
+        TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const TSignature &sig, TVector<TFollowerInfo>&& followers)
             : Status(status)
             , TabletID(tabletId)
             , Cookie(cookie)
@@ -278,12 +365,9 @@ struct TEvStateStorage {
             , CurrentStep(step)
             , Locked(locked)
             , LockedFor(lockedFor)
-            , SignatureSz(sigsz)
-            , Signature(new ui64[sigsz])
-            , Followers(followers.begin(), followers.end())
-        {
-            MakeFilteredSignatureCopy(sig, sigsz, Signature.Get());
-        }
+            , Signature(sig)
+            , Followers(std::move(followers))
+        {}
 
         TString ToString() const {
             TStringStream str;
@@ -296,21 +380,14 @@ struct TEvStateStorage {
             str << " CurrentStep: " << CurrentStep;
             str << " Locked: " << (Locked ? "true" : "false");
             str << " LockedFor: " << LockedFor;
-            str << " SignatureSz: " << SignatureSz;
-            if (SignatureSz) {
-                str << " Signature: {" << Signature[0];
-                for (size_t i = 1; i < SignatureSz; ++i) {
-                    str << ", " << Signature[i];
-                }
-                str << "}";
-            }
+            str << " Signature: " << Signature.ToString();
             if (!Followers.empty()) {
                 str << " Followers: [";
                 for (auto it = Followers.begin(); it != Followers.end(); ++it) {
                     if (it != Followers.begin()) {
-                        str << ',';
+                        str << ", ";
                     }
-                    str << '{' << it->first.ToString() << ',' << it->second.ToString() << '}';
+                    str << it->ToString();
                 }
                 str << "]";
             }
@@ -321,28 +398,17 @@ struct TEvStateStorage {
 
     struct TEvUpdateSignature : public TEventLocal<TEvUpdateSignature, EvUpdateSignature> {
         const ui64 TabletID;
-        const ui32 Sz;
-        const TArrayHolder<ui64> Signature;
+        const TSignature Signature;
 
-        TEvUpdateSignature(ui64 tabletId, ui64 *sig, ui32 sigsz)
+        TEvUpdateSignature(ui64 tabletId, const TSignature &sig)
             : TabletID(tabletId)
-            , Sz(sigsz)
-            , Signature(new ui64[sigsz])
-        {
-            MakeFilteredSignatureCopy(sig, sigsz, Signature.Get());
-        }
+            , Signature(sig)
+        {}
 
         TString ToString() const {
             TStringStream str;
             str << "{EvUpdateSignature TabletID: " << TabletID;
-            str << " Sz: " << Sz;
-            if (Sz) {
-                str << " Signature: {" << Signature[0];
-                for (size_t i = 1; i < Sz; ++i) {
-                    str << ", " << Signature[i];
-                }
-                str << "}";
-            }
+            str << " Signature: " << Signature.ToString();
             str << "}";
             return str.Str();
         }
@@ -380,6 +446,9 @@ struct TEvStateStorage {
     struct TEvListStateStorageResult;
     struct TEvPublishActorGone;
     struct TEvUpdateGroupConfig;
+    struct TEvRingGroupPassAway;
+    struct TEvListBoard;
+    struct TEvListBoardResult;
 
     struct TEvReplicaShutdown : public TEventPB<TEvStateStorage::TEvReplicaShutdown, NKikimrStateStorage::TEvReplicaShutdown, TEvStateStorage::EvReplicaShutdown> {
     };
@@ -402,12 +471,15 @@ struct TEvStateStorage {
         TEvReplicaRegFollower()
         {}
 
-        TEvReplicaRegFollower(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate)
+        TEvReplicaRegFollower(ui64 tabletId, ui32 followerId, TActorId follower, TActorId tablet, bool isCandidate, ui64 clusterStateGeneration, ui64 clusterStateGuid)
         {
             Record.SetTabletID(tabletId);
+            Record.SetClusterStateGeneration(clusterStateGeneration);
+            Record.SetClusterStateGuid(clusterStateGuid);
             ActorIdToProto(follower, Record.MutableFollower());
             ActorIdToProto(tablet, Record.MutableFollowerTablet());
             Record.SetCandidate(isCandidate);
+            Record.SetFollowerId(followerId);
         }
     };
 
@@ -415,10 +487,13 @@ struct TEvStateStorage {
         TEvReplicaUnregFollower()
         {}
 
-        TEvReplicaUnregFollower(ui64 tabletId, const TActorId &follower)
+        TEvReplicaUnregFollower(ui64 tabletId, ui32 followerId, const TActorId &follower, ui64 clusterStateGeneration, ui64 clusterStateGuid)
         {
             Record.SetTabletID(tabletId);
+            Record.SetClusterStateGeneration(clusterStateGeneration);
+            Record.SetClusterStateGuid(clusterStateGuid);
             ActorIdToProto(follower, Record.MutableFollower());
+            Record.SetFollowerId(followerId);
         }
     };
 
@@ -463,6 +538,13 @@ struct TEvStateStorage {
     };
 };
 
+enum ERingGroupState {
+    PRIMARY,
+    SYNCHRONIZED,
+    NOT_SYNCHRONIZED,
+    DISCONNECTED
+};
+
 struct TStateStorageInfo : public TThrRefBase {
     struct TSelection {
         enum EStatus {
@@ -496,18 +578,33 @@ struct TStateStorageInfo : public TThrRefBase {
         ui32 ContentHash() const;
     };
 
-    ui32 NToSelect;
-    TVector<TRing> Rings;
+    struct TRingGroup {
+        ERingGroupState State;
+        bool WriteOnly = false;
+        ui32 NToSelect = 0;
+        TBridgePileId BridgePileId;
+        TVector<TRing> Rings;
 
+        TString ToString() const;
+        bool SameConfiguration(const TStateStorageInfo::TRingGroup& rg);
+    };
+
+    TVector<TRingGroup> RingGroups;
+
+    ui64 ClusterStateGeneration;
+    ui64 ClusterStateGuid;
     ui32 StateStorageVersion;
     TVector<ui32> CompatibleVersions;
 
-    void SelectReplicas(ui64 tabletId, TSelection *selection) const;
+    void SelectReplicas(ui64 tabletId, TSelection *selection, ui32 ringGroupIdx) const;
     TList<TActorId> SelectAllReplicas() const;
     ui32 ContentHash() const;
+    ui32 RingGroupsSelectionSize() const;
 
     TStateStorageInfo()
-        : NToSelect(0)
+        : ClusterStateGeneration(0)
+        , ClusterStateGuid(0)
+        , StateStorageVersion(0)
         , Hash(Max<ui64>())
     {}
 
@@ -516,6 +613,11 @@ struct TStateStorageInfo : public TThrRefBase {
 private:
     mutable ui64 Hash;
 };
+
+bool operator==(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs);
+bool operator==(const TStateStorageInfo::TRingGroup& lhs, const TStateStorageInfo::TRingGroup& rhs);
+bool operator!=(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs);
+bool operator!=(const TStateStorageInfo::TRingGroup& lhs, const TStateStorageInfo::TRingGroup& rhs);
 
 enum class EBoardLookupMode {
     First,
@@ -532,8 +634,10 @@ struct TBoardRetrySettings {
     TDuration MaxDelayMs = TDuration::MilliSeconds(5000);
 };
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config);
-void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& config,
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TStateStorageConfig& config);
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TStateStorageConfig& config);
+TIntrusivePtr<TStateStorageInfo> BuildSchemeBoardInfo(const NKikimrConfig::TStateStorageConfig& config);
+void BuildStateStorageInfos(const NKikimrConfig::TStateStorageConfig& config,
     TIntrusivePtr<TStateStorageInfo> &stateStorageInfo,
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
     TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo);
@@ -543,7 +647,7 @@ IActor* CreateStateStorageProxyStub();
 IActor* CreateStateStorageReplica(const TIntrusivePtr<TStateStorageInfo> &info, ui32 replicaIndex);
 IActor* CreateStateStorageMonitoringActor(ui64 targetTablet, const TActorId &sender, const TString &query);
 IActor* CreateStateStorageTabletGuardian(ui64 tabletId, const TActorId &leader, const TActorId &tabletLeader, ui32 generation);
-IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, const TActorId &follower); // created as followerCandidate
+IActor* CreateStateStorageFollowerGuardian(ui64 tabletId, ui32 followerId, const TActorId &follower); // created as followerCandidate
 IActor* CreateStateStorageBoardReplica(const TIntrusivePtr<TStateStorageInfo> &, ui32);
 IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32);
 IActor* CreateBoardLookupActor(

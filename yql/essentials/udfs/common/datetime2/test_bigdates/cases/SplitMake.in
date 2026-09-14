@@ -1,0 +1,88 @@
+{
+    "fdate32"="-144169-01-01";
+    "fdatetime64"="-144169-01-01T00:00:00Z";
+    "ftimestamp64"="-144169-01-01T00:00:00.000000Z";
+    "ftzpdate32"="-144169-01-01,Europe/Moscow";
+    "ftzpdatetime64"="-144169-01-01T00:00:00,Europe/Moscow";
+    "ftzptimestamp64"="-144169-01-01T00:00:00.000000,Europe/Moscow";
+    "ftzmdate32"="-144169-01-01,America/Los_Angeles";
+    "ftzmdatetime64"="-144169-01-01T00:00:00,America/Los_Angeles";
+    "ftzmtimestamp64"="-144169-01-01T00:00:00.000000,America/Los_Angeles";
+};
+{
+    "fdate32"="-1-01-01";
+    "fdatetime64"="-1-01-01T23:59:59Z";
+    "ftimestamp64"="-1-01-01T23:59:59.999999Z";
+    "ftzpdate32"="-1-01-01,Europe/Moscow";
+    "ftzpdatetime64"="-1-01-01T23:59:59,Europe/Moscow";
+    "ftzptimestamp64"="-1-01-01T23:59:59.999999,Europe/Moscow";
+    "ftzmdate32"="-1-01-01,America/Los_Angeles";
+    "ftzmdatetime64"="-1-01-01T23:59:59,America/Los_Angeles";
+    "ftzmtimestamp64"="-1-01-01T23:59:59.999999,America/Los_Angeles";
+};
+{
+    "fdate32"="1-01-01";
+    "fdatetime64"="1-01-01T00:00:00Z";
+    "ftimestamp64"="1-01-01T00:00:00.000000Z";
+    "ftzpdate32"="1-01-01,Europe/Moscow";
+    "ftzpdatetime64"="1-01-01T00:00:00,Europe/Moscow";
+    "ftzptimestamp64"="1-01-01T00:00:00.000000,Europe/Moscow";
+    "ftzmdate32"="1-01-01,America/Los_Angeles";
+    "ftzmdatetime64"="1-01-01T00:00:00,America/Los_Angeles";
+    "ftzmtimestamp64"="1-01-01T00:00:00.000000,America/Los_Angeles";
+};
+{
+    "fdate32"="1969-12-31";
+    "fdatetime64"="1969-12-31T23:59:59Z";
+    "ftimestamp64"="1969-12-31T23:59:59.999999Z";
+    "ftzpdate32"="1969-12-31,Europe/Moscow";
+    "ftzpdatetime64"="1969-12-31T23:59:59,Europe/Moscow";
+    "ftzptimestamp64"="1969-12-31T23:59:59.999999,Europe/Moscow";
+    "ftzmdate32"="1969-12-31,America/Los_Angeles";
+    "ftzmdatetime64"="1969-12-31T23:59:59,America/Los_Angeles";
+    "ftzmtimestamp64"="1969-12-31T23:59:59.999999,America/Los_Angeles";
+};
+{
+    "fdate32"="1970-01-01";
+    "fdatetime64"="1970-01-01T00:00:00Z";
+    "ftimestamp64"="1970-01-01T00:00:00.000000Z";
+    "ftzpdate32"="1970-01-01,Europe/Moscow";
+    "ftzpdatetime64"="1970-01-01T00:00:00,Europe/Moscow";
+    "ftzptimestamp64"="1970-01-01T00:00:00.000000,Europe/Moscow";
+    "ftzmdate32"="1970-01-01,America/Los_Angeles";
+    "ftzmdatetime64"="1970-01-01T00:00:00,America/Los_Angeles";
+    "ftzmtimestamp64"="1970-01-01T00:00:00.000000,America/Los_Angeles";
+};
+{
+    "fdate32"="2025-01-01";
+    "fdatetime64"="2025-01-01T00:00:00Z";
+    "ftimestamp64"="2025-01-01T00:00:00.000000Z";
+    "ftzpdate32"="2025-01-01,Europe/Moscow";
+    "ftzpdatetime64"="2025-01-01T00:00:00,Europe/Moscow";
+    "ftzptimestamp64"="2025-01-01T00:00:00.000000,Europe/Moscow";
+    "ftzmdate32"="2025-01-01,America/Los_Angeles";
+    "ftzmdatetime64"="2025-01-01T00:00:00,America/Los_Angeles";
+    "ftzmtimestamp64"="2025-01-01T00:00:00.000000,America/Los_Angeles"
+};
+{
+    "fdate32"="2106-01-01";
+    "fdatetime64"="2106-01-01T00:00:00Z";
+    "ftimestamp64"="2106-01-01T00:00:00.000000Z";
+    "ftzpdate32"="2106-01-01,Europe/Moscow";
+    "ftzpdatetime64"="2106-01-01T00:00:00,Europe/Moscow";
+    "ftzptimestamp64"="2106-01-01T00:00:00.000000,Europe/Moscow";
+    "ftzmdate32"="2106-01-01,America/Los_Angeles";
+    "ftzmdatetime64"="2106-01-01T00:00:00,America/Los_Angeles";
+    "ftzmtimestamp64"="2106-01-01T00:00:00.000000,America/Los_Angeles";
+};
+{
+    "fdate32"="148107-12-31";
+    "fdatetime64"="148107-12-31T23:59:59Z";
+    "ftimestamp64"="148107-12-31T23:59:59.999999Z";
+    "ftzpdate32"="148107-12-31,Europe/Moscow";
+    "ftzpdatetime64"="148107-12-31T23:59:59,Europe/Moscow";
+    "ftzptimestamp64"="148107-12-31T23:59:59.999999,Europe/Moscow";
+    "ftzmdate32"="148107-12-31,America/Los_Angeles";
+    "ftzmdatetime64"="148107-12-31T23:59:59,America/Los_Angeles";
+    "ftzmtimestamp64"="148107-12-31T23:59:59.999999,America/Los_Angeles";
+};

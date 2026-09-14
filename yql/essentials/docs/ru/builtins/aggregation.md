@@ -1,8 +1,14 @@
 # Агрегатные функции
 
+{% note info %}
+
+Агрегатные функции не учитывают `NULL` в своих аргументах, за исключением функции `COUNT`, если в качестве аргумента указана `*`, а также функций `BOOL_AND` / `BOOL_OR` / `BOOL_XOR`, в которых `NULL` учитывается без пропусков.
+
+{% endnote %}
+
 ## COUNT {#count}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 COUNT(*)->Uint64
@@ -14,7 +20,13 @@ COUNT(T?)->Uint64
 
 Как и другие агрегатные функции, может использоваться в сочетании с [GROUP BY](../syntax/group_by.md) для получения статистики по частям таблицы, соответствующим значениям в столбцах, по которым идет группировка. А модификатор [DISTINCT](../syntax/group_by.md#distinct) позволяет посчитать число уникальных значений.
 
-### Примеры
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `Uint64`
+- **Result**: `Uint64`
+
+#### Примеры
 
 ```yql
 SELECT COUNT(*) FROM my_table;
@@ -30,7 +42,7 @@ SELECT COUNT(DISTINCT value) FROM my_table;
 
 ## MIN и MAX {#min-max}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 MIN(T?)->T?
@@ -43,7 +55,13 @@ MAX(T)->T?
 
 В качестве аргумента допустимо произвольное вычислимое выражение с результатом, допускающим сравнение значений.
 
-### Примеры
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
+
+#### Примеры
 
 ```yql
 SELECT MIN(value), MAX(value) FROM my_table;
@@ -51,7 +69,7 @@ SELECT MIN(value), MAX(value) FROM my_table;
 
 ## SUM {#sum}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SUM(Unsigned?)->Uint64?
@@ -70,9 +88,15 @@ SUM(Decimal(N, M)?)->Decimal(35, M)?
 SELECT SUM(value) FROM my_table;
 ```
 
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `WidenIntegral(T)`
+- **Result**: `WidenIntegral(T)`
+
 ## AVG {#avg}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AVG(Double?)->Double?
@@ -86,7 +110,13 @@ AVG(Decimal(N, M)?)->Decimal(N, M)?
 
 Целочисленные значения и интервалы времени автоматически приводятся к Double.
 
-### Примеры
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<T, Uint64>`
+- **Result**: `T`
+
+#### Примеры
 
 ```yql
 SELECT AVG(value) FROM my_table;
@@ -94,10 +124,10 @@ SELECT AVG(value) FROM my_table;
 
 ## COUNT_IF {#count-if}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
-COUNT_IF(Bool?)->Uint64?
+COUNT_IF(Bool?)->Uint64
 ```
 
 Количество строк, для которых указанное в качестве аргумента выражение истинно (результат вычисления выражения — true).
@@ -106,7 +136,13 @@ COUNT_IF(Bool?)->Uint64?
 
 Функция *не* выполняет неявного приведения типов к булевым для строк и чисел.
 
-### Примеры
+#### Типы
+
+- **Item**: `Bool`
+- **SerializedState**: `Uint64`
+- **Result**: `Uint64`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -121,7 +157,7 @@ SELECT
 
 ## SUM_IF и AVG_IF {#sum-if}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SUM_IF(Unsigned?, Bool?)->Uint64?
@@ -135,7 +171,21 @@ AVG_IF(Double?, Bool?)->Double?
 
 Таким образом, `SUM_IF(value, condition)` является чуть более короткой записью для `SUM(IF(condition, value))`, аналогично для `AVG`. Расширение типа данных аргумента работает так же аналогично одноименным функциям без суффикса.
 
-### Примеры
+NB. `WidenStateIntegral(T) = if (T is Interval) then Decimal(35, 0) else WidenIntegral(T)`
+
+#### Типы SumIf
+
+- **Item**: `T`
+- **SerializedState**: `WidenStateIntegral(T)`
+- **Result**: `WidenIntegral(T)`
+
+#### Типы AvgIf
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<WidenStateIntegral(T), Uint64>`
+- **Result**: `WidenIntegral(T)`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -158,7 +208,7 @@ FROM my_table;
 
 ## SOME {#some}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SOME(T?)->T?
@@ -169,7 +219,13 @@ SOME(T)->T?
 
 Из-за отсутствия гарантий `SOME` вычислительно дешевле, чем часто использующиеся в подобных ситуациях [MIN и MAX](#min-max).
 
-### Примеры
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -185,7 +241,7 @@ FROM my_table;
 
 ## CountDistinctEstimate, HyperLogLog и HLL {#countdistinctestimate}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 CountDistinctEstimate(T)->Uint64?
@@ -204,7 +260,13 @@ HLL(T)->Uint64?
 
 На данный момент все три функции являются алиасами, но в будущем `CountDistinctEstimate` может начать использовать другой алгоритм.
 
-### Примеры
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `String`
+- **Result**: `Uint64`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -222,7 +284,7 @@ FROM my_table;
 
 ## AGGREGATE_LIST {#agg-list}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AGGREGATE_LIST(T? [, limit:Uint64])->List<T>
@@ -241,7 +303,13 @@ AGGREGATE_LIST_DISTINCT(T [, limit:Uint64])->List<T>
 
 Например, можно использовать в сочетании с `DISTINCT` и функцией [String::JoinFromList](../udf/list/string.md) (аналог `','.join(list)` из Python) для распечатки в строку всех значений, которые встретились в столбце после применения [GROUP BY](../syntax/group_by.md).
 
-### Примеры
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `List<T>`
+- **Result**: `List<T>`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -271,7 +339,7 @@ FROM users
 
 ## MAX_BY и MIN_BY {#max-min-by}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 MAX_BY(T1?, T2)->T1?
@@ -302,7 +370,19 @@ MIN_BY(T1, T2, limit:Uint64)->List<T1>?
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и ключа.
 
-### Примеры
+#### Типы без limit
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<T1, T2>`
+- **Result**: `T1`
+
+#### Типы с limit
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<List<T1>, T2>`
+- **Result**: `List<T1>`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -324,7 +404,7 @@ FROM my_table;
 
 ## TOP и BOTTOM {#top-bottom}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TOP(T?, limit:Uint32)->List<T>
@@ -335,7 +415,13 @@ BOTTOM(T, limit:Uint32)->List<T>
 
 Вернуть список максимальных/минимальных значений выражения. Первый аргумент - выражение, второй - ограничение на количество элементов.
 
-### Примеры
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<Uint32, List<T>>`
+- **Result**: `List<T>`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -356,7 +442,7 @@ FROM my_table;
 
 ## TOP_BY и BOTTOM_BY {#top-bottom-by}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TOP_BY(T1, T2, limit:Uint32)->List<T1>
@@ -367,7 +453,13 @@ BOTTOM_BY(T1, T2, limit:Uint32)->List<T1>
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и ключа. Ограничение на количество элементов в этом случае передаётся вторым аргументом при создании фабрики.
 
-### Примеры
+#### Типы
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<Uint32, List<Tuple<T2, T1>>>`
+- **Result**: `List<T1>`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -389,7 +481,7 @@ FROM my_table;
 
 ## TOPFREQ и MODE {#topfreq-mode}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TOPFREQ(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T>>
@@ -408,7 +500,13 @@ MODE(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T
 1. Для `TOPFREQ` — желаемое число элементов в результате. `MODE` является алиасом к `TOPFREQ` с 1 в этом аргументе. У `TOPFREQ` по умолчанию тоже 1.
 2. Число элементов в используемом буфере, что позволяет разменивать потребление памяти на точность. По умолчанию 100.
 
-### Примеры
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<Uint32, Uint32, List<Tuple<Uint64, T>>>`
+- **Result**: `List<Struct<Frequency: Uint64, Value: T>>`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -420,7 +518,7 @@ FROM my_table;
 
 ## STDDEV и VARIANCE {#stddev-variance}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 STDDEV(Double?)->Double?
@@ -447,7 +545,13 @@ VARIANCE_SAMPLE(Double?)->Double?
 
 Если все переданные значения — `NULL`, возвращает `NULL`.
 
-### Примеры
+#### Типы
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Double, Double, Double>`
+- **Result**: `Double`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -459,7 +563,7 @@ FROM my_table;
 
 ## CORRELATION и COVARIANCE {#correlation-covariance}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 CORRELATION(Double?, Double?)->Double?
@@ -476,7 +580,19 @@ COVARIANCE_POPULATION(Double?, Double?)->Double?
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из двух значений.
 
-### Примеры
+#### Типы CORRELATION
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Uint64, Double, Double, Double, Double, Double>`
+- **Result**: `Double`
+
+#### Типы COVARIANCE
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Uint64, Double, Double, Double>`
+- **Result**: `Double`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -495,7 +611,7 @@ FROM my_table;
 
 ## PERCENTILE и MEDIAN {#percentile-median}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 PERCENTILE(T, Double)->T
@@ -518,7 +634,13 @@ MEDIAN(T, [ List<Double> ])->List<T>
 
 Значения прецентиля должны лежать в диапазоне от 0.0 до 1.0 включительно.
 
-### Примеры
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `String`
+- **Result**: `T`, `Tuple<T, ...>`, `Struct<name1: T, ...>` или `List<T>` в зависимости от второго аргумента
+
+#### Примеры
 
 ```yql
 SELECT
@@ -534,7 +656,7 @@ FROM my_table;
 
 ## HISTOGRAM {#histogram}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 HISTOGRAM(Double?)->HistogramStruct?
@@ -615,7 +737,13 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 
 При использовании [фабрики агрегационной функции](basic.md#aggregationfactory) в качестве первого аргумента [AGGREGATE_BY](#aggregate-by) передается `Tuple` из значения и веса.
 
-### Примеры
+#### Типы
+
+- **Item**: `Double`
+- **SerializedState**: `String`
+- **Result**: `HistogramStruct`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -644,7 +772,7 @@ FROM my_table;
 
 Построение гистограммы по явно указанной фиксированной шкале корзин.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 LinearHistogram(Double?)->HistogramStruct?
@@ -667,7 +795,7 @@ LogHistogram(Double? [, logBase:Double [, min:Double [, max:Double]]])->Histogra
 
 Если разброс входных значений неконтролируемо велик, рекомендуется указывать минимальное и максимальное значение для предотвращения потенциальных падений из-за высокого потребления памяти.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -697,7 +825,7 @@ FROM my_table;
 
 ## BOOL_AND, BOOL_OR и BOOL_XOR {#bool-and-or-xor}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 BOOL_AND(Bool?)->Bool?
@@ -730,7 +858,13 @@ BOOL_XOR(Bool?)->Bool?
 
 Для агрегации с пропуском `NULL`-ов можно использовать функции `MIN`/`MAX` или `BIT_AND`/`BIT_OR`/`BIT_XOR`.
 
-### Примеры
+#### Типы
+
+- **Item**: `Bool`
+- **SerializedState**: `Bool`
+- **Result**: `Bool`
+
+#### Примеры
 
 ```yql
 $data = [
@@ -759,7 +893,13 @@ FROM AS_TABLE($data);
 
 Применение соответствующей битовой операции ко всем значениям числовой колонки или выражения.
 
-### Примеры
+#### Типы
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
+
+#### Примеры
 
 ```yql
 SELECT
@@ -782,7 +922,7 @@ FROM my_table;
 1. Колонка, `DISTINCT` колонка или выражение;
 2. Фабрика.
 
-### Примеры
+#### Примеры
 
 ```yql
 $count_factory = AggregationFactory("COUNT");
@@ -800,3 +940,57 @@ SELECT
 FROM my_table;
 ```
 
+
+## RANDOM_SAMPLE и RANDOM_VALUE
+
+#### Сигнатура
+
+Функции доступны начиная с версии [2025.04](../changelog/2025.04.md).
+
+```yql
+RANDOM_SAMPLE(T?, limit:Uint64)->List<T>
+RANDOM_SAMPLE(T, limit:Uint64)->List<T>
+RANDOM_VALUE(T)->T
+RANDOM_VALUE(T?)->Optional<T>
+```
+
+Выбрать не более `limit` случайных значений. `RANDOM_VALUE` эквивалентен `RANDOM_SAMPLE` с `limit=1`, за исключением того, что возвращает элемент, а не список. Вероятность каждого входного значения появиться в результирующем списке равняется в точности `limit/count(*)`.
+
+{% note info %}
+
+`RANDOM_SAMPLE` на пустой таблице без группировки по ключам возвращает пустой список, а не `NULL`.
+
+{% endnote %}
+
+#### Типы RANDOM_SAMPLE
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<List<T>, Uint64, Uint64>`
+- **Result**: `List<T>`
+
+#### Типы RANDOM_VALUE
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<List<T>, Uint64, Uint64>`
+- **Result**: `T`
+
+#### Примеры
+
+```yql
+SELECT
+   RANDOM_SAMPLE(region, 5) as five_random_regions,
+   RANDOM_VALUE(region) as random_region
+FROM users
+```
+
+{% note warning %}
+
+Итоговый результат не детерминирован (нельзя сделать два запуска, получающих гарантированно один и тот же результат).
+
+{% endnote %}
+
+{% note warning %}
+
+В процессе вычисления агрегационная функция удерживает в памяти `limit` элементов. При использовании большого `limit` и элементов большого размера, вычисления могут упасть по превышению лимита памяти.
+
+{% endnote %}

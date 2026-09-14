@@ -19,10 +19,10 @@ Y_UNIT_TEST_SUITE(DsProxyLwTrace) {
 
 
         env.Runtime->FilterFunction = [&](ui32/* nodeId*/, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVGet::EventType) {                
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVGet::EventType) {
                 UNIT_ASSERT_VALUES_UNEQUAL(ev->Get<TEvBlobStorage::TEvVGet>()->Record.GetTimestamps().GetSentByDSProxyUs(), 0);
             }
-            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVGetResult::EventType) {                
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvVGetResult::EventType) {
                 UNIT_ASSERT_VALUES_UNEQUAL(ev->Get<TEvBlobStorage::TEvVGetResult>()->Record.GetTimestamps().GetSentByDSProxyUs(), 0);
             }
             return true;

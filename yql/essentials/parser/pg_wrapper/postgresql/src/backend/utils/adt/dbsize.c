@@ -582,9 +582,13 @@ pg_size_pretty(PG_FUNCTION_ARGS)
 	for (unit = size_pretty_units; unit->name != NULL; unit++)
 	{
 		uint8		bits;
+		uint64		abs_size = size < 0 ? 0 - (uint64) size : (uint64) size;
 
-		/* use this unit if there are no more units or we're below the limit */
-		if (unit[1].name == NULL || i64abs(size) < unit->limit)
+		/*
+		 * Use this unit if there are no more units or the absolute size is
+		 * below the limit for the current unit.
+		 */
+		if (unit[1].name == NULL || abs_size < unit->limit)
 		{
 			if (unit->round)
 				size = half_rounded(size);
@@ -922,6 +926,9 @@ pg_relation_filenode(PG_FUNCTION_ARGS)
  * tables.
  *
  * We don't fail but return NULL if we cannot find a mapping.
+ *
+ * Temporary relations are not detected, returning NULL (see
+ * RelidByRelfilenumber() for the reasons).
  *
  * InvalidOid can be passed instead of the current database's default
  * tablespace.

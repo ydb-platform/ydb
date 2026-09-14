@@ -79,6 +79,7 @@ class NullStream {
     return *this;
   }
   NullStream& InternalStream() { return *this; }
+  void Flush() {}
 };
 template <typename T>
 inline NullStream& operator<<(NullStream& str, const T&) {
@@ -124,4 +125,4 @@ class NullStreamFatal final : public NullStream {
 ABSL_NAMESPACE_END
 }  // namespace absl
 
-#endif  // ABSL_LOG_INTERNAL_GLOBALS_H_
+#endif  // ABSL_LOG_INTERNAL_NULLSTREAM_H_

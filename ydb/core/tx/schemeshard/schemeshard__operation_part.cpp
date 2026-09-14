@@ -1,19 +1,20 @@
 #include "schemeshard__operation_part.h"
+
 #include "schemeshard_impl.h"
-#include "schemeshard_utils.h"  // for TransactionTemplate
 #include "schemeshard_path.h"
 
 #include <ydb/core/base/hive.h>
-#include <ydb/core/kesus/tablet/events.h>
-#include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/replication/controller/public_events.h>
-#include <ydb/core/tx/sequenceshard/public/events.h>
-#include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
+#include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/replication/controller/public_events.h>
+#include <ydb/core/tx/sequenceshard/public/events.h>
+#include <ydb/core/test_tablet/events.h>
+#include <ydb/core/tx/tx_processing.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -94,10 +95,10 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
         const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType); \
         const auto msg = LogMessage(DebugReply(ev), context, ignore); \
         if (ignore) { \
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg); \
+            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
             return false; \
         } \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg); \
+        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
         Y_FAIL_S(msg); \
     } \
     \
@@ -170,12 +171,15 @@ ISubOperation::TPtr CascadeDropTableChildren(TVector<ISubOperation::TPtr>& resul
                 , "unexpected name %s", implName.c_str());
 
             TPath implPath = child.Child(implName);
+            if (implPath.IsDeleted()) {
+                continue;
+            }
+
             {
                 TPath::TChecker checks = implPath.Check();
                 checks
                     .NotEmpty()
                     .IsResolved()
-                    .NotDeleted()
                     .NotUnderDeleting()
                     .NotUnderOperation();
 

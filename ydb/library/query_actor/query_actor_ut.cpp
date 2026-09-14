@@ -1,6 +1,6 @@
 #include "query_actor.h"
 #include <ydb/core/testlib/test_client.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -273,6 +273,29 @@ Y_UNIT_TEST_SUITE(QueryActorTest) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.StatusCode, Ydb::StatusIds::SUCCESS, result.Issues.ToOneLineString());
             UNIT_ASSERT_VALUES_EQUAL(result.ResultSets[0].RowsCount(), 1000);
         }
+    }
+
+    Y_UNIT_TEST(StartQueryDuringShutdown) {
+        TTestServer server;
+
+        auto& runtime = *server.Server->GetRuntime();
+        runtime.Send(NKqp::MakeKqpProxyID(runtime.GetFirstNodeId()), {}, new NKqp::TEvKqp::TEvInitiateShutdownRequest(
+            MakeIntrusive<NKqp::TKqpShutdownState>()
+        ));
+
+        struct TQuery : public TTestQueryActorBase {
+            void OnRunQuery() override {
+                RunDataQuery("SELECT 42");
+            }
+
+            void OnQueryResult() override {
+                Finish();
+            }
+        };
+
+        auto result = server.RunQueryActor<TQuery>();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.StatusCode, Ydb::StatusIds::OVERLOADED, result.Issues.ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToOneLineString(), "system shutdown requested");
     }
 }
 

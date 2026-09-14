@@ -7,7 +7,6 @@
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
 #include <memory>
@@ -15,6 +14,9 @@
 
 namespace NKikimrReplication {
     class TReplicationConfig;
+    class TReplicationLocationConfig;
+    class TWorkerStats;
+    class TEvDescribeReplicationResult;
 }
 
 namespace NKikimr::NReplication::NController {
@@ -27,12 +29,14 @@ public:
         Ready,
         Done,
         Removing,
-        Error = 255
+        Paused,
+        Error = Max<ui8>()
     };
 
     enum class ETargetKind: ui8 {
         Table,
         IndexTable,
+        Transfer,
     };
 
     enum class EDstState: ui8 {
@@ -41,7 +45,8 @@ public:
         Alter,
         Done,
         Removing,
-        Error = 255
+        Paused,
+        Error = Max<ui8>()
     };
 
     enum class EStreamState: ui8 {
@@ -49,16 +54,34 @@ public:
         Ready,
         Removing,
         Removed,
-        Error = 255
+        Error = Max<ui8>()
+    };
+
+    class ITargetStats {
+    public:
+        virtual ~ITargetStats() = default;
+
+        virtual void Serialize(NKikimrReplication::TEvDescribeReplicationResult& destination, bool detailed) const = 0;
     };
 
     class ITarget {
     public:
+        struct IConfig {
+            using TPtr = std::shared_ptr<const IConfig>;
+
+            virtual ~IConfig() = default;
+
+            virtual ETargetKind GetKind() const = 0;
+            virtual const TString& GetSrcPath() const = 0;
+            virtual const TString& GetDstPath() const = 0;
+        };
+
         virtual ~ITarget() = default;
 
         virtual ui64 GetId() const = 0;
         virtual ETargetKind GetKind() const = 0;
 
+        virtual const IConfig::TPtr& GetConfig() const = 0;
         virtual const TString& GetSrcPath() const = 0;
         virtual const TString& GetDstPath() const = 0;
 
@@ -70,6 +93,8 @@ public:
 
         virtual const TString& GetStreamName() const = 0;
         virtual void SetStreamName(const TString& value) = 0;
+        virtual const TString& GetStreamConsumerName() const = 0;
+        virtual void SetStreamConsumerName(const TString& value) = 0;
         virtual TString GetStreamPath() const = 0;
 
         virtual EStreamState GetStreamState() const = 0;
@@ -80,11 +105,18 @@ public:
 
         virtual void AddWorker(ui64 id) = 0;
         virtual void RemoveWorker(ui64 id) = 0;
+        virtual TVector<ui64> GetWorkers() const = 0;
         virtual void UpdateLag(ui64 workerId, TDuration lag) = 0;
-        virtual const TMaybe<TDuration> GetLag() const = 0;
+        virtual const std::optional<TDuration> GetLag() const = 0;
+
+        virtual bool UpdateStats(ui64 workerId, const NKikimrReplication::TWorkerStats& stats) = 0;
+        virtual void WorkerStatusChanged(ui64 workerId, ui64 status) = 0;
+        virtual const ITargetStats* GetStats() = 0;
 
         virtual void Progress(const TActorContext& ctx) = 0;
         virtual void Shutdown(const TActorContext& ctx) = 0;
+
+        virtual void UpdateConfig(const NKikimrReplication::TReplicationConfig&) = 0;
 
     protected:
         virtual IActor* CreateWorkerRegistar(const TActorContext& ctx) const = 0;
@@ -101,12 +133,12 @@ public:
     };
 
 public:
-    explicit TReplication(ui64 id, const TPathId& pathId, const NKikimrReplication::TReplicationConfig& config);
-    explicit TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config);
-    explicit TReplication(ui64 id, const TPathId& pathId, const TString& config);
+    explicit TReplication(ui64 id, const TPathId& pathId, const NKikimrReplication::TReplicationConfig& config, const TString& database);
+    explicit TReplication(ui64 id, const TPathId& pathId, NKikimrReplication::TReplicationConfig&& config, TString&& database);
+    explicit TReplication(ui64 id, const TPathId& pathId, const TString& config, const TString& database);
 
-    ui64 AddTarget(ETargetKind kind, const TString& srcPath, const TString& dstPath);
-    ITarget* AddTarget(ui64 id, ETargetKind kind, const TString& srcPath, const TString& dstPath);
+    ui64 AddTarget(ETargetKind kind, const ITarget::IConfig::TPtr& config);
+    ITarget* AddTarget(ui64 id, ETargetKind kind, const ITarget::IConfig::TPtr& config);
     const ITarget* FindTarget(ui64 id) const;
     ITarget* FindTarget(ui64 id);
     void RemoveTarget(ui64 id);
@@ -120,19 +152,28 @@ public:
     const TActorId& GetYdbProxy() const;
     ui64 GetSchemeShardId() const;
     void SetConfig(NKikimrReplication::TReplicationConfig&& config);
+    void SetLocation(const NKikimrReplication::TReplicationLocationConfig& location);
+    void ResetCredentials(const TActorContext& ctx);
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
+    EState GetDesiredState() const;
+    void SetDesiredState(EState state);
     const TString& GetIssue() const;
-    const TMaybe<TDuration> GetLag() const;
+    const std::optional<TDuration> GetLag() const;
+    const NKikimrReplication::TReplicationLocationConfig& GetLocation() const;
 
     void SetNextTargetId(ui64 value);
     ui64 GetNextTargetId() const;
 
     void UpdateSecret(const TString& secretValue);
+    ui64 GetExpectedSecretResolverCookie() const;
 
-    void SetTenant(const TString& value);
-    const TString& GetTenant() const;
+    void UpdateResourceId(const TString& value);
+
+    void SetDatabase(const TString& value);
+    const TString& GetDatabase() const;
+    void ResolveDatabase(const TActorContext& ctx);
 
     bool CheckAlterDone() const;
 

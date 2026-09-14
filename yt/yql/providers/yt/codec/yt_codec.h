@@ -6,6 +6,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_stats_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 
 #include <yt/cpp/mapreduce/interface/io.h>
 
@@ -31,6 +32,12 @@ public:
 
     Y_DECLARE_FLAGS(TSystemFields, ESystemField);
 
+    enum class EBlockRepresentation {
+        None,
+        WideBlock,
+        BlockStruct,
+    };
+
     struct TSpecInfo {
         NKikimr::NMiniKQL::TType* Type = nullptr;
         bool StrictSchema = true;
@@ -38,6 +45,7 @@ public:
         THashMap<TString, NKikimr::NMiniKQL::TType*> AuxColumns;
         ui64 NativeYtTypeFlags = 0;
         bool Dynamic = false;
+        bool RLS = false;
         THashSet<TString> SysColumns;
         THashSet<TString> ExplicitYson;
     };
@@ -60,11 +68,13 @@ public:
         TVector<NKikimr::NUdf::TUnboxedValue> DefaultValues;
         ui64 NativeYtTypeFlags = 0;
         bool Dynamic = false;
+        bool RLS = false;
         TMaybe<ui32> FillSysColumnPath;
         TMaybe<ui32> FillSysColumnRecord;
         TMaybe<ui32> FillSysColumnIndex;
         TMaybe<ui32> FillSysColumnNum;
         TMaybe<ui32> FillSysColumnKeySwitch;
+        TMaybe<ui32> FillBlockStructSize;
     };
 
     struct TEncoderSpec {
@@ -133,6 +143,18 @@ public:
         UseBlockOutput_ = true;
     }
 
+    void SetIsTableContent() {
+        IsTableContent_ = true;
+    }
+
+    void SetDatumValidationMode(EDatumValidationMode mode) {
+        DatumValidationMode_ = mode;
+    }
+
+    void SetInputBlockRepresentation(EBlockRepresentation type) {
+        InputBlockRepresentation_ = type;
+    }
+
     void SetTableOffsets(const TVector<ui64>& offsets);
 
     void Clear();
@@ -148,8 +170,12 @@ public:
     bool UseSkiff_ = false;
     bool UseBlockInput_ = false;
     bool UseBlockOutput_ = false;
+    bool IsTableContent_ = false;
+    EDatumValidationMode DatumValidationMode_ = DefaultDatumValidationMode;
     TString OptLLVM_;
     TSystemFields SystemFields_;
+
+    EBlockRepresentation InputBlockRepresentation_ = EBlockRepresentation::None;
 
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_ = nullptr;
     THashMap<TString, TDecoderSpec> Decoders;
@@ -256,5 +282,43 @@ public:
 };
 
 using IMkqlWriterImplPtr = TIntrusivePtr<IMkqlWriterImpl>;
+
+NKikimr::NUdf::TUnboxedValue ReadYsonValueInTableFormat(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, char cmd, NCommon::TInputBuf& buf);
+TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonValueInTableFormat(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const TStringBuf& yson, NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, IOutputStream* err);
+TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonNode(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const NYT::TNode& node, NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, IOutputStream* err);
+extern "C" void ReadYsonContainerValue(NKikimr::NMiniKQL::TType* type,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf,
+    bool wrapOptional);
+extern "C" void ReadContainerNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf,
+    bool wrapOptional);
+void WriteYsonValueInTableFormat(NCommon::TOutputBuf& buf, NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, bool topLevel);
+extern "C" void WriteYsonContainerValue(NKikimr::NMiniKQL::TType* type,
+    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
+
+// Helper method used to keep backward compatibility
+// with old optional singulars behavior after switching to mandatory v3 schema
+// TODO: remove this helper and its usages
+// to switch to correct, non-backward compatible behavior
+bool IsOptionalSingular(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags);
+
+void SkipSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
+void SkipSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
+void SkipSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
+NKikimr::NUdf::TUnboxedValue ReadSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NCommon::TInputBuf& buf, bool withDefVal);
+NKikimr::NUdf::TUnboxedValue ReadSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NCommon::TInputBuf& buf);
+NKikimr::NUdf::TUnboxedValue ReadSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
+void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
+void WriteSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf, bool wasOptional);
+void WriteSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
+extern "C" void WriteContainerNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
 
 } // NYql

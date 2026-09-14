@@ -60,6 +60,8 @@
                                                 "PlanNodeId": 5,
                                                 "Plans": [
                                                     {
+                                                        "Blocks": "True",
+                                                        "HashFunc": "HashV2",
                                                         "KeyColumns": [
                                                             "MobilePhoneModel"
                                                         ],
@@ -94,6 +96,8 @@
                                                                 "PlanNodeId": 3,
                                                                 "Plans": [
                                                                     {
+                                                                        "Blocks": "True",
+                                                                        "HashFunc": "HashV2",
                                                                         "KeyColumns": [
                                                                             "MobilePhoneModel",
                                                                             "UserID"
@@ -117,6 +121,7 @@
                                                                                         "Phase": "Intermediate"
                                                                                     },
                                                                                     {
+                                                                                        "Blocks": "True",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 2
@@ -131,15 +136,12 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                                         "ReadColumns": [
-                                                                                            "MobilePhoneModel",
-                                                                                            "UserID"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "CounterID (-\u221e, +\u221e)",
                                                                                             "EventDate (-\u221e, +\u221e)",
                                                                                             "UserID (-\u221e, +\u221e)",
                                                                                             "EventTime (-\u221e, +\u221e)",
-                                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                                            "WatchID (-\u221e, +\u221e)",
+                                                                                            "MobilePhoneModel"
                                                                                         ],
                                                                                         "Scan": "Parallel",
                                                                                         "SsaProgram": {
@@ -193,8 +195,7 @@
                                                                                                         ]
                                                                                                     }
                                                                                                 }
-                                                                                            ],
-                                                                                            "Version": 5
+                                                                                            ]
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }

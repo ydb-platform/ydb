@@ -41,7 +41,7 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                                                const TActorContext &)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasReceiveSnapshot())
@@ -49,18 +49,18 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
 
     NIceDb::TNiceDb db(txc.DB);
 
-    Y_ABORT_UNLESS(schemeTx.HasCreateTable());
+    Y_ENSURE(schemeTx.HasCreateTable());
 
     const auto &createTableTx = schemeTx.GetCreateTable();
 
     TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
     if (createTableTx.HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
         tableId.LocalPathId = createTableTx.GetPathId().GetLocalId();
     }
 
     auto userTable = DataShard.FindUserTable(tableId);
-    Y_ABORT_UNLESS(userTable);
+    Y_ENSURE(userTable);
 
     bool hasOpenTxs = false;
     bool loanedTables = false;
@@ -75,7 +75,7 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                 const bool ok = rs.ParseFromArray(
                     rsdata.Body.data() + SnapshotTransferReadSetMagic.size(),
                     rsdata.Body.size() - SnapshotTransferReadSetMagic.size());
-                Y_ABORT_UNLESS(ok, "Failed to parse snapshot transfer readset");
+                Y_ENSURE(ok, "Failed to parse snapshot transfer readset");
 
                 TString compressedBody = rs.GetBorrowedSnapshot();
                 snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody);
@@ -114,7 +114,7 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
         DataShard.PersistLastLoanTableTid(db, userTable->LocalTid);
     }
 
-    Y_ABORT_UNLESS(DataShard.GetSnapshotManager().GetSnapshots().empty(),
+    Y_ENSURE(DataShard.GetSnapshotManager().GetSnapshots().empty(),
         "Found unexpected persistent snapshots at CopyTable destination");
 
     const auto minVersion = DataShard.GetSnapshotManager().GetLowWatermark();

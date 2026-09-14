@@ -23,7 +23,6 @@
 #include <memory>
 #include <util/generic/string.h>
 #include <util/string/cast.h>
-#include <type_traits>
 #include <utility>
 
 #include "y_absl/strings/str_cat.h"
@@ -32,7 +31,6 @@
 
 #include <grpc/support/log.h>
 
-#include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/promise/activity.h"
@@ -378,8 +376,8 @@ class Center : public InterceptorList<T> {
 
   TString DebugTag() {
     if (auto* activity = Activity::current()) {
-      return y_absl::StrCat(activity->DebugTag(), " PIPE[0x",
-                          reinterpret_cast<uintptr_t>(this), "]: ");
+      return y_absl::StrCat(activity->DebugTag(), " PIPE[0x", y_absl::Hex(this),
+                          "]: ");
     } else {
       return y_absl::StrCat("PIPE[0x", reinterpret_cast<uintptr_t>(this), "]: ");
     }
@@ -478,6 +476,13 @@ class PipeSender {
     }
   }
 
+  void CloseWithError() {
+    if (center_ != nullptr) {
+      center_->MarkCancelled();
+      center_.reset();
+    }
+  }
+
   void Swap(PipeSender<T>* other) { std::swap(center_, other->center_); }
 
   // Send a single message along the pipe.
@@ -535,7 +540,9 @@ class Next {
   Next(Next&& other) noexcept = default;
   Next& operator=(Next&& other) noexcept = default;
 
-  Poll<y_absl::optional<T>> operator()() { return center_->Next(); }
+  Poll<y_absl::optional<T>> operator()() {
+    return center_ == nullptr ? y_absl::nullopt : center_->Next();
+  }
 
  private:
   friend class PipeReceiver<T>;
@@ -566,29 +573,27 @@ class PipeReceiver {
   // Blocks the promise until the receiver is either closed or a message is
   // available.
   auto Next() {
-    return Seq(
-        pipe_detail::Next<T>(center_->Ref()),
-        [center = center_->Ref()](y_absl::optional<T> value) {
-          bool open = value.has_value();
-          bool cancelled = center->cancelled();
-          return If(
-              open,
-              [center = std::move(center), value = std::move(value)]() mutable {
-                auto run = center->Run(std::move(value));
-                return Map(std::move(run),
-                           [center = std::move(center)](
-                               y_absl::optional<T> value) mutable {
-                             if (value.has_value()) {
-                               center->value() = std::move(*value);
-                               return NextResult<T>(std::move(center));
-                             } else {
-                               center->MarkCancelled();
-                               return NextResult<T>(true);
-                             }
-                           });
-              },
-              [cancelled]() { return NextResult<T>(cancelled); });
-        });
+    return Seq(pipe_detail::Next<T>(center_), [center = center_](
+                                                  y_absl::optional<T> value) {
+      bool open = value.has_value();
+      bool cancelled = center == nullptr ? true : center->cancelled();
+      return If(
+          open,
+          [center = std::move(center), value = std::move(value)]() mutable {
+            auto run = center->Run(std::move(value));
+            return Map(std::move(run), [center = std::move(center)](
+                                           y_absl::optional<T> value) mutable {
+              if (value.has_value()) {
+                center->value() = std::move(*value);
+                return NextResult<T>(std::move(center));
+              } else {
+                center->MarkCancelled();
+                return NextResult<T>(true);
+              }
+            });
+          },
+          [cancelled]() { return NextResult<T>(cancelled); });
+    });
   }
 
   // Return a promise that resolves when the receiver is closed.
@@ -597,11 +602,21 @@ class PipeReceiver {
   // Checks closed from the receivers perspective: that is, if there is a value
   // in the pipe but the pipe is closed, reports open until that value is read.
   auto AwaitClosed() {
-    return [center = center_]() { return center->PollClosedForReceiver(); };
+    return [center = center_]() -> Poll<bool> {
+      if (center == nullptr) return false;
+      return center->PollClosedForReceiver();
+    };
   }
 
   auto AwaitEmpty() {
     return [center = center_]() { return center->PollEmpty(); };
+  }
+
+  void CloseWithError() {
+    if (center_ != nullptr) {
+      center_->MarkCancelled();
+      center_.reset();
+    }
   }
 
   // Interject PromiseFactory f into the pipeline.

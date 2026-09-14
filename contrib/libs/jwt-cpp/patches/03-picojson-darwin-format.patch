@@ -1,0 +1,9 @@
+--- a/include/picojson/picojson.h	(index)
++++ b/include/picojson/picojson.h	(working tree)
+@@ -487,1 +487,5 @@ inline std::string value::to_str() const {
+-    SNPRINTF(buf, sizeof(buf), "%" PRId64, u_.int64_);
++#if defined(__APPLE__)
++    SNPRINTF(buf, sizeof(buf), "%lld", u_.int64_);
++#else
++    SNPRINTF(buf, sizeof(buf), "%" PRId64, u_.int64_);
++#endif

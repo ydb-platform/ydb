@@ -85,19 +85,26 @@ struct TTestEnvOpts {
     ui32 NRings;
     ui32 RingSize;
     ui32 DataCenterCount;
+    ui32 PileCount;
+    ui32 NodesWithoutPDisksCount;
     TNodeTenantsMap Tenants;
     bool UseMirror3dcErasure;
     bool AdvanceCurrentTime;
     bool EnableSentinel;
     bool EnableCMSRequestPriorities;
     bool EnableSingleCompositeActionGroup;
+    bool EnableDynamicGroups;
+    bool IsBridgeMode;
+    bool EnableSimpleStateStorageConfig;
+    bool EnableCmsLocksPriority;
+    bool EnableCmsSmartAvailabilityMode;
 
     using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
     TNodeLocationCallback NodeLocationCallback;
 
     TTestEnvOpts() = default;
 
-    TTestEnvOpts(ui32 nodeCount, 
+    TTestEnvOpts(ui32 nodeCount,
             ui32 vdisks = 1,
             const TNodeTenantsMap &tenants = TNodeTenantsMap())
         : NodeCount(nodeCount)
@@ -106,12 +113,19 @@ struct TTestEnvOpts {
         , NRings(1)
         , RingSize(nodeCount)
         , DataCenterCount(1)
+        , PileCount(0)
+        , NodesWithoutPDisksCount(0)
         , Tenants(tenants)
         , UseMirror3dcErasure(false)
         , AdvanceCurrentTime(false)
         , EnableSentinel(false)
         , EnableCMSRequestPriorities(true)
         , EnableSingleCompositeActionGroup(true)
+        , EnableDynamicGroups(false)
+        , IsBridgeMode(false)
+        , EnableSimpleStateStorageConfig(false)
+        , EnableCmsLocksPriority(false)
+        , EnableCmsSmartAvailabilityMode(false)
     {
     }
 
@@ -130,11 +144,32 @@ struct TTestEnvOpts {
         return *this;
     }
 
+    TTestEnvOpts& WithEnableCmsLocksPriority() {
+        EnableCmsLocksPriority = true;
+        return *this;
+    }
+
+    TTestEnvOpts& WithEnableCmsSmartAvailabilityMode() {
+        EnableCmsSmartAvailabilityMode = true;
+        return *this;
+    }
+
     TTestEnvOpts& WithNodeLocationCallback(TNodeLocationCallback nodeLocationCallback) {
         NodeLocationCallback = nodeLocationCallback;
         return *this;
     }
 
+    TTestEnvOpts& WithDynamicGroups() {
+        EnableDynamicGroups = true;
+        return *this;
+    }
+
+    TTestEnvOpts& WithBridgeMode(ui32 pileCount = 2, bool enableSimpleStateStorageConfig = false) {
+        IsBridgeMode = true;
+        PileCount = pileCount;
+        EnableSimpleStateStorageConfig = enableSimpleStateStorageConfig;
+        return *this;
+    }
 };
 
 class TCmsTestEnv : public TTestBasicRuntime {
@@ -150,6 +185,8 @@ public:
 
     void RestartCms();
     void SendRestartCms();
+    void RestartBSController();
+    void SendRestartBSController();
     void SendToCms(IEventBase *event);
     void CreateDefaultCmsPipe();
     void DestroyDefaultCmsPipe();
@@ -159,15 +196,34 @@ public:
     void SetCmsConfig(const NKikimrCms::TCmsConfig &config);
     void SetLimits(ui32 tenantLimit, ui32 tenantRatioLimit, ui32 clusterLimit, ui32 clusterRatioLimit);
 
-    void EnableSysNodeChecking(); 
+    void EnableSysNodeChecking();
     TIntrusiveConstPtr<NKikimr::TStateStorageInfo> GetStateStorageInfo();
-    
+
     void UpdateNodeStartTime(ui32 nodeIndex, TInstant startTime) {
         TFakeNodeWhiteboardService::Info[GetNodeId(nodeIndex)].SystemStateInfo.SetStartTime(startTime.GetValue());
     }
 
     NKikimrCms::TClusterState RequestState(const NKikimrCms::TClusterStateRequest &request = {},
         NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+
+    NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult RequestDDiskInfoList();
+    NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult RequestDDiskInfo(ui64 tabletId);
+    NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult
+    WaitForDDiskInfo(ui64 tabletId, ui64 revision, TDuration timeout = TDuration::Seconds(30));
+    NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult RequestBSControllerDDiskInfoList();
+    NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult RequestBSControllerDDiskInfo(ui64 tabletId);
+
+    NKikimrCms::TDDiskTabletListResponse RequestDDiskTabletList(
+        const NKikimrCms::TDDiskTabletListRequest &request = {});
+    NKikimrCms::TDDiskDiskListResponse RequestDDiskDiskList(
+        const NKikimrCms::TDDiskDiskListRequest &request = {});
+
+    void ConfigureDDiskPool(ui32 numGroups = 1);
+    NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult
+    AllocateDDiskBlockGroup(ui64 tabletId, ui64 directBlockGroupId, ui32 targetNumVChunks = 1);
+
+    using TListNodes = ::google::protobuf::RepeatedPtrField< ::Ydb::Maintenance::Node>;
+    TListNodes RequestListNodes();
 
     std::pair<TString, TVector<TString>> ExtractPermissions(const NKikimrCms::TPermissionResponse &response);
 
@@ -314,6 +370,12 @@ public:
         bool dry = false,
         NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
     NKikimrCms::TManageRequestResponse CheckListRequests(const TString &user, ui64 count);
+    NKikimrCms::TManageRequestResponse CheckApproveRequest(
+        const TString &user,
+        const TString &id,
+        bool dry = false,
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK
+    );
 
     NKikimrCms::TPermissionResponse CheckRequest(
         const TString &user,
@@ -407,12 +469,66 @@ public:
         return CheckResetMarker(req, code);
     }
 
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskRefresh(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code)
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvRefreshMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
+    }
+
+    Ydb::Maintenance::GetMaintenanceTaskResult CheckMaintenanceTaskGet(
+        const TString &taskUid,
+        Ydb::StatusIds::StatusCode code)
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvGetMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvGetMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
+    }
+
+    void CheckMaintenanceTaskDrop(
+        const TString &taskUid,
+        Ydb::StatusIds::StatusCode code)
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvDropMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvManageMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+    }
+
     template <typename... Ts>
     Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
             const TString &taskUid,
             Ydb::StatusIds::StatusCode code,
             Ydb::Maintenance::AvailabilityMode availabilityMode,
-            const Ts&... actionGroups) 
+            ui32 maxInflightActions,
+            const Ts&... actionGroups)
     {
         auto ev = std::make_unique<NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
         ev->Record.SetUserSID("test-user");
@@ -420,6 +536,9 @@ public:
         auto *req = ev->Record.MutableRequest();
         req->mutable_task_options()->set_task_uid(taskUid);
         req->mutable_task_options()->set_availability_mode(availabilityMode);
+        if (maxInflightActions > 0) {
+            req->mutable_task_options()->set_max_inflight_actions(maxInflightActions);
+        }
         AddActionGroups(*req, actionGroups...);
 
         SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
@@ -435,9 +554,37 @@ public:
     Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
             const TString &taskUid,
             Ydb::StatusIds::StatusCode code,
-            const Ts&... actionGroups) 
-    {   
-        return CheckMaintenanceTaskCreate(taskUid, code, Ydb::Maintenance::AVAILABILITY_MODE_STRONG, actionGroups...);
+            Ydb::Maintenance::AvailabilityMode availabilityMode,
+            const Ts&... actionGroups)
+    {
+        return CheckMaintenanceTaskCreate(taskUid, code, availabilityMode, 0u, actionGroups...);
+    }
+
+    template <typename... Ts>
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code,
+            const Ts&... actionGroups)
+    {
+        return CheckMaintenanceTaskCreate(taskUid, code, Ydb::Maintenance::AVAILABILITY_MODE_STRONG, 0u, actionGroups...);
+    }
+
+    Ydb::Maintenance::ManageActionResult CheckCompleteAction(
+        const Ydb::Maintenance::ActionUid &actionUid,
+        Ydb::StatusIds::StatusCode code)
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvCompleteActionRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->mutable_action_uids()->Add()->CopyFrom(actionUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvManageActionResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
     }
 
     void EnableBSBaseConfig();

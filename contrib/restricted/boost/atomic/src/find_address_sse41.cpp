@@ -16,10 +16,10 @@
 
 #if BOOST_ARCH_X86 && defined(BOOST_ATOMIC_DETAIL_SIZEOF_POINTER) && (BOOST_ATOMIC_DETAIL_SIZEOF_POINTER == 8)
 
-#include <cstddef>
 #include <smmintrin.h>
+#include <cstddef>
+#include <cstdint>
 
-#include <boost/cstdint.hpp>
 #include <boost/atomic/detail/config.hpp>
 #include <boost/atomic/detail/intptr.hpp>
 #include "find_address.hpp"
@@ -71,7 +71,7 @@ std::size_t find_address_sse41(const volatile void* addr, const volatile void* c
 
         mm1 = _mm_packs_epi16(mm1, mm5);
 
-        uint32_t mask = _mm_movemask_epi8(mm1);
+        std::uint32_t mask = _mm_movemask_epi8(mm1);
         if (mask)
         {
             pos += atomics::detail::count_trailing_zeros(mask);
@@ -96,7 +96,7 @@ std::size_t find_address_sse41(const volatile void* addr, const volatile void* c
 
         mm1 = _mm_packs_epi32(mm1, mm3);
 
-        uint32_t mask = _mm_movemask_epi8(mm1);
+        std::uint32_t mask = _mm_movemask_epi8(mm1);
         if (mask)
         {
             pos += atomics::detail::count_trailing_zeros(mask) / 2u;
@@ -116,7 +116,7 @@ std::size_t find_address_sse41(const volatile void* addr, const volatile void* c
 
         mm1 = _mm_castps_si128(_mm_shuffle_ps(_mm_castsi128_ps(mm1), _mm_castsi128_ps(mm2), _MM_SHUFFLE(2, 0, 2, 0)));
 
-        uint32_t mask = _mm_movemask_ps(_mm_castsi128_ps(mm1));
+        std::uint32_t mask = _mm_movemask_ps(_mm_castsi128_ps(mm1));
         if (mask)
         {
             pos += atomics::detail::count_trailing_zeros(mask);
@@ -131,7 +131,7 @@ std::size_t find_address_sse41(const volatile void* addr, const volatile void* c
         __m128i mm1 = _mm_load_si128(reinterpret_cast< const __m128i* >(addrs + pos));
 
         mm1 = _mm_cmpeq_epi64(mm1, mm_addr);
-        uint32_t mask = _mm_movemask_pd(_mm_castsi128_pd(mm1));
+        std::uint32_t mask = _mm_movemask_pd(_mm_castsi128_pd(mm1));
         if (mask)
         {
             pos += atomics::detail::count_trailing_zeros(mask);

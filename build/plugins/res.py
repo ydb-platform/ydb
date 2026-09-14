@@ -1,8 +1,9 @@
 import json
 import os
-import six
-from _common import rootrel_arc_src, ugly_conftest_exception
 import ymake
+
+YA_CONF_JSON_NAME = "ya.conf.json"
+DEFAULT_FORMULA_PATH_TMPL = "build/external_resources/{}/resources.json"
 
 
 def remove_prefix(text, prefix):
@@ -11,7 +12,12 @@ def remove_prefix(text, prefix):
     return text
 
 
-def onresource_files(unit, *args):
+def _normalize_resource_path(path):
+    return path.replace("\\", "/")
+
+
+@ymake.macro
+def RESOURCE_FILES(unit: ymake.Unit, *args: str):
     """
     @usage: RESOURCE_FILES([DONT_COMPRESS] [PREFIX {prefix}] [STRIP prefix_to_strip] {path})
 
@@ -65,10 +71,7 @@ def onresource_files(unit, *args):
                     ['warn', "Duplicated resource file {} in RESOURCE_FILES() macro. Skipped it.".format(path)]
                 )
                 continue
-            if not ugly_conftest_exception(path):
-                src = 'resfs/src/{}=${{rootrel;input;context=TEXT:"{}"}}'.format(key, path)
-            else:
-                src = 'resfs/src/{}={}'.format(key, rootrel_arc_src(path, unit))
+            src = 'resfs/src/{}=${{rootrel;context=TEXT;input=TEXT:"{}"}}'.format(key, path)
             res += ['-', src, path, key]
 
     if unit.enabled('_GO_MODULE'):
@@ -77,67 +80,129 @@ def onresource_files(unit, *args):
         unit.onresource(res)
 
 
-def on_all_resource_files(unit, macro, *args):
+@ymake.macro
+def _ALL_RESOURCE_FILES(unit: ymake.Unit, macro: str, *args: str):
     # This is only validation, actual work is done in ymake.core.conf implementation
     for arg in args:
         if '*' in arg or '?' in arg:
             ymake.report_configure_error('Wildcards in [[imp]]{}[[rst]] are not allowed'.format(macro))
 
 
-def onall_resource_files(unit, *args):
-    on_all_resource_files(unit, 'ALL_RESOURCE_FILES', args)
+@ymake.macro
+def ALL_RESOURCE_FILES(unit: ymake.Unit, *args: str):
+    _ALL_RESOURCE_FILES(unit, 'ALL_RESOURCE_FILES', args)
 
 
-def onall_resource_files_from_dirs(unit, *args):
-    on_all_resource_files(unit, 'ALL_RESOURCE_FILES_FROM_DIRS', args)
+@ymake.macro
+def ALL_RESOURCE_FILES_FROM_DIRS(unit: ymake.Unit, *args: str):
+    _ALL_RESOURCE_FILES(unit, 'ALL_RESOURCE_FILES_FROM_DIRS', args)
 
 
-def on_ya_conf_json(unit, conf_file):
-    conf_abs_path = unit.resolve('$S/' + conf_file)
-    if not os.path.exists(conf_abs_path):
-        ymake.report_configure_error('File "{}" not found'.format(conf_abs_path))
+@ymake.macro
+def _YA_TOOLS_CONF(unit: ymake.Unit, conf_dir: str):
+    conf_dir = conf_dir.rstrip("/")
+    conf_abs_path = unit.resolve('$S/' + conf_dir)
+    if not os.path.isdir(conf_abs_path):
+        ymake.report_configure_error('Directory "{}" not found'.format(conf_abs_path))
         return
 
-    # conf_file should be passed to the RESOURCE_FILES macro without path.
-    # To resolve it later by name only we must add it's path to SRCDIR().
-    conf_dir = os.path.dirname(conf_file)
-    if conf_dir:
-        unit.onsrcdir(conf_dir)
-    unit.onresource_files(os.path.basename(conf_file))
+    conf_file = conf_dir + "/" + YA_CONF_JSON_NAME
+    conf_abs_file = conf_abs_path + "/" + YA_CONF_JSON_NAME
+    if not os.path.isfile(conf_abs_file):
+        ymake.report_configure_error('File "{}" not found'.format(conf_abs_file))
+        return
 
+    unit.onresource_files(["STRIP", conf_dir + "/", conf_file])
+
+    resource_files = []
+    formulas = set()
     valid_dirs = (
         "build",
         conf_dir,
     )
 
-    with open(conf_abs_path) as f:
-        conf = json.load(f)
-    formulas = set()
+    def add_resource_file(abs_path):
+        relative_path = remove_prefix(
+            _normalize_resource_path(abs_path),
+            _normalize_resource_path(conf_abs_path) + "/",
+        )
+        resource_files.append("/".join([conf_dir, relative_path]))
 
-    def _iter_bottles(config):
-        if "simple_tools" in config:
-            for name, info in config["simple_tools"].items():
-                yield name, f"build/external_resources/{info.get('resource', name)}/resources.json"
-        for name, bottle in config["bottles"].items():
-            yield name, bottle["formula"]
+    def add_formula(formula, referenced_from):
+        if not isinstance(formula, str):
+            return
 
-    for bottle_name, formula in _iter_bottles(conf):
-        if isinstance(formula, six.string_types):
-            if formula.startswith(valid_dirs):
-                abs_path = unit.resolve('$S/' + formula)
-                if os.path.exists(abs_path):
-                    formulas.add(formula)
-                else:
-                    ymake.report_configure_error(
-                        'File "{}" (referenced from bottle "{}" in "{}") is not found'.format(
-                            abs_path, bottle_name, conf_abs_path
-                        )
-                    )
-            else:
-                ymake.report_configure_error(
-                    'File "{}" (referenced from bottle "{}" in "{}") must be located in "{}" file tree'.format(
-                        formula, bottle_name, conf_file, '" or "'.join(valid_dirs)
-                    )
+        if not any(formula.startswith(valid_dir + "/") for valid_dir in valid_dirs):
+            ymake.report_configure_error(
+                'File "{}" (referenced from {}) must be located in "{}" file tree'.format(
+                    formula, referenced_from, '" or "'.join(valid_dirs)
                 )
+            )
+            return
+
+        formula_abs_path = unit.resolve('$S/' + formula)
+        if os.path.exists(formula_abs_path):
+            formulas.add(formula)
+        else:
+            ymake.report_configure_error(
+                'File "{}" (referenced from {}) is not found'.format(formula_abs_path, referenced_from)
+            )
+
+    def add_bottle_formulas(config, config_file):
+        for name, bottle in config["bottles"].items():
+            add_formula(bottle["formula"], 'bottle "{}" in "{}"'.format(name, config_file))
+
+    with open(conf_abs_file) as f:
+        conf = json.load(f)
+
+    if "simple_tools" in conf:
+        for name, info in conf["simple_tools"].items():
+            formula = DEFAULT_FORMULA_PATH_TMPL.format(info.get("resource", name))
+            add_formula(formula, 'simple tool "{}" in "{}"'.format(name, conf_abs_file))
+    add_bottle_formulas(conf, conf_abs_file)
+
+    tools_dir = conf_abs_path + "/tools/tools"
+
+    def add_tool_formula(tool_file):
+        with open(tool_file) as f:
+            tool = json.load(f).get("tool", {})
+        if tool.get("type") != "simple":
+            return
+
+        definition = tool.get("definition", {})
+        if "formula" in definition:
+            formula = definition["formula"]
+        else:
+            tool_name = remove_prefix(
+                _normalize_resource_path(tool_file),
+                _normalize_resource_path(tools_dir) + "/",
+            )[: -len(".tool.json")]
+            formula = DEFAULT_FORMULA_PATH_TMPL.format(tool_name)
+        add_formula(formula, 'tool config "{}"'.format(tool_file))
+
+    tier_file = conf_abs_path + "/tools/internal/tiers.json"
+    if os.path.isfile(tier_file):
+        add_resource_file(tier_file)
+
+    if os.path.isdir(tools_dir):
+        for root, dirs, files in os.walk(tools_dir):
+            dirs.sort()
+            for filename in sorted(files):
+                if filename.endswith(".tool.json"):
+                    tool_file = root + "/" + filename
+                    add_resource_file(tool_file)
+                    add_tool_formula(tool_file)
+
+    toolchains_dir = conf_abs_path + "/tools/toolchains"
+    if os.path.isdir(toolchains_dir):
+        for filename in sorted(os.listdir(toolchains_dir)):
+            abs_path = toolchains_dir + "/" + filename
+            if filename.endswith(".toolchain.json") and os.path.isfile(abs_path):
+                add_resource_file(abs_path)
+                with open(abs_path) as f:
+                    add_bottle_formulas(json.load(f), abs_path)
+
+    if resource_files:
+        unit.onresource_files(["PREFIX", "yatools", "STRIP", conf_dir] + sorted(resource_files))
     for formula in sorted(formulas):
         unit.onresource_files(formula)

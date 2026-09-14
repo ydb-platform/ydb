@@ -45,7 +45,7 @@ public:
         AddHandler({TYtConfigure::CallableName()}, RequireFirst(), Hndl(&TYtDataSourceExecTransformer::HandleConfigure));
     }
 
-protected:
+private:
     TString WriteTableScheme(TYtReadTableScheme readScheme, NYson::EYsonFormat ysonFormat, bool withType) {
         TStringStream out;
         NYson::TYsonWriter writer(&out, ysonFormat, ::NYson::EYsonType::Node, true);
@@ -114,9 +114,17 @@ protected:
 
         TString usedCluster;
         TSyncMap syncList;
-        if (!IsYtIsolatedLambda(data.Ref(), syncList, usedCluster, false)) {
+        ERuntimeClusterSelectionMode mode = State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        if (mode == ERuntimeClusterSelectionMode::Force) {
+            mode = ERuntimeClusterSelectionMode::Auto;
+        }
+        if (!IsYtIsolatedLambda(data.Ref(), syncList, usedCluster, false, mode)) {
             ctx.AddError(TIssue(ctx.GetPosition(data.Pos()), TStringBuilder() << "Failed to execute node due to bad graph: " << input->Content()));
             return SyncError();
+        }
+        if (usedCluster == YtUnspecifiedCluster) {
+            usedCluster = GetRuntimeCluster(*input, State_);
+            YQL_CLOG(DEBUG, ProviderYt) << "Assigning runtime cluster " << usedCluster << " for node " << input->Content();
         }
         if (usedCluster.empty()) {
             usedCluster = State_->Configuration->DefaultCluster.Get().GetOrElse(State_->Gateway->GetDefaultClusterName());
@@ -151,6 +159,48 @@ protected:
         auto optimizeChildren = input->ChildrenList();
         optimizeChildren[0] = optimizedInput;
         resOrPull = TResOrPullBase(ctx.ExactChangeChildren(resOrPull.Ref(), std::move(optimizeChildren)));
+        auto config = State_->Configuration->GetSettingsForNode(resOrPull.Origin().Ref());
+        auto cypressPaths = BuildLayersPaths(optimizedInput, usedCluster, State_->Types->LayersRegistry,
+            State_->LayersIntegration_, config, ctx
+        );
+        if (!cypressPaths) {
+            return SyncError();
+        }
+        auto& snapshots = State_->LayersSnapshots[usedCluster];
+        TVector<TString> needSnapshots;
+        for (const auto& path: *cypressPaths) {
+            if (!snapshots.contains(path)) {
+                needSnapshots.emplace_back(path);
+            }
+        }
+
+        if (needSnapshots.size()) {
+            auto snapshotResult = State_->Gateway->SnapshotLayers(
+                IYtGateway::TSnapshotLayersOptions(State_->SessionId)
+                    .Cluster(usedCluster)
+                    .Layers(needSnapshots)
+                    .Config(config)
+            );
+
+            return WrapFutureCallback(snapshotResult, [input, needSnapshots, state=State_, usedCluster](const IYtGateway::TLayersSnapshotResult& res, const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&) {
+                auto& snapshots = state->LayersSnapshots[usedCluster];
+                for (size_t i = 0; i < needSnapshots.size(); ++i) {
+                    snapshots[needSnapshots[i]] = res.Data[i];
+                }
+                input->SetState(TExprNode::EState::ExecutionRequired);
+                return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            });
+        }
+
+        TVector<std::pair<TString, ui64>> snaphsotsResult;
+        TVector<TString> finalCypressPaths;
+        snaphsotsResult.reserve(cypressPaths->size());
+        for (const auto& path: *cypressPaths) {
+            auto ptr = snapshots.FindPtr(path);
+            YQL_ENSURE(ptr);
+            snaphsotsResult.emplace_back(*ptr);
+            finalCypressPaths.emplace_back(ptr->first);
+        }
 
         TString operationHash;
         if (resOrPull.Maybe<TResult>()) {
@@ -165,6 +215,10 @@ protected:
                         builder << TYtNodeHashCalculator::MakeSalt(settings, usedCluster) << operationHash << columns.size();
                         for (auto& col: columns) {
                             builder << col;
+                        }
+                        builder << snaphsotsResult.size();
+                        for (size_t i = 0; i < snaphsotsResult.size(); ++i) {
+                            builder << snaphsotsResult[i].first << snaphsotsResult[i].second;
                         }
                         operationHash = builder.Finish();
                     }
@@ -191,6 +245,12 @@ protected:
                 .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                 .OperationHash(operationHash)
                 .SecureParams(secureParams)
+                .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
+                .LangVer(State_->Types->LangVer)
+                .LayersPaths(std::move(finalCypressPaths))
+                .RuntimeSettings(State_->Types->RuntimeSettings)
+                .BridgeMode(State_->Types->BridgeMode)
+                .BridgeBinaryPath(State_->Types->UdfBridgeBinaryPath)
             );
 
         return WrapFuture(future, [](const IYtGateway::TResOrPullResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -232,7 +292,6 @@ protected:
         TExecTransformerBase::Rewind();
     }
 
-private:
     const TYtState::TPtr State_;
 };
 

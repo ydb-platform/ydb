@@ -1,0 +1,1514 @@
+#include "mock_env.h"
+
+using namespace fmt::literals;
+
+Y_UNIT_TEST_SUITE(ParseOptionsTest) {
+    Y_UNIT_TEST_F(EndpointAndDatabaseFromCommandLine, TCliTestFixture) {
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "scheme", "ls",
+            }
+        );
+    }
+
+    Y_UNIT_TEST_F(NoDiscoveryCommandLine, TCliTestFixture) {
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--no-discovery",
+                "scheme", "ls",
+            }
+        );
+    }
+
+    Y_UNIT_TEST_F(EndpointAndDatabaseFromActiveProfile, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            test:
+                endpoint: {endpoint}
+                database: {database}
+        active_profile: test
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+        ExpectToken("42");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "42"}
+            },
+            profile
+        );
+    }
+
+    Y_UNIT_TEST_F(EndpointAndDatabaseFromExplicitProfile, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            test_profile:
+                endpoint: {endpoint}
+                database: {database}
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+        ExpectToken("42");
+        RunCli(
+            {
+                "-v",
+                "-p", "test_profile",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "42"}
+            },
+            profile
+        );
+    }
+
+    // When explicit profile is set, active profile must be ignored (no fallback to active for missing options).
+    Y_UNIT_TEST_F(ExplicitProfileIgnoresActiveProfile, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_has_all:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: ydb-token
+                    data: token-from-active
+            explicit_no_database:
+                endpoint: {endpoint}
+        active_profile: active_has_all
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+        // Explicit profile has no database. We must NOT use database from active profile; command should fail.
+        ExpectFail();
+        RunCli(
+            {
+                "-v",
+                "-p", "explicit_no_database",
+                "scheme", "ls",
+            },
+            {},
+            profile
+        );
+    }
+
+    Y_UNIT_TEST_F(IamToken, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: iam-token
+                    data: test-iam-token
+            other_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: iam-token
+                    data: other-test-iam-token
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        TString tokenFile = EnvFile("iam_token", "token");
+        ExpectToken("iam_token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--iam-token-file", tokenFile,
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        ExpectToken("iam_token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--profile", "other_test_profile",
+            "--iam-token-file", tokenFile,
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        ExpectToken("iam_token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "-p", "active_test_profile",
+            "--iam-token-file", tokenFile,
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        ExpectToken("test-iam-token");
+        RunCli({
+            "-v",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        ExpectToken("other-test-iam-token");
+        RunCli({
+            "-v",
+            "--profile", "other_test_profile",
+            "scheme", "ls",
+        },
+        {
+            {"IAM_TOKEN", "env-iam-token"},
+        },
+        profile);
+
+        ExpectToken("env-iam-token");
+        RunCli({
+            "-v",
+            "scheme", "ls",
+        },
+        {
+            {"IAM_TOKEN", "env-iam-token"},
+        },
+        profile);
+    }
+
+    Y_UNIT_TEST_F(YdbToken, TCliTestFixture) {
+        TString tokenFileForProfile = EnvFile("test_token_from_file", "token");
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: ydb-token
+                    data: test-ydb-token
+            token_file_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: token-file
+                    data: {token_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "token_file"_a = tokenFileForProfile
+        );
+
+        TString tokenFile = EnvFile("test_token", "token");
+        ExpectToken("test_token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--token-file", tokenFile,
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        ExpectToken("test_token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--token-file", tokenFile,
+            "--profile", "token_file_test_profile",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        ExpectToken("test-ydb-token");
+        RunCli({
+            "-v",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        ExpectToken("test_token_from_file");
+        RunCli({
+            "-v",
+            "--profile", "token_file_test_profile",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "env-ydb-token"},
+        },
+        profile);
+
+        ExpectToken("env-ydb-token");
+        RunCli({
+            "-v",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "env-ydb-token"},
+            {"YDB_USER", "not_used"},
+            {"YDB_OAUTH2_KEY_FILE", "not_used"},
+        },
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsExplicitOptions, TCliTestFixture) {
+        TString explicitPasswordFile = EnvFile("password-from-file-explicit  \n", "password2");
+
+        // user and password-file from explicit options
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-file-explicit");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--user", "user-from-explicit-option",
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        });
+
+        // user from explicit option, no password
+        ExpectUserAndPassword("user-from-explicit-option", "");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--user", "user-from-explicit-option",
+            "--no-password",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "env-password"},
+        });
+
+        // --no-password and --password-file are not allowed together
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--user", "user-from-explicit-option",
+            "--no-password",
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        });
+
+        // password-file without user is not allowed
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        });
+
+        // password from env without user is ignored
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "env-password"},
+        });
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsProfileActivePasswordFile, TCliTestFixture) {
+        TString explicitPasswordFile = EnvFile("password-from-file-explicit  \n", "password2");
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-active-profile
+                        password: password-from-active-profile
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        // user from active profile, password from explicit password file
+        ExpectUserAndPassword("user-from-active-profile", "password-from-file-explicit");
+        RunCli({
+            "-v",
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        },
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsProfileActivePassword, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-active-profile
+                        password: password-from-active-profile
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        // user and password from active profile
+        ExpectUserAndPassword("user-from-active-profile", "password-from-active-profile");
+        RunCli({
+            "-v",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsProfileExplicitPassword, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-explicit-profile
+                        password: password-from-explicit-profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        // explicit profile
+        ExpectUserAndPassword("user-from-explicit-profile", "password-from-explicit-profile");
+        RunCli({
+            "-v",
+            "-p", "test_profile",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsProfilePasswordFile, TCliTestFixture) {
+        TString profilePasswordFile = EnvFile("password-from-file-in-profile  \n", "password");
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            test_profile_with_password_file:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-explicit-profile
+                        password-file: {password_file}
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "password_file"_a = profilePasswordFile
+        );
+
+        // explicit profile with password file
+        ExpectUserAndPassword("user-from-explicit-profile", "password-from-file-in-profile");
+        RunCli({
+            "-v",
+            "-p", "test_profile_with_password_file",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsProfileBothPasswords, TCliTestFixture) {
+        TString profilePasswordFile = EnvFile("password-from-file-in-profile  \n", "password");
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            test_profile_with_both_passwords:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: users
+                        password: pwd
+                        password-file: {password_file}
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "password_file"_a = profilePasswordFile
+        );
+
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-p", "test_profile_with_both_passwords",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsProfileNoPassword, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            test_profile_without_password:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user_no_password
+                        password: ""
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        ExpectUserAndPassword("user_no_password", "");
+        RunCli({
+            "-v",
+            "-p", "test_profile_without_password",
+            "--no-password",
+            "scheme", "ls",
+        },
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsEnvSources, TCliTestFixture) {
+        TString profilePasswordFile = EnvFile("password-from-file-in-profile  \n", "password");
+        TString explicitPasswordFile = EnvFile("password-from-file-explicit  \n", "password2");
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-active-profile
+                        password: password-from-active-profile
+            test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-explicit-profile
+                        password: password-from-explicit-profile
+            test_profile_with_password_file:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-explicit-profile
+                        password-file: {password_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "password_file"_a = profilePasswordFile
+        );
+
+        // user from active profile, password from env
+        ExpectUserAndPassword("user-from-active-profile", "password-from-env");
+        RunCli({
+            "-v",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // user and password from env
+        ExpectUserAndPassword("user-from-env", "password-from-env");
+        RunCli({
+            "-v",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_USER", "user-from-env"},
+            {"YDB_PASSWORD", "password-from-env"},
+            {"YDB_OAUTH2_KEY_FILE", "not used"},
+        },
+        profile);
+
+        // --user option + password from environment
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-env");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // --user option + password from environment (active profile password is ignored)
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-env");
+        RunCli({
+            "-v",
+            "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // user from environment + --password-file option
+        ExpectUserAndPassword("user-from-env", "password-from-file-explicit");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        },
+        {
+            {"YDB_USER", "user-from-env"},
+        },
+        profile);
+
+        // user from environment + password from environment (active profile password is ignored)
+        ExpectUserAndPassword("user-from-env", "password-from-env");
+        RunCli({
+            "-v",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_USER", "user-from-env"},
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsOverrides, TCliTestFixture) {
+        TString profilePasswordFile = EnvFile("password-from-file-in-profile  \n", "password");
+        TString explicitPasswordFile = EnvFile("password-from-file-explicit  \n", "password2");
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-active-profile
+                        password: password-from-active-profile
+            test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-explicit-profile
+                        password: password-from-explicit-profile
+            test_profile_without_password:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user_no_password
+                        password: ""
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "password_file"_a = profilePasswordFile
+        );
+
+        // user + empty password from explicit profile (password from environment is overridden)
+        ExpectUserAndPassword("user_no_password", "");
+        RunCli({
+            "-v",
+            "-p", "test_profile_without_password",
+            "--no-password",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // user from explicit profile + --password-file option
+        ExpectUserAndPassword("user-from-explicit-profile", "password-from-file-explicit");
+        RunCli({
+            "-v",
+            "-p", "test_profile",
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        // --user option + password from env (explicit profile password is ignored)
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-env");
+        RunCli({
+            "-v",
+            "-p", "test_profile",
+            "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // --user option + --no-password (override env and active profile password)
+        ExpectUserAndPassword("user-from-explicit-option", "");
+        RunCli({
+            "-v",
+            "--user", "user-from-explicit-option",
+            "--no-password",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // user from environment + --no-password (override env andactive profile password)
+        ExpectUserAndPassword("user-from-env", "");
+        RunCli({
+            "-v",
+            "--no-password",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_USER", "user-from-env"},
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+
+        // Test precedence with all sources present - explicit options should take precedence over everything
+        ExpectUserAndPassword("user-from-explicit-option", "password-from-file-explicit");
+        RunCli({
+            "-v",
+            "--user", "user-from-explicit-option",
+            "--password-file", explicitPasswordFile,
+            "scheme", "ls",
+        },
+        {
+            {"YDB_USER", "user-from-env"},
+            {"YDB_PASSWORD", "password-from-env"},
+        },
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsInteractivePrompt, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-active-profile
+                        password: password-from-active-profile
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        const TString typedPassword = "typed-password";
+        ExpectUserAndPassword("user-from-explicit-option", typedPassword);
+        RunCliWithInput({
+            "-v",
+            "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        typedPassword + "\n",
+        {},
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsInteractivePromptEnvUser, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: static-credentials
+                    data:
+                        user: user-from-active-profile
+                        password: password-from-active-profile
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        const TString typedPassword = "typed-password-env";
+        ExpectUserAndPassword("user-from-env", typedPassword);
+        RunCliWithInput({
+            "-v",
+            "scheme", "ls",
+        },
+        typedPassword + "\n",
+        {
+            {"YDB_USER", "user-from-env"},
+        },
+        profile);
+    }
+
+    Y_UNIT_TEST_F(StaticCredentialsInteractivePromptNoProfile, TCliTestFixture) {
+        const TString typedPassword = "typed-password-no-profile";
+        ExpectUserAndPassword("user-from-explicit-option", typedPassword);
+        RunCliWithInput({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--user", "user-from-explicit-option",
+            "scheme", "ls",
+        },
+        typedPassword + "\n");
+    }
+
+    Y_UNIT_TEST_F(AnonymousCredentials, TCliTestFixture) {
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        });
+
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: anonymous-auth
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase()
+        );
+
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {},
+        profile);
+
+        ExpectToken("ydb-token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "ydb-token"},
+        },
+        profile);
+
+        ExpectToken("");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--profile", "active_test_profile",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "ydb-token"},
+        },
+        profile);
+
+        ExpectUserAndPassword("user", "");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--profile", "active_test_profile",
+            "--user", "user",
+            "--no-password",
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "ydb-token"},
+        },
+        profile);
+    }
+
+    Y_UNIT_TEST_F(EnvPriority, TCliTestFixture) {
+        ExpectToken("right-token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"IAM_TOKEN", "right-token"},
+            {"YC_TOKEN", "wrong-token"},
+            {"USE_METADATA_CREDENTIALS", "1"},
+            {"SA_KEY_FILE", "wrong-file"},
+            {"YDB_TOKEN", "wrong-token"},
+            {"YDB_USER", "wrong-user"},
+            {"YDB_PASSWORD", "wrong-password"},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseCAFile, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+
+        // But fail with wrong untrusted CA
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetWrongRootCAFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+
+        // No trusted CA
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseCAFileFromEnv, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+        });
+
+        // But fail with wrong untrusted CA
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetWrongRootCAFile()},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseCAFileFromProfile, TCliTestFixtureWithSsl) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "ca_file"_a = GetRootCAFile()
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "-p", "active_test_profile",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+    }
+
+    // When the user overrides the endpoint with a non-SSL one on the command line,
+    // a ca-file from the active profile must be silently ignored — including the case
+    // when the profile points to a non-existent file (i.e. we must not even try to read it).
+    Y_UNIT_TEST_F(IgnoreCAFileFromProfileWhenEndpointIsNonSsl, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: grpcs://wrong-host:2135
+                database: {database}
+                ca-file: /nonexistent/path/to/ca.pem
+        active_profile: active_test_profile
+        )yaml",
+        "database"_a = GetDatabase()
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+    }
+
+    // Same as above, but ca-file comes from YDB_CA_FILE env: must be ignored without
+    // attempting to read the file.
+    Y_UNIT_TEST_F(IgnoreCAFileFromEnvWhenEndpointIsNonSsl, TCliTestFixture) {
+        ExpectToken("token");
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", "/nonexistent/path/to/ca.pem"},
+        });
+    }
+
+    // An explicitly provided --ca-file with a non-SSL endpoint is a clear user contradiction
+    // and must still fail. GetRootCAFile() is a valid CA file path; the failure must come
+    // from misuse validation, not from TLS handshake — hence the non-SSL fixture.
+    Y_UNIT_TEST_F(ExplicitCAFileWithNonSslEndpointFails, TCliTestFixture) {
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseClientCertFile, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "--client-cert-file", GetClientCertFile(),
+            "--client-cert-key-file", GetClientKeyFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--ca-file", GetRootCAFile(),
+            "--client-cert-file", GetClientCertFile(),
+            "--client-cert-key-file", GetClientKeyWithPasswordFile(),
+            "--client-cert-key-password-file", GetClientKeyPasswordFile(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseClientCertFromEnv, TCliTestFixtureWithSsl) {
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+            {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+            {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+        });
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+            {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+            {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+            {"YDB_CLIENT_CERT_KEY_PASSWORD", GetClientKeyPassword()},
+        });
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "scheme", "ls",
+        },
+        {
+            {"YDB_TOKEN", "token"},
+            {"YDB_CA_FILE", GetRootCAFile()},
+            {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+            {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+            {"YDB_CLIENT_CERT_KEY_PASSWORD_FILE", GetClientKeyPasswordFile()},
+        });
+    }
+
+    Y_UNIT_TEST_F(ParseClientCertFileFromProfile, TCliTestFixtureWithSsl) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+                client-cert-file: {client_cert_file}
+                client-cert-key-file: {client_cert_key_file}
+            test_profile_with_client_cert_password:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+                client-cert-file: {client_cert_file}
+                client-cert-key-file: {client_cert_key_with_password_file}
+                client-cert-key-password-file: {client_cert_key_password_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "ca_file"_a = GetRootCAFile(),
+        "client_cert_file"_a = GetClientCertFile(),
+        "client_cert_key_file"_a = GetClientKeyFile(),
+        "client_cert_key_with_password_file"_a = GetClientKeyWithPasswordFile(),
+        "client_cert_key_password_file"_a = GetClientKeyPasswordFile()
+        );
+
+        ExpectToken("token");
+        ExpectClientCert();
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+
+        ExpectToken("token2");
+        ExpectClientCert();
+        RunCli(
+            {
+                "-v",
+                "-p", "test_profile_with_client_cert_password",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token2"},
+            },
+            profile
+        );
+
+        ExpectToken("token3");
+        ExpectClientCert();
+        RunCli(
+            {
+                "-v",
+                "-p", "active_test_profile",
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token3"},
+            },
+            profile
+        );
+    }
+
+    // Same idea as IgnoreCAFileFromProfileWhenEndpointIsNonSsl, but for the whole pack
+    // of client cert options pulled from a profile.
+    Y_UNIT_TEST_F(IgnoreClientCertFromProfileWhenEndpointIsNonSsl, TCliTestFixture) {
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: grpcs://wrong-host:2135
+                database: {database}
+                ca-file: /nonexistent/ca.pem
+                client-cert-file: /nonexistent/cert.pem
+                client-cert-key-file: /nonexistent/key.pem
+        active_profile: active_test_profile
+        )yaml",
+        "database"_a = GetDatabase()
+        );
+
+        ExpectToken("token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "scheme", "ls",
+            },
+            {
+                {"YDB_TOKEN", "token"},
+            },
+            profile
+        );
+    }
+
+    Y_UNIT_TEST_F(PrintConnectionParams, TCliTestFixtureWithSsl) {
+        {
+            TString output = RunCli(
+                {
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "--ca-file", GetRootCAFile(),
+                    "--client-cert-file", GetClientCertFile(),
+                    "--client-cert-key-file", GetClientKeyFile(),
+                    "config", "info",
+                },
+                {}
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyFile() << Endl);
+        }
+
+        {
+            TString output = RunCli(
+                {
+                    "-e", GetEndpoint(),
+                    "-d", GetDatabase(),
+                    "config", "info",
+                },
+                {
+                    {"YDB_CA_FILE", GetRootCAFile()},
+                    {"YDB_CLIENT_CERT_FILE", GetClientCertFile()},
+                    {"YDB_CLIENT_CERT_KEY_FILE", GetClientKeyFile()},
+                }
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyFile() << Endl);
+        }
+
+        {
+            TString profile = fmt::format(R"yaml(
+            profiles:
+                active_test_profile:
+                    endpoint: {endpoint}
+                    database: {database}
+                    ca-file: {ca_file}
+                    client-cert-file: {client_cert_file}
+                    client-cert-key-file: {client_cert_key_with_password_file}
+                    client-cert-key-password-file: {client_cert_key_password_file}
+            active_profile: active_test_profile
+            )yaml",
+            "endpoint"_a = GetEndpoint(),
+            "database"_a = GetDatabase(),
+            "ca_file"_a = GetRootCAFile(),
+            "client_cert_file"_a = GetClientCertFile(),
+            "client_cert_key_with_password_file"_a = GetClientKeyWithPasswordFile(),
+            "client_cert_key_password_file"_a = GetClientKeyPasswordFile()
+            );
+
+            TString output = RunCli(
+                {
+                    "config", "info",
+                },
+                {},
+                profile
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyWithPasswordFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-password-file: " << GetClientKeyPasswordFile() << Endl);
+
+            output = RunCli(
+                {
+                    "-p", "active_test_profile",
+                    "config", "info",
+                },
+                {},
+                profile
+            );
+
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "endpoint: " << GetAddress() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "database: " << GetDatabase() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "ca-file: " << GetRootCAFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-file: " << GetClientCertFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-file: " << GetClientKeyWithPasswordFile() << Endl);
+            UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "client-cert-key-password-file: " << GetClientKeyPasswordFile() << Endl);
+        }
+    }
+
+    Y_UNIT_TEST_F(SaKeyFile, TCliTestFixtureWithSsl) {
+        TStringBuilder saKeyContent;
+        NJson::TJsonWriter saKeyParamsWriter(&saKeyContent.Out, true);
+        saKeyParamsWriter.OpenMap();
+        saKeyParamsWriter.Write("id", "test-id");
+        saKeyParamsWriter.Write("user_account_id", "test-user-id");
+        saKeyParamsWriter.Write("public_key", GetClientCert()); // We need any certificate/key here
+        saKeyParamsWriter.Write("private_key", GetClientKey());
+        saKeyParamsWriter.CloseMap();
+        saKeyParamsWriter.Flush();
+
+        const TString saKeyFile = EnvFile(saKeyContent, "sa_key.json");
+
+        Service<TIamTokenServiceImpl>().SetToken("test-iam-token");
+        Service<TIamTokenServiceImpl>().ExpectCall();
+        ExpectToken("test-iam-token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--ca-file", GetRootCAFile(),
+                "--sa-key-file", saKeyFile,
+                "--iam-endpoint", GetIamEndpoint(),
+                "scheme", "ls",
+            },
+            {}
+        );
+
+        Service<TIamTokenServiceImpl>().SetToken("test-iam-token-2");
+        Service<TIamTokenServiceImpl>().ExpectCall();
+        ExpectToken("test-iam-token-2");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--ca-file", GetRootCAFile(),
+                "--sa-key-file", saKeyFile,
+                "--iam-endpoint", GetIamEndpoint(),
+                "scheme", "ls",
+            },
+            {
+                {"YDB_CA_FILE", GetRootCAFile()},
+                {"SA_KEY_FILE", saKeyFile},
+            }
+        );
+
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                ca-file: {ca_file}
+                iam-endpoint: {iam_endpoint}
+                authentication:
+                    method: sa-key-file
+                    data: {sa_key_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "ca_file"_a = GetRootCAFile(),
+        "sa_key_file"_a = saKeyFile,
+        "iam_endpoint"_a = GetIamEndpoint()
+        );
+
+        Service<TIamTokenServiceImpl>().SetToken("test-iam-token-3");
+        Service<TIamTokenServiceImpl>().ExpectCall();
+        ExpectToken("test-iam-token-3");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {},
+            profile
+        );
+
+        TString output = RunCli(
+            {
+                "config", "info",
+            },
+            {},
+            profile
+        );
+        UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "sa-key-file: " << saKeyFile << Endl);
+    }
+
+    Y_UNIT_TEST_F(Oauth2KeyFile, TCliTestFixture) {
+        TStringBuilder oauth2KeyContent;
+        NJson::TJsonWriter oauth2KeyParamsWriter(&oauth2KeyContent.Out, true);
+        oauth2KeyParamsWriter.OpenMap();
+        oauth2KeyParamsWriter.Write("grant-type", "urn:ietf:params:oauth:grant-type:token-exchange");
+        oauth2KeyParamsWriter.Write("requested-token-type", "urn:ietf:params:oauth:token-type:access_token");
+        oauth2KeyParamsWriter.WriteKey("subject-credentials");
+        oauth2KeyParamsWriter.OpenMap();
+        oauth2KeyParamsWriter.Write("type", "fixed");
+        oauth2KeyParamsWriter.Write("token", "fixed_test_token");
+        oauth2KeyParamsWriter.Write("token-type", "test_token_type");
+        oauth2KeyParamsWriter.CloseMap();
+        oauth2KeyParamsWriter.CloseMap();
+        oauth2KeyParamsWriter.Flush();
+
+        const TString oauth2KeyFile = EnvFile(oauth2KeyContent, "oauth2_key.json");
+
+        TTestTokenExchangeServer oauth2Server;
+        oauth2Server.Check.ExpectedInputParams.emplace("grant_type", "urn:ietf:params:oauth:grant-type:token-exchange");
+        oauth2Server.Check.ExpectedInputParams.emplace("requested_token_type", "urn:ietf:params:oauth:token-type:access_token");
+        oauth2Server.Check.ExpectedInputParams.emplace("subject_token", "fixed_test_token");
+        oauth2Server.Check.ExpectedInputParams.emplace("subject_token_type", "test_token_type");
+        oauth2Server.Check.Response = R"({"access_token": "hello_token", "token_type": "bearer", "expires_in": 42})";
+
+        ExpectToken("Bearer hello_token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--oauth2-key-file", oauth2KeyFile,
+                "--iam-endpoint", oauth2Server.GetEndpoint(),
+                "scheme", "ls",
+            },
+            {}
+        );
+
+        ExpectToken("Bearer hello_token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--iam-endpoint", oauth2Server.GetEndpoint(),
+                "scheme", "ls",
+            },
+            {
+                {"YDB_OAUTH2_KEY_FILE", oauth2KeyFile},
+            }
+        );
+
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                iam-endpoint: {iam_endpoint}
+                authentication:
+                    method: oauth2-key-file
+                    data: {oauth2_key_file}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "oauth2_key_file"_a = oauth2KeyFile,
+        "iam_endpoint"_a = oauth2Server.GetEndpoint()
+        );
+
+        ExpectToken("Bearer hello_token");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {},
+            profile
+        );
+
+        TString output = RunCli(
+            {
+                "config", "info",
+            },
+            {},
+            profile
+        );
+        UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "oauth2-key-file: " << oauth2KeyFile << Endl);
+    }
+}

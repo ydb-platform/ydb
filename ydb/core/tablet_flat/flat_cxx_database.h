@@ -1,8 +1,11 @@
 #pragma once
 
+#include <ydb/core/tablet_flat/flat_backup.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/base/subdomain.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
@@ -18,6 +21,22 @@ namespace NIceDb {
 using TToughDb = NTable::TDatabase;
 using NTable::TUpdateOp;
 using NTable::ELookup;
+using NTable::TBackupExclusion;
+
+template <typename T>
+struct TTriviallySerializable : std::bool_constant<std::is_scalar<T>::value && !std::is_pointer<T>::value> {};
+
+template <typename T, typename U>
+struct TTriviallySerializable<std::pair<T, U>> : std::bool_constant<TTriviallySerializable<T>::value && TTriviallySerializable<U>::value> {};
+
+template <>
+struct TTriviallySerializable<TActorId> : std::true_type {};
+
+template<>
+struct TTriviallySerializable<TSubDomainKey> : std::true_type {};
+
+template <typename T>
+concept CTriviallySerializable = TTriviallySerializable<T>::value;
 
 class TTypeValue : public TRawTypeValue {
 public:
@@ -56,7 +75,7 @@ public:
         : TRawTypeValue(&value, sizeof(value), type)
     {}
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     TTypeValue(const TVector<ElementType> &value, NScheme::TTypeId type = NScheme::NTypeIds::String)
         : TRawTypeValue(value.empty() ? (const ElementType*)0xDEADBEEFDEADBEEF : value.data(), value.size() * sizeof(ElementType), type)
     {}
@@ -102,111 +121,111 @@ public:
     }
 
     operator ui64() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Uint64
+        Y_ENSURE((Type() == NScheme::NTypeIds::Uint64
                   || Type() == NScheme::NTypeIds::Timestamp)
-                 && Size() == sizeof(ui64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(ui64), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return ReadUnaligned<ui64>(reinterpret_cast<const ui64*>(Data()));
     }
 
     operator i64() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int64
+        Y_ENSURE((Type() == NScheme::NTypeIds::Int64
                   || Type() == NScheme::NTypeIds::Interval
                   || Type() == NScheme::NTypeIds::Datetime64
                   || Type() == NScheme::NTypeIds::Timestamp64
                   || Type() == NScheme::NTypeIds::Interval64)
-                 && Size() == sizeof(i64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(i64), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return ReadUnaligned<i64>(reinterpret_cast<const i64*>(Data()));
     }
 
     operator ui32() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Uint32
+        Y_ENSURE((Type() == NScheme::NTypeIds::Uint32
                   || Type() == NScheme::NTypeIds::Datetime)
-                 && Size() == sizeof(ui32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(ui32), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         ui32 value = ReadUnaligned<ui32>(reinterpret_cast<const ui32*>(Data()));
         return value;
     }
 
     operator i32() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::Int32 
+        Y_ENSURE((Type() == NScheme::NTypeIds::Int32
                   || Type() == NScheme::NTypeIds::Date32)
-                 && Size() == sizeof(i32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+                 && Size() == sizeof(i32), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
         return value;
     }
 
     operator ui16() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Date && Size() == sizeof(ui16), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Date && Size() == sizeof(ui16), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         ui16 value = ReadUnaligned<ui16>(reinterpret_cast<const ui16*>(Data()));
         return value;
     }
 
     operator ui8() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Byte && Size() == sizeof(ui8), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Byte && Size() == sizeof(ui8), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         ui8 value = *reinterpret_cast<const ui8*>(Data());
         return value;
     }
 
     operator bool() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Bool && Size() == sizeof(bool), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Bool && Size() == sizeof(bool), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         bool value = *reinterpret_cast<const bool*>(Data());
         return value;
     }
 
     operator double() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Double && Size() == sizeof(double), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Double && Size() == sizeof(double), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         double value = ReadUnaligned<double>(reinterpret_cast<const double*>(Data()));
         return value;
     }
 
     operator TActorId() const {
-        Y_ABORT_UNLESS((Type() == NScheme::NTypeIds::ActorId
+        Y_ENSURE((Type() == NScheme::NTypeIds::ActorId
                || Type() == NScheme::NTypeIds::String
                || Type() == NScheme::NTypeIds::String2m
-               || Type() == NScheme::NTypeIds::String4k) && Size() == sizeof(TActorId), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+               || Type() == NScheme::NTypeIds::String4k) && Size() == sizeof(TActorId), "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return *reinterpret_cast<const TActorId*>(Data());
     }
 
     operator TString() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Utf8
+        Y_ENSURE(Type() == NScheme::NTypeIds::Utf8
                || Type() == NScheme::NTypeIds::String
                || Type() == NScheme::NTypeIds::String2m
-               || Type() == NScheme::NTypeIds::String4k, "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+               || Type() == NScheme::NTypeIds::String4k, "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return TString(reinterpret_cast<const char*>(Data()), Size());
     }
 
     operator TBuffer() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::String
+        Y_ENSURE(Type() == NScheme::NTypeIds::String
                || Type() == NScheme::NTypeIds::String2m
-               || Type() == NScheme::NTypeIds::String4k, "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+               || Type() == NScheme::NTypeIds::String4k, "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return TBuffer(reinterpret_cast<const char*>(Data()), Size());
     }
 
     operator std::pair<ui64, ui64>() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::PairUi64Ui64 && Size() == sizeof(std::pair<ui64, ui64>), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::PairUi64Ui64 && Size() == sizeof(std::pair<ui64, ui64>),
+            "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return *reinterpret_cast<const std::pair<ui64, ui64>*>(Data());
     }
 
     operator std::pair<ui64, i64>() const {
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::Decimal && Size() == sizeof(std::pair<ui64, ui64>), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
+        Y_ENSURE(Type() == NScheme::NTypeIds::Decimal && Size() == sizeof(std::pair<ui64, ui64>),
+            "Data=" << (const void*)Data() << ", Type=" << (i64)Type() << ", Size=" << (i64)Size());
         return *reinterpret_cast<const std::pair<ui64, i64>*>(Data());
     }
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     operator TVector<ElementType>() const {
-        static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
-        Y_ABORT_UNLESS(Size() % sizeof(ElementType) == 0);
+        Y_ENSURE(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
+        Y_ENSURE(Size() % sizeof(ElementType) == 0);
         std::size_t count = Size() / sizeof(ElementType);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
         const ElementType *end = begin + count;
         return TVector<ElementType>(begin, end);
     }
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     void ExtractArray(THashSet<ElementType> &container) const {
-        static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
-        Y_ABORT_UNLESS(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
-        Y_ABORT_UNLESS(Size() % sizeof(ElementType) == 0);
+        Y_ENSURE(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
+        Y_ENSURE(Size() % sizeof(ElementType) == 0);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
         const ElementType *end = begin + Size() / sizeof(ElementType);
         container.resize(Size() / sizeof(ElementType));
@@ -238,6 +257,7 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Date32> { typedef i32 Ty
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Datetime64> { typedef i64 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Timestamp64> { typedef i64 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Interval64> { typedef i64 Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::JsonDocument> { typedef TString Type; };
 
 /// only for compatibility with old code
 template <NScheme::TTypeId ValType>
@@ -272,7 +292,7 @@ public:
         return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(value.SerializeAsString());
     }
 
-    template <typename ElementType>
+    template <CTriviallySerializable ElementType>
     static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TVector<ElementType>& value) {
         return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(
             TString(
@@ -310,7 +330,7 @@ public:
 //    TConvertValue(const TRawTypeValue& value)
 //        : Value(reinterpret_cast<const char*>(value.Data()), value.Size())
 //    {
-//        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
+//        Y_ENSURE(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
 //    }
 //
 //    operator TStringBuf() const {
@@ -340,7 +360,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TRawTypeValue, TInstant> {
     typename NSchemeTypeMapper<TColumnType::ColumnType>::Type Storage;
     TTypeValue Value;
-    TConvertValue(const TInstant& value) : Storage(value.GetValue()), Value(Storage, TColumnType::ColumnType) {}
+    TConvertValue(const TInstant& value) : Storage(value.MicroSeconds()), Value(Storage, TColumnType::ColumnType) {}
     operator const TRawTypeValue&() const { return Value; }
 };
 
@@ -348,7 +368,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TInstant, TRawTypeValue> {
     TTypeValue Value;
     TConvertValue(const TRawTypeValue& value) : Value(value) {}
-    operator TInstant() const { return TInstant::FromValue(static_cast<ui64>(Value)); }
+    operator TInstant() const { return TInstant::MicroSeconds(static_cast<ui64>(Value)); }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -358,7 +378,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TRawTypeValue, TDuration> {
     typename NSchemeTypeMapper<TColumnType::ColumnType>::Type Storage;
     TTypeValue Value;
-    TConvertValue(const TDuration& value) : Storage(value.GetValue()), Value(Storage, TColumnType::ColumnType) {}
+    TConvertValue(const TDuration& value) : Storage(value.MicroSeconds()), Value(Storage, TColumnType::ColumnType) {}
     operator const TRawTypeValue&() const { return Value; }
 };
 
@@ -366,7 +386,7 @@ template <typename TColumnType>
 struct TConvertValue<TColumnType, TDuration, TRawTypeValue> {
     TTypeValue Value;
     TConvertValue(const TRawTypeValue& value) : Value(value) {}
-    operator TDuration() const { return TDuration::FromValue(static_cast<ui64>(Value)); }
+    operator TDuration() const { return TDuration::MicroSeconds(static_cast<ui64>(Value)); }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -385,6 +405,37 @@ struct TConvertValue<TColumnType, TIdWrapper<T, Tag>, TRawTypeValue> {
     TTypeValue Value;
     TConvertValue(const TRawTypeValue & value) : Value(value) {}
     operator TIdWrapper<T, Tag>() const { return TIdWrapper<T, Tag>::FromValue(static_cast<T>(Value)); }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TBridgePileId conversion
+
+template<typename TColumnType>
+struct TConvertValue<TColumnType, TRawTypeValue, TBridgePileId> {
+    static_assert(TColumnType::ColumnType == NScheme::NTypeIds::Uint32);
+
+    ui32 Storage;
+    TTypeValue Value;
+
+    TConvertValue(TBridgePileId value)
+        : Storage(value.GetLocalDb())
+        , Value(value ? TTypeValue(Storage) : TTypeValue())
+    {}
+
+    operator const TRawTypeValue&() const { return Value; }
+};
+
+template<typename TColumnType>
+struct TConvertValue<TColumnType, TBridgePileId, TRawTypeValue> {
+    TTypeValue Value;
+
+    TConvertValue(const TRawTypeValue& value)
+        : Value(value)
+    {}
+
+    operator TBridgePileId() const {
+        return Value.HaveValue() ? TBridgePileId::FromLocalDb(static_cast<ui32>(Value)) : TBridgePileId();
+    }
 };
 
 template <typename TColumnType, typename SourceType>
@@ -453,12 +504,12 @@ struct TConvertValueFromRawTypeValueToProto {
     TConvertValueFromRawTypeValueToProto(const TRawTypeValue& value)
         : Value(value)
     {
-        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String);
+        Y_ENSURE(value.Type() == NScheme::NTypeIds::String);
     }
 
     operator TargetType() const {
         TargetType msg;
-        Y_ABORT_UNLESS(msg.ParseFromArray(Value.Data(), Value.Size()));
+        Y_ENSURE(msg.ParseFromArray(Value.Data(), Value.Size()));
         return msg;
     }
 };
@@ -489,19 +540,19 @@ struct TConvertValueFromRawTypeValueToPod {
     }
 };
 
-template <typename ColumnType, typename VectorType>
+template <typename ColumnType, CTriviallySerializable VectorType>
 struct TConvertValue<ColumnType, TVector<VectorType>, TRawTypeValue> {
     TVector<VectorType> Value;
 
     TConvertValue(const TRawTypeValue& value) {
-        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String);
-        Y_ABORT_UNLESS(value.Size() % sizeof(VectorType) == 0);
+        Y_ENSURE(value.Type() == NScheme::NTypeIds::String);
+        Y_ENSURE(value.Size() % sizeof(VectorType) == 0);
         const size_t count = value.Size() / sizeof(VectorType);
         Value.reserve(count);
         for (TUnalignedMemoryIterator<VectorType> it(value.Data(), value.Size()); !it.AtEnd(); it.Next()) {
             Value.emplace_back(it.Cur());
         }
-        Y_ABORT_UNLESS(Value.size() == count);
+        Y_ENSURE(Value.size() == count);
     }
 
     operator const TVector<VectorType>&() const {
@@ -509,7 +560,7 @@ struct TConvertValue<ColumnType, TVector<VectorType>, TRawTypeValue> {
     }
 };
 
-template <typename TColumnType, typename VectorType>
+template <typename TColumnType, CTriviallySerializable VectorType>
 struct TConvertValue<TColumnType, TRawTypeValue, TVector<VectorType>> {
     TTypeValue Value;
 
@@ -549,7 +600,7 @@ struct TConvertValue<ColumnType, TStringBuf, TRawTypeValue> {
     TConvertValue(const TRawTypeValue& value)
         : Value(reinterpret_cast<const char*>(value.Data()), value.Size())
     {
-        Y_ABORT_UNLESS(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
+        Y_ENSURE(value.Type() == NScheme::NTypeIds::String || value.Type() == NScheme::NTypeIds::Utf8);
     }
 
     operator TStringBuf() const {
@@ -659,17 +710,29 @@ struct Schema {
     struct NoAutoPrecharge {};
     struct AutoPrecharge {};
 
+    // Excludes table or column data from system tablet backup. Can't be applied to key columns.
+    // When applied to a column, an update to a row containing only the excluded columns will
+    // not be recorded in the backup's changelog, even if it involves inserting a new row.
+    // By default, all tables and columns are included in backup. When excluding data from a backup,
+    // remember to override the BackupExclusion method in the ITablet.
+    struct NoBackup;
+    struct InBackup;
+
     template <TTableId _TableId> struct Table {
         constexpr static TTableId TableId = _TableId;
 
         using Precharge = AutoPrecharge;
+        using BackupPolicy = InBackup;
 
-        template <TColumnId _ColumnId, NScheme::TTypeId _ColumnType, bool _IsNotNull = false>
+        template <TColumnId _ColumnId, NScheme::TTypeId _ColumnType, bool _IsNotNull = false, bool _IsSensitive = false, bool _IsSetNotNullInProgress = false>
         struct Column {
             constexpr static TColumnId ColumnId = _ColumnId;
             constexpr static NScheme::TTypeId ColumnType = _ColumnType;
             constexpr static bool IsNotNull = _IsNotNull;
+            constexpr static bool IsSensitive = _IsSensitive;
+            constexpr static bool IsSetNotNullInProgress = _IsSetNotNullInProgress;
             using Type = typename NSchemeTypeMapper<_ColumnType>::Type;
+            using BackupPolicy = InBackup;
 
             static TString GetColumnName(const TString& typeName) {
                 return typeName.substr(typeName.rfind(':') + 1);
@@ -694,7 +757,7 @@ struct Schema {
             }
 
             static void Materialize(TToughDb& database) {
-                database.Alter().AddColumn(TableId, GetColumnName(), T::ColumnId, T::ColumnType, T::IsNotNull);
+                database.Alter().AddColumn(TableId, GetColumnName(), T::ColumnId, T::ColumnType, T::IsNotNull, T::IsSensitive, { }, T::IsSetNotNullInProgress);
             }
 
             static constexpr bool HaveColumn(ui32 columnId) {
@@ -704,6 +767,12 @@ struct Schema {
             template <typename OtherT>
             static constexpr bool HaveColumn() {
                 return std::is_same<T, OtherT>::value != 0;
+            }
+
+            static void FillBackupExclusion(TBackupExclusion& exclusion) {
+                if constexpr (std::is_same<typename T::BackupPolicy, NoBackup>::value) {
+                    exclusion.AddColumn(TableId, T::ColumnId);
+                }
             }
         };
 
@@ -720,6 +789,11 @@ struct Schema {
 
             static constexpr bool HaveColumn(ui32 columnId) {
                 return TableColumns<T>::HaveColumn(columnId) || TableColumns<Ts...>::HaveColumn(columnId);
+            }
+
+            static void FillBackupExclusion(TBackupExclusion& exclusion) {
+                TableColumns<T>::FillBackupExclusion(exclusion);
+                TableColumns<Ts...>::FillBackupExclusion(exclusion);
             }
         };
 
@@ -846,6 +920,8 @@ struct Schema {
 
             template <typename T>
             struct TableKeyMaterializer<T> {
+                static_assert(std::is_same_v<typename T::BackupPolicy, InBackup>, "Key column must be in backup");
+
                 static void Materialize(TToughDb& database) {
                     database.Alter().AddColumnToKey(TableId, T::ColumnId);
                 }
@@ -2062,6 +2138,11 @@ struct Schema {
         static bool HaveTable(ui32 tableId) {
             return SchemaTables<Type>::HaveTable(tableId) || SchemaTables<Types...>::HaveTable(tableId);
         }
+
+        static void FillBackupExclusion(TBackupExclusion& exclusion) {
+            SchemaTables<Type>::FillBackupExclusion(exclusion);
+            SchemaTables<Types...>::FillBackupExclusion(exclusion);
+        }
     };
 
     template <typename Type>
@@ -2109,6 +2190,14 @@ struct Schema {
         static bool HaveTable(ui32 tableId) {
             return Type::TableId == tableId;
         }
+
+        static void FillBackupExclusion(TBackupExclusion& exclusion) {
+            if constexpr (std::is_same_v<typename Type::BackupPolicy, NoBackup>) {
+                exclusion.AddTable(Type::TableId);
+            } else {
+                Type::TColumns::FillBackupExclusion(exclusion);
+            }
+        }
     };
 
     using TSettings = SchemaSettings<>;
@@ -2120,7 +2209,7 @@ inline bool Schema::Precharger<Schema::AutoPrecharge>::Precharge(
         NTable::TRawVals minKey, NTable::TRawVals maxKey,
         NTable::TTagsRef columns, NTable::EDirection direction, ui64 maxRowCount, ui64 maxBytes)
 {
-    return database.Precharge(table, minKey, maxKey, columns, 0, maxRowCount, maxBytes, direction);
+    return database.Precharge(table, minKey, maxKey, columns, 0, maxRowCount, maxBytes, direction).Ready;
 }
 
 template <>
@@ -2130,6 +2219,13 @@ inline bool Schema::Precharger<Schema::NoAutoPrecharge>::Precharge(
         NTable::TTagsRef, NTable::EDirection, ui64, ui64)
 {
     return true;
+}
+
+template <typename SchemaType>
+inline TIntrusivePtr<TBackupExclusion> GenerateBackupExclusion() {
+    auto exclusion = MakeIntrusive<TBackupExclusion>();
+    SchemaType::TTables::FillBackupExclusion(*exclusion);
+    return exclusion;
 }
 
 class TNiceDb {

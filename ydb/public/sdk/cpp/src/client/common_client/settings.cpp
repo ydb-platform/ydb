@@ -1,8 +1,10 @@
-#include <ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
 
-#include <src/client/impl/ydb_internal/common/parser.h>
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/common/parser.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 TCommonClientSettings& TCommonClientSettings::AuthToken(const std::optional<std::string>& token) {
     return CredentialsProviderFactory(CreateOAuthCredentialsProviderFactory(token.value()));

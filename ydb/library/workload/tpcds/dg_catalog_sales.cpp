@@ -21,11 +21,9 @@ class TCatalogSalesGenerator {
 public:
     void MakeMaster(ds_key_t index) {
         int giftPct;
-        static bool init = false;
-        if (!init) {
+        if (!ItemPermutation) {
             Date = skipDays(CATALOG_SALES, &NewDateIndex);
             ItemPermutation = makePermutation(NULL, (ItemCount = (int)getIDCount(ITEM)), CS_PERMUTE);
-            init = true;
         }
 
         while (index > NewDateIndex) {
@@ -91,10 +89,16 @@ public:
         writerSales.RegisterRow();
     }
 
+    ~TCatalogSalesGenerator() {
+        if (ItemPermutation) {
+            free(ItemPermutation);
+        }
+    }
+
 private:
     int TicketItemBase = 1;
     int ItemCount;
-    int* ItemPermutation;
+    int* ItemPermutation = nullptr;
     ds_key_t NewDateIndex = 0;
     ds_key_t Date;
 };

@@ -6,8 +6,8 @@ namespace NKikimr::NBlobDepot {
 
     struct TResolvedValue {
         struct TLink {
-            TLogoBlobID BlobId;
-            ui32 GroupId;
+            std::optional<std::tuple<TLogoBlobID, ui32>> Blob;
+            std::optional<TS3Locator> S3Locator;
             ui32 SubrangeBegin;
             ui32 SubrangeEnd;
 
@@ -16,10 +16,7 @@ namespace NKikimr::NBlobDepot {
             void Output(IOutputStream& s) const;
             TString ToString() const;
 
-            friend bool operator ==(const TLink& x, const TLink& y) {
-                return x.BlobId == y.BlobId && x.GroupId == y.GroupId && x.SubrangeBegin == y.SubrangeBegin &&
-                    x.SubrangeEnd == y.SubrangeEnd;
-            }
+            friend std::strong_ordering operator <=>(const TLink&, const TLink&) = default;
         };
 
         bool Defined = false;

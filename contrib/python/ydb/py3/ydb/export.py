@@ -16,7 +16,7 @@ from . import operation
 
 _ExportToYt = "ExportToYt"
 _ExportToS3 = "ExportToS3"
-_progresses = {}
+_progresses: "dict[int, ExportProgress]" = {}
 
 
 @enum.unique

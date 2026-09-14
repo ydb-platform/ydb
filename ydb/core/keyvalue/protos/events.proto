@@ -29,6 +29,8 @@ message Statuses {
         RSTATUS_NOT_FOUND = 5;
         RSTATUS_OVERRUN = 6;
         RSTATUS_WRONG_LOCK_GENERATION = 7;
+        RSTATUS_BLOCKED = 8;
+        RSTATUS_BAD_REQUEST = 9;
     }
 }
 
@@ -85,7 +87,10 @@ message ReadResult {
     string requested_key = 1;
     uint64 requested_offset = 2;
     uint64 requested_size = 3;
-    bytes value = 4;
+    oneof buffer {
+        bytes value = 4;
+        uint32 payload_id = 9;
+    }
     string msg = 5;
     Statuses.ReplyStatus status = 6;
     uint64 cookie = 7;
@@ -108,7 +113,10 @@ message ReadRangeRequest {
 message ReadRangeResult {
     message KeyValuePair {
         string key = 1;
-        bytes value = 2;
+        oneof buffer {
+            bytes value = 2;
+            uint32 payload_id = 7;
+        }
         uint32 value_size = 3;
 
         // Unix time of the creation of the key-value pair (in ms).
@@ -146,7 +154,10 @@ message ExecuteTransactionRequest {
                 TACTIC_MIN_LATENCY = 2;
             }
             string key = 1;
-            bytes value = 2;
+            oneof buffer {
+                bytes value = 2;
+                uint32 payload_id = 6;
+            }
             uint32 storage_channel = 3;
             Priorities.Priority priority = 4;
             Tactic tactic = 5;
@@ -202,4 +213,25 @@ message AcquireLockResult {
     uint64 lock_generation = 1;
     uint64 cookie = 2;
     uint64 node_id = 3;
+}
+
+message VacuumRequest {
+    uint64 generation = 1;
+    bool reset_actual_generation = 2;
+}
+
+message VacuumResponse {
+    enum Status {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_ALREADY_COMPLETED = 2;
+        STATUS_ABORTED = 3;
+        STATUS_ERROR = 4;
+    }
+
+    uint64 generation = 1;
+    uint64 actual_generation = 2;
+    Status status = 3;
+    string error_reason = 4;
+    uint64 tablet_id = 5; // key value tablet id
 }

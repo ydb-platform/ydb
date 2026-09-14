@@ -2,13 +2,11 @@ SUBSCRIBER(g:ymake)
 
 PY23_TEST()
 
-IF (PY2)
+IF (PYTHON2)
     TEST_SRCS(
         build_catboost.py
-        collect_java_srcs.py
         compile_cuda.py
         coverage-info.py
-        copy_clang_profile_rt.py
         create_jcoverage_report.py
         custom_link_green_mysql.py
         f2c.py
@@ -16,19 +14,14 @@ IF (PY2)
         fetch_from_archive.py
         fetch_from_mds.py
         fetch_from_sandbox.py
-        fetch_resource.py
-        fix_py2_protobuf.py
         gen_java_codenav_entry.py
         gen_py3_reg.py
-        go_tool.py
         ios_wrapper.py
-        link_dyn_lib.py
         mangle_typeinfo_names.py
         pack_ios.py
         pack_jcoverage_resources.py
         python_yndexer.py
         run_ios_simulator.py
-        run_msvc_wine.py
         symlink.py
         touch.py
         unpacking_jtest_runner.py
@@ -36,7 +29,11 @@ IF (PY2)
         with_crash_on_timeout.py
         yndexer.py
     )
-ELSEIF (PY3)
+ELSEIF (PYTHON3)
+    PEERDIR(
+        contrib/python/PyYAML
+    )
+
     STYLE_PYTHON()
     TEST_SRCS(
         append_file.py
@@ -44,6 +41,8 @@ ELSEIF (PY3)
         build_info_gen.py
         build_java_codenav_index.py
         build_java_with_error_prone2.py
+        bundle_output.py
+        canonicalize_java_abi_jar.py
         cat.py
         cgo1_wrapper.py
         check_config_h.py
@@ -55,12 +54,15 @@ ELSEIF (PY3)
         compile_pysrc.py
         configure_file.py
         container.py
+        copy_clang_profile_rt.py
         copy_docs_files.py
         copy_docs_files_to_dir.py
         copy_files_to_dir.py
         copy_to_dir.py
         cpp_flatc_wrapper.py
         decimal_md5.py
+        docs_manifest.py
+        docs_proto_wrapper.py
         error.py
         extract_asrc.py
         extract_docs.py
@@ -71,7 +73,6 @@ ELSEIF (PY3)
         find_time_trace.py
         fix_java_command_file_cp.py
         fix_msvc_output.py
-        fix_py2_protobuf.py
         fs_tools.py
         gen_aar_gradle_script.py
         gen_java_codenav_protobuf.py
@@ -84,12 +85,17 @@ ELSEIF (PY3)
         generate_mf.py
         generate_pom.py
         generate_win_vfs.py
+        go.py
         go_proto_wrapper.py
+        go_tool.py
+        iwyu.py
+        iwyu_arch.py
         java_command_file.py
         java_pack_to_file.py
         jni_swig.py
         kt_copy.py
         link_asrc.py
+        link_dyn_lib.py
         link_exe.py
         link_fat_obj.py
         link_jsrc.py
@@ -111,7 +117,6 @@ ELSEIF (PY3)
         preprocess.py
         process_command_files.py
         process_whole_archive_option.py
-        py_compile.py
         resolve_java_srcs.py
         retry.py
         retry_cc.py
@@ -121,6 +126,7 @@ ELSEIF (PY3)
         run_junit.py
         run_llvm_dsymutil.py
         run_tool.py
+        run_msvc_wine.py
         setup_java_tmpdir.py
         sky.py
         stderr2stdout.py

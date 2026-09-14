@@ -1,6 +1,7 @@
 (
 #comment
 (let config (DataSource 'config))
+(let world (Configure! world config '"OptimizerFlags" '"RewriteSwitchOverExtractMembers"))
 (let res_sink (DataSink 'result))
 
 (let list (AsList
@@ -23,6 +24,7 @@
 (let justHandler2 (lambda '(x) (FlatMap x (lambda '(s) (Just (AsStruct '('key (Concat (String '"#1: ") (Member s 'key))) '('value (Member s 'value))))))))
 (let justHandler3 (lambda '(x) (FlatMap x (lambda '(s) (Just (AsStruct '('key (Concat (String '"#3: ") (Member s 'key))) '('value (Member s 'value))))))))
 (let extractMembersHandler (lambda '(x) (FlatMap (ExtractMembers x '('key)) (lambda '(s) (Just (AsStruct '('key (Concat (String '"#3: ") (Member s 'key)))))))))
+(let pureExtractMembersHandler (lambda '(x) (ExtractMembers x '('key))))
 (let listHandler (lambda '(x) (FlatMap x (lambda '(s) (AsList s s)))))
 (let streamHandler (lambda '(x) (FlatMap x (lambda '(s) (Iterator (AsList s s) (DependsOn s) (DependsOn (String '0)))))))
 (let justVarHandler1 (lambda '(x) (FlatMap x (lambda '(s) (Just (Variant s '1 vt))))))
@@ -34,6 +36,7 @@
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'A4))) '1 '('0) streamHandler)) '('('type))))
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'A5))) '1 '('0) justVarHandler1)) '('('type))))
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'A6))) '1 '('0) extractMembersHandler)) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'A7))) '1 '('0) pureExtractMembersHandler)) '('('type))))
 
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'B1))) '1 '('0) justHandler1 '('1) justHandler2)) '('('type))))
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'B2))) '1 '('0) justHandler1 '('1) justHandler2 '('2) justHandler3)) '('('type))))
@@ -47,6 +50,8 @@
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'B10))) '1 '('0) justHandler1 '('1) listHandler '('1) streamHandler)) '('('type))))
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'B11))) '1 '('0) justHandler1 '('1) listHandler '('1) trivialLambda)) '('('type))))
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'B12))) '1 '('0) justHandler1 '('1) trivialLambda '('1) trivialLambda)) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'B13))) '1 '('0) justHandler1 '('1) pureExtractMembersHandler)) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'B14))) '1 '('0) justHandler1 '('1) pureExtractMembersHandler '('1) streamHandler)) '('('type))))
 
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'C1))) '1 '('0) justHandler1 '('1) listHandler '('2) trivialLambda)) '('('type))))
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator vlist (DependsOn (String 'C2))) '1 '('0) streamHandler '('1) listHandler '('2) trivialLambda)) '('('type))))
@@ -62,6 +67,8 @@
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator list (DependsOn (String 'E4))) '1 '('0) justHandler1 '('0) extractMembersHandler)) '('('type))))
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator list (DependsOn (String 'E5))) '1 '('0) trivialLambda '('0) justHandler1 '('0) listHandler)) '('('type))))
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator list (DependsOn (String 'E6))) '1 '('0) streamHandler '('0) listHandler)) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator list (DependsOn (String 'E7))) '1 '('0) pureExtractMembersHandler)) '('('type))))
+(let world (Write! world res_sink (Key) (Collect (Switch (Iterator list (DependsOn (String 'E8))) '1 '('0) justHandler1 '('0) pureExtractMembersHandler)) '('('type))))
 
 # Shouldn't be optimized
 (let world (Write! world res_sink (Key) (Collect (Switch (Iterator list (DependsOn (String 'F1))) '1 '('0) justVarHandler1 '('0) justVarHandler2)) '('('type))))

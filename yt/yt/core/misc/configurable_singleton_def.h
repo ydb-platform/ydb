@@ -18,6 +18,10 @@ template <bool Static>
 class TSingletonsConfigBase
 {
 public:
+    TSingletonsConfigBase() = default;
+    TSingletonsConfigBase(const TSingletonsConfigBase&) = delete;
+    TSingletonsConfigBase& operator=(const TSingletonsConfigBase&) = delete;
+
     template <class TConfig>
     TIntrusivePtr<TConfig> TryGetSingletonConfig();
 
@@ -26,6 +30,10 @@ public:
 
     template <class TConfig>
     void SetSingletonConfig(TIntrusivePtr<TConfig> config);
+
+    // Merge all configs from src into self by cloning them.
+    // If a config is already present, it is overridden.
+    void MergeAllSingletonConfigsFrom(const TSingletonsConfigBase& src);
 
 protected:
     static void RegisterSingletons(
@@ -44,11 +52,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSingletonsConfig
+struct TSingletonsConfig
     : public NDetail::TSingletonsConfigBase<true>
     , public virtual NYTree::TYsonStruct
 {
-public:
     REGISTER_YSON_STRUCT(TSingletonsConfig);
 
     static void Register(TRegistrar registrar);
@@ -58,11 +65,10 @@ DEFINE_REFCOUNTED_TYPE(TSingletonsConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSingletonsDynamicConfig
+struct TSingletonsDynamicConfig
     : public NDetail::TSingletonsConfigBase<false>
     , public virtual NYTree::TYsonStruct
 {
-public:
     REGISTER_YSON_STRUCT(TSingletonsDynamicConfig);
 
     static void Register(TRegistrar registrar);

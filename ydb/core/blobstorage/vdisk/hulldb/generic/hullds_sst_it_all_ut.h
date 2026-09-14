@@ -19,12 +19,14 @@ namespace NKikimr {
                                     ui32 channel = 0, ui32 cookie = 0) {
             using TRec = TLogoBlobSst::TRec;
             Y_UNUSED(step);
+            TTrackableVector<TRec> linearIndex(TMemoryConsumer(TTestContexts().GetVCtx()->SstIndex));
             TLogoBlobSstPtr ptr(new TLogoBlobSst(TTestContexts().GetVCtx()));
             for (ui32 i = 0; i < recs; i++) {
                 TLogoBlobID id(tabletId, generation, step + i * plus, channel, 0, cookie);
                 TRec rec {TKeyLogoBlob(id), TMemRecLogoBlob()};
-                ptr->LoadedIndex.push_back(rec);
+                linearIndex.push_back(rec);
             }
+            ptr->LoadLinearIndex(linearIndex);
             return ptr;
         }
 

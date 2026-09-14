@@ -9,13 +9,20 @@
 
 #include <pfr/detail/config.hpp>
 
+#if !defined(PFR_USE_MODULES) || defined(PFR_INTERFACE_UNIT)
+
 namespace pfr {
+
+PFR_BEGIN_MODULE_EXPORT
 
 template<class T, class WhatFor>
 struct is_reflectable;
 
+PFR_END_MODULE_EXPORT
+
 } // namespace pfr
 
-#endif // PFR_DETAIL_TRAITS_FWD_HPP
+#endif  // #if !defined(PFR_USE_MODULES) || defined(PFR_INTERFACE_UNIT)
 
+#endif // PFR_DETAIL_TRAITS_FWD_HPP
 

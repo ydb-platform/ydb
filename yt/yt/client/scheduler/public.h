@@ -16,9 +16,9 @@ class TSpecPatch;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_STRONG_TYPEDEF(TJobTraceId, TGuid);
+YT_DEFINE_STRONG_TYPEDEF(TAllocationId, TGuid);
 
-extern const TJobTraceId NullJobTraceId;
+extern const TAllocationId NullAllocationId;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -78,6 +78,7 @@ YT_DEFINE_ERROR_ENUM(
     ((CannotUseBothAclAndAco)                 (221))
     ((GangOperationsAllowedOnlyInFifoPools)   (222))
     ((OperationLaunchedInNonexistentPool)     (223))
+    ((OperationHasNoController)               (224))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,
@@ -94,6 +95,7 @@ DEFINE_ENUM(ESchemaInferenceMode,
 
 // NB(eshcherbin): This enum must be synchronized at schedulers ans CAs.
 // If you change it, you must bump the controller agent tracker service protocol version!
+// COMPAT(eshcherbin): Remove NodeFairShareTreeChanged in favor of NodePoolTreeChanged.
 DEFINE_ENUM(EAbortReason,
     ((None)                            (  0))
     ((Scheduler)                       (  1))
@@ -153,6 +155,12 @@ DEFINE_ENUM(EAbortReason,
     ((OperationIncarnationChanged)     ( 56))
     ((AddressResolveFailed)            ( 57))
     ((UnexpectedNodeJobPhase)          ( 58))
+    ((JobCountChangedByUserRequest)    ( 59))
+    ((NbdError)                        ( 60))
+    ((NodePoolTreeChanged)             ( 61))
+    ((UserSlotDisabled)                ( 62))
+    ((JobLogDirectoryNotPrepared)      ( 63))
+    ((OverlayLayerPreparationFailed)   ( 64))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))
@@ -162,20 +170,22 @@ DEFINE_ENUM(EAbortReason,
     ((SchedulingOperationDisabled)     (106))
     ((SchedulingOperationIsNotAlive)   (107))
     ((SchedulingLast)                  (199))
+    ((JobCollectiveDisbanded)          (200))
 );
 
 DEFINE_ENUM_UNKNOWN_VALUE(EAbortReason, Unknown);
 
-DEFINE_ENUM(EInterruptReason,
-    ((None)               (0))
-    ((Preemption)         (1))
-    ((UserRequest)        (2))
-    ((JobSplit)           (3))
-    ((Unknown)            (4))
-    ((JobsDisabledOnNode) (5))
+DEFINE_ENUM(EInterruptionReason,
+    ((None)                (0))
+    ((Preemption)          (1))
+    ((UserRequest)         (2))
+    ((JobSplit)            (3))
+    ((Unknown)             (4))
+    ((JobsDisabledOnNode)  (5))
+    ((NbdDeviceStopping)   (6))
 );
 
-DEFINE_ENUM_UNKNOWN_VALUE(EInterruptReason, Unknown);
+DEFINE_ENUM_UNKNOWN_VALUE(EInterruptionReason, Unknown);
 
 DEFINE_ENUM(EAutoMergeMode,
     (Disabled)
@@ -186,7 +196,7 @@ DEFINE_ENUM(EAutoMergeMode,
 
 DECLARE_REFCOUNTED_CLASS(TOperationCache)
 
-DECLARE_REFCOUNTED_CLASS(TSpecPatch);
+DECLARE_REFCOUNTED_STRUCT(TSpecPatch);
 using TSpecPatchList = std::vector<TSpecPatchPtr>;
 
 ////////////////////////////////////////////////////////////////////////////////

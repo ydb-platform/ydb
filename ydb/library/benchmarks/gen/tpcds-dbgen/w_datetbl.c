@@ -100,7 +100,7 @@ mk_w_date (void * row, ds_key_t index)
     mk_bkey(&r->d_date_id[0], nTemp, D_DATE_ID);
     jtodt (&temp_date, nTemp);
     r->d_year = temp_date.year;
-    r->d_dow = set_dow (&temp_date);
+    r->d_dow = set_dow (&temp_date) % 7;
     r->d_moy = temp_date.month;
     r->d_dom = temp_date.day;
     /* set the sequence counts; assumes that the date table starts on a year boundary */
@@ -277,7 +277,7 @@ vld_w_date(int nTable, ds_key_t kRow, int *Permutation)
     mk_bkey(&r->d_date_id[0], nTemp, D_DATE_ID);
     jtodt (&temp_date, nTemp);
     r->d_year = temp_date.year;
-    r->d_dow = set_dow (&temp_date);
+    r->d_dow = set_dow (&temp_date) % 7;
     r->d_moy = temp_date.month;
     r->d_dom = temp_date.day;
     /* set the sequence counts; assumes that the date table starts on a year boundary */

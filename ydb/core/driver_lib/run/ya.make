@@ -1,15 +1,5 @@
 LIBRARY(run)
 
-IF (OS_WINDOWS)
-    CFLAGS(
-        -DKIKIMR_DISABLE_S3_OPS
-    )
-ELSE()
-    PEERDIR(
-        contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
-    )
-ENDIF()
-
 ADDINCL(
     ydb/public/sdk/cpp
 )
@@ -21,9 +11,9 @@ SRCS(
     config_helpers.cpp
     config_parser.cpp
     config_parser.h
-    driver.h
     factories.h
     factories.cpp
+    grpc_servers_manager.h
     kikimr_services_initializers.cpp
     kikimr_services_initializers.h
     main.h
@@ -36,17 +26,8 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    ydb/library/actors/core
-    ydb/library/actors/dnsresolver
-    ydb/library/actors/interconnect
-    ydb/library/actors/memory_log
-    ydb/library/actors/prof
-    ydb/library/actors/protos
-    ydb/library/actors/util
+    library/cpp/containers/absl
     library/cpp/getopt/small
-    ydb/public/sdk/cpp/src/library/grpc/client
-    ydb/library/grpc/server
-    ydb/library/grpc/server/actors
     library/cpp/logger
     library/cpp/malloc/api
     library/cpp/messagebus
@@ -57,8 +38,10 @@ PEERDIR(
     library/cpp/svnversion
     ydb/core/actorlib_impl
     ydb/core/audit
-    ydb/core/base
+    ydb/core/audit/audit_config
+    ydb/core/audit/heartbeat_actor
     ydb/core/backup/controller
+    ydb/core/base
     ydb/core/blob_depot
     ydb/core/blobstorage
     ydb/core/blobstorage/backpressure
@@ -72,7 +55,7 @@ PEERDIR(
     ydb/core/cms
     ydb/core/cms/console
     ydb/core/control
-    ydb/core/driver_lib/base_utils
+    ydb/core/counters_info
     ydb/core/driver_lib/cli_config_base
     ydb/core/driver_lib/cli_utils
     ydb/core/driver_lib/version
@@ -86,16 +69,16 @@ PEERDIR(
     ydb/core/health_check
     ydb/core/http_proxy
     ydb/core/jaeger_tracing
+    ydb/core/kafka_proxy
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
-    ydb/core/kafka_proxy
     ydb/core/kqp
-    ydb/core/kqp/federated_query
+    ydb/core/kqp/federated_query/actors
+    ydb/services/scheme_secret
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/rm_service
     ydb/core/load_test
-    ydb/core/local_pgwire
     ydb/core/log_backend
     ydb/core/memory_controller
     ydb/core/metering
@@ -107,13 +90,17 @@ PEERDIR(
     ydb/core/mon_alloc
     ydb/core/node_whiteboard
     ydb/core/persqueue
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter
+    ydb/core/retro_tracing_impl/distributed_collector
+    ydb/core/retro_tracing_impl/spans
     ydb/core/scheme
     ydb/core/scheme_types
     ydb/core/security
     ydb/core/security/ldap_auth_provider
+    ydb/core/security/token_manager
     ydb/core/statistics/aggregator
     ydb/core/statistics/service
     ydb/core/sys_view/processor
@@ -122,16 +109,23 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/test_tablet
     ydb/core/tracing
+    ydb/core/transfer
     ydb/core/tx
     ydb/core/tx/columnshard
-    ydb/core/tx/coordinator
     ydb/core/tx/conveyor/service
-    ydb/core/tx/limiter/service
-    ydb/core/tx/limiter/grouped_memory/usage
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/conveyor_composite/usage
+    ydb/core/tx/general_cache
+    ydb/core/tx/columnshard/data_accessor/cache_policy
+    ydb/core/tx/columnshard/column_fetching
+    ydb/core/tx/coordinator
     ydb/core/tx/datashard
+    ydb/core/tx/limiter/grouped_memory/usage
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/mediator
+    ydb/core/tx/priorities/service
+    ydb/core/tx/priorities/usage
     ydb/core/tx/replication/controller
     ydb/core/tx/replication/service
     ydb/core/tx/scheme_board
@@ -145,44 +139,87 @@ PEERDIR(
     ydb/core/viewer
     ydb/core/ymq/actor
     ydb/core/ymq/http
+    ydb/library/actors/core
+    ydb/library/actors/dnsresolver
+    ydb/library/actors/interconnect
+    ydb/library/actors/memory_log
+    ydb/library/actors/prof
+    ydb/library/actors/protos
+    ydb/library/actors/retro_tracing
+    ydb/library/actors/util
+    ydb/library/aws_init
     ydb/library/folder_service
     ydb/library/folder_service/proto
+    ydb/library/global_plugins
+    ydb/library/grpc/server
+    ydb/library/grpc/server/actors
     ydb/library/pdisk_io
     ydb/library/security
-    yql/essentials/minikql/comp_nodes/llvm14
-    yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm14
     ydb/library/yql/providers/pq/cm_client
+    ydb/library/slide_limiter/service
+    ydb/library/slide_limiter/usage
     ydb/library/yql/providers/s3/actors
-    yql/essentials/public/udf/service/exception_policy
     ydb/public/lib/base
     ydb/public/lib/deprecated/client
+    ydb/public/sdk/cpp/src/library/grpc/client
     ydb/services/auth
     ydb/services/backup
-    ydb/services/bsconfig
+    ydb/services/bridge
     ydb/services/cms
-    ydb/services/dynamic_config
+    ydb/services/config
     ydb/services/datastreams
+    ydb/services/deprecated/persqueue_v0
     ydb/services/discovery
+    ydb/services/dynamic_config
     ydb/services/fq
     ydb/services/kesus
     ydb/services/keyvalue
     ydb/services/local_discovery
     ydb/services/maintenance
-    ydb/services/metadata/ds_table
     ydb/services/metadata
-    ydb/services/ext_index/service
-    ydb/services/ext_index/metadata
+    ydb/services/metadata/ds_table
+    ydb/services/udf_store
     ydb/services/monitoring
     ydb/services/persqueue_cluster_discovery
-    ydb/services/deprecated/persqueue_v0
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
+    ydb/services/distributed_storage
     ydb/services/tablet
+    ydb/services/test_shard
     ydb/services/view
+    ydb/services/workload_manager/service
     ydb/services/ydb
+    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/public/udf/service/exception_policy
+    yt/yql/providers/yt/codec/codegen
+    yt/yql/providers/yt/comp_nodes/dq/llvm16
+    yt/yql/providers/yt/comp_nodes/llvm16
 )
+
+DEFAULT(YDB_EMBEDDED_NBS_ENABLED yes)
+
+IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
+    CFLAGS(
+        -DYDB_EMBEDDED_NBS_ENABLED
+    )
+    PEERDIR(
+        ydb/core/nbs/cloud/blockstore/bootstrap
+        ydb/core/nbs/cloud/blockstore/config/protos
+        ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller
+        ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet
+        ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
+        ydb/core/nbs/cloud/blockstore/libs/storage/volume
+
+        ydb/services/nbs
+    )
+ENDIF()
+
+IF (NOT OS_WINDOWS)
+    PEERDIR(
+        ydb/library/signal_backtrace
+    )
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

@@ -1,0 +1,36 @@
+PY3TEST()
+
+TEST_SRCS(
+    test.py
+)
+
+SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+ENDIF()
+
+NO_CHECK_IMPORTS()
+
+DEPENDS(
+    yql/essentials/udfs/test/test_import
+    ydb/tests/tools/kqprun
+)
+
+
+DATA(
+    arcadia/ydb/library/yql/tests/sql # python files
+)
+
+INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/tools/solomon_emulator/recipe/recipe.inc)
+
+PEERDIR(
+    ydb/library/yql/tools/solomon_emulator/testing
+    ydb/tests/fq/tools
+    yql/essentials/tests/common/test_framework
+)
+
+END()
+
+RECURSE_FOR_TESTS(
+    scalar_write
+)

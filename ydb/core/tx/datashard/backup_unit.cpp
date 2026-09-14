@@ -33,16 +33,16 @@ protected:
 
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        Y_ABORT_UNLESS(tx->GetSchemeTx().HasBackup());
+        Y_ENSURE(tx->GetSchemeTx().HasBackup());
         const auto& backup = tx->GetSchemeTx().GetBackup();
 
         const ui64 tableId = backup.GetTableId();
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
-        Y_ABORT_UNLESS(txc.DB.GetScheme().GetTableInfo(localTableId));
+        Y_ENSURE(txc.DB.GetScheme().GetTableInfo(localTableId));
 
         auto* appData = AppData(ctx);
         const auto& columns = DataShard.GetUserTables().at(tableId)->Columns;
@@ -56,11 +56,15 @@ protected:
 
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToYt(backup, columns)).swap(exp);
+                if (!exp) {
+                    Abort(op, ctx, "Failed to create YT export");
+                    return false;
+                }
             } else {
                 Abort(op, ctx, "Exports to YT are disabled");
                 return false;
             }
-        } else if (backup.HasS3Settings()) {
+        } else if (backup.HasS3Settings() || backup.HasFSSettings()) {
             NBackupRestoreTraits::ECompressionCodec codec;
             if (!TryCodecFromTask(backup, codec)) {
                 Abort(op, ctx, TStringBuilder() << "Unsupported compression codec"
@@ -68,10 +72,26 @@ protected:
                 return false;
             }
 
+            if (NBackupRestoreTraits::DataFormatFromTask(backup) == NBackupRestoreTraits::EDataFormat::Parquet) {
+                if (!appData->FeatureFlags.GetEnableExportInParquet()) {
+                    Abort(op, ctx, "Parquet export is disabled by feature flag EnableExportInParquet");
+                    return false;
+                }
+                if (backup.HasEncryptionSettings()) {
+                    Abort(op, ctx, "Encryption is not supported for parquet files");
+                    return false;
+                }
+            }
+
+            const TStringBuf exportKind = backup.HasFSSettings() ? "FS"sv : "S3"sv;
             if (auto* exportFactory = appData->DataShardExportFactory) {
                 std::shared_ptr<IExport>(exportFactory->CreateExportToS3(backup, columns)).swap(exp);
+                if (!exp) {
+                    Abort(op, ctx, TStringBuilder() << "Failed to create " << exportKind << " export");
+                    return false;
+                }
             } else {
-                Abort(op, ctx, "Exports to S3 are disabled");
+                Abort(op, ctx, TStringBuilder() << "Exports to " << exportKind << " are disabled");
                 return false;
             }
         } else {
@@ -115,7 +135,7 @@ protected:
 
     bool ProcessResult(TOperation::TPtr op, const TActorContext&) override {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto* result = CheckedCast<TExportScanProduct*>(op->ScanResult().Get());
         bool done = true;
@@ -129,7 +149,7 @@ protected:
                 schemeOp->BytesProcessed = result->BytesRead;
                 schemeOp->RowsProcessed = result->RowsRead;
             } else {
-                Y_FAIL_S("Cannot find schema tx: " << op->GetTxId());
+                Y_ENSURE(false, "Cannot find schema tx: " << op->GetTxId());
             }
             break;
         case EExportOutcome::Aborted:
@@ -150,7 +170,7 @@ protected:
 
         const ui64 tableId = tx->GetSchemeTx().GetBackup().GetTableId();
 
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
 
         DataShard.CancelScan(localTableId, tx->GetScanTask());

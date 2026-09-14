@@ -2,35 +2,55 @@ RECURSE(
     accessor
     aclib
     actors
+    analytics
     arrow_clickhouse
     arrow_kernels
     arrow_parquet
+    aws_init
     backup
     benchmarks
+    breakpad
     chunks_limiter
+    drr
     folder_service
     formats
     fyamlcpp
+    global_plugins
     grpc
+    http
     http_proxy
+    intersection_tree
+    json_index
     keys
+    kll_median
     lockfree_bucket
     logger
     login
     mkql_proto
     naming_conventions
     ncloud
+    net
+    nmslib
     pdisk_io
     persqueue
+    plan2svg
+    planner
     pretty_types_print
     protobuf_printer
+    range_treap
     query_actor
     schlab
     security
+    shop
+    signal_backtrace
+    signals
+    slide_limiter
     table_creator
     testlib
     time_series_vec
+    union_copy_set
     wilson_ids
+    wasm
     workload
     workload
     yaml_config

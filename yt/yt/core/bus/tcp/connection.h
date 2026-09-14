@@ -2,7 +2,6 @@
 
 #include "packet.h"
 #include "dispatcher_impl.h"
-#include "ssl_helpers.h"
 
 #include <yt/yt/core/bus/private.h>
 #include <yt/yt/core/bus/bus.h>
@@ -11,26 +10,28 @@
 
 #include <yt/yt/core/actions/future.h>
 
+#include <yt/yt/core/crypto/tls.h>
+
 #include <yt/yt/core/logging/log.h>
 
 #include <yt/yt/core/net/address.h>
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
-#include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/atomic_ptr.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/net/public.h>
 
 #include <yt/yt/core/concurrency/pollable_detail.h>
 
-#include <library/cpp/yt/threading/atomic_object.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
+
+#include <library/cpp/yt/memory/blob.h>
+
 #include <library/cpp/yt/threading/spin_lock.h>
 
 #include <util/network/init.h>
-
-#include <openssl/ssl.h>
 
 #ifdef _win_
 #include <winsock2.h>
@@ -42,11 +43,11 @@
 
 #include <atomic>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DEFINE_ENUM(ETcpConnectionState,
+DEFINE_ENUM(EConnectionState,
     (None)
     (Resolving)
     (Opening)
@@ -69,12 +70,12 @@ DEFINE_ENUM(ESslSessionState,
     (Aborted)
 );
 
-class TTcpConnection
+class TConnection
     : public IBus
     , public NConcurrency::TPollableBase
 {
 public:
-    TTcpConnection(
+    TConnection(
         TBusConfigPtr config,
         EConnectionType connectionType,
         TConnectionId id,
@@ -88,9 +89,10 @@ public:
         IMessageHandlerPtr handler,
         NConcurrency::IPollerPtr poller,
         IPacketTranscoderFactory* packetTranscoderFactory,
-        IMemoryUsageTrackerPtr memoryUsageTracker);
+        IMemoryUsageTrackerPtr memoryUsageTracker,
+        bool rejectConnectionOnMemoryOvercommit);
 
-    ~TTcpConnection();
+    ~TConnection();
 
     void Start();
     void RunPeriodicCheck();
@@ -99,7 +101,7 @@ public:
     TBusNetworkStatistics GetBusStatistics() const;
 
     // IPollable implementation.
-    const std::string& GetLoggingTag() const override;
+    const NLogging::TLoggingTagList& GetLoggingTags() const override;
     void OnEvent(NConcurrency::EPollControl control) override;
     void OnShutdown() override;
 
@@ -119,7 +121,7 @@ public:
     DECLARE_SIGNAL_OVERRIDE(void(const TError&), Terminated);
 
 private:
-    using EState = ETcpConnectionState;
+    using EState = EConnectionState;
 
     using ESslState = ESslSessionState;
 
@@ -135,6 +137,7 @@ private:
             , PayloadSize(GetByteSize(Message))
             , Options(options)
             , PacketId(TPacketId::Create())
+            , RequestId(options.RequestId)
         { }
 
         TPromise<void> Promise;
@@ -142,6 +145,7 @@ private:
         size_t PayloadSize;
         TSendOptions Options;
         TPacketId PacketId;
+        TRequestId RequestId;
     };
 
     struct TPacket final
@@ -175,11 +179,11 @@ private:
 
         std::atomic<EPacketState> State = EPacketState::Queued;
         TPromise<void> Promise;
-        TTcpConnectionPtr Connection;
+        TConnectionPtr Connection;
 
         bool MarkEncoded();
         void OnCancel(const TError& error);
-        void EnableCancel(TTcpConnectionPtr connection);
+        void EnableCancel(TConnectionPtr connection);
     };
 
     using TPacketPtr = TIntrusivePtr<TPacket>;
@@ -190,20 +194,19 @@ private:
     const std::string EndpointDescription_;
     const NYTree::IAttributeDictionaryPtr EndpointAttributes_;
     const NNet::TNetworkAddress EndpointNetworkAddress_;
-    const std::optional<TString> EndpointAddress_;
-    const std::optional<TString> UnixDomainSocketPath_;
-    const std::optional<TString> AbstractUnixDomainSocketName_;
+    const std::optional<std::string> EndpointAddress_;
+    const std::optional<std::string> UnixDomainSocketPath_;
+    const std::optional<std::string> AbstractUnixDomainSocketName_;
     const IMessageHandlerPtr Handler_;
     const NConcurrency::IPollerPtr Poller_;
 
-    const std::string LoggingTag_;
     const NLogging::TLogger Logger;
 
     const TPromise<void> ReadyPromise_ = NewPromise<void>();
 
-    TString NetworkName_;
+    std::string NetworkName_;
     // Endpoint host name is used for peer's certificate verification.
-    TString EndpointHostName_;
+    std::string EndpointHostName_;
 
     TBusNetworkCounters BusCounters_;
     TBusNetworkCounters BusCountersDelta_;
@@ -227,7 +230,7 @@ private:
 
     EMultiplexingBand ActualMultiplexingBand_ = EMultiplexingBand::Default;
 
-    NThreading::TAtomicObject<TError> Error_;
+    TError Error_;
 
     NNet::IAsyncDialerSessionPtr DialerSession_;
 
@@ -272,13 +275,14 @@ private:
     bool SslAckEnqueued_ = false;
     bool SslAckReceived_ = false;
     bool SslAckSent_ = false;
-    std::unique_ptr<SSL, TDeleter> Ssl_;
+    NCrypto::TSslPtr Ssl_;
     std::atomic<ESslState> SslState_ = ESslState::None;
 
     const EEncryptionMode EncryptionMode_;
     const EVerificationMode VerificationMode_;
 
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+    const bool RejectConnectionOnMemoryOvercommit_;
 
     NYTree::IAttributeDictionaryPtr PeerAttributes_;
 
@@ -385,6 +389,7 @@ private:
     bool CheckTcpReadError(ssize_t result);
     bool CheckTcpWriteError(ssize_t result);
     bool DoSslHandshake();
+    void DoSslShutdown();
     size_t GetSslAckPacketSize();
     void TryEstablishSslSession();
 
@@ -392,8 +397,8 @@ private:
     ssize_t DoWriteFragments(const std::vector<struct iovec>& vec);
 };
 
-DEFINE_REFCOUNTED_TYPE(TTcpConnection)
+DEFINE_REFCOUNTED_TYPE(TConnection)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp

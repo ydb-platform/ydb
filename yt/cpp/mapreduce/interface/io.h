@@ -8,8 +8,10 @@
 
 #include "fwd.h"
 
+#include "abortable_stream.h"
 #include "client_method_options.h"
 #include "common.h"
+#include "distributed_session.h"
 #include "format.h"
 #include "node.h"
 #include "mpl.h"
@@ -106,7 +108,7 @@ class TIOException
 /// Interface representing YT file reader.
 class IFileReader
     : public TThrRefBase
-    , public IInputStream
+    , public IAbortableInputStream
 { };
 
 /// Interface representing YT file writer.
@@ -121,12 +123,20 @@ public:
     }
 };
 
+class IFileFragmentWriter
+    : public TThrRefBase
+    , public IOutputStream
+{
+public:
+    virtual TWriteFileFragmentResult GetWriteFragmentResult() const = 0;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 /// Low-level interface to read YT table with retries.
 class TRawTableReader
     : public TThrRefBase
-    , public IInputStream
+    , public IAbortableInputStream
 {
 public:
     /// @brief Retry table read starting from the specified `rangeIndex` and `rowIndex`.
@@ -270,6 +280,12 @@ public:
 
     /// Returns `true` if job raw input stream was closed and `false` otherwise.
     bool IsRawReaderExhausted() const;
+
+    /// @brief Abort the reader, interrupting any in-progress or future reads.
+    void Abort();
+
+    /// @brief Check whether the reader is aborted.
+    bool IsAborted() const;
 };
 
 /// @brief Iterator for use in range-based-for.
@@ -331,7 +347,7 @@ private:
 ///
 /// @see @ref NYT::TTableReaderIterator
 template <class T>
-TTableReaderIterator<T> begin(TTableReader<T>& reader)
+TTableReaderIterator<T> begin(TTableReader<T>& reader) // NOLINT
 {
     return TTableReaderIterator<T>(&reader);
 }
@@ -340,7 +356,7 @@ TTableReaderIterator<T> begin(TTableReader<T>& reader)
 ///
 /// @see @ref NYT::TTableReaderIterator
 template <class T>
-TTableReaderIterator<T> end(TTableReader<T>&)
+TTableReaderIterator<T> end(TTableReader<T>&) // NOLINT
 {
     return TTableReaderIterator<T>(nullptr);
 }
@@ -396,6 +412,32 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/// @brief Class template for distributed table API fragment writer.
+///
+/// Write fragment result may be obtained after writer is closed.
+/// NB(achains): TTableFragmentWriter is not a derivative of TTableWriter on purpose.
+///              Due to different semantics and the necessity of closing writer.
+template <class T>
+class ITableFragmentWriter
+    : public TThrRefBase
+{
+public:
+    /// @brief Get object with session-specific table fragment write information.
+    ///
+    /// Only use after Finish() is called.
+    virtual TWriteTableFragmentResult GetWriteFragmentResult() const = 0;
+
+    /// @brief Submit a row for writing.
+    virtual void AddRow(const T& row) = 0;
+
+    /// @brief Completes writing and makes write fragment result available.
+    ///
+    /// No other data can be written after Finish is called.
+    virtual void Finish() = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 /// @brief Type representing YaMR table row.
 ///
 /// @deprecated
@@ -429,6 +471,13 @@ public:
         const TRichYPath& path,
         const TFileWriterOptions& options = TFileWriterOptions()) = 0;
 
+    /// @brief Create a fragment writer for given distributed file session cookie.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#write_file_fragment)
+    virtual IFileFragmentWriterPtr CreateFileFragmentWriter(
+        const TDistributedWriteFileCookie& cookie,
+        const TFileFragmentWriterOptions& options = TFileFragmentWriterOptions()) = 0;
+
     /// Create a typed reader for table at `path`.
     template <class T>
     TTableReaderPtr<T> CreateTableReader(
@@ -447,6 +496,14 @@ public:
         const ::google::protobuf::Descriptor& descriptor,
         const TTableWriterOptions& options = TTableWriterOptions()) = 0;
 
+    /// @brief Create a fragment table writer for given distributed table session cookie.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#write_fragment)
+    template <class T>
+    ITableFragmentWriterPtr<T> CreateTableFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options = {});
+
     /// Create a reader to read a table using specified format.
     virtual TRawTableReaderPtr CreateRawReader(
         const TRichYPath& path,
@@ -458,6 +515,30 @@ public:
         const TRichYPath& path,
         const TFormat& format,
         const TTableWriterOptions& options = TTableWriterOptions()) = 0;
+
+    ///
+    /// @brief Create raw reader of table partition
+    ///
+    /// Reader returns unparsed data in specified format.
+    ///
+    /// @param cookie Partition cookie received from @ref NYT::IClientBase::GetTablesPartitions.
+    /// @param format Format description.
+    /// @param options Additional options.
+    virtual TRawTableReaderPtr CreateRawTablePartitionReader(
+        const TString& cookie,
+        const TFormat& format,
+        const TTablePartitionReaderOptions& options = {}) = 0;
+
+    ///
+    /// @brief Create reader of table partition
+    ///
+    /// @param cookie Partition cookie received from @ref NYT::IClientBase::GetTablesPartitions.
+    /// @param format Format description.
+    /// @param options Additional options.
+    template <class T>
+    TTableReaderPtr<T> CreateTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options = {});
 
     ///
     /// @brief Create a reader for [blob table](https://docs.yandex-team.ru/docs/yt/description/storage/blobtables) at `path`.
@@ -495,7 +576,23 @@ private:
         const TRichYPath& path,
         const TTableReaderOptions& options,
         const ISkiffRowSkipperPtr& skipper,
-        const NSkiff::TSkiffSchemaPtr& schema) = 0;
+        const NSkiff::TSkiffSchemaPtr& requestedSchema,
+        const NSkiff::TSkiffSchemaPtr& parserSchema) = 0;
+
+    virtual ::TIntrusivePtr<INodeReaderImpl> CreateNodeTablePartitionReader(
+        const TString& cookie, const TTablePartitionReaderOptions& options) = 0;
+
+    virtual ::TIntrusivePtr<IProtoReaderImpl> CreateProtoTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
+        const ::google::protobuf::Message* prototype) = 0;
+
+    virtual ::TIntrusivePtr<ISkiffRowReaderImpl> CreateSkiffRowTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
+        const ISkiffRowSkipperPtr& skipper,
+        const NSkiff::TSkiffSchemaPtr& requestedSchema,
+        const NSkiff::TSkiffSchemaPtr& parserSchema) = 0;
 
     virtual ::TIntrusivePtr<INodeWriterImpl> CreateNodeWriter(
         const TRichYPath& path, const TTableWriterOptions& options) = 0;
@@ -506,6 +603,19 @@ private:
     virtual ::TIntrusivePtr<IProtoWriterImpl> CreateProtoWriter(
         const TRichYPath& path,
         const TTableWriterOptions& options,
+        const ::google::protobuf::Message* prototype) = 0;
+
+    virtual ::TIntrusivePtr<ITableFragmentWriter<TNode>> CreateNodeFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options) = 0;
+
+    virtual ::TIntrusivePtr<ITableFragmentWriter<TYaMRRow>> CreateYaMRFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options) = 0;
+
+    virtual ::TIntrusivePtr<ITableFragmentWriter<Message>> CreateProtoFragmentWriter(
+        const TDistributedWriteTableCookie& cookie,
+        const TTableFragmentWriterOptions& options,
         const ::google::protobuf::Message* prototype) = 0;
 };
 

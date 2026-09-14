@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateView(runtime, txId++, "/MyRoot", R"(
+        TestCreateView(runtime, ++txId, "/MyRoot", R"(
                 Name: "MyView"
                 QueryText: "Some query"
             )"
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TestCreateView(runtime, txId++, "/MyRoot", R"(
+        TestCreateView(runtime, ++txId, "/MyRoot", R"(
                 Name: "MyView"
                 QueryText: "Some query"
             )"
@@ -147,7 +147,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardViewTest) {
         TestModificationResults(runtime, txId - 1, expectedResults);
         TestModificationResults(runtime, txId, expectedResults);
 
-        env.TestWaitNotification(runtime, {txId - 1, txId});
+        env.TestWaitNotification(runtime, {txId - 2, txId - 1, txId});
         TestLs(runtime, "/MyRoot/MyView", false, NLs::PathNotExist);
     }
 

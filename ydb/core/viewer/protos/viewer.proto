@@ -9,6 +9,7 @@ import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/hive.proto";
 import "ydb/core/protos/kqp.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
+import "ydb/public/api/protos/ydb_bridge_common.proto";
 import "ydb/core/protos/sys_view.proto";
 
 package NKikimrViewer;
@@ -43,6 +44,10 @@ enum EObjectType {
     ExternalDataSource = 25;
     View = 26;
     ResourcePool = 27;
+    SysView = 28;
+    Secret = 29;
+    StreamingQuery = 30;
+    TestShardSet = 31;
 }
 
 message TBrowseInfo {
@@ -314,11 +319,24 @@ enum EFlag {
     Red = 5;
 }
 
+message TBridgePileInfo {
+    optional uint32 PileId = 1;
+    optional string Name = 2;
+    optional Ydb.Bridge.PileState.State State = 3;
+    optional uint32 Nodes = 4;
+    map<string, uint32> GroupStatuses = 5; // UNKNOWN (grey), FULL (green), PARTIAL (yellow), DEGRADED (yellow), DISINTEGRATED (red)
+}
+
+message TBridgeInfo {
+    repeated TBridgePileInfo Piles = 1;
+}
+
 message TClusterInfo {
     uint32 Version = 1;
     string Name = 2;
     string Domain = 3;
     EFlag Overall = 5;
+    optional uint64 CachedDataMaxAge = 8;
     repeated string Problems = 9;
     uint32 NodesTotal = 10;
     uint32 NodesAlive = 11;
@@ -344,6 +362,8 @@ message TClusterInfo {
     uint64 Hosts = 60;
     uint64 Tenants = 61;
     double NetworkUtilization = 62;
+    uint64 NetworkWriteThroughput = 63;
+    TBridgeInfo BridgeInfo = 64;
 }
 
 enum ETenantType {
@@ -400,6 +420,9 @@ message TTenant {
     uint32 CoresTotal = 50;
     optional NKikimrMemory.TMemoryStats MemoryStats = 51;
     float NetworkUtilization = 52;
+    uint64 NetworkWriteThroughput = 53;
+    uint64 GrpcRequestBytes = 54;
+    uint64 GrpcResponseBytes = 55;
 }
 
 message TTenants {
@@ -408,7 +431,7 @@ message TTenants {
 
 message TTenantInfo {
     repeated TTenant TenantInfo = 1;
-    repeated string Errors = 2;
+    repeated string Problems = 2;
     uint32 Version = 3;
 }
 
@@ -418,20 +441,22 @@ message TStoragePDisk {
     string Type = 3;
     string Guid = 4;
     uint64 Category = 5;
-    uint64 TotalSize = 6;
-    uint64 AvailableSize = 7;
+    optional uint64 TotalSize = 6;
+    optional uint64 AvailableSize = 7;
     string Status = 8;
     EFlag DiskSpace = 9;
     string DecommitStatus = 10;
     uint64 SlotSize = 11;
+    uint64 SlotCount = 12;
+    string MaintenanceStatus = 13;
     NKikimrWhiteboard.TPDiskStateInfo Whiteboard = 50;
 }
 
 message TStorageVDisk {
     string VDiskId = 1;
     uint32 NodeId = 2;
-    uint64 AllocatedSize = 3;
-    uint64 AvailableSize = 4;
+    optional uint64 AllocatedSize = 3;
+    optional uint64 AvailableSize = 4;
     string Kind = 5;
     string Status = 6;
     EFlag DiskSpace = 7;
@@ -463,6 +488,13 @@ message TStorageGroupInfo {
     optional uint64 LatencyPutTabletLog = 20;
     optional uint64 LatencyPutUserData = 21;
     optional uint64 LatencyGetFast = 22;
+    string PileName = 23;
+    optional double MaxPDiskUsage = 24;
+    optional double MaxVDiskSlotUsage = 25;
+    optional double MaxVDiskRawUsage = 26;
+    optional double MaxNormalizedOccupancy = 27;
+    optional string CapacityAlert = 28;
+    optional uint32 GroupSizeInUnits = 29;
     repeated TStorageVDisk VDisks = 30;
 }
 
@@ -514,9 +546,10 @@ message TStorageGroupsInfo {
     optional bool NeedGroup = 7;
     optional bool NeedSort = 8;
     optional bool NeedLimit = 9;
-    repeated string Problems = 10;
-    repeated TStorageGroupInfo StorageGroups = 11;
-    repeated TStorageGroupGroup StorageGroupGroups = 12;
+    optional uint64 CachedDataMaxAge = 10;
+    repeated string Problems = 11;
+    repeated TStorageGroupInfo StorageGroups = 12;
+    repeated TStorageGroupGroup StorageGroupGroups = 13;
 }
 
 message TStorageUsageStats {
@@ -537,10 +570,11 @@ message TNodeInfo {
     float CpuUsage = 5;
     float DiskSpaceUsage = 6;
     optional uint32 Connections = 7; // total number of live connections
-    EFlag ConnectStatus = 10; // Max
+    optional EFlag ConnectStatus = 10; // Max
     optional uint64 ReceiveThroughput = 11;
     optional uint64 SendThroughput = 12;
-    optional float NetworkUtilization = 20; // Sum
+    optional string PileName = 13;
+    optional float NetworkUtilization = 20; // Avg
     optional float NetworkUtilizationMin = 21;
     optional float NetworkUtilizationMax = 22;
     optional int64 ClockSkewUs = 30; // Avg
@@ -551,12 +585,23 @@ message TNodeInfo {
     optional uint64 PingTimeMinUs = 41;
     optional uint64 PingTimeMaxUs = 42;
     optional uint64 ReversePingTimeUs = 43; // Avg
+    optional double MaxPDiskUsage = 44;
+    optional double MaxVDiskSlotUsage = 45;
+    optional double MaxVDiskRawUsage = 46;
+    optional string CapacityAlert = 47; // the highest across VDisks on this node
+    optional double MaxNormalizedOccupancy = 48;
     NKikimrWhiteboard.TSystemStateInfo SystemState = 50;
     repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 51;
     repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 52;
     repeated TTabletStateInfo Tablets = 53;
     repeated NKikimrWhiteboard.TNodeStateInfo Peers = 54;
     repeated NKikimrWhiteboard.TNodeStateInfo ReversePeers = 55;
+}
+
+message TNodeBatch {
+    repeated uint32 NodesToAskFor = 1;
+    repeated uint32 NodesToAskAbout = 2;
+    optional bool HasStaticNodes = 3;
 }
 
 message TNodesInfo {
@@ -570,10 +615,39 @@ message TNodesInfo {
     optional bool NeedSort = 8;
     optional bool NeedLimit = 9;
     repeated string Problems = 10;
+    optional uint64 CachedDataMaxAge = 11;
     repeated TNodeInfo Nodes = 20;
     repeated TNodeGroup NodeGroups = 30;
     optional uint64 MaximumDisksPerNode = 50;
     optional uint64 MaximumSlotsPerDisk = 51;
+    optional bool NoDC = 60;
+    optional bool NoRack = 61;
+    repeated TNodeBatch OriginalNodeBatches = 62;
+}
+
+message TPeerInfo {
+    NKikimrWhiteboard.TSystemStateInfo SystemState = 20;
+    NKikimrWhiteboard.TNodeStateInfo Forward = 21;
+    NKikimrWhiteboard.TNodeStateInfo Reverse = 22;
+}
+
+message TPeerGroup {
+    string GroupName = 1;
+    uint64 PeerCount = 2;
+}
+
+message TPeersInfo {
+    uint32 Version = 1;
+    optional uint64 TotalPeers = 2;
+    optional uint64 FoundPeers = 3;
+    optional bool NeedFilter = 6;
+    optional bool NeedGroup = 7;
+    optional bool NeedSort = 8;
+    optional bool NeedLimit = 9;
+    repeated string Problems = 10;
+    optional uint64 CachedDataMaxAge = 11;
+    repeated TPeerInfo Peers = 20;
+    repeated TPeerGroup PeerGroups = 30;
     optional bool NoDC = 60;
     optional bool NoRack = 61;
 }
@@ -763,6 +837,8 @@ enum EAutocompleteType {
     view = 20;
     column = 21;
     index = 22;
+    sys_view = 23;
+    streaming_query = 27;
 }
 
 message TQueryAutocomplete {
@@ -828,3 +904,63 @@ message TFeatureFlagsConfig {
     repeated TDatabase Databases = 2;
 }
 
+message TTopicDataResponse {
+    message TMessage {
+        uint64 Offset = 1;
+        uint64 CreateTimestamp = 2;
+        uint64 WriteTimestamp = 3;
+        uint64 TimestampDiff = 4;
+        string Message = 5;
+        uint32 StorageSize = 6;
+        uint32 OriginalSize = 7;
+        uint32 Codec = 8;
+        string ProducerId = 9;
+        uint64 SeqNo = 10;
+
+        message TMetadataItem {
+            string Key = 1;
+            string Value = 2;
+        }
+        repeated TMetadataItem MessageMetadata = 11;
+        string Ip = 12;
+    }
+
+    uint64 StartOffset = 1;
+    uint64 EndOffset = 2;
+    repeated TMessage Messages = 3;
+    bool Truncated = 4;
+}
+
+message TDatabaseStats {
+    // common
+    repeated string Problems = 10;
+
+    // grpc
+    optional uint64 GrpcRequestBytes = 101;
+    optional uint64 GrpcResponseBytes = 102;
+
+    // database nodes
+    optional uint32 DatabaseNodes = 201;
+    optional float DatabaseCpuUsage = 202;
+    optional float DatabaseMemoryUsage = 203;
+    optional uint64 DatabaseNetwork = 204;
+
+    // database to storage
+    optional uint64 StorageNetworkRead = 301;
+    optional uint64 StorageNetworkWrite = 302;
+
+    // storage nodes
+    optional uint32 StorageNodes = 401;
+    optional float StorageCpuUsage = 402;
+    optional float StorageMemoryUsage = 403;
+    optional uint64 StorageNetwork = 404;
+
+    // storage to disk
+    optional uint64 DiskRead = 501;
+    optional uint64 DiskWrite = 502;
+
+    // disk
+    optional uint32 StorageGroups = 601;
+    optional uint64 StorageTotal = 602;
+    optional uint64 StorageConsumed = 603;
+}

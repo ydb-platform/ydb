@@ -83,15 +83,12 @@ static void InitPlan(QueryDesc *queryDesc, int eflags);
 static void CheckValidRowMarkRel(Relation rel, RowMarkType markType);
 static void ExecPostprocessPlan(EState *estate);
 static void ExecEndPlan(PlanState *planstate, EState *estate);
-static void ExecutePlan(EState *estate, PlanState *planstate,
-						bool use_parallel_mode,
+static void ExecutePlan(QueryDesc *queryDesc,
 						CmdType operation,
 						bool sendTuples,
 						uint64 numberTuples,
 						ScanDirection direction,
-						DestReceiver *dest,
-						bool execute_once);
-static bool ExecCheckOneRelPerms(RTEPermissionInfo *perminfo);
+						DestReceiver *dest);
 static bool ExecCheckPermissionsModified(Oid relOid, Oid userid,
 										 Bitmapset *modifiedCols,
 										 AclMode requiredPerms);
@@ -132,10 +129,12 @@ void
 ExecutorStart(QueryDesc *queryDesc, int eflags)
 {
 	/*
-	 * In some cases (e.g. an EXECUTE statement) a query execution will skip
-	 * parse analysis, which means that the query_id won't be reported.  Note
-	 * that it's harmless to report the query_id multiple times, as the call
-	 * will be ignored if the top level query_id has already been reported.
+	 * In some cases (e.g. an EXECUTE statement or an execute message with the
+	 * extended query protocol) the query_id won't be reported, so do it now.
+	 *
+	 * Note that it's harmless to report the query_id multiple times, as the
+	 * call will be ignored if the top level query_id has already been
+	 * reported.
 	 */
 	pgstat_report_query_id(queryDesc->plannedstmt->queryId, false);
 
@@ -286,6 +285,9 @@ standard_ExecutorStart(QueryDesc *queryDesc, int eflags)
  *		retrieved tuples, not for instance to those inserted/updated/deleted
  *		by a ModifyTable plan node.
  *
+ *		execute_once is ignored, and is present only to avoid an API break
+ *		in stable branches.
+ *
  *		There is no return value, but output tuples (if any) are sent to
  *		the destination receiver specified in the QueryDesc; and the number
  *		of tuples processed at the top level can be found in
@@ -357,21 +359,12 @@ standard_ExecutorRun(QueryDesc *queryDesc,
 	 * run plan
 	 */
 	if (!ScanDirectionIsNoMovement(direction))
-	{
-		if (execute_once && queryDesc->already_executed)
-			elog(ERROR, "can't re-execute query flagged for single execution");
-		queryDesc->already_executed = true;
-
-		ExecutePlan(estate,
-					queryDesc->planstate,
-					queryDesc->plannedstmt->parallelModeNeeded,
+		ExecutePlan(queryDesc,
 					operation,
 					sendTuples,
 					count,
 					direction,
-					dest,
-					execute_once);
-	}
+					dest);
 
 	/*
 	 * Update es_total_processed to keep track of the number of tuples
@@ -641,7 +634,7 @@ ExecCheckPermissions(List *rangeTable, List *rteperminfos,
  * ExecCheckOneRelPerms
  *		Check access permissions for a single relation.
  */
-static bool
+bool
 ExecCheckOneRelPerms(RTEPermissionInfo *perminfo)
 {
 	AclMode		requiredPerms;
@@ -1017,21 +1010,57 @@ InitPlan(QueryDesc *queryDesc, int eflags)
  * Generally the parser and/or planner should have noticed any such mistake
  * already, but let's make sure.
  *
+ * For INSERT ON CONFLICT, the result relation is required to support the
+ * onConflictAction, regardless of whether a conflict actually occurs.
+ *
+ * For MERGE, mergeActions is the list of actions that may be performed.  The
+ * result relation is required to support every action, regardless of whether
+ * or not they are all executed.
+ *
  * Note: when changing this function, you probably also need to look at
  * CheckValidRowMarkRel.
  */
 void
-CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
+CheckValidResultRelNew(ResultRelInfo *resultRelInfo, CmdType operation,
+					   OnConflictAction onConflictAction, List *mergeActions)
 {
 	Relation	resultRel = resultRelInfo->ri_RelationDesc;
 	TriggerDesc *trigDesc = resultRel->trigdesc;
 	FdwRoutine *fdwroutine;
 
+	/* Expect a fully-formed ResultRelInfo from InitResultRelInfo(). */
+	Assert(resultRelInfo->ri_needLockTagTuple ==
+		   IsInplaceUpdateRelation(resultRel));
+
 	switch (resultRel->rd_rel->relkind)
 	{
 		case RELKIND_RELATION:
 		case RELKIND_PARTITIONED_TABLE:
-			CheckCmdReplicaIdentity(resultRel, operation);
+
+			/*
+			 * For MERGE, check that the target relation supports each action.
+			 * For other operations, just check the operation itself.
+			 */
+			if (operation == CMD_MERGE)
+			{
+				ListCell   *lc;
+
+				foreach(lc, mergeActions)
+				{
+					MergeAction *action = (MergeAction *) lfirst(lc);
+
+					CheckCmdReplicaIdentity(resultRel, action->commandType);
+				}
+			}
+			else
+				CheckCmdReplicaIdentity(resultRel, operation);
+
+			/*
+			 * For INSERT ON CONFLICT DO UPDATE, additionally check that the
+			 * target relation supports UPDATE.
+			 */
+			if (onConflictAction == ONCONFLICT_UPDATE)
+				CheckCmdReplicaIdentity(resultRel, CMD_UPDATE);
 			break;
 		case RELKIND_SEQUENCE:
 			ereport(ERROR,
@@ -1151,6 +1180,16 @@ CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
 }
 
 /*
+ * ABI-compatible wrapper to emulate old version of the above function.
+ * Do not call this version in new code.
+ */
+void
+CheckValidResultRel(ResultRelInfo *resultRelInfo, CmdType operation)
+{
+	CheckValidResultRelNew(resultRelInfo, operation, ONCONFLICT_NONE, NIL);
+}
+
+/*
  * Check that a proposed rowmark target relation is a legal target
  *
  * In most cases parser and/or planner should have noticed this already, but
@@ -1235,6 +1274,8 @@ InitResultRelInfo(ResultRelInfo *resultRelInfo,
 	resultRelInfo->ri_NumIndices = 0;
 	resultRelInfo->ri_IndexRelationDescs = NULL;
 	resultRelInfo->ri_IndexRelationInfo = NULL;
+	resultRelInfo->ri_needLockTagTuple =
+		IsInplaceUpdateRelation(resultRelationDesc);
 	/* make a copy so as not to depend on relcache info not changing... */
 	resultRelInfo->ri_TrigDesc = CopyTriggerDesc(resultRelationDesc->trigdesc);
 	if (resultRelInfo->ri_TrigDesc)
@@ -1302,10 +1343,9 @@ InitResultRelInfo(ResultRelInfo *resultRelInfo,
  *		Get a ResultRelInfo for a trigger target relation.
  *
  * Most of the time, triggers are fired on one of the result relations of the
- * query, and so we can just return a member of the es_result_relations array,
- * or the es_tuple_routing_result_relations list (if any). (Note: in self-join
- * situations there might be multiple members with the same OID; if so it
- * doesn't matter which one we pick.)
+ * query, and so we can just return a suitable one we already made and stored
+ * in the es_opened_result_relations or es_tuple_routing_result_relations
+ * Lists.
  *
  * However, it is sometimes necessary to fire triggers on other relations;
  * this happens mainly when an RI update trigger queues additional triggers
@@ -1325,11 +1365,20 @@ ExecGetTriggerResultRel(EState *estate, Oid relid,
 	Relation	rel;
 	MemoryContext oldcontext;
 
+	/*
+	 * Before creating a new ResultRelInfo, check if we've already made and
+	 * cached one for this relation.  We must ensure that the given
+	 * 'rootRelInfo' matches the one stored in the cached ResultRelInfo as
+	 * trigger handling for partitions can result in mixed requirements for
+	 * what ri_RootResultRelInfo is set to.
+	 */
+
 	/* Search through the query result relations */
 	foreach(l, estate->es_opened_result_relations)
 	{
 		rInfo = lfirst(l);
-		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid)
+		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid &&
+			rInfo->ri_RootResultRelInfo == rootRelInfo)
 			return rInfo;
 	}
 
@@ -1340,7 +1389,8 @@ ExecGetTriggerResultRel(EState *estate, Oid relid,
 	foreach(l, estate->es_tuple_routing_result_relations)
 	{
 		rInfo = (ResultRelInfo *) lfirst(l);
-		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid)
+		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid &&
+			rInfo->ri_RootResultRelInfo == rootRelInfo)
 			return rInfo;
 	}
 
@@ -1348,7 +1398,8 @@ ExecGetTriggerResultRel(EState *estate, Oid relid,
 	foreach(l, estate->es_trig_target_relations)
 	{
 		rInfo = (ResultRelInfo *) lfirst(l);
-		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid)
+		if (RelationGetRelid(rInfo->ri_RelationDesc) == relid &&
+			rInfo->ri_RootResultRelInfo == rootRelInfo)
 			return rInfo;
 	}
 	/* Nope, so we need a new one */
@@ -1616,22 +1667,19 @@ ExecCloseRangeTableRelations(EState *estate)
  *		moving in the specified direction.
  *
  *		Runs to completion if numberTuples is 0
- *
- * Note: the ctid attribute is a 'junk' attribute that is removed before the
- * user can see it
  * ----------------------------------------------------------------
  */
 static void
-ExecutePlan(EState *estate,
-			PlanState *planstate,
-			bool use_parallel_mode,
+ExecutePlan(QueryDesc *queryDesc,
 			CmdType operation,
 			bool sendTuples,
 			uint64 numberTuples,
 			ScanDirection direction,
-			DestReceiver *dest,
-			bool execute_once)
+			DestReceiver *dest)
 {
+	EState	   *estate = queryDesc->estate;
+	PlanState  *planstate = queryDesc->planstate;
+	bool		use_parallel_mode;
 	TupleTableSlot *slot;
 	uint64		current_tuple_count;
 
@@ -1646,11 +1694,17 @@ ExecutePlan(EState *estate,
 	estate->es_direction = direction;
 
 	/*
-	 * If the plan might potentially be executed multiple times, we must force
-	 * it to run without parallelism, because we might exit early.
+	 * Set up parallel mode if appropriate.
+	 *
+	 * Parallel mode only supports complete execution of a plan.  If we've
+	 * already partially executed it, or if the caller asks us to exit early,
+	 * we must force the plan to run without parallelism.
 	 */
-	if (!execute_once)
+	if (queryDesc->already_executed || numberTuples != 0)
 		use_parallel_mode = false;
+	else
+		use_parallel_mode = queryDesc->plannedstmt->parallelModeNeeded;
+	queryDesc->already_executed = true;
 
 	estate->es_use_parallel_mode = use_parallel_mode;
 	if (use_parallel_mode)
@@ -2650,12 +2704,14 @@ bool
 EvalPlanQualFetchRowMark(EPQState *epqstate, Index rti, TupleTableSlot *slot)
 {
 	ExecAuxRowMark *earm = epqstate->relsubs_rowmark[rti - 1];
-	ExecRowMark *erm = earm->rowmark;
+	ExecRowMark *erm;
 	Datum		datum;
 	bool		isNull;
 
 	Assert(earm != NULL);
 	Assert(epqstate->origslot != NULL);
+
+	erm = earm->rowmark;
 
 	if (RowMarkRequiresRowShareLock(erm->markType))
 		elog(ERROR, "EvalPlanQual doesn't support locking rowmarks");

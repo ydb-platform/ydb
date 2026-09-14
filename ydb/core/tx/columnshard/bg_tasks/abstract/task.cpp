@@ -1,4 +1,5 @@
 #include "task.h"
+
 #include <ydb/core/tx/columnshard/bg_tasks/protos/data.pb.h>
 
 namespace NKikimr::NOlap::NBackground {
@@ -25,4 +26,4 @@ NKikimr::TConclusionStatus TTask::DeserializeFromProto(const NKikimrTxBackground
     return TConclusionStatus::Success();
 }
 
-}
+}   // namespace NKikimr::NOlap::NBackground

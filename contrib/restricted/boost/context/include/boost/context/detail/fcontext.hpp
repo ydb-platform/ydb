@@ -27,14 +27,11 @@ struct transfer_t {
     void    *   data;
 };
 
-extern "C" BOOST_CONTEXT_DECL
-transfer_t BOOST_CONTEXT_CALLDECL jump_fcontext( fcontext_t const to, void * vp);
-extern "C" BOOST_CONTEXT_DECL
-fcontext_t BOOST_CONTEXT_CALLDECL make_fcontext( void * sp, std::size_t size, void (* fn)( transfer_t) );
+BOOST_CONTEXT_DECL transfer_t jump_fcontext( fcontext_t const to, void * vp);
+BOOST_CONTEXT_DECL fcontext_t make_fcontext( void * sp, std::size_t size, void (* fn)( transfer_t) );
 
 // based on an idea of Giovanni Derreta
-extern "C" BOOST_CONTEXT_DECL
-transfer_t BOOST_CONTEXT_CALLDECL ontop_fcontext( fcontext_t const to, void * vp, transfer_t (* fn)( transfer_t) );
+BOOST_CONTEXT_DECL transfer_t ontop_fcontext( fcontext_t const to, void * vp, transfer_t (* fn)( transfer_t) );
 
 }}}
 

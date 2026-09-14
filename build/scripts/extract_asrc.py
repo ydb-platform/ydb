@@ -23,6 +23,5 @@ def main():
                 tar.extractall(path=args.output)
 
 
-
 if __name__ == '__main__':
     main()

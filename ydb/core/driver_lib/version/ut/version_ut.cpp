@@ -50,11 +50,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 true
         );
@@ -63,11 +63,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Hotfix = 10 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 10 }
                 }, 
                 true
         );
@@ -76,11 +76,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 8, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 8, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 true
         );
@@ -89,11 +89,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Hotfix = 10 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 10 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 true
         );
@@ -102,11 +102,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 1, .Hotfix = 10 }
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 1, .Patch = 9, .Hotfix = 10 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 10, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 10, .Patch = 1, .Hotfix = 0 }
                 }, 
                 true
         );
@@ -115,11 +115,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 2, .Major = 1, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 2, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 false
         );
@@ -128,11 +128,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 2, .Major = 1, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 2, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 false
         );
@@ -141,11 +141,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1, .Hotfix = 0 }
                 }, 
                 false
         );
@@ -154,11 +154,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 false
         );
@@ -167,11 +167,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 true
         );
@@ -180,20 +180,33 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 0 },
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 },
                 }, 
                 false
+        );
+    }
+    Y_UNIT_TEST(DefaulPatchTag) {
+        Test(
+                TCurrentCompatibilityInfo{
+                    .Application = "ydb",
+                    .Version = TVersion{ .Year = 25, .Major = 1, .Minor = 14 }
+                }, 
+                TCurrentCompatibilityInfo{
+                    .Application = "ydb",
+                    .Version = TVersion{ .Year = 25, .Major = 1, .Minor = 15, .Patch = 1 }
+                }, 
+                true
         );
     }
     Y_UNIT_TEST(LimitOld) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 1, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 1, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
@@ -204,7 +217,7 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 2, .Hotfix = 1 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 2, .Patch = 1, .Hotfix = 1 }
                 }, 
                 false
         );
@@ -213,15 +226,15 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Hotfix = 3 },
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 3 },
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 2, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 2, .Patch = 4, .Hotfix = 0 },
                     .StoresReadableBy = {
                         TCompatibilityRule{
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 2, .Minor = 1 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 2, .Minor = 1, .Patch = 4 },
                             .Forbidden = true
                         }
                     }
@@ -233,17 +246,17 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Hotfix = 0 }
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                         }
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 1 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1, .Hotfix = 1 }
                 }, 
                 true
         );
@@ -252,16 +265,16 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 2, .Major = 4, .Minor = 1, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 2, .Major = 4, .Minor = 1, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
-                            .UpperLimit = TVersion{ .Year = 2, .Major = 4, .Minor = 1, .Hotfix = 0 }
+                            .UpperLimit = TVersion{ .Year = 2, .Major = 4, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                         }
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 1 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1, .Hotfix = 1 }
                 }, 
                 true
         );
@@ -270,17 +283,17 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
                             .LowerLimit = TVersion{ .Year = 1, .Major = 2 }, 
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Hotfix = 0 }
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                         }
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 1 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 3, .Hotfix = 1 }
                 }, 
                 false
         );
@@ -289,17 +302,17 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 },
                     .StoresReadableBy = {
                         TCompatibilityRule{
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Hotfix = 0 }
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                         }
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 1 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1, .Hotfix = 1 }
                 }, 
                 false
         );
@@ -308,15 +321,15 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 2, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 2, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 },
                     .StoresReadableBy = {
                         TCompatibilityRule{
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 }
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 }
                         }
                     }
                 }, 
@@ -327,15 +340,15 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 2, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 2, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 },
                     .StoresReadableBy = {
                         TCompatibilityRule{
-                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 }
+                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1, .Hotfix = 1 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 }
                         }
                     }
                 }, 
@@ -346,15 +359,15 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 4, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 4, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 },
                     .StoresReadableBy = {
                         TCompatibilityRule{
-                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 }
+                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 }
                         }
                     }
                 }, 
@@ -365,15 +378,15 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 5, .Minor = 1, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 5, .Minor = 1, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 },
                     .StoresReadableBy = {
                         TCompatibilityRule{
-                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 }
+                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 }
                         }
                     }
                 }, 
@@ -384,16 +397,16 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 2, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 2, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 },
                     .CanConnectTo = {
                         TCompatibilityRule{
                             .Application = "nbs",
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 },
                             .ComponentId = EComponentId::Interconnect,
                         }
                     }
@@ -406,16 +419,16 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 2, .Hotfix = 0 }
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 2, .Patch = 1, .Hotfix = 0 }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 },
                     .CanConnectTo = {
                         TCompatibilityRule{
                             .Application = "nbs",
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Hotfix = 1 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 3, .Patch = 1, .Hotfix = 1 },
                             .ComponentId = EComponentId::Interconnect,
                         }
                     }
@@ -428,19 +441,19 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                     .CanConnectTo = {
                         TCompatibilityRule{
                             .Application = "ydb",
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Hotfix = 0 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                             .ComponentId = EComponentId::Interconnect,
                         }
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 2 },
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1, .Hotfix = 2 },
                 }, 
                 true,
                 EComponentId::Interconnect
@@ -450,19 +463,19 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                     .CanConnectTo = {
                         TCompatibilityRule{
                             .Application = "ydb",
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Hotfix = 0 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                             .ComponentId = EComponentId::Interconnect,
                         }
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 2 },
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1, .Hotfix = 2 },
                 }, 
                 false
         );
@@ -471,17 +484,17 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 3, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
-                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 2 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 2 }
+                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1, .Hotfix = 2 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1, .Hotfix = 2 }
                         }
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 2 },
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1, .Hotfix = 2 },
                 }, 
                 true
         );
@@ -490,18 +503,18 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 2, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
-                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3 },
+                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1 },
                             .Forbidden = true
                         }
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Hotfix = 1 },
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1, .Hotfix = 1 },
                 }, 
                 false
         );
@@ -510,18 +523,18 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 2, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
-                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3 },
+                            .LowerLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 1, .Minor = 3, .Patch = 1 },
                             .Forbidden = true
                         }
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 4 },
+                    .Version = TVersion{ .Year = 1, .Major = 1, .Minor = 4, .Patch = 1 },
                 }, 
                 true
         );
@@ -530,22 +543,22 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Hotfix = 0 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                         },
                         TCompatibilityRule{
-                            .LowerLimit = TVersion{ .Year = 1, .Major = 2, .Minor = 3 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 2, .Minor = 3 },
+                            .LowerLimit = TVersion{ .Year = 1, .Major = 2, .Minor = 3, .Patch = 1 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 2, .Minor = 3, .Patch = 1 },
                             .Forbidden = true
                         }
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 3, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 3, .Patch = 1, .Hotfix = 0 },
                 }, 
                 false
         );
@@ -554,22 +567,22 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Hotfix = 0 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                         },
                         TCompatibilityRule{
-                            .LowerLimit = TVersion{ .Year = 1, .Major = 2, .Minor = 4 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 2, .Minor = 4 },
+                            .LowerLimit = TVersion{ .Year = 1, .Major = 2, .Minor = 4, .Patch = 1 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 2, .Minor = 4, .Patch = 1 },
                             .Forbidden = true
                         }
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 3, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 3, .Patch = 1, .Hotfix = 0 },
                 }, 
                 true
         );
@@ -578,18 +591,18 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Hotfix = 0 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                             .ComponentId = (ui32)EComponentId::Test1,
                         },
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 3, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 3, .Patch = 1, .Hotfix = 0 },
                 }, 
                 true
         );
@@ -598,18 +611,18 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
                             .LowerLimit = TVersion{ .Year = 1, .Major = 1 },
-                            .UpperLimit = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Hotfix = 0 },
+                            .UpperLimit = TVersion{ .Year = 1, .Major = 4, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                             .ComponentId = (ui32)EComponentId::Test2,
                         },
                     }
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 3, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 1, .Major = 2, .Minor = 3, .Patch = 1, .Hotfix = 0 },
                 }, 
                 false
         );
@@ -619,11 +632,11 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "nbs",
-                    .Version = TVersion{ .Year = 23, .Major = 3, .Minor = 2, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 23, .Major = 3, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 24, .Major = 2, .Minor = 3, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 24, .Major = 2, .Minor = 3, .Patch = 1, .Hotfix = 0 },
                     .CanConnectTo = {
                         TCompatibilityRule{
                             .Application = "nbs",
@@ -642,7 +655,7 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         Test(
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 24, .Major = 3, .Minor = 1, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 24, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
                             .Application = "nbs",
@@ -660,7 +673,7 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 24, .Major = 2, .Minor = 3, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 24, .Major = 2, .Minor = 3, .Patch = 1, .Hotfix = 0 },
                     .CanLoadFrom = {
                         TCompatibilityRule{
                             .Application = "nbs",
@@ -680,6 +693,69 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         );
     }
 
+    Y_UNIT_TEST(WithPatchAndWithoutPatch) {
+        Test(
+                TCurrentCompatibilityInfo{
+                    .Application = "ydb",
+                    .Version = TVersion{ .Year = 25, .Major = 1, .Minor = 1, .Patch = 1, .Hotfix = 0 },
+                },
+                TCurrentCompatibilityInfo{
+                    .Application = "ydb",
+                    .Version = TVersion{ .Year = 24, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 },
+                },
+                false
+        );
+    }
+
+    Y_UNIT_TEST(AcceptSpecificHotfixWithoutPatch) {
+        Test(
+                TCurrentCompatibilityInfo{
+                    .Application = "ydb",
+                    .Version = TVersion{ .Year = 25, .Major = 1, .Minor = 7, .Patch = 1, .Hotfix = 0 },
+                    .CanLoadFrom = {
+                        TCompatibilityRule{
+                            .LowerLimit = TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 3 },
+                            .UpperLimit = TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 3 },
+                        },
+                    },
+                    .StoresReadableBy = {
+                        TCompatibilityRule{
+                            .LowerLimit = TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 3 },
+                            .UpperLimit = TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 3 },
+                        },
+                    }
+                },
+                TCurrentCompatibilityInfo{
+                    .Application = "ydb",
+                    .Version = TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 3 },
+                },
+                true
+        );
+        Test(
+            TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TVersion{ .Year = 25, .Major = 1, .Minor = 7, .Patch = 1, .Hotfix = 0 },
+                .CanLoadFrom = {
+                    TCompatibilityRule{
+                        .LowerLimit = TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 3 },
+                        .UpperLimit = TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 3 },
+                    },
+                },
+                .StoresReadableBy = {
+                    TCompatibilityRule{
+                        .LowerLimit = TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 3 },
+                        .UpperLimit = TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 3 },
+                    },
+                }
+            },
+            TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TVersion{ .Year = 24, .Major = 4, .Minor = 1, .Hotfix = 2 },
+            },
+            false
+        );
+    }
+
     Y_UNIT_TEST(TrunkYDBAndNbs) {
         Test(
                 TCurrentCompatibilityInfo{
@@ -692,6 +768,7 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 EComponentId::Interconnect
         );
     }
+
     Y_UNIT_TEST(TrunkAndStable) {
         Test(
                 TCurrentCompatibilityInfo{
@@ -699,7 +776,7 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
                 }, 
                 TCurrentCompatibilityInfo{
                     .Application = "ydb",
-                    .Version = TVersion{ .Year = 24, .Major = 3, .Minor = 1, .Hotfix = 0 },
+                    .Version = TVersion{ .Year = 24, .Major = 3, .Minor = 1, .Patch = 1, .Hotfix = 0 },
                 }, 
                 false
         );
@@ -760,11 +837,21 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         );
     }
 
+    Y_UNIT_TEST(PrintStableWithPatch) {
+        PrintCompatibilityInfo(
+            TCurrentCompatibilityInfo{
+                .Application = "ydb",
+                .Version = TVersion{ .Year = 25, .Major = 1, .Minor = 4, .Patch = 1, .Hotfix = 4 },
+            }.ToPB(),
+            EPrintAs::HumanReadable
+        );
+    }
+
     Y_UNIT_TEST(PrintYdbAndNbs) {
         PrintCompatibilityInfo(
             TCurrentCompatibilityInfo{
                 .Application = "ydb",
-                .Version = TVersion{ .Year = 24, .Major = 2, .Minor = 2, .Hotfix = 0 },
+                .Version = TVersion{ .Year = 24, .Major = 2, .Minor = 2, .Patch = 1, .Hotfix = 0 },
                 .CanConnectTo = {
                     TCompatibilityRule{
                         .Application = "nbs",
@@ -782,12 +869,12 @@ Y_UNIT_TEST_SUITE(YdbVersion) {
         PrintCompatibilityInfo(
             TCurrentCompatibilityInfo{
                 .Application = "ydb",
-                .Version = TVersion{ .Year = 23, .Major = 4, .Minor = 5, .Hotfix = 1 },
+                .Version = TVersion{ .Year = 23, .Major = 4, .Minor = 5, .Patch = 1, .Hotfix = 1 },
                 .StoresReadableBy = {
                     TCompatibilityRule{
                         .Application = "ydb",
-                        .LowerLimit = TVersion{ .Year = 23, .Major = 4, .Minor = 5, .Hotfix = 0 },
-                        .UpperLimit = TVersion{ .Year = 23, .Major = 4, .Minor = 5, .Hotfix = 0 },
+                        .LowerLimit = TVersion{ .Year = 23, .Major = 4, .Minor = 5, .Patch = 1, .Hotfix = 0 },
+                        .UpperLimit = TVersion{ .Year = 23, .Major = 4, .Minor = 5, .Patch = 1, .Hotfix = 0 },
                         .ComponentId = EComponentId::PDisk,
                         .Forbidden = true,
                     },

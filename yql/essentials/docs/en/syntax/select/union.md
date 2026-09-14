@@ -6,7 +6,7 @@ Union of the results of the underlying queries, with duplicates removed.
 Behavior is identical to using `UNION ALL` followed by `SELECT DISTINCT *`.
 Refer to [UNION ALL](#union-all) for more details.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT key FROM T1
@@ -19,7 +19,7 @@ SELECT key FROM T2 -- returns the set of distinct keys in the tables
 
 Concatenating results of multiple `SELECT` statements (or subqueries).
 
-Two `UNION ALL` modes are supported: by column names (the default mode) and by column positions (corresponds to the ANSI SQL standard and is enabled by the [PRAGMA](../pragma.md#positionalunionall)).
+Two `UNION ALL` modes are supported: by column names (the default mode) and by column positions (corresponds to the ANSI SQL standard and is enabled by the [PRAGMA](../pragma/global.md#positionalunionall)).
 
 In the "by name" mode, the output of the resulting data schema uses the following rules:
 
@@ -41,7 +41,7 @@ In the "by position" mode, the output of the resulting data schema uses the foll
 
 The order of the output columns in this mode is the same as the order of columns in the first input.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT 1 AS x

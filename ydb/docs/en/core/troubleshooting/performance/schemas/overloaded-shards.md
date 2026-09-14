@@ -29,7 +29,7 @@ Consider the following solutions to address shard overload:
 
     {% note tip %}
 
-    A table is not partitioned by load, if you see the `Partitioning by load: false` line on the **Diagnostics > Info** tab in the **Embedded UI** or the  `ydb scheme describe` command output.
+    A table is not partitioned by load, if you see the `Partitioning by load: false` line on the **Diagnostics > Info** tab in the **{{ ydb-ui-name }}** or the  `ydb scheme describe` command output.
 
     {% endnote %}
 
@@ -37,7 +37,7 @@ Consider the following solutions to address shard overload:
 
     {% note tip %}
 
-    To determine the number of partitions in the table, see the `PartCount` value on the **Diagnostics > Info** tab in the **Embedded UI**.
+    To determine the number of partitions in the table, see the `PartCount` value on the **Diagnostics > Info** tab in the **{{ ydb-ui-name }}**.
 
     {% endnote %}
 
@@ -54,4 +54,8 @@ Consider modifying the primary key to distribute the load evenly across table pa
 Also, consider changing your application logic for generating primary key values for new rows. For example, use hashes of values instead of values themselves.
 
 {% endnote %}
+
+## Example
+
+For a practical demonstration of how to follow these instructions, see [{#T}](../../examples/schemas/overloaded-shard-simple-case.md).
 

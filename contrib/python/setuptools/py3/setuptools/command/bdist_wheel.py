@@ -23,17 +23,12 @@ from packaging import tags, version as _packaging_version
 from wheel.wheelfile import WheelFile
 
 from .. import Command, __version__, _shutil
+from .._core_metadata import _safe_license_file
+from .._normalization import safer_name
 from ..warnings import SetuptoolsDeprecationWarning
 from .egg_info import egg_info as egg_info_cls
 
 from distutils import log
-
-
-def safe_name(name: str) -> str:
-    """Convert an arbitrary string to a standard distribution name
-    Any runs of non-alphanumeric/. characters are replaced with a single '-'.
-    """
-    return re.sub("[^A-Za-z0-9.]+", "-", name)
 
 
 def safe_version(version: str) -> str:
@@ -131,10 +126,6 @@ def get_abi_tag() -> str | None:
         abi = None
 
     return abi
-
-
-def safer_name(name: str) -> str:
-    return safe_name(name).replace("-", "_")
 
 
 def safer_version(version: str) -> str:
@@ -294,7 +285,7 @@ class bdist_wheel(Command):
             raise ValueError(
                 f"`py_limited_api={self.py_limited_api!r}` not supported. "
                 "`Py_LIMITED_API` is currently incompatible with "
-                f"`Py_GIL_DISABLED` ({sys.abiflags=!r}). "
+                "`Py_GIL_DISABLED`. "
                 "See https://github.com/python/cpython/issues/111506."
             )
 
@@ -458,8 +449,7 @@ class bdist_wheel(Command):
 
         if not self.keep_temp:
             log.info(f"removing {self.bdist_dir}")
-            if not self.dry_run:
-                _shutil.rmtree(self.bdist_dir)
+            _shutil.rmtree(self.bdist_dir)
 
     def write_wheelfile(
         self, wheelfile_base: str, generator: str = f"setuptools ({__version__})"
@@ -590,9 +580,12 @@ class bdist_wheel(Command):
         metadata_path = os.path.join(distinfo_path, "METADATA")
         shutil.copy(pkginfo_path, metadata_path)
 
+        licenses_folder_path = os.path.join(distinfo_path, "licenses")
         for license_path in self.license_paths:
-            filename = os.path.basename(license_path)
-            shutil.copy(license_path, os.path.join(distinfo_path, filename))
+            safe_path = _safe_license_file(license_path)
+            dist_info_license_path = os.path.join(licenses_folder_path, safe_path)
+            os.makedirs(os.path.dirname(dist_info_license_path), exist_ok=True)
+            shutil.copy(license_path, dist_info_license_path)
 
         adios(egginfo_path)
 

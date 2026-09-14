@@ -6,11 +6,11 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, SolomonLogger, "Solomon");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, SolomonLogger, "Solomon");
 
 inline const int DefaultProducerCollectionBatchSize = 100;
 
-inline static const TString IsSolomonPullHeaderName = "X-YT-IsSolomonPull";
+inline static const std::string IsSolomonPullHeaderName = "X-YT-IsSolomonPull";
 
 ////////////////////////////////////////////////////////////////////////////////
 

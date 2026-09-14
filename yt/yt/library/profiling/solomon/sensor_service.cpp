@@ -12,14 +12,19 @@
 #include <yt/yt/core/ytree/virtual.h>
 #include <yt/yt/core/ytree/ypath_client.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 namespace NYT::NProfiling {
 
 using namespace NConcurrency;
 using namespace NYTree;
 
+using NYT::ToProto;
+using NYT::FromProto;
+
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = SolomonLogger;
+constinit const auto Logger = SolomonLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -82,15 +87,15 @@ private:
     void GetSelf(TReqGet* request, TRspGet* response, const TCtxGetPtr& context) override
     {
         auto options = ParseGetSensorOptions(request);
-        YT_LOG_DEBUG("Received sensor value request (RequestId: %v, Name: %v, Tags: %v, ReadAllProjections: %v, ExportSummaryAsMax: %v)",
-            context->GetRequestId(),
-            options.Name,
-            options.TagMap,
-            options.ReadAllProjections,
-            options.ExportSummaryAsMax);
+        YT_TLOG_DEBUG("Received sensor value request")
+            .With("RequestId", context->GetRequestId())
+            .With("Name", options.Name)
+            .With("Tags", options.TagMap)
+            .With("ReadAllProjections", options.ReadAllProjections)
+            .With("ExportSummaryAsMax", options.ExportSummaryAsMax);
 
         if (!options.Name) {
-            response->set_value(BuildYsonStringFluently().Entity().ToString());
+            response->set_value(ToProto(BuildYsonStringFluently().Entity()));
             context->Reply();
             return;
         }
@@ -136,10 +141,14 @@ public:
         , Exporter_(std::move(exporter))
         , RootSensorServiceImpl_(New<TSensorServiceImpl>(/*name*/ std::string(), Registry_.Get(), &Exporter_->Lock_))
         , Root_(GetEphemeralNodeFactory(/*shouldHideAttributes*/ true)->CreateMap())
+        , RootService_(Root_->Via(GetInvoker()))
         , SensorTreeUpdateDuration_(Registry_->GetSelfProfiler().Timer("/sensor_service_tree_update_duration"))
+    { }
+
+    void InitializeRefCounted()
     {
         UpdateSensorTreeExecutor_ = New<TPeriodicExecutor>(
-            Exporter_->ControlQueue_->GetInvoker(),
+            GetInvoker(),
             BIND(&TSensorService::UpdateSensorTree, MakeWeak(this)),
             Config_->UpdateSensorServiceTreePeriod);
         UpdateSensorTreeExecutor_->Start();
@@ -151,15 +160,21 @@ private:
     const TSolomonExporterPtr Exporter_;
     const TSensorServiceImplPtr RootSensorServiceImpl_;
     const IMapNodePtr Root_;
+    const IYPathServicePtr RootService_;
 
     THashMap<std::string, TSensorServiceImplPtr> NameToSensorServiceImpl_;
 
     TEventTimer SensorTreeUpdateDuration_;
     TPeriodicExecutorPtr UpdateSensorTreeExecutor_;
 
+    IInvokerPtr GetInvoker()
+    {
+        return Exporter_->ControlQueue_->GetInvoker();
+    }
+
     void UpdateSensorTree()
     {
-        YT_LOG_DEBUG("Updating sensor service tree");
+        YT_TLOG_DEBUG("Updating sensor service tree");
 
         TWallTimer timer;
 
@@ -177,12 +192,15 @@ private:
             EmplaceOrCrash(NameToSensorServiceImpl_, name, sensorServiceImpl);
 
             auto node = CreateVirtualNode(std::move(sensorServiceImpl));
+            auto path = TYPath("/" + name);
+
             try {
-                auto path = TYPath("/" + name);
                 ForceYPath(Root_, path);
                 SetNodeByYPath(Root_, path, node);
             } catch (const std::exception& ex) {
-                YT_LOG_DEBUG(ex, "Failed to add new sensor to the sensor service tree (Name: %v)", name);
+                YT_TLOG_DEBUG("Failed to add new sensor to the sensor service tree")
+                    .With("Name", name)
+                    .With(ex);
 
                 // Ignore sensors with weird names.
                 ++malformedSensorCount;
@@ -195,13 +213,11 @@ private:
         auto elapsed = timer.GetElapsedTime();
         SensorTreeUpdateDuration_.Record(elapsed);
 
-        YT_LOG_DEBUG(
-            "Finished updating sensor service tree "
-            "(TotalSensorCount: %v, AddedSensorCount: %v, MalformedSensorCount: %v, Elapsed: %v)",
-            sensors.size(),
-            addedSensorCount,
-            malformedSensorCount,
-            elapsed);
+        YT_TLOG_DEBUG("Finished updating sensor service tree")
+            .With("TotalSensorCount", sensors.size())
+            .With("AddedSensorCount", addedSensorCount)
+            .With("MalformedSensorCount", malformedSensorCount)
+            .With("Elapsed", elapsed);
     }
 
     IYPathService::TResolveResult ResolveSelf(
@@ -218,7 +234,7 @@ private:
         const TYPath& path,
         const IYPathServiceContextPtr& /*context*/) override
     {
-        return TResolveResultThere{Root_, "/" + path};
+        return TResolveResultThere{RootService_, "/" + path};
     }
 
     bool DoInvoke(const IYPathServiceContextPtr& context) override
@@ -232,15 +248,15 @@ private:
         auto guard = WaitFor(TAsyncLockReaderGuard::Acquire(&Exporter_->Lock_))
             .ValueOrThrow();
 
-        auto attributeKeys = NYT::FromProto<THashSet<std::string>>(request->attributes().keys());
+        auto attributeKeys = FromProto<THashSet<std::string>>(request->attributes().keys());
         context->SetRequestInfo("AttributeKeys: %v", attributeKeys);
 
         response->set_value(BuildYsonStringFluently()
             .DoListFor(Registry_->ListSensors(), [&] (TFluentList fluent, const TSensorInfo& sensorInfo) {
                 if (!sensorInfo.Error.IsOK()) {
                     THROW_ERROR_EXCEPTION("Broken sensor")
-                        << TErrorAttribute("name", sensorInfo.Name)
-                        << sensorInfo.Error;
+                        .With("name", sensorInfo.Name)
+                        .With(sensorInfo.Error);
                 }
 
                 fluent

@@ -7,8 +7,8 @@
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -43,9 +43,8 @@ struct TEvPqNewMetaCache {
         EvGetVersionRequest,
         EvGetVersionResponse,
         EvDescribeTopicsRequest,
+        EvDescribeTopicsByNameRequest,
         EvDescribeTopicsResponse,
-        EvDescribeAllTopicsRequest,
-        EvDescribeAllTopicsResponse,
         EvGetNodesMappingRequest,
         EvGetNodesMappingResponse,
         EvEnd
@@ -77,9 +76,22 @@ struct TEvPqNewMetaCache {
         explicit TEvDescribeTopicsRequest(const TVector<NPersQueue::TDiscoveryConverterPtr>& topics,
                                           bool syncVersion = true, bool showPrivate = false)
             : Topics(topics)
-                , SyncVersion(syncVersion)
-                , ShowPrivate(showPrivate)
+            , SyncVersion(syncVersion)
+            , ShowPrivate(showPrivate)
         {}
+    };
+
+    struct TEvDescribeTopicsByNameRequest: public TEventLocal<TEvDescribeTopicsByNameRequest, EvDescribeTopicsByNameRequest> {
+        TVector<TString> Topics;
+        bool SyncVersion;
+
+        TEvDescribeTopicsByNameRequest() = default;
+
+        explicit TEvDescribeTopicsByNameRequest(const TVector<TString>& topics, bool syncVersion = true)
+            : Topics(topics)
+            , SyncVersion(syncVersion)
+        {
+        }
     };
 
     struct TEvDescribeTopicsResponse : public TEventLocal<TEvDescribeTopicsResponse, EvDescribeTopicsResponse> {
@@ -93,25 +105,6 @@ struct TEvPqNewMetaCache {
         {}
     };
 
-    struct TEvDescribeAllTopicsRequest : public TEventLocal<TEvDescribeAllTopicsRequest, EvDescribeAllTopicsRequest> {
-        TEvDescribeAllTopicsRequest() = default;
-    };
-
-    struct TEvDescribeAllTopicsResponse : public TEventLocal<TEvDescribeAllTopicsResponse, EvDescribeAllTopicsResponse> {
-        bool Success = true;
-        TString Path;
-        TVector<NPersQueue::TTopicConverterPtr> Topics;
-        std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> Result;
-
-        explicit TEvDescribeAllTopicsResponse() {}
-
-        TEvDescribeAllTopicsResponse(const TString& path, TVector<NPersQueue::TTopicConverterPtr>&& topics,
-                                     const std::shared_ptr<NSchemeCache::TSchemeCacheNavigate>& result)
-            : Path(path)
-            , Topics(std::move(topics))
-            , Result(result)
-        {}
-    };
 
     struct TEvGetNodesMappingRequest : public TEventLocal<TEvGetNodesMappingRequest, EvGetNodesMappingRequest> {
     };
@@ -128,11 +121,9 @@ struct TEvPqNewMetaCache {
     };
 
 };
-IActor* CreatePQMetaCache(const ::NMonitoring::TDynamicCounterPtr& counters,
-                          const TDuration& versionCheckInterval = TDuration::Seconds(1));
+IActor* CreatePQMetaCache(const ::NMonitoring::TDynamicCounterPtr& counters);
 
-IActor* CreatePQMetaCache(const NActors::TActorId& schemeBoardCacheId,
-                          const TDuration& versionCheckInterval = TDuration::Seconds(1));
+IActor* CreatePQMetaCache(const NActors::TActorId& schemeBoardCacheId);
 
 
 } // namespace NPqMetaCacheV2

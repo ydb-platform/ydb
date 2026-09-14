@@ -7,7 +7,7 @@ NO_UTIL()
 EXPORT_ALL_DYNAMIC_SYMBOLS()
 
 DYNAMIC_LIBRARY_FROM(
-    contrib/libs/clang${CLANG_VER}-rt/lib/lsan
+    contrib/libs/clang${COMPILER_VERSION}-rt/lib/lsan
 )
 
 END()

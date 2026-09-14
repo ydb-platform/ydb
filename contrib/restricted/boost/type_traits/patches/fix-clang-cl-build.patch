@@ -1,0 +1,11 @@
+--- contrib/restricted/boost/type_traits/include/boost/type_traits/type_with_alignment.hpp	(index)
++++ contrib/restricted/boost/type_traits/include/boost/type_traits/type_with_alignment.hpp	(working tree)
+@@ -83,7 +83,7 @@ struct type_with_alignment
+    typedef typename boost::detail::char_alignment<Align, boost::alignment_of<char>::value >= Align>::type type;
+ };
+ 
+-#if (defined(__GNUC__) || (defined (__SUNPRO_CC) &&  (__SUNPRO_CC >= 0x5130)) || defined(__clang__)) && !defined(BOOST_TT_DISABLE_INTRINSICS)
++#if (defined(__GNUC__) || (defined (__SUNPRO_CC) &&  (__SUNPRO_CC >= 0x5130)) || defined(__clang__)) && !defined(BOOST_TT_DISABLE_INTRINSICS) && !defined(_MSC_VER)
+ namespace tt_align_ns {
+ struct __attribute__((__aligned__(2))) a2 {};
+ struct __attribute__((__aligned__(4))) a4 {};

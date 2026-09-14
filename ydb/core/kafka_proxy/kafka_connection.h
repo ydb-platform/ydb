@@ -13,6 +13,6 @@ NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
                                        TIntrusivePtr<TSocketDescriptor> socket,
                                        TNetworkConfig::TSocketAddressType address,
                                        const NKikimrConfig::TKafkaProxyConfig& config,
-                                       const TActorId& discoveryCacheActorId);
+                                       std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds);
 
 } // namespace NKafka

@@ -24,7 +24,7 @@ protected:
         return std::get<1>(GetParam());
     }
 
-    void TestCase(const std::vector<TString>& pieces)
+    void TestCase(const std::vector<std::string>& pieces)
     {
         std::vector<TSharedRef> refs;
         size_t length = 0;
@@ -59,12 +59,12 @@ TEST_P(TCodecTest, HelloWorld)
 
 TEST_P(TCodecTest, 64KB)
 {
-    TestCase({TString(64 * 1024, 'a')});
+    TestCase({std::string(64 * 1024, 'a')});
 }
 
 TEST_P(TCodecTest, 1MB)
 {
-    TestCase({TString(1 * 1024 * 1024, 'a')});
+    TestCase({std::string(1 * 1024 * 1024, 'a')});
 }
 
 TEST_P(TCodecTest, VectorHelloWorld)
@@ -72,8 +72,8 @@ TEST_P(TCodecTest, VectorHelloWorld)
     TestCase({
         "", "", "hello",
         "", "", "world",
-        "", "", TString(10000, 'a'),
-        "", "", TString(10000, 'b'),
+        "", "", std::string(10000, 'a'),
+        "", "", std::string(10000, 'b'),
         "", ""});
 }
 
@@ -84,13 +84,13 @@ TEST_P(TCodecTest, VectorEmptyRefs)
 
 TEST_P(TCodecTest, VectorSingleCharacters)
 {
-    std::vector<TString> input(1000, "a");
+    std::vector<std::string> input(1000, "a");
     TestCase(input);
 }
 
 TEST_P(TCodecTest, VectorExpBuffers)
 {
-    std::vector<TString> input;
+    std::vector<std::string> input;
     for (int i = 0; i < 15; ++i) {
         input.emplace_back(1 << i, 'a' + i);
     }

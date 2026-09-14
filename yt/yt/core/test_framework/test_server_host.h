@@ -25,7 +25,7 @@ public:
     void TearDown();
 
     TTestNodeMemoryTrackerPtr GetMemoryUsageTracker() const;
-    TString GetAddress() const;
+    std::string GetAddress() const;
     std::vector<NRpc::IServicePtr> GetServices() const;
     NRpc::IServerPtr GetServer() const;
 

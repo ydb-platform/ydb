@@ -125,7 +125,7 @@ TBitPackedUnsignedVectorReader<T, Scan>::TBitPackedUnsignedVectorReader()
 { }
 
 template <class T, bool Scan>
-inline T TBitPackedUnsignedVectorReader<T, Scan>::operator[] (size_t index) const
+inline T TBitPackedUnsignedVectorReader<T, Scan>::operator[](size_t index) const
 {
     YT_ASSERT(index < Size_);
     if (Scan) {

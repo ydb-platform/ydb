@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk.h"
+#include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_logreader_base.h"
 #include "blobstorage_pdisk_tools.h"
 
@@ -24,7 +25,7 @@ enum class EInitPhase {
 
 enum EOwner {
     OwnerSystem = 0, // Chunk0, SysLog chunks and CommonLog + just common log tracking, means "for dynamic" in requests
-    OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands
+    OwnerUnallocated = 1, // Unallocated chunks, Trim scheduling, Slay commands, common log records owned by OwnerUnallocated = padding
     OwnerBeginUser = 2,
     OwnerEndUser = 241,
     OwnerMetadata = 250, // Metadata chunks, the real owner
@@ -94,6 +95,7 @@ struct TOwnerData {
     NMetrics::TDecayingAverageValue<ui64, NMetrics::DurationPerMinute, NMetrics::DurationPerSecond> ReadThroughput;
     NMetrics::TDecayingAverageValue<ui64, NMetrics::DurationPerMinute, NMetrics::DurationPerSecond> WriteThroughput;
     ui32 VDiskSlotId = 0;
+    ui32 GroupSizeInUnits = 0;
 
     TIntrusivePtr<TLogReaderBase> LogReader;
     TIntrusivePtr<TOwnerInflight> InFlight;
@@ -109,10 +111,7 @@ struct TOwnerData {
     {}
 
     bool IsStaticGroupOwner() const {
-        if (VDiskId == TVDiskID::InvalidId) {
-            return false;
-        }
-        return TGroupID(VDiskId.GroupID).ConfigurationType() == EGroupConfigurationType::Static;
+        return IsStaticGroupVDisk(VDiskId);
     }
 
     bool IsNextLsnOk(const ui64 lsn) const {
@@ -211,6 +210,7 @@ struct TOwnerData {
             str << " HasReadTheWholeLog";
         }
         str << " VDiskSlotId# " << VDiskSlotId;
+        str << " SizeInUnits# " << GroupSizeInUnits;
         if (InFlight) {
             str << " Inflight {";
             str << " ChunkWrites# " << InFlight->ChunkWrites.load();
@@ -244,6 +244,7 @@ struct TOwnerData {
         ReadThroughput = NMetrics::TDecayingAverageValue<ui64, NMetrics::DurationPerMinute, NMetrics::DurationPerSecond>();
         WriteThroughput = NMetrics::TDecayingAverageValue<ui64, NMetrics::DurationPerMinute, NMetrics::DurationPerSecond>();
         VDiskSlotId = 0;
+        GroupSizeInUnits = 0;
 
         if (!quarantine) {
             LogReader.Reset();
@@ -279,8 +280,9 @@ struct TChunkState {
     std::atomic<i64> OperationsInProgress;
     TOwner OwnerId;
     ECommitState CommitState;
+    std::atomic<bool> IsDirty;
     ui64 CommitsInProgress;
-
+    ui64 ShredGeneration;
     TChunkState()
         : Nonce(0)
         , CurrentNonce(0)
@@ -288,7 +290,9 @@ struct TChunkState {
         , OperationsInProgress(0)
         , OwnerId(OwnerUnallocated)
         , CommitState(FREE)
+        , IsDirty(false)
         , CommitsInProgress(0)
+        , ShredGeneration(0)
     {}
 
     bool HasAnyOperationsInProgress() const {
@@ -308,7 +312,9 @@ struct TChunkState {
         OUT_VAR(OperationsInProgress.load());
         OUT_VAR(OwnerId);
         OUT_VAR(CommitState);
+        OUT_VAR(IsDirty.load());
         OUT_VAR(CommitsInProgress);
+        OUT_VAR(ShredGeneration);
         str << "}";
         return str.Str();
     }

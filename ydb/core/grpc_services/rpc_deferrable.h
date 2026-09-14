@@ -13,7 +13,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 
@@ -83,7 +83,7 @@ public:
         }
 
         auto selfId = ctx.SelfID;
-        auto* actorSystem = ctx.ExecutorThread.ActorSystem;
+        auto* actorSystem = ctx.ActorSystem();
         auto clientLostCb = [selfId, actorSystem]() {
             actorSystem->Send(selfId, new TRpcServices::TEvForgetOperation());
         };
@@ -149,7 +149,11 @@ public:
         : TBase(request)
         , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
                 "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END)
-    {}
+    {
+        if (Span_ && AppData()) {
+            Span_.Attribute("database", AppData()->TenantName);
+        }
+    }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::DEFERRABLE_RPC;
@@ -185,7 +189,7 @@ protected:
                 NYql::TIssues issues;
                 issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                     TStringBuilder() << "Unexpected event received in TRpcOperationRequestActor::StateWork: "
-                        << ev->GetTypeRewrite()));
+                        << ev->GetTypeRewrite() << " event=" << ev->GetTypeName()));
                 return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, TActivationContext::AsActorContext());
             }
         }
@@ -205,11 +209,29 @@ protected:
         this->Die(ctx);
     }
 
+    void Reply(Ydb::StatusIds::StatusCode status,
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message)
+    {
+        NYql::TIssues issues;
+        IssuesFromMessage(message, issues);
+        Request_->RaiseIssues(issues);
+        Request_->ReplyWithYdbStatus(status);
+        NWilson::EndSpanWithStatus(Span_, status);
+        this->Die(TActivationContext::AsActorContext());
+    }
+
     void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TActorContext& ctx) {
         Request_->RaiseIssues(issues);
         Request_->ReplyWithYdbStatus(status);
         NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
+        Request_->RaiseIssues(issues);
+        Request_->ReplyWithYdbStatus(status);
+        NWilson::EndSpanWithStatus(Span_, status);
+        this->Die(TActivationContext::AsActorContext());
     }
 
     void Reply(Ydb::StatusIds::StatusCode status, const TString& message, NKikimrIssues::TIssuesIds::EIssueCode issueCode, const TActorContext& ctx) {
@@ -218,10 +240,22 @@ protected:
         Reply(status, issues, ctx);
     }
 
+    void Reply(Ydb::StatusIds::StatusCode status, const TString& message, NKikimrIssues::TIssuesIds::EIssueCode issueCode) {
+        NYql::TIssues issues;
+        issues.AddIssue(MakeIssue(issueCode, message));
+        Reply(status, issues);
+    }
+
     void Reply(Ydb::StatusIds::StatusCode status, const TActorContext& ctx) {
         Request_->ReplyWithYdbStatus(status);
         NWilson::EndSpanWithStatus(Span_, status);
         this->Die(ctx);
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode status) {
+        Request_->ReplyWithYdbStatus(status);
+        NWilson::EndSpanWithStatus(Span_, status);
+        this->Die(TActivationContext::AsActorContext());
     }
 
     template<typename TResult>

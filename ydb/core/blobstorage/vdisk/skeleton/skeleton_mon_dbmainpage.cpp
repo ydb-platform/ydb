@@ -136,7 +136,7 @@ namespace NKikimr {
         }
 
         void Finish(const TActorContext &ctx, IEventBase *ev) {
-            ctx.Send(NotifyId, new TEvents::TEvActorDied);
+            ctx.Send(NotifyId, new TEvents::TEvGone);
             ctx.Send(Ev->Sender, ev);
             Die(ctx);
         }

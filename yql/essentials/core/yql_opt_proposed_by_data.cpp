@@ -1,5 +1,7 @@
 #include "yql_opt_proposed_by_data.h"
 
+#include <utility>
+
 namespace NYql {
 
 namespace {
@@ -11,87 +13,91 @@ enum class ESource {
 };
 
 template <ESource Source, typename TGetTransformer, typename TFinish>
-class TDataProposalsInspector : public TGraphTransformerBase {
+class TDataProposalsInspector: public TGraphTransformerBase {
 public:
     TDataProposalsInspector(const TTypeAnnotationContext& types, TGetTransformer getTransformer,
-        TFinish finish)
-        : Types(types)
-        , GetTransformer(getTransformer)
-        , Finish(finish)
-    {}
+                            TFinish finish)
+        : Types_(types)
+        , GetTransformer_(getTransformer)
+        , Finish_(finish)
+    {
+    }
 
 private:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        HasRepeats = false;
+        HasRepeats_ = false;
         if (Source == ESource::DataSource || Source == ESource::All) {
-            for (auto& x : Types.DataSources) {
+            for (auto& x : Types_.DataSources) {
                 auto s = HandleProvider(x.Get(), input, output, ctx);
-                if (s.Level == TStatus::Error) return s;
-                HasRepeats = HasRepeats || s == TStatus::Repeat;
+                if (s.Level == TStatus::Error) {
+                    return s;
+                }
+                HasRepeats_ = HasRepeats_ || s == TStatus::Repeat;
 
-                if (!NewRoots.empty()) {
+                if (!NewRoots_.empty()) {
                     break;
                 }
             }
         }
 
         if (Source == ESource::DataSink || Source == ESource::All) {
-            for (auto& x : Types.DataSinks) {
+            for (auto& x : Types_.DataSinks) {
                 auto s = HandleProvider(x.Get(), input, output, ctx);
-                if (s.Level == TStatus::Error) return s;
-                HasRepeats = HasRepeats || s == TStatus::Repeat;
+                if (s.Level == TStatus::Error) {
+                    return s;
+                }
+                HasRepeats_ = HasRepeats_ || s == TStatus::Repeat;
 
-                if (!NewRoots.empty()) {
+                if (!NewRoots_.empty()) {
                     break;
                 }
             }
         }
 
-        if (!PendingProviders.empty()) {
+        if (!PendingProviders_.empty()) {
             return TStatus::Async;
         }
 
-        if (NewRoots.empty()) {
-            if (HasRepeats) {
+        if (NewRoots_.empty()) {
+            if (HasRepeats_) {
                 return TStatus::Repeat;
             }
 
-            Finish(ctx);
+            Finish_(ctx);
             return TStatus::Ok;
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void Rewind() final {
         if (Source == ESource::DataSource || Source == ESource::All) {
-            for (auto& x : Types.DataSources) {
-                GetTransformer(x.Get()).Rewind();
+            for (auto& x : Types_.DataSources) {
+                GetTransformer_(x.Get()).Rewind();
             }
         }
 
         if (Source == ESource::DataSink || Source == ESource::All) {
-            for (auto& x : Types.DataSinks) {
-                GetTransformer(x.Get()).Rewind();
+            for (auto& x : Types_.DataSinks) {
+                GetTransformer_(x.Get()).Rewind();
             }
         }
-        PendingProviders.clear();
-        HasRepeats = false;
-        NewRoots.clear();
+        PendingProviders_.clear();
+        HasRepeats_ = false;
+        NewRoots_.clear();
     }
 
     TStatus HandleProvider(IDataProvider* provider, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         TExprNode::TPtr newRoot;
-        TStatus status = GetTransformer(provider).Transform(input, newRoot, ctx);
-
+        TStatus status = GetTransformer_(provider).Transform(input, newRoot, ctx);
 
         if (status.Level == TStatus::Ok || status.Level == TStatus::Repeat) {
             if (newRoot && newRoot != input) {
-                NewRoots.push_back(newRoot);
+                NewRoots_.push_back(newRoot);
             }
         } else if (status.Level == TStatus::Async) {
-            PendingProviders.push_back(provider);
+            PendingProviders_.push_back(provider);
             if (newRoot && newRoot != input) {
                 output = newRoot;
             }
@@ -102,131 +108,135 @@ private:
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
         TVector<NThreading::TFuture<void>> futures;
-        for (auto& x : PendingProviders) {
-            futures.push_back(GetTransformer(x).GetAsyncFuture(input));
+        for (auto& x : PendingProviders_) {
+            futures.push_back(GetTransformer_(x).GetAsyncFuture(input));
         }
 
         return WaitExceptionOrAll(futures);
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        for (auto& x : PendingProviders) {
+        for (auto& x : PendingProviders_) {
             TExprNode::TPtr newRoot;
-            TStatus status = GetTransformer(x).ApplyAsyncChanges(input, newRoot, ctx);
+            TStatus status = GetTransformer_(x).ApplyAsyncChanges(input, newRoot, ctx);
             if (status.Level == TStatus::Ok || status.Level == TStatus::Repeat) {
                 if (newRoot && newRoot != input) {
-                    NewRoots.push_back(newRoot);
+                    NewRoots_.push_back(newRoot);
                 }
-                HasRepeats = HasRepeats || status == TStatus::Repeat;
+                HasRepeats_ = HasRepeats_ || status == TStatus::Repeat;
             } else {
                 return status;
             }
         }
 
-        PendingProviders.clear();
-        bool hasRepeats = HasRepeats;
-        HasRepeats = false;
-        if (NewRoots.empty()) {
+        PendingProviders_.clear();
+        bool hasRepeats = HasRepeats_;
+        HasRepeats_ = false;
+        if (NewRoots_.empty()) {
             if (hasRepeats) {
                 return TStatus::Repeat;
             }
 
-            Finish(ctx);
+            Finish_(ctx);
             return TStatus::Ok;
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void ChooseRoot(TExprNode::TPtr&& input, TExprNode::TPtr& output) {
         // just get first
-        output = std::move(NewRoots.empty() ? input : NewRoots.front());
-        NewRoots.clear();
+        output = std::move(NewRoots_.empty() ? input : NewRoots_.front());
+        NewRoots_.clear();
     }
 
-    const TTypeAnnotationContext& Types;
-    TGetTransformer GetTransformer;
-    TFinish Finish;
-    TVector<IDataProvider*> PendingProviders;
-    bool HasRepeats = false;
-    TExprNode::TListType NewRoots;
+    const TTypeAnnotationContext& Types_;
+    TGetTransformer GetTransformer_;
+    TFinish Finish_;
+    TVector<IDataProvider*> PendingProviders_;
+    bool HasRepeats_ = false;
+    TExprNode::TListType NewRoots_;
 };
 
 template <ESource Source, typename TGetTransformer, typename TFinish>
-class TSpecificDataProposalsInspector : public TGraphTransformerBase {
+class TSpecificDataProposalsInspector: public TGraphTransformerBase {
 public:
-    TSpecificDataProposalsInspector(const TTypeAnnotationContext& types, const TString& provider, TGetTransformer getTransformer,
-        TFinish finish)
-        : Types(types)
-        , Provider(provider)
-        , GetTransformer(getTransformer)
-        , Finish(finish)
-    {}
+    TSpecificDataProposalsInspector(const TTypeAnnotationContext& types, TString provider, TGetTransformer getTransformer,
+                                    TFinish finish)
+        : Types_(types)
+        , Provider_(std::move(provider))
+        , GetTransformer_(getTransformer)
+        , Finish_(finish)
+    {
+    }
 
 private:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         bool hasRepeats = false;
         if (Source == ESource::DataSource || Source == ESource::All) {
-            if (auto p = Types.DataSourceMap.FindPtr(Provider)) {
+            if (auto p = Types_.DataSourceMap.FindPtr(Provider_)) {
                 auto s = HandleProvider(p->Get(), input, output, ctx);
-                if (s.Level == TStatus::Error) return s;
+                if (s.Level == TStatus::Error) {
+                    return s;
+                }
                 hasRepeats = hasRepeats || s == TStatus::Repeat;
             }
         }
 
         if (Source == ESource::DataSink || Source == ESource::All) {
-            if (auto p = Types.DataSinkMap.FindPtr(Provider)) {
+            if (auto p = Types_.DataSinkMap.FindPtr(Provider_)) {
                 auto s = HandleProvider(p->Get(), input, output, ctx);
-                if (s.Level == TStatus::Error) return s;
+                if (s.Level == TStatus::Error) {
+                    return s;
+                }
                 hasRepeats = hasRepeats || s == TStatus::Repeat;
             }
         }
 
-        if (!PendingProviders.empty()) {
+        if (!PendingProviders_.empty()) {
             return TStatus::Async;
         }
 
-        if (NewRoots.empty()) {
+        if (NewRoots_.empty()) {
             if (hasRepeats) {
                 return TStatus::Repeat;
             }
 
-            Finish(ctx);
+            Finish_(ctx);
             return TStatus::Ok;
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void Rewind() final {
         if (Source == ESource::DataSource || Source == ESource::All) {
-            if (auto p = Types.DataSourceMap.FindPtr(Provider)) {
-                GetTransformer(p->Get()).Rewind();
+            if (auto p = Types_.DataSourceMap.FindPtr(Provider_)) {
+                GetTransformer_(p->Get()).Rewind();
             }
         }
 
         if (Source == ESource::DataSink || Source == ESource::All) {
-            if (auto p = Types.DataSinkMap.FindPtr(Provider)) {
-                GetTransformer(p->Get()).Rewind();
+            if (auto p = Types_.DataSinkMap.FindPtr(Provider_)) {
+                GetTransformer_(p->Get()).Rewind();
             }
         }
-        PendingProviders.clear();
-        NewRoots.clear();
+        PendingProviders_.clear();
+        NewRoots_.clear();
     }
 
     TStatus HandleProvider(IDataProvider* provider, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         TExprNode::TPtr newRoot;
-        TStatus status = GetTransformer(provider).Transform(input, newRoot, ctx);
-
+        TStatus status = GetTransformer_(provider).Transform(input, newRoot, ctx);
 
         if (status.Level == TStatus::Ok || status.Level == TStatus::Repeat) {
             if (newRoot && newRoot != input) {
-                NewRoots.push_back(newRoot);
+                NewRoots_.push_back(newRoot);
             }
         } else if (status.Level == TStatus::Async) {
-            PendingProviders.push_back(provider);
+            PendingProviders_.push_back(provider);
             if (newRoot && newRoot != input) {
                 output = newRoot;
             }
@@ -237,8 +247,8 @@ private:
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
         TVector<NThreading::TFuture<void>> futures;
-        for (auto& x : PendingProviders) {
-            futures.push_back(GetTransformer(x).GetAsyncFuture(input));
+        for (auto& x : PendingProviders_) {
+            futures.push_back(GetTransformer_(x).GetAsyncFuture(input));
         }
 
         return WaitExceptionOrAll(futures);
@@ -246,12 +256,12 @@ private:
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         bool hasRepeats = false;
-        for (auto& x : PendingProviders) {
+        for (auto& x : PendingProviders_) {
             TExprNode::TPtr newRoot;
-            TStatus status = GetTransformer(x).ApplyAsyncChanges(input, newRoot, ctx);
+            TStatus status = GetTransformer_(x).ApplyAsyncChanges(input, newRoot, ctx);
             if (status.Level == TStatus::Ok || status.Level == TStatus::Repeat) {
                 if (newRoot && newRoot != input) {
-                    NewRoots.push_back(newRoot);
+                    NewRoots_.push_back(newRoot);
                 }
                 hasRepeats = hasRepeats || status == TStatus::Repeat;
             } else {
@@ -259,42 +269,42 @@ private:
             }
         }
 
-        PendingProviders.clear();
-        if (NewRoots.empty()) {
+        PendingProviders_.clear();
+        if (NewRoots_.empty()) {
             return hasRepeats
-                ? TStatus::Repeat
-                : TStatus::Ok;
+                       ? TStatus::Repeat
+                       : TStatus::Ok;
         }
 
         ChooseRoot(std::move(input), output);
-        return TStatus(TStatus::Repeat, true);
+        return TStatus(TStatus::Repeat, /*hasRestart=*/true);
     }
 
     void ChooseRoot(TExprNode::TPtr&& input, TExprNode::TPtr& output) {
         // just get first
-        output = std::move(NewRoots.empty() ? input : NewRoots.front());
-        NewRoots.clear();
+        output = std::move(NewRoots_.empty() ? input : NewRoots_.front());
+        NewRoots_.clear();
     }
 
-    const TTypeAnnotationContext& Types;
-    TString Provider;
-    TGetTransformer GetTransformer;
-    TFinish Finish;
-    TVector<IDataProvider*> PendingProviders;
-    TExprNode::TListType NewRoots;
+    const TTypeAnnotationContext& Types_;
+    TString Provider_;
+    TGetTransformer GetTransformer_;
+    TFinish Finish_;
+    TVector<IDataProvider*> PendingProviders_;
+    TExprNode::TListType NewRoots_;
 };
 
-auto DefaultFinish = [](TExprContext&){};
+auto DefaultFinish = [](TExprContext&) {};
 
 template <ESource Source, typename TGetTransformer, typename TFinish = decltype(DefaultFinish)>
 TAutoPtr<IGraphTransformer> CreateDataProposalsInspector(const TTypeAnnotationContext& types,
-    TGetTransformer getTransformer, TFinish finish = DefaultFinish) {
+                                                         TGetTransformer getTransformer, TFinish finish = DefaultFinish) {
     return new TDataProposalsInspector<Source, TGetTransformer, TFinish>(types, getTransformer, finish);
 }
 
 template <ESource Source, typename TGetTransformer, typename TFinish = decltype(DefaultFinish)>
 TAutoPtr<IGraphTransformer> CreateSpecificDataProposalsInspector(const TTypeAnnotationContext& types, const TString& provider,
-    TGetTransformer getTransformer, TFinish finish = DefaultFinish) {
+                                                                 TGetTransformer getTransformer, TFinish finish = DefaultFinish) {
     return new TSpecificDataProposalsInspector<Source, TGetTransformer, TFinish>(types, provider, getTransformer, finish);
 }
 
@@ -304,12 +314,11 @@ TAutoPtr<IGraphTransformer> CreateConfigureTransformer(const TTypeAnnotationCont
     return CreateDataProposalsInspector<ESource::DataSource>(
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
-        return provider->GetConfigurationTransformer();
-    },
+            return provider->GetConfigurationTransformer();
+        },
         [](TExprContext& ctx) {
-        ctx.Step.Done(TExprStep::ELevel::Configure);
-    }
-    );
+            ctx.Step.Done(TExprStep::ELevel::Configure);
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateIODiscoveryTransformer(const TTypeAnnotationContext& types) {
@@ -320,8 +329,7 @@ TAutoPtr<IGraphTransformer> CreateIODiscoveryTransformer(const TTypeAnnotationCo
         },
         [](TExprContext& ctx) {
             ctx.Step.Done(TExprStep::ELevel::DiscoveryIO);
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateEpochsTransformer(const TTypeAnnotationContext& types) {
@@ -332,8 +340,7 @@ TAutoPtr<IGraphTransformer> CreateEpochsTransformer(const TTypeAnnotationContext
         },
         [](TExprContext& ctx) {
             ctx.Step.Done(TExprStep::ELevel::Epochs);
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateLogicalDataProposalsInspector(const TTypeAnnotationContext& types) {
@@ -341,8 +348,7 @@ TAutoPtr<IGraphTransformer> CreateLogicalDataProposalsInspector(const TTypeAnnot
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetLogicalOptProposalTransformer();
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreatePhysicalDataProposalsInspector(const TTypeAnnotationContext& types) {
@@ -350,8 +356,7 @@ TAutoPtr<IGraphTransformer> CreatePhysicalDataProposalsInspector(const TTypeAnno
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetPhysicalOptProposalTransformer();
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreatePhysicalFinalizers(const TTypeAnnotationContext& types) {
@@ -359,8 +364,7 @@ TAutoPtr<IGraphTransformer> CreatePhysicalFinalizers(const TTypeAnnotationContex
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetPhysicalFinalizingTransformer();
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateTableMetadataLoader(const TTypeAnnotationContext& types) {
@@ -371,8 +375,7 @@ TAutoPtr<IGraphTransformer> CreateTableMetadataLoader(const TTypeAnnotationConte
         },
         [](TExprContext& ctx) {
             ctx.Step.Done(TExprStep::LoadTablesMetadata);
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateCompositeFinalizingTransformer(const TTypeAnnotationContext& types) {
@@ -380,8 +383,7 @@ TAutoPtr<IGraphTransformer> CreateCompositeFinalizingTransformer(const TTypeAnno
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetFinalizingTransformer();
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreatePlanInfoTransformer(const TTypeAnnotationContext& types) {
@@ -389,8 +391,7 @@ TAutoPtr<IGraphTransformer> CreatePlanInfoTransformer(const TTypeAnnotationConte
         types,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetPlanInfoTransformer();
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateRecaptureDataProposalsInspector(const TTypeAnnotationContext& types, const TString& provider) {
@@ -402,8 +403,7 @@ TAutoPtr<IGraphTransformer> CreateRecaptureDataProposalsInspector(const TTypeAnn
         },
         [](TExprContext& ctx) {
             ctx.Step.Done(TExprStep::Recapture);
-        }
-    );
+        });
 }
 
 TAutoPtr<IGraphTransformer> CreateStatisticsProposalsInspector(const TTypeAnnotationContext& types, const TString& provider) {
@@ -412,8 +412,7 @@ TAutoPtr<IGraphTransformer> CreateStatisticsProposalsInspector(const TTypeAnnota
         provider,
         [](IDataProvider* provider) -> IGraphTransformer& {
             return provider->GetStatisticsProposalTransformer();
-        }
-    );
+        });
 }
 
 } // namespace NYql

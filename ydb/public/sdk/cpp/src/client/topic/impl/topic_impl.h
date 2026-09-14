@@ -2,18 +2,19 @@
 
 #include "transaction.h"
 
-#include <src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <src/client/common_client/impl/client.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 struct TOffsetsRange {
     ui64 Start;
     ui64 End;
@@ -41,25 +42,6 @@ public:
         , Settings(settings)
     {
     }
-
-    static void ConvertAlterConsumerToProto(const TAlterConsumerSettings& settings, Ydb::Topic::AlterConsumer& consumerProto) {
-        consumerProto.set_name(TStringType{settings.ConsumerName_});
-        if (settings.SetImportant_)
-            consumerProto.set_set_important(*settings.SetImportant_);
-        if (settings.SetReadFrom_)
-            consumerProto.mutable_set_read_from()->set_seconds(settings.SetReadFrom_->Seconds());
-
-        if (settings.SetSupportedCodecs_) {
-            for (const auto& codec : *settings.SetSupportedCodecs_) {
-                consumerProto.mutable_set_supported_codecs()->add_codecs((static_cast<Ydb::Topic::Codec>(codec)));
-            }
-        }
-
-        for (auto& pair : settings.AlterAttributes_) {
-            (*consumerProto.mutable_alter_attributes())[pair.first] = pair.second;
-        }
-    }
-
 
     static Ydb::Topic::CreateTopicRequest MakePropsCreateRequest(const std::string& path, const TCreateTopicSettings& settings) {
         Ydb::Topic::CreateTopicRequest request = MakeOperationRequest<Ydb::Topic::CreateTopicRequest>(settings);
@@ -107,6 +89,9 @@ public:
         if (settings.SetRetentionPeriod_) {
             request.mutable_set_retention_period()->set_seconds(settings.SetRetentionPeriod_->Seconds());
         }
+        if (settings.SetContentBasedDeduplication_) {
+            request.set_set_content_based_deduplication(*settings.SetContentBasedDeduplication_);
+        }
         if (settings.SetSupportedCodecs_) {
             for (const auto& codec : *settings.SetSupportedCodecs_) {
                 request.mutable_set_supported_codecs()->add_codecs((static_cast<Ydb::Topic::Codec>(codec)));
@@ -117,6 +102,12 @@ public:
         }
         if (settings.SetPartitionWriteBurstBytes_) {
             request.set_set_partition_write_burst_bytes(*settings.SetPartitionWriteBurstBytes_);
+        }
+        if (settings.SetPartitionWriteSpeedMessagesPerSecond_) {
+            request.set_set_partition_write_speed_messages_per_second(*settings.SetPartitionWriteSpeedMessagesPerSecond_);
+        }
+        if (settings.SetPartitionWriteBurstMessages_) {
+            request.set_set_partition_write_burst_messages(*settings.SetPartitionWriteBurstMessages_);
         }
         if (settings.SetRetentionStorageMb_) {
             request.set_set_retention_storage_mb(*settings.SetRetentionStorageMb_);
@@ -139,7 +130,13 @@ public:
 
         for (const auto& consumer : settings.AlterConsumers_) {
             Ydb::Topic::AlterConsumer& consumerProto = *request.add_alter_consumers();
-            ConvertAlterConsumerToProto(consumer, consumerProto);
+            consumer.SerializeTo(consumerProto);
+        }
+
+        if (auto level = std::get_if<EMetricsLevel>(&settings.MetricsLevel_)) {
+            request.set_set_metrics_level(*level);
+        } else if (auto reset = std::get_if<bool>(&settings.MetricsLevel_); *reset) {
+            request.mutable_reset_metrics_level();
         }
 
         return request;
@@ -282,7 +279,9 @@ public:
         request.set_partition_id(partitionId);
         request.set_consumer(TStringType{consumerName});
         request.set_offset(offset);
-
+        if (settings.ReadSessionId_) {
+            request.set_read_session_id(*settings.ReadSessionId_);
+        }
         return RunSimple<Ydb::Topic::V1::TopicService, Ydb::Topic::CommitOffsetRequest, Ydb::Topic::CommitOffsetResponse>(
             std::move(request),
             &Ydb::Topic::V1::TopicService::Stub::AsyncCommitOffset,
@@ -296,8 +295,8 @@ public:
     {
         auto request = MakeOperationRequest<Ydb::Topic::UpdateOffsetsInTransactionRequest>(settings);
 
-        request.mutable_tx()->set_id(TStringType{GetTxId(tx)});
-        request.mutable_tx()->set_session(TStringType{GetSessionId(tx)});
+        request.mutable_tx()->set_id(tx.TxId);
+        request.mutable_tx()->set_session(tx.SessionId);
 
         for (auto& t : topics) {
             auto* topic = request.mutable_topics()->Add();
@@ -327,6 +326,14 @@ public:
     // Runtime API.
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);
     std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleWriteSession(const TWriteSessionSettings& settings);
+    std::shared_ptr<IProducer> CreateProducer(const TProducerSettings& settings);
+
+    template<typename T>
+    std::shared_ptr<TTypedProducer<T>> CreateTypedProducer(const TProducerSettings& settings) {
+        auto producer = CreateProducer(settings);
+        return std::make_shared<TTypedProducer<T>>(producer);
+    }
+
     std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
 
     using IReadSessionConnectionProcessorFactory =
@@ -340,6 +347,12 @@ public:
                                            Ydb::Topic::StreamWriteMessage::FromServer>;
 
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> CreateWriteSessionConnectionProcessorFactory();
+
+    using IDirectReadSessionConnectionProcessorFactory =
+    ISessionConnectionProcessorFactory<Ydb::Topic::StreamDirectReadMessage::FromClient,
+                                       Ydb::Topic::StreamDirectReadMessage::FromServer>;
+
+    std::shared_ptr<IDirectReadSessionConnectionProcessorFactory> CreateDirectReadSessionConnectionProcessorFactory();
 
     NYdbGrpc::IQueueClientContextPtr CreateContext() {
         return Connections_->CreateContext();

@@ -118,6 +118,7 @@ BELONGS ya.make
         include/boost/config/stdlib/libcpp.hpp [2:4]
         include/boost/config/stdlib/libstdcpp3.hpp [3:5]
         include/boost/config/user.hpp [4:6]
+        include/boost/static_assert.hpp [2:4]
 
 KEEP     BSL-1.0              3dc626ff78bf44fdf3a99b804f677fe6
 BELONGS ya.make
@@ -289,7 +290,6 @@ BELONGS ya.make
         include/boost/config/platform/amigaos.hpp [2:4]
         include/boost/config/platform/beos.hpp [2:4]
         include/boost/config/platform/bsd.hpp [4:6]
-        include/boost/config/platform/cygwin.hpp [2:4]
         include/boost/config/platform/hpux.hpp [6:8]
         include/boost/config/platform/irix.hpp [3:5]
         include/boost/config/platform/linux.hpp [3:5]

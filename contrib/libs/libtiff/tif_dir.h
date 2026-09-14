@@ -65,6 +65,12 @@ typedef struct
                             tif_dirread.c */
 } TIFFDirEntry;
 
+typedef struct
+{
+    uint64_t offset;
+    uint64_t length;
+} TIFFEntryOffsetAndLength; /* auxiliary for evaluating size of IFD data */
+
 /*
  * Internal format of a TIFF directory entry.
  */
@@ -98,6 +104,16 @@ typedef struct
     uint16_t td_halftonehints[2];
     uint16_t td_extrasamples;
     uint16_t *td_sampleinfo;
+    /* strip support */
+    uint32_t td_row;             /* current scanline */
+    uint32_t td_curstrip;        /* current strip for read/write */
+    tmsize_t td_scanlinesize;    /* # of bytes in a scanline */
+#define NOSTRIP ((uint32_t)(-1)) /* undefined state */
+    /* tiling support */
+    uint32_t td_col;            /* current column (offset by row too) */
+    uint32_t td_curtile;        /* current tile for read/write */
+    tmsize_t td_tilesize;       /* # of bytes in a tile */
+#define NOTILE ((uint32_t)(-1)) /* undefined state */
     /* even though the name is misleading, td_stripsperimage is the number
      * of striles (=strips or tiles) per plane, and td_nstrips the total
      * number of striles */
@@ -115,6 +131,9 @@ typedef struct
 #ifdef STRIPBYTECOUNTSORTED_UNUSED
     int td_stripbytecountsorted; /* is the bytecount array sorted ascending? */
 #endif
+    /* Be aware that the parameters of td_stripoffset_entry and
+     * td_stripbytecount_entry are swapped but tdir_offset is not
+     * and has to be swapped when used. */
     TIFFDirEntry td_stripoffset_entry;    /* for deferred loading */
     TIFFDirEntry td_stripbytecount_entry; /* for deferred loading */
     uint16_t td_nsubifd;
@@ -135,7 +154,27 @@ typedef struct
 
     unsigned char
         td_deferstrilearraywriting; /* see TIFFDeferStrileArrayWriting() */
+
+    unsigned char
+        td_iswrittentofile; /* indicates if current IFD is present on file */
+
+    /* LibTIFF writes all data that does not fit into the IFD entries directly
+     * after the IFD tag entry part. When reading, only the IFD data directly
+     * and continuously behind the IFD tags is taken into account for the IFD
+     * data size.*/
+    uint64_t td_dirdatasize_write; /* auxiliary for evaluating size of IFD data
+                                       to be written */
+    uint64_t td_dirdatasize_read;  /* auxiliary for evaluating size of IFD data
+                                       read from file */
+    uint32_t td_dirdatasize_Noffsets; /* auxiliary counter for
+                                         tif_dir.td_dirdatasize_offsets array */
+    TIFFEntryOffsetAndLength
+        *td_dirdatasize_offsets; /* auxiliary array for all offsets of IFD tag
+                                    entries with data outside the IFD tag
+                                    entries. */
 } TIFFDirectory;
+
+extern void _TIFFResetTifDirAndInitStrileCounters(TIFFDirectory *td);
 
 /*
  * Field flags used to indicate fields that have been set in a directory, and
@@ -204,7 +243,7 @@ typedef struct
 
 #define FIELD_LAST (32 * FIELDSET_ITEMS - 1)
 
-#define BITn(n) (((uint32_t)1L) << ((n)&0x1f))
+#define BITn(n) (1U << ((n) & 0x1f))
 #define BITFIELDn(tif, n) ((tif)->tif_dir.td_fieldsset[(n) / 32])
 #define TIFFFieldSet(tif, field) (BITFIELDn(tif, field) & BITn(field))
 #define TIFFSetFieldBit(tif, field) (BITFIELDn(tif, field) |= BITn(field))
@@ -302,20 +341,18 @@ extern "C"
 
     struct _TIFFField
     {
-        uint32_t field_tag;      /* field's tag */
-        short field_readcount;   /* read count/TIFF_VARIABLE/TIFF_SPP */
-        short field_writecount;  /* write count/TIFF_VARIABLE */
-        TIFFDataType field_type; /* type of associated data */
-        uint32_t
-            field_anonymous; /* if true, this is a unknown / anonymous tag */
-        TIFFSetGetFieldType
-            set_field_type; /* type to be passed to TIFFSetField */
-        TIFFSetGetFieldType
-            get_field_type;              /* type to be passed to TIFFGetField */
+        uint32_t field_tag;       /* field's tag */
+        short field_readcount;    /* read count/TIFF_VARIABLE/TIFF_SPP */
+        short field_writecount;   /* write count/TIFF_VARIABLE */
+        TIFFDataType field_type;  /* type of associated data */
+        uint32_t field_anonymous; /* if true, this is a unknown /
+                                     anonymous tag */
+        TIFFSetGetFieldType set_get_field_type; /* type to be passed to
+                                                   TIFFSetField, TIFFGetField */
         unsigned short field_bit;        /* bit in fieldsset bit vector */
         unsigned char field_oktochange;  /* if true, can change while writing */
         unsigned char field_passcount;   /* if true, pass dir count on set */
-        char *field_name;                /* ASCII name */
+        const char *field_name;          /* ASCII name */
         TIFFFieldArray *field_subfields; /* if field points to child ifds, child
                                             ifd field definition array */
     };

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common.h"
+#include "public.h"
 
 namespace NYT {
 
@@ -10,13 +10,11 @@ class TPatternFormatter
     : private TNonCopyable
 {
 public:
-    void AddProperty(const TString& name, const TString& value);
-    TString Format(const TString& pattern);
+    TPatternFormatter& SetProperty(std::string name, std::string value);
+    std::string Format(TStringBuf pattern);
 
 private:
-    using TPropertyMap = THashMap<TString, TString>;
-    TPropertyMap PropertyMap;
-
+    std::unordered_map<std::string, std::string> PropertyMap_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

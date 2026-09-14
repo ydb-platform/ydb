@@ -1,22 +1,24 @@
 #include "mkql_tooptional.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsOptional>
-class THeadWrapper : public TMutableCodegeneratorPtrNode<THeadWrapper<IsOptional>> {
-    typedef TMutableCodegeneratorPtrNode<THeadWrapper<IsOptional>> TBaseComputation;
+class THeadWrapper: public TMutableCodegeneratorPtrNode<THeadWrapper<IsOptional>> {
+    using TBaseComputation = TMutableCodegeneratorPtrNode<THeadWrapper<IsOptional>>;
+
 public:
     THeadWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list)
-        : TBaseComputation(mutables, kind), List(list)
-    {}
+        : TBaseComputation(mutables, kind)
+        , List_(list)
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        const auto& value = List->GetValue(ctx);
+        const auto& value = List_->GetValue(ctx);
         if (const auto ptr = value.GetElements()) {
             if (value.GetListLength() > 0ULL) {
                 return NUdf::TUnboxedValuePod(*ptr).MakeOptionalIf<IsOptional>();
@@ -32,12 +34,12 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* result, BasicBlock*& block) const {
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* result, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrType = PointerType::getUnqual(valueType);
 
-        const auto list = GetNodeValue(List, ctx, block);
+        const auto list = GetNodeValue(List_, ctx, block);
 
         const auto elements = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElements>(ptrType, list, ctx.Codegen, block);
 
@@ -71,7 +73,7 @@ public:
             const auto iter = new LoadInst(valueType, result, "iter", block);
             new StoreInst(ConstantInt::get(valueType, 0ULL), result, block);
 
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, result);
+            const auto status = CallBoxedValueNext(iter, ctx, block, result);
             UnRefBoxed(iter, ctx, block);
 
             BranchInst::Create(good, none, status, block);
@@ -90,28 +92,32 @@ public:
         BranchInst::Create(done, block);
 
         block = done;
-        if (List->IsTemporaryValue())
+        if (List_->IsTemporaryValue()) {
             CleanupBoxed(list, ctx, block);
+        }
     }
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(List);
+        this->DependsOn(List_);
     }
 
-    IComputationNode* const List;
+    IComputationNode* const List_;
 };
 
 template <bool IsOptional>
-class TLastWrapper : public TMutableCodegeneratorPtrNode<TLastWrapper<IsOptional>> {
-    typedef TMutableCodegeneratorPtrNode<TLastWrapper<IsOptional>> TBaseComputation;
+class TLastWrapper: public TMutableCodegeneratorPtrNode<TLastWrapper<IsOptional>> {
+    using TBaseComputation = TMutableCodegeneratorPtrNode<TLastWrapper<IsOptional>>;
+
 public:
     TLastWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list)
-        : TBaseComputation(mutables, kind), List(list)
-    {}
+        : TBaseComputation(mutables, kind)
+        , List_(list)
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        const auto& value = List->GetValue(ctx);
+        const auto& value = List_->GetValue(ctx);
         if (const auto ptr = value.GetElements()) {
             if (const auto size = value.GetListLength()) {
                 return NUdf::TUnboxedValuePod(ptr[size - 1U]).MakeOptionalIf<IsOptional>();
@@ -119,7 +125,9 @@ public:
         } else if (const auto iter = value.GetListIterator()) {
             NUdf::TUnboxedValue result;
             if (iter.Next(result)) {
-                while (iter.Next(result)) continue;
+                while (iter.Next(result)) {
+                    continue;
+                }
                 return result.Release().MakeOptionalIf<IsOptional>();
             }
         }
@@ -128,12 +136,12 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* result, BasicBlock*& block) const {
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* result, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrType = PointerType::getUnqual(valueType);
 
-        const auto list = GetNodeValue(List, ctx, block);
+        const auto list = GetNodeValue(List_, ctx, block);
 
         const auto elements = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElements>(ptrType, list, ctx.Codegen, block);
 
@@ -171,7 +179,7 @@ public:
             const auto iter = new LoadInst(valueType, result, "iter", block);
             new StoreInst(ConstantInt::get(valueType, 0ULL), result, block);
 
-            const auto first = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, result);
+            const auto first = CallBoxedValueNext(iter, ctx, block, result);
             BranchInst::Create(loop, nope, first, block);
 
             block = nope;
@@ -181,7 +189,7 @@ public:
 
             block = loop;
 
-            const auto status = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(Type::getInt1Ty(context), iter, ctx.Codegen, block, result);
+            const auto status = CallBoxedValueNext(iter, ctx, block, result);
             BranchInst::Create(loop, good, status, block);
 
             block = good;
@@ -201,19 +209,20 @@ public:
         BranchInst::Create(done, block);
 
         block = done;
-        if (List->IsTemporaryValue())
+        if (List_->IsTemporaryValue()) {
             CleanupBoxed(list, ctx, block);
+        }
     }
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(List);
+        this->DependsOn(List_);
     }
 
-    IComputationNode* const List;
+    IComputationNode* const List_;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapHead(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args");
@@ -233,5 +242,4 @@ IComputationNode* WrapLast(TCallable& callable, const TComputationNodeFactoryCon
     }
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

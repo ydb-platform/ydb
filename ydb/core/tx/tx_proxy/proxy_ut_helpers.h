@@ -118,6 +118,7 @@ public:
 
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
+        GetSettings().SetEnableMetadataProvider(false);
 
         Server = new Tests::TServer(Settings);
 
@@ -175,7 +176,9 @@ namespace NTestLs {
 }
 
 namespace NHelpers {
+
 const TDuration WaitTimeOut = TDuration::Seconds(ChoiceFastOrFat(10, 600));
+const TDuration SchemeShardInitDuration = TDuration::MilliSeconds(100);
 
 template <typename T>
 inline constexpr static T ChoiceThreadSanOrDefault(T tsan, T def) noexcept {
@@ -187,6 +190,7 @@ inline constexpr static T ChoiceThreadSanOrDefault(T tsan, T def) noexcept {
     return def;
 #endif
 }
+
 const ui32 active_tenants_nodes = ChoiceThreadSanOrDefault(1, 5);
 
 ui64 CreateSubDomainAndTabletInside(TBaseTestEnv &env, const TString& name, ui64 shard_index, const TStoragePools& pools = {});
@@ -201,6 +205,9 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSetting(const TString &
 
 NKikimrSchemeOp::TTableDescription GetTableSimpleDescription(const TString &name);
 void SetRowInSimpletable(TBaseTestEnv& env, ui64 key, ui64 value, const TString &path);
+
+TLocalPathId GetNextLocalPathId(TBaseTestEnv& env, const TString& root);
+
 }
 
 class TTestEnvWithPoolsSupport: public TBaseTestEnv {
@@ -213,7 +220,6 @@ public:
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
         GetSettings().SetEnableAlterDatabaseCreateHiveFirst(enableAlterDatabaseCreateHiveFirst);
-        GetSettings().SetEnableSystemViews(false);
 
         for (ui32 poolNum = 1; poolNum <= poolsCount; ++poolNum) {
             GetSettings().AddStoragePoolType("storage-pool-number-" + ToString(poolNum));
@@ -238,4 +244,5 @@ public:
     }
 };
 
-}}
+}
+}

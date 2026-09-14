@@ -1,14 +1,15 @@
 #include "index_info.h"
-#include <ydb/core/sys_view/common/path.h>
-#include <ydb/core/sys_view/common/schema.h>
-#include <ydb/library/formats/arrow/simple_arrays_cache.h>
+
 #include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/sys_view/common/path.h>
+
+#include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
 
 namespace NKikimr::NOlap {
 
-const std::shared_ptr<NKikimr::NOlap::TColumnLoader>& IIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
+const std::shared_ptr<TColumnLoader>& IIndexInfo::GetColumnLoaderVerified(const ui32 columnId) const {
     const auto& result = GetColumnLoaderOptional(columnId);
     AFL_VERIFY(result);
     return result;
@@ -17,8 +18,10 @@ const std::shared_ptr<NKikimr::NOlap::TColumnLoader>& IIndexInfo::GetColumnLoade
 void IIndexInfo::AddDeleteFlagsColumn(NArrow::TGeneralContainer& batch, const bool isDelete) {
     const i64 numRows = batch.num_rows();
 
-    batch.AddField(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()), 
-        NArrow::TThreadSimpleArraysCache::GetConst(arrow::boolean(), std::make_shared<arrow::BooleanScalar>(isDelete), numRows)).Validate();
+    batch
+        .AddField(arrow::field(SPEC_COL_DELETE_FLAG, arrow::boolean()),
+            NArrow::TThreadSimpleArraysCache::GetConst(arrow::boolean(), std::make_shared<arrow::BooleanScalar>(isDelete), numRows))
+        .Validate();
 }
 
 void IIndexInfo::AddSnapshotColumns(NArrow::TGeneralContainer& batch, const TSnapshot& snapshot, const ui64 insertWriteId) {
@@ -36,7 +39,7 @@ void IIndexInfo::NormalizeDeletionColumn(NArrow::TGeneralContainer& batch) {
     AddDeleteFlagsColumn(batch, false);
 }
 
-std::optional<ui32> IIndexInfo::GetColumnIdOptional(const std::string& name) const {
+std::optional<ui32> IIndexInfo::GetColumnIdOptional(const std::string& name) {
     if (name == SPEC_COL_PLAN_STEP) {
         return ui32(ESpecialColumn::PLAN_STEP);
     } else if (name == SPEC_COL_TX_ID) {
@@ -126,4 +129,4 @@ std::shared_ptr<arrow::Scalar> IIndexInfo::DefaultColumnValue(const ui32 colId) 
     }
 }
 
-} // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap

@@ -25,9 +25,7 @@ namespace NKikimr {
         const TActorId HugeKeeperId;
         NMonGroup::TDefragGroup DefragMonGroup;
         bool RunDefragBySchedule;
-
-        // free up to this number of chunks in one quantum
-        ui32 MaxChunksToDefrag = 1u;
+        std::shared_ptr<TEventsQuoter> Throttler;
 
         TDefragCtx(
                 const TIntrusivePtr<TVDiskContext> &vctx,

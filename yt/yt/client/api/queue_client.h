@@ -28,12 +28,17 @@ struct TPullRowsOptions
     NTransactionClient::TTimestamp UpperTimestamp = NTransactionClient::NullTimestamp;
     NTableClient::TTableSchemaPtr TableSchema;
     i64 MaxDataWeight = 20_MB;
+    // Used for throttling, has different logic than UpperTimestamp
+    TInstant MaxTransactionCommitInstant = TInstant::Max();
     IReservingMemoryUsageTrackerPtr MemoryTracker;
+    NTabletClient::TTabletId SelfTabletId = NObjectClient::NullObjectId;
 };
 
 struct TPullRowsResult
 {
     THashMap<NTabletClient::TTabletId, i64> EndReplicationRowIndexes;
+    NTransactionClient::TTimestamp PullRowsMaxTimestamp = NTransactionClient::NullTimestamp;
+    NTransactionClient::TTimestamp PullRowsMinTimestamp = NTransactionClient::NullTimestamp;
     i64 RowCount = 0;
     i64 DataWeight = 0;
     NChaosClient::TReplicationProgress ReplicationProgress;
@@ -77,6 +82,7 @@ struct TListQueueConsumerRegistrationsResult
 
 struct TCreateQueueProducerSessionOptions
     : public TTimeoutOptions
+    , public TMutatingOptions
 {
     NYTree::INodePtr UserMeta;
 };

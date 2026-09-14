@@ -6,18 +6,13 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
-/**
- * DEVELOPER PREVIEW DISCLAIMER
- *
- * MQTT5 support is currently in **developer preview**.  We encourage feedback at all times, but feedback during the
- * preview window is especially valuable in shaping the final product.  During the preview period we may make
- * backwards-incompatible changes to the public API, but in general, this is something we will try our best to avoid.
- */
-
 #include <aws/mqtt/mqtt.h>
 
 #include <aws/common/array_list.h>
 #include <aws/common/byte_buf.h>
+#include <aws/common/ref_count.h>
+
+AWS_PUSH_SANE_WARNING_LEVEL
 
 /**
  * Some artificial (non-MQTT spec specified) limits that we place on input packets (publish, subscribe, unsubscibe)
@@ -143,6 +138,17 @@ enum aws_mqtt5_puback_reason_code {
     AWS_MQTT5_PARC_PACKET_IDENTIFIER_IN_USE = 145,
     AWS_MQTT5_PARC_QUOTA_EXCEEDED = 151,
     AWS_MQTT5_PARC_PAYLOAD_FORMAT_INVALID = 153,
+};
+
+/**
+ * Result for manual PUBACK operations.
+ *
+ */
+enum aws_mqtt5_manual_publish_acknowledgement_result {
+    AWS_MQTT5_MPAR_SUCCESS = 0,
+    AWS_MQTT5_MPAR_PUBACK_CANCELLED = 1,
+    AWS_MQTT5_MPAR_PUBACK_INVALID = 2,
+    AWS_MQTT5_MPAR_CRT_FAILURE = 3,
 };
 
 /**
@@ -450,6 +456,19 @@ struct aws_mqtt5_packet_puback_view {
 };
 
 /**
+ * This is used to track which PUBLISH packets a user has taken manual publish acknowledgement control from.
+ */
+struct aws_mqtt5_manual_pub_ack_entry {
+    struct aws_allocator *allocator;
+    struct aws_ref_count ref_count;
+
+    /* control id for internal tracking */
+    uint64_t pub_ack_control_id;
+    /* packet_id of controlled publish */
+    uint16_t packet_id;
+};
+
+/**
  * Read-only snapshot of a SUBACK packet
  *
  * https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901171
@@ -482,5 +501,6 @@ struct aws_mqtt5_packet_unsuback_view {
     size_t reason_code_count;
     const enum aws_mqtt5_unsuback_reason_code *reason_codes;
 };
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_MQTT_MQTT5_TYPES_H */

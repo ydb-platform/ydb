@@ -1,10 +1,13 @@
 #include "service_dynamic_config.h"
 #include "rpc_deferrable.h"
 
+#include <type_traits>
+
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
 
 namespace NKikimr::NGRpcService {
@@ -43,6 +46,12 @@ using TEvResolveConfigRequest = TGrpcRequestOperationCall<DynamicConfig::Resolve
 using TEvResolveAllConfigRequest = TGrpcRequestOperationCall<DynamicConfig::ResolveAllConfigRequest,
     DynamicConfig::ResolveAllConfigResponse>;
 
+using TEvFetchStartupConfigRequest = TGrpcRequestOperationCall<DynamicConfig::FetchStartupConfigRequest,
+    DynamicConfig::FetchStartupConfigResponse>;
+
+using TEvGetConfigurationVersionRequest = TGrpcRequestOperationCall<DynamicConfig::GetConfigurationVersionRequest,
+    DynamicConfig::GetConfigurationVersionResponse>;
+
 template <typename TRequest, typename TConsoleRequest, typename TConsoleResponse>
 class TDynamicConfigRPC : public TRpcOperationRequestActor<TDynamicConfigRPC<TRequest, TConsoleRequest, TConsoleResponse>, TRequest> {
     using TThis = TDynamicConfigRPC<TRequest, TConsoleRequest, TConsoleResponse>;
@@ -60,6 +69,32 @@ public:
     {
         TBase::Bootstrap(TActivationContext::AsActorContext());
 
+        if constexpr (std::is_same_v<TRequest, TEvSetConfigRequest> || std::is_same_v<TRequest, TEvReplaceConfigRequest>) {
+            if (AppData()->FeatureFlags.GetSwitchToConfigV2()) {
+                NYql::TIssues issues;
+                issues.AddIssue("Dynamic Config V1 is disabled. Use V2 API.");
+                TBase::Reply(Ydb::StatusIds::BAD_REQUEST, issues, TActivationContext::AsActorContext());
+                return;
+            }
+
+            this->Send(MakeBlobStorageNodeWardenID(IActor::SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
+            this->Become(&TThis::StateWaitNodeWarden);
+        } else {
+            StartConsolePipe();
+        }
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr& ev) {
+        if (ev->Get()->SelfManagementEnabled) {
+            NYql::TIssues issues;
+            issues.AddIssue("Dynamic Config V1 is disabled. Use V2 API.");
+            TBase::Reply(Ydb::StatusIds::BAD_REQUEST, issues, TActivationContext::AsActorContext());
+        } else {
+            StartConsolePipe();
+        }
+    }
+
+    void StartConsolePipe() {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = {
             .RetryLimitCount = 10,
@@ -70,6 +105,13 @@ public:
         SendRequest();
 
         this->Become(&TThis::StateWork);
+    }
+
+    STFUNC(StateWaitNodeWarden) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvNodeWardenStorageConfig, Handle);
+            default: TBase::StateFuncBase(ev);
+        }
     }
 
 private:
@@ -121,6 +163,14 @@ private:
         return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
     }
 
+    void Handle(TEvConsole::TEvFetchStartupConfigResponse::TPtr& ev) {
+        return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
+    }
+
+    void Handle(TEvConsole::TEvGetConfigurationVersionResponse::TPtr& ev) {
+        return TBase::ReplyWithResult(Ydb::StatusIds::SUCCESS, ev->Get()->Record.GetResponse(), TActivationContext::AsActorContext());
+    }
+
     void Handle(TEvConsole::TEvUnauthorized::TPtr&) {
         ::google::protobuf::RepeatedPtrField< ::Ydb::Issue::IssueMessage> issues;
         auto issue = issues.Add();
@@ -135,7 +185,6 @@ private:
         auto issue = issues.Add();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
         issue->set_message("Feature is disabled");
-
         return TBase::Reply(Ydb::StatusIds::BAD_REQUEST, issues, TActivationContext::AsActorContext());
     }
 
@@ -206,6 +255,9 @@ private:
         request->Record.MutableRequest()->CopyFrom(*this->GetProtoRequest());
         request->Record.SetUserToken(this->Request_->GetSerializedToken());
         request->Record.SetPeerName(this->Request_->GetPeerName());
+        if (this->Request_->GetDatabaseName()) {
+            request->Record.SetIngressDatabase(*this->Request_->GetDatabaseName());
+        }
         NTabletPipe::SendData(IActor::SelfId(), ConsolePipe, request.Release());
     }
 };
@@ -278,6 +330,20 @@ void DoResolveAllConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacility
         new TDynamicConfigRPC<TEvResolveAllConfigRequest,
                     TEvConsole::TEvResolveAllConfigRequest,
                     TEvConsole::TEvResolveAllConfigResponse>(p.release()));
+}
+
+void DoFetchStartupConfigRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TDynamicConfigRPC<TEvFetchStartupConfigRequest,
+                    TEvConsole::TEvFetchStartupConfigRequest,
+                    TEvConsole::TEvFetchStartupConfigResponse>(p.release()));
+}
+
+void DoGetConfigurationVersionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    TActivationContext::AsActorContext().Register(
+        new TDynamicConfigRPC<TEvGetConfigurationVersionRequest,
+                    TEvConsole::TEvGetConfigurationVersionRequest,
+                    TEvConsole::TEvGetConfigurationVersionResponse>(p.release()));
 }
 
 } // namespace NKikimr::NGRpcService

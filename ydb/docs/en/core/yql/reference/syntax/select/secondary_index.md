@@ -1,19 +1,5 @@
 # VIEW (INDEX)
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% if oss == true and backend_name == "YDB" %}
-
-{% note warning %}
-
-{% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
-
-{% endnote %}
-
-{% endif %}
-
-{% endif %}
-
 To make a `SELECT` by secondary index of row-oriented table statement, use the following:
 
 ```yql
@@ -21,6 +7,8 @@ SELECT *
     FROM TableName VIEW IndexName
     WHERE …
 ```
+
+{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 ## Examples
 
@@ -32,7 +20,7 @@ SELECT *
       WHERE views >= someValue
   ```
 
-* [`JOIN`](../join.md) the `series` and `users` row-oriented tables on the `userName` field using the `users_index` and `name_index` indexes, respectively:
+* [`JOIN`](join.md) the `series` and `users` row-oriented tables on the `userName` field using the `users_index` and `name_index` indexes, respectively:
 
   ```yql
   SELECT t1.series_id, t1.title

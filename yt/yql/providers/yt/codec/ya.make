@@ -7,6 +7,7 @@ SRCS(
     yt_codec_io.h
     yt_codec_job.cpp
     yt_codec_job.h
+    yt_codec_tz.h
     yt_codec.cpp
     yt_codec.h
 )
@@ -33,6 +34,7 @@ PEERDIR(
     yt/yql/providers/yt/common
     yt/yql/providers/yt/lib/mkql_helpers
     yt/yql/providers/yt/lib/skiff
+    yt/yt/library/decimal
     yql/essentials/providers/common/codec/yt_arrow_converter_interface
 )
 

@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/bus/tcp/public.h>
+
 #include <yt/yt/core/actions/future.h>
 
 namespace NYT::NBus {
@@ -31,6 +33,8 @@ struct IBusServer
      *  e.g. the server socket is closed.
      */
     virtual TFuture<void> Stop() = 0;
+
+    virtual NYTree::IYPathServicePtr GetOrchidService() const = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IBusServer)

@@ -4,6 +4,8 @@
 
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -56,6 +58,8 @@ private:
 };
 
 void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
+    YDB_LOG_DEBUG("Handle TEvSubDomainPathIdFound",
+        {"ev", ev->Get()->ToString()});
     const auto* msg = ev->Get();
 
     if (FindSubDomainPathIdActor == ev->Sender) {
@@ -63,6 +67,57 @@ void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::T
     }
 
     Execute(new TTxPersistSubDomainPathId(this, msg->SchemeShardId, msg->LocalPathId), ctx);
+}
+
+bool TDataShard::NeedToWatchSubDomainPathId() {
+    switch (State) {
+        case TShardState::WaitScheme:
+            if (TransQueue.GetSchemaOperations().empty()) {
+                // We cannot watch subdomain state until the first schema operation arrives
+                return false;
+            }
+
+            // We start watching when storing the first schema operation
+            return true;
+
+        case TShardState::Ready:
+            return true;
+
+        case TShardState::Frozen:
+            // While frozen shards are readonly they may unfreeze at any time
+            // and need to know current subdomain state
+            return true;
+
+        case TShardState::SplitDstReceivingSnapshot:
+            // We start watching as soon as split destination is initialized
+            return true;
+
+        case TShardState::SplitSrcWaitForNoTxInFlight:
+        case TShardState::SplitSrcMakeSnapshot:
+        case TShardState::SplitSrcSendingSnapshot:
+        case TShardState::SplitSrcWaitForPartitioningChanged:
+            // These are terminal states, and shard will move into PreOffline
+            // eventually, so watching subdomain state may not be relevant.
+            // However it may affect error messages, so it's better to keep
+            // watching.
+            return true;
+
+        case TShardState::PreOffline:
+        case TShardState::Offline:
+            // Shard is waiting to be deleted and subdomain state is not
+            // relevant anyway. Additinally we may have some ancient shards
+            // which have been laying dormant, and we don't want they to
+            // suddently wake up
+            return false;
+
+        case TShardState::Readonly:
+            // Followers cannot watch subdomain state
+            return false;
+
+        default:
+            // It may not be safe to watch in unexpected states
+            return false;
+    }
 }
 
 void TDataShard::StopWatchingSubDomainPathId() {
@@ -115,21 +170,66 @@ private:
     const bool OutOfSpace;
 };
 
+class TDataShard::TTxPersistSubDomainTablesMetricsLevel : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxPersistSubDomainTablesMetricsLevel(TDataShard* self, NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level)
+        : TTransactionBase(self)
+        , Level(level)
+    { }
+
+    TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_TABLES_METRICS_LEVEL; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (Self->SubDomainTablesMetricsLevel != Level) {
+            Self->PersistSys(db, Schema::Sys_SubDomainTablesMetricsLevel, ui64(Level));
+            Self->SubDomainTablesMetricsLevel = Level;
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        // nothing
+    }
+
+private:
+    const NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel Level;
+};
+
 void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
-        const bool outOfSpace = msg->Result->GetPathDescription()
-            .GetDomainDescription()
-            .GetDomainState()
-            .GetDiskQuotaExceeded();
+        const auto& domainDescription = msg->Result->GetPathDescription().GetDomainDescription();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Discovered subdomain " << msg->PathId << " state, outOfSpace = " << outOfSpace
-            << " at datashard " << TabletID());
+        const bool outOfSpace = domainDescription.GetDomainState().GetDiskQuotaExceeded();
+
+        YDB_LOG_DEBUG_CTX(ctx, "Discovered subdomain state",
+            {"pathId", msg->PathId},
+            {"outOfSpace", outOfSpace},
+            {"tabletId", TabletID()});
 
         Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
+
+        // Persisted so that a restart keeps emitting detailed metrics without
+        // waiting for the next subdomain publish.
+        const auto tablesMetricsLevel = domainDescription.GetTablesMetricsLevel();
+
+        if (tablesMetricsLevel != SubDomainTablesMetricsLevel) {
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "Discovered subdomain " << msg->PathId << " tablesMetricsLevel = "
+                << NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel_Name(tablesMetricsLevel)
+                << " at datashard " << TabletID());
+
+            Execute(new TTxPersistSubDomainTablesMetricsLevel(this, tablesMetricsLevel), ctx);
+        }
     }
 }
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

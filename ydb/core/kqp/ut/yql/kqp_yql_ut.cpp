@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -578,17 +578,48 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         CompareYson(R"([[3]])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(Discard) {
-        auto kikimr = DefaultKikimrRunner();
-        auto db = kikimr.GetQueryClient();
+    Y_UNIT_TEST_TWIN(Discard, DiscardSelectIsOn) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableDiscardSelect(DiscardSelectIsOn);
 
+        TKikimrRunner kikimr{TKikimrSettings(appConfig)};
+        auto db = kikimr.GetQueryClient();
         auto result = db.ExecuteQuery(R"(
             DISCARD SELECT 1;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+        if (DiscardSelectIsOn) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+        }
     }
 
+    Y_UNIT_TEST(Explain) {
+        auto kikimr = DefaultKikimrRunner();
+        auto queries = std::vector{"EXPLAIN SELECT 1;", 
+                                   "EXPLAIN SELECT 1; SELECT 2;", 
+                                   "SELECT 1; EXPLAIN SELECT 2;",
+                                   "EXPLAIN DROP TABLE IF EXISTS test;"};
+        
+        for (const auto& query : queries) {
+            {
+                auto db = kikimr.GetQueryClient();
+                auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EXPLAIN is not supported");
+            }
+            {
+                auto db = kikimr.GetTableClient();
+                auto session = db.CreateSession().GetValueSync().GetSession();
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "EXPLAIN is not supported");
+            }
+        }
+    }
     Y_UNIT_TEST(AnsiIn) {
         auto kikimr = DefaultKikimrRunner();
         auto db = kikimr.GetQueryClient();
@@ -609,12 +640,9 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     }
 
     Y_UNIT_TEST(UuidPrimaryKeyDisabled) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetEnableUuidAsPrimaryKey(false)
-            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 
@@ -680,11 +708,8 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     }
 
     Y_UNIT_TEST(UuidPrimaryKey) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 
@@ -828,11 +853,8 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     }
 
     Y_UNIT_TEST(TestUuidPrimaryKeyPrefixSearch) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 
@@ -884,11 +906,8 @@ Y_UNIT_TEST_SUITE(KqpYql) {
     }
 
     Y_UNIT_TEST(TestUuidDefaultColumn) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 
@@ -968,13 +987,9 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(PgIntPrimaryKey, EnableKqpDataQueryStreamLookup) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(EnableKqpDataQueryStreamLookup);
+    Y_UNIT_TEST(PgIntPrimaryKey) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
             .SetKqpSettings({setting});
         TKikimrRunner kikimr(serverSettings.SetWithSampleTables(false));
 

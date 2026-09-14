@@ -66,6 +66,7 @@
 #include "replication/slot.h"
 #include "replication/syncrep.h"
 #include "storage/bufmgr.h"
+#include "storage/fd.h"
 #include "storage/large_object.h"
 #include "storage/pg_shmem.h"
 #include "storage/predicate.h"
@@ -470,6 +471,14 @@ static const struct config_enum_entry wal_compression_options[] = {
 	{NULL, 0, false}
 };
 
+static const struct config_enum_entry file_extend_method_options[] = {
+#ifdef HAVE_POSIX_FALLOCATE
+	{"posix_fallocate", FILE_EXTEND_METHOD_POSIX_FALLOCATE, false},
+#endif
+	{"write_zeros", FILE_EXTEND_METHOD_WRITE_ZEROS, false},
+	{NULL, 0, false}
+};
+
 /*
  * Options for enum values stored in other modules
  */
@@ -564,6 +573,7 @@ static __thread char *server_encoding_string;
 static __thread char *server_version_string;
 static __thread int	server_version_num;
 static __thread char *debug_io_direct_string;
+static __thread char *restrict_nonsystem_relation_kind_string;
 
 #ifdef HAVE_SYSLOG
 #define	DEFAULT_SYSLOG_FACILITY LOG_LOCAL0

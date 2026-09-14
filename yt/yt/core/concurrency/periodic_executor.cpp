@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/utilex/random.h>
 
+#include <algorithm>
+
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -25,9 +27,9 @@ TDefaultInvocationTimePolicy::TDefaultInvocationTimePolicy(
 void TDefaultInvocationTimePolicy::ProcessResult()
 { }
 
-TInstant TDefaultInvocationTimePolicy::KickstartDeadline()
+TInstant TDefaultInvocationTimePolicy::GenerateKickstartDeadline()
 {
-    return TInstant::Now() + RandomDuration(Splay);
+    return LastDeadline_ = TInstant::Now() + RandomDuration(Splay);
 }
 
 bool TDefaultInvocationTimePolicy::IsEnabled()
@@ -55,16 +57,16 @@ void TDefaultInvocationTimePolicy::SetOptions(std::optional<TDuration> period)
     Period = period;
 }
 
-TInstant TDefaultInvocationTimePolicy::NextDeadline()
+TInstant TDefaultInvocationTimePolicy::GenerateNextDeadline()
 {
-    auto randomGenerator = [] {
-        double rand = RandomNumber<double>();
-
-        return 2.0 * rand - 1.0;
-    };
-
-    //! Jitter is divided by 2 for historical reasons.
-    return TInstant::Now() + ApplyJitter(*Period, Jitter / 2.0, randomGenerator);
+    switch (DelayMode) {
+        case EPeriodicExecutorDelayMode::FromPreviousStart:
+            // Keep a fixed start-to-start period; never schedule into the past.
+            return LastDeadline_ = std::max(LastDeadline_ + GenerateDelay(), TInstant::Now());
+        case EPeriodicExecutorDelayMode::FromPreviousEnd:
+            return LastDeadline_ = TInstant::Now() + GenerateDelay();
+    }
+    YT_ABORT();
 }
 
 bool TDefaultInvocationTimePolicy::IsOutOfBandProhibited()

@@ -20,7 +20,7 @@ namespace NYql {
     class TActorSystemManager {
     public:
         TActorSystemManager(
-            IMetricsRegistryPtr& metricsRegistry,
+            IMetricsRegistryPtr metricsRegistry,
             NActors::NLog::EPriority loggingLevel,
             TIntrusivePtr<NActors::NLog::TSettings> loggingSettings = nullptr);
 

@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include <yt/yt/library/profiling/sensor.h>
 #include <yt/yt/core/service_discovery/service_discovery.h>
 
 namespace NYT::NServiceDiscovery::NYP {
@@ -21,6 +22,9 @@ namespace NYT::NServiceDiscovery::NYP {
  *  actual erroneous one.
  */
 IServiceDiscoveryPtr CreateServiceDiscovery(TServiceDiscoveryConfigPtr config);
+
+
+IServiceDiscoveryPtr CreateServiceDiscovery(TServiceDiscoveryConfigPtr config, NProfiling::TProfiler profiler);
 
 ////////////////////////////////////////////////////////////////////////////////
 

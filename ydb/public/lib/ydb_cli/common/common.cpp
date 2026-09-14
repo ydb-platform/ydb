@@ -12,8 +12,7 @@
 #include <windows.h>
 #endif
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 TProfileConfig::TProfileConfig(const TString& profileName)
     : ProfileName(profileName)
@@ -161,7 +160,7 @@ TString InputPassword() {
 #elif defined(_win_)
             SetConsoleMode(hStdin, mode);
 #endif
-            exit(EXIT_FAILURE);
+            throw yexception() << "Input interrupted";
         } else {
             Cerr << '*';
             password.push_back(c);
@@ -178,5 +177,16 @@ TString InputPassword() {
     return password;
 }
 
+bool ThrowOnErrorAndCheckEOS(NYdb::TStreamPartStatus status) {
+    if (!status.IsSuccess()) {
+        if (status.EOS()) {
+            return true;
+        }
+        throw NStatusHelpers::TYdbErrorException(status) << static_cast<NYdb::Dev::TStatus>(status);
+    } else if (status.GetIssues()) {
+        Cerr << static_cast<NYdb::Dev::TStatus>(status);
+    }
+    return false;
 }
-}
+
+} // namespace NYdb::NConsoleClient

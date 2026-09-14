@@ -4,6 +4,8 @@
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -62,24 +64,28 @@ void TOperation::AddInReadSet(const TReadSetKey &rsKey,
     auto it = CoverageBuilders().find(std::make_pair(rsKey.From, rsKey.To));
     if (it != CoverageBuilders().end()) {
         if (it->second->AddResult(btList)) {
-            LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Filled readset for " << *this << " from=" << rsKey.From
-                        << " to=" << rsKey.To << "origin=" << rsKey.Origin);
-            InReadSets()[it->first].emplace_back(TRSData(readSet, rsKey.Origin));
+            YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Filled readset",
+                {"operation", *this},
+                {"from", rsKey.From},
+                {"to", rsKey.To},
+                {"origin", rsKey.Origin});
+            InReadSets()[it->first].emplace_back(TRSData{ std::move(readSet), rsKey.Origin });
             if (it->second->IsComplete()) {
-                Y_ABORT_UNLESS(InputDataRef().RemainReadSets > 0, "RemainReadSets counter underflow");
+                Y_ENSURE(InputDataRef().RemainReadSets > 0, "RemainReadSets counter underflow");
                 --InputDataRef().RemainReadSets;
             }
         }
     } else {
-        LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                     "Discarded readset for " << *this << " from=" << rsKey.From
-                     << " to=" << rsKey.To << "origin=" << rsKey.Origin);
+        YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Discarded readset",
+            {"operation", *this},
+            {"from", rsKey.From},
+            {"to", rsKey.To},
+            {"origin", rsKey.Origin});
     }
 }
 
 void TOperation::AddDependency(const TOperation::TPtr &op) {
-    Y_ABORT_UNLESS(this != op.Get());
+    Y_ENSURE(this != op.Get());
 
     if (Dependencies.insert(op).second) {
         op->Dependents.insert(this);
@@ -87,7 +93,7 @@ void TOperation::AddDependency(const TOperation::TPtr &op) {
 }
 
 void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
-    Y_ABORT_UNLESS(this != op.Get());
+    Y_ENSURE(this != op.Get());
 
     if (SpecialDependencies.insert(op).second) {
         op->SpecialDependents.insert(this);
@@ -95,7 +101,7 @@ void TOperation::AddSpecialDependency(const TOperation::TPtr &op) {
 }
 
 void TOperation::AddImmediateConflict(const TOperation::TPtr &op) {
-    Y_ABORT_UNLESS(this != op.Get());
+    Y_ENSURE(this != op.Get());
     Y_DEBUG_ABORT_UNLESS(!IsImmediate());
     Y_DEBUG_ABORT_UNLESS(op->IsImmediate());
 
@@ -184,7 +190,7 @@ void TOperation::ClearImmediateConflicts() {
 }
 
 void TOperation::AddRepeatableReadConflict(const TOperation::TPtr &op) {
-    Y_ABORT_UNLESS(this != op.Get());
+    Y_ENSURE(this != op.Get());
     Y_DEBUG_ABORT_UNLESS(IsImmediate());
     Y_DEBUG_ABORT_UNLESS(!op->IsImmediate());
 
@@ -199,7 +205,7 @@ void TOperation::AddRepeatableReadConflict(const TOperation::TPtr &op) {
 }
 
 void TOperation::PromoteRepeatableReadConflicts() {
-    Y_ABORT_UNLESS(IsImmediate());
+    Y_ENSURE(IsImmediate());
 
     for (auto& op : RepeatableReadConflicts) {
         Y_DEBUG_ABORT_UNLESS(op->RepeatableReadConflicts.contains(this));
@@ -279,7 +285,7 @@ void TOperation::AdvanceExecutionPlan()
     profile.WaitTime = now - ExecutionProfile.StartUnitAt - profile.ExecuteTime
         - profile.CommitTime - profile.CompleteTime - profile.DelayedCommitTime;
 
-    Y_ABORT_UNLESS(!IsExecutionPlanFinished());
+    Y_ENSURE(!IsExecutionPlanFinished());
     ++CurrentUnit;
 
     ExecutionProfile.StartUnitAt = now;
@@ -323,6 +329,24 @@ void TOperation::SetFinishProposeTs() noexcept
     SetFinishProposeTs(AppData()->MonotonicTimeProvider->Now());
 }
 
+std::optional<TString> TOperation::OnMigration(TDataShard&, const TActorContext&)
+{
+    // By default operations cannot be migrated
+    return std::nullopt;
+}
+
+bool TOperation::OnRestoreMigrated(TDataShard&, const TString&)
+{
+    // By default operations cannot be restored
+    return false;
+}
+
+bool TOperation::OnFinishMigration(TDataShard&, const NTable::TScheme&)
+{
+    // By default operations cannot finish migration
+    return false;
+}
+
 bool TOperation::OnStopping(TDataShard&, const TActorContext&)
 {
     // By default operations don't do anything when stopping
@@ -337,3 +361,7 @@ void TOperation::OnCleanup(TDataShard&, std::vector<std::unique_ptr<IEventHandle
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

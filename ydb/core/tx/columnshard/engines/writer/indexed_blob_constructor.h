@@ -7,10 +7,10 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
-#include <ydb/core/tx/columnshard/engines/insert_table/user_data.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/data_events/write_data.h>
+
+#include <ydb/library/signals/object_counter.h>
 
 namespace NKikimr::NColumnShard {
 class TColumnShard;
@@ -28,7 +28,6 @@ private:
     TWriteAggregation* ParentAggregation;
 
 public:
-    std::shared_ptr<TUserData> BuildInsertionUserData(const NColumnShard::TColumnShard& owner) const;
     void InitBlobId(const TUnifiedBlobId& id);
 
     const NArrow::TSerializedBatch& GetSplittedBlobs() const {
@@ -49,7 +48,8 @@ public:
 
     TWideSerializedBatch(NArrow::TSerializedBatch&& splitted, TWriteAggregation& parentAggregation)
         : SplittedBlobs(std::move(splitted))
-        , ParentAggregation(&parentAggregation) {
+        , ParentAggregation(&parentAggregation)
+    {
     }
 };
 
@@ -62,6 +62,7 @@ private:
 
 public:
     TWritingBlob() = default;
+
     bool AddData(TWideSerializedBatch& batch) {
         AFL_VERIFY(!Extracted);
         if (BlobSize + batch.GetSplittedBlobs().GetSize() < 8 * 1024 * 1024) {
@@ -131,7 +132,8 @@ public:
         , Size(writeData.GetSize())
         , BlobsAction(writeData.GetBlobsAction())
         , SchemaSubset(writeData.GetSchemaSubsetVerified())
-        , RecordBatch(batch) {
+        , RecordBatch(batch)
+    {
         AFL_VERIFY(WriteMeta);
         for (auto&& s : splittedBlobs) {
             SplittedBlobs.emplace_back(std::move(s), *this);
@@ -145,7 +147,8 @@ public:
         : WriteMeta(writeData.GetWriteMetaPtr())
         , SchemaVersion(writeData.GetData()->GetSchemaVersion())
         , Size(writeData.GetSize())
-        , BlobsAction(writeData.GetBlobsAction()) {
+        , BlobsAction(writeData.GetBlobsAction())
+    {
         AFL_VERIFY(!writeData.GetSchemaSubset());
     }
 };
@@ -159,9 +162,11 @@ private:
 
 public:
     TWritingBuffer() = default;
+
     TWritingBuffer(const std::shared_ptr<IBlobsWritingAction>& action, std::vector<std::shared_ptr<TWriteAggregation>>&& aggregations)
         : BlobsAction(action)
-        , Aggregations(std::move(aggregations)) {
+        , Aggregations(std::move(aggregations))
+    {
         AFL_VERIFY(BlobsAction);
         for (auto&& aggr : Aggregations) {
             SumSize += aggr->GetSize();

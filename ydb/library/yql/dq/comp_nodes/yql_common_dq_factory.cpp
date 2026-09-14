@@ -1,8 +1,11 @@
 #include "yql_common_dq_factory.h"
+
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/yql/dq/actors/compute/events/events.h>
+
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/actors/core/actor.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NYql {
 
@@ -47,7 +50,7 @@ private:
 TComputationNodeFactory GetCommonDqFactory() {
     return [] (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             TStringBuf name = callable.GetType()->GetName();
-            if (name == "DqNotify") {
+            if (name == "DqNotify"sv) {
                 return new TDqNotify(ctx.Mutables);
             }
 

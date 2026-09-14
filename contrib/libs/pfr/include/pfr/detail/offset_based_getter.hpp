@@ -1,5 +1,5 @@
 // Copyright (c) 2017-2018 Chris Beck
-// Copyright (c) 2019-2023 Antony Polukhin
+// Copyright (c) 2019-2025 Antony Polukhin
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -10,13 +10,15 @@
 
 #include <pfr/detail/config.hpp>
 
-#include <type_traits>
-#include <utility>
-#include <memory>  // std::addressof
 #include <pfr/detail/sequence_tuple.hpp>
 #include <pfr/detail/rvalue_t.hpp>
 #include <pfr/detail/size_t_.hpp>
 
+#if !defined(PFR_INTERFACE_UNIT)
+#include <type_traits>
+#include <utility>
+#include <memory>  // std::addressof
+#endif
 
 namespace pfr { namespace detail {
 

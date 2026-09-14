@@ -3,6 +3,7 @@
 #include "public.h"
 #include "unversioned_row.h"
 #include "versioned_row.h"
+#include "tracked_memory_chunk_provider.h"
 
 #include <yt/yt/core/misc/memory_usage_tracker.h>
 
@@ -23,37 +24,22 @@ class TRowBuffer
     : public TRefCounted
 {
 public:
+    template <class TTag = TDefaultRowBufferPoolTag>
+    explicit TRowBuffer(
+        TTag tag = TDefaultRowBufferPoolTag(),
+        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
+        IMemoryUsageTrackerPtr tracker = nullptr,
+        bool allowMemoryOvercommit = false);
+
     TRowBuffer(
         TRefCountedTypeCookie tagCookie,
         IMemoryChunkProviderPtr chunkProvider,
-        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
-        IMemoryUsageTrackerPtr tracker = nullptr);
-
-    template <class TTag = TDefaultRowBufferPoolTag>
-    explicit TRowBuffer(
-        TTag /*tag*/ = TDefaultRowBufferPoolTag(),
-        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize,
-        IMemoryUsageTrackerPtr tracker = nullptr)
-        : MemoryTracker_(std::move(tracker))
-        , Pool_(
-            TTag(),
-            startChunkSize)
-    {
-        static_assert(IsEmptyClass<TTag>());
-    }
+        size_t startChunkSize = TChunkedMemoryPool::DefaultStartChunkSize);
 
     template <class TTag>
     TRowBuffer(
-        TTag /*tag*/,
-        IMemoryChunkProviderPtr chunkProvider,
-        IMemoryUsageTrackerPtr tracker = nullptr)
-        : MemoryTracker_(std::move(tracker))
-        , Pool_(
-            GetRefCountedTypeCookie<TTag>(),
-            std::move(chunkProvider))
-    {
-        static_assert(IsEmptyClass<TTag>());
-    }
+        TTag tag,
+        IMemoryChunkProviderPtr chunkProvider);
 
     TChunkedMemoryPool* GetPool();
 
@@ -112,12 +98,7 @@ public:
     void Purge();
 
 private:
-    const IMemoryUsageTrackerPtr MemoryTracker_;
-
     TChunkedMemoryPool Pool_;
-    std::optional<TMemoryUsageTrackerGuard> MemoryGuard_;
-
-    void ValidateNoOverflow();
 };
 
 DEFINE_REFCOUNTED_TYPE(TRowBuffer)
@@ -125,3 +106,7 @@ DEFINE_REFCOUNTED_TYPE(TRowBuffer)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTableClient
+
+#define ROW_BUFFER_INL_H_
+#include "row_buffer-inl.h"
+#undef ROW_BUFFER_INL_H_

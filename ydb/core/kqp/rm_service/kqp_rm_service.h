@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
@@ -14,9 +14,12 @@
 
 #include "kqp_resource_estimation.h"
 
+#include <algorithm>
 #include <array>
+#include <atomic>
 #include <bitset>
 #include <functional>
+#include <limits>
 #include <utility>
 
 
@@ -25,105 +28,58 @@ namespace NKqp {
 
 namespace NRm {
 
-/// memory pools
-enum EKqpMemoryPool : ui32 {
-    Unspecified = 0,
-    ScanQuery   = 1, // slow allocations via ResourceBroker
-    DataQuery   = 2, // fast allocations via memory-arena
-
-    Count = 3
-};
-
 using TOnResourcesSnapshotCallback = std::function<void(TVector<NKikimrKqp::TKqpNodeResources>&&)>;
 
 /// resources request
 struct TKqpResourcesRequest {
     ui64 ExecutionUnits = 0;
-    EKqpMemoryPool MemoryPool = EKqpMemoryPool::Unspecified;
     ui64 Memory = 0;
     ui64 ExternalMemory = 0;
-    bool ReleaseAllResources = false;
-
-    void MoveToFreeTier() {
-        ExternalMemory += Memory;
-        Memory = 0;
-    }
 
     TString ToString() const {
-        return TStringBuilder() << "TKqpResourcesRequest{ MemoryPool: " << (ui32) MemoryPool << ", Memory: " << Memory
-            << "ExternalMemory: " << ExternalMemory << " }";
+        return TStringBuilder() << "TKqpResourcesRequest{ ExecutionUnits: " << ExecutionUnits << ", Memory: " << Memory
+            << ", ExternalMemory: " << ExternalMemory << " }";
     }
 };
-
-class TTxState;
 
 class TMemoryResourceCookie : public TAtomicRefCount<TMemoryResourceCookie> {
 public:
-    std::atomic<bool> SpillingPercentReached{false};
+    // Limit - Used - OverLimit of the owning TMemoryResource, i.e. the bytes left before the spilling
+    // threshold (negative = over the threshold, |value| is the overuse). Written under the resource
+    // manager lock, read lock-free by compute actors, see TTxState::GetMemoryAvailability.
+    std::atomic<i64> MemoryAvailability{std::numeric_limits<i64>::max()};
 };
 
-class TTaskState : public TAtomicRefCount<TTaskState> {
-    friend TTxState;
-
-public:
-    const ui64 TaskId = 0;
-    const TInstant CreatedAt;
-    ui64 ScanQueryMemory = 0;
-    ui64 ExternalDataQueryMemory = 0;
-    ui64 ResourceBrokerTaskId = 0;
-    ui32 ExecutionUnits = 0;
-    TIntrusivePtr<TMemoryResourceCookie> TotalMemoryCookie;
-    TIntrusivePtr<TMemoryResourceCookie> PoolMemoryCookie;
-
-public:
-
-    // compute actor wants to release some memory.
-    // we distribute that memory across granted resources
-    TKqpResourcesRequest FitRequest(TKqpResourcesRequest& resources) {
-        ui64 releaseScanQueryMemory = std::min(ScanQueryMemory, resources.Memory);
-        ui64 leftToRelease = resources.Memory - releaseScanQueryMemory;
-        ui64 releaseExternalDataQueryMemory = std::min(ExternalDataQueryMemory, resources.ExternalMemory + leftToRelease);
-
-        resources.Memory = releaseScanQueryMemory;
-        resources.ExternalMemory = releaseExternalDataQueryMemory;
-        return resources;
-    }
-
-    bool IsReasonableToStartSpilling() {
-        return (PoolMemoryCookie && PoolMemoryCookie->SpillingPercentReached.load())
-            || (TotalMemoryCookie && TotalMemoryCookie->SpillingPercentReached.load());
-    }
-
-    TKqpResourcesRequest FreeResourcesRequest() const {
-        return TKqpResourcesRequest{
-            .ExecutionUnits=ExecutionUnits,
-            .MemoryPool=EKqpMemoryPool::Unspecified,
-            .Memory=ScanQueryMemory,
-            .ExternalMemory=ExternalDataQueryMemory};
-    }
-
-    explicit TTaskState(ui64 taskId, TInstant createdAt)
-        : TaskId(taskId)
-        , CreatedAt(createdAt)
-    {
-    }
+// The cookies a tx reads its memory availability from: the node total and, for a tx with a resource pool,
+// the pool resource. Handed out by the resource manager when the tx is constructed, see TTxState.
+struct TMemoryResourceCookies {
+    TIntrusivePtr<TMemoryResourceCookie> Total;
+    TIntrusivePtr<TMemoryResourceCookie> Pool;
 };
+
+class IKqpResourceManager;
 
 class TTxState : public TAtomicRefCount<TTxState> {
 
 public:
+    std::shared_ptr<IKqpResourceManager> ResourceManager;
+    TIntrusivePtr<TKqpCounters> Counters;
     const ui64 TxId;
     const TInstant CreatedAt;
-    TIntrusivePtr<TKqpCounters> Counters;
     const TString PoolId;
     const double MemoryPoolPercent;
     const TString Database;
+    const bool MemoryPoolLimited;
     const bool CollectBacktrace;
+    // Attached at construction and never written again, so that GetMemoryAvailability() can be read from any
+    // thread without a lock, see IKqpResourceManager::GetMemoryResourceCookies
+    const TIntrusivePtr<TMemoryResourceCookie> TotalMemoryCookie;
+    const TIntrusivePtr<TMemoryResourceCookie> PoolMemoryCookie;
 
-private:
     std::atomic<ui64> TxScanQueryMemory = 0;
     std::atomic<ui64> TxExternalDataQueryMemory = 0;
     std::atomic<ui32> TxExecutionUnits = 0;
+    std::atomic<ui64> TxResourceBrokerTaskId = 0;
     std::atomic<ui64> TxMaxAllocationSize = 0;
 
     // TODO(ilezhankin): it's better to use std::atomic<std::shared_ptr<>> which is not supported at the moment.
@@ -137,23 +93,45 @@ private:
     std::atomic<bool> HasFailedAllocationBacktrace = false;
 
 public:
-    explicit TTxState(ui64 txId, TInstant now, TIntrusivePtr<TKqpCounters> counters, const TString& poolId, const double memoryPoolPercent,
-        const TString& database, bool collectBacktrace)
-        : TxId(txId)
-        , CreatedAt(now)
-        , Counters(std::move(counters))
-        , PoolId(poolId)
-        , MemoryPoolPercent(memoryPoolPercent)
-        , Database(database)
-        , CollectBacktrace(collectBacktrace)
-    {}
+    TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
+        const TString& database, bool collectBacktrace);
+    ~TTxState();
 
-    ~TTxState() {
-        delete TxMaxAllocationBacktrace.load();
+private:
+    TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
+        const TString& database, bool collectBacktrace, TMemoryResourceCookies cookies);
+
+public:
+    // The key of a resource pool in the resource manager, the one rule for the tx and for the cookie hand-out
+    // that runs before the tx exists (IKqpResourceManager::GetMemoryResourceCookies)
+    static std::pair<TString, TString> MakePoolId(const TString& database, const TString& poolId) {
+        return std::make_pair(database, poolId);
     }
 
     std::pair<TString, TString> MakePoolId() const {
-        return std::make_pair(Database, PoolId);
+        return MakePoolId(Database, PoolId);
+    }
+
+    bool HasMemoryPoolLimit() const {
+        return MemoryPoolLimited;
+    }
+
+    // Node level memory availability of this tx: the minimum over the node total and the pool resource,
+    // see TMemoryResourceCookie. The cookies are attached at construction, nothing to synchronize here.
+    // Unlimited only with a resource manager that hands out no cookies (test stubs).
+    i64 GetMemoryAvailability() const {
+        i64 result = TotalMemoryCookie ? TotalMemoryCookie->MemoryAvailability.load() : std::numeric_limits<i64>::max();
+        if (PoolMemoryCookie) {
+            result = std::min(result, PoolMemoryCookie->MemoryAvailability.load());
+        }
+        return result;
+    }
+
+    TKqpResourcesRequest FreeResourcesRequest() const {
+        return TKqpResourcesRequest{
+            .ExecutionUnits=TxExecutionUnits.load(),
+            .Memory=TxScanQueryMemory.load(),
+            .ExternalMemory=TxExternalDataQueryMemory.load()};
     }
 
     TString ToString() const {
@@ -166,7 +144,7 @@ public:
 
         if (!PoolId.empty()) {
             res << ", PoolId: " << PoolId
-                << ", MemoryPoolPercent: " << Sprintf("%.2f", MemoryPoolPercent > 0 ? MemoryPoolPercent : 100);
+                << ", MemoryPoolPercent: " << Sprintf("%.2f", MemoryPoolPercent);
         }
 
         if (CollectBacktrace) {
@@ -217,38 +195,49 @@ public:
         }
     }
 
-    void Released(TIntrusivePtr<TTaskState>& taskState, const TKqpResourcesRequest& resources) {
+    bool Released(const TKqpResourcesRequest& resources) {
         if (resources.ExecutionUnits) {
             Counters->RmOnCompleteFree->Inc();
         } else {
             Counters->RmExtraMemFree->Inc();
         }
 
+        auto prevExternalMemory = TxExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
+        if (prevExternalMemory < resources.ExternalMemory) {
+            return false;
+        }
         Counters->RmExternalMemory->Sub(resources.ExternalMemory);
-        TxExternalDataQueryMemory.fetch_sub(resources.ExternalMemory);
-        taskState->ExternalDataQueryMemory -= resources.ExternalMemory;
 
-        TxScanQueryMemory.fetch_sub(resources.Memory);
-        taskState->ScanQueryMemory -= resources.Memory;
+        auto prevMemory = TxScanQueryMemory.fetch_sub(resources.Memory);
+        if (prevMemory < resources.Memory) {
+            return false;
+        }
         Counters->RmMemory->Sub(resources.Memory);
 
-        TxExecutionUnits.fetch_sub(resources.ExecutionUnits);
-        taskState->ExecutionUnits -= resources.ExecutionUnits;
+        auto prevExecutionUnits = TxExecutionUnits.fetch_sub(resources.ExecutionUnits);
+        if (prevExecutionUnits < resources.ExecutionUnits) {
+            return false;
+        }
         Counters->RmComputeActors->Sub(resources.ExecutionUnits);
+
+        return true;
     }
 
-    void Allocated(TIntrusivePtr<TTaskState>& taskState, const TKqpResourcesRequest& resources) {
+    void Allocated(const TKqpResourcesRequest& resources) {
+
+        TxExecutionUnits.fetch_add(resources.ExecutionUnits);
+        Counters->RmComputeActors->Add(resources.ExecutionUnits);
+
+        TxScanQueryMemory.fetch_add(resources.Memory);
+        Counters->RmMemory->Add(resources.Memory);
+
+        TxExternalDataQueryMemory.fetch_add(resources.ExternalMemory);
+        Counters->RmExternalMemory->Add(resources.ExternalMemory);
+
         if (resources.ExecutionUnits > 0) {
             Counters->RmOnStartAllocs->Inc();
         }
 
-        Counters->RmExternalMemory->Add(resources.ExternalMemory);
-        TxExternalDataQueryMemory.fetch_add(resources.ExternalMemory);
-        taskState->ExternalDataQueryMemory += resources.ExternalMemory;
-
-        TxScanQueryMemory.fetch_add(resources.Memory);
-        taskState->ScanQueryMemory += resources.Memory;
-        Counters->RmMemory->Add(resources.Memory);
         if (resources.Memory) {
             Counters->RmExtraMemAllocs->Inc();
         }
@@ -271,10 +260,6 @@ public:
                 delete newBacktrace;
             }
         }
-
-        TxExecutionUnits.fetch_add(resources.ExecutionUnits);
-        taskState->ExecutionUnits += resources.ExecutionUnits;
-        Counters->RmComputeActors->Add(resources.ExecutionUnits);
     }
 };
 
@@ -283,8 +268,6 @@ struct TKqpRMAllocateResult {
     bool Success = true;
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason Status = NKikimrKqp::TEvStartKqpTasksResponse::INTERNAL_ERROR;
     TString FailReason;
-    TIntrusivePtr<TTaskState> TaskInfo;
-    TIntrusivePtr<TTxState> TxInfo;
 
     NKikimrKqp::TEvStartKqpTasksResponse::ENotStartedTaskReason GetStatus() const {
         return Status;
@@ -308,7 +291,8 @@ struct TKqpRMAllocateResult {
 /// local resources snapshot
 struct TKqpLocalNodeResources {
     ui32 ExecutionUnits = 0;
-    std::array<ui64, EKqpMemoryPool::Count> Memory;
+    ui64 Memory = 0;
+    ui64 ExternalMemory = 0;
 };
 
 struct TPlannerPlacingOptions {
@@ -325,18 +309,30 @@ public:
 
     virtual const TIntrusivePtr<TKqpCounters>& GetCounters() const = 0;
 
-    virtual TKqpRMAllocateResult AllocateResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) = 0;
+    // The spilling cookies for a new tx: the node total and, with a resource pool, the pool resource (created on
+    // its first use). Called by the TTxState constructor, the cookies then stay with the tx for its whole life.
+    virtual TMemoryResourceCookies GetMemoryResourceCookies(const TString& database, const TString& poolId, double memoryPoolPercent) = 0;
+
+    virtual TKqpRMAllocateResult AllocateResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
 
     virtual TPlannerPlacingOptions GetPlacingOptions() = 0;
     virtual TTaskResourceEstimation EstimateTaskResources(const NYql::NDqProto::TDqTask& task, const ui32 tasksCount) = 0;
     virtual void EstimateTaskResources(TTaskResourceEstimation& result, const ui32 tasksCount) = 0;
 
-    virtual void FreeResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task, const TKqpResourcesRequest& resources) = 0;
-    virtual void FreeResources(TIntrusivePtr<TTxState>& tx, TIntrusivePtr<TTaskState>& task) = 0;
+    virtual void FreeResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) = 0;
+    virtual void FinishTx(TTxState& tx) = 0;
     virtual void RequestClusterResourcesInfo(TOnResourcesSnapshotCallback&& callback) = 0;
 
     virtual TVector<NKikimrKqp::TKqpNodeResources> GetClusterResources() const = 0;
     virtual TKqpLocalNodeResources GetLocalResources() const = 0;
+
+    // True after first TEvBoardInfo. Distinguishes "gossip not started" from "no peers".
+    virtual bool GetInitialBoardSyncDone() const = 0;
+
+    // NodeIds from first board sync; immutable thereafter. Empty until
+    // GetInitialBoardSyncDone(). Unlike GetClusterResources() does not wait for
+    // per-peer TEvSendResources (no RTT).
+    virtual TVector<ui32> GetInitialBoardNodeIds() const = 0;
 
     virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
 
@@ -349,6 +345,8 @@ public:
 struct TResourceSnapshotState {
     std::shared_ptr<TVector<NKikimrKqp::TKqpNodeResources>> Snapshot;
     TMutex Lock;
+    bool InitialBoardSyncReceived = false;
+    TVector<ui32> InitialBoardNodeIds;
 };
 
 struct TEvKqpResourceInfoExchanger {
@@ -378,7 +376,7 @@ struct TKqpProxySharedResources {
 NActors::IActor* CreateKqpResourceManagerActor(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
     TIntrusivePtr<TKqpCounters> counters, NActors::TActorId resourceBroker = {},
     std::shared_ptr<TKqpProxySharedResources> kqpProxySharedResources = nullptr,
-    ui32 nodeId = 0);
+    ui32 nodeId = 0, TDuration warmupDeadline = TDuration::Zero());
 
 std::shared_ptr<NRm::IKqpResourceManager> GetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());
 std::shared_ptr<NRm::IKqpResourceManager> TryGetKqpResourceManager(TMaybe<ui32> nodeId = Nothing());

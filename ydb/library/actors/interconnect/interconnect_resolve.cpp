@@ -1,11 +1,12 @@
 #include "interconnect.h"
-#include "interconnect_address.h"
 #include "events_local.h"
-#include "logging.h"
 
+#include <ydb/library/actors/interconnect/logging/logging.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/dnsresolver/dnsresolver.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
 
 namespace NActors {
 
@@ -18,7 +19,7 @@ namespace NActors {
     public:
         TInterconnectResolveActor(
                 const TString& host, ui16 port, ui32 nodeId, const TString& defaultAddress,
-                const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline)
+                const TActorId& replyTo, const TActorId& replyFrom, TMonotonic deadline)
             : Host(host)
             , NodeId(nodeId)
             , Port(port)
@@ -30,7 +31,7 @@ namespace NActors {
 
         TInterconnectResolveActor(
                 const TString& host, ui16 port,
-                const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline)
+                const TActorId& replyTo, const TActorId& replyFrom, TMonotonic deadline)
             : Host(host)
             , Port(port)
             , ReplyTo(replyTo)
@@ -45,7 +46,10 @@ namespace NActors {
         void Bootstrap() {
             TMaybe<TString> errorText;
             if (auto addr = ExtractDefaultAddr(errorText)) {
-                LOG_TRACE_IC("ICR01", "Host: %s, CACHED address: %s", Host.c_str(), DefaultAddress.c_str());
+                YDB_LOG_TRACE("CACHED",
+                    {"marker", "ICR01"},
+                    {"host", Host},
+                    {"address", DefaultAddress});
                 if (NodeId) {
                     return SendLocalNodeInfoAndDie({{*addr}});
                 } else {
@@ -57,20 +61,22 @@ namespace NActors {
                 SendErrorAndDie(*errorText);
             }
 
-            auto now = TActivationContext::Now();
+            auto now = TActivationContext::Monotonic();
             if (Deadline < now) {
                 SendErrorAndDie("Deadline");
                 return;
             }
 
-            LOG_DEBUG_IC("ICR02", "Host: %s, RESOLVING address ...", Host.c_str());
+            YDB_LOG_DEBUG("RESOLVING address",
+                {"marker", "ICR02"},
+                {"host", Host});
             Send(MakeDnsResolverActorId(),
                 NodeId
                     ? static_cast<IEventBase*>(new TEvDns::TEvGetHostByName(Host, AF_UNSPEC))
                     : static_cast<IEventBase*>(new TEvDns::TEvGetAddr(Host, AF_UNSPEC)),
                 IEventHandle::FlagTrackDelivery);
 
-            if (Deadline != TInstant::Max()) {
+            if (Deadline != TMonotonic::Max()) {
                 Schedule(Deadline, new TEvents::TEvWakeup);
             }
 
@@ -117,7 +123,9 @@ namespace NActors {
         }
 
         void SendAddressInfoAndDie(NAddr::IRemoteAddrPtr addr) {
-            LOG_DEBUG_IC("ICR03", "Host: %s, RESOLVED address", Host.c_str());
+            YDB_LOG_DEBUG("RESOLVED address",
+                {"marker", "ICR03"},
+                {"host", Host});
             auto reply = new TEvAddressInfo;
             reply->Address = std::move(addr);
             TActivationContext::Send(new IEventHandle(ReplyTo, ReplyFrom, reply));
@@ -125,7 +133,9 @@ namespace NActors {
         }
 
         void SendLocalNodeInfoAndDie(std::vector<NInterconnect::TAddress> addresses) {
-            LOG_DEBUG_IC("ICR04", "Host: %s, RESOLVED address", Host.c_str());
+            YDB_LOG_DEBUG("RESOLVED address",
+                {"marker", "ICR04"},
+                {"host", Host});
             auto reply = std::make_unique<TEvLocalNodeInfo>();
             reply->NodeId = *NodeId;
             reply->Addresses = std::move(addresses);
@@ -134,7 +144,10 @@ namespace NActors {
         }
 
         void SendErrorAndDie(const TString& errorText) {
-            LOG_DEBUG_IC("ICR05", "Host: %s, ERROR resolving: %s", Host.c_str(), errorText.c_str());
+            YDB_LOG_DEBUG("ERROR",
+                {"marker", "ICR05"},
+                {"host", Host},
+                {"resolving", errorText});
             auto *event = new TEvResolveError;
             event->Explain = errorText;
             event->Host = Host;
@@ -188,19 +201,19 @@ namespace NActors {
         const TString DefaultAddress;
         const TActorId ReplyTo;
         const TActorId ReplyFrom;
-        const TInstant Deadline;
+        const TMonotonic Deadline;
     };
 
     IActor* CreateResolveActor(
         const TString& host, ui16 port, ui32 nodeId, const TString& defaultAddress,
-        const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline)
+        const TActorId& replyTo, const TActorId& replyFrom, TMonotonic deadline)
     {
         return new TInterconnectResolveActor(host, port, nodeId, defaultAddress, replyTo, replyFrom, deadline);
     }
 
     IActor* CreateResolveActor(
         const TString& host, ui16 port,
-        const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline)
+        const TActorId& replyTo, const TActorId& replyFrom, TMonotonic deadline)
     {
         return new TInterconnectResolveActor(host, port, replyTo, replyFrom, deadline);
     }

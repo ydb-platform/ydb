@@ -1,10 +1,10 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/config/config.h>
 #include <ydb/core/kesus/tablet/events.h>
+#include <ydb/core/persqueue/public/config.h>
 
 namespace {
 
@@ -118,7 +118,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        TKesusInfo::TPtr kesus = context.SS->KesusInfos[txState->TargetPathId];
+        TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(txState->TargetPathId);
         Y_VERIFY_S(kesus, "kesus is null. PathId: " << txState->TargetPathId);
 
         TPath kesusPath = TPath::Init(txState->TargetPathId, context.SS);

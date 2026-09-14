@@ -4,6 +4,13 @@ IF(BUILD_TYPE == RELEASE)
     STRIP()
 ENDIF()
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DUNICODE
+        -D_UNICODE
+    )
+ENDIF()
+
 SRCS(
     main.cpp
 )
@@ -27,7 +34,7 @@ ENDIF()
 
 END()
 
-IF (OS_LINUX)
+IF (OS_LINUX AND USE_SSE4 != "no")
     RECURSE_FOR_TESTS(
         ut
     )

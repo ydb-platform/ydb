@@ -16,6 +16,13 @@
    need to call ffi.cdef() to add more information to it.
 */
 
+#ifdef MS_WIN32
+#include "misc_win32.h"
+#else
+#include "misc_thread_posix.h"
+#endif
+#include "misc_thread_common.h"
+
 #define FFI_COMPLEXITY_OUTPUT   1200     /* xxx should grow as needed */
 
 #define FFIObject_Check(op) PyObject_TypeCheck(op, &FFI_Type)
@@ -25,7 +32,6 @@ struct FFIObject_s {
     PyObject_HEAD
     PyObject *gc_wrefs, *gc_wrefs_freelist;
     PyObject *init_once_cache;
-    struct _cffi_parse_info_s info;
     char ctx_is_static, ctx_is_nonempty;
     builder_c_t types_builder;
 };
@@ -33,8 +39,6 @@ struct FFIObject_s {
 static FFIObject *ffi_internal_new(PyTypeObject *ffitype,
                                  const struct _cffi_type_context_s *static_ctx)
 {
-    static _cffi_opcode_t internal_output[FFI_COMPLEXITY_OUTPUT];
-
     FFIObject *ffi;
     if (static_ctx != NULL) {
         ffi = (FFIObject *)PyObject_GC_New(FFIObject, ffitype);
@@ -54,9 +58,6 @@ static FFIObject *ffi_internal_new(PyTypeObject *ffitype,
     ffi->gc_wrefs = NULL;
     ffi->gc_wrefs_freelist = NULL;
     ffi->init_once_cache = NULL;
-    ffi->info.ctx = &ffi->types_builder.ctx;
-    ffi->info.output = internal_output;
-    ffi->info.output_size = FFI_COMPLEXITY_OUTPUT;
     ffi->ctx_is_static = (static_ctx != NULL);
     ffi->ctx_is_nonempty = (static_ctx != NULL);
     return ffi;
@@ -145,7 +146,8 @@ static PyObject *ffi_fetch_int_constant(FFIObject *ffi, const char *name,
 #define ACCEPT_ALL      (ACCEPT_STRING | ACCEPT_CTYPE | ACCEPT_CDATA)
 #define CONSIDER_FN_AS_FNPTR  8
 
-static CTypeDescrObject *_ffi_bad_type(FFIObject *ffi, const char *input_text)
+static PyObject *_ffi_bad_type(struct _cffi_parse_info_s *info,
+                               const char *input_text)
 {
     size_t length = strlen(input_text);
     char *extra;
@@ -155,7 +157,7 @@ static CTypeDescrObject *_ffi_bad_type(FFIObject *ffi, const char *input_text)
     }
     else {
         char *p;
-        size_t i, num_spaces = ffi->info.error_location;
+        size_t i, num_spaces = info->error_location;
         extra = alloca(length + num_spaces + 4);
         p = extra;
         *p++ = '\n';
@@ -173,7 +175,7 @@ static CTypeDescrObject *_ffi_bad_type(FFIObject *ffi, const char *input_text)
         *p++ = '^';
         *p++ = 0;
     }
-    PyErr_Format(FFIError, "%s%s", ffi->info.error_message, extra);
+    PyErr_Format(FFIError, "%s%s", info->error_message, extra);
     return NULL;
 }
 
@@ -183,18 +185,30 @@ static CTypeDescrObject *_ffi_type(FFIObject *ffi, PyObject *arg,
     /* Returns the CTypeDescrObject from the user-supplied 'arg'.
        Does not return a new reference!
     */
-    if ((accept & ACCEPT_STRING) && PyText_Check(arg)) {
+    if ((accept & ACCEPT_STRING) && PyUnicode_Check(arg)) {
         PyObject *types_dict = ffi->types_builder.types_dict;
+        /* The types_dict keeps the reference alive. Items are never removed */
         PyObject *x = PyDict_GetItem(types_dict, arg);
 
         if (x == NULL) {
-            const char *input_text = PyText_AS_UTF8(arg);
-            int err, index = parse_c_type(&ffi->info, input_text);
-            if (index < 0)
-                return _ffi_bad_type(ffi, input_text);
-
-            x = realize_c_type_or_func(&ffi->types_builder,
-                                       ffi->info.output, index);
+            const char *input_text = PyUnicode_AsUTF8(arg);
+            struct _cffi_parse_info_s info;
+            info.ctx = &ffi->types_builder.ctx;
+            info.output_size = FFI_COMPLEXITY_OUTPUT;
+            info.output = PyMem_Malloc(FFI_COMPLEXITY_OUTPUT * sizeof(_cffi_opcode_t));
+            if (info.output == NULL) {
+                PyErr_NoMemory();
+                return NULL;
+            }
+            int index = parse_c_type(&info, input_text);
+            if (index < 0) {
+                x = _ffi_bad_type(&info, input_text);
+            }
+            else {
+                x = realize_c_type_or_func(&ffi->types_builder,
+                                           info.output, index);
+            }
+            PyMem_Free(info.output);
             if (x == NULL)
                 return NULL;
 
@@ -206,11 +220,12 @@ static CTypeDescrObject *_ffi_type(FFIObject *ffi, PyObject *arg,
                sure that in any case the next _ffi_type() with the same
                'arg' will succeed early, in PyDict_GetItem() above.
             */
-            err = PyDict_SetItem(types_dict, arg, x);
-            Py_DECREF(x); /* we know it was written in types_dict (unless out
-                             of mem), so there is at least that ref left */
-            if (err < 0)
+            PyObject *value = PyDict_SetDefault(types_dict, arg, x);
+            if (value == NULL) {
                 return NULL;
+            }
+            Py_DECREF(x); /* we know types_dict holds a strong ref */
+            x = value;
         }
 
         if (CTypeDescr_Check(x))
@@ -226,17 +241,6 @@ static CTypeDescrObject *_ffi_type(FFIObject *ffi, PyObject *arg,
     else if ((accept & ACCEPT_CDATA) && CData_Check(arg)) {
         return ((CDataObject *)arg)->c_type;
     }
-#if PY_MAJOR_VERSION < 3
-    else if (PyUnicode_Check(arg)) {
-        CTypeDescrObject *result;
-        arg = PyUnicode_AsASCIIString(arg);
-        if (arg == NULL)
-            return NULL;
-        result = _ffi_type(ffi, arg, accept);
-        Py_DECREF(arg);
-        return result;
-    }
-#endif
     else {
         const char *m1 = (accept & ACCEPT_STRING) ? "string" : "";
         const char *m2 = (accept & ACCEPT_CTYPE) ? "ctype object" : "";
@@ -265,14 +269,18 @@ static PyObject *ffi_sizeof(FFIObject *self, PyObject *arg)
         CTypeDescrObject *ct = _ffi_type(self, arg, ACCEPT_ALL);
         if (ct == NULL)
             return NULL;
-        size = ct->ct_size;
+        if (ct->ct_flags & (CT_STRUCT | CT_UNION)) {
+            if (force_lazy_struct(ct) < 0)
+                return NULL;
+        }
+        size = cffi_get_size(ct);
         if (size < 0) {
             PyErr_Format(FFIError, "don't know the size of ctype '%s'",
                          ct->ct_name);
             return NULL;
         }
     }
-    return PyInt_FromSsize_t(size);
+    return PyLong_FromSsize_t(size);
 }
 
 PyDoc_STRVAR(ffi_alignof_doc,
@@ -289,7 +297,7 @@ static PyObject *ffi_alignof(FFIObject *self, PyObject *arg)
     align = get_alignment(ct);
     if (align < 0)
         return NULL;
-    return PyInt_FromLong(align);
+    return PyLong_FromLong(align);
 }
 
 PyDoc_STRVAR(ffi_typeof_doc,
@@ -507,7 +515,7 @@ static PyObject *ffi_offsetof(FFIObject *self, PyObject *args)
             return NULL;
         offset += ofs1;
     }
-    return PyInt_FromSsize_t(offset);
+    return PyLong_FromSsize_t(offset);
 }
 
 PyDoc_STRVAR(ffi_addressof_doc,
@@ -620,9 +628,7 @@ static PyObject *ffi_getctype(FFIObject *self, PyObject *args, PyObject *kwds)
     CTypeDescrObject *ct;
     size_t replace_with_len;
     static char *keywords[] = {"cdecl", "replace_with", NULL};
-#if PY_MAJOR_VERSION >= 3
     PyObject *u;
-#endif
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|s:getctype", keywords,
                                      &c_decl, &replace_with))
@@ -656,14 +662,12 @@ static PyObject *ffi_getctype(FFIObject *self, PyObject *args, PyObject *kwds)
     if (add_paren)
         p[replace_with_len] = ')';
 
-#if PY_MAJOR_VERSION >= 3
     /* bytes -> unicode string */
     u = PyUnicode_DecodeLatin1(PyBytes_AS_STRING(res),
                                PyBytes_GET_SIZE(res),
                                NULL);
     Py_DECREF(res);
     res = u;
-#endif
 
     return res;
 }
@@ -912,7 +916,7 @@ static PyObject *ffi_list_types(FFIObject *self, PyObject *noargs)
         goto error;
 
     for (i = 0; i < n1; i++) {
-        o = PyText_FromString(self->types_builder.ctx.typenames[i].name);
+        o = PyUnicode_FromString(self->types_builder.ctx.typenames[i].name);
         if (o == NULL)
             goto error;
         PyList_SET_ITEM(lst[0], i, o);
@@ -926,7 +930,7 @@ static PyObject *ffi_list_types(FFIObject *self, PyObject *noargs)
         if (s->name[0] == '$')
             continue;
 
-        o = PyText_FromString(s->name);
+        o = PyUnicode_FromString(s->name);
         if (o == NULL)
             goto error;
         index = (s->flags & _CFFI_F_UNION) ? 2 : 1;
@@ -971,14 +975,6 @@ PyDoc_STRVAR(ffi_init_once_doc,
 "of function() is done.  If function() raises an exception, it is\n"
 "propagated and nothing is cached.");
 
-#if PY_MAJOR_VERSION < 3
-/* PyCapsule_New is redefined to be PyCObject_FromVoidPtr in _cffi_backend,
-   which gives 2.6 compatibility; but the destructor signature is different */
-static void _free_init_once_lock(void *lock)
-{
-    PyThread_free_lock((PyThread_type_lock)lock);
-}
-#else
 static void _free_init_once_lock(PyObject *capsule)
 {
     PyThread_type_lock lock;
@@ -986,7 +982,6 @@ static void _free_init_once_lock(PyObject *capsule)
     if (lock != NULL)
         PyThread_free_lock(lock);
 }
-#endif
 
 static PyObject *ffi_init_once(FFIObject *self, PyObject *args, PyObject *kwds)
 {
@@ -1001,16 +996,21 @@ static PyObject *ffi_init_once(FFIObject *self, PyObject *args, PyObject *kwds)
        in this function */
 
     /* atomically get or create a new dict (no GIL release) */
+    Py_BEGIN_CRITICAL_SECTION(self);
     cache = self->init_once_cache;
     if (cache == NULL) {
-        cache = PyDict_New();
-        if (cache == NULL)
-            return NULL;
-        self->init_once_cache = cache;
+        self->init_once_cache = cache = PyDict_New();
+    }
+    Py_END_CRITICAL_SECTION();
+
+    if (cache == NULL) {
+        return NULL;
     }
 
     /* get the tuple from cache[tag], or make a new one: (False, lock) */
-    tup = PyDict_GetItem(cache, tag);
+    if (PyDict_GetItemRef(cache, tag, &tup) < 0) {
+        return NULL;
+    }
     if (tup == NULL) {
         lock = PyThread_allocate_lock();
         if (lock == NULL)
@@ -1033,8 +1033,6 @@ static PyObject *ffi_init_once(FFIObject *self, PyObject *args, PyObject *kwds)
         Py_DECREF(x);
         if (tup == NULL)
             return NULL;
-
-        Py_DECREF(tup);   /* there is still a ref inside the dict */
     }
 
     res = PyTuple_GET_ITEM(tup, 1);
@@ -1042,8 +1040,10 @@ static PyObject *ffi_init_once(FFIObject *self, PyObject *args, PyObject *kwds)
 
     if (PyTuple_GET_ITEM(tup, 0) == Py_True) {
         /* tup == (True, result): return the result. */
+        Py_DECREF(tup);
         return res;
     }
+    Py_DECREF(tup);
 
     /* tup == (False, lock) */
     lockobj = res;

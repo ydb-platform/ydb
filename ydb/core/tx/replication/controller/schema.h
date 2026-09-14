@@ -25,9 +25,21 @@ struct TControllerSchema: NIceDb::Schema {
         struct State: Column<5, NScheme::NTypeIds::Uint8> { using Type = TReplication::EState; };
         struct Issue: Column<6, NScheme::NTypeIds::Utf8> {};
         struct NextTargetId: Column<7, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 1; };
+        struct DesiredState: Column<8, NScheme::NTypeIds::Uint8> { using Type = TReplication::EState; };
+        struct Database: Column<9, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
-        using TColumns = TableColumns<Id, PathOwnerId, PathLocalId, Config, State, Issue, NextTargetId>;
+        using TColumns = TableColumns<
+            Id,
+            PathOwnerId,
+            PathLocalId,
+            Config,
+            State,
+            Issue,
+            NextTargetId,
+            DesiredState,
+            Database
+        >;
     };
 
     struct Targets: Table<3> {
@@ -46,9 +58,32 @@ struct TControllerSchema: NIceDb::Schema {
             static constexpr Type Default = InvalidLocalPathId;
         };
         struct Issue: Column<9, NScheme::NTypeIds::Utf8> {};
+        struct TransformLambda: Column<10, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
+        struct RunAsUser: Column<11, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
+        struct DirectoryPath: Column<12, NScheme::NTypeIds::Utf8> {}; // Deprecated. Remove in next major release (27-1).
+        // Marks that registration has completed for the target, so Workers is
+        // a complete partition-membership set rather than a partial stream of
+        // asynchronous registrations.
+        struct WorkerSetComplete: Column<13, NScheme::NTypeIds::Bool> {
+            static constexpr bool Default = false;
+        };
 
         using TKey = TableKey<ReplicationId, Id>;
-        using TColumns = TableColumns<ReplicationId, Id, Kind, SrcPath, DstPath, DstState, DstPathOwnerId, DstPathLocalId, Issue>;
+        using TColumns = TableColumns<
+            ReplicationId,
+            Id,
+            Kind,
+            SrcPath,
+            DstPath,
+            DstState,
+            DstPathOwnerId,
+            DstPathLocalId,
+            Issue,
+            TransformLambda,
+            RunAsUser,
+            DirectoryPath,
+            WorkerSetComplete
+        >;
     };
 
     struct SrcStreams: Table<4> {
@@ -56,9 +91,10 @@ struct TControllerSchema: NIceDb::Schema {
         struct TargetId: Column<2, NScheme::NTypeIds::Uint64> {};
         struct Name: Column<3, NScheme::NTypeIds::Utf8> {};
         struct State: Column<4, NScheme::NTypeIds::Uint8> { using Type = TReplication::EStreamState; };
+        struct ConsumerName: Column<5, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ReplicationId, TargetId>;
-        using TColumns = TableColumns<ReplicationId, TargetId, Name, State>;
+        using TColumns = TableColumns<ReplicationId, TargetId, Name, State, ConsumerName>;
     };
 
     struct TxIds: Table<5> {

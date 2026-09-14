@@ -1,10 +1,12 @@
 #include "local.h"
 
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -16,10 +18,13 @@
 #include <ydb/library/actors/core/log.h>
 
 #include <util/system/info.h>
+#include <util/generic/algorithm.h>
 #include <util/string/vector.h>
 
 #include <unordered_map>
 #include <unordered_set>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL
 
 template <>
 void Out<std::pair<ui64, ui32>>(IOutputStream& out, const std::pair<ui64, ui32>& p) {
@@ -52,19 +57,19 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         ui32 Generation;
         TTabletTypes::EType TabletType;
         NKikimrLocal::EBootMode BootMode;
-        ui32 FollowerId;
 
         TTablet()
             : Tablet()
             , Generation(0)
             , TabletType()
             , BootMode(NKikimrLocal::EBootMode::BOOT_MODE_LEADER)
-            , FollowerId(0)
         {}
     };
 
     struct TTabletEntry : TTablet {
         TInstant From;
+        bool IsPromoting = false;
+        ui32 PromotingFromFollower = 0;
 
         TTabletEntry()
             : From(TInstant::MicroSeconds(0))
@@ -83,6 +88,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     const TActorId Owner;
     const ui64 HiveId;
     TVector<TSubDomainKey> ServicedDomains;
+    TBridgePileId BridgePileId;
 
     TActorId HivePipeClient;
     bool Connected;
@@ -104,7 +110,6 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TDuration LastSendTabletMetricsDuration = {};
     constexpr static TDuration TABLET_METRICS_BATCH_INTERVAL = TDuration::MilliSeconds(5000);
     constexpr static TDuration UPDATE_SYSTEM_USAGE_INTERVAL = TDuration::MilliSeconds(1000);
-    constexpr static TDuration DRAIN_NODE_TIMEOUT = TDuration::MilliSeconds(15000);
     ui64 UserPoolUsage = 0; // (usage uS x threads) / sec
     ui64 UserPoolLimit = 0; // PotentialMaxThreadCount of UserPool
     ui64 MemUsage = 0;
@@ -117,6 +122,18 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     i32 PrevEstimate = 0;
 
     TIntrusivePtr<TDrainProgress> LastDrainRequest;
+
+    // Retained cut-history events awaiting forwarding to Hive after reconnect.
+    // One event is kept per (tablet, channel, fromGeneration) tuple; a newer
+    // arrival for the same tuple replaces the stored one.  On reconnect a copy
+    // of each stored event is sent through the pipe; the master copy is kept
+    // for subsequent reconnects.  Hive sends no ack; TTxCutTabletHistory is a
+    // no-op for an already-erased entry, so replay-on-reconnect is safe.
+    // Memory is bounded by one tablet incarnation's cut entries (TEvTabletDead
+    // cleans up).
+    using TCutHistoryEvent = std::unique_ptr<TEvTablet::TEvCutTabletHistory>;
+    static constexpr size_t MaxRetainedCutHistoryPerTablet = 1024;
+    THashMap<ui64, TVector<TCutHistoryEvent>> RetainedCutHistory;
 
     NKikimrTabletBase::TMetrics ResourceLimit;
     TResourceProfilesPtr ResourceProfiles;
@@ -140,6 +157,10 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelIsolated;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelDemotedByBS;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterCancelUnknownReason;
+
+    static TTabletId LeaderId(TTabletId tabletId) {
+        return {tabletId.first, 0};
+    }
 
     void Die(const TActorContext &ctx) override {
         if (HivePipeClient) {
@@ -174,7 +195,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void TryToRegister(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::TryToRegister");
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::TryToRegister");
 
         Y_DEBUG_ABORT_UNLESS(!HivePipeClient);
 
@@ -203,19 +224,22 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (const TString& nodeName = AppData(ctx)->NodeName; !nodeName.empty()) {
             request->Record.SetName(nodeName);
         }
+        BridgePileId.CopyToProto(&request->Record, &decltype(request->Record)::SetBridgePileId);
 
         NTabletPipe::SendData(ctx, HivePipeClient, request.Release());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::TryToRegister pipe to hive, pipe:" << HivePipeClient.ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::TryToRegister: registered pipe to hive",
+            {"hivePipeClient", HivePipeClient});
     }
 
     void HandlePipeDestroyed(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar HandlePipeDestroyed - DISCONNECTED");
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::HandlePipeDestroyed: disconnected from hive");
         HivePipeClient = TActorId();
         Connected = false;
         TryToRegister(ctx);
         if (SentDrainNode && !DrainResultReceived) {
-            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: drain complete: hive pipe destroyed, hive id: " << HiveId);
+            YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: drain complete, hive pipe destroyed",
+                {"hiveId", HiveId});
             DrainResultReceived = true;
             LastDrainRequest->OnReceive();
             UpdateEstimate();
@@ -250,10 +274,10 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TEvTabletPipe::TEvClientConnected {"
-                    << "TabletId=" << msg->TabletId
-                    << " Status=" << msg->Status
-                    << " ClientId=" << msg->ClientId << "}");
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvTabletPipe::TEvClientConnected",
+            {"tabletId", msg->TabletId},
+            {"status", msg->Status},
+            {"clientId", msg->ClientId});
         if (msg->ClientId != HivePipeClient)
             return;
         if (msg->Status == NKikimrProto::OK) {
@@ -265,9 +289,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TEvTabletPipe::TEvClientDestroyed {"
-                    << "TabletId=" << msg->TabletId
-                    << " ClientId=" << msg->ClientId << "}");
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvTabletPipe::TEvClientDestroyed",
+            {"tabletId", msg->TabletId},
+            {"clientId", msg->ClientId});
         if (msg->ClientId != HivePipeClient)
             return;
         HandlePipeDestroyed(ctx);
@@ -290,7 +314,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void SendStatusOk(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar SendStatusOk");
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::SendStatusOk");
         TAutoPtr<TEvLocal::TEvStatus> eventStatus = new TEvLocal::TEvStatus(TEvLocal::TEvStatus::StatusOk);
         auto& record = eventStatus->Record;
         record.SetStartTime(StartTime.GetValue());
@@ -299,13 +323,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void Handle(TEvLocal::TEvReconnect::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvReconnect");
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvReconnect");
         const TActorId& sender = ev->Sender;
         const NKikimrLocal::TEvReconnect& record = ev->Get()->Record;
         Y_ABORT_UNLESS(HiveId == record.GetHiveId());
         const ui32 hiveGen = record.GetHiveGeneration();
         if (hiveGen < HiveGeneration) {
-            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvReconnect - outdated");
+            YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvReconnect - outdated");
             ctx.Send(sender, new TEvLocal::TEvStatus(TEvLocal::TEvStatus::StatusOutdated));
             return;
         }
@@ -317,14 +341,14 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void Handle(TEvLocal::TEvPing::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing");
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing");
         const TActorId &sender = ev->Sender;
         const NKikimrLocal::TEvPing &record = ev->Get()->Record;
         Y_ABORT_UNLESS(HiveId == record.GetHiveId());
 
         const ui32 hiveGen = record.GetHiveGeneration();
         if (hiveGen < HiveGeneration) {
-            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing - outdated");
+            YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing - outdated");
             ctx.Send(sender, new TEvLocal::TEvStatus(TEvLocal::TEvStatus::StatusOutdated));
             return;
         }
@@ -342,8 +366,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             }
 
             if (record.GetPurge()) {
-                for (const auto &x : OnlineTablets)
+                for (const auto &x : OnlineTablets) {
                     ctx.Send(x.second.Tablet, new TEvents::TEvPoisonPill());
+                    if (x.first.second == 0) { // leader
+                        RetainedCutHistory.erase(x.first.first);
+                    }
+                }
                 OnlineTablets.clear();
             }
 
@@ -373,7 +401,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             NTabletPipe::SendData(ctx, HivePipeClient, eventSyncTablets.Release());
 
             Connected = true;
-            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar TEvPing - CONNECTED");
+            YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvPing: connected to hive");
+            for (const auto& tabletEntries : RetainedCutHistory) {
+                for (const auto& e : tabletEntries.second) {
+                    NTabletPipe::SendData(ctx, HivePipeClient, new TEvTablet::TEvCutTabletHistory(e->Record));
+                }
+            }
         }
 
         HiveGeneration = hiveGen;
@@ -385,38 +418,56 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         ScheduleSendTabletMetrics(ctx);
     }
 
+    void StartPromotion(TTabletId tabletId, TOnlineTabletEntry& followerEntry, ui32 suggestedGen, TInstant now) {
+        TTabletId leaderId = LeaderId(tabletId);
+        TTabletEntry& leaderEntry = InbootTablets[leaderId];
+        followerEntry.IsPromoting = true;
+        leaderEntry = followerEntry;
+        leaderEntry.From = now;
+        leaderEntry.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
+        leaderEntry.Generation = suggestedGen;
+        leaderEntry.PromotingFromFollower = tabletId.second;
+    }
+
+    void FinishPromotion(TTabletId tabletId, TTabletEntry& entry) {
+        TTabletId promotedTablet{tabletId.first, entry.PromotingFromFollower};
+        OnlineTablets.erase(promotedTablet);
+        entry.IsPromoting = false;
+        entry.PromotingFromFollower = 0;
+    }
+
     void Handle(TEvLocal::TEvBootTablet::TPtr &ev, const TActorContext &ctx) {
         NKikimrLocal::TEvBootTablet &record = ev->Get()->Record;
         TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(record.GetInfo()));
         info->HiveId = HiveId;
         TTabletId tabletId(info->TabletID, record.GetFollowerId());
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet tabletId:"
-                    << tabletId
-                    << (record.HasBootMode() && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER ? ".Follower" : ".Leader")
-                    << " storage:"
-                    << info->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet",
+            {"tabletId", tabletId},
+            {"bootMode", (record.HasBootMode() && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER ? ".Follower" : ".Leader")},
+            {"storage", info->ToString()});
         Y_ABORT_UNLESS(!info->Channels.empty() && !info->Channels[0].History.empty());
         auto tabletType = info->TabletType;
         Y_ABORT_UNLESS(tabletType != TTabletTypes::TypeInvalid);
         ui32 suggestedGen = record.GetSuggestedGeneration();
 
         if (ev->Sender != BootQueue) {
-            LOG_NOTICE(ctx, NKikimrServices::LOCAL,
-                "TLocalNodeRegistrar: Handle TEvLocal::TEvBootTablet unexpected sender:%s",
-                ev->Sender.ToString().c_str());
+            YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet: unexpected sender",
+                {"sender", ev->Sender});
             ctx.Send(ev->Sender, new TEvLocal::TEvTabletStatus(
                 TEvLocal::TEvTabletStatus::StatusBootQueueUnknown, tabletId, suggestedGen));
             return;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvLocal::TEvBootTablet tabletType:"
-                    << tabletType << " tabletId:" << tabletId << " suggestedGen:" << suggestedGen);
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet: booting tablet",
+            {"tabletType", tabletType},
+            {"tabletId", tabletId},
+            {"suggestedGen", suggestedGen});
 
         TMap<TTabletTypes::EType, TLocalConfig::TTabletClassInfo>::const_iterator it = Config->TabletClassInfo.find(tabletType);
         if (it == Config->TabletClassInfo.end()) {
-            LOG_ERROR_S(ctx, NKikimrServices::LOCAL,
-                       "TLocalNodeRegistrar: boot-tablet unknown tablet type: "
-                       << tabletType << " for tablet: " << tabletId);
+            YDB_LOG_ERROR_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet: unknown tablet type",
+                {"tabletType", tabletType},
+                {"tabletId", tabletId});
             ctx.Send(ev->Sender, new TEvLocal::TEvTabletStatus(
                 TEvLocal::TEvTabletStatus::StatusTypeUnknown, tabletId, suggestedGen));
             return;
@@ -427,20 +478,11 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             if (it != OnlineTablets.end()) {
                 if (it->second.BootMode == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER
                         && record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_LEADER) {
-                    // promote to leader
-                    it->second.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
-                    it->second.Generation = suggestedGen;
-                    tabletId.second = 0; // FollowerId = 0
-                    TTabletEntry &entry = InbootTablets[tabletId];
-                    entry = it->second;
-                    entry.From = ctx.Now();
-                    entry.BootMode = NKikimrLocal::EBootMode::BOOT_MODE_LEADER;
-                    entry.Generation = suggestedGen;
-                    ctx.Send(entry.Tablet, new TEvTablet::TEvPromoteToLeader(suggestedGen, info));
+                    StartPromotion(tabletId, it->second, suggestedGen, ctx.Now());
+                    ctx.Send(it->second.Tablet, new TEvTablet::TEvPromoteToLeader(suggestedGen, info));
                     MarkDeadTablet(it->first, 0, TEvLocal::TEvTabletStatus::StatusSupersededByLeader, TEvTablet::TEvTabletDead::ReasonError, ctx);
-                    OnlineTablets.erase(it);
-                    LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                        "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet follower tablet " << tabletId << " promoted to leader");
+                    YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet follower tablet promoted to leader",
+                        {"tabletId", tabletId});
                     return;
                 }
                 ctx.Send(it->second.Tablet, new TEvTablet::TEvTabletStop(tabletId.first, TEvTablet::TEvTabletStop::ReasonStop));
@@ -449,9 +491,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
 
         if (record.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_LEADER && tabletId.second != 0) {
-            LOG_WARN_S(ctx, NKikimrServices::LOCAL,
-                       "TLocalNodeRegistrar: unsuccessful attempt to promote follower "
-                       << "tabletId: " << tabletId << " suggestedGen: " << suggestedGen);
+            YDB_LOG_WARN_CTX(ctx, "TLocalNodeRegistrar: unsuccessful attempt to promote follower",
+                {"tabletId", tabletId},
+                {"suggestedGen", suggestedGen});
             tabletId.second = 0; // we change tabletid to leader because it was unsuccessful attempt to boot leader, not a follower
             ctx.Send(ev->Sender, new TEvLocal::TEvTabletStatus(TEvLocal::TEvTabletStatus::StatusFailed, tabletId, suggestedGen));
             return;
@@ -479,7 +521,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         entry.TabletType = tabletType;
         entry.BootMode = record.GetBootMode();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet tabletId:" << tabletId << " tablet entry created");
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvBootTablet tablet entry created",
+            {"tabletId", tabletId});
 
         if (record.GetBootMode() == NKikimrLocal::BOOT_MODE_FOLLOWER) {
             MarkRunningTablet(tabletId, suggestedGen, ctx);
@@ -491,7 +534,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         Y_ABORT_UNLESS(record.HasTabletId());
         TTabletId tabletId(record.GetTabletId(), record.GetFollowerId());
         ui32 generation(record.GetGeneration());
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvStopTablet TabletId:" << tabletId << " Generation:" << generation);
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvStopTablet",
+            {"tabletId", tabletId},
+            {"generation", generation});
 
         auto onlineTabletIt = OnlineTablets.find(tabletId);
         if (onlineTabletIt != OnlineTablets.end()) {
@@ -512,7 +557,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         const NKikimrLocal::TEvDeadTabletAck &record = ev->Get()->Record;
         Y_ABORT_UNLESS(record.HasTabletId());
         TTabletId tabletId(record.GetTabletId(), record.GetFollowerId());
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvDeadTabletAck TabletId:" << tabletId);
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvLocal::TEvDeadTabletAck",
+            {"tabletId", tabletId});
     }
 
     void Handle(TEvLocal::TEvTabletMetrics::TPtr& ev, const TActorContext& ctx) {
@@ -642,7 +688,15 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void Handle(TEvPrivate::TEvUpdateSystemUsage::TPtr&, const TActorContext&) {
-        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest());
+        static constexpr auto REQUIRED_FIELDS = std::to_array<i32>({
+            NKikimrWhiteboard::TSystemStateInfo::kNumberOfCpusFieldNumber,
+            NKikimrWhiteboard::TSystemStateInfo::kPoolStatsFieldNumber,
+            NKikimrWhiteboard::TSystemStateInfo::kMemoryUsedInAllocFieldNumber,
+            NKikimrWhiteboard::TSystemStateInfo::kMemoryLimitFieldNumber,
+        });
+        auto req = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
+        req->Record.MutableFieldsRequired()->Assign(REQUIRED_FIELDS.begin(), REQUIRED_FIELDS.end());
+        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), req.release());
         Schedule(UPDATE_SYSTEM_USAGE_INTERVAL, new TEvPrivate::TEvUpdateSystemUsage());
     }
 
@@ -675,7 +729,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             if (info.HasMemoryLimit()) {
                 if (MemLimit != info.GetMemoryLimit()) {
                     MemLimit = info.GetMemoryLimit();
-                    LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar MemoryLimit changed");
+                    YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar: memory limit changed");
                     if (Connected) {
                         SendStatusOk(ctx);
                     }
@@ -701,8 +755,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         auto &info = ev->Get()->TenantInfo;
         ResourceLimit = info.ResourceLimit;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "Updated resoure limit: "
-                    << ResourceLimit.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar: updated resource limit",
+            {"resourceLimit", ResourceLimit.ShortDebugString()});
 
         UpdateCacheQuota();
 
@@ -713,11 +767,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         auto inbootIt = InbootTablets.find(tabletId);
         if (inbootIt == InbootTablets.end())
             return;
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: tablet "
-                    << tabletId
-                    << " marked as running at generation "
-                    << generation);
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar: tablet marked as running",
+            {"tabletId", tabletId},
+            {"generation", generation});
         NTabletPipe::SendData(ctx, HivePipeClient, new TEvLocal::TEvTabletStatus(TEvLocal::TEvTabletStatus::StatusOk, tabletId, generation));
+        if (inbootIt->second.IsPromoting) {
+            FinishPromotion(tabletId, inbootIt->second);
+        }
         OnlineTablets.emplace(tabletId, inbootIt->second);
         InbootTablets.erase(inbootIt);
     }
@@ -735,10 +791,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         TEvTablet::TEvReady *msg = ev->Get();
 
         const auto tabletId = msg->TabletID;
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvTablet::TEvReady tablet "
-                    << tabletId
-                    << " generation "
-                    << msg->Generation);
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvTablet::TEvReady: tablet ready",
+            {"tabletId", tabletId},
+            {"generation", msg->Generation});
         auto inbootIt = std::find_if(InbootTablets.begin(), InbootTablets.end(), [&](const auto& pr) -> bool {
             return pr.second.Tablet == ev->Sender;
         });
@@ -746,29 +801,69 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             return;
         TTabletEntry &entry = inbootIt->second;
         if (msg->Generation < entry.Generation) {
-            LOG_WARN_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvTablet::TEvReady tablet "
-                       << tabletId
-                       << " ready with generation "
-                       << msg->Generation
-                       << " but we are waiting for generation "
-                       << entry.Generation
-                       << " - ignored");
+            YDB_LOG_WARN_CTX(ctx, "TLocalNodeRegistrar::Handle TEvTablet::TEvReady: unexpected generation, ignored",
+                {"tabletId", tabletId},
+                {"generation", msg->Generation},
+                {"expectedGeneration", entry.Generation});
             return;
         }
         MarkRunningTablet(inbootIt->first, msg->Generation, ctx);
     }
 
     void Handle(TEvTablet::TEvCutTabletHistory::TPtr &ev, const TActorContext &ctx) {
-        if (Connected) // must be 'connected' check
+        const auto& record = ev->Get()->Record;
+        const ui64 tabletId = record.GetTabletID();
+        const ui32 channel = record.GetChannel();
+        const ui32 fromGen = record.GetFromGeneration();
+        auto& entries = RetainedCutHistory[tabletId];
+        auto* existing = FindIfPtr(entries, [&](const TCutHistoryEvent& e) {
+            return e->Record.GetChannel() == channel && e->Record.GetFromGeneration() == fromGen;
+        });
+        if (Connected) {
+            // Keep a copy for future reconnects; the original goes to Hive now.
+            auto copy = std::make_unique<TEvTablet::TEvCutTabletHistory>(record);
+            if (existing) {
+                *existing = std::move(copy);
+            } else if (entries.size() < MaxRetainedCutHistoryPerTablet) {
+                entries.push_back(std::move(copy));
+            } else {
+                // The per-tablet buffer is capped because the tuple space is sender-controlled.
+                // On overflow the copy is not retained; the cut reaches Hive this time but will
+                // not be replayed on reconnect, so it must be re-derived after tablet restart.
+                YDB_LOG_WARN_CTX(ctx, "TLocalNodeRegistrar: retained cut-history overflow, dropping",
+                    {"tabletId", tabletId},
+                    {"channel", channel},
+                    {"fromGeneration", fromGen});
+            }
             NTabletPipe::SendData(ctx, HivePipeClient, ev.Get()->Release().Release());
+        } else {
+            // Not connected: move the event directly into the store (zero copy).
+            auto owned = TCutHistoryEvent(ev.Get()->Release().Release());
+            if (existing) {
+                *existing = std::move(owned);
+            } else if (entries.size() < MaxRetainedCutHistoryPerTablet) {
+                entries.push_back(std::move(owned));
+            } else {
+                // The per-tablet buffer is capped because the tuple space is sender-controlled.
+                // On overflow the request is dropped with a warning; the cut for this
+                // (channel, fromGeneration) entry is delivered to Hive only after the tablet
+                // restarts and re-derives it.
+                YDB_LOG_WARN_CTX(ctx, "TLocalNodeRegistrar: retained cut-history overflow, dropping",
+                    {"tabletId", tabletId},
+                    {"channel", channel},
+                    {"fromGeneration", fromGen});
+            }
+        }
     }
 
     void Handle(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {
         TEvTablet::TEvTabletDead *msg = ev->Get();
         const auto tabletId = msg->TabletID;
         const ui32 generation = msg->Generation;
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvTablet::TEvTabletDead tabletId:"
-                    << tabletId << " generation:" << generation << " reason:" << (ui32)msg->Reason);
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Handle TEvTablet::TEvTabletDead",
+            {"tabletId", tabletId},
+            {"generation", generation},
+            {"reason", (ui32)msg->Reason});
 
         switch (msg->Reason) {
         case TEvTablet::TEvTabletDead::ReasonBootLocked:
@@ -818,6 +913,17 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         });
         if (onlineIt != OnlineTablets.end()) { // from online list
             MarkDeadTablet(onlineIt->first, generation, TEvLocal::TEvTabletStatus::StatusFailed, msg->Reason, ctx);
+            if (onlineIt->second.IsPromoting) {
+                TTabletId leader = LeaderId(onlineIt->first);
+                auto inbootIt = InbootTablets.find(leader);
+                if (inbootIt != InbootTablets.end()) {
+                    MarkDeadTablet(leader, inbootIt->second.Generation, TEvLocal::TEvTabletStatus::StatusFailed, msg->Reason, ctx);
+                }
+                InbootTablets.erase(inbootIt);
+            }
+            if (onlineIt->first.second == 0) { // leader
+                RetainedCutHistory.erase(onlineIt->first.first);
+            }
             OnlineTablets.erase(onlineIt);
             UpdateEstimate();
             return;
@@ -828,6 +934,9 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         });
         if (inbootIt != InbootTablets.end() && inbootIt->second.Generation <= generation) {
             MarkDeadTablet(inbootIt->first, generation, TEvLocal::TEvTabletStatus::StatusBootFailed, msg->Reason, ctx);
+            if (inbootIt->first.second == 0) { // leader
+                RetainedCutHistory.erase(inbootIt->first.first);
+            }
             InbootTablets.erase(inbootIt);
             return;
         }
@@ -836,12 +945,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void HandlePoison(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: HandlePoison");
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::HandlePoison");
         Die(ctx);
     }
 
     void HandleDrainNodeResult(TEvHive::TEvDrainNodeResult::TPtr &ev, const TActorContext &ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Drain node result received. Online tablets: " << OnlineTablets.size());
+        YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: drain node result received",
+            {"onlineTabletCount", OnlineTablets.size()});
         Y_ABORT_UNLESS(SentDrainNode);
         Y_UNUSED(ev);
         UpdateEstimate();
@@ -860,7 +970,8 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void HandleDrainTimeout(TEvPrivate::TEvLocalDrainTimeout::TPtr &ev, const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Drain node result received: timeout. Online tablets: " << OnlineTablets.size());
+        YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: drain node result timed out",
+            {"onlineTabletCount", OnlineTablets.size()});
         Y_ABORT_UNLESS(SentDrainNode);
         Y_UNUSED(ev);
         UpdateEstimate();
@@ -870,23 +981,52 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         }
     }
 
+    void SendDrain(const TActorContext &ctx) {
+        YDB_LOG_NOTICE_CTX(ctx, "TLocalNodeRegistrar: send drain node request",
+            {"hiveId", HiveId},
+            {"onlineTabletCount", OnlineTablets.size()});
+        SentDrainNode = true;
+        LastDrainRequest->OnSend();
+        UpdateEstimate();
+        NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId()));
+        ctx.Schedule(Config->DrainNodeTimeout, new TEvPrivate::TEvLocalDrainTimeout());
+    }
+
     void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) {
         if (!HivePipeClient) {
             TryToRegister(ctx);
         }
 
         if (!SentDrainNode) {
-            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Send drain node to hive: " << HiveId << ". Online tablets: " << OnlineTablets.size());
-            SentDrainNode = true;
-            ev->Get()->DrainProgress->OnSend();
             LastDrainRequest = ev->Get()->DrainProgress;
-            UpdateEstimate();
-            NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId()));
-            ctx.Schedule(DRAIN_NODE_TIMEOUT, new TEvPrivate::TEvLocalDrainTimeout());
-            ev->Get()->DrainProgress->OnReceive();
+            SendDrain(ctx);
+            LastDrainRequest->OnReceive();
         } else {
             ev->Get()->DrainProgress->OnReceive();
         }
+    }
+
+    void HandleInit(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext&) {
+        LastDrainRequest = ev->Get()->DrainProgress;
+        LastDrainRequest->OnReceive();
+    }
+
+    void Handle(TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx) {
+        auto bridgeInfo = ev->Get()->BridgeInfo;
+        if (bridgeInfo == nullptr) {
+            // There will be an update with bridge info later
+            return;
+        }
+        auto pileInfo = bridgeInfo->SelfNodePile;
+        if (pileInfo) {
+            BridgePileId = pileInfo->BridgePileId;
+        }
+        TryToRegister(ctx);
+        if (LastDrainRequest) {
+            SendDrain(ctx);
+        }
+        Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
+        Become(&TThis::StateWork);
     }
 
     void UpdateCacheQuota() {
@@ -940,11 +1080,17 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar::Bootstrap");
-        Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
+        YDB_LOG_DEBUG_CTX(ctx, "TLocalNodeRegistrar::Bootstrap");
         StartTime = ctx.Now();
-        TryToRegister(ctx);
-        Become(&TThis::StateWork);
+        const TActorId wardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+        if (IsBridgeMode(ctx)) {
+            Send(wardenId, new TEvNodeWardenQueryStorageConfig(true));
+            Become(&TThis::StateInit);
+        } else {
+            TryToRegister(ctx);
+            Send(SelfId(), new TEvPrivate::TEvUpdateSystemUsage());
+            Become(&TThis::StateWork);
+        }
     }
 
     STFUNC(StateWork) {
@@ -972,7 +1118,21 @@ public:
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
-                LOG_DEBUG(*TlsActivationContext, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Unhandled in StateWork type: %" PRIx32
+                YDB_LOG_DEBUG_CTX(*TlsActivationContext, "TLocalNodeRegistrar: Unhandled in StateWork",
+                    {"type", ev->GetTypeRewrite()},
+                    {"event", ev->ToString().data()});
+                break;
+        }
+    }
+
+    STFUNC(StateInit) {
+        switch(ev->GetTypeRewrite()) {
+            HFunc(TEvNodeWardenStorageConfig, Handle);
+            HFunc(TEvLocal::TEvEnumerateTablets, Handle);
+            HFunc(TEvLocal::TEvLocalDrainNode, HandleInit);
+            CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
+            default:
+                Y_DEBUG_ABORT("TLocalNodeRegistrar: Unhandled in StateInit type: %" PRIx32
                     " event: %s", ev->GetTypeRewrite(), ev->ToString().data());
                 break;
         }
@@ -998,7 +1158,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         TRegistrationInfo Info;
         TVector<TActorId> Locals;
         TActorId Subscriber;
-        TVector<TTabletId> HiveIds;
+        std::set<TTabletId> HiveIds;
         THashMap<TString, TString> Attributes;
         TSubDomainKey DomainKey;
     };
@@ -1029,9 +1189,10 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
 
     void SendResolveRequest(const TRegistrationInfo &info, const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                    LogPrefix << "Send resolve request for " << info.TenantName
-                    << " to schemeshard " << SchemeRoot);
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::SendResolveRequest: send resolve request to schemeshard",
+            {"logPrefix", LogPrefix},
+            {"tenantName", info.TenantName},
+            {"schemeRoot", SchemeRoot});
 
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(info.TenantName);
         NTabletPipe::SendData(ctx.SelfID, SchemeShardPipe, request.Release());
@@ -1099,7 +1260,7 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         RunningTenants.at(tenant).Locals.push_back(actorId);
 
         TActorId localRegistrarServiceId = MakeLocalRegistrarID(ctx.SelfID.NodeId(), hiveId);
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(localRegistrarServiceId, actorId);
+        ctx.ActorSystem()->RegisterLocalService(localRegistrarServiceId, actorId);
     }
 
     void RegisterAsDomain(const TRegistrationInfo &info,
@@ -1111,16 +1272,17 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         for (auto id : HiveIds) {
             RegisterLocalNode(info.TenantName, info.ResourceLimit, id, {domainKey}, ctx);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                        LogPrefix << "Binding to hive " << id <<
-                        " at domain " << info.DomainName <<
-                        " (allocated resources: " << info.ResourceLimit.ShortDebugString() << ")");
+            YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::RegisterAsDomain: binding tenant to hive",
+                {"logPrefix", LogPrefix},
+                {"hiveId", id},
+                {"domainName", info.DomainName},
+                {"resourceLimit", info.ResourceLimit.ShortDebugString()});
         }
     }
 
     void RegisterAsSubDomain(const NKikimrScheme::TEvDescribeSchemeResult &rec,
                              const TResolveTask &task,
-                             const TVector<TTabletId> hiveIds,
+                             const std::set<TTabletId> hiveIds,
                              const TActorContext &ctx)
     {
         const auto &domainDesc = rec.GetPathDescription().GetDomainDescription();
@@ -1134,27 +1296,31 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         const TActorId whiteboardServiceId(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()));
         Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateSetTenant(task.Info.TenantName));
         for (TTabletId hId : hiveIds) {
-            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                        LogPrefix << "Binding tenant " << task.Info.TenantName
-                        << " to hive " << hId
-                        << " (allocated resources: " << task.Info.ResourceLimit.ShortDebugString() << ")");
+            YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::RegisterAsSubDomain: binding tenant to hive",
+                {"logPrefix", LogPrefix},
+                {"tenantName", task.Info.TenantName},
+                {"hiveId", hId},
+                {"resourceLimit", task.Info.ResourceLimit.ShortDebugString()});
             RegisterLocalNode(task.Info.TenantName, task.Info.ResourceLimit, hId, {domainKey}, ctx);
         }
     }
 
     void HandlePoison(const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, LogPrefix << "HandlePoison");
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::HandlePoison",
+            {"logPrefix", LogPrefix});
 
         for (auto &pr : RunningTenants) {
             for (auto aid : pr.second.Locals) {
-                LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                            LogPrefix << "Send poison pill to local of " << pr.second.Info.TenantName);
+                YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal: send poison pill to tenant local",
+                    {"logPrefix", LogPrefix},
+                    {"tenantName", pr.second.Info.TenantName});
                 ctx.Send(aid, new TEvents::TEvPoisonPill);
             }
             if (pr.second.Subscriber) {
-                LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                            LogPrefix << "Send poison pill to scheme subscriber of " << pr.second.Info.TenantName);
+                YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal: send poison pill to scheme subscriber",
+                    {"logPrefix", LogPrefix},
+                    {"tenantName", pr.second.Info.TenantName});
                 ctx.Send(pr.second.Subscriber, new TEvents::TEvPoisonPill);
                 pr.second.Subscriber = TActorId();
             }
@@ -1170,9 +1336,10 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                    LogPrefix << "TDomainLocal::TEvClientConnected for " << Domain
-                    << " shard " << msg->TabletId);
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::Handle TEvTabletPipe::TEvClientConnected for shard",
+            {"logPrefix", LogPrefix},
+            {"domain", Domain},
+            {"tabletId", msg->TabletId});
 
         if (msg->Status != NKikimrProto::EReplyStatus::OK) {
             OpenPipe(ctx);
@@ -1187,8 +1354,9 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     {
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                    LogPrefix << "TEvTabletPipe::TEvClientDestroyed from tablet " << msg->TabletId);
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::Handle TEvTabletPipe::TEvClientDestroyed from tablet",
+            {"logPrefix", LogPrefix},
+            {"tabletId", msg->TabletId});
 
         OpenPipe(ctx);
     }
@@ -1197,13 +1365,15 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     {
         const NKikimrScheme::TEvDescribeSchemeResult &rec = ev->Get()->GetRecord();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                    LogPrefix << "HandleResolve from schemeshard " << SchemeRoot
-                    << ": " << rec.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::HandleResolve: received response from schemeshard",
+            {"logPrefix", LogPrefix},
+            {"schemeRoot", SchemeRoot},
+            {"schemeResult", rec.ShortDebugString()});
 
         if (!ResolveTasks.contains(rec.GetPath())) {
-            LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                        LogPrefix << "Missing task for " << rec.GetPath());
+            YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::HandleResolve: missing resolve task for path",
+                {"logPrefix", LogPrefix},
+                {"path", rec.GetPath()});
             return;
         }
 
@@ -1211,11 +1381,11 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
 
         using EDescStatus = NKikimrScheme::EStatus;
         if (rec.GetStatus() != EDescStatus::StatusSuccess) {
-            LOG_ERROR_S(ctx, NKikimrServices::LOCAL,
-                        LogPrefix << " Receive TEvDescribeSchemeResult with bad status "
-                        << NKikimrScheme::EStatus_Name(rec.GetStatus()) <<
-                        " reason is <" << rec.GetReason() << ">" <<
-                        " while resolving subdomain " << task.Info.DomainName);
+            YDB_LOG_ERROR_CTX(ctx, "TDomainLocal::HandleResolve: scheme description failed while resolving subdomain",
+                {"logPrefix", LogPrefix},
+                {"schemeStatus", NKikimrScheme::EStatus_Name(rec.GetStatus())},
+                {"reason", rec.GetReason()},
+                {"domainName", task.Info.DomainName});
 
             SendStatus(rec.GetPath(), TEvLocal::TEvTenantStatus::UNKNOWN_TENANT,
                        rec.GetReason(), task.Senders, ctx);
@@ -1227,10 +1397,10 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         Y_ABORT_UNLESS(rec.GetPathDescription().HasSelf());
         if (rec.GetPathDescription().GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeSubDomain
             && rec.GetPathDescription().GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeExtSubDomain) {
-            LOG_CRIT_S(ctx, NKikimrServices::LOCAL,
-                       LogPrefix << " Resolve subdomain fail, requested path "
-                       << task.Info.DomainName << " has invalid path type "
-                       << NKikimrSchemeOp::EPathType_Name(rec.GetPathDescription().GetSelf().GetPathType()));
+            YDB_LOG_CRIT_CTX(ctx, "TDomainLocal::HandleResolve: invalid path type while resolving subdomain",
+                {"logPrefix", LogPrefix},
+                {"domainName", task.Info.DomainName},
+                {"pathType", NKikimrSchemeOp::EPathType_Name(rec.GetPathDescription().GetSelf().GetPathType())});
 
             SendStatus(rec.GetPath(), TEvLocal::TEvTenantStatus::UNKNOWN_TENANT,
                        rec.GetPath() + " is not a tenant path", task.Senders, ctx);
@@ -1241,14 +1411,14 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         const auto &domainDesc = rec.GetPathDescription().GetDomainDescription();
         Y_ABORT_UNLESS(domainDesc.GetDomainKey().GetSchemeShard() == SchemeRoot);
 
-        TVector<TTabletId> hiveIds(HiveIds);
+        std::set<TTabletId> hiveIds(HiveIds.begin(), HiveIds.end());
         TTabletId hiveId = domainDesc.GetProcessingParams().GetHive();
         if (hiveId) {
-            hiveIds.emplace_back(hiveId);
+            hiveIds.emplace(hiveId);
         }
         TTabletId sharedHiveId = domainDesc.GetSharedHive();
         if (sharedHiveId) {
-            hiveIds.emplace_back(sharedHiveId);
+            hiveIds.emplace(sharedHiveId);
         }
         RegisterAsSubDomain(rec, task, hiveIds, ctx);
 
@@ -1266,8 +1436,10 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             THolder<IActor> subscriber(CreateSchemeBoardSubscriber(SelfId(), path, ESchemeBoardSubscriberDeletionPolicy::Majority));
             tenant.Subscriber = Register(subscriber.Release());
         } else {
-            LOG_WARN_S(ctx, NKikimrServices::LOCAL,
-                       LogPrefix << " Local tenant info not found, requested path " << task.Info.DomainName);
+            YDB_LOG_WARN_CTX(ctx, "TDomainLocal::HandleResolve: local tenant info not found for path",
+                {"logPrefix", LogPrefix},
+                {"domainName", task.Info.DomainName},
+                {"path", rec.GetPath()});
         }
     }
 
@@ -1279,17 +1451,18 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
             TTenantInfo& tenant = itTenant->second;
             TTabletId hiveId = ev->Get()->DescribeSchemeResult.GetPathDescription().GetDomainDescription().GetProcessingParams().GetHive();
             if (hiveId) {
-                auto itHiveId = Find(tenant.HiveIds, hiveId);
+                auto itHiveId = tenant.HiveIds.find(hiveId);
                 if (itHiveId == tenant.HiveIds.end()) {
                     const auto &domainDesc = ev->Get()->DescribeSchemeResult.GetPathDescription().GetDomainDescription();
                     TVector<TSubDomainKey> servicedDomains = {TSubDomainKey(domainDesc.GetDomainKey())};
 
-                    LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                                LogPrefix << "Binding tenant " << tenant.Info.TenantName
-                                << " to hive " << hiveId
-                                << " (allocated resources: " << tenant.Info.ResourceLimit.ShortDebugString() << ")");
+                    YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::HandleSchemeBoard: binding tenant to hive",
+                        {"logPrefix", LogPrefix},
+                        {"tenantName", tenant.Info.TenantName},
+                        {"hiveId", hiveId},
+                        {"resourceLimit", tenant.Info.ResourceLimit.ShortDebugString()});
                     RegisterLocalNode(tenant.Info.TenantName, tenant.Info.ResourceLimit, hiveId, servicedDomains, ctx);
-                    tenant.HiveIds.emplace_back(hiveId);
+                    tenant.HiveIds.emplace(hiveId);
                 }
             }
         }
@@ -1359,7 +1532,8 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
 
     void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext& ctx) {
         for(auto& hiveId: HiveIds) {
-            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Forward drain node to local, hive id: " << hiveId);
+            YDB_LOG_NOTICE_CTX(ctx, "TDomainLocal::HandleDrain: forward drain node request to local registrar",
+                {"hiveId", hiveId});
             ev->Get()->DrainProgress->OnSend();
             TActorId localRegistrarServiceId = MakeLocalRegistrarID(ctx.SelfID.NodeId(), hiveId);
             ctx.Send(localRegistrarServiceId, new TEvLocal::TEvLocalDrainNode(ev->Get()->DrainProgress));
@@ -1371,8 +1545,9 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
     {
         auto &info = ev->Get()->TenantInfo;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,
-                    LogPrefix << "Alter tenant " << info.TenantName);
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::HandleTenant: alter tenant",
+            {"logPrefix", LogPrefix},
+            {"tenantName", info.TenantName});
 
         auto it = RunningTenants.find(info.TenantName);
         if (it != RunningTenants.end()) {
@@ -1406,7 +1581,8 @@ public:
 
     void Bootstrap(const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, LogPrefix << "Bootstrap");
+        YDB_LOG_DEBUG_CTX(ctx, "TDomainLocal::Bootstrap",
+            {"logPrefix", LogPrefix});
 
         Become(&TThis::StateWork);
     }
@@ -1449,14 +1625,14 @@ public:
     {}
 
     void HandlePoison(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocal: HandlePoison");
+        YDB_LOG_DEBUG_CTX(ctx, "TLocal: HandlePoison");
         for (auto &pr : DomainLocals)
             ctx.Send(pr.second, new TEvents::TEvPoisonPill());
         Die(ctx);
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::LOCAL, "TLocal::Bootstrap");
+        YDB_LOG_DEBUG_CTX(ctx, "TLocal::Bootstrap");
         Become(&TThis::StateWork);
     }
 
@@ -1465,7 +1641,8 @@ public:
         auto &domainsInfo = *AppData(ctx)->DomainsInfo;
         auto *domain = domainsInfo.GetDomainByName(domainName);
         if (!domain) {
-            LOG_ERROR_S(ctx, NKikimrServices::LOCAL, "Unknown domain " << domainName);
+            YDB_LOG_ERROR_CTX(ctx, "TLocal::ForwardToDomainLocal: unknown domain",
+                {"domainName", domainName});
             return false;
         }
 
@@ -1536,9 +1713,9 @@ public:
             HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
 
         default:
-            ALOG_DEBUG(NKikimrServices::LOCAL,
-                        "TLocal: Unhandled in StateResolveSubDomain type: " <<  ev->GetTypeRewrite() <<
-                        " event: " << ev->ToString());
+            YDB_LOG_DEBUG("TLocal: Unhandled in StateResolveSubDomain",
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString()});
             break;
         }
     }

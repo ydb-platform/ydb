@@ -12,10 +12,11 @@ using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
 TSimpleFileTransformProvider::TSimpleFileTransformProvider(const IFunctionRegistry* functionRegistry,
-    const TUserDataTable& userDataBlocks)
+                                                           const TUserDataTable& userDataBlocks)
     : FunctionRegistry_(functionRegistry)
     , UserDataBlocks_(userDataBlocks)
-{}
+{
+}
 
 TCallableVisitFunc TSimpleFileTransformProvider::operator()(TInternName name) {
     if (name == "FilePath") {
@@ -25,10 +26,8 @@ TCallableVisitFunc TSimpleFileTransformProvider::operator()(TInternName name) {
             auto block = TUserDataStorage::FindUserDataBlock(UserDataBlocks_, name);
             MKQL_ENSURE(block, "File not found: " << name);
             MKQL_ENSURE(block->Type == EUserDataType::PATH || block->FrozenFile, "File is not frozen, name: "
-                << name << ", block type: " << block->Type);
-            return TProgramBuilder(env, *FunctionRegistry_).NewDataLiteral<NUdf::EDataSlot::String>(
-                block->Type == EUserDataType::PATH ? block->Data : block->FrozenFile->GetPath().GetPath()
-            );
+                                                                                     << name << ", block type: " << block->Type);
+            return TProgramBuilder(env, *FunctionRegistry_).NewDataLiteral<NUdf::EDataSlot::String>(block->Type == EUserDataType::PATH ? block->Data : block->FrozenFile->GetPath().GetPath());
         };
     }
 
@@ -44,7 +43,7 @@ TCallableVisitFunc TSimpleFileTransformProvider::operator()(TInternName name) {
                 }
 
                 MKQL_ENSURE(x.second.Type == EUserDataType::PATH, "FolderPath not supported for non-file data block, name: "
-                    << x.first.Alias() << ", block type: " << x.second.Type);
+                                                                      << x.first.Alias() << ", block type: " << x.second.Type);
                 auto newFolderPath = x.second.Data.substr(0, x.second.Data.size() - (x.first.Alias().size() - folderName.size()));
                 if (!folderPath) {
                     folderPath = newFolderPath;
@@ -67,11 +66,9 @@ TCallableVisitFunc TSimpleFileTransformProvider::operator()(TInternName name) {
             if (block->Type == EUserDataType::PATH) {
                 auto content = TFileInput(block->Data).ReadAll();
                 return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(content);
-            }
-            else if (block->Type == EUserDataType::RAW_INLINE_DATA) {
+            } else if (block->Type == EUserDataType::RAW_INLINE_DATA) {
                 return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(block->Data);
-            }
-            else if (block->FrozenFile && block->Type == EUserDataType::URL) {
+            } else if (block->FrozenFile && block->Type == EUserDataType::URL) {
                 auto content = TFileInput(block->FrozenFile->GetPath().GetPath()).ReadAll();
                 return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(content);
             } else {
@@ -83,4 +80,4 @@ TCallableVisitFunc TSimpleFileTransformProvider::operator()(TInternName name) {
     return TCallableVisitFunc();
 }
 
-} // NYql
+} // namespace NYql

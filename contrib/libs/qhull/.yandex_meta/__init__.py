@@ -1,6 +1,5 @@
 from devtools.yamaker.project import CMakeNinjaNixProject
 
-
 qhull = CMakeNinjaNixProject(
     arcdir="contrib/libs/qhull",
     nixattr="qhull",

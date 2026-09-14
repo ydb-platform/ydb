@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import NoReturn
+
 from setuptools import Command
 from setuptools.warnings import SetuptoolsDeprecationWarning
 
@@ -35,11 +37,11 @@ class _test(Command):
         ('test-runner=', 'r', "Test runner to use"),
     ]
 
-    def initialize_options(self):
+    def initialize_options(self) -> None:
         pass
 
-    def finalize_options(self):
+    def finalize_options(self) -> None:
         pass
 
-    def run(self):
+    def run(self) -> NoReturn:
         raise RuntimeError("Support for the test command was removed in Setuptools 72")

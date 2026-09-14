@@ -62,30 +62,27 @@ def build_include_tree(path: str, build_output_dir: str, base_src_dir: str) -> l
     with open(path) as f:
         obj = json.load(f)
 
-    include_events = []  # (time, +-1, path)
+    current_includes_stack = []
+    current_ts_stack = []
+    tree_path_to_sum_duration = {}
 
     for event in obj["traceEvents"]:
-        if event["name"] == "Source":
+        if event["name"] != "Source":
+            continue
+
+        ts = event["ts"]
+        ph = event.get("ph")
+        if ph == "b": # begin event
             path = event["args"]["detail"]
-            time_stamp = event["ts"]
-            duration = event["dur"]
-            include_events.append((time_stamp, +1, path, duration))
-            include_events.append((time_stamp + duration, -1, path, duration))
-
-    include_events.sort(key=lambda event: (event[0], -event[1]))
-
-    tree_path_to_sum_duration = {}
-    current_includes_stack = []
-
-    for time_stamp, ev, path, duration in include_events:
-        if ev == 1:
             current_includes_stack.append(sanitize_path(path, base_src_dir))
+            current_ts_stack.append(ts)
+        elif ph == "e": # end event
             tree_path = tuple(current_includes_stack)
             prev = tree_path_to_sum_duration.get(tree_path, 0)
+            duration = ts - current_ts_stack[-1]
             tree_path_to_sum_duration[tree_path] = prev + duration
-        else:
-            assert current_includes_stack[-1] == sanitize_path(path, base_src_dir)
             current_includes_stack.pop()
+            current_ts_stack.pop()
 
     # filter small entities
     tree_paths_to_include = set()
@@ -231,19 +228,42 @@ def parse_includes(trace_path: str, base_src_dir: str) -> tuple[list[tuple[int, 
         obj = json.load(f)
 
     cpp_file = None
-    include_events = []  # (time, +-1, path)
+    include_events = []  # (timestamp, +1/-1, path)
+
+    # we will store "begin events" until we see matching "end"
+    source_begin = {}  # path -> timestamp
+    source_stack = []  # stack of paths in open order
 
     for event in obj["traceEvents"]:
-        if event["name"] == "Source":
-            path = event["args"]["detail"]
-            path = sanitize_path(path, base_src_dir)
-            time_stamp = event["ts"]
-            duration = event["dur"]
-            include_events.append((time_stamp, +1, path))
-            include_events.append((time_stamp + duration, -1, path))
+        name = event["name"]
+        args = event.get("args", {})
+        ph = event["ph"]
+        ts = event["ts"]
 
-        if event["name"] == "OptModule":
-            cpp_file = event["args"]["detail"]
+        if name == "Source" and ph == "b":  # begin event
+            path = sanitize_path(args["detail"], base_src_dir)
+            source_begin[path] = ts
+            source_stack.append(path)
+
+        elif name == "Source" and ph == "e":  # end event
+            detail = args.get("detail")
+            if detail is not None:
+                path = sanitize_path(detail, base_src_dir)
+            else:
+                assert source_stack, "Source end without any open begin"
+                path = source_stack[-1]
+
+            ts_begin = source_begin.pop(path, None)
+            assert ts_begin is not None
+
+            if source_stack and source_stack[-1] == path:
+                source_stack.pop()
+
+            include_events.append((ts_begin, +1, path))
+            include_events.append((ts, -1, path))
+
+        elif name == "OptModule":
+            cpp_file = args["detail"]
 
     path_to_time = {}
     last_time_stamp = 0

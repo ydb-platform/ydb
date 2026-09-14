@@ -1,12 +1,13 @@
 #include "cert_check.h"
-#include "cert_auth_utils.h"
+
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/file.h>
 #include <util/system/tempfile.h>
 
-namespace NKikimr {
+namespace NKikimr::NCertTestUtils {
 
 TTempFile SaveToTempFile(const std::string& content, const char* prefix = "cert") {
     TTempFile file = MakeTempName(nullptr, prefix);
@@ -279,4 +280,4 @@ Y_UNIT_TEST_SUITE(TCertificateCheckerTest) {
     }
 }
 
-} // namespace NKikimr
+} // namespace NKikimr::NCertTestUtils

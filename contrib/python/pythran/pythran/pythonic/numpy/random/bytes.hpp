@@ -21,9 +21,8 @@ namespace numpy
       // dummy init + rewrite is faster than reserve && push_back
       types::str result(std::string(length, 0));
       std::uniform_int_distribution<long> distribution{0, 255};
-      std::generate(result.chars().begin(), result.chars().end(), [&]() {
-        return static_cast<char>(distribution(details::generator));
-      });
+      std::generate(result.chars().begin(), result.chars().end(),
+                    [&]() { return static_cast<char>(distribution(details::generator)); });
       return result;
     }
   } // namespace random

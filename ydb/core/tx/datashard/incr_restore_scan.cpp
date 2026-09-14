@@ -8,8 +8,11 @@
 #include <ydb/core/tx/datashard/change_record_body_serializer.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/incr_restore_helpers.h>
+#include <ydb/core/tx/datashard/datashard.h> // Add for TEvIncrementalRestoreResponse
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/services/services.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
 
 namespace NKikimr::NDataShard {
 
@@ -18,6 +21,7 @@ using namespace NTable;
 
 class TIncrementalRestoreScan
     : public IActorCallback
+    , public IActorExceptionHandler
     , public NTable::IScan
     , protected TChangeRecordBodySerializer
 {
@@ -25,18 +29,15 @@ class TIncrementalRestoreScan
     using TBuffer = NStreamScan::TBuffer;
     using TChange = IDataShardChangeCollector::TChange;
 
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[TIncrementalRestoreScan]"
-                << "[" << TxId << "]"
-                << SourcePathId
-                << TargetPathId
-                << SelfId() /* contains brackets */ << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TIncrementalRestoreScan"},
+            {"txId", TxId},
+            {"sourcePathId", SourcePathId},
+            {"targetPathId", TargetPathId},
+            {"selfId", SelfId()});
     }
+
 public:
     explicit TIncrementalRestoreScan(
             TActorId parent,
@@ -60,20 +61,20 @@ public:
     {}
 
     static TVector<TTag> InitValueTags(TUserTable::TCPtr table) {
-        Y_VERIFY(table->Columns.size() >= 2);
+        Y_ENSURE(table->Columns.size() >= 2);
         TVector<TTag> valueTags;
         valueTags.reserve(table->Columns.size() - 1);
-        bool deletedMarkerColumnFound = false;
+        bool changeMetadataColumnFound = false;
         for (const auto& [tag, column] : table->Columns) {
             if (!column.IsKey) {
                 valueTags.push_back(tag);
-                if (column.Name == "__ydb_incrBackupImpl_deleted") {
-                    deletedMarkerColumnFound = true;
+                if (column.Name == "__ydb_incrBackupImpl_changeMetadata") {
+                    changeMetadataColumnFound = true;
                 }
             }
         }
 
-        Y_VERIFY(deletedMarkerColumnFound);
+        Y_ENSURE(changeMetadataColumnFound);
 
         return valueTags;
     }
@@ -93,19 +94,24 @@ public:
     }
 
     void Start(TEvIncrementalRestoreScan::TEvServe::TPtr& ev) {
-        LOG_D("Handle TEvIncrementalRestoreScan::TEvServe " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle TEvIncrementalRestoreScan::TEvServe",
+            {"ev", ev->Get()->ToString()});
+
+        // Store/update the actorId on each command receipt (handles SchemeShard restarts)
+        OperatorActorId = ev->Sender;
 
         Driver->Touch(EScan::Feed);
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         TVector<TChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
 
         for (const auto& record : ev->Get()->Records) {
             auto it = PendingRecords.find(record.Order);
-            Y_ABORT_UNLESS(it != PendingRecords.end());
+            Y_ENSURE(it != PendingRecords.end());
             records.emplace_back(it->second);
         }
 
@@ -113,7 +119,8 @@ public:
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"ev", ev->Get()->ToString()});
 
         for (auto recordId : ev->Get()->Records) {
             PendingRecords.erase(recordId);
@@ -123,12 +130,15 @@ public:
     }
 
     void Handle(TEvIncrementalRestoreScan::TEvFinished::TPtr& ev) {
-        LOG_D("Handle TEvIncrementalRestoreScan::TEvFinished " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle TEvIncrementalRestoreScan::TEvFinished",
+            {"ev", ev->Get()->ToString()});
 
         Driver->Touch(EScan::Final);
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvIncrementalRestoreScan::TEvServe, Start);
             hFunc(NChangeExchange::TEvChangeExchange::TEvRequestRecords, Handle);
@@ -137,16 +147,16 @@ public:
         }
     }
 
-    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
         Driver = driver;
-        Y_ABORT_UNLESS(!LastKey || LastKey->GetCells().size() == scheme->Tags(true).size());
+        Y_ENSURE(!LastKey || LastKey->GetCells().size() == scheme->Tags(true).size());
 
         return {EScan::Sleep, {}};
     }
 
-    EScan Seek(TLead& lead, ui64) noexcept override {
-        LOG_D("Seek");
+    EScan Seek(TLead& lead, ui64) override {
+        YDB_LOG_DEBUG("Seek");
 
         if (LastKey) {
             lead.To(ValueTags, LastKey->GetCells(), ESeek::Upper);
@@ -157,7 +167,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
         Buffer.AddRow(key, *row);
         if (Buffer.Bytes() < Limits.BatchMaxBytes) {
             if (Buffer.Rows() < Limits.BatchMaxRows) {
@@ -173,8 +183,8 @@ public:
         return EScan::Sleep;
     }
 
-    EScan Exhausted() noexcept override {
-        LOG_D("Exhausted");
+    EScan Exhausted() override {
+        YDB_LOG_DEBUG("Exhausted");
 
         NoMoreData = true;
 
@@ -186,20 +196,39 @@ public:
         return Progress();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        LOG_D("Finish " << static_cast<ui64>(abort));
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        YDB_LOG_DEBUG("Finish",
+            {"status", status});
 
-        if (abort != EAbort::None) {
-            // FIXME
+        const bool success = IsScanSuccess(status);
+        const auto endStatus = MapScanStatus(status);
+        if (!success) {
+            // Error propagation: see github.com/ydb-platform/ydb/issues/18797
+            // DS classifies cause (EndStatus); SS owns retry policy.
+            YDB_LOG_ERROR("IncrementalRestoreScan finished with error",
+                {"status", status},
+                {"endStatus", static_cast<int>(endStatus)});
         }
 
-        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId));
+        TString errorMsg;
+        if (!success) {
+            errorMsg = TStringBuilder() << "Scan finished with status: " << status;
+        }
+        Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId, success, errorMsg, endStatus));
 
         PassAway();
         return nullptr;
     }
 
-    void Describe(IOutputStream& o) const noexcept override {
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
+    }
+
+    void Describe(IOutputStream& o) const override {
         o << "IncrRestoreScan {"
           << " TxId: " << TxId
           << " SourcePathId: " << SourcePathId
@@ -208,6 +237,10 @@ public:
     }
 
     EScan Progress() {
+        // Save the last key for scan continuation before flushing
+        if (Buffer.Rows() > 0) {
+            LastKey = Buffer.GetLastKey();
+        }
         auto rows = Buffer.Flush();
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
 
@@ -254,7 +287,7 @@ private:
     const TPathId SourcePathId;
     const TPathId TargetPathId;
     const TVector<TTag> ValueTags;
-    const TMaybe<TSerializedCellVec> LastKey;
+    TMaybe<TSerializedCellVec> LastKey;
     const TLimits Limits;
     mutable TMaybe<TString> LogPrefix;
     IDriver* Driver;
@@ -263,6 +296,7 @@ private:
     ui64 Order = 0;
     TActorId ChangeSender;
     TMap<ui64, TChangeRecord::TPtr> PendingRecords;
+    TActorId OperatorActorId; // Store the actorId of the operation initiator for restart handling
 
     TMap<ui32, TUserTable::TUserColumn> Columns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
@@ -289,3 +323,7 @@ THolder<NTable::IScan> CreateIncrementalRestoreScan(
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

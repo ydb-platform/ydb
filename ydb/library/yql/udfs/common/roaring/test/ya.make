@@ -1,4 +1,4 @@
-YQL_UDF_YDB_TEST()
+YQL_UDF_TEST()
 
 DEPENDS(ydb/library/yql/udfs/common/roaring)
 

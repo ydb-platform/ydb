@@ -5,14 +5,19 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 PROTO_NAMESPACE(yt)
 
 SRCS(
-    attributes_ut.cpp
     attribute_filter_ut.cpp
+    attributes_ut.cpp
+    complex_key_map.cpp
+    composite_map_ut.cpp
+    lazy_ypath_service_ut.cpp
+    options_ut.cpp
+    precise_time_ut.cpp
     resolver_ut.cpp
     serialize_ut.cpp
     service_combiner_ut.cpp
+    size_ut.cpp
     text_yson_convert_ut.cpp
     tree_builder_ut.cpp
-    lazy_ypath_service_ut.cpp
     yson_schema_ut.cpp
     yson_struct_update_ut.cpp
     yson_struct_ut.cpp
@@ -45,7 +50,12 @@ SIZE(SMALL)
 
 IF (OS_DARWIN)
     SIZE(LARGE)
-    TAG(ya:fat ya:force_sandbox ya:exotic_platform)
+    TAG(
+        ya:fat
+        ya:force_sandbox
+        ya:exotic_platform
+        ya:large_tests_on_single_slots
+    )
 ENDIF()
 
 END()

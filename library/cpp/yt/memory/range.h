@@ -100,7 +100,7 @@ public:
     { }
 
     //! Constructs a TRange from an std::span.
-    TRange(const std::span<T>& elements)
+    TRange(std::span<const T> elements)
         : Data_(elements.data())
         , Length_(elements.size())
     { }
@@ -354,11 +354,22 @@ public:
         : TRange<T>(elements)
     { }
 
+    using TRange<T>::Data;
     using TRange<T>::Begin;
     using TRange<T>::End;
     using TRange<T>::Front;
     using TRange<T>::Back;
     using TRange<T>::operator[];
+
+    T* Data() const
+    {
+        return const_cast<T*>(this->Data_);
+    }
+
+    T* data() const
+    {
+        return Data();
+    }
 
     iterator Begin() const
     {

@@ -11,7 +11,7 @@ namespace NYT::NPhoenix {
 struct TFieldSchema
     : public NYTree::TYsonStruct
 {
-    TString Name;
+    std::string Name;
     TFieldTag Tag;
 
     REGISTER_YSON_STRUCT(TFieldSchema);
@@ -25,7 +25,7 @@ DEFINE_REFCOUNTED_TYPE(TFieldSchema);
 struct TTypeSchema
     : public NYTree::TYsonStruct
 {
-    TString Name;
+    std::string Name;
     TTypeTag Tag;
     std::vector<TFieldSchemaPtr> Fields;
     std::vector<TTypeTag> BaseTypeTags;

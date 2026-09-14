@@ -5,6 +5,7 @@
 #include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_state.h"
 
+#include <ydb/core/util/random.h>
 #include <ydb/core/util/text.h>
 
 namespace NKikimr {
@@ -36,36 +37,106 @@ constexpr ui32 DefaultSectorSize = 4 * (1 << 10); // 4 KiB
 constexpr ui32 ReplicationFactor = 3;
 constexpr ui32 RecordsInSysLog = 16;
 
-constexpr ui64 FullSizeDiskMinimumSize = 800ull * (1 << 30); // 800GB, all disks smaller are considered "small"
-constexpr ui32 SmallDiskMaximumChunkSize = 32 * (1 << 20); // 32MB
+// normal disks, 128MB chunks
+// - 800GB
+// small disks, 32MB chunks
+// - 80GB
+// tiny disks, 32MB chunks
+
+constexpr ui64 SmallDiskSizeBoundary = 800ull * (1 << 30);
+constexpr ui64 TinyDiskSizeBoundary = 80ull * (1 << 30);
+constexpr ui32 SmallDiskMaximumChunkSize = 32 * (1 << 20);
+
+// reserved log: 200 chunks, reserved static log: 70 chunks
+// - 200GB
+// linear interpolation
+// - 8GB
+// reserved log: 20 chunks, reserved static log: 5 chunks
+
+constexpr ui64 SmallDiskSizeLogBoundary = 200ull * (1 << 30);
+constexpr ui64 TinyDiskSizeLogBoundary = 8ull * (1 << 30);
+constexpr i64 MaxCommonLogChunks = 200; // default, can also be set from ICB
+constexpr i64 CommonStaticLogChunks = 70; // default, can also be set from ICB
+constexpr ui32 StaticGroupChunkReservePerMille = 25; // 2,5%; default, can also be set from ICB
+constexpr i64 TinyDiskMaxCommonLogChunks = 20;
+constexpr i64 TinyDiskCommonStaticLogChunks = 5;
 
 #define PDISK_FORMAT_VERSION 3
 #define PDISK_DATA_VERSION 2
 #define PDISK_DATA_VERSION_2 3
 #define PDISK_DATA_VERSION_3 4
+#define PDISK_DATA_VERSION_4 5
 #define PDISK_SYS_LOG_RECORD_VERSION_2 2
 #define PDISK_SYS_LOG_RECORD_VERSION_3 3
 #define PDISK_SYS_LOG_RECORD_VERSION_4 4
 // #define PDISK_SYS_LOG_RECORD_VERSION_5 5 // It was used in reverted commits, just avoid this version
 #define PDISK_SYS_LOG_RECORD_VERSION_6 6
 #define PDISK_SYS_LOG_RECORD_VERSION_7 7
+#define PDISK_SYS_LOG_RECORD_VERSION_8 8
 #define PDISK_SYS_LOG_RECORD_INCOMPATIBLE_VERSION_1000 1000
 #define FORMAT_TEXT_SIZE 1024
 
 #define NONCE_JUMP_DLOG_CHUNKS 16
 #define NONCE_JUMP_DLOG_RECORDS 4
 
+// Originally there were two options for writing data:
+// * Always encrypted (default).
+// * Never encrypted (a special build with the YDB_DISABLE_PDISK_ENCRYPTION flag, which sets CFLAG
+//   DISABLE_PDISK_ENCRYPTION).
+// We want to migrate from "always encrypted":
+// * Old data is decrypted when it is read.
+// * New data is never decrypted.
+// * If encryption is turned on again, non-encrypted data is read without decryption.
+// This makes the on/off setting backward compatible. However, after turning off encryption,
+// it is not possible to downgrade to a YDB version that does not support this feature.
 #pragma pack(push, 1)
 struct TDataSectorFooter {
     ui64 Nonce;
-    ui64 Version;
+private:
+    ui64 VersionAndFlags;
+public:
     THash Hash;
+
+    static constexpr ui64 VersionMask = 0xff;
+
+    // we use NoEncryptionFlag vs. EncryptedFlag, because this makes
+    // backward compatibility easier: not set – encrypted (as before this feature)
+    static constexpr ui64 NoEncryptionFlag = 1ull << 8;
 
     TDataSectorFooter()
         : Nonce(0)
-        , Version(PDISK_DATA_VERSION)
+        , VersionAndFlags(PDISK_DATA_VERSION)
         , Hash(0)
     {}
+
+    ui8 GetVersion() const {
+        return static_cast<ui8>(VersionAndFlags & VersionMask);
+    }
+
+    void SetVersionAndEncryption(bool enableSectorEncryption) {
+#ifdef DISABLE_PDISK_ENCRYPTION
+        Y_UNUSED(enableSectorEncryption);
+        VersionAndFlags = PDISK_DATA_VERSION;
+        return;
+#else
+        if (enableSectorEncryption) {
+            // use old version
+            VersionAndFlags = PDISK_DATA_VERSION;
+            return;
+        }
+        VersionAndFlags = static_cast<ui64>(PDISK_DATA_VERSION_4) | NoEncryptionFlag;
+#endif
+    }
+
+    // note, it's backward compatible with both old version types,
+    // where we either set DISABLE_PDISK_ENCRYPTION or always encrypt
+    bool IsEncrypted() const {
+#ifdef DISABLE_PDISK_ENCRYPTION
+        return false;
+#else
+        return (VersionAndFlags & NoEncryptionFlag) == 0;
+#endif
+    }
 };
 
 struct TParitySectorFooter {
@@ -277,16 +348,24 @@ struct TCommitRecordFooter {
     ui64 FirstLsnToKeep;
     ui32 CommitCount;
     ui32 DeleteCount;
+#ifdef ENABLE_PDISK_SHRED
+    ui32 DirtyCount;
+#endif
     bool IsStartingPoint;
 
-    TCommitRecordFooter(ui64 userDataSize, ui64 firstLsnToKeep, ui32 commitCount, ui32 deleteCount,
+    TCommitRecordFooter(ui64 userDataSize, ui64 firstLsnToKeep, ui32 commitCount, ui32 deleteCount, ui32 dirtyCount,
             bool isStartingPoint)
         : UserDataSize(userDataSize)
         , FirstLsnToKeep(firstLsnToKeep)
         , CommitCount(commitCount)
         , DeleteCount(deleteCount)
+#ifdef ENABLE_PDISK_SHRED
+        , DirtyCount(dirtyCount)
+#endif
         , IsStartingPoint(isStartingPoint)
-    {}
+    {
+        Y_UNUSED(dirtyCount);
+    }
 };
 
 enum ENonce {
@@ -311,7 +390,7 @@ struct TNonceSet {
 
     TString ToString(bool isMultiline) const {
         TStringStream str;
-        const char *x = isMultiline ? "\n" : "";
+        const char *x = isMultiline ? "\n " : "";
         str << "{TNonceSet" << x;
         str << " Version# " << Version << x;
         str << " NonceSysLog# " << Value[NonceSysLog] << x;
@@ -333,7 +412,7 @@ struct TSysLogRecord {
     TVDiskID OwnerVDisks[256];
 
     TSysLogRecord()
-        : Version(PDISK_SYS_LOG_RECORD_VERSION_7)
+        : Version(PDISK_SYS_LOG_RECORD_VERSION_8)
         , LogHeadChunkIdx(0)
         , Reserved1(0)
         , LogHeadChunkPreviousNonce((ui64)-1)
@@ -420,14 +499,28 @@ struct TMetadataHeader {
         *this = header;
     }
 
-    bool CheckHash() const {
+    bool CheckHash(ui64 *magic) const {
         TPDiskHashCalculator hasher;
+#ifdef DISABLE_PDISK_ENCRYPTION
+	if (magic) {
+            hasher.Hash(magic, sizeof(ui64));
+	}
+#else
+	Y_UNUSED(magic);
+#endif
         hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));
         return hasher.GetHashResult() == HeaderHash;
     }
 
-    void SetHash() {
+    void SetHash(const ui64 *magic) {
         TPDiskHashCalculator hasher;
+#ifdef DISABLE_PDISK_ENCRYPTION
+	if (magic) {
+            hasher.Hash(magic, sizeof(ui64));
+	}
+#else
+	Y_UNUSED(magic);
+#endif
         hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));
         HeaderHash = hasher.GetHashResult();
     }
@@ -449,12 +542,36 @@ struct TMetadataFormatSector {
 #pragma pack(pop)
 
 struct TChunkInfo {
-    ui8 Version;
+    ui8 VersionDirty; // 5 bit of version info, 3 bit of encoded dirtyness info
     TOwner OwnerId;
     ui64 Nonce;
 
+    ui32 GetVersion() const {
+        return VersionDirty & 0x1f;
+    }
+
+    bool IsDirty() const {
+        return VersionDirty & 0x80;
+    }
+
+    bool IsCurrentShredGeneration() const {
+        return VersionDirty & 0x40;
+    }
+
+    bool IsGenerationBitSet() const {
+        return VersionDirty & 0x20;
+    }
+
+    void SetDirty(bool isDirty, bool isCurrentShredGeneration) {
+        VersionDirty = (VersionDirty & 0x3f) | (isDirty ? 0x80 : 0) | (isCurrentShredGeneration ? 0x40 : 0);
+    }
+
+    void SetGenerationBit(bool isSet) {
+        VersionDirty = (VersionDirty & ~0x20) | (isSet ? 0x20 : 0);
+    }
+
     TChunkInfo()
-        : Version(PDISK_DATA_VERSION)
+        : VersionDirty(PDISK_DATA_VERSION)
         , OwnerId(0)
         , Nonce(0)
     {}
@@ -480,17 +597,17 @@ struct TChunkTrimInfo {
     {}
 
     void SetChunkTrimmed(ui8 idx) {
-        Y_ABORT_UNLESS(idx < ChunksPerRecord);
+        Y_VERIFY(idx < ChunksPerRecord);
         TrimMask |= (1 << idx);
     }
 
     void SetChunkUntrimmed(ui8 idx) {
-        Y_ABORT_UNLESS(idx < ChunksPerRecord);
+        Y_VERIFY(idx < ChunksPerRecord);
         TrimMask &= ~(1 << idx);
     }
 
     bool IsChunkTrimmed(ui8 idx) {
-        Y_ABORT_UNLESS(idx < ChunksPerRecord);
+        Y_VERIFY(idx < ChunksPerRecord);
         return TrimMask & (1 << idx);
     }
 };
@@ -531,8 +648,10 @@ enum EFormatFlags {
     FormatFlagErasureEncodeFormat = 1 << 3,  // Always on, flag is useless
     FormatFlagErasureEncodeNextChunkReference = 1 << 4,  // Always on, flag is useless
     FormatFlagEncryptFormat = 1 << 5,  // Always on, flag is useless
-    FormatFlagEncryptData = 1 << 6,  // Always on, flag is useless
+    FormatFlagEncryptData = 1 << 6,
     FormatFlagFormatInProgress = 1 << 7,  // Not implemented (Must be OFF for a formatted disk)
+
+    FormatFlagPlainDataChunks = 1 << 8,  // Default is off, means "encrypted", for backward compatibility
 };
 
 struct TDiskFormat {
@@ -579,6 +698,7 @@ struct TDiskFormat {
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagEncryptFormat, "EncryptFormat", str);
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagEncryptData, "EncryptData", str);
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagFormatInProgress, "FormatFlagFormatInProgress", str);
+        isFirst = NText::OutFlag(isFirst, flags & FormatFlagPlainDataChunks, "FormatFlagPlainDataChunks", str);
         NText::OutFlag(isFirst, isFirst, "Unknown", str);
         return str.Str();
     }
@@ -648,10 +768,34 @@ struct TDiskFormat {
         return FormatFlags & FormatFlagFormatInProgress;
     }
 
+    bool IsPlainDataChunks() const {
+        return FormatFlags & FormatFlagPlainDataChunks;
+    }
+
+    size_t GetAppendBlockSize() const {
+        return IsPlainDataChunks() ? SectorSize : SectorPayloadSize();
+    }
+
     void SetFormatInProgress(bool isInProgress) {
         FormatFlags &= ~FormatFlagFormatInProgress;
         if (isInProgress) {
             FormatFlags |= FormatFlagFormatInProgress;
+        }
+    }
+
+    void SetPlainDataChunks(bool plain) {
+        if (plain) {
+            FormatFlags |= FormatFlagPlainDataChunks;
+        } else {
+            FormatFlags &= ~FormatFlagPlainDataChunks;
+        }
+    }
+
+    void SetEncryptFormat(bool encrypt) {
+        if (encrypt) {
+            FormatFlags |= FormatFlagEncryptFormat;
+        } else {
+            FormatFlags &= ~FormatFlagEncryptFormat;
         }
     }
 
@@ -700,16 +844,21 @@ struct TDiskFormat {
     }
 
     void PrepareMagic(TKey &key, ui64 nonce, ui64 &magic) {
-        NPDisk::TPDiskStreamCypher cypher(true);
+        NPDisk::TPDiskStreamCypher cypher(IsEncryptFormat());
         cypher.SetKey(key);
         cypher.StartMessage(nonce);
         cypher.InplaceEncrypt(&magic, sizeof(magic));
     }
 
-    void InitMagic() {
+    void InitMagic(bool randomizeMagic = false) {
         MagicFormatChunk = MagicFormatChunkId;
         NPDisk::TPDiskHashCalculator hash;
         hash.Hash(&Guid, sizeof(Guid));
+        if (randomizeMagic) {
+            ui64 formatMagicSalt = 0;
+            SafeEntropyPoolRead(&formatMagicSalt, sizeof(formatMagicSalt));
+            hash.Hash(&formatMagicSalt, sizeof(formatMagicSalt));
+        }
         hash.Hash(&MagicNextLogChunkReferenceId, sizeof(MagicNextLogChunkReferenceId));
         MagicNextLogChunkReference = hash.GetHashResult();
         hash.Hash(&MagicLogChunkId, sizeof(MagicLogChunkId));
@@ -735,7 +884,7 @@ struct TDiskFormat {
     }
 
     ui64 RoundUpToSectorSize(ui64 size) const { // assuming SectorSize is a power of 2
-        Y_DEBUG_ABORT_UNLESS(IsPowerOf2(SectorSize));
+        Y_VERIFY_DEBUG(IsPowerOf2(SectorSize));
         return (size + SectorSize - 1) & ~ui64(SectorSize - 1);
     }
 
@@ -773,14 +922,14 @@ struct TDiskFormat {
         // Set Hash
         {
             NPDisk::TPDiskHashCalculator hashCalculator;
-            Y_ABORT_UNLESS(DiskFormatSize > sizeof(THash));
+            Y_VERIFY(DiskFormatSize > sizeof(THash));
             ui64 size = DiskFormatSize - sizeof(THash);
             hashCalculator.Hash(this, size);
             Hash = hashCalculator.GetHashResult();
         }
     }
 
-    void Clear() {
+    void Clear(bool enableFormatAndMetadataEncryption) {
         Version = PDISK_FORMAT_VERSION;
         DiskSize = 0;
         Guid = 0;
@@ -800,8 +949,12 @@ struct TDiskFormat {
             FormatFlagErasureEncodeSysLog |
             FormatFlagErasureEncodeFormat |
             FormatFlagErasureEncodeNextChunkReference |
-            FormatFlagEncryptFormat |
             FormatFlagEncryptData;
+
+        if (enableFormatAndMetadataEncryption) {
+            FormatFlags |= FormatFlagEncryptFormat;
+        }
+
         Hash = 0;
 
         memset(FormatText, 0, sizeof(FormatText));
@@ -809,7 +962,7 @@ struct TDiskFormat {
     }
 
     void UpgradeFrom(const TDiskFormat &format) {
-        Clear();
+        Clear(IsEncryptFormat());
         // Upgrade from version 2
         TimestampUs = 0;
         // Fill the flags according to actual Version2 settings
@@ -821,15 +974,20 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
-        Y_ABORT_UNLESS(format.Version <= Version);
-        Y_ABORT_UNLESS(format.GetUsedSize() <= sizeof(TDiskFormat));
+        SetEncryptFormat(format.IsEncryptFormat());
+        SetPlainDataChunks(format.IsPlainDataChunks());
+
+        Y_VERIFY(format.Version <= Version);
+        Y_VERIFY(format.GetUsedSize() <= sizeof(TDiskFormat));
         memcpy(this, &format, format.GetUsedSize());
     }
 
-    bool IsDiskSmall() {
-        return DiskSize < FullSizeDiskMinimumSize;
+    bool IsDiskSmall() const {
+        return DiskSize < SmallDiskSizeBoundary;
     }
 };
+
+static_assert(sizeof(TDiskFormat) >= MagicIncompleteFormatSize, "Magic format should be less or equal than TDiskFormat");
 
 union TDiskFormatSector {
     TDiskFormat Format;
@@ -854,4 +1012,3 @@ struct TPDiskFormatBigChunkException : public yexception {
 
 } // NPDisk
 } // NKikimr
-

@@ -17,6 +17,7 @@ protected:
     virtual void DoStatus(const TStatusContainer& status) const = 0;
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrColumnShardDataSharingProto::TInitiator::TController& proto) = 0;
     virtual void DoSerializeToProto(NKikimrColumnShardDataSharingProto::TInitiator::TController& proto) const = 0;
+
 public:
     using TProto = NKikimrColumnShardDataSharingProto::TInitiator::TController;
     using TFactory = NObjectFactory::TObjectFactory<IInitiatorController, TString>;
@@ -34,42 +35,52 @@ public:
     void Status(const TStatusContainer& status) const {
         DoStatus(status);
     }
+
     void ProposeError(const TString& sessionId, const TString& message) const {
         DoProposeError(sessionId, message);
     }
+
     void ConfirmSuccess(const TString& sessionId) const {
         DoConfirmSuccess(sessionId);
     }
+
     void ProposeSuccess(const TString& sessionId) const {
         DoProposeSuccess(sessionId);
     }
+
     void Finished(const TString& sessionId) const {
         DoFinished(sessionId);
     }
+
     virtual TString GetClassName() const = 0;
 };
 
 class TInitiatorControllerContainer: public NBackgroundTasks::TInterfaceProtoContainer<IInitiatorController> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IInitiatorController>;
+
 public:
     using TBase::TBase;
 
     void Status(const TStatusContainer& status) const {
         TBase::GetObjectPtrVerified()->Status(status);
     }
+
     void ProposeSuccess(const TString& sessionId) const {
         TBase::GetObjectPtrVerified()->ProposeSuccess(sessionId);
     }
+
     void ConfirmSuccess(const TString& sessionId) const {
         TBase::GetObjectPtrVerified()->ConfirmSuccess(sessionId);
     }
+
     void ProposeError(const TString& sessionId, const TString& message) const {
         TBase::GetObjectPtrVerified()->ProposeError(sessionId, message);
     }
+
     void Finished(const TString& sessionId) const {
         TBase::GetObjectPtrVerified()->Finished(sessionId);
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NDataSharing

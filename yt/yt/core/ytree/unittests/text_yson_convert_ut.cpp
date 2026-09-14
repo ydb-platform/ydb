@@ -221,7 +221,7 @@ TEST(TTextYsonConvertTest, ConvertFromTextTypeMissmatch)
 TEST(TTextYsonConvertTest, ConvertFromTextYsonStringThrowBasicCases)
 {
     auto fromPayload = [] (const auto& value) {
-        return TYsonString(TString(value));
+        return TYsonString(std::string(value));
     };
 
     // Overflow.

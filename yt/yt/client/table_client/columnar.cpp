@@ -1,4 +1,5 @@
 #include "columnar.h"
+#include "helpers.h"
 
 #include <yt/yt/library/numeric/algorithm_helpers.h>
 
@@ -99,48 +100,37 @@ void CopyBitmapRangeToBitmapImpl(
         } else {
             ::memcpy(beginByteOutput, beginByteInput, byteCount);
         }
-        return;
-    }
-
-    auto buildOutputQWord = [&] (ui64 qword1, ui64 qword2) {
-        qword1 >>= qwordShift;
-        qword2 &= (1ULL << qwordShift) - 1;
-        qword2 <<= qwordCoshift;
-        return MaybeNegateValue<Negate>(qword1 | qword2);
-    };
-
-    // Head
-    while (currentQwordInput < endQwordInput - 1) {
-        auto qword1 = currentQwordInput[0];
-        auto qword2 = currentQwordInput[1];
-        *currentQwordOutput = buildOutputQWord(qword1, qword2);
-        ++currentQwordInput;
-        ++currentQwordOutput;
-    }
-
-    // Tail
-    while (currentQwordInput <= endQwordInput) {
-        auto qword1 = SafeReadQword(currentQwordInput, bitmap.End());
-        auto qword2 = SafeReadQword(currentQwordInput + 1, bitmap.End());
-        SafeWriteQword(currentQwordOutput, dst.End(), buildOutputQWord(qword1, qword2));
-        ++currentQwordInput;
-        ++currentQwordOutput;
-    }
-}
-
-bool GetBit(TRef bitmap, i64 index)
-{
-    return (bitmap[index >> 3] & (1U << (index & 7))) != 0;
-}
-
-void SetBit(TMutableRef bitmap, i64 index, bool value)
-{
-    auto& byte = bitmap[index >> 3];
-    auto mask = (1U << (index & 7));
-    if (value) {
-        byte |= mask;
     } else {
-        byte &= ~mask;
+        auto buildOutputQWord = [&] (ui64 qword1, ui64 qword2) {
+            qword1 >>= qwordShift;
+            qword2 &= (1ULL << qwordShift) - 1;
+            qword2 <<= qwordCoshift;
+            return MaybeNegateValue<Negate>(qword1 | qword2);
+        };
+
+        // Head
+        while (currentQwordInput < endQwordInput - 1) {
+            auto qword1 = currentQwordInput[0];
+            auto qword2 = currentQwordInput[1];
+            *currentQwordOutput = buildOutputQWord(qword1, qword2);
+            ++currentQwordInput;
+            ++currentQwordOutput;
+        }
+
+        // Tail
+        while (currentQwordInput <= endQwordInput) {
+            auto qword1 = SafeReadQword(currentQwordInput, bitmap.End());
+            auto qword2 = SafeReadQword(currentQwordInput + 1, bitmap.End());
+            SafeWriteQword(currentQwordOutput, dst.End(), buildOutputQWord(qword1, qword2));
+            ++currentQwordInput;
+            ++currentQwordOutput;
+        }
+    }
+
+    // Unset all unused bits in the last byte.
+    if (byteCount > 0 && (bitCount & 7) != 0) {
+        auto* lastOutputByte = reinterpret_cast<ui8*>(dst.Begin()) + byteCount - 1;
+        *lastOutputByte &= MaskLowerBits(bitCount & 7);
     }
 }
 

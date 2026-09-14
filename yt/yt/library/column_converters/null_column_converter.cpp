@@ -12,7 +12,7 @@ class TNullColumnWriterConverter
     : public IColumnConverter
 {
 public:
-    TNullColumnWriterConverter(int columnId)
+    explicit TNullColumnWriterConverter(int columnId)
         : ColumnId_(columnId)
     { }
 

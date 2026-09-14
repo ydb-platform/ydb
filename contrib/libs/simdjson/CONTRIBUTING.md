@@ -92,7 +92,7 @@ We welcome contributions from women and less represented groups. If you need hel
 
 Consider the following points when engaging with the project:
 
-- We discourage arguments from authority: ideas are discusssed on their own merits and not based on who stated it.
+- We discourage arguments from authority: ideas are discussed on their own merits and not based on who stated it.
 - Be mindful that what you may view as an aggression is maybe merely a difference of opinion or a misunderstanding.
 - Be mindful that a collection of small aggressions, even if mild in isolation, can become harmful.
 
@@ -101,3 +101,10 @@ Getting Started Hacking
 
 An overview of simdjson's directory structure, with pointers to architecture and design
 considerations and other helpful notes, can be found at [HACKING.md](HACKING.md).
+
+
+
+AI Usage Policy
+---------------
+
+Please also review our [AI Usage Policy](AI_USAGE_POLICY.md).

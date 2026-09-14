@@ -25,6 +25,12 @@
 
 namespace NYql {
 
+struct TGroupedInputKey {
+    const TExprNode* Section;
+    bool WeakFields;
+    bool operator<(const TGroupedInputKey& other) const;
+};
+
 class THorizontalJoinBase {
 public:
     THorizontalJoinBase(const TYtState::TPtr& state, const std::vector<const TExprNode*>& opDepsOrder, const TOpDeps& opDeps, const TNodeSet& hasWorldDeps)
@@ -56,6 +62,7 @@ protected:
     NNodes::TCoLambda BuildMapperWithAuxColumnsForSingleInput(TPositionHandle pos, bool ordered, TExprContext& ctx) const;
     NNodes::TCoLambda BuildMapperWithAuxColumnsForMultiInput(TPositionHandle pos, bool ordered, TExprContext& ctx) const;
     NNodes::TCoLambda MakeSwitchLambda(size_t mapIndex, size_t fieldsCount, bool singleInput, TExprContext& ctx) const;
+    NNodes::TExprBase JoinQLFilters(TPositionHandle pos, TExprContext& ctx) const;
 
 protected:
     TYtState::TPtr State_;
@@ -111,8 +118,7 @@ private:
     // out_num -> TVector{section_num, path_num}. Cannot be joined with other outputs
     TMap<size_t, TVector<std::pair<size_t, size_t>>> ExclusiveOuts;
     size_t InputCount = 0;
-    // {section or table, ranges, section settings, WeakField}
-    TSet<std::tuple<const TExprNode*, const TExprNode*, const TExprNode*, bool>> GroupedInputs;
+    TSet<TGroupedInputKey> GroupedInputs;
 
     // {section_num, path_num} -> {joined_map, out_num}
     TMap<std::pair<size_t, size_t>, TMaybe<std::pair<NNodes::TYtMap, size_t>>> InputSubsts;
@@ -140,14 +146,13 @@ private:
 private:
     TSyncMap Worlds;
     size_t InputCount = 0;
-    // {section or table, ranges, section settings, WeakField}
-    TSet<std::tuple<const TExprNode*, const TExprNode*, const TExprNode*, bool>> GroupedInputs;
+    TSet<TGroupedInputKey> GroupedInputs;
 
     TNodeMap<std::pair<NNodes::TYtMap, size_t>> OutputSubsts; // original map -> joined map, out index
 };
 
 class TOutHorizontalJoinOptimizer: public THorizontalJoinBase {
-    // Group by: Cluster, World, Input, Range, Sampling, Flags
+    // Group by: Cluster, World, Input, Ranges, Sampling, Flags
     using TGroupKey = std::tuple<TString, const TExprNode*, const TExprNode*, const TExprNode*, const TExprNode*, ui32>;
 
 public:

@@ -10,25 +10,23 @@ cdef extern from "<util/datetime/base.h>" nogil:
 
     cdef cppclass TTimeBase:
         TTimeBase()
-        TTimeBase(uint64_t)
 
         uint64_t GetValue()
         double SecondsFloat()
-        uint64_t MicroSeconds()
-        uint64_t MilliSeconds()
-        uint64_t Seconds()
-        uint64_t Minutes()
-        uint64_t Hours()
-        uint64_t Days()
-        uint64_t NanoSeconds()
-        uint32_t MicroSecondsOfSecond()
-        uint32_t MilliSecondsOfSecond()
-        uint32_t NanoSecondsOfSecond()
+        uint64_t GetMicroSeconds "TTimeBase::MicroSeconds" ()
+        uint64_t GetMilliSeconds "TTimeBase::MilliSeconds" ()
+        uint64_t GetSeconds "TTimeBase::Seconds" ()
+        uint64_t GetMinutes "TTimeBase::Minutes" ()
+        uint64_t GetHours "TTimeBase::Hours" ()
+        uint64_t GetDays "TTimeBase::Days" ()
+        uint64_t GetNanoSeconds "TTimeBase::NanoSeconds" ()
+        uint32_t GetMicroSecondsOfSecond "TTimeBase::MicroSecondsOfSecond" ()
+        uint32_t GetMilliSecondsOfSecond "TTimeBase::MilliSecondsOfSecond" ()
+        uint32_t GetNanoSecondsOfSecond "TTimeBase::NanoSecondsOfSecond"()
 
 
     cdef cppclass TInstant(TTimeBase):
         TInstant()
-        TInstant(uint64_t)
 
         @staticmethod
         TInstant Now() except +
@@ -97,7 +95,6 @@ cdef extern from "<util/datetime/base.h>" nogil:
 
     cdef cppclass TDuration(TTimeBase):
         TDuration()
-        TDuration(uint64_t)
 
         @staticmethod
         TDuration MicroSeconds(uint64_t)

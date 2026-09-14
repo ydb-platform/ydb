@@ -63,7 +63,7 @@ namespace NKikimr {
                 , IncarnationGuid(incarnationGuid)
                 , VCtx(vCtx)
             {
-                Y_ABORT_UNLESS(statuses.size() == Items.size());
+                Y_VERIFY_S(statuses.size() == Items.size(), VCtx->VDiskLogPrefix);
                 for (ui64 idx = 0; idx < Items.size(); ++idx) {
                     Items[idx].Status = statuses[idx];
                 }
@@ -82,10 +82,12 @@ namespace NKikimr {
                 }
 
                 TInstant now = TAppData::TimeProvider->Now();
+                auto handleClass = Event->Get()->Record.GetHandleClass();
+                const NVDiskMon::TLtcHistoPtr &histoPtr = VCtx->Histograms.GetHistogram(handleClass);
                 const ui64 bufferSizeBytes = Event->Get()->GetBufferBytes();
                 auto vMultiPutResult = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(NKikimrProto::OK, vdisk, cookie,
                     now, Event->Get()->GetCachedByteSize(), &vMultiPutRecord, SkeletonFrontIDPtr, MultiPutResMsgsPtr,
-                    nullptr, bufferSizeBytes, IncarnationGuid, TString());
+                    histoPtr, bufferSizeBytes, IncarnationGuid, TString());
 
                 for (ui64 idx = 0; idx < Items.size(); ++idx) {
                     TItem &result = Items[idx];
@@ -95,18 +97,23 @@ namespace NKikimr {
 
                 vMultiPutResult->Record.SetStatusFlags(OOSStatus.Flags);
 
-                SendVDiskResponse(ctx, Event->Sender, vMultiPutResult.release(), Event->Cookie, VCtx);
+                SendVDiskResponse(ctx, Event->Sender, vMultiPutResult.release(), Event->Cookie, VCtx, Event->Get()->Record.GetHandleClass());
                 PassAway();
             }
 
             void Handle(TEvVMultiPutItemResult::TPtr &ev, const TActorContext &ctx) {
                 TLogoBlobID blobId = ev->Get()->BlobId;
                 ui64 idx = ev->Get()->ItemIdx;
-                Y_ABORT_UNLESS(idx < Items.size(), "itemIdx# %" PRIu64 " ItemsSize# %" PRIu64, idx, (ui64)Items.size());
-                TItem &item = Items[idx];
-                Y_ABORT_UNLESS(blobId == item.BlobId, "itemIdx# %" PRIu64 " blobId# %s item# %s", idx, blobId.ToString().data(), item.ToString().data());
+                Y_VERIFY_S(idx < Items.size(), VCtx->VDiskLogPrefix
+                    << "itemIdx# " << idx << " ItemsSize# " << (ui64)Items.size());
 
-                Y_ABORT_UNLESS(!item.Received, "itemIdx# %" PRIu64 " item# %s", idx, item.ToString().data());
+                TItem &item = Items[idx];
+                Y_VERIFY_S(blobId == item.BlobId, VCtx->VDiskLogPrefix
+                    << "itemIdx# " << idx << " blobId# " << blobId.ToString() << " item# " << item.ToString());
+
+                Y_VERIFY_S(!item.Received, VCtx->VDiskLogPrefix
+                    << "itemIdx# " << idx << " item# " << item.ToString());
+
                 item.Received = true;
                 item.Status = ev->Get()->Status;
                 item.ErrorReason = ev->Get()->ErrorReason;

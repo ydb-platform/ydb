@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/rpc/public.h>
 
+#include <yt/yt/core/ypath/public.h>
+
 namespace NYT::NSecurityClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -16,38 +18,42 @@ using TNetworkProjectId = NObjectClient::TObjectId;
 using TProxyRoleId = NObjectClient::TObjectId;
 using TAccountResourceUsageLeaseId = NObjectClient::TObjectId;
 
-extern const TString RootAccountName;
-extern const TString RootAccountCypressPath;
-extern const TString TmpAccountName;
-extern const TString SysAccountName;
-extern const TString IntermediateAccountName;
-extern const TString ChunkWiseAccountingMigrationAccountName;
-extern const TString SequoiaAccountName;
+extern const std::string RootAccountName;
+extern const NYPath::TYPath RootAccountCypressPath;
+extern const std::string TmpAccountName;
+extern const std::string SysAccountName;
+extern const std::string IntermediateAccountName;
+extern const std::string ChunkWiseAccountingMigrationAccountName;
+extern const std::string SequoiaAccountName;
 
 using NRpc::RootUserName;
-extern const TString GuestUserName;
-extern const TString JobUserName;
-extern const TString SchedulerUserName;
-extern const TString BundleControllerUserName;
-extern const TString FileCacheUserName;
-extern const TString OperationsCleanerUserName;
-extern const TString OperationsClientUserName;
-extern const TString TabletCellChangeloggerUserName;
-extern const TString TabletCellSnapshotterUserName;
-extern const TString TableMountInformerUserName;
-extern const TString AlienCellSynchronizerUserName;
-extern const TString QueueAgentUserName;
-extern const TString YqlAgentUserName;
-extern const TString TabletBalancerUserName;
+extern const std::string GuestUserName;
+extern const std::string JobUserName;
+extern const std::string SchedulerUserName;
+extern const std::string BundleControllerUserName;
+extern const std::string FileCacheUserName;
+extern const std::string OperationsCleanerUserName;
+extern const std::string OperationsClientUserName;
+extern const std::string TabletCellChangeloggerUserName;
+extern const std::string TabletCellSnapshotterUserName;
+extern const std::string TableMountInformerUserName;
+extern const std::string AlienCellSynchronizerUserName;
+extern const std::string QueueAgentUserName;
+extern const std::string YqlAgentUserName;
+extern const std::string TabletBalancerUserName;
+extern const std::string PermissionCacheUserName;
+extern const std::string ReplicatedTableTrackerUserName;
+extern const std::string ChunkReplicaCacheUserName;
+extern const std::string SignatureKeysmithUserName;
 
-extern const TString EveryoneGroupName;
-extern const TString UsersGroupName;
-extern const TString SuperusersGroupName;
-extern const TString AdminsGroupName;
-extern const TString ReplicatorUserName;
-extern const TString OwnerUserName;
+extern const std::string EveryoneGroupName;
+extern const std::string UsersGroupName;
+extern const std::string SuperusersGroupName;
+extern const std::string AdminsGroupName;
+extern const std::string ReplicatorUserName;
+extern const std::string OwnerUserName;
 
-using TSecurityTag = TString;
+using TSecurityTag = std::string;
 constexpr int MaxSecurityTagLength = 128;
 
 DEFINE_ENUM(ESecurityAction,
@@ -74,12 +80,7 @@ YT_DEFINE_ERROR_ENUM(
     ((SafeModeEnabled)              (906))
     ((AlreadyPresentInGroup)        (908))
     ((IrreversibleAclModification)  (909))
-);
-
-// NB: Changing this list requires reign promotion.
-DEFINE_ENUM(EProxyKind,
-    ((Http)          (1))
-    ((Rpc)           (2))
+    ((NoSuchUser)                   (910))
 );
 
 DEFINE_ENUM(EAccessControlObjectNamespace,
@@ -95,13 +96,20 @@ DEFINE_ENUM(EAccessControlObject,
     (GetMasterConsistentState)
     (ExitReadOnly)
     (MasterExitReadOnly)
+    (ResetDynamicallyPropagatedMasterCells)
     (DiscombobulateNonvotingPeers)
     (SwitchLeader)
     (RequestRestart)
     (CollectCoverage)
 );
 
+DEFINE_ENUM(EInapplicableRowAccessPredicateMode,
+    // Fail the read action (e.g. scheduler operation / read_table command / SPYT/CHYT query).
+    (Fail)
+    // Pretend that the RL ACE does not exist for the current read action.
+    (Ignore)
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NSecurityClient
-

@@ -1,9 +1,12 @@
 #pragma once
 
-#include <ydb/services/datastreams/datastreams_codes.h>
+#include <ydb/services/datastreams/codes/datastreams_codes.h>
 
 #include <library/cpp/http/misc/httpcodes.h>
 
+#include <util/generic/string.h>
+
+#include <utility>
 
 using TException = std::pair<TString, HttpCodes>;
 
@@ -21,4 +24,4 @@ namespace NKikimr::NHttpProxy {
     TException UnauthorizedExceptions(const TString& method, NYds::EErrorCodes issueCode);
     TException UnsupportedExceptions(const TString& method, NYds::EErrorCodes issueCode);
 
-}
+} // namespace NKikimr::NHttpProxy

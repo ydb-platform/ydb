@@ -1,4 +1,3 @@
-
 # Базовые встроенные функции
 
 Ниже описаны функции общего назначения, а для специализированных функций есть отдельные статьи: [агрегатные](aggregation.md){% if feature_window_functions %}, [оконные](window.md){% endif %}, а также для работы со [списками](list.md), [словарями](dict.md), [структурами](struct.md), [типами данных](types.md){% if feature_codegen %} и [генерацией кода](codegen.md){% endif %}.
@@ -1215,32 +1214,7 @@ SELECT EvaluateExpr(
 
 {% include [decimal args](../_includes/decimal_args.md) %}
 
-### Примеры
-
-```yql
-SELECT
-  Bool("true"),
-  Uint8("0"),
-  Int32("-1"),
-  Uint32("2"),
-  Int64("-3"),
-  Uint64("4"),
-  Float("-5"),
-  Double("6"),
-  Decimal("1.23", 5, 2), -- до 5 десятичных знаков, из которых 2 после запятой
-  String("foo"),
-  Utf8("привет"),
-  Yson("<a=1>[3;%false]"),
-  Json(@@{"a":1,"b":null}@@),
-  Date("2017-11-27"),
-  Datetime("2017-11-27T13:24:00Z"),
-  Timestamp("2017-11-27T13:24:00.123456Z"),
-  Interval("P1DT2H3M4.567890S"),
-  TzDate("2017-11-27,Europe/Moscow"),
-  TzDatetime("2017-11-27T13:24:00,America/Los_Angeles"),
-  TzTimestamp("2017-11-27T13:24:00.123456,GMT"),
-  Uuid("f9d5cc3f-f1dc-4d9c-b97e-766e57ca4ccb");
-```
+{% include [x](../_includes/type_literals_examples.md) %}
 
 {% if feature_webui %}
 
@@ -1294,7 +1268,8 @@ FromBytes(String?, Type<T>)->T?
 
 ```yql
 SELECT
-    ToBytes(123), -- "\u0001\u0000\u0000\u0000"
+    ToBytes(123), -- "{\u0000\u0000\u0000"
+    String::HexEncode(ToBytes(123)) -- "7B000000"
     FromBytes(
         "\xd2\x02\x96\x49\x00\x00\x00\x00",
         Uint64
@@ -1498,6 +1473,7 @@ Unpickle(Type<T>, String)->T
 
 ### Примеры
 
+{% if feature_tablesample==true %}
 ```yql
 SELECT *
 FROM my_table
@@ -1508,6 +1484,18 @@ WHERE Digest::MurMurHash32(
 $buf = Pickle(123);
 SELECT Unpickle(Int32, $buf);
 ```
+{% else %}
+```yql
+SELECT *
+FROM my_table
+WHERE Digest::MurMurHash32(
+        Pickle(TableRow())
+    ) % 10 == 0;
+
+$buf = Pickle(123);
+SELECT Unpickle(Int32, $buf);
+```
+{% endif %}
 
 
 ## StaticMap
@@ -1601,15 +1589,15 @@ $f($el_n, ...$f($el_2, $f($f0($init), el_1))...)
 
 ## AggregationFactory {#aggregationfactory}
 
-Создать фабрику для [агрегационных функций](aggregation.md) для того чтобы разделить процесс описания того, как агрегировать данные, и то, к каким данным это применять.
+Создать фабрику для [агрегатных функций](aggregation.md) для того чтобы разделить процесс описания того, как агрегировать данные, и то, к каким данным это применять.
 
 Аргументы:
 
-1. Строка в кавычках, являющаяся именем агрегационной функции, например ["MIN"](aggregation.md#min).
-2. Опциональные параметры агрегационной функции, которые не зависят от данных. Например, значение percentile в [PERCENTILE](aggregation.md#percentile).
+1. Строка в кавычках, являющаяся именем агрегатной функции, например ["MIN"](aggregation.md#min).
+2. Опциональные параметры агрегатной функции, которые не зависят от данных. Например, значение percentile в [PERCENTILE](aggregation.md#percentile).
 
 Полученную фабрику можно использовать как второй параметр функции [AGGREGATE_BY](aggregation.md#aggregateby).
-Если агрегационная функция работает на двух колонках вместо одной, как например, [MIN_BY](aggregation.md#minby), то в [AGGREGATE_BY](aggregation.md#aggregateby) первым аргументом передается `Tuple` из двух значений. Подробнее это указано при описании такой агрегационной функции.
+Если агрегатная функция работает на двух колонках вместо одной, как например, [MIN_BY](aggregation.md#minby), то в [AGGREGATE_BY](aggregation.md#aggregateby) первым аргументом передается `Tuple` из двух значений. Подробнее это указано при описании такой агрегатной функции.
 
 ### Примеры
 
@@ -1622,11 +1610,11 @@ FROM my_table;
 
 ## AggregateTransformInput {#aggregatetransform}
 
-`AggregateTransformInput()` преобразует фабрику для [агрегационных функций](aggregation.md), например, полученную через функцию [AggregationFactory](#aggregationfactory) в другую фабрику, в которой перед началом выполнения агрегации производится указанное преобразование входных элементов.
+`AggregateTransformInput()` преобразует фабрику для [агрегатных функций](aggregation.md), например, полученную через функцию [AggregationFactory](#aggregationfactory) в другую фабрику, в которой перед началом выполнения агрегации производится указанное преобразование входных элементов.
 
 Аргументы:
 
-1. Фабрика для агрегационных функций;
+1. Фабрика для агрегатных функций;
 2. Лямбда функция с одним аргументом, преобразующая входной элемент.
 
 ### Примеры
@@ -1642,11 +1630,11 @@ SELECT ListAggregate([1,2,3], $h); -- 12
 
 ## AggregateTransformOutput {#aggregatetransformoutput}
 
-`AggregateTransformOutput()` преобразует фабрику для [агрегационных функций](aggregation.md), например, полученную через функцию [AggregationFactory](#aggregationfactory) в другую фабрику, в которой после окончания выполнения агрегации производится указанное преобразование результата.
+`AggregateTransformOutput()` преобразует фабрику для [агрегатных функций](aggregation.md), например, полученную через функцию [AggregationFactory](#aggregationfactory) в другую фабрику, в которой после окончания выполнения агрегации производится указанное преобразование результата.
 
 Аргументы:
 
-1. Фабрика для агрегационных функций;
+1. Фабрика для агрегатных функций;
 2. Лямбда функция с одним аргументом, преобразующая результат.
 
 ### Примеры
@@ -1660,11 +1648,11 @@ SELECT ListAggregate([1,2,3], $g); -- 12
 
 ## AggregateFlatten {#aggregateflatten}
 
-Адаптирует фабрику для [агрегационных функций](aggregation.md), например, полученную через функцию [AggregationFactory](#aggregationfactory) так, чтобы выполнять агрегацию над входными элементами - списками. Эта операция похожа на [FLATTEN LIST BY](../syntax/flatten.md) - производится агрегация каждого элемента списка.
+Адаптирует фабрику для [агрегатных функций](aggregation.md), (например, полученную через функцию [AggregationFactory](#aggregationfactory)) так, чтобы выполнять агрегацию над входными элементами - списками. Эта операция похожа на [FLATTEN LIST BY](../syntax/select/flatten.md) - производится агрегация каждого элемента списка.
 
 Аргументы:
 
-1. Фабрика для агрегационных функций.
+1. Фабрика для агрегатных функций.
 
 ### Примеры
 

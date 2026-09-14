@@ -26,6 +26,11 @@ namespace NTable {
             TRowVersion Upper;
         };
 
+        struct TTruncate {
+            ui32 Table;
+            TAutoPtr<TSubset> Subset;
+        };
+
         TChange(TTxStamp stamp, ui64 serial)
             : Stamp(stamp), Serial(serial) { }
 
@@ -34,7 +39,7 @@ namespace NTable {
             return Scheme || Redo || RemovedRowVersions;
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Change{" << Serial
@@ -55,6 +60,8 @@ namespace NTable {
         TVector<ui32> Affects;  /* This tables touched in redo  */
         TVector<ui32> Deleted;  /* Tables deleted in some alter */
         TGarbage Garbage;       /* Wiped tables, ids in Deleted */
+
+        TVector<TTruncate> Truncated; /* Truncated tables */
 
         ui32 Snapshots = 0;
 

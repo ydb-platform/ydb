@@ -58,7 +58,7 @@ public:
     ++numCopyConstructorCalls;
   }
 
-  Constructable(Constructable && src) : constructed(true) {
+  Constructable(Constructable && src) noexcept : constructed(true) {
     value = src.value;
     ++numConstructorCalls;
     ++numMoveConstructorCalls;
@@ -78,7 +78,7 @@ public:
     return *this;
   }
 
-  Constructable & operator=(Constructable && src) {
+  Constructable & operator=(Constructable && src) noexcept {
     EXPECT_TRUE(constructed);
     value = src.value;
     ++numAssignmentCalls;
@@ -143,8 +143,8 @@ int Constructable::numMoveAssignmentCalls;
 
 struct NonCopyable {
   NonCopyable() {}
-  NonCopyable(NonCopyable &&) {}
-  NonCopyable &operator=(NonCopyable &&) { return *this; }
+  NonCopyable(NonCopyable &&) noexcept {}
+  NonCopyable &operator=(NonCopyable &&) noexcept { return *this; }
 private:
   NonCopyable(const NonCopyable &) = delete;
   NonCopyable &operator=(const NonCopyable &) = delete;
@@ -273,7 +273,7 @@ TYPED_TEST(CompactVectorTest, InsertEnd)
 {
     SCOPED_TRACE("InsertEnd");
 
-    TCompactVector<TString, 5> vector;
+    TCompactVector<std::string, 5> vector;
     for (int index = 0; index < 10; ++index) {
         vector.insert(vector.end(), ToString(index));
     }
@@ -286,7 +286,7 @@ TYPED_TEST(CompactVectorTest, ShrinkToSmall)
 {
     SCOPED_TRACE("ShrinkToSmall");
 
-    TCompactVector<TString, 5> vector;
+    TCompactVector<std::string, 5> vector;
     for (int index = 0; index < 10; ++index) {
         vector.shrink_to_small();
         vector.push_back(ToString(index));
@@ -789,10 +789,10 @@ struct MovedFrom {
   bool hasValue;
   MovedFrom() : hasValue(true) {
   }
-  MovedFrom(MovedFrom&& m) : hasValue(m.hasValue) {
+  MovedFrom(MovedFrom&& m) noexcept : hasValue(m.hasValue) {
     m.hasValue = false;
   }
-  MovedFrom &operator=(MovedFrom&& m) {
+  MovedFrom &operator=(MovedFrom&& m) noexcept {
     hasValue = m.hasValue;
     m.hasValue = false;
     return *this;
@@ -817,7 +817,7 @@ enum EmplaceableArgState {
 template <int I> struct EmplaceableArg {
   EmplaceableArgState State;
   EmplaceableArg() : State(EAS_Defaulted) {}
-  EmplaceableArg(EmplaceableArg &&X)
+  EmplaceableArg(EmplaceableArg &&X) noexcept
       : State(X.State == EAS_Arg ? EAS_RValue : EAS_Failure) {}
   EmplaceableArg(EmplaceableArg &X)
       : State(X.State == EAS_Arg ? EAS_LValue : EAS_Failure) {}
@@ -859,8 +859,8 @@ struct Emplaceable {
         A2(std::forward<A2Ty>(A2)), A3(std::forward<A3Ty>(A3)),
         State(ES_Emplaced) {}
 
-  Emplaceable(Emplaceable &&) : State(ES_Moved) {}
-  Emplaceable &operator=(Emplaceable &&) {
+  Emplaceable(Emplaceable &&) noexcept : State(ES_Moved) {}
+  Emplaceable &operator=(Emplaceable &&) noexcept {
     State = ES_Moved;
     return *this;
   }
@@ -1061,8 +1061,8 @@ TEST(CompactVectorTest, InitializerList) {
 }
 
 TEST(CompactVectorTest, AssignToShorter) {
-  TCompactVector<TString, 4> lhs;
-  TCompactVector<TString, 4> rhs;
+  TCompactVector<std::string, 4> lhs;
+  TCompactVector<std::string, 4> rhs;
   rhs.emplace_back("foo");
   lhs = rhs;
   EXPECT_EQ(1U, lhs.size());
@@ -1070,10 +1070,10 @@ TEST(CompactVectorTest, AssignToShorter) {
 }
 
 TEST(CompactVectorTest, AssignToLonger) {
-  TCompactVector<TString, 4> lhs;
+  TCompactVector<std::string, 4> lhs;
   lhs.emplace_back("bar");
   lhs.emplace_back("baz");
-  TCompactVector<TString, 4> rhs;
+  TCompactVector<std::string, 4> rhs;
   rhs.emplace_back("foo");
   lhs = rhs;
   EXPECT_EQ(1U, lhs.size());

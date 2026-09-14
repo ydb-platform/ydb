@@ -2,7 +2,10 @@
 
 #include "public.h"
 
+#include <yt/yt/client/api/public.h>
+
 #include <yt/yt/client/object_client/public.h>
+
 #include <yt/yt/client/hydra/public.h>
 
 #include <yt/yt/core/misc/public.h>
@@ -21,6 +24,8 @@ bool operator==(const TEtag& lhs, const TEtag& rhs);
 
 TErrorOr<TEtag> ParseEtag(TStringBuf etagString);
 void FormatValue(TStringBuilderBase* builder, const TEtag& tag, TStringBuf spec);
+
+void WriteFileByBatches(const NApi::IFileWriterPtr& writer, const TSharedRef& data, i64 maxAttachmentSize);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,5 +1,6 @@
 #include "yql_mkql_file_input_state.h"
 
+#include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <util/system/fs.h>
@@ -55,7 +56,14 @@ bool TFileInputState::NextValue() {
         }
 
         MkqlReader_.Next();
-        ++CurrentRecord_;
+        if (Spec_->UseBlockInput_) {
+            auto blockSizeStructIndex = GetBlockSizeStructIndex(*Spec_, CurrentInput_);
+            auto blockCountValue = CurrentValue_.GetElement(blockSizeStructIndex);
+            CurrentRecord_ += GetBlockCount(blockCountValue);
+        } else {
+            ++CurrentRecord_;
+        }
+
         return true;
     }
 }

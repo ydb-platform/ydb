@@ -241,13 +241,13 @@ NKikimrSchemeOp::TColumnTableSharding IShardingBase::SerializeToProto() const {
     return result;
 }
 
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> IShardingBase::SplitByShardsToArrowBatches(const std::shared_ptr<arrow::RecordBatch>& batch) {
+THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> IShardingBase::SplitByShardsToArrowBatches(const std::shared_ptr<arrow::RecordBatch>& batch, arrow::MemoryPool* memoryPool) {
     THashMap<ui64, std::vector<ui32>> sharding = MakeSharding(batch);
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> chunks;
     if (sharding.size() == 1) {
         AFL_VERIFY(chunks.emplace(sharding.begin()->first, batch).second);
     } else {
-        chunks = NArrow::ShardingSplit(batch, sharding);
+        chunks = NArrow::ShardingSplit(batch, sharding, memoryPool);
     }
     AFL_VERIFY(chunks.size() == sharding.size());
     return chunks;
@@ -255,7 +255,7 @@ THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> IShardingBase::SplitByShards
 
 TConclusion<THashMap<ui64, std::vector<NArrow::TSerializedBatch>>> IShardingBase::SplitByShards(const std::shared_ptr<arrow::RecordBatch>& batch, const ui64 chunkBytesLimit) {
     auto splitted = SplitByShardsToArrowBatches(batch);
-    NArrow::TBatchSplitttingContext context(chunkBytesLimit);
+    NArrow::TBatchSplittingContext context(chunkBytesLimit);
     THashMap<ui64, std::vector<NArrow::TSerializedBatch>> result;
     for (auto&& [tabletId, chunk] : splitted) {
         if (!chunk) {

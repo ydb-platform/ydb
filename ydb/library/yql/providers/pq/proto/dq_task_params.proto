@@ -13,5 +13,5 @@ message TDqReadTaskParams {
         uint64 DqPartitionsCount = 3;
     }
 
-    TPartitioningParams PartitioningParams = 1;
+    repeated TPartitioningParams PartitioningParams = 1;
 }

@@ -49,14 +49,15 @@ NNodes::TCoLambda FallbackLambdaInput(NNodes::TCoLambda lambda, TExprContext& ct
 
 NNodes::TCoLambda FallbackLambdaOutput(NNodes::TCoLambda lambda, TExprContext& ctx);
 
-NNodes::TYtDSink GetDataSink(NNodes::TExprBase input, TExprContext& ctx);
+NNodes::TYtDSink MakeDataSink(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx);
+NNodes::TYtDSource MakeDataSource(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx);
 
 NNodes::TExprBase GetWorld(NNodes::TExprBase input, NNodes::TMaybeNode<NNodes::TExprBase> main, TExprContext& ctx);
 
 struct TConvertInputOpts {
     NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> Settings_;
     NNodes::TMaybeNode<NNodes::TCoAtomList> CustomFields_;
-    bool KeepDirecRead_;
+    bool KeepDirectRead_;
     bool MakeUnordered_;
     bool ClearUnordered_;
 
@@ -70,7 +71,7 @@ struct TConvertInputOpts {
 
     TConvertInputOpts& ExplicitFields(const TStructExprType& type, TPositionHandle pos, TExprContext& ctx);
 
-    TConvertInputOpts& KeepDirecRead(bool keepDirecRead = true);
+    TConvertInputOpts& KeepDirectRead(bool keepDirectRead = true);
 
     TConvertInputOpts& MakeUnordered(bool makeUnordered = true);
 
@@ -94,20 +95,20 @@ bool CollectKeyPredicatesOr(NNodes::TExprBase row, const std::vector<NNodes::TEx
 
 bool CollectKeyPredicates(NNodes::TExprBase row, NNodes::TExprBase predicate, TVector<TKeyFilterPredicates>& ranges, size_t maxTables);
 
-TVector<NNodes::TYtOutTable> ConvertMultiOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, TExprContext& ctx,
+TVector<NNodes::TYtOutTable> ConvertMultiOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx,
     const TYtState::TPtr& state, const TMultiConstraintNode* multi = nullptr);
 
-TVector<NNodes::TYtOutTable> ConvertOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, TExprContext& ctx,
+TVector<NNodes::TYtOutTable> ConvertOutTables(TPositionHandle pos, const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx,
     const TYtState::TPtr& state, const TConstraintSet* constraint = nullptr);
 
 TVector<NNodes::TYtOutTable> ConvertMultiOutTablesWithSortAware(TExprNode::TPtr& lambda, bool& ordered, TPositionHandle pos,
-    const TTypeAnnotationNode* outItemType, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
+    const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
 
 NNodes::TYtOutTable ConvertSingleOutTableWithSortAware(TExprNode::TPtr& lambda, bool& ordered, TPositionHandle pos,
-    const TTypeAnnotationNode* outItemType, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
+    const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
 
 TVector<NNodes::TYtOutTable> ConvertOutTablesWithSortAware(TExprNode::TPtr& lambda, bool& ordered, TPositionHandle pos,
-    const TTypeAnnotationNode* outItemType, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
+    const TTypeAnnotationNode* outItemType, const TString& cluster, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
 
 bool EnsurePersistableYsonTypes(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, const TYtState::TPtr& state);
 
@@ -115,4 +116,15 @@ NNodes::TExprBase WrapOp(NNodes::TYtOutputOpBase op, TExprContext& ctx);
 
 NNodes::TCoLambda MapEmbedInputFieldsFilter(NNodes::TCoLambda lambda, bool ordered, NNodes::TCoAtomList fields, TExprContext& ctx);
 
-}  // namespace NYql::NPrivate
+NNodes::TExprBase BuildMapForPruneKeys(
+    const NNodes::TExprBase node,
+    const TExprNode::TPtr extractorLambda,
+    bool isOrdered,
+    const TString& cluster,
+    const TExprNode::TPtr newWorld,
+    const NNodes::TYtSectionList newInput,
+    const TTypeAnnotationNode* outItemType,
+    TExprContext& ctx,
+    const TYtState::TPtr& state);
+
+} // namespace NYql::NPrivate

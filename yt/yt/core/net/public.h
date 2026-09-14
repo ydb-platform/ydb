@@ -2,11 +2,16 @@
 
 #include <yt/yt/core/misc/public.h>
 #include <yt/yt/core/misc/configurable_singleton_decl.h>
-#include <yt/yt/core/misc/error_code.h>
+
+#include <library/cpp/yt/error/error_code.h>
 
 #include <library/cpp/yt/memory/intrusive_ptr.h>
 
 #include <library/cpp/yt/misc/guid.h>
+
+#ifdef _linux_
+    #include <sys/signalfd.h>
+#endif
 
 namespace NYT::NNet {
 
@@ -18,6 +23,17 @@ class TIP6Network;
 
 using TConnectionId = TGuid;
 
+DEFINE_ENUM(EDeliveryFencedMode,
+    (None)
+    (New)
+    // COMPAT(pogorelov)
+    (Old)
+);
+
+#ifdef _linux_
+static inline const auto DeliveryFencedWriteSignal = SIGRTMIN;
+#endif // _linux
+
 DECLARE_REFCOUNTED_STRUCT(IConnection)
 DECLARE_REFCOUNTED_STRUCT(IPacketConnection)
 DECLARE_REFCOUNTED_STRUCT(IConnectionReader)
@@ -28,8 +44,8 @@ DECLARE_REFCOUNTED_STRUCT(IDialer)
 DECLARE_REFCOUNTED_STRUCT(IAsyncDialer)
 DECLARE_REFCOUNTED_STRUCT(IAsyncDialerSession)
 
-DECLARE_REFCOUNTED_CLASS(TDialerConfig)
-DECLARE_REFCOUNTED_CLASS(TAddressResolverConfig)
+DECLARE_REFCOUNTED_STRUCT(TDialerConfig)
+DECLARE_REFCOUNTED_STRUCT(TAddressResolverConfig)
 
 YT_DEFINE_ERROR_ENUM(
     ((Aborted)         (1500))

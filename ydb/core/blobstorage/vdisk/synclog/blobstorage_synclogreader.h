@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include "blobstorage_synclog_public_events.h"
+#include "blobstorage_synclog_context.h"
 #include "blobstorage_synclogdata.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 
@@ -46,7 +46,8 @@ namespace NKikimr {
         };
 
         const char *Name2Str(EReadWhatsNext w);
-        TWhatsNextOutcome WhatsNext(ui64 syncedLsn, // lsn our peer VDisk synced to
+        TWhatsNextOutcome WhatsNext(const TString& logPrefix,
+                                    ui64 syncedLsn, // lsn our peer VDisk synced to
                                     ui64 dbBirthLsn,// our db birth lsn
                                     const NSyncLog::TLogEssence *e,
                                     std::function<TString()> reportInternals);

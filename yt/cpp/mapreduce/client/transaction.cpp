@@ -2,11 +2,9 @@
 
 #include "transaction_pinger.h"
 
-#include <yt/cpp/mapreduce/common/wait_proxy.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
-
-#include <yt/cpp/mapreduce/http/requests.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
+#include <yt/cpp/mapreduce/common/wait_proxy.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/error_codes.h>
@@ -131,9 +129,9 @@ void TPingableTransaction::Ping() const
     RawClient_->PingTransaction(TransactionId_);
 }
 
-void TPingableTransaction::Commit()
+void TPingableTransaction::Commit(const TCommitTransactionOptions& options)
 {
-    Stop(EStopAction::Commit);
+    Stop(EStopAction::Commit, options);
 }
 
 void TPingableTransaction::Abort()
@@ -146,7 +144,7 @@ void TPingableTransaction::Detach()
     Stop(EStopAction::Detach);
 }
 
-void TPingableTransaction::Stop(EStopAction action)
+void TPingableTransaction::Stop(EStopAction action, const TCommitTransactionOptions& commitOptions)
 {
     if (Finalized_) {
         return;
@@ -163,8 +161,8 @@ void TPingableTransaction::Stop(EStopAction action)
         case EStopAction::Commit:
             NDetail::RequestWithRetry<void>(
                 ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-                [this] (TMutationId& mutationId) {
-                    RawClient_->CommitTransaction(mutationId, TransactionId_);
+                [this, &commitOptions] (TMutationId& mutationId) {
+                    RawClient_->CommitTransaction(mutationId, TransactionId_, commitOptions);
                 });
             break;
         case EStopAction::Abort:

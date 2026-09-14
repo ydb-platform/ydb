@@ -213,7 +213,7 @@ class MplRenderer(Renderer):
             ax (int or Matplotlib Axes, optional): Which Axes to plot on, default ``0``.
             color (str, optional): Circle color, default ``"black"``.
         """
-        mask = np.ma.getmask(z)  # type: ignore[no-untyped-call]
+        mask = np.ma.getmask(z)
         if mask is np.ma.nomask:
             return
         ax = self._get_ax(ax)
@@ -303,8 +303,8 @@ class MplRenderer(Renderer):
         if quad_as_tri:
             for j in range(ny-1):
                 for i in range(nx-1):
-                    xx = np.mean(x[j:j+2, i:i+2])
-                    yy = np.mean(y[j:j+2, i:i+2])
+                    xx = np.mean(x[j:j+2, i:i+2], dtype=np.float64)
+                    yy = np.mean(y[j:j+2, i:i+2], dtype=np.float64)
                     zz = np.mean(z[j:j+2, i:i+2])
                     ax.text(xx, yy, f"{zz:{fmt}}", ha="center", va="center", color=color,
                             clip_on=True)

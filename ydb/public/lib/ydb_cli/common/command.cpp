@@ -1,94 +1,67 @@
 #include "command.h"
+#include "build_info.h"
+#include "command_utils.h"
 #include "normalize_path.h"
 
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+#if defined(_linux_)
+#include <sched.h>
+#endif
+
+namespace NLastGetoptPrivate {
+    TString& VersionString();
+}
+
+namespace {
+
+// copypaste from TPC-C: because of complicated dependencies, it
+// seems to be better to copypaste this
+#if defined(_linux_)
+size_t NumberOfMyCpus() {
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    if (sched_getaffinity(0, sizeof(set), &set) == -1) {
+        return NSystemInfo::CachedNumberOfCpus();
+    }
+
+    int count = 0;
+    for (int i = 0; i < CPU_SETSIZE; i++) {
+        if (CPU_ISSET(i, &set))
+            count++;
+    }
+
+    return count;
+}
+
+#else // not Linux
+
+size_t NumberOfMyCpus() {
+    return NSystemInfo::CachedNumberOfCpus();
+}
+
+#endif // _linux_
+
+} // anonymous
+
+namespace NYdb::NConsoleClient {
 
 bool TClientCommand::TIME_REQUESTS = false; // measure time of requests
 bool TClientCommand::PROGRESS_REQUESTS = false; // display progress of long requests
 
+using namespace NUtils;
+
 namespace {
-    TString FormatOption(const NLastGetopt::TOpt* option, const NColorizer::TColors& colors) {
-        using namespace NLastGetopt;
-        TStringStream result;
-        const TOpt::TShortNames& shorts = option->GetShortNames();
-        const TOpt::TLongNames& longs = option->GetLongNames();
-
-        const size_t nopts = shorts.size() + longs.size();
-        const bool multiple = 1 < nopts;
-        if (multiple) {
-            result << '{';
-        }
-        for (size_t i = 0; i < nopts; ++i) {
-            if (multiple && 0 != i) {
-                result << '|';
-            }
-
-            if (i < shorts.size()) { // short
-                result << colors.GreenColor() << '-' << shorts[i] << colors.OldColor();
-            } else {
-                result << colors.GreenColor() << "--" << longs[i - shorts.size()] << colors.OldColor();
-            }
-        }
-        if (multiple) {
-            result << '}';
-        }
-
-        return result.Str();
+    void PrintUsageAndThrowHelpPrinted(const NLastGetopt::TOptsParser* parser) {
+        parser->PrintUsage();
+        throw TNeedToExitWithCode(EXIT_SUCCESS);
     }
 
-    // Option not to show in parent command help
-    bool NeedToHideOption(const NLastGetopt::TOpt* opt) {
-        if (opt->IsHidden()) {
-            return true;
-        }
-        for (const char shortName : opt->GetShortNames()) {
-            if (shortName == 'V' || shortName == 'h')
-                return true;
-        }
-        return false;
-    }
-
-    void PrintOptionsDescription(IOutputStream& os, const NLastGetopt::TOpts* opts, NColorizer::TColors& colors, const TString& command) {
-        using namespace NLastGetopt;
-        NColorizer::TColors disabledColors(false);
-        os << "  ";
-        bool firstPrintedOption = true;
-        for (size_t i = 0; i < opts->Opts_.size(); i++) {
-            const TOpt* opt = opts->Opts_[i].Get();
-            if (NeedToHideOption(opt)) {
-                continue;
-            }
-            if (!firstPrintedOption) {
-                os << ", ";
-            }
-            os << FormatOption(opt, colors);
-            firstPrintedOption = false;
-        }
-
-        os << Endl << "  To get full description of these options run '" << command << "--help'.";
-    }
-
-    void PrintParentOptions(TStringStream& stream, TClientCommand::TConfig& config, NColorizer::TColors& colors) {
-        bool foundRootParent = false;
-        TStringBuilder fullCommand;
-        for (const auto& parentCommand: config.ParentCommands) {
-            fullCommand << parentCommand.Name << " ";
-            if (parentCommand.Options) {
-                TString name = "Global";
-                if (!foundRootParent) {
-                    foundRootParent = true;
-                } else {
-                    name = parentCommand.Name;
-                    name[0] = toupper(name[0]);
-                    stream << Endl << Endl;
-                }
-                stream << colors.BoldColor() << name << " options" << colors.OldColor() << ":" << Endl;
-                PrintOptionsDescription(stream, parentCommand.Options, colors, fullCommand);
-            }
-        }
+    void PrintSvnVersionAndThrowHelpPrinted(const NLastGetopt::TOptsParser*) {
+        const auto& version = ::NLastGetoptPrivate::VersionString();
+        Cout << (version ? version : "program version: not linked with library/cpp/getopt") << Endl;
+        throw TNeedToExitWithCode(version.empty() ? EXIT_FAILURE : EXIT_SUCCESS);
     }
 }
 
@@ -102,32 +75,25 @@ TClientCommand::TClientCommand(
         , Description(description)
         , Visible(visible)
         , Parent(nullptr)
-        , Opts(NLastGetopt::TOpts::Default())
 {
-    HideOption("svnrevision");
-    Opts.AddHelpOption('h');
-    ChangeOptionDescription("help", "Print usage, -hh for detailed help");
+    Opts.GetOpts().Opts_.clear();
+    Opts.AddLongOption('V', "svnrevision", "print svn version")
+        .HasArg(NLastGetopt::EHasArg::NO_ARGUMENT)
+        .IfPresentDisableCompletion()
+        .Handler(&PrintSvnVersionAndThrowHelpPrinted)
+        .Hidden();
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
+    Opts.AddLongOption('h', "help", TStringBuilder() << "Print usage, " << colors.Green() << "-hh" << colors.OldColor() << " for detailed help")
+        .HasArg(NLastGetopt::EHasArg::NO_ARGUMENT)
+        .IfPresentDisableCompletion()
+        .Handler(&PrintUsageAndThrowHelpPrinted);
     auto terminalWidth = GetTerminalWidth();
     size_t lineLength = terminalWidth ? *terminalWidth : Max<size_t>();
-    Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(lineLength)));
+    Opts.GetOpts().SetWrap(Max(Opts.GetOpts().Wrap_, static_cast<ui32>(lineLength)));
 }
 
-ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientCommand::TConfig::EVerbosityLevel lvl) {
-    switch (lvl) {
-        case TClientCommand::TConfig::EVerbosityLevel::NONE:
-            return ELogPriority::TLOG_EMERG;
-        case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
-            return ELogPriority::TLOG_DEBUG;
-        case TClientCommand::TConfig::EVerbosityLevel::INFO:
-            return ELogPriority::TLOG_INFO;
-        case TClientCommand::TConfig::EVerbosityLevel::WARN:
-            return ELogPriority::TLOG_WARNING;
-        default:
-            return ELogPriority::TLOG_ERR;
-    }
-}
 
-size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
+size_t TClientCommand::TConfig::ParseHelpCommandVerbosity(int argc, char** argv) {
     size_t cnt = 0;
     for (int i = 0; i < argc; ++i) {
         TStringBuf arg = argv[i];
@@ -153,7 +119,137 @@ size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv
     return cnt;
 }
 
-TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {
+namespace {
+    class TSingleProviderFactory : public ICredentialsProviderFactory {
+    public:
+        TSingleProviderFactory(std::shared_ptr<ICredentialsProviderFactory> originalFactory)
+        : OriginalFactory(originalFactory)
+        {}
+    virtual std::shared_ptr<ICredentialsProvider> CreateProvider() const override {
+        if (!provider) {
+            provider = OriginalFactory->CreateProvider();
+        }
+        return provider;
+    }
+    virtual std::shared_ptr<ICredentialsProvider> CreateProvider(std::weak_ptr<ICoreFacility> facility) const override {
+        if (!provider) {
+            provider = OriginalFactory->CreateProvider(facility);
+        }
+        return provider;
+    }
+
+    private:
+        std::shared_ptr<ICredentialsProviderFactory> OriginalFactory;
+        mutable TCredentialsProviderPtr provider = nullptr;
+    };
+}
+
+std::shared_ptr<ICredentialsProviderFactory> TClientCommand::TConfig::GetSingletonCredentialsProviderFactory() {
+    if (!SingletonCredentialsProviderFactory) {
+        auto credentialsGetterResult = CredentialsGetter(*this);
+        if (credentialsGetterResult) {
+            SingletonCredentialsProviderFactory = std::make_shared<TSingleProviderFactory>(credentialsGetterResult);
+        }
+    }
+    return SingletonCredentialsProviderFactory;
+}
+
+TDriverConfig TClientCommand::TConfig::CreateDriverConfig() {
+    auto driverConfig = TDriverConfig()
+        .SetEndpoint(Address)
+        .SetDatabase(Database)
+        .SetCredentialsProviderFactory(GetSingletonCredentialsProviderFactory())
+        .SetUsePerChannelTcpConnection(UsePerChannelTcpConnection);
+
+    if (UseAllNodes) {
+        driverConfig.SetBalancingPolicy(TBalancingPolicy::UseAllNodes());
+    }
+
+    if (EnableSsl) {
+        driverConfig.UseSecureConnection(CaCerts);
+    }
+
+    if (IsNetworkIntensive) {
+        size_t networkThreadNum = GetNetworkThreadNum();
+        driverConfig.SetNetworkThreadsNum(networkThreadNum);
+    }
+
+    if (SkipDiscovery) {
+        driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
+    }
+
+    driverConfig.UseClientCertificate(ClientCert, ClientCertPrivateKey);
+
+    return driverConfig;
+}
+
+TDriverConfig TClientCommand::TConfig::CreateDriverConfigWithBuildInfo(const TString& buildInfoCommandTag) {
+    auto driverConfig = CreateDriverConfig();
+    TString tag = buildInfoCommandTag.empty() ? GetBuildInfoCommandTag() : buildInfoCommandTag;
+    AppendYdbCliBuildInfo(driverConfig, GetBuildInfo(), tag);
+    return driverConfig;
+}
+
+const TYdbCliBuildInfo& TClientCommand::TConfig::GetBuildInfo() {
+    static const TYdbCliBuildInfo empty;
+    if (!CachedBuildInfo_ && BuildInfoProvider) {
+        CachedBuildInfo_ = BuildInfoProvider();
+    }
+    return CachedBuildInfo_ ? *CachedBuildInfo_ : empty;
+}
+
+TString TClientCommand::TConfig::GetBuildInfoCommandTag() const {
+    if (BuildInfoCommandTag) {
+        return BuildInfoCommandTag;
+    }
+    if (ActiveLeafCommand) {
+        TStringBuilder tag;
+        bool first = true;
+        for (const auto& parent : ParentCommands) {
+            if (first) {
+                first = false;
+                continue;
+            }
+            if (tag) {
+                tag << "-";
+            }
+            tag << parent.Name;
+        }
+        if (tag) {
+            tag << "-";
+        }
+        tag << ActiveLeafCommand->Name;
+        return tag;
+    }
+    return {};
+}
+
+size_t TClientCommand::TConfig::GetNetworkThreadNum() const {
+    if (IsNetworkIntensive) {
+        size_t cpuCount = NumberOfMyCpus();
+        if (cpuCount >= 64) {
+            // doubtfully there is a reason to have more. Even this is too much.
+            return 32;
+        } else if (cpuCount >= 32 && cpuCount < 64) {
+            // leave the half of CPUs to the client's logic
+            return cpuCount / 2;
+        } else if (cpuCount > 16 && cpuCount < 32) {
+            // Originally here we had a constant value 16.
+            // To not break things this heuristic tries to use this constant as well.
+            return 16;
+        } else if (cpuCount == 16) {
+            // Again originally here we had a constant value 16.
+            // But it seems a bad idea to create 16 network threads if we have just 16 cores.
+            // To not break things here we return slightly more than 16 / 2, but not 16.
+            return 12;
+        } else if (cpuCount >= 4 && cpuCount < 16) {
+            return cpuCount / 2;
+        }
+    }
+    return 1; // TODO: check default
+}
+
+std::pair<int, const char**> TClientCommand::TOptsParseOneLevelResult::GetArgv(TConfig& config) {
     int _argc = 1;
     int levels = 1;
 
@@ -164,13 +260,24 @@ TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& conf
             auto eqPos = optName.find('=');
             optName = optName.substr(0, eqPos);
             if (optName.StartsWith("--")) {
-                opt = config.Opts->FindLongOption(optName.substr(2));
-            } else {
-                opt = config.Opts->FindCharOption(optName[1]);
-            }
-            if (opt != nullptr && opt->GetHasArg() != NLastGetopt::NO_ARGUMENT) {
-                if (eqPos == TStringBuf::npos) {
+                opt = config.Opts->GetOpts().FindLongOption(optName.substr(2));
+                if (opt != nullptr && opt->GetHasArg() != NLastGetopt::NO_ARGUMENT && eqPos == TStringBuf::npos) {
                     ++_argc;
+                }
+            } else {
+                if (optName.length() > 2) {
+                    // Char option list
+                    if (eqPos != TStringBuf::npos) {
+                        throw yexception() << "Char option list " << optName << " can not be followed by \"=\" sign";
+                    }
+                } else if (optName.length() == 2) {
+                    // Single char option
+                    opt = config.Opts->GetOpts().FindCharOption(optName[1]);
+                    if (opt != nullptr && opt->GetHasArg() != NLastGetopt::NO_ARGUMENT && eqPos == TStringBuf::npos) {
+                        ++_argc;
+                    }
+                } else {
+                    throw yexception() << "Wrong CLI argument \"" << optName << "\"";
                 }
             }
         } else {
@@ -178,7 +285,21 @@ TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& conf
         }
         ++_argc;
     }
-    Init(config.Opts, _argc, const_cast<const char**>(config.ArgV));
+    if (_argc > config.ArgC) {
+        // This is possible if the last option should have an argument, but it is not provided
+        _argc = config.ArgC;
+    }
+    return std::pair(_argc, const_cast<const char**>(config.ArgV));
+}
+
+TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config, std::pair<int, const char**> argv)
+    : TOptionsParseResult(config.Opts, argv.first, argv.second)
+{
+}
+
+TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config)
+    : TOptsParseOneLevelResult(config, GetArgv(config))
+{
 }
 
 void TClientCommand::CheckForExecutableOptions(TConfig& config) {
@@ -190,9 +311,19 @@ void TClientCommand::CheckForExecutableOptions(TConfig& config) {
         auto eqPos = optName.find('=');
         optName = optName.substr(0, eqPos);
         if (optName.StartsWith("--")) {
-            opt = config.Opts->FindLongOption(optName.substr(2));
+            opt = config.Opts->GetOpts().FindLongOption(optName.substr(2));
         } else {
-            opt = config.Opts->FindCharOption(optName[1]);
+            if (optName.length() > 2) {
+                // Char option list
+                if (eqPos != TStringBuf::npos) {
+                    throw yexception() << "Char option list " << optName << " can not be followed by \"=\" sign";
+                }
+            } else if (optName.length() == 2) {
+                // Single char option
+                opt = config.Opts->GetOpts().FindCharOption(optName[1]);
+            } else {
+                throw yexception() << "Wrong CLI argument \"" << optName << "\"";
+            }
         }
         if (config.ExecutableOptions.find(optName) != config.ExecutableOptions.end()) {
             config.HasExecutableOptions = true;
@@ -208,8 +339,9 @@ void TClientCommand::CheckForExecutableOptions(TConfig& config) {
 
 void TClientCommand::Config(TConfig& config) {
     config.Opts = &Opts;
+    config.OnlyExplicitProfile = OnlyExplicitProfile;
     TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl;
     PrintParentOptions(stream, config, colors);
@@ -231,31 +363,89 @@ int TClientCommand::Run(TConfig& config) {
 }
 
 int TClientCommand::Process(TConfig& config) {
-    Prepare(config);
-    return ValidateAndRun(config);
+    try {
+        Prepare(config);
+        return ValidateAndRun(config);
+    } catch (const TInitializationException& e) {
+        Cerr << "Error";
+        if (e.HasErrorCode()) {
+            Cerr << " [" << *e.GetErrorCode() << "]";
+        }
+        Cerr << ": " << e.what() << Endl;
+        return e.GetCode();
+    } catch (const TNeedToExitWithCode& e) {
+        return e.GetCode();
+    } catch (const NYdb::NConsoleClient::TMisuseException& e) {
+        Cerr << e.what() << Endl;
+        Cerr << "Try \"--help\" option for more info." << Endl;
+        return EXIT_FAILURE;
+    }
 }
 
 void TClientCommand::SaveParseResult(TConfig& config) {
-    ParseResult = std::make_shared<NLastGetopt::TOptsParseResult>(config.Opts, config.ArgC, config.ArgV);
+    ParseResult = std::make_shared<TOptionsParseResult>(config.Opts, config.ArgC, (const char**)config.ArgV);
+
+    // Parse options from env and apply default parameters.
+    // Parsing from profiles is only supported at high level commands and occure in ExtractParams() stage.
+    std::vector<TString> errors = ParseResult->ParseFromProfilesAndEnv(nullptr, nullptr);
+    if (!errors.empty()) {
+        TStringBuilder msg;
+        for (auto it = errors.begin(); it != errors.end(); ++it) {
+            if (it != errors.begin()) {
+                msg << Endl;
+            }
+            msg << *it;
+        }
+        throw TMisuseException() << msg;
+    }
+}
+
+void TClientCommand::PrepareOptions(TConfig& config, bool validate) {
+    config.ArgsSettings = TConfig::TArgSettings();
+    Opts.SetHelpCommandVerbosityLevel(config.HelpCommandVerbosityLevel);
+    config.Opts = &Opts;
+    Config(config);
+
+    if (validate) {
+        CheckForExecutableOptions(config);
+        config.CheckParamsCount();
+    }
+
+    SetCustomUsage(config);
 }
 
 void TClientCommand::Prepare(TConfig& config) {
-    config.ArgsSettings.Reset(new TConfig::TArgSettings());
-    config.Opts = &Opts;
-    Config(config);
-    CheckForExecutableOptions(config);
-    config.CheckParamsCount();
-    SetCustomUsage(config);
+    PrepareOptions(config);
     SaveParseResult(config);
     config.ParseResult = ParseResult.get();
     Parse(config);
 }
 
+void TClientCommand::ExtractParams(TConfig& config) {
+    Y_UNUSED(config);
+}
+
+bool TClientCommand::Prompt(TConfig& config) {
+    Y_UNUSED(config);
+    return true;
+}
+
 int TClientCommand::ValidateAndRun(TConfig& config) {
+    config.ActiveLeafCommand = this;
+    Opts.SetHelpCommandVerbosityLevel(config.HelpCommandVerbosityLevel);
     config.Opts = &Opts;
     config.ParseResult = ParseResult.get();
+    ExtractParams(config);
     Validate(config);
-    return Run(config);
+    if (Prompt(config)) {
+        return Run(config);
+    } else {
+        return EXIT_FAILURE;
+    }
+}
+
+TClientCommand* TClientCommand::FindNextCommand(TString cmd) const {
+    throw yexception() << "Invalid command '" << cmd << "'";
 }
 
 void TClientCommand::SetCustomUsage(TConfig& config) {
@@ -282,14 +472,14 @@ void TClientCommand::SetCustomUsage(TConfig& config) {
 }
 
 void TClientCommand::HideOption(const TString& name) {
-    NLastGetopt::TOpt* opt = Opts.FindLongOption(name);
+    NLastGetopt::TOpt* opt = Opts.GetOpts().FindLongOption(name);
     if (opt) {
         opt->Hidden_ = true;
     }
 }
 
 void TClientCommand::ChangeOptionDescription(const TString& name, const TString& description) {
-    NLastGetopt::TOpt* opt = Opts.FindLongOption(name);
+    NLastGetopt::TOpt* opt = Opts.GetOpts().FindLongOption(name);
     if (opt) {
         opt->Help_ = description;
     }
@@ -297,33 +487,44 @@ void TClientCommand::ChangeOptionDescription(const TString& name, const TString&
 
 void TClientCommand::SetFreeArgTitle(size_t pos, const TString& title, const TString& help) {
     Args[pos] = title;
-    Opts.SetFreeArgTitle(pos, title, help);
+    Opts.GetOpts().SetFreeArgTitle(pos, title, help);
 }
 
-void TClientCommand::RenderOneCommandDescription(
+void TClientCommand::RenderCommandDescription(
     TStringStream& stream,
+    bool renderTree,
     const NColorizer::TColors& colors,
-    RenderEntryType type
+    RenderEntryType type,
+    TString prefix,
+    bool shortForm
 ) {
-    if (Hidden) {
+    Y_UNUSED(renderTree);
+    if (Hidden && type != BEGIN) {
         return;
     }
-    TString prefix;
     if (type == MIDDLE) {
-        prefix = "├─ ";
+        prefix += "├─ ";
     }
     if (type == END) {
-        prefix = "└─ ";
+        prefix += "└─ ";
     }
+
     TString line = prefix + Name;
-    stream << prefix << colors.BoldColor() << Name << colors.OldColor();
+    stream << prefix << (Dangerous ? colors.Red() : "") << colors.BoldColor() << Name << colors.OldColor();
     if (!Description.empty()) {
         int namePartLength = GetNumberOfUTF8Chars(line);
         if (namePartLength < DESCRIPTION_ALIGNMENT)
             stream << TString(DESCRIPTION_ALIGNMENT - namePartLength, ' ');
         else
             stream << ' ';
-        stream << Description;
+        if (shortForm) {
+            TStringBuf descr(Description), line;
+            while (descr.ReadLine(line) && line.empty()) {
+            }
+            stream << line;
+        } else {
+            stream << Description;
+        }
         if (!Aliases.empty()) {
             stream << " (aliases: ";
             for (auto it = Aliases.begin(); it != Aliases.end(); ++it) {
@@ -339,6 +540,15 @@ void TClientCommand::RenderOneCommandDescription(
 
 void TClientCommand::Hide() {
     Hidden = true;
+    Visible = false;
+}
+
+void TClientCommand::MarkDangerous() {
+    Dangerous = true;
+}
+
+void TClientCommand::UseOnlyExplicitProfile() {
+    OnlyExplicitProfile = true;
 }
 
 TClientCommandTree::TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
@@ -361,17 +571,23 @@ void TClientCommandTree::AddHiddenCommand(std::unique_ptr<TClientCommand> comman
     AddCommand(std::move(command));
 }
 
+void TClientCommandTree::AddDangerousCommand(std::unique_ptr<TClientCommand> command) {
+    command->MarkDangerous();
+    command->UseOnlyExplicitProfile();
+    AddCommand(std::move(command));
+}
+
 void TClientCommandTree::Config(TConfig& config) {
     TClientCommand::Config(config);
     SetFreeArgs(config);
     TString commands;
     SetFreeArgTitle(0, "<subcommand>", commands);
     TStringStream stream;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandsDescription(stream, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosityLevel > 1, colors, BEGIN, "", true);
     stream << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
@@ -398,18 +614,29 @@ void TClientCommandTree::Parse(TConfig& config) {
         if (it != Aliases.end())
             cmd = it->second;
     }
+    SelectedCommand = FindNextCommand(cmd);
+}
+
+TClientCommand* TClientCommandTree::FindNextCommand(TString cmd) const {
+    if (const auto it = Aliases.find(cmd); it != Aliases.end()) {
+        cmd = it->second;
+    }
+
     auto it = SubCommands.find(cmd);
     if (it == SubCommands.end()) {
-        if (IsNumber(cmd))
+        if (IsNumber(cmd)) {
             it = SubCommands.find("#");
-        if (it == SubCommands.end())
+        }
+        if (it == SubCommands.end()) {
             it = SubCommands.find("*");
+        }
     }
+
     if (it != SubCommands.end()) {
-        SelectedCommand = it->second.get();
-    } else {
-        throw yexception() << "Invalid command '" << cmd << "'";
+        return it->second.get();
     }
+
+    throw yexception() << "Invalid command '" << cmd << "'";
 }
 
 int TClientCommandTree::Run(TConfig& config) {
@@ -421,7 +648,7 @@ int TClientCommandTree::Run(TConfig& config) {
 
 void TClientCommandTree::Prepare(TConfig& config) {
     TClientCommand::Prepare(config);
-    config.ParentCommands.push_back({ Name, HasOptionsToShow() ? &Opts : nullptr });
+    config.ParentCommands.push_back({ Name, HasOptionsToShow() ? &Opts.GetOpts() : nullptr });
 
     if (SelectedCommand) {
         SelectedCommand->Prepare(config);
@@ -433,7 +660,7 @@ void TClientCommandTree::SetFreeArgs(TConfig& config) {
 }
 
 bool TClientCommandTree::HasOptionsToShow() {
-    for (auto opt : Opts.Opts_) {
+    for (auto opt : Opts.GetOpts().Opts_) {
         if (!NeedToHideOption(opt.Get())) {
             return true;
         }
@@ -441,32 +668,43 @@ bool TClientCommandTree::HasOptionsToShow() {
     return false;
 }
 
-void TClientCommandTree::RenderCommandsDescription(
+void TClientCommandTree::RenderCommandDescription(
     TStringStream& stream,
-    const NColorizer::TColors& colors
+    bool renderTree,
+    const NColorizer::TColors& colors,
+    RenderEntryType type,
+    TString prefix,
+    bool shortForm
 ) {
-    TClientCommand::RenderOneCommandDescription(stream, colors, BEGIN);
-
-    TVector<TClientCommand*> VisibleSubCommands;
-    for (auto& [_, command] : SubCommands) {
-        if (command->Visible) {
-            VisibleSubCommands.push_back(command.get());
+    TClientCommand::RenderCommandDescription(stream, false, colors, type, prefix, shortForm);
+    if (type == BEGIN || renderTree) {
+        if (type == MIDDLE) {
+            prefix += "│  ";
         }
-    }
+        if (type == END) {
+            prefix += "   ";
+        }
+        TVector<TClientCommand*> visibleSubCommands;
+        for (auto& [_, command] : SubCommands) {
+            if (command->Visible) {
+                visibleSubCommands.push_back(command.get());
+            }
+        }
 
-    for (auto it = VisibleSubCommands.begin(); it != VisibleSubCommands.end(); ++it) {
-        bool lastCommand = (std::next(it) == VisibleSubCommands.end());
-        (*it)->RenderOneCommandDescription(stream, colors, lastCommand ? END : MIDDLE);
+        for (auto it = visibleSubCommands.begin(); it != visibleSubCommands.end(); ++it) {
+            bool lastCommand = (std::next(it) == visibleSubCommands.end());
+            (*it)->RenderCommandDescription(stream, renderTree, colors, lastCommand ? END : MIDDLE, prefix, shortForm);
+        }
     }
 }
 
 void TCommandWithPath::ParsePath(const TClientCommand::TConfig& config, const size_t argPos, bool isPathOptional) {
-    if (config.ParseResult->GetFreeArgCount() < argPos + 1 && isPathOptional) {
+    if (config.ParseResult->GetFreeArgCount() <= argPos) {
         if (isPathOptional) {
             Path = ".";
         }
     } else {
-        Path = config.ParseResult->GetFreeArgs()[argPos];
+        Path = config.ParseResult->GetFreeArgs().at(argPos);
     }
 
     AdjustPath(config);
@@ -476,13 +714,17 @@ void TCommandWithPath::AdjustPath(const TClientCommand::TConfig& config) {
     if (!Path) {
         throw TMisuseException() << "Missing required argument <path>";
     }
-
+    if (config.IsVerbose()) {
+        Cerr << "Path before adjusting: \"" << Path << '"' << Endl;
+    }
     NConsoleClient::AdjustPath(Path, config);
+    if (config.IsVerbose()) {
+        Cerr << "Path after adjusting: \"" << Path << '"' << Endl;
+    }
 }
 
 void TCommandWithTopicName::ParseTopicName(const TClientCommand::TConfig &config, const size_t argPos) {
     TopicName = config.ParseResult->GetFreeArgs()[argPos];
 }
 
-}
-}
+} // namespace NYdb::NConsoleClient

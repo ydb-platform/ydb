@@ -24,6 +24,7 @@
 #include "orc/OrcFile.hh"
 #include "orc/Reader.hh"
 
+#include "Geospatial.hh"
 #include "Timezone.hh"
 #include "TypeImpl.hh"
 
@@ -1683,6 +1684,127 @@ namespace orc {
     }
   };
 
+  class GeospatialColumnStatisticsImpl : public GeospatialColumnStatistics,
+                                         public MutableColumnStatistics {
+   private:
+    geospatial::WKBGeometryBounder bounder_;
+    InternalCharStatistics stats_;
+
+   public:
+    GeospatialColumnStatisticsImpl() {
+      reset();
+    }
+    explicit GeospatialColumnStatisticsImpl(const proto::ColumnStatistics& stats);
+    virtual ~GeospatialColumnStatisticsImpl();
+
+    uint64_t getNumberOfValues() const override {
+      return stats_.getNumberOfValues();
+    }
+
+    void setNumberOfValues(uint64_t value) override {
+      stats_.setNumberOfValues(value);
+    }
+
+    void increase(uint64_t count) override {
+      stats_.setNumberOfValues(stats_.getNumberOfValues() + count);
+    }
+
+    bool hasNull() const override {
+      return stats_.hasNull();
+    }
+
+    void setHasNull(bool hasNull) override {
+      stats_.setHasNull(hasNull);
+    }
+
+    void merge(const MutableColumnStatistics& other) override {
+      const GeospatialColumnStatisticsImpl& geoStats =
+          dynamic_cast<const GeospatialColumnStatisticsImpl&>(other);
+      stats_.merge(geoStats.stats_);
+      bounder_.merge(geoStats.bounder_);
+    }
+
+    void reset() override {
+      stats_.reset();
+      bounder_.reset();
+    }
+
+    void update(const char* value, size_t length) override {
+      bounder_.mergeGeometry(std::string_view(value, length));
+    }
+
+    void toProtoBuf(proto::ColumnStatistics& pbStats) const override {
+      pbStats.set_has_null(stats_.hasNull());
+      pbStats.set_number_of_values(stats_.getNumberOfValues());
+
+      proto::GeospatialStatistics* geoStats = pbStats.mutable_geospatial_statistics();
+      const auto& bbox = bounder_.bounds();
+      if (bbox.boundValid(0) && bbox.boundValid(1) && !bbox.boundEmpty(0) && !bbox.boundEmpty(1)) {
+        geoStats->mutable_bbox()->set_xmin(bbox.min[0]);
+        geoStats->mutable_bbox()->set_xmax(bbox.max[0]);
+        geoStats->mutable_bbox()->set_ymin(bbox.min[1]);
+        geoStats->mutable_bbox()->set_ymax(bbox.max[1]);
+        if (bbox.boundValid(2) && !bbox.boundEmpty(2)) {
+          geoStats->mutable_bbox()->set_zmin(bbox.min[2]);
+          geoStats->mutable_bbox()->set_zmax(bbox.max[2]);
+        }
+        if (bbox.boundValid(3) && !bbox.boundEmpty(3)) {
+          geoStats->mutable_bbox()->set_mmin(bbox.min[3]);
+          geoStats->mutable_bbox()->set_mmax(bbox.max[3]);
+        }
+      }
+      for (auto type : bounder_.geometryTypes()) {
+        geoStats->add_geospatial_types(type);
+      }
+    }
+
+    std::string toString() const override {
+      if (!bounder_.isValid()) {
+        return "<GeoStatistics> invalid";
+      }
+
+      std::stringstream ss;
+      ss << "<GeoStatistics>";
+
+      std::string dim_label("xyzm");
+      const auto& bbox = bounder_.bounds();
+      auto dim_valid = bbox.dimensionValid();
+      auto dim_empty = bbox.dimensionEmpty();
+      auto lower = bbox.lowerBound();
+      auto upper = bbox.upperBound();
+
+      for (int i = 0; i < 4; i++) {
+        ss << " " << dim_label[i] << ": ";
+        if (!dim_valid[i]) {
+          ss << "invalid";
+        } else if (dim_empty[i]) {
+          ss << "empty";
+        } else {
+          ss << "[" << lower[i] << ", " << upper[i] << "]";
+        }
+      }
+
+      std::vector<int32_t> maybe_geometry_types = bounder_.geometryTypes();
+      ss << " geometry_types: [";
+      std::string sep("");
+      for (int32_t geometry_type : maybe_geometry_types) {
+        ss << sep << geometry_type;
+        sep = ", ";
+      }
+      ss << "]";
+
+      return ss.str();
+    }
+
+    const geospatial::BoundingBox& getBoundingBox() const override {
+      return bounder_.bounds();
+    }
+
+    std::vector<int32_t> getGeospatialTypes() const override {
+      return bounder_.geometryTypes();
+    }
+  };
+
   ColumnStatistics* convertColumnStatistics(const proto::ColumnStatistics& s,
                                             const StatContext& statContext);
 
@@ -1713,7 +1835,6 @@ namespace orc {
   class StripeStatisticsImpl : public StripeStatistics {
    private:
     std::unique_ptr<StatisticsImpl> columnStats_;
-    std::vector<std::vector<std::shared_ptr<const ColumnStatistics> > > rowIndexStats_;
 
     // DELIBERATELY NOT IMPLEMENTED
     StripeStatisticsImpl(const StripeStatisticsImpl&);
@@ -1721,7 +1842,6 @@ namespace orc {
 
    public:
     StripeStatisticsImpl(const proto::StripeStatistics& stripeStats,
-                         std::vector<std::vector<proto::ColumnStatistics> >& indexStats,
                          const StatContext& statContext);
 
     virtual const ColumnStatistics* getColumnStatistics(uint32_t columnId) const override {
@@ -1732,13 +1852,38 @@ namespace orc {
       return columnStats_->getNumberOfColumns();
     }
 
+    virtual const ColumnStatistics* getRowIndexStatistics(uint32_t, uint32_t) const override {
+      throw NotImplementedYet("set includeRowIndex true to get row index stats");
+    }
+
+    virtual ~StripeStatisticsImpl() override;
+
+    virtual uint32_t getNumberOfRowIndexStats(uint32_t) const override {
+      throw NotImplementedYet("set includeRowIndex true to get row index stats");
+    }
+  };
+
+  class StripeStatisticsWithRowGroupIndexImpl : public StripeStatisticsImpl {
+   private:
+    std::vector<std::vector<std::shared_ptr<const ColumnStatistics> > > rowIndexStats_;
+
+    // DELIBERATELY NOT IMPLEMENTED
+    StripeStatisticsWithRowGroupIndexImpl(const StripeStatisticsWithRowGroupIndexImpl&);
+    StripeStatisticsWithRowGroupIndexImpl& operator=(const StripeStatisticsWithRowGroupIndexImpl&);
+
+   public:
+    StripeStatisticsWithRowGroupIndexImpl(
+        const proto::StripeStatistics& stripeStats,
+        std::vector<std::vector<proto::ColumnStatistics> >& indexStats,
+        const StatContext& statContext);
+
     virtual const ColumnStatistics* getRowIndexStatistics(uint32_t columnId,
                                                           uint32_t rowIndex) const override {
       // check id indices are valid
       return rowIndexStats_[columnId][rowIndex].get();
     }
 
-    virtual ~StripeStatisticsImpl() override;
+    virtual ~StripeStatisticsWithRowGroupIndexImpl() override;
 
     uint32_t getNumberOfRowIndexStats(uint32_t columnId) const override {
       return static_cast<uint32_t>(rowIndexStats_[columnId].size());

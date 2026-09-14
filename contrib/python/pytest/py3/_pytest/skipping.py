@@ -1,10 +1,11 @@
 """Support for skip/xfail functions and markers."""
+
+from collections.abc import Mapping
 import dataclasses
 import os
 import platform
 import sys
 import traceback
-from collections.abc import Mapping
 from typing import Generator
 from typing import Optional
 from typing import Tuple
@@ -19,6 +20,7 @@ from _pytest.outcomes import fail
 from _pytest.outcomes import skip
 from _pytest.outcomes import xfail
 from _pytest.reports import BaseReport
+from _pytest.reports import TestReport
 from _pytest.runner import CallInfo
 from _pytest.stash import StashKey
 
@@ -103,9 +105,7 @@ def evaluate_condition(item: Item, mark: Mark, condition: object) -> Tuple[bool,
         ):
             if not isinstance(dictionary, Mapping):
                 raise ValueError(
-                    "pytest_markeval_namespace() needs to return a dict, got {!r}".format(
-                        dictionary
-                    )
+                    f"pytest_markeval_namespace() needs to return a dict, got {dictionary!r}"
                 )
             globals_.update(dictionary)
         if hasattr(item, "obj"):
@@ -243,7 +243,7 @@ def pytest_runtest_setup(item: Item) -> None:
         xfail("[NOTRUN] " + xfailed.reason)
 
 
-@hookimpl(hookwrapper=True)
+@hookimpl(wrapper=True)
 def pytest_runtest_call(item: Item) -> Generator[None, None, None]:
     xfailed = item.stash.get(xfailed_key, None)
     if xfailed is None:
@@ -252,18 +252,20 @@ def pytest_runtest_call(item: Item) -> Generator[None, None, None]:
     if xfailed and not item.config.option.runxfail and not xfailed.run:
         xfail("[NOTRUN] " + xfailed.reason)
 
-    yield
+    try:
+        return (yield)
+    finally:
+        # The test run may have added an xfail mark dynamically.
+        xfailed = item.stash.get(xfailed_key, None)
+        if xfailed is None:
+            item.stash[xfailed_key] = xfailed = evaluate_xfail_marks(item)
 
-    # The test run may have added an xfail mark dynamically.
-    xfailed = item.stash.get(xfailed_key, None)
-    if xfailed is None:
-        item.stash[xfailed_key] = xfailed = evaluate_xfail_marks(item)
 
-
-@hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item: Item, call: CallInfo[None]):
-    outcome = yield
-    rep = outcome.get_result()
+@hookimpl(wrapper=True)
+def pytest_runtest_makereport(
+    item: Item, call: CallInfo[None]
+) -> Generator[None, TestReport, TestReport]:
+    rep = yield
     xfailed = item.stash.get(xfailed_key, None)
     if item.config.option.runxfail:
         pass  # don't interfere
@@ -286,6 +288,7 @@ def pytest_runtest_makereport(item: Item, call: CallInfo[None]):
             else:
                 rep.outcome = "passed"
                 rep.wasxfail = xfailed.reason
+    return rep
 
 
 def pytest_report_teststatus(report: BaseReport) -> Optional[Tuple[str, str, str]]:

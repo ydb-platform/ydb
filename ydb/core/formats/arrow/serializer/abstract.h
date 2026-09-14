@@ -1,15 +1,16 @@
 #pragma once
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/library/conclusion/status.h>
-#include <ydb/services/metadata/abstract/request_features.h>
-#include <ydb/services/bg_tasks/abstract/interface.h>
 
 #include <ydb/library/conclusion/result.h>
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/conclusion/status.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
+#include <ydb/services/bg_tasks/abstract/interface.h>
+#include <ydb/services/metadata/abstract/request_features.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/compression.h>
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 
@@ -20,7 +21,8 @@ protected:
     virtual TString DoSerializeFull(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
     virtual TString DoSerializePayload(const std::shared_ptr<arrow::RecordBatch>& batch) const = 0;
     virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data) const = 0;
-    virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(const TString& data, const std::shared_ptr<arrow::Schema>& schema) const = 0;
+    virtual arrow::Result<std::shared_ptr<arrow::RecordBatch>> DoDeserialize(
+        const TString& data, const std::shared_ptr<arrow::Schema>& schema) const = 0;
     virtual TString DoDebugString() const {
         return "";
     }
@@ -29,6 +31,7 @@ protected:
 
     virtual TConclusionStatus DoDeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerializer& proto) const = 0;
+
 public:
     using TPtr = std::shared_ptr<ISerializer>;
     using TFactory = NObjectFactory::TObjectFactory<ISerializer, TString>;
@@ -95,19 +98,22 @@ public:
 
     virtual bool IsHardPacker() const = 0;
 
+    virtual std::shared_ptr<arrow::util::Codec> GetCompressionCodec() const {
+        return nullptr;
+    }
+
     virtual TString GetClassName() const = 0;
 };
 
 class TSerializerContainer: public NBackgroundTasks::TInterfaceProtoContainer<ISerializer> {
 private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<ISerializer>;
+
 public:
     using TBase::TBase;
 
     TSerializerContainer(const std::shared_ptr<ISerializer>& object)
-        : TBase(object)
-    {
-
+        : TBase(object) {
     }
 
     bool IsCompatibleForExchange(const TSerializerContainer& item) const {
@@ -170,4 +176,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NArrow::NSerialization

@@ -2,6 +2,8 @@ INCLUDE_ONCE()
 
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 
+ENABLE(TIDY_ALLOW_GENERATED)
+
 ADDINCL(
     ${ARCADIA_BUILD_ROOT}/${MODDIR}
     ${ARCADIA_BUILD_ROOT}/${MODDIR}/yql/essentials/minikql/invoke_builtins
@@ -43,4 +45,3 @@ COPY_FILE(TEXT
     OUTPUT_INCLUDES
         mkql_builtins_impl.h
 )
-

@@ -1,0 +1,469 @@
+syntax = "proto3";
+
+package NYql.NFmr.NProto;
+
+enum EOperationStatus {
+    OPERATION_UNKNOWN = 0;
+    OPERATION_ACCEPTED = 1;
+    OPERATION_IN_PROGRESS = 2;
+    OPERATION_FAILED = 3;
+    OPERATION_COMPLETED = 4;
+    OPERATION_ABORTED = 5;
+    OPERATION_NOT_FOUND = 6;
+}
+
+enum ETaskStatus {
+    TASK_UNKNOWN = 0;
+    TASK_ACCEPTED = 1;
+    TASK_IN_PROGRESS = 2;
+    TASK_FAILED = 3;
+    TASK_COMPLETED = 4;
+}
+
+enum EOperationType {
+    OPERATION_TYPE_UNKNOWN = 0;
+    OPERATION_TYPE_DOWNLOAD = 1;
+    OPERATION_TYPE_UPLOAD = 2;
+    OPERATION_TYPE_MERGE = 3;
+    OPERATION_TYPE_MAP = 4;
+    OPERATION_TYPE_DISTRIBUTED_UPLOAD = 5;
+    OPERATION_TYPE_SORTED_MERGE = 6;
+    OPERATION_TYPE_SORT = 7;
+    OPERATION_TYPE_REDUCE = 8;
+    OPERATION_TYPE_PULL = 9;
+    OPERATION_TYPE_FILL = 10;
+    OPERATION_TYPE_MAP_REDUCE = 11;
+    OPERATION_TYPE_TOUCH = 12;
+}
+
+enum ETaskType {
+    TASK_TYPE_UNKNOWN = 0;
+    TASK_TYPE_DOWNLOAD = 1;
+    TASK_TYPE_UPLOAD = 2;
+    TASK_TYPE_MERGE = 3;
+    TASK_TYPE_MAP = 4;
+    TASK_TYPE_DISTRIBUTED_UPLOAD = 5;
+    TASK_TYPE_SORTED_MERGE = 6;
+    TASK_TYPE_LOCAL_SORT = 7;
+    TASK_TYPE_REDUCE = 8;
+    TASK_TYPE_PULL = 9;
+    TASK_TYPE_FILL = 10;
+    TASK_TYPE_MAP_REDUCE_MAP = 11;
+}
+
+enum EFmrComponent {
+    COMPONENT_UNKNOWN = 0;
+    COMPONENT_COORDINATOR = 1;
+    COMPONENT_WORKER = 2;
+    COMPONENT_JOB = 3;
+}
+
+enum EFmrReason {
+    REASON_UNKNOWN = 0;
+    REASON_RESTART_OPERATION = 1;
+    REASON_RESTART_QUERY = 2;
+    REASON_FALLBACK_OPERATION = 3;
+    REASON_UDF_TERMINATE = 4;
+    REASON_WORKER_OOM = 5;
+}
+
+enum ESortOrder {
+    ASCENDING = 0;
+    DESCENDING = 1;
+}
+
+message TFmrError {
+    EFmrComponent Component = 1;
+    EFmrReason Reason = 2;
+    string ErrorMessage = 3;
+    optional uint32 WorkerId = 4;
+    optional string TaskId = 5;
+    optional string OperationId = 6;
+    optional string JobId = 7;
+}
+
+message TYtTableRef {
+    string RichPath = 1;
+    optional string FilePath = 2;
+    uint32 TableIndex = 3;
+}
+
+message TYtTableTaskRef {
+    repeated string RichPath = 1;
+    repeated string FilePath = 2;
+    repeated uint32 TableIndex = 3;
+}
+
+message TFmrTableId {
+    string Id = 1;
+}
+
+message TFmrTableRef {
+    TFmrTableId FmrTableId = 1;
+    repeated string Columns = 2;
+    optional string ColumnGroups = 3;
+    repeated ESortOrder SortOrder = 4;
+    repeated string SortColumns = 5;
+    uint32 TableIndex = 6;
+}
+
+message TTableRange {
+    string PartId = 1;
+    uint64 MinChunk = 2;
+    uint64 MaxChunk = 3;
+}
+
+message TFmrTableInputRef {
+    string TableId = 1;
+    repeated TTableRange TableRanges = 2;
+    repeated string Columns = 3;
+    optional string ColumnGroups = 4;
+    optional bool   IsFirstRowInclusive = 5;
+    optional bool   IsLastRowInclusive = 6;
+    optional bytes  FirstRowKeys = 7;
+    optional bytes  LastRowKeys = 8;
+    uint32 TableIndex = 9;
+}
+
+message TSortingColumns {
+    repeated string Columns = 1;
+    repeated ESortOrder SortOrder = 2;
+}
+
+message TFmrTableOutputRef {
+    string TableId = 1;
+    string PartId = 2;
+    optional string ColumnGroups = 3;
+    optional TSortingColumns SortingColumns = 4;
+}
+
+message TTableStats {
+    uint64 Chunks = 1;
+    uint64 Rows = 2;
+    uint64 DataWeight = 3;
+}
+
+message TSortedChunkStats {
+    bool IsSorted = 1;
+    bytes FirstRowKeys = 2;
+    bytes LastRowKeys = 3;
+}
+
+message TChunkStats {
+    uint64 Rows = 1;
+    uint64 DataWeight = 2;
+    TSortedChunkStats SortedChunkStats = 3;
+}
+
+message TTableChunkStats {
+    string PartId = 1;
+    repeated TChunkStats PartIdChunkStats = 2;
+}
+
+message TStatisticsObject {
+    TFmrTableOutputRef FmrTableOutputRef = 1;
+    TTableChunkStats TableChunkStats = 2;
+}
+
+message TStatistics {
+    repeated TStatisticsObject OutputTables = 1;
+    optional TTaskResult TaskResult = 2;
+}
+
+message TOperationTableRef {
+    oneof OperationTableRef {
+        TYtTableRef YtTableRef = 1;
+        TFmrTableRef FmrTableRef = 2;
+    }
+}
+
+message TTaskTableRef {
+    oneof TaskTableRef {
+        TYtTableTaskRef YtTableTaskRef = 1;
+        TFmrTableInputRef FmrTableInputRef = 2;
+    }
+}
+
+message TTaskTableInputRef {
+    repeated TTaskTableRef Inputs = 1;
+}
+
+message TUploadOperationParams {
+    TFmrTableRef Input = 1;
+    TYtTableRef Output = 2;
+}
+
+message TSortedUploadOperationParams {
+    TFmrTableRef Input = 1;
+    TYtTableRef Output = 2;
+    string SessionId = 3;
+    repeated bytes Cookies = 4;
+    uint32 SessionType = 5;
+    string PartitionId = 6;
+    bool IsOrdered = 7;
+}
+
+message TSortedUploadTaskParams {
+    TFmrTableInputRef Input = 1;
+    TYtTableRef Output = 2;
+    bytes CookieYson = 3;
+    uint32 SessionType = 4;
+    uint64 Order = 5;
+    optional TSortingColumns SortingColumns = 6;
+}
+
+message TUploadTaskParams {
+    TFmrTableInputRef Input = 1;
+    TYtTableRef Output = 2;
+}
+
+message TDownloadOperationParams {
+    TYtTableRef Input = 1;
+    TFmrTableRef Output = 2;
+}
+
+message TDownloadTaskParams {
+    TYtTableTaskRef Input = 1;
+    TFmrTableOutputRef Output = 2;
+}
+
+message TMergeOperationParams {
+    repeated TOperationTableRef Input = 1;
+    TFmrTableRef Output = 2;
+}
+
+message TSortedMergeOperationParams {
+    repeated TOperationTableRef Input = 1;
+    TFmrTableRef Output = 2;
+}
+
+message TSortedMergeTaskParams {
+    TTaskTableInputRef Input = 1;
+    TFmrTableOutputRef Output = 2;
+}
+
+message TMergeTaskParams {
+    TTaskTableInputRef Input = 1;
+    TFmrTableOutputRef Output = 2;
+}
+
+enum EFmrJobType {
+    MAP = 0;
+    ORDERED_MAP = 1;
+    REDUCE = 2;
+}
+
+enum EReduceType {
+    SORTED_REDUCE = 0;
+    JOIN_REDUCE = 1;
+}
+
+message TMapOperationParams {
+    repeated TOperationTableRef Input = 1;
+    repeated TFmrTableRef Output = 2;
+    bytes SerializedMapJobState = 3;
+    EFmrJobType MapJobType = 4;
+    bool ForceSingleTask = 5;
+}
+
+message TMapTaskParams {
+    TTaskTableInputRef Input = 1;
+    repeated TFmrTableOutputRef Output = 2;
+    bytes SerializedMapJobState = 3;
+    EFmrJobType MapJobType = 4;
+}
+
+message TFillOperationParams {
+    repeated TFmrTableRef Output = 1;
+    bytes SerializedFillJobState = 2;
+}
+
+message TTouchOperationParams {
+    repeated TFmrTableRef Output = 1;
+}
+
+message TFillTaskParams {
+    repeated TFmrTableOutputRef Output = 1;
+    bytes SerializedFillJobState = 2;
+}
+
+message TReduceOperationSpec {
+    TSortingColumns ReduceBy = 1;
+    TSortingColumns SortBy = 2;
+    EReduceType ReduceType = 3;
+}
+
+message TReduceOperationParams {
+    repeated TOperationTableRef Input = 1;
+    repeated TFmrTableRef Output = 2;
+    bytes SerializedReduceJobState = 3;
+    TReduceOperationSpec ReduceOperationSpec = 4;
+}
+
+message TReduceTaskParams {
+    TTaskTableInputRef Input = 1;
+    repeated TFmrTableOutputRef Output = 2;
+    bytes SerializedReduceJobState = 3;
+    TReduceOperationSpec ReduceOperationSpec = 4;
+    // Whether Input's rows are sorted by [_yql_key_hash, ...ReduceOperationSpec.SortBy] (true for
+    // a MapReduce operation's reduce stage, which shuffles via a synthetic hash column) or by
+    // ReduceOperationSpec.SortBy alone (a plain Reduce operation, which reads real YT-sorted
+    // input with no hash column at all).
+    bool SortByHasKeyHashPrefix = 5;
+}
+
+message TSortOperationParams {
+    repeated TOperationTableRef Input = 1;
+    TFmrTableRef Output = 2;
+}
+
+message TMapReduceOperationParams {
+    repeated TOperationTableRef Input = 1;
+    repeated TFmrTableRef Output = 2;
+    bytes SerializedMapJobState = 3;
+    bytes SerializedReduceJobState = 4;
+    TReduceOperationSpec ReduceOperationSpec = 5;
+    repeated TFmrTableRef DirectMapOutput = 6;
+}
+
+// Task params for the map stage of MapReduce: apply mapper, compute _yql_key_hash, local-sort.
+message TMapReduceMapTaskParams {
+    TTaskTableInputRef Input = 1;
+    TFmrTableOutputRef Output = 2;
+    bytes SerializedMapJobState = 3;
+    TReduceOperationSpec ReduceOperationSpec = 4;
+    repeated TFmrTableOutputRef DirectOutputs = 5;
+}
+
+message TPullOperationParams {
+    repeated TOperationTableRef Input = 1;
+}
+
+message TPullTaskParams {
+    TTaskTableInputRef Input = 1;
+}
+
+message TLocalSortTaskParams {
+    TTaskTableInputRef Input = 1;
+    TFmrTableOutputRef Output = 2;
+}
+
+message TOperationParams {
+    oneof TOperationParams {
+        TUploadOperationParams UploadOperationParams = 1;
+        TDownloadOperationParams DownloadOperationParams = 2;
+        TMergeOperationParams MergeOperationParams = 3;
+        TMapOperationParams MapOperationParams = 4;
+        TSortedUploadOperationParams SortedUploadOperationParams = 5;
+        TSortedMergeOperationParams SortedMergeOperationParams = 6;
+        TSortOperationParams SortOperationParams = 7;
+        TReduceOperationParams ReduceOperationParams = 8;
+        TPullOperationParams PullOperationParams = 9;
+        TFillOperationParams FillOperationParams = 10;
+        TMapReduceOperationParams MapReduceOperationParams = 11;
+        TTouchOperationParams TouchOperationParams = 12;
+    }
+}
+
+message TTaskParams {
+    oneof TTaskParams {
+        TUploadTaskParams UploadTaskParams = 1;
+        TDownloadTaskParams DownloadTaskParams = 2;
+        TMergeTaskParams MergeTaskParams = 3;
+        TMapTaskParams MapTaskParams = 4;
+        TSortedUploadTaskParams SortedUploadTaskParams = 5;
+        TSortedMergeTaskParams SortedMergeTaskParams = 6;
+        TLocalSortTaskParams LocalSortTaskParams = 7;
+        TReduceTaskParams ReduceTaskParams = 8;
+        TPullTaskParams PullTaskParams = 9;
+        TFillTaskParams FillTaskParams = 10;
+        TMapReduceMapTaskParams MapReduceMapTaskParams = 11;
+    }
+}
+
+message TClusterConnection {
+    string TransactionId = 1;
+    string YtServerName = 2;
+    optional string Token = 3;
+}
+
+message TFileInfo {
+    string LocalPath = 1;
+    string Md5Key = 2;
+    string Alias = 3;
+}
+
+message TYtResourceInfo {
+    string RichPath = 1;
+    string YtServerName = 2;
+    string Token = 3;
+    string LocalPath = 4;
+}
+
+message TFmrResourceOperationInfo {
+    TFmrTableRef FmrTable = 1;
+    string Alias = 2;
+}
+
+message TFmrResourceTaskInfo {
+    repeated TFmrTableInputRef FmrResourceTasks = 1;
+    string LocalPath = 2;
+    string Alias = 3;
+}
+
+message TTask {
+    ETaskType TaskType = 1;
+    string TaskId = 2;
+    TTaskParams TaskParams = 3;
+    string SessionId = 4;
+    optional uint32 NumRetries = 5;
+    map<string, TClusterConnection> ClusterConnections = 6;
+    optional bytes JobSettings = 7;
+    repeated TFileInfo Files = 8;
+    repeated TYtResourceInfo YtResources = 9;
+    repeated TFmrResourceTaskInfo FmrResources = 10;
+    optional string JobEnvironmentDir = 11;
+}
+
+message TTaskUploadResult {
+}
+
+message TTaskDownloadResult {
+}
+
+message TTaskMergeResult {
+}
+
+message TTaskMapResult {
+}
+
+message TTaskFillResult {
+}
+
+message TTaskSortedUploadResult {
+    bytes FragmentResult = 1;
+    uint64 FragmentOrder = 2;
+}
+
+message TTaskPullResult {
+    bytes Data = 1;
+}
+
+message TTaskResult {
+    oneof TTaskResult {
+        TTaskUploadResult TaskUploadResult = 1;
+        TTaskDownloadResult TaskDownloadResult = 2;
+        TTaskMergeResult TaskMergeResult = 3;
+        TTaskMapResult TaskMapResult = 4;
+        TTaskSortedUploadResult TaskSortedUploadResult = 5;
+        TTaskPullResult TaskPullResult = 6;
+        TTaskFillResult TaskFillResult = 7;
+    }
+}
+
+message TTaskState {
+    ETaskStatus TaskStatus = 1;
+    string TaskId = 2;
+    optional TFmrError TaskErrorMessage = 3;
+    TStatistics Stats = 4;
+}

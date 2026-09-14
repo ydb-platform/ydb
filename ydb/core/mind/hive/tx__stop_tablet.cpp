@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -8,22 +10,37 @@ class TTxStopTablet : public TTransactionBase<THive> {
     TTabletId TabletId;
     TActorId ActorToNotify;
     TSideEffects SideEffects;
+    bool ByTenant;
 
 public:
-    TTxStopTablet(ui64 tabletId, const TActorId &actorToNotify, THive *hive)
+    TTxStopTablet(ui64 tabletId, const TActorId &actorToNotify, bool byTenant, THive *hive)
         : TBase(hive)
         , TabletId(tabletId)
         , ActorToNotify(actorToNotify)
+        , ByTenant(byTenant)
     {}
 
     TTxType GetTxType() const override { return NHive::TXTYPE_STOP_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
-        BLOG_D("THive::TTxStopTablet::Execute Tablet: " << TabletId);
+        YDB_LOG_DEBUG("THive::TTxStopTablet::Execute stopping tablet",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId});
         SideEffects.Reset(Self->SelfId());
         NKikimrProto::EReplyStatus status = NKikimrProto::UNKNOWN;
         TLeaderTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
+            if (ByTenant) {
+                TDomainInfo* domain = Self->FindDomain(tablet->NodeFilter.ObjectDomain);
+                if (domain == nullptr || !domain->Stopped) {
+                    return true;
+                }
+            }
+            YDB_LOG_DEBUG("THive::TTxStopTablet::Execute processing tablet stop",
+                {"logPrefix", GetLogPrefix()},
+                {"tabletId", TabletId},
+                {"state", ETabletStateName(tablet->State)},
+                {"volatileState", TTabletInfo::EVolatileStateName(tablet->GetVolatileState())});
             ETabletState state = tablet->State;
             ETabletState newState = state;
             NIceDb::TNiceDb db(txc.DB);
@@ -51,6 +68,8 @@ public:
                 if (tablet->IsAlive()) {
                     tablet->InitiateStop(SideEffects);
                     db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::LeaderNode>(0);
+                } else {
+                    tablet->BecomeStopped();
                 }
                 status = NKikimrProto::OK;
                 break;
@@ -68,12 +87,18 @@ public:
             }
             if (status == NKikimrProto::OK && newState != state) {
                 db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(newState);
+                db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::StoppedByTenant>(ByTenant);
                 tablet->State = newState;
+                tablet->StoppedByTenant = ByTenant;
             }
             if (status != NKikimrProto::UNKNOWN) {
-                SideEffects.Send(ActorToNotify, new TEvHive::TEvStopTabletResult(status, TabletId), 0, 0);
+                if (ActorToNotify) {
+                    SideEffects.Send(ActorToNotify, new TEvHive::TEvStopTabletResult(status, TabletId), 0, 0);
+                }
                 Self->ReportStoppedToWhiteboard(*tablet);
-                BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
+                YDB_LOG_DEBUG("THive::TTxStopTablet::Execute reported tablet as stopped to whiteboard",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletInfo", tablet->ToString()});
             }
             Self->ProcessBootQueue();
         }
@@ -81,13 +106,20 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxStopTablet::Complete TabletId: " << TabletId);
-        SideEffects.Complete(ctx);
+        YDB_LOG_DEBUG("THive::TTxStopTablet::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId});
+        SideEffects.Complete(ctx, Self->Requests);
+        Self->ProcessPendingStopTablet();
     }
 };
 
 ITransaction* THive::CreateStopTablet(TTabletId tabletId, const TActorId &actorToNotify) {
-    return new TTxStopTablet(tabletId, actorToNotify, this);
+    return new TTxStopTablet(tabletId, actorToNotify, false, this);
+}
+
+ITransaction* THive::CreateStopTabletByTenant(TTabletId tabletId) {
+    return new TTxStopTablet(tabletId, {}, true, this);
 }
 
 } // NHive

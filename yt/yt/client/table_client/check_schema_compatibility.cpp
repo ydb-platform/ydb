@@ -9,6 +9,7 @@
 #include <yt/yt/core/ytree/convert.h>
 
 namespace NYT::NTableClient {
+namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -18,8 +19,8 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
     TTableSchemaCompatibilityOptions options)
 {
     // If output schema is strict, check that input columns are subset of output columns.
-    if (outputSchema.GetStrict()) {
-        if (!inputSchema.GetStrict()) {
+    if (outputSchema.IsStrict()) {
+        if (!inputSchema.IsStrict()) {
             return {
                 ESchemaCompatibility::Incompatible,
                 TError("Incompatible strictness: input schema is not strict while output schema is"),
@@ -72,14 +73,16 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
             }
 
             auto currentTypeCompatibility = NComplexTypes::CheckTypeCompatibility(
-                inputColumn->LogicalType(), outputColumn.LogicalType());
+                inputColumn->LogicalType(),
+                outputColumn.LogicalType(),
+                options.TypeCompatibilityOptions);
 
             if (currentTypeCompatibility.first < result.first) {
                 result = {
                     currentTypeCompatibility.first,
                     TError("Column %v input type is incompatible with output type",
                         inputColumn->GetDiagnosticNameString())
-                        << currentTypeCompatibility.second
+                        .With(currentTypeCompatibility.second)
                 };
             }
 
@@ -116,7 +119,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
                 TError("Unexpected computed column %v in output schema",
                     outputColumn.GetDiagnosticNameString()),
             };
-        } else if (!inputSchema.GetStrict()) {
+        } else if (!inputSchema.IsStrict()) {
             return {
                 ESchemaCompatibility::Incompatible,
                 TError("Column %v is present in output schema and is missing in non-strict input schema",
@@ -160,7 +163,7 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
     // Check that we don't lose complex types.
     // We never want to teleport complex types to schemaless part of the chunk because we want to change their type from
     // EValueType::Composite to EValueType::Any.
-    if (!outputSchema.GetStrict()) {
+    if (!outputSchema.IsStrict()) {
         for (const auto& inputColumn : inputSchema.Columns()) {
             if (!IsV3Composite(inputColumn.LogicalType())) {
                 continue;
@@ -189,8 +192,8 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
         };
     }
 
-    if (outputSchema.GetUniqueKeys()) {
-        if (!inputSchema.GetUniqueKeys()) {
+    if (outputSchema.IsUniqueKeys()) {
+        if (!inputSchema.IsUniqueKeys()) {
             return {
                 ESchemaCompatibility::Incompatible,
                 TError("Input schema \"unique_keys\" attribute is false"),
@@ -232,24 +235,24 @@ std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibilityImpl(
     return result;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace
+
 std::pair<ESchemaCompatibility, TError> CheckTableSchemaCompatibility(
     const TTableSchema& inputSchema,
     const TTableSchema& outputSchema,
     TTableSchemaCompatibilityOptions options)
 {
-    auto result = CheckTableSchemaCompatibilityImpl(
-        inputSchema,
-        outputSchema,
-        options);
-    if (result.first != ESchemaCompatibility::FullyCompatible) {
-        result.second = TError(NTableClient::EErrorCode::IncompatibleSchemas, "Table schemas are incompatible")
-            << result.second
-            << TErrorAttribute("input_table_schema", inputSchema)
-            << TErrorAttribute("output_table_schema", outputSchema);
+    auto [result, error] = CheckTableSchemaCompatibilityImpl(inputSchema, outputSchema, options);
+    if (result != ESchemaCompatibility::FullyCompatible) {
+        error = TError(NTableClient::EErrorCode::IncompatibleSchemas, "Table schemas are incompatible")
+            .With(error)
+            .With("input_table_schema", inputSchema)
+            .With("output_table_schema", outputSchema);
     }
-    return result;
+    return std::pair(result, std::move(error));
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 

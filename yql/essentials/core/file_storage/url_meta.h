@@ -14,4 +14,4 @@ struct TUrlMeta {
     void TryReadFrom(const TString& path);
 };
 
-}
+} // namespace NYql

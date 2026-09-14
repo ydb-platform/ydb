@@ -1,0 +1,1 @@
+option('libblkio', type : 'feature', value : 'auto', description : 'Pull libblkio subproject (required for tests)')

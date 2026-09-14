@@ -4,11 +4,12 @@
 #include "request_validators.h"
 
 #include <ydb/core/mon/mon.h>
-#include <ydb/core/fq/libs/actors/database_resolver.h>
 #include <ydb/core/fq/libs/actors/proxy.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/config/yq_issue.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
 #include <ydb/core/fq/libs/control_plane_storage/config.h>
 
@@ -17,6 +18,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 #include <library/cpp/monlib/service/pages/templates.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_TEST_CONNECTION
 
 namespace NFq {
 
@@ -99,7 +102,7 @@ class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionA
     ::NFq::TControlPlaneStorageConfig ControlPlaneStorageConfig;
     NConfig::TCommonConfig CommonConfig;
     NFq::TYqSharedResources::TPtr SharedResouces;
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TCounters Counters;
@@ -117,7 +120,7 @@ public:
         const NConfig::TCommonConfig& commonConfig,
         const ::NFq::TSigner::TPtr& signer,
         const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const NYql::IHTTPGateway::TPtr& httpGateway,
@@ -138,7 +141,8 @@ public:
     static constexpr char ActorName[] = "YQ_TEST_CONNECTION";
 
     void Bootstrap() {
-        TC_LOG_D("Starting yandex query test connection. Actor id: " << SelfId());
+        YDB_LOG_DEBUG("Starting yandex query test connection",
+            {"selfId", SelfId()});
 
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_TEST_CONNECTION_PROVIDER));
 
@@ -167,12 +171,20 @@ public:
         TTestConnectionRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, request.setting().connection_case());
         if (issues) {
             requestCounters->Error->Inc();
-            TC_LOG_D("TestConnectionRequest: validation failed " << scope << " " << user << " " << NKikimr::MaskTicket(token) << issues.ToOneLineString());
+            YDB_LOG_DEBUG("TestConnectionRequest: validation failed",
+                {"scope", scope},
+                {"user", user},
+                {"ticket", NKikimr::MaskTicket(token)},
+                {"issues", issues.ToOneLineString()});
             Send(ev->Sender, new TEvTestConnection::TEvTestConnectionResponse(issues), 0, ev->Cookie);
             return;
         }
 
-        TC_LOG_T("TestConnectionRequest: " << scope << " " << user << " " << NKikimr::MaskTicket(token) << request.DebugString());
+        YDB_LOG_TRACE("TestConnectionRequest",
+            {"scope", scope},
+            {"user", user},
+            {"ticket", NKikimr::MaskTicket(token)},
+            {"request", request.DebugString()});
         switch (request.setting().connection_case()) {
             case FederatedQuery::ConnectionSetting::kDataStreams: {
                 Register(CreateTestDataStreamsConnectionActor(
@@ -205,7 +217,11 @@ public:
             default: {
                 LWPROBE(TestUnsupportedConnectionRequest, scope, user);
                 requestCounters->Error->Inc();
-                TC_LOG_E("TestConnectionRequest: unimplemented " << scope << " " << user << " " << NKikimr::MaskTicket(token) << request.DebugString());
+                YDB_LOG_ERROR("TestConnectionRequest: unimplemented",
+                    {"scope", scope},
+                    {"user", user},
+                    {"ticket", NKikimr::MaskTicket(token)},
+                    {"request", request.DebugString()});
                 Send(ev->Sender, new TEvTestConnection::TEvTestConnectionResponse(NYql::TIssues{MakeErrorIssue(TIssuesIds::INTERNAL_ERROR, "Unimplemented yet")}), 0, ev->Cookie);
             }
         }
@@ -236,7 +252,7 @@ NActors::IActor* CreateTestConnectionActor(
         const NConfig::TCommonConfig& commonConfig,
         const ::NFq::TSigner::TPtr& signer,
         const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const NYql::IHTTPGateway::TPtr& httpGateway,

@@ -3,6 +3,7 @@
 # files with source copies of this package and derivative works is **REQUIRED** as specified by the Apache License.
 # See https://github.com/kislyuk/argcomplete for more info.
 
+from collections.abc import Iterable
 from shlex import quote
 
 bashcode = r"""#compdef %(executables)s
@@ -47,7 +48,7 @@ _python_argcomplete%(function_suffix)s() {
         if is-at-least 5.8; then
             nosort=(-o nosort)
         fi
-        if [[ "${completions-}" =~ ([^\\]): && "${match[1]}" =~ [=/:] ]]; then
+        if [[ "${completions-}" =~ ([^\\\\]): && "${match[1]}" =~ [=/:] ]]; then
             nospace=(-S '')
         fi
         _describe "${words[1]}" completions "${nosort[@]}" "${nospace[@]}"
@@ -94,14 +95,14 @@ complete "%(executable)s" 'p@*@`python-argcomplete-tcsh "%(argcomplete_script)s"
 
 fishcode = r"""
 function __fish_%(function_name)s_complete
-    set -x _ARGCOMPLETE 1
-    set -x _ARGCOMPLETE_DFS \t
-    set -x _ARGCOMPLETE_IFS \n
-    set -x _ARGCOMPLETE_SUPPRESS_SPACE 1
-    set -x _ARGCOMPLETE_SHELL fish
-    set -x COMP_LINE (commandline -p)
-    set -x COMP_POINT (string length (commandline -cp))
-    set -x COMP_TYPE
+    set -lx _ARGCOMPLETE 1
+    set -lx _ARGCOMPLETE_DFS \t
+    set -lx _ARGCOMPLETE_IFS \n
+    set -lx _ARGCOMPLETE_SUPPRESS_SPACE 1
+    set -lx _ARGCOMPLETE_SHELL fish
+    set -lx COMP_LINE (commandline -p)
+    set -lx COMP_POINT (string length (commandline -cp))
+    set -lx COMP_TYPE
     if set -q _ARC_DEBUG
         %(argcomplete_script)s 8>&1 9>&2 1>&9 2>&1
     else
@@ -135,7 +136,13 @@ Register-ArgumentCompleter -Native -CommandName %(executable)s -ScriptBlock {
 shell_codes = {"bash": bashcode, "tcsh": tcshcode, "fish": fishcode, "powershell": powershell_code}
 
 
-def shellcode(executables, use_defaults=True, shell="bash", complete_arguments=None, argcomplete_script=None):
+def shellcode(
+    executables: Iterable[str],
+    use_defaults: bool = True,
+    shell: str = "bash",
+    complete_arguments: Iterable[str] | None = None,
+    argcomplete_script: str | None = None,
+) -> str:
     """
     Provide the shell code required to register a python executable for use with the argcomplete module.
 
@@ -160,7 +167,8 @@ def shellcode(executables, use_defaults=True, shell="bash", complete_arguments=N
         executables_list = " ".join(quoted_executables)
         script = argcomplete_script
         if script:
-            function_suffix = "_" + script
+            # If the script path contain a space, this would generate an invalid function name.
+            function_suffix = "_" + script.replace(" ", "_SPACE_")
         else:
             script = ""
             function_suffix = ""

@@ -9,7 +9,7 @@
 
 #include <ydb/core/fq/libs/graph_params/proto/graph_params.pb.h>
 #include <ydb/core/fq/libs/protos/fq_private.pb.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/actors/core/events.h>
 
@@ -192,17 +192,6 @@ struct TEvents {
         NProto::TGraphParams GraphParams;
         bool IsEvaluation = false;
         NThreading::TPromise<NYql::IDqGateway::TResult> Result;
-    };
-
-    struct TEvRaiseTransientIssues : public NActors::TEventLocal<TEvRaiseTransientIssues, TEventIds::EvRaiseTransientIssues> {
-        TEvRaiseTransientIssues() = default;
-
-        explicit TEvRaiseTransientIssues(NYql::TIssues issues)
-            : TransientIssues(std::move(issues))
-        {
-        }
-
-        NYql::TIssues TransientIssues;
     };
 
     struct TEvSchemaCreated : public NActors::TEventLocal<TEvSchemaCreated, TEventIds::EvSchemaCreated> {

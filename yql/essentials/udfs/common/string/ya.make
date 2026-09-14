@@ -1,18 +1,19 @@
 YQL_UDF_CONTRIB(string_udf)
-    
+
     YQL_ABI_VERSION(
         2
-        37
+        43
         0
     )
-    
+
     SRCS(
         string_udf.cpp
     )
-    
+
     PEERDIR(
+        yql/essentials/core/langver
+        yql/essentials/public/langver
         yql/essentials/public/udf/arrow
-        library/cpp/charset
         library/cpp/deprecated/split
         library/cpp/html/pcdata
         library/cpp/string_utils/base32
@@ -20,11 +21,9 @@ YQL_UDF_CONTRIB(string_udf)
         library/cpp/string_utils/levenshtein_diff
         library/cpp/string_utils/quote
     )
-    
+
     END()
 
 RECURSE_FOR_TESTS(
     test
 )
-
-

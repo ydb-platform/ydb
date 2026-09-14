@@ -1,5 +1,6 @@
 #include "topic_workload_writer_producer.h"
 #include "topic_workload_writer.h"
+#include "topic_workload_writer_producer_utils.h"
 
 using namespace NYdb::NConsoleClient;
 
@@ -22,6 +23,7 @@ TTopicWorkloadWriterProducer::TTopicWorkloadWriterProducer(
 
 void TTopicWorkloadWriterProducer::SetWriteSession(std::shared_ptr<NYdb::NTopic::IWriteSession> writeSession) {
     WriteSession_ = writeSession;
+    InflightMessagesCount_.store(0);
 }
 
 void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
@@ -29,11 +31,14 @@ void TTopicWorkloadWriterProducer::Send(const TInstant& createTimestamp,
     Y_ASSERT(WriteSession_);
 
     TString data = GetGeneratedMessage();
-    InflightMessagesCreateTs_[MessageId_] = createTimestamp;
+    NTopic::TWriteMessage::TMessageMeta meta = GenerateMessageMeta();
+    InflightMessagesCreateTs_.Insert(MessageId_, createTimestamp);
+    InflightMessagesCount_.fetch_add(1, std::memory_order_relaxed);
 
     NTopic::TWriteMessage writeMessage(data);
     writeMessage.SeqNo(MessageId_);
     writeMessage.CreateTimestamp(createTimestamp);
+    writeMessage.MessageMeta(std::move(meta));
 
     if (transaction.has_value()) {
         writeMessage.Tx(transaction.value());
@@ -57,7 +62,11 @@ void TTopicWorkloadWriterProducer::Close() {
 
 
 TString TTopicWorkloadWriterProducer::GetGeneratedMessage() const {
-    return Params_.GeneratedMessages[MessageId_ % TTopicWorkloadWriterWorker::GENERATED_MESSAGES_COUNT];
+    return NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GetGeneratedMessage(Params_, MessageId_);
+}
+
+NYdb::NTopic::TWriteMessage::TMessageMeta TTopicWorkloadWriterProducer::GenerateMessageMeta() const {
+    return NYdb::NConsoleClient::NTopicWorkloadWriterInternal::GenerateOptionalKeyMeta(MessageId_, Params_);
 }
 
 bool TTopicWorkloadWriterProducer::WaitForInitSeqNo() {
@@ -140,18 +149,19 @@ void TTopicWorkloadWriterProducer::HandleAckEvent(NYdb::NTopic::TWriteSessionEve
         ui64 AckedMessageId = ack.SeqNo;
         WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG, TStringBuilder() << "Got ack for write " << AckedMessageId);
 
-        auto inflightMessageIter = InflightMessagesCreateTs_.find(AckedMessageId);
-        if (inflightMessageIter == InflightMessagesCreateTs_.end()) {
+        TInstant createTimestamp = now;
+        if (InflightMessagesCreateTs_.TryRemove(AckedMessageId, createTimestamp)) {
+            InflightMessagesCount_.fetch_sub(1, std::memory_order_relaxed);
+        } else {
             *Params_.ErrorFlag = 1;
             WRITE_LOG(Params_.Log, ELogPriority::TLOG_ERR,
                       TStringBuilder() << "Unknown AckedMessageId " << AckedMessageId);
         }
 
-        auto inflightTime = (now - inflightMessageIter->second);
-        InflightMessagesCreateTs_.erase(inflightMessageIter);
+        const auto inflightTime = (now - createTimestamp);
 
         StatsCollector_->AddWriterEvent(Params_.WriterIdx, {Params_.MessageSize, inflightTime.MilliSeconds(),
-                                                          InflightMessagesCreateTs_.size()});
+                                                          InflightMessagesCnt()});
 
         WRITE_LOG(Params_.Log, ELogPriority::TLOG_DEBUG,
                   TStringBuilder() << "Ack PartitionId " << ack.Details->PartitionId << " Offset "
@@ -170,18 +180,18 @@ void TTopicWorkloadWriterProducer::HandleSessionClosed(const NYdb::NTopic::TSess
         << ": got close event: " << event.DebugString());
 }
 
-bool TTopicWorkloadWriterProducer::ContinuationTokenDefined() {
+bool TTopicWorkloadWriterProducer::ContinuationTokenDefined() const {
     return !!ContinuationToken_;
 }
 
-ui64 TTopicWorkloadWriterProducer::GetCurrentMessageId() {
+ui64 TTopicWorkloadWriterProducer::GetCurrentMessageId() const {
     return MessageId_;
 }
 
-ui64 TTopicWorkloadWriterProducer::GetPartitionId() {
+ui64 TTopicWorkloadWriterProducer::GetPartitionId() const {
     return PartitionId_;
 }
 
-size_t TTopicWorkloadWriterProducer::InflightMessagesCnt() {
-    return InflightMessagesCreateTs_.size();
+size_t TTopicWorkloadWriterProducer::InflightMessagesCnt() const {
+    return InflightMessagesCount_.load(std::memory_order_relaxed);
 }

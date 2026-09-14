@@ -37,6 +37,10 @@
 #define STS_WEB_IDENTITY_MAX_ATTEMPTS 3
 
 static void s_on_connection_manager_shutdown(void *user_data);
+static int s_stswebid_error_xml_on_Error_child(struct aws_xml_node *, void *);
+static int s_stswebid_200_xml_on_AssumeRoleWithWebIdentityResponse_child(struct aws_xml_node *, void *);
+static int s_stswebid_200_xml_on_AssumeRoleWithWebIdentityResult_child(struct aws_xml_node *, void *);
+static int s_stswebid_200_xml_on_Credentials_child(struct aws_xml_node *, void *);
 
 struct aws_credentials_provider_sts_web_identity_impl {
     struct aws_http_connection_manager *connection_manager;
@@ -187,152 +191,150 @@ Error Response looks like:
 </Error>
 */
 
-static bool s_on_error_node_encountered_fn(struct aws_xml_parser *parser, struct aws_xml_node *node, void *user_data) {
-
-    struct aws_byte_cursor node_name;
-    AWS_ZERO_STRUCT(node_name);
-
-    if (aws_xml_node_get_name(node, &node_name)) {
-        AWS_LOGF_ERROR(
-            AWS_LS_AUTH_CREDENTIALS_PROVIDER,
-            "(id=%p): While parsing xml error response for sts web identity credentials provider, could not get xml "
-            "node name for function s_on_error_node_encountered_fn.",
-            user_data);
-        return false;
-    }
-
+static int s_stswebid_error_xml_on_root(struct aws_xml_node *node, void *user_data) {
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "Error")) {
-        return aws_xml_node_traverse(parser, node, s_on_error_node_encountered_fn, user_data);
+        return aws_xml_node_traverse(node, s_stswebid_error_xml_on_Error_child, user_data);
     }
 
-    bool *get_retryable_error = user_data;
-    struct aws_byte_cursor data_cursor;
-    AWS_ZERO_STRUCT(data_cursor);
+    return AWS_OP_SUCCESS;
+}
 
+static int s_stswebid_error_xml_on_Error_child(struct aws_xml_node *node, void *user_data) {
+    bool *get_retryable_error = user_data;
+
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "Code")) {
-        aws_xml_node_as_body(parser, node, &data_cursor);
+
+        struct aws_byte_cursor data_cursor = {0};
+        if (aws_xml_node_as_body(node, &data_cursor)) {
+            return AWS_OP_ERR;
+        }
+
         if (aws_byte_cursor_eq_c_str_ignore_case(&data_cursor, "IDPCommunicationError") ||
             aws_byte_cursor_eq_c_str_ignore_case(&data_cursor, "InvalidIdentityToken")) {
             *get_retryable_error = true;
         }
     }
 
-    return true;
+    return AWS_OP_SUCCESS;
 }
 
 static bool s_parse_retryable_error_from_response(struct aws_allocator *allocator, struct aws_byte_buf *response) {
 
-    struct aws_xml_parser_options options;
-    AWS_ZERO_STRUCT(options);
-    options.doc = aws_byte_cursor_from_buf(response);
-
-    struct aws_xml_parser *xml_parser = aws_xml_parser_new(allocator, &options);
-
-    if (xml_parser == NULL) {
-        AWS_LOGF_ERROR(
-            AWS_LS_AUTH_CREDENTIALS_PROVIDER,
-            "Failed to init xml parser for sts web identity credentials provider to parse error information.");
-        return false;
-    }
     bool get_retryable_error = false;
-    if (aws_xml_parser_parse(xml_parser, s_on_error_node_encountered_fn, &get_retryable_error)) {
+    struct aws_xml_parser_options options = {
+        .doc = aws_byte_cursor_from_buf(response),
+        .on_root_encountered = s_stswebid_error_xml_on_root,
+        .user_data = &get_retryable_error,
+    };
+
+    if (aws_xml_parse(allocator, &options)) {
         AWS_LOGF_ERROR(
             AWS_LS_AUTH_CREDENTIALS_PROVIDER,
             "Failed to parse xml error response for sts web identity with error %s",
             aws_error_str(aws_last_error()));
-        aws_xml_parser_destroy(xml_parser);
         return false;
     }
 
-    aws_xml_parser_destroy(xml_parser);
     return get_retryable_error;
 }
 
-static bool s_on_creds_node_encountered_fn(struct aws_xml_parser *parser, struct aws_xml_node *node, void *user_data) {
-
-    struct aws_byte_cursor node_name;
-    AWS_ZERO_STRUCT(node_name);
-
-    if (aws_xml_node_get_name(node, &node_name)) {
-        AWS_LOGF_ERROR(
-            AWS_LS_AUTH_CREDENTIALS_PROVIDER,
-            "(id=%p): While parsing credentials xml response for sts web identity credentials provider, could not get "
-            "xml node name for function s_on_creds_node_encountered_fn.",
-            user_data);
-        return false;
+static int s_stswebid_200_xml_on_root(struct aws_xml_node *node, void *user_data) {
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
+    if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "AssumeRoleWithWebIdentityResponse")) {
+        return aws_xml_node_traverse(node, s_stswebid_200_xml_on_AssumeRoleWithWebIdentityResponse_child, user_data);
     }
+    return AWS_OP_SUCCESS;
+}
 
-    if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "AssumeRoleWithWebIdentityResponse") ||
-        aws_byte_cursor_eq_c_str_ignore_case(&node_name, "AssumeRoleWithWebIdentityResult") ||
-        aws_byte_cursor_eq_c_str_ignore_case(&node_name, "Credentials")) {
-        return aws_xml_node_traverse(parser, node, s_on_creds_node_encountered_fn, user_data);
+static int s_stswebid_200_xml_on_AssumeRoleWithWebIdentityResponse_child(
+    struct aws_xml_node *node,
+
+    void *user_data) {
+
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
+    if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "AssumeRoleWithWebIdentityResult")) {
+        return aws_xml_node_traverse(node, s_stswebid_200_xml_on_AssumeRoleWithWebIdentityResult_child, user_data);
     }
+    return AWS_OP_SUCCESS;
+}
 
+static int s_stswebid_200_xml_on_AssumeRoleWithWebIdentityResult_child(
+    struct aws_xml_node *node,
+
+    void *user_data) {
+
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
+    if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "Credentials")) {
+        return aws_xml_node_traverse(node, s_stswebid_200_xml_on_Credentials_child, user_data);
+    }
+    return AWS_OP_SUCCESS;
+}
+
+static int s_stswebid_200_xml_on_Credentials_child(struct aws_xml_node *node, void *user_data) {
     struct sts_web_identity_user_data *query_user_data = user_data;
+
+    struct aws_byte_cursor node_name = aws_xml_node_get_name(node);
     struct aws_byte_cursor credential_data;
     AWS_ZERO_STRUCT(credential_data);
+
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "AccessKeyId")) {
-        aws_xml_node_as_body(parser, node, &credential_data);
-        query_user_data->access_key_id =
-            aws_string_new_from_array(query_user_data->allocator, credential_data.ptr, credential_data.len);
+        if (aws_xml_node_as_body(node, &credential_data)) {
+            return AWS_OP_ERR;
+        }
+        query_user_data->access_key_id = aws_string_new_from_cursor(query_user_data->allocator, &credential_data);
     }
 
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "SecretAccessKey")) {
-        aws_xml_node_as_body(parser, node, &credential_data);
-        query_user_data->secret_access_key =
-            aws_string_new_from_array(query_user_data->allocator, credential_data.ptr, credential_data.len);
+        if (aws_xml_node_as_body(node, &credential_data)) {
+            return AWS_OP_ERR;
+        }
+        query_user_data->secret_access_key = aws_string_new_from_cursor(query_user_data->allocator, &credential_data);
     }
 
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "SessionToken")) {
-        aws_xml_node_as_body(parser, node, &credential_data);
-        query_user_data->session_token =
-            aws_string_new_from_array(query_user_data->allocator, credential_data.ptr, credential_data.len);
+        if (aws_xml_node_as_body(node, &credential_data)) {
+            return AWS_OP_ERR;
+        }
+        query_user_data->session_token = aws_string_new_from_cursor(query_user_data->allocator, &credential_data);
     }
 
     /* As long as we parsed an usable expiration, use it, otherwise use
      * the existing one: now + 900s, initialized before parsing.
      */
     if (aws_byte_cursor_eq_c_str_ignore_case(&node_name, "Expiration")) {
-        aws_xml_node_as_body(parser, node, &credential_data);
+        if (aws_xml_node_as_body(node, &credential_data)) {
+            return AWS_OP_ERR;
+        }
         if (credential_data.len != 0) {
             struct aws_date_time expiration;
             if (aws_date_time_init_from_str_cursor(&expiration, &credential_data, AWS_DATE_FORMAT_ISO_8601) ==
                 AWS_OP_SUCCESS) {
                 query_user_data->expiration_timepoint_in_seconds = (uint64_t)aws_date_time_as_epoch_secs(&expiration);
             } else {
-                query_user_data->error_code = aws_last_error();
                 AWS_LOGF_ERROR(
                     AWS_LS_AUTH_CREDENTIALS_PROVIDER,
                     "Failed to parse time string from sts web identity xml response: %s",
-                    aws_error_str(query_user_data->error_code));
+                    aws_error_str(aws_last_error()));
+                return AWS_OP_ERR;
             }
         }
     }
-    return true;
+
+    return AWS_OP_SUCCESS;
 }
 
 static struct aws_credentials *s_parse_credentials_from_response(
     struct sts_web_identity_user_data *query_user_data,
     struct aws_byte_buf *response) {
 
-    if (!response || response->len == 0) {
-        return NULL;
-    }
-
     struct aws_credentials *credentials = NULL;
 
-    struct aws_xml_parser_options options;
-    AWS_ZERO_STRUCT(options);
-    options.doc = aws_byte_cursor_from_buf(response);
-
-    struct aws_xml_parser *xml_parser = aws_xml_parser_new(query_user_data->allocator, &options);
-
-    if (xml_parser == NULL) {
-        AWS_LOGF_ERROR(
-            AWS_LS_AUTH_CREDENTIALS_PROVIDER,
-            "Failed to init xml parser for sts web identity credentials provider to parse error information.");
-        return NULL;
+    if (!response || response->len == 0) {
+        goto on_finish;
     }
+
     uint64_t now = UINT64_MAX;
     if (aws_sys_clock_get_ticks(&now) != AWS_OP_SUCCESS) {
         AWS_LOGF_ERROR(
@@ -343,7 +345,12 @@ static struct aws_credentials *s_parse_credentials_from_response(
     uint64_t now_seconds = aws_timestamp_convert(now, AWS_TIMESTAMP_NANOS, AWS_TIMESTAMP_SECS, NULL);
     query_user_data->expiration_timepoint_in_seconds = now_seconds + STS_WEB_IDENTITY_CREDS_DEFAULT_DURATION_SECONDS;
 
-    if (aws_xml_parser_parse(xml_parser, s_on_creds_node_encountered_fn, query_user_data)) {
+    struct aws_xml_parser_options options = {
+        .doc = aws_byte_cursor_from_buf(response),
+        .on_root_encountered = s_stswebid_200_xml_on_root,
+        .user_data = query_user_data,
+    };
+    if (aws_xml_parse(query_user_data->allocator, &options)) {
         AWS_LOGF_ERROR(
             AWS_LS_AUTH_CREDENTIALS_PROVIDER,
             "Failed to parse xml response for sts web identity with error: %s",
@@ -352,6 +359,7 @@ static struct aws_credentials *s_parse_credentials_from_response(
     }
 
     if (!query_user_data->access_key_id || !query_user_data->secret_access_key) {
+        AWS_LOGF_ERROR(AWS_LS_AUTH_CREDENTIALS_PROVIDER, "STS web identity not found in XML response.");
         goto on_finish;
     }
 
@@ -362,15 +370,16 @@ static struct aws_credentials *s_parse_credentials_from_response(
         aws_byte_cursor_from_string(query_user_data->session_token),
         query_user_data->expiration_timepoint_in_seconds);
 
+    if (credentials == NULL) {
+        AWS_LOGF_ERROR(AWS_LS_AUTH_CREDENTIALS_PROVIDER, "Failed to create credentials for sts web identity");
+        goto on_finish;
+    }
+
 on_finish:
 
     if (credentials == NULL) {
-        query_user_data->error_code = aws_last_error();
-    }
-
-    if (xml_parser != NULL) {
-        aws_xml_parser_destroy(xml_parser);
-        xml_parser = NULL;
+        /* Give a useful error (aws_last_error() might be AWS_ERROR_INVALID_ARGUMENT, which isn't too helpful) */
+        query_user_data->error_code = AWS_AUTH_CREDENTIALS_PROVIDER_STS_WEB_IDENTITY_SOURCE_FAILURE;
     }
 
     return credentials;
@@ -739,6 +748,11 @@ static int s_credentials_provider_sts_web_identity_get_credentials_async(
 
     struct aws_credentials_provider_sts_web_identity_impl *impl = provider->impl;
 
+    AWS_LOGF_DEBUG(
+        AWS_LS_AUTH_CREDENTIALS_PROVIDER,
+        "id=%p: STS_WEB_IDENTITY provider trying to load credentials",
+        (void *)provider);
+
     struct sts_web_identity_user_data *wrapped_user_data = s_user_data_new(provider, callback, user_data);
     if (wrapped_user_data == NULL) {
         goto error;
@@ -846,7 +860,6 @@ on_error:
     return NULL;
 }
 
-static struct aws_byte_cursor s_default_profile_name_cursor = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL("default");
 static struct aws_byte_cursor s_dot_cursor = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(".");
 static struct aws_byte_cursor s_amazonaws_cursor = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(".amazonaws.com");
 static struct aws_byte_cursor s_cn_cursor = AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(".cn");
@@ -859,7 +872,7 @@ static int s_construct_endpoint(
     const struct aws_string *service_name) {
 
     if (!allocator || !endpoint || !region || !service_name) {
-        return AWS_ERROR_INVALID_ARGUMENT;
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
     aws_byte_buf_clean_up(endpoint);
 
@@ -898,7 +911,7 @@ on_error:
 static int s_generate_uuid_to_buf(struct aws_allocator *allocator, struct aws_byte_buf *dst) {
 
     if (!allocator || !dst) {
-        return AWS_ERROR_INVALID_ARGUMENT;
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
 
     struct aws_uuid uuid;
@@ -924,6 +937,23 @@ static int s_generate_uuid_to_buf(struct aws_allocator *allocator, struct aws_by
         return aws_last_error();
     }
     return AWS_OP_SUCCESS;
+}
+
+static struct aws_string *s_check_or_get_with_env(
+    struct aws_allocator *allocator,
+    const struct aws_string *env_key,
+    struct aws_byte_cursor option) {
+
+    AWS_ASSERT(allocator);
+    struct aws_string *out = NULL;
+
+    if (option.len) {
+        out = aws_string_new_from_cursor(allocator, &option);
+    } else {
+        aws_get_environment_value(allocator, env_key, &out);
+    }
+
+    return out;
 }
 
 static void s_check_or_get_with_profile_config(
@@ -959,7 +989,7 @@ static void s_parameters_destroy(struct sts_web_identity_parameters *parameters)
 
 static struct sts_web_identity_parameters *s_parameters_new(
     struct aws_allocator *allocator,
-    struct aws_profile_collection *config_profile_collection_cached) {
+    const struct aws_credentials_provider_sts_web_identity_options *options) {
 
     struct sts_web_identity_parameters *parameters =
         aws_mem_calloc(allocator, 1, sizeof(struct sts_web_identity_parameters));
@@ -969,20 +999,18 @@ static struct sts_web_identity_parameters *s_parameters_new(
     parameters->allocator = allocator;
 
     bool success = false;
-    struct aws_string *region = NULL;
-    struct aws_string *role_arn = NULL;
-    struct aws_string *role_session_name = NULL;
-    struct aws_string *token_file_path = NULL;
-
-    /* check environment variables */
-    aws_get_environment_value(allocator, s_region_env, &region);
-    aws_get_environment_value(allocator, s_role_arn_env, &role_arn);
-    aws_get_environment_value(allocator, s_role_session_name_env, &role_session_name);
-    aws_get_environment_value(allocator, s_token_file_path_env, &token_file_path);
+    struct aws_string *region = s_check_or_get_with_env(allocator, s_region_env, options->region);
+    struct aws_string *role_arn = s_check_or_get_with_env(allocator, s_role_arn_env, options->role_arn);
+    struct aws_string *role_session_name =
+        s_check_or_get_with_env(allocator, s_role_session_name_env, options->role_session_name);
+    struct aws_string *token_file_path =
+        s_check_or_get_with_env(allocator, s_token_file_path_env, options->token_file_path);
+    ;
 
     /**
      * check config profile if either region, role_arn or token_file_path or role_session_name is not resolved from
-     * environment variable. Role session name can also be generated by us using uuid if not found from both sources.
+     * environment variable. Role session name can also be generated by us using uuid if not found from both
+     * sources.
      */
     struct aws_profile_collection *config_profile = NULL;
     struct aws_string *profile_name = NULL;
@@ -990,9 +1018,9 @@ static struct sts_web_identity_parameters *s_parameters_new(
     bool get_all_parameters =
         (region && region->len && role_arn && role_arn->len && token_file_path && token_file_path->len);
     if (!get_all_parameters) {
-        if (config_profile_collection_cached) {
+        if (options->config_profile_collection_cached) {
             /* Use cached profile collection */
-            config_profile = aws_profile_collection_acquire(config_profile_collection_cached);
+            config_profile = aws_profile_collection_acquire(options->config_profile_collection_cached);
         } else {
             /* Load profile collection from files */
             config_profile = s_load_profile(allocator);
@@ -1001,10 +1029,8 @@ static struct sts_web_identity_parameters *s_parameters_new(
             }
         }
 
-        profile_name = aws_get_profile_name(allocator, &s_default_profile_name_cursor);
-        if (profile_name) {
-            profile = aws_profile_collection_get_profile(config_profile, profile_name);
-        }
+        profile_name = aws_get_profile_name(allocator, &options->profile_name_override);
+        profile = aws_profile_collection_get_profile(config_profile, profile_name);
 
         if (!profile) {
             AWS_LOGF_ERROR(
@@ -1080,8 +1106,7 @@ struct aws_credentials_provider *aws_credentials_provider_new_sts_web_identity(
     struct aws_allocator *allocator,
     const struct aws_credentials_provider_sts_web_identity_options *options) {
 
-    struct sts_web_identity_parameters *parameters =
-        s_parameters_new(allocator, options->config_profile_collection_cached);
+    struct sts_web_identity_parameters *parameters = s_parameters_new(allocator, options);
     if (!parameters) {
         return NULL;
     }

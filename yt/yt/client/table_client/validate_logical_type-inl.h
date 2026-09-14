@@ -8,6 +8,8 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <yt/yt/library/tz_types/tz_types.h>
+
 #include <util/charset/utf8.h>
 
 #include <cmath>
@@ -212,6 +214,40 @@ void ValidateSimpleLogicalType(TStringBuf value)
         if (value.size() != 16) {
             THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation,
                 "Not a valid Uuid");
+        }
+    } else if constexpr (
+        type == ESimpleLogicalValueType::TzDate ||
+        type == ESimpleLogicalValueType::TzDatetime ||
+        type == ESimpleLogicalValueType::TzTimestamp ||
+        type == ESimpleLogicalValueType::TzDate32 ||
+        type == ESimpleLogicalValueType::TzDatetime64 ||
+        type == ESimpleLogicalValueType::TzTimestamp64)
+    {
+        try {
+            constexpr ESimpleLogicalValueType underlyingDateType = GetUnderlyingDateType<type>();
+
+            using TInt = TUnderlyingTimestampIntegerType<underlyingDateType>;
+
+            const auto& [timestamp, tzId] = NTzTypes::ParseTzValue<TInt>(value);
+
+            try {
+                if constexpr (std::is_signed_v<TInt>) {
+                    ValidateSimpleLogicalType<underlyingDateType>(static_cast<i64>(timestamp));
+                } else {
+                    ValidateSimpleLogicalType<underlyingDateType>(static_cast<ui64>(timestamp));
+                }
+            } catch (const std::exception& ex) {
+                THROW_ERROR_EXCEPTION("Cannot validate underlying timestamp of %Qlv type", type)
+                    .With(ex);
+            }
+
+            NTzTypes::ValidateTzId(tzId);
+        } catch (const std::exception& ex) {
+            THROW_ERROR_EXCEPTION(
+                NTableClient::EErrorCode::SchemaViolation,
+                "Not a valid timezone type")
+                .With("value", value)
+                .With(ex);
         }
     } else {
         static_assert(type == ESimpleLogicalValueType::String, "Bad logical type");

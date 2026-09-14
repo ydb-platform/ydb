@@ -1,55 +1,81 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
+#include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 namespace NYql::NDq::NInternal {
 
 class TDqPqReadActorBase : public IDqComputeActorAsyncInput {
-    
-public:
-    using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
+protected:
+    struct TPartitionInfo {
+        std::optional<ui64> Offset;             // offset of next event.
+        std::optional<ui64> EndOffset;          // end offset in topic on start.
+        TMaybe<TInstant> EndWriteTime;          // from predicate.
+        TInstant LastMessageWriteTime;
 
-    const ui64 InputIndex;
-    THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
+        bool IsFinishedInTableMode() {
+            if (!EndOffset                      // Not connected yet.
+                && !EndWriteTime) {
+                return false;
+            }
+            bool endByOffset =
+                EndOffset
+                && (*EndOffset == 0             // No data in partition on start.
+                    || (Offset && *EndOffset <= *Offset));
+            if (endByOffset) {
+                return true;
+            }
+            return EndWriteTime && *EndWriteTime <= LastMessageWriteTime;
+        }
+    };
+
+    const ui64 InputIndex = 0;
+    THashMap<TPartitionKey, TPartitionInfo> Partitions;
     const TTxId TxId;
-    const NPq::NProto::TDqPqTopicSource SourceParams;
+    NPq::NProto::TDqPqTopicSource SourceParams;
     TDqAsyncStats IngressStats;
     TInstant StartingMessageTimestamp;
     TString LogPrefix;
-    const NPq::NProto::TDqReadTaskParams ReadParams;
+    TVector<NPq::NProto::TDqReadTaskParams> ReadParams;
     const NActors::TActorId ComputeActorId;
-    ui64 TaskId;
+    const ui64 TaskId = 0;
+    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
+    // << Initialized when watermark tracking is enabled
 
+public:
     TDqPqReadActorBase(
         ui64 inputIndex,
         ui64 taskId,
         NActors::TActorId selfId,
         const TTxId& txId,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
-        NPq::NProto::TDqReadTaskParams&& readParams,
-        const NActors::TActorId& computeActorId)
-        : InputIndex(inputIndex)
-        , TxId(txId)
-        , SourceParams(std::move(sourceParams))
-        , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
-        , LogPrefix(TStringBuilder() << "SelfId: " << selfId << ", TxId: " << txId << ", task: " << taskId << ". PQ source. ")
-        , ReadParams(std::move(readParams))
-        , ComputeActorId(computeActorId)
-        , TaskId(taskId) {
-     }
+        TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
+        const NActors::TActorId& computeActorId);
 
-public:
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override;
+
     void LoadState(const TSourceState& state) override;
 
     ui64 GetInputIndex() const override;
+
     const TDqAsyncStats& GetIngressStats() const override;
 
-    virtual TString GetSessionId() const {
-        return TString{"empty"};
-    }
+protected:
+    virtual void SchedulePartitionIdlenessCheck(TInstant) = 0;
+
+    virtual void InitWatermarkTracker() = 0;
+
+    virtual TString GetSessionId() const;
+
+    void InitWatermarkTracker(TDuration, TDuration, const ::NMonitoring::TDynamicCounterPtr& counters = {});
+
+    void MaybeSchedulePartitionIdlenessCheck(TInstant systemTime);
+
+private:
+    TString LogPartitionToOffset() const;
 };
 
 } // namespace NYql::NDq

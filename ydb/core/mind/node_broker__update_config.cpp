@@ -3,6 +3,8 @@
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -32,10 +34,10 @@ public:
     {
         auto &rec = Notification->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxUpdateConfig Execute " << rec.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfig Execute",
+            {"rec", rec.ShortDebugString()});
 
-        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Config))
+        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
@@ -49,10 +51,10 @@ public:
     {
         auto &rec = Request->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "TTxUpdateConfig Execute " << rec.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfig Execute",
+            {"rec", rec.ShortDebugString()});
 
-        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Config))
+        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;
 
         auto resp = MakeHolder<TEvNodeBroker::TEvSetConfigResponse>();
@@ -72,26 +74,28 @@ public:
         if (Request && !ProcessRequest(ctx))
             return true;
 
-        if (Modify)
-            Self->DbUpdateConfig(Config, txc);
+        if (Modify) {
+            Self->Dirty.DbUpdateConfig(Config, txc);
+            Self->Dirty.LoadConfigFromProto(Config);
+        }
 
         return true;
     }
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfig Complete");
 
         if (Modify)
-            Self->LoadConfigFromProto(Config);
+            Self->Committed.LoadConfigFromProto(Config);
 
         if (Response) {
-            LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
-                        "TTxUpdateConfig reply with: " << Response->ToString());
+            YDB_LOG_TRACE_CTX(ctx, "TTxUpdateConfig: reply",
+                {"response", Response->ToString()});
             ctx.Send(Response);
         }
 
-        Self->TxCompleted(this, ctx);
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

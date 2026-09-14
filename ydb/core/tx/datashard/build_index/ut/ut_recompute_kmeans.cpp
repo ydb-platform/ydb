@@ -1,0 +1,441 @@
+#include "ut_helpers.h"
+
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
+
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+namespace NKikimr {
+using namespace Tests;
+using Ydb::Table::VectorIndexSettings;
+using namespace NTableIndex::NKMeans;
+
+static std::atomic<ui64> sId = 1;
+static constexpr const char* kMainTable = "/Root/table-main";
+
+Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
+
+    static void DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
+        std::function<void(NKikimrTxDataShard::TEvRecomputeKMeansRequest&)> setupRequest,
+        const TString& expectedError, bool expectedErrorSubstring = false)
+    {
+        auto id = sId.fetch_add(1, std::memory_order_relaxed);
+        auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
+        auto datashards = GetTableShards(server, sender, kMainTable);
+        TTableId tableId = ResolveTableId(server, sender, kMainTable);
+
+        TStringBuilder data;
+        TString err;
+        UNIT_ASSERT(datashards.size() == 1);
+
+        auto ev = std::make_unique<TEvDataShard::TEvRecomputeKMeansRequest>();
+        auto& rec = ev->Record;
+        rec.SetId(1);
+
+        rec.SetSeqNoGeneration(id);
+        rec.SetSeqNoRound(1);
+
+        rec.SetTabletId(datashards[0]);
+        tableId.PathId.ToProto(rec.MutablePathId());
+
+        rec.SetSnapshotTxId(snapshot.TxId);
+        rec.SetSnapshotStep(snapshot.Step);
+
+        VectorIndexSettings settings;
+        settings.set_vector_dimension(2);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
+        settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
+        *rec.MutableSettings() = settings;
+
+        rec.SetParent(0);
+        rec.AddClusters("ab\2");
+        rec.SetEmbeddingColumn("embedding");
+
+        setupRequest(rec);
+
+        NKikimr::DoBadRequest<TEvDataShard::TEvRecomputeKMeansResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
+    }
+
+    static TString DoRecomputeKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent,
+        const std::vector<TString>& level, VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric, bool withForeign = false)
+    {
+        auto id = sId.fetch_add(1, std::memory_order_relaxed);
+        auto& runtime = *server->GetRuntime();
+        auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
+        auto datashards = GetTableShards(server, sender, kMainTable);
+        TTableId tableId = ResolveTableId(server, sender, kMainTable);
+
+        TStringBuilder data;
+        TString err;
+
+        for (auto tid : datashards) {
+            auto ev1 = std::make_unique<TEvDataShard::TEvRecomputeKMeansRequest>();
+            auto ev2 = std::make_unique<TEvDataShard::TEvRecomputeKMeansRequest>();
+            auto fill = [&](std::unique_ptr<TEvDataShard::TEvRecomputeKMeansRequest>& ev) {
+                auto& rec = ev->Record;
+                rec.SetId(1);
+
+                rec.SetSeqNoGeneration(id);
+                rec.SetSeqNoRound(1);
+
+                rec.SetTabletId(tid);
+                tableId.PathId.ToProto(rec.MutablePathId());
+
+                rec.SetSnapshotTxId(snapshot.TxId);
+                rec.SetSnapshotStep(snapshot.Step);
+
+                VectorIndexSettings settings;
+                settings.set_vector_dimension(2);
+                settings.set_vector_type(type);
+                settings.set_metric(metric);
+                *rec.MutableSettings() = settings;
+
+                rec.SetSkipOverlapForeign(withForeign);
+
+                rec.SetParent(parent);
+                *rec.MutableClusters() = {level.begin(), level.end()};
+                rec.SetEmbeddingColumn("embedding");
+            };
+            fill(ev1);
+            fill(ev2);
+
+            runtime.SendToPipe(tid, sender, ev1.release(), 0, GetPipeConfigWithRetries());
+            runtime.SendToPipe(tid, sender, ev2.release(), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvRecomputeKMeansResponse>(handle);
+
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
+            UNIT_ASSERT_EQUAL_C(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::DONE,
+                                issues.ToOneLineString());
+
+            const auto& rows = reply->Record.GetClusters();
+            const auto& sizes = reply->Record.GetClusterSizes();
+            UNIT_ASSERT((size_t)rows.size() == level.size());
+            UNIT_ASSERT((size_t)sizes.size() == level.size());
+
+            for (int i = 0; i < rows.size(); i++) {
+                data.Out << "cluster = " << rows[i] << " size = " << sizes[i] << "\n";
+            }
+        }
+
+        return data;
+    }
+
+    Y_UNIT_TEST(BadRequest) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
+            request.SetTabletId(0);
+        }, TStringBuilder() << "{ <main>: Error: Wrong shard 0 this is " << GetTableShards(server, sender, kMainTable)[0] << " }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
+            TPathId(0, 0).ToProto(request.MutablePathId());
+        }, "{ <main>: Error: Unknown table id: 0 }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
+            request.SetSnapshotStep(request.GetSnapshotStep() + 1);
+        }, "Error: Unknown snapshot", true);
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
+            request.SetSnapshotTxId(request.GetSnapshotTxId() + 1);
+        }, "Error: Unknown snapshot", true);
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
+            request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
+        }, "{ <main>: Error: vector_type should be set }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
+            request.MutableSettings()->set_metric(VectorIndexSettings::METRIC_UNSPECIFIED);
+        }, "{ <main>: Error: either distance or similarity should be set }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
+            request.ClearClusters();
+        }, "{ <main>: Error: Should be requested for at least one cluster }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
+            request.ClearClusters();
+            request.AddClusters("something");
+        }, "{ <main>: Error: Clusters have invalid format }");
+
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
+            request.SetEmbeddingColumn("some");
+        }, "{ <main>: Error: Unknown embedding column: some }");
+
+        // test multiple issues:
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
+            request.ClearClusters();
+            request.SetEmbeddingColumn("some");
+        }, "[ { <main>: Error: Unknown embedding column: some } { <main>: Error: Should be requested for at least one cluster } ]");
+    }
+
+    Y_UNIT_TEST(MainTable) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        // Upsert some initial values
+        ExecSQL(server, sender,
+                R"(
+        UPSERT INTO `/Root/table-main`
+            (key, embedding, data)
+        VALUES )"
+                "(1, \"\x30\x30\2\", \"one\"),"
+                "(2, \"\x31\x28\2\", \"two\"),"
+                "(3, \"\x29\x31\2\", \"three\"),"
+                "(4, \"\x20\x40\2\", \"four\"),"
+                "(5, \"\x15\x40\2\", \"five\"),"
+                "(6, \"\x10\x40\2\", \"six\");");
+
+        std::vector<TString> level = { "\x30\x30\2", "\x10\x40\2" };
+
+        auto recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x17\x40\2 size = 3\n");
+
+        recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x17\x40\2 size = 3\n");
+
+        recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2A\x32\2 size = 4\ncluster = \x12\x40\2 size = 2\n");
+
+        recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_COSINE);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \xFF\xFD\2 size = 3\ncluster = \x5B\xFF\2 size = 3\n");
+
+        recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \xFF\xFD\2 size = 3\ncluster = \x5B\xFF\2 size = 3\n");
+
+    }
+
+    Y_UNIT_TEST_TWIN(BuildTable, WithForeign) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+
+        // Upsert some initial values
+        if (WithForeign) {
+            CreateBuildTableWithForeignIn(server, sender, options, "table-main");
+            ExecSQL(server, sender, "UPSERT INTO `/Root/table-main` "
+                "(__ydb_parent, key, __ydb_foreign, embedding, data) VALUES "
+                "(10, 1, false, \"\x30\x30\2\", \"one\"),"
+                "(11, 1, true,  \"\x30\x30\2\", \"one\"),"
+                "(10, 2, false, \"\x31\x28\2\", \"two\"),"
+                "(10, 3, false, \"\x29\x31\2\", \"three\"),"
+                "(10, 4, false, \"\x20\x40\2\", \"four\"),"
+                "(11, 5, false, \"\x15\x40\2\", \"five\"),"
+                "(11, 6, false, \"\x10\x40\2\", \"six\");"
+            );
+        } else {
+            CreateBuildTable(server, sender, options, "table-main");
+            ExecSQL(server, sender, "UPSERT INTO `/Root/table-main` "
+                "(__ydb_parent, key, embedding, data) VALUES "
+                "(10, 1, \"\x30\x30\2\", \"one\"),"
+                "(10, 2, \"\x31\x28\2\", \"two\"),"
+                "(10, 3, \"\x29\x31\2\", \"three\"),"
+                "(10, 4, \"\x20\x40\2\", \"four\"),"
+                "(11, 5, \"\x15\x40\2\", \"five\"),"
+                "(11, 6, \"\x10\x40\2\", \"six\");");
+        }
+
+        // Check that clusters are always the same and not affected by the row with __ydb_foreign=true
+        std::vector<TString> level = { "\x30\x30\2", "\x20\x40\2" };
+
+        auto recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN, WithForeign);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
+
+        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN, WithForeign);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
+
+        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_INNER_PRODUCT, WithForeign);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x30\x2C\2 size = 2\ncluster = \x24\x38\2 size = 2\n");
+
+        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_COSINE, WithForeign);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \xFF\xFD\2 size = 3\ncluster = \x80\xFF\2 size = 1\n");
+
+        recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE, WithForeign);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \xFF\xFD\2 size = 3\ncluster = \x80\xFF\2 size = 1\n");
+    }
+
+    Y_UNIT_TEST(DimensionMismatchError) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        // 2 valid rows, 1 invalid row with wrong dimension
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
+            "(1, \"\x30\x30\2\", \"one\"),"
+            "(2, \"\x31\x31\2\", \"two\"),"
+            "(3, \"\x30\x30\x30\2\", \"three\");");
+
+        auto id = sId.fetch_add(1, std::memory_order_relaxed);
+        auto snapshot = CreateVolatileSnapshot(server, {kMainTable});
+        auto datashards = GetTableShards(server, sender, kMainTable);
+        TTableId tableId = ResolveTableId(server, sender, kMainTable);
+        auto tid = datashards[0];
+
+        auto ev = std::make_unique<TEvDataShard::TEvRecomputeKMeansRequest>();
+        auto& rec = ev->Record;
+        rec.SetId(1);
+        rec.SetSeqNoGeneration(id);
+        rec.SetSeqNoRound(1);
+        rec.SetTabletId(tid);
+        tableId.PathId.ToProto(rec.MutablePathId());
+        rec.SetSnapshotTxId(snapshot.TxId);
+        rec.SetSnapshotStep(snapshot.Step);
+
+        VectorIndexSettings settings;
+        settings.set_vector_dimension(2);
+        settings.set_vector_type(VectorIndexSettings::VECTOR_TYPE_UINT8);
+        settings.set_metric(VectorIndexSettings::DISTANCE_COSINE);
+        *rec.MutableSettings() = settings;
+
+        rec.SetParent(0);
+        rec.AddClusters("\x30\x30\2");
+        rec.AddClusters("\x31\x31\2");
+        rec.SetEmbeddingColumn("embedding");
+
+        runtime.SendToPipe(tid, sender, ev.release(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvRecomputeKMeansResponse>(handle);
+
+        UNIT_ASSERT_EQUAL(reply->Record.GetStatus(), NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(reply->Record.GetIssues(), issues);
+        TString issuesStr = issues.ToOneLineString();
+        UNIT_ASSERT_STRING_CONTAINS(issuesStr, "Vector dimension mismatch");
+    }
+
+    Y_UNIT_TEST(NullEmbedding) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        // 2 valid rows, 2 rows with NULL embedding (column omitted)
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, embedding, data) VALUES )"
+            "(1, \"\x30\x30\2\", \"one\"),"
+            "(2, \"\x31\x31\2\", \"two\");");
+        ExecSQL(server, sender,
+            R"(UPSERT INTO `/Root/table-main` (key, data) VALUES )"
+            "(3, \"null_one\"),"
+            "(4, \"null_two\");");
+
+        std::vector<TString> level = { "\x30\x30\2", "\x31\x31\2" };
+        auto recomputed = DoRecomputeKMeans(server, sender, 0, level,
+            VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
+
+        // Clusters should still be recomputed from the 2 valid rows
+        UNIT_ASSERT_STRING_CONTAINS(recomputed, "cluster = ");
+    }
+
+    Y_UNIT_TEST(EmptyCluster) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root");
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TShardedTableOptions options;
+        options.Shards(1);
+        CreateMainTable(server, sender, options);
+
+        // Upsert some initial values
+        ExecSQL(server, sender,
+                R"(
+        UPSERT INTO `/Root/table-main`
+            (key, embedding, data)
+        VALUES )"
+                "(1, \"\x30\x30\2\", \"one\"),"
+                "(2, \"\x31\x28\2\", \"two\"),"
+                "(3, \"\x29\x31\2\", \"three\"),"
+                "(4, \"\x20\x40\2\", \"four\"),"
+                "(5, \"\x15\x40\2\", \"five\"),"
+                "(6, \"\x10\x40\2\", \"six\");");
+
+        std::vector<TString> level = { "\x30\x30\2", "\x10\x10\2" };
+        auto recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_COSINE);
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \xA2\xFF\2 size = 6\ncluster = \x10\x10\2 size = 0\n");
+
+    }
+
+}
+
+}

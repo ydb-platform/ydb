@@ -1,0 +1,2 @@
+/* yt can not - it is impossible to update gateways in api for single test */
+select YQL::HostRuntimeSetting("TestHostSetting"), YQL::UdfRuntimeSetting("TestModule", "TestUdfSetting");

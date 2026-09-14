@@ -2,18 +2,53 @@
 
 #include "fwd.h"
 #include "common.h"
+#include "patchable_field.h"
 
 #include <library/cpp/yt/misc/enum.h>
+
+#include <library/cpp/yt/yson_string/public.h>
 
 #include <library/cpp/yson/node/node.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
 #include <util/datetime/base.h>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYson {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct IYsonConsumer;
+
+enum class EYsonFormat : int;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYson
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NLogLevel {
+    inline constexpr std::string_view Fatal = "fatal";
+    inline constexpr std::string_view Error = "error";
+    inline constexpr std::string_view Info = "info";
+    inline constexpr std::string_view Debug = "debug";
+} // namespace NLogLevel
+
+////////////////////////////////////////////////////////////////////////////////
+
+extern const TString DefaultHosts;
+extern const TString DefaultRemoteTempTablesDirectory;
+extern const TString DefaultRemoteTempFilesDirectory;
+
+////////////////////////////////////////////////////////////////////////////////
 
 enum EEncoding : int
 {
@@ -80,18 +115,36 @@ struct TConfig
     TString ApiVersion;
     TString LogLevel;
     TString LogPath;
+    THashSet<TString> LogExcludeCategories = {"Bus", "Net", "Dns", "Concurrency"};
+
+    /// @brief Path to the structured log file for recording telemetry data in JSON format.
+    /// This allows later retrieval and analysis of these metrics.
+    TString StructuredLog;
+
+    /// @brief Represents the role involved in HTTP proxy configuration.
+    ///
+    /// @note If the "Hosts" configuration option is specified, it is given priority over the HTTP proxy role.
+    TString HttpProxyRole;
+
+    /// @brief Represents the role involved in RPC proxy configuration.
+    TString RpcProxyRole;
+
+    /// @brief Proxy url aliasing rules to be used for connection.
+    ///
+    /// You can pass here "foo" => "fqdn:port" and afterwards use "foo" as handy alias,
+    /// while all connections will be made to "fqdn:port" address.
+    THashMap<TString, TString> ProxyUrlAliasingRules;
 
     ///
     /// For historical reasons mapreduce client uses its own logging system.
     ///
-    /// If this options is set to true library switches to yt/yt/core logging by default.
-    /// But if user calls @ref NYT::SetLogger library switches back to logger provided by user
+    /// Currently library uses yt/yt/core logging by default.
+    /// But if user calls @ref NYT::SetLogger, library switches back to logger provided by user
     /// (except for messages from yt/yt/core).
     ///
-    /// This is temporary option. In future it would be true by default, and then removed.
-    ///
-    /// https://st.yandex-team.ru/YT-23645
-    bool LogUseCore = false;
+    /// TODO: This is a temporary option for emergency fallback.
+    /// Should be removed after eliminating all NYT::SetLogger references.
+    bool LogUseCore = true;
 
     // Compression for data that is sent to YT cluster.
     EEncoding ContentEncoding;
@@ -104,6 +157,11 @@ struct TConfig
     bool ForceIpV4;
     bool ForceIpV6;
     bool UseHosts;
+
+    /// @brief Use https if no schema was provided in proxy url.
+    bool PreferHttps;
+
+    bool UseTLS;
 
     TDuration HostListUpdateInterval;
 
@@ -133,6 +191,9 @@ struct TConfig
     int ReadRetryCount;
     int StartOperationRetryCount;
 
+    // The CheckClusterLiveness operation should be retried, but fewer times than other operations.
+    int CheckLivenessRetryCount;
+
     /// @brief Period for checking status of running operation.
     TDuration OperationTrackerPollPeriod = TDuration::Seconds(5);
 
@@ -156,7 +217,7 @@ struct TConfig
 
     /// Defines replication factor that is used for files that are uploaded to YT
     /// to use them in operations.
-    int FileCacheReplicationFactor = 10;
+    TPatchableField<i64> FileCacheReplicationFactor = TPatchableField<i64>("file_cache_replication_factor", 10);
 
     /// @brief Used when waiting for other process which uploads the same file to the file cache.
     ///
@@ -174,6 +235,14 @@ struct TConfig
     // @brief Minimum byte size for files to undergo deduplication at upload
     i64 CacheUploadDeduplicationThreshold;
 
+    /// @brief Take a shared lock on the file cache directory during operation preparation.
+    ///
+    /// Prevents periodic cleaners from removing the cache directory between its creation and operation files upload to the cache.
+    ///
+    /// Only non-default file storages are locked.
+    /// The default one is expected to be protected on the cluster side.
+    bool LockFileStorage = false;
+
     bool MountSandboxInTmpfs;
 
     /// @brief Set upload options (e.g.) for files created by library.
@@ -185,6 +254,18 @@ struct TConfig
     // Testing options, should never be used in user programs.
     bool UseAbortableResponse = false;
     bool EnableDebugMetrics = false;
+
+    /// @brief Simulate a response that halts (stops sending data) mid-stream.
+    ///
+    /// Testing options, should never be used in user programs.
+    /// When enabled, the HTTP response will be truncated after @ref HaltingResponseBytesLimit bytes.
+    bool UseHaltingResponse = false;
+
+    /// @brief Maximum number of bytes sent before the response is halted.
+    ///
+    /// Testing options, should never be used in user programs.
+    /// Only meaningful when @ref UseHaltingResponse is true.
+    i64 HaltingResponseBytesLimit = 64 * 1024;
 
     //
     // There is optimization used with local YT that enables to skip binary upload and use real binary path.
@@ -217,6 +298,22 @@ struct TConfig
     /// Redirects stdout to stderr for jobs.
     bool RedirectStdoutToStderr = false;
 
+    /// Append job and operation IDs as shell command options.
+    bool EnableDebugCommandLineArguments = true;
+
+    /// Path to document node with cluster config for |IClient::GetDynamicConfiguration|.
+    TString ConfigRemotePatchPath = "//sys/client_config";
+
+    /// Pattern for generating operation web link in |GetOperationWebInterfaceUrl|.
+    TPatchableField<TString> OperationLinkPattern = TPatchableField<TString>("operation_link_pattern", "https://yt.yandex-team.ru/{cluster_ui_host}/operations/{operation_id}");
+
+    /// Allow to create trace_id on client side and propogate with request
+    bool EnableClientTracing = true;
+
+    /// If true, all RPC requests share a single connection,
+    //  and the native client sends lightweight control requests via a separate multiplexing band.
+    bool EnableControlMultiplexingBand = false;
+
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);
     static TDuration GetDuration(const char* var, TDuration defaultValue);
@@ -235,6 +332,7 @@ struct TConfig
     void LoadToken();
     void LoadSpec();
     void LoadTimings();
+    void LoadProxyUrlAliasingRules();
 
     void Reset();
 
@@ -242,6 +340,18 @@ struct TConfig
 
     static TConfigPtr Get();
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer);
+
+void Deserialize(TConfig& config, const TNode& node);
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString ConfigToYsonString(const TConfig& config, NYson::EYsonFormat format = NYson::EYsonFormat::Pretty);
+
+TConfig ConfigFromYsonString(TString serializedConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

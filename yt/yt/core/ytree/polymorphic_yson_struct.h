@@ -1,6 +1,7 @@
 #pragma once
 
 #include "yson_struct.h"
+#include "yson_schema.h"
 
 namespace NYT::NYTree {
 
@@ -38,7 +39,13 @@ constexpr bool AllDerived = (std::derived_from<TArgs, TBase> && ...);
 template <class TBase, class... TArgs>
 constexpr bool CHierarchy =
     AllDerived<TBase, TArgs...> &&
-    AllDifferent<TBase, TArgs...>;
+    AllDifferent<TArgs...>;
+
+template <class TEnum, TEnum Default, TEnum... TArgs>
+constexpr bool CIsThereDefaultInMapping = ((Default == TArgs) || ...);
+
+template <class TEnum, std::same_as<TEnum>... TArgs>
+consteval bool AreAllValuesDifferent(TArgs... args);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -59,15 +66,42 @@ struct TMappingLeaf
     friend TDerived EnumToDerivedMethod(TFactoryTag<Value>, TMappingLeaf*);
 };
 
-template <class TEnum, class... TLeafTags>
+template <class T, T... Value>
+struct TOptionalValue;
+
+template <class T>
+struct TOptionalValue<T>
+{
+    static constexpr std::optional<T> OptionalValue;
+};
+
+template <class T, T Value>
+struct TOptionalValue<T, Value>
+{
+    static constexpr std::optional<T> OptionalValue = Value;
+};
+
+template <const char TypeFieldNameValue[], class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags>
 struct TPolymorphicMapping;
 
-template <class TEnum, TEnum BaseValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
-    requires (CHierarchy<TBase, TDerived...>)
-struct TPolymorphicMapping<TEnum, TLeafTag<BaseValue, TBase>, TLeafTag<Values, TDerived>...>
-    : public TMappingLeaf<TEnum, BaseValue, TBase, TBase>
-    , public TMappingLeaf<TEnum, Values, TBase, TDerived>...
+template <const char TypeFieldNameValue[], class TEnum, TEnum... DefaultValue, CYsonStructDerived TBase, TEnum... Values, class... TDerived>
+    requires (
+        CHierarchy<TBase, TDerived...> &&
+        // This check is needed to avoid compiling code for an enum that doesn't have a mapping.
+        (
+            !TOptionalValue<TEnum, DefaultValue...>::OptionalValue.has_value() ||
+            CIsThereDefaultInMapping<TEnum, DefaultValue..., Values...>)
+        )
+struct TPolymorphicMapping<TypeFieldNameValue, TEnum, TOptionalValue<TEnum, DefaultValue...>, TBase, TLeafTag<Values, TDerived>...>
+    : public TMappingLeaf<TEnum, Values, TBase, TDerived>...
 {
+    // NB(apachee): Chose to do as static_assert rather than template requirement as it provided better error message.
+    static_assert(AreAllValuesDifferent<TEnum>(Values...), "All values in the mapping must be different");
+
+    static constexpr std::string_view TypeFieldName = TypeFieldNameValue;
+
+    static constexpr TEnumIndexedArray<TEnum, bool> ValueMap = {{Values, true}...};
+
     template <TEnum Value, class TConcrete>
     using TLeaf = TMappingLeaf<TEnum, Value, TBase, TConcrete>;
 
@@ -77,6 +111,8 @@ struct TPolymorphicMapping<TEnum, TLeafTag<BaseValue, TBase>, TLeafTag<Values, T
     using TKey = TEnum;
     using TBaseClass = TBase;
 
+    static constexpr auto DefaultEnumValue = TOptionalValue<TEnum, DefaultValue...>::OptionalValue;
+
     static TIntrusivePtr<TBase> CreateInstance(TEnum value);
 };
 
@@ -84,7 +120,7 @@ struct TPolymorphicMapping<TEnum, TLeafTag<BaseValue, TBase>, TLeafTag<Values, T
 
 template <class T>
 constexpr bool IsMapping = requires (T t) {
-    [] <class TEnum, class... TLeafTags> (TPolymorphicMapping<TEnum, TLeafTags...>) {
+    [] <const char TypeFieldNameValue[], class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags> (TPolymorphicMapping<TypeFieldNameValue, TEnum, TDefaultEnumValue, TBase, TLeafTags...>) {
     } (t);
 };
 
@@ -97,11 +133,15 @@ constexpr bool IsMapping = requires (T t) {
 template <class TBase, class... TDerived>
 concept CHierarchy = NDetail::CHierarchy<TBase, TDerived...>;
 
-template <class TEnum, class... TLeafTags>
-using TPolymorphicEnumMapping = NDetail::TPolymorphicMapping<TEnum, TLeafTags...>;
+template <const char TypeFieldNameValue[], class TEnum, class TDefaultEnumValue, class TBase, class... TLeafTags>
+using TPolymorphicEnumMapping = NDetail::TPolymorphicMapping<TypeFieldNameValue, TEnum, TDefaultEnumValue, TBase, TLeafTags...>;
 
 template <class T>
 concept CPolymorphicEnumMapping = NDetail::IsMapping<T>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+inline constexpr const char DefaultPolymorphicYsonStructTypeFieldName[] = "type";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -122,14 +162,13 @@ concept CPolymorphicEnumMapping = NDetail::IsMapping<T>;
     "field1" = ...;
     "field2" = ...;
 */
-// NB(arkady-e1ppa): Word "type" is reserved
+// NB(arkady-e1ppa): The discriminator field name (default "type") is reserved
 // and must not be used as a field name of any
 // class in the hierarchy.
-// TODO(arkady-e1ppa): Add customisation for reserved name.
-// Would require constexpr strings and thus certain limitations.
 template <CPolymorphicEnumMapping TMapping>
 class TPolymorphicYsonStruct
 {
+public:
     // TODO(arkady-e1ppa): Support non refcounted hierarchies
     // e.g. shared_ptr<TYsonStructLite> or shared_ptr<TExternalizedYsonStruct>.
     // TODO(arkady-e1ppa): Support lookup by enum instead of concrete type.
@@ -137,13 +176,16 @@ class TPolymorphicYsonStruct
     // with some enum indexed tuple (But one has to implement it first)
     // TODO(arkady-e1ppa): Support ctor from anyone from the
     // hierarchy.
+    static constexpr std::string_view TypeFieldName = TMapping::TypeFieldName;
     using TKey = typename TMapping::TKey;
     using TBase = typename TMapping::TBaseClass;
+    template <TKey key>
+    using TEnumToDerived = typename TMapping::template TDerivedToEnum<key>;
 
-public:
     using TImplementsYsonStructField = void;
+    using TImplementsYsonStructPostprocess = void;
 
-    TPolymorphicYsonStruct() = default;
+    TPolymorphicYsonStruct();
 
     explicit TPolymorphicYsonStruct(TKey key);
     TPolymorphicYsonStruct(TKey key, TIntrusivePtr<TBase> ptr) noexcept;
@@ -153,10 +195,12 @@ public:
         TSource source,
         bool postprocess = true,
         bool setDefaults = true,
-        const NYPath::TYPath& path = {},
+        const std::function<NYPath::TYPath()>& pathGetter = {},
         std::optional<EUnrecognizedStrategy> recursiveUnrecognizedStrategy = {});
 
     void Save(NYson::IYsonConsumer* consumer) const;
+
+    void Postprocess(const std::function<NYPath::TYPath()>& pathGetter = {});
 
     //! Empty if empty or the type is wrong.
     template <std::derived_from<TBase> TConcrete>
@@ -165,7 +209,14 @@ public:
     template <TKey Value>
     TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> TryGetConcrete() const;
 
-    TKey GetCurrentType() const;
+    //! Same as TryGetConcrete but fails on mismatch.
+    template <std::derived_from<TBase> TConcrete>
+    TIntrusivePtr<TConcrete> GetConcrete() const;
+
+    template <TKey Value>
+    TIntrusivePtr<typename TMapping::template TDerivedToEnum<Value>> GetConcrete() const;
+
+    TKey GetType() const;
 
     TBase* operator->();
     const TBase* operator->() const;
@@ -182,10 +233,20 @@ private:
     INodePtr SerializedStorage_;
     TKey HeldType_;
 
+    static constexpr auto DefaultType_ = TMapping::DefaultEnumValue;
+
     void PrepareInstance(INodePtr& node);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+    requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
+void TraverseYsonStruct(const TYsonStructParameterVisitor& visitor, const NYPath::TYPath& path);
+
+template <class T>
+    requires NMpl::IsSpecialization<T, NYT::NYTree::TPolymorphicYsonStruct>
+void WriteSchema(NYson::IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options);
 
 template <CPolymorphicEnumMapping TMapping>
 void Serialize(const TPolymorphicYsonStruct<TMapping>& value, NYson::IYsonConsumer* consumer);
@@ -197,11 +258,18 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
 
 //! Usage:
 /*
-    DEFINE_POLYMORPHIC_YSON_STRUCT(Struct,
+    DEFINE_POLYMORPHIC_YSON_STRUCT(Struct, TBaseStruct,
         ((Base)     (TBaseStruct))
         ((Derived1) (TDerivedStruct1))
         ((Derived2) (TDerivedStruct2))
     );
+    or
+    DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(Struct, Derived1, TBaseStruct,
+        ((Base)     (TBaseStruct))
+        ((Derived1) (TDerivedStruct1))
+        ((Derived2) (TDerivedStruct2))
+    );
+
     .....TypeName.....ActualTypeName
 
     Macro generates two names:
@@ -210,7 +278,8 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
     2) EStructType -- enum which holds short names for
     hierarchy members. They are keys in serialization.
 */
-#define DEFINE_POLYMORPHIC_YSON_STRUCT(name, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT(name, base, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_DEFAULT(name, default, base, seq)
 
 //! Usage:
 /*
@@ -219,21 +288,44 @@ void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source);
         (Apple)
     );
 
-    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(Struct, EMyEnum,
+    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(Struct, EMyEnum, TBaseClass,
+        ((Pear)  (TPearClass))
+        ((Apple) (TAppleClass))
+    )
+    or
+    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(Struct, EMyEnum, Apple, TBaseClass,
         ((Pear)  (TPearClass))
         ((Apple) (TAppleClass))
     )
 
     // NB(arkady-e1ppa): enum names in the list must be unqualified! E.g.
 
-    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(Struct, EMyEnum,
+    DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(Struct, EMyEnum, TBaseClass,
         ((EMyEnum::Pear)  (TPearClass))
         ((EMyEnum::Apple) (TAppleClass))
     )
 
     Will not compile
 */
-#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(name, enum, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM(name, enum, base, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_DEFAULT(name, enum, default, base, seq)
+
+//! Copies of the macros above, but with custom discriminator, i.e. use any field name instead of "type".
+//! Example usage:
+//! \code
+//! constexpr const char CustomDiscriminator[] = "custom_type";
+//!
+//! DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR(Struct, CustomDiscriminator, TBaseStruct,
+//!     ((Base)     (TBaseStruct))
+//!     ((Derived1) (TDerivedStruct1))
+//!     ((Derived2) (TDerivedStruct2))
+//! );
+//! \endcode
+//! This struct's field containing the type is "custom_type", rather than "type", which is the default.
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR(name, discriminator, base, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_WITH_CUSTOM_DISCRIMINATOR_AND_DEFAULT(name, discriminator, default, base, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_CUSTOM_DISCRIMINATOR(name, discriminator, enum, base, seq)
+#define DEFINE_POLYMORPHIC_YSON_STRUCT_FOR_ENUM_WITH_CUSTOM_DISCRIMINATOR_AND_DEFAULT(name, discriminator, enum, default, base, seq)
 
 ////////////////////////////////////////////////////////////////////////////////
 

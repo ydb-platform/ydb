@@ -3,6 +3,7 @@
 #include <util/generic/utility.h>
 
 namespace NPersQueue {
+inline namespace Dev {
 
 std::string ObfuscateString(std::string str) {
     ui32 publicPartSize = Min<ui32>(4, str.size() / 4);
@@ -12,4 +13,5 @@ std::string ObfuscateString(std::string str) {
     return str;
 }
 
-} // namespace NPersQueue
+}
+}

@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/protos
+    ydb/core/tx/columnshard/blobs_action/common
     ydb/core/tx/tiering/tier
     ydb/public/sdk/cpp/src/client/params
     ydb/public/sdk/cpp/src/client/types/credentials

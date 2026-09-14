@@ -40,6 +40,18 @@
 /* Define to 1 if you have the `getopt' function. */
 #define HAVE_GETOPT 1
 
+/* Define to 1 if you have the <GLUT/glut.h> header file. */
+/* #undef HAVE_GLUT_GLUT_H */
+
+/* Define to 1 if you have the <GL/glut.h> header file. */
+/* #undef HAVE_GL_GLUT_H */
+
+/* Define to 1 if you have the <GL/glu.h> header file. */
+/* #undef HAVE_GL_GLU_H */
+
+/* Define to 1 if you have the <GL/gl.h> header file. */
+/* #undef HAVE_GL_GL_H */
+
 /* Define to 1 if you have the <io.h> header file. */
 /* #undef HAVE_IO_H */
 
@@ -48,6 +60,12 @@
 
 /* Define to 1 if you have the `mmap' function. */
 #define HAVE_MMAP 1
+
+/* Define to 1 if you have the <OpenGL/glu.h> header file. */
+/* #undef HAVE_OPENGL_GLU_H */
+
+/* Define to 1 if you have the <OpenGL/gl.h> header file. */
+/* #undef HAVE_OPENGL_GL_H */
 
 /* Define to 1 if you have the `setmode' function. */
 /* #undef HAVE_SETMODE */
@@ -64,8 +82,14 @@
 /* 8/12 bit libjpeg dual mode enabled */
 /* #undef JPEG_DUAL_MODE_8_12 */
 
+/* 8/12 bit dual mode JPEG built into libjpeg-turbo 3.0+ */
+#define HAVE_JPEGTURBO_DUAL_MODE_8_12 1
+
 /* Support LERC compression */
 /* #undef LERC_SUPPORT */
+
+/* Define to 1 when building a static libtiff with LERC enabled. */
+/* #undef LERC_STATIC */
 
 /* 12bit libjpeg primary include file with path */
 #define LIBJPEG_12_PATH ""
@@ -109,15 +133,7 @@
 
 /* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
    significant byte first (like Motorola and SPARC, unlike Intel). */
-#if defined AC_APPLE_UNIVERSAL_BUILD
-# if defined __BIG_ENDIAN__
-#  define WORDS_BIGENDIAN 1
-# endif
-#else
-# ifndef WORDS_BIGENDIAN
-#  undef WORDS_BIGENDIAN
-# endif
-#endif
+#define WORDS_BIGENDIAN 0
 
 #if !defined(__MINGW32__)
 #  define TIFF_SIZE_FORMAT "zu"

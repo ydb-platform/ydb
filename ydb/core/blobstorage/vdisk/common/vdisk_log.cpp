@@ -25,10 +25,16 @@ namespace  NKikimr {
         return prefix + formatted;
     }
 
-    TString GenerateVDiskLogPrefix(const TVDiskID &vdisk, bool donorMode) {
+    TString GenerateVDiskMonitoringName(const TVDiskID &vDiskId, bool donorMode) {
         return donorMode
-            ? Sprintf("VDISK%s(DONOR): ", vdisk.ToString().data())
-            : Sprintf("VDISK%s: ", vdisk.ToStringWOGeneration().data());
+            ? Sprintf("VDISK%s(DONOR): ", vDiskId.ToString().data())
+            : Sprintf("VDISK%s: ", vDiskId.ToStringWOGeneration().data());
+    }
+
+    TString GenerateVDiskLogPrefix(ui32 pDiskId, const TVDiskID &vDiskId, bool donorMode) {
+        auto monName = GenerateVDiskMonitoringName(vDiskId, donorMode);
+        return Sprintf("PDiskId# %" PRIu32 " %s(%" PRIu32 ") ",
+                pDiskId, monName.data(), vDiskId.GroupID.GetRawId());
     }
 
     ////////////////////////////////////////////////////////////////////////////

@@ -78,6 +78,13 @@ namespace NMonitoring {
             InitIndex(data, size);
         }
 
+        TStringPool(const char* data, const TVector<std::pair<ui32, ui32>>& segments) {
+            Index_.reserve(segments.size());
+            for (const auto& [offset, length] : segments) {
+                Index_.emplace_back(data + offset, length);
+            }
+        }
+
         TStringBuf Get(ui32 i) const {
             return Index_.at(i);
         }

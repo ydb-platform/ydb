@@ -1,6 +1,7 @@
 /*=============================================================================
     Copyright (c) 2001, Daniel C. Nuffer
     Copyright (c) 2003, Hartmut Kaiser
+    Copyright (c) 2025, Joaquin M Lopez Munoz
     http://spirit.sourceforge.net/
 
   Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -57,7 +58,13 @@ public:
     fsq_iterator(position const &p_) : p(p_) {}
     
     position const &get_position() const { return p; }
-    
+
+    // boost::iterator_facade::operator[] return type not C++20-concepts compliant.
+    typename base_t::reference operator[](typename base_t::difference_type n) const
+    {
+      return *(*this+n); 
+    }
+
 private:
     friend class boost::iterator_core_access;
     

@@ -12,6 +12,7 @@ constexpr size_t CacheLineSize = 64;
 class TChunkedMemoryPool;
 
 DECLARE_REFCOUNTED_STRUCT(IMemoryChunkProvider)
+DECLARE_REFCOUNTED_STRUCT(ISimpleMemoryUsageTracker)
 DECLARE_REFCOUNTED_STRUCT(TSharedRangeHolder)
 
 using TMemoryTag = ui32;

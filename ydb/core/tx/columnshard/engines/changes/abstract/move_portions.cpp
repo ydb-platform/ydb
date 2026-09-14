@@ -21,9 +21,8 @@ void TMovePortionsChange::DoApplyOnExecute(
         const auto pred = [&](TPortionInfo& portionCopy) {
             portionCopy.MutableMeta().ResetCompactionLevel(TargetCompactionLevel.value_or(0));
         };
-        context.EngineLogs.GetGranuleVerified(i->GetPathId())
-            .ModifyPortionOnExecute(context.DBWrapper, fetchedDataAccessor.GetPortionAccessorVerified(i->GetPortionId()), pred,
-                schemaPtr->GetIndexInfo().GetPKFirstColumnId());
+        context.EngineLogs.GetGranuleVerified(i->GetPathId()).ModifyPortionOnExecute(context.DBWrapper,
+            fetchedDataAccessor.GetPortionAccessorVerified(i->GetPortionId()), pred, schemaPtr->GetIndexInfo().GetPKFirstColumnId());
     }
 }
 

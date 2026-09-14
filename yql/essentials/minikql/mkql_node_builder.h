@@ -2,8 +2,7 @@
 #include "defs.h"
 #include "mkql_node.h"
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TDataLiteral* BuildDataLiteral(const NUdf::TStringRef& data, NUdf::TDataTypeId type, const TTypeEnvironment& env);
 inline TDataLiteral* BuildDataLiteral(const NUdf::TStringRef& data, NUdf::EDataSlot slot, const TTypeEnvironment& env) {
@@ -22,27 +21,29 @@ TType* UnpackOptional(TRuntimeNode data, bool& isOptional);
 TType* UnpackOptional(TType* type, bool& isOptional);
 TDataType* UnpackOptionalData(TRuntimeNode data, bool& isOptional);
 TDataType* UnpackOptionalData(TType* type, bool& isOptional);
+TType* UnpackOptionalBlockItemType(TBlockType* type, const TTypeEnvironment& env);
 
 TBlockType::EShape GetResultShape(const TVector<TType*>& types);
 
 class TTupleLiteralBuilder {
 public:
-    TTupleLiteralBuilder(const TTypeEnvironment& env);
+    explicit TTupleLiteralBuilder(const TTypeEnvironment& env);
     TTupleLiteralBuilder(const TTupleLiteralBuilder&) = default;
     TTupleLiteralBuilder& operator=(const TTupleLiteralBuilder&) = default;
     void Reserve(ui32 size);
     TTupleLiteralBuilder& Add(TRuntimeNode value);
     TTupleLiteral* Build();
     void Clear();
+
 private:
-    const TTypeEnvironment& Env;
-    TVector<TType*> Types;
-    TVector<TRuntimeNode> Values;
+    const TTypeEnvironment& Env_;
+    TVector<TType*> Types_;
+    TVector<TRuntimeNode> Values_;
 };
 
 class TStructTypeBuilder {
 public:
-    TStructTypeBuilder(const TTypeEnvironment& env);
+    explicit TStructTypeBuilder(const TTypeEnvironment& env);
     TStructTypeBuilder(const TStructTypeBuilder&) = default;
     TStructTypeBuilder& operator=(const TStructTypeBuilder&) = default;
     void Reserve(ui32 size);
@@ -52,8 +53,8 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TVector<TStructMember> Members;
+    const TTypeEnvironment* Env_;
+    TVector<TStructMember> Members_;
 };
 
 class TListLiteralBuilder {
@@ -66,14 +67,14 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TType* Type;
-    TVector<TRuntimeNode> Items;
+    const TTypeEnvironment* Env_;
+    TType* Type_;
+    TVector<TRuntimeNode> Items_;
 };
 
 class TStructLiteralBuilder {
 public:
-    TStructLiteralBuilder(const TTypeEnvironment& env);
+    explicit TStructLiteralBuilder(const TTypeEnvironment& env);
     TStructLiteralBuilder(const TStructLiteralBuilder&) = default;
     TStructLiteralBuilder& operator=(const TStructLiteralBuilder&) = default;
     void Reserve(ui32 size);
@@ -82,9 +83,9 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TVector<TStructMember> Members;
-    TVector<TRuntimeNode> Values;
+    const TTypeEnvironment* Env_;
+    TVector<TStructMember> Members_;
+    TVector<TRuntimeNode> Values_;
 };
 
 class TDictLiteralBuilder {
@@ -98,10 +99,10 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TType* KeyType;
-    TType* PayloadType;
-    TVector<std::pair<TRuntimeNode, TRuntimeNode>> Items;
+    const TTypeEnvironment* Env_;
+    TType* KeyType_;
+    TType* PayloadType_;
+    TVector<std::pair<TRuntimeNode, TRuntimeNode>> Items_;
 };
 
 class TCallableTypeBuilder {
@@ -110,7 +111,7 @@ public:
     TCallableTypeBuilder(const TCallableTypeBuilder&) = default;
     TCallableTypeBuilder& operator=(const TCallableTypeBuilder&) = default;
     void Reserve(ui32 size);
-    TCallableTypeBuilder& Add(TType* time);
+    TCallableTypeBuilder& Add(TType* type);
     TCallableTypeBuilder& SetArgumentName(const TStringBuf& name);
     TCallableTypeBuilder& SetArgumentFlags(ui64 flags);
     TCallableTypeBuilder& SetOptionalArgs(ui32 count);
@@ -119,21 +120,21 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TInternName Name;
-    TType* ReturnType;
-    TVector<TType*> Arguments;
-    ui32 OptionalArgsCount;
-    TVector<TStringBuf> ArgNames;
-    TVector<ui64> ArgFlags;
-    TStringBuf FuncPayload;
-    bool HasPayload;
+    const TTypeEnvironment* Env_;
+    TInternName Name_;
+    TType* ReturnType_;
+    TVector<TType*> Arguments_;
+    ui32 OptionalArgsCount_;
+    TVector<TStringBuf> ArgNames_;
+    TVector<ui64> ArgFlags_;
+    TStringBuf FuncPayload_;
+    bool HasPayload_;
 };
 
 class TCallableBuilder {
 public:
     TCallableBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType,
-        bool disableMerge = false);
+                     bool disableMerge = false);
     TCallableBuilder(const TCallableBuilder&) = default;
     TCallableBuilder& operator=(const TCallableBuilder&) = default;
     void Reserve(ui32 size);
@@ -146,18 +147,17 @@ public:
     void Clear();
 
 private:
-    const TTypeEnvironment* Env;
-    TInternName Name;
-    TType* ReturnType;
-    bool DisableMerge;
-    TVector<TType*> Arguments;
-    TVector<TRuntimeNode> Inputs;
-    ui32 OptionalArgsCount;
-    TVector<TStringBuf> ArgNames;
-    TVector<ui64> ArgFlags;
-    TStringBuf FuncPayload;
-    bool HasPayload;
+    const TTypeEnvironment* Env_;
+    TInternName Name_;
+    TType* ReturnType_;
+    bool DisableMerge_;
+    TVector<TType*> Arguments_;
+    TVector<TRuntimeNode> Inputs_;
+    ui32 OptionalArgsCount_;
+    TVector<TStringBuf> ArgNames_;
+    TVector<ui64> ArgFlags_;
+    TStringBuf FuncPayload_;
+    bool HasPayload_;
 };
 
-}
-}
+} // namespace NKikimr::NMiniKQL

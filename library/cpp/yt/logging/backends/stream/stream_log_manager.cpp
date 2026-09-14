@@ -65,8 +65,8 @@ public:
 private:
     IOutputStream* const Output_;
 
-    NThreading::TForkAwareSpinLock SpinLock_;
-    THashMap<TString, std::unique_ptr<TLoggingCategory>> NameToCategory_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TForkAwareSpinLock, SpinLock_);
+    THashMap<std::string, std::unique_ptr<TLoggingCategory>, THash<TStringBuf>, TEqualTo<TStringBuf>> NameToCategory_;
     std::atomic<int> Version_ = 1;
 
     TPlainTextEventFormatter EventFormatter_{/*enableSourceLocation*/ false};

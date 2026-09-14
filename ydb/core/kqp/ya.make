@@ -74,9 +74,16 @@ RECURSE(
     runtime
     session_actor
     tests
-    workload_service
 )
 
 RECURSE_FOR_TESTS(
     ut
+    tools/cbo_latency_dataset
+    tools/hash_test
 )
+
+IF (NOT OS_WINDOWS)
+    RECURSE_FOR_TESTS(
+        tools/combiner_perf/bin
+    )
+ENDIF()

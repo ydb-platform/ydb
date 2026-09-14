@@ -1,10 +1,7 @@
 #include "udf_value.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
-IBoxedValue::IBoxedValue()
-{}
+IBoxedValue::IBoxedValue() = default;
 
-}
-}
+} // namespace NYql::NUdf

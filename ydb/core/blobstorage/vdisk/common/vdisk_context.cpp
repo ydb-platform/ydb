@@ -7,7 +7,7 @@ namespace NKikimr {
     static TLogger ActorSystemLogger(TActorSystem *as) {
         Y_ABORT_UNLESS(as);
         auto logger = [as] (NLog::EPriority p, NLog::EComponent c, const TString &s) {
-            LOG_LOG(*as, p, c, s);
+            YDB_LOG_CTX_COMP(*as, p, c, s);
         };
         return logger;
     }
@@ -28,6 +28,7 @@ namespace NKikimr {
                 const TVDiskID &selfVDisk,
                 TActorSystem *as, // as can be nullptr for tests
                 NPDisk::EDeviceType type,
+                ui32 pDiskId,
                 bool donorMode,
                 TReplQuoter::TPtr replPDiskReadQuoter,
                 TReplQuoter::TPtr replPDiskWriteQuoter,
@@ -42,7 +43,7 @@ namespace NKikimr {
         , IFaceMonGroup(std::make_shared<NMonGroup::TVDiskIFaceGroup>(VDiskCounters, "subsystem", "interface"))
         , GroupId(selfVDisk.GroupID)
         , ShortSelfVDisk(selfVDisk)
-        , VDiskLogPrefix(GenerateVDiskLogPrefix(selfVDisk, donorMode))
+        , VDiskLogPrefix(GenerateVDiskLogPrefix(pDiskId, selfVDisk, donorMode))
         , NodeId(as ? as->NodeId : 0)
         , FreshIndex(VDiskMemCounters->GetCounter("MemTotal:FreshIndex"))
         , FreshData(VDiskMemCounters->GetCounter("MemTotal:FreshData"))
@@ -61,6 +62,7 @@ namespace NKikimr {
         , ReplNodeResponseQuoter(std::move(replNodeResponseQuoter))
         , CostTracker()
         , OOSMonGroup(std::make_shared<NMonGroup::TOutOfSpaceGroup>(VDiskCounters, "subsystem", "oos"))
+        , ResponseStatusMonGroup(std::make_shared<NMonGroup::TResponseStatusGroup>(VDiskCounters))
         , OutOfSpaceState(Top->GetTotalVDisksNum(), Top->GetOrderNumber(ShortSelfVDisk))
         , CostMonGroup(vdiskCounters, "subsystem", "cost")
         , Logger(as ? ActorSystemLogger(as) : DevNullLogger())
@@ -86,10 +88,7 @@ namespace NKikimr {
 
     bool TVDiskContext::CheckPDiskResponseReadable(const TActorContext &actorSystemOrCtx, const NPDisk::TEvChunkReadResult &ev, const TString &message) {
         if (!ev.Data.IsReadable()) {
-            LOG_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
-                    VDISKP(VDiskLogPrefix,
-                        "CheckPDiskResponseReadable: not readable chunk from PDisk: %s",
-                        FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
+            YDB_LOG_ERROR_CTX_COMP(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER, VDISKP(VDiskLogPrefix, "CheckPDiskResponseReadable: not readable chunk from PDisk: %s", FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
             return false;
         }
         return true;

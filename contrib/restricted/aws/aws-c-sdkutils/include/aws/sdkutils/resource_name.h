@@ -10,6 +10,8 @@
 
 #include <aws/common/byte_buf.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_resource_name {
     struct aws_byte_cursor partition;
     struct aws_byte_cursor service;
@@ -40,5 +42,6 @@ AWS_SDKUTILS_API
 int aws_byte_buf_append_resource_name(struct aws_byte_buf *buf, const struct aws_resource_name *arn);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_SDKUTILS_RESOURCE_NAME_H */

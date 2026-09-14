@@ -1,67 +1,39 @@
 LIBRARY()
 
-PEERDIR(
-    contrib/libs/protobuf
-    library/cpp/histogram/hdr
-    library/cpp/monlib/dynamic_counters/percentile
-    library/cpp/monlib/service/pages
-    ydb/core/base
-    ydb/core/blobstorage/backpressure
-    ydb/core/blobstorage/base
-    ydb/core/blobstorage/pdisk
-    ydb/core/control
-    ydb/core/keyvalue
-    ydb/core/jaeger_tracing
-    ydb/core/kqp/common
-    ydb/core/kqp/rm_service
-    ydb/core/tx/columnshard
-    ydb/core/tx/datashard
-    ydb/library/workload/abstract
-    ydb/library/workload/kv
-    ydb/library/workload/stock
-    ydb/public/lib/base
-    ydb/public/sdk/cpp/src/library/operation_id
-    ydb/public/sdk/cpp/src/client/proto
-    ydb/services/kesus
-    ydb/services/metadata
-    ydb/services/persqueue_cluster_discovery
-    ydb/services/ydb
-)
-
 SRCS(
     aggregated_result.cpp
     archive.cpp
     config_examples.cpp
-    keyvalue_write.cpp
-    kqp.cpp
-    memory.cpp
-    pdisk_log.cpp
-    pdisk_read.cpp
-    pdisk_write.cpp
     service_actor.cpp
-    group_write.cpp
-    vdisk_write.cpp
-    yql_single_query.cpp
-
-    ycsb/actors.h
-    ycsb/bulk_mkql_upsert.cpp
-    ycsb/common.h
-    ycsb/common.cpp
-    ycsb/defs.h
-    ycsb/info_collector.h
-    ycsb/info_collector.cpp
-    ycsb/kqp_select.cpp
-    ycsb/kqp_upsert.cpp
-    ycsb/test_load_actor.cpp
-    ycsb/test_load_actor.h
-    ycsb/test_load_read_iterator.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(percentile.h)
+PEERDIR(
+    library/cpp/json
+    library/cpp/json/writer
+    library/cpp/monlib/service/pages
+    library/cpp/time_provider
+    ydb/core/base
+    ydb/core/blobstorage/base
+    ydb/core/load_test/blobstorage
+    ydb/core/load_test/common
+    ydb/core/load_test/ddisk
+    ydb/core/load_test/interconnect
+    ydb/core/load_test/keyvalue
+    ydb/core/load_test/kqp
+    ydb/core/load_test/nbs
+    ydb/core/load_test/ycsb
+    ydb/core/protos
+    ydb/library/actors/interconnect
+    ydb/library/mkql_proto/protos
+    ydb/public/lib/base
+    ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/library/operation_id
+)
 
 END()
 
 RECURSE_FOR_TESTS(
+    blobstorage
     ut
     ut_ycsb
 )

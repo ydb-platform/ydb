@@ -19,7 +19,7 @@ class TScaleRecommenderPolicy {
 public:
     TScaleRecommenderPolicy(ui64 hiveId, bool dryRun);
     virtual ~TScaleRecommenderPolicy() = default;
-    virtual ui32 MakeScaleRecommendation(ui32 readyNodes, const NKikimrConfig::THiveConfig& config) const = 0;
+    virtual std::optional<ui32> MakeScaleRecommendation(ui32 readyNodes, const NKikimrConfig::THiveConfig& config) const = 0;
 
     virtual TString GetLogPrefix() const;
 private:
@@ -30,7 +30,7 @@ private:
 class TTargetTrackingPolicy : public TScaleRecommenderPolicy {
 public:
     TTargetTrackingPolicy(double target, const std::deque<double>& usageHistory, ui64 hiveId = 0, bool dryRun = false);
-    ui32 MakeScaleRecommendation(ui32 readyNodesCount, const NKikimrConfig::THiveConfig& config) const override;
+    std::optional<ui32> MakeScaleRecommendation(ui32 readyNodesCount, const NKikimrConfig::THiveConfig& config) const override;
 
     virtual TString GetLogPrefix() const override;
 private:
@@ -42,6 +42,7 @@ struct TDomainInfo {
     TString Path;
     TTabletId HiveId = 0;
     TMaybeServerlessComputeResourcesMode ServerlessComputeResourcesMode;
+    bool Stopped = false;
 
     ui64 TabletsTotal = 0;
     ui64 TabletsAlive = 0;
@@ -50,10 +51,23 @@ struct TDomainInfo {
     std::deque<double> AvgCpuUsageHistory;
     TMaybeFail<TScaleRecommendation> LastScaleRecommendation;
     TVector<std::shared_ptr<TScaleRecommenderPolicy>> ScaleRecommenderPolicies;
+    TVector<TString> ShrinkingStoragePools;
+
+    TActorId HivePipeClient;
 
     void SetScaleRecommenderPolicies(const NKikimrHive::TScaleRecommenderPolicies& policies);
 
     ENodeSelectionPolicy GetNodeSelectionPolicy() const;
+
+    TActorId GetPipeToHive(THive* self);
+
+    void ClosePipeToHive(const TActorId& actorId);
+
+    bool AddShrinkingPool(const TString& pool);
+
+    TString ShrinkingPoolsString() const;
+
+    void ParseShrinkingPools(const TString& str);
 };
 
 } // NHive

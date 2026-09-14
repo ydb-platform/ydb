@@ -1,6 +1,9 @@
 #include "data.h"
 #include "data_uncertain.h"
 #include "garbage_collection.h"
+#include "s3.h"
+
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -20,9 +23,21 @@ namespace NKikimr::NBlobDepot {
     TData::~TData()
     {}
 
+    bool TData::IsTrashFullyLoaded() const {
+        return TrashLoadState == ETrashLoadState::Complete;
+    }
+
+    TData::ETrashLoadState TData::GetTrashLoadState() const {
+        return TrashLoadState;
+    }
+
+    ui64 TData::GetLoadedTrashRecords() const {
+        return LoadedTrashRecords;
+    }
+
     bool TData::TValue::Validate(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item) {
         if (!item.HasBlobLocator()) {
-            return false;
+            return true;
         }
         const auto& locator = item.GetBlobLocator();
         return locator.HasGroupId() &&
@@ -42,28 +57,32 @@ namespace NKikimr::NBlobDepot {
             return false;
         }
 
-        Y_DEBUG_ABORT_UNLESS(chain.HasLocator());
-        const auto& locator1 = chain.GetLocator();
-        Y_DEBUG_ABORT_UNLESS(locator1.HasGroupId() && locator1.HasBlobSeqId() && locator1.HasTotalDataLen());
+        if (chain.HasBlobLocator() != item.HasBlobLocator()) {
+            return false;
+        } else if (chain.HasBlobLocator() && item.HasBlobLocator()) {
+            Y_DEBUG_ABORT_UNLESS(chain.HasBlobLocator());
+            const auto& locator1 = chain.GetBlobLocator();
+            Y_DEBUG_ABORT_UNLESS(locator1.HasGroupId() && locator1.HasBlobSeqId() && locator1.HasTotalDataLen());
 
-        Y_DEBUG_ABORT_UNLESS(item.HasBlobLocator());
-        const auto& locator2 = item.GetBlobLocator();
-        Y_DEBUG_ABORT_UNLESS(locator2.HasGroupId() && locator2.HasBlobSeqId() && locator2.HasTotalDataLen());
+            Y_DEBUG_ABORT_UNLESS(item.HasBlobLocator());
+            const auto& locator2 = item.GetBlobLocator();
+            Y_DEBUG_ABORT_UNLESS(locator2.HasGroupId() && locator2.HasBlobSeqId() && locator2.HasTotalDataLen());
 
 #define COMPARE_FIELD(NAME) \
-        if (locator1.Has##NAME() != locator2.Has##NAME()) { \
-            return false; \
-        } else if (locator1.Has##NAME() && locator1.Get##NAME() != locator2.Get##NAME()) { \
-            return false; \
-        }
-        COMPARE_FIELD(GroupId)
-        COMPARE_FIELD(Checksum)
-        COMPARE_FIELD(TotalDataLen)
-        COMPARE_FIELD(FooterLen)
+            if (locator1.Has##NAME() != locator2.Has##NAME()) { \
+                return false; \
+            } else if (locator1.Has##NAME() && locator1.Get##NAME() != locator2.Get##NAME()) { \
+                return false; \
+            }
+            COMPARE_FIELD(GroupId)
+            COMPARE_FIELD(Checksum)
+            COMPARE_FIELD(TotalDataLen)
+            COMPARE_FIELD(FooterLen)
 #undef COMPARE_FIELD
 
-        if (TBlobSeqId::FromProto(locator1.GetBlobSeqId()) != TBlobSeqId::FromProto(locator2.GetBlobSeqId())) {
-            return false;
+            if (TBlobSeqId::FromProto(locator1.GetBlobSeqId()) != TBlobSeqId::FromProto(locator2.GetBlobSeqId())) {
+                return false;
+            }
         }
 
         return true;
@@ -78,16 +97,25 @@ namespace NKikimr::NBlobDepot {
             Self->BarrierServer->GetBlobBarrierRelation(*id, &underSoft, &underHard);
         }
         if (underHard && !Data.contains(key)) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT59, "UpdateKey: key under hard barrier, will not be created",
-                (Id, Self->GetLogId()), (Key, key), (Reason, reason));
+            YDB_LOG_DEBUG("UpdateKey: key under hard barrier, will not be created",
+                {"marker", "BDT59"},
+                {"id", Self->GetLogId()},
+                {"key", key},
+                {"reason", reason});
             return false; // no such key existed and will not be created as it hits the barrier
         }
+
+        Y_DEFER {
+            Self->JsonHandler.Invalidate();
+        };
 
         const auto [it, inserted] = Data.try_emplace(std::move(key), std::forward<TArgs>(args)...);
         {
             auto& [key, value] = *it;
 
-            std::vector<TLogoBlobID> deleteQ;
+            std::vector<TLogoBlobID> deleteBlobs;
+            std::vector<TS3Locator> deleteS3;
+
             const bool uncertainWriteBefore = value.UncertainWrite;
             const bool wasUncertain = value.IsWrittenUncertainly();
             const bool wasGoingToAssimilate = value.GoingToAssimilate;
@@ -99,12 +127,16 @@ namespace NKikimr::NBlobDepot {
 #endif
 
             if (!inserted) {
-                EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
-                    const auto it = RefCount.find(id);
-                    Y_ABORT_UNLESS(it != RefCount.end());
-                    if (!--it->second) {
-                        deleteQ.push_back(id);
+                auto dropRefCount = [&](auto& map, auto&& key, auto& deleteQ) {
+                    if (ui32& rc = --map[key]; !rc) {
+                        deleteQ.push_back(std::move(key));
+                    } else {
+                        Y_ABORT_UNLESS(rc != Max<ui32>());
                     }
+                };
+                EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), TOverloaded{
+                    [&](TLogoBlobID id, ui32, ui32) { dropRefCount(RefCountBlobs, id, deleteBlobs); },
+                    [&](TS3Locator locator) { dropRefCount(RefCountS3, locator, deleteS3); }
                 });
             }
 
@@ -126,51 +158,132 @@ namespace NKikimr::NBlobDepot {
                     case EUpdateOutcome::DROP:      return "DROP";
                 }
             };
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT60, "UpdateKey", (Id, Self->GetLogId()), (Key, key), (Reason, reason),
-                (Outcome, outcomeToString()), (UnderSoft, underSoft), (Inserted, inserted), (Value, value),
-                (UncertainWriteBefore, uncertainWriteBefore));
+            YDB_LOG_DEBUG("UpdateKey",
+                {"marker", "BDT60"},
+                {"id", Self->GetLogId()},
+                {"key", key},
+                {"reason", reason},
+                {"outcome", outcomeToString()},
+                {"underSoft", underSoft},
+                {"inserted", inserted},
+                {"value", value},
+                {"uncertainWriteBefore", uncertainWriteBefore});
 
-            EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
-                const auto [it, inserted] = RefCount.try_emplace(id);
-                if (inserted) {
-                    Y_ABORT_UNLESS(!CanBeCollected(TBlobSeqId::FromLogoBlobId(id)));
-                    Y_VERIFY_DEBUG_S(id.Generation() == generation, "BlobId# " << id << " Generation# " << generation);
-                    Y_VERIFY_DEBUG_S(Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation) <= TBlobSeqId::FromLogoBlobId(id),
-                        "LeastExpectedBlobId# " << Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation)
-                        << " Id# " << id
-                        << " Generation# " << generation);
-                    AddFirstMentionedBlob(id);
-                }
-                if (outcome == EUpdateOutcome::DROP) {
-                    if (inserted) {
-                        deleteQ.push_back(id);
-                    }
-                } else {
+            auto returnRefCount = [&](auto& map, auto&& key, auto& deleteQ) {
+                const auto [it, inserted] = map.try_emplace(std::move(key));
+                if (outcome != EUpdateOutcome::DROP) {
                     ++it->second;
+                } else if (inserted) {
+                    deleteQ.push_back(it->first);
+                }
+                if (inserted) {
+                    AddFirstMentionedBlob(it->first);
+                }
+                return inserted;
+            };
+
+            EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), TOverloaded{
+                [&](TLogoBlobID id, ui32, ui32) {
+                    if (returnRefCount(RefCountBlobs, id, deleteBlobs)) {
+                        auto makeValueChain = [&] {
+                            TStringStream s;
+                            s << '{';
+                            for (bool first = true; const auto& item : value.ValueChain) {
+                                s << (std::exchange(first, false) ? "" : " ") << SingleLineProto(item);
+                            }
+                            s << '}';
+                            return s.Str();
+                        };
+                        Y_VERIFY_S(!CanBeCollected(TBlobSeqId::FromLogoBlobId(id)), "BlobId# " << id
+                            << " ValueChain# " << makeValueChain());
+                        Y_VERIFY_DEBUG_S(id.Generation() == generation, "BlobId# " << id << " Generation# " << generation);
+                        Y_VERIFY_DEBUG_S(Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation) <= TBlobSeqId::FromLogoBlobId(id),
+                            "LeastExpectedBlobId# " << Self->Channels[id.Channel()].GetLeastExpectedBlobId(generation)
+                            << " Id# " << id
+                            << " Generation# " << generation);
+                    }
+                },
+                [&](TS3Locator locator) {
+                    returnRefCount(RefCountS3, locator, deleteS3);
                 }
             });
 
-            auto filter = [&](const TLogoBlobID& id) {
-                const auto it = RefCount.find(id);
-                Y_ABORT_UNLESS(it != RefCount.end());
+            NIceDb::TNiceDb db(txc.DB);
+
+            auto filterBlobs = [&](TLogoBlobID id) {
+                const auto it = RefCountBlobs.find(id);
+                Y_ABORT_UNLESS(it != RefCountBlobs.end());
                 if (it->second) {
-                    return true; // remove this blob from deletion queue, it still has references
-                } else {
-                    InFlightTrash.emplace(cookie, id);
-                    InFlightTrashSize += id.BlobSize();
-                    Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
-                    NIceDb::TNiceDb(txc.DB).Table<Schema::Trash>().Key(id.AsBinaryString()).Update();
-                    RefCount.erase(it);
-                    TotalStoredDataSize -= id.BlobSize();
-                    Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_DATA_SIZE] = TotalStoredDataSize;
-                    return false; // keep this blob in deletion queue
+                    return true;
+                }
+                RefCountBlobs.erase(it);
+
+                const size_t size = id.BlobSize();
+                InFlightTrashSize += size;
+                Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
+                TotalStoredDataSize -= size;
+                Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_DATA_SIZE] = TotalStoredDataSize;
+
+                InFlightTrashBlobs.emplace(cookie, id);
+                const bool inserted = AllInFlightTrashBlobs.insert(id).second;
+                Y_ABORT_UNLESS(inserted);
+                db.Table<Schema::Trash>().Key(id.AsBinaryString()).Update();
+                return false; // keep this blob in deletion queue
+            };
+
+            auto filterS3 = [&](TS3Locator locator) {
+                const auto it = RefCountS3.find(locator);
+                Y_ABORT_UNLESS(it != RefCountS3.end());
+                if (it->second) {
+                    return true;
+                }
+
+                RefCountS3.erase(it);
+                TotalS3DataSize -= locator.Len;
+
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Delete_S3",
+                    {"marker", "BDEV27"},
+                    {"BDT", Self->TabletID()},
+                    {"key", key},
+                    {"locator", locator});
+                AddToS3Trash(locator, txc, cookie);
+                return false; // keep this blob in deletion queue
+            };
+
+            auto process = [&](auto& deleteQ, auto&& filterFunc) {
+                std::ranges::sort(deleteQ);
+                if (auto [first, last] = std::ranges::unique(deleteQ); first != last) {
+                    deleteQ.erase(first, last);
+                }
+                if (auto [first, last] = std::ranges::remove_if(deleteQ, filterFunc); first != last) {
+                    deleteQ.erase(first, last);
                 }
             };
-            std::sort(deleteQ.begin(), deleteQ.end());
-            deleteQ.erase(std::unique(deleteQ.begin(), deleteQ.end()), deleteQ.end());
-            deleteQ.erase(std::remove_if(deleteQ.begin(), deleteQ.end(), filter), deleteQ.end());
-            if (!deleteQ.empty()) {
-                UncertaintyResolver->DropBlobs(deleteQ);
+
+            process(deleteBlobs, filterBlobs);
+            process(deleteS3, filterS3);
+
+            if (!deleteBlobs.empty()) {
+                UncertaintyResolver->DropBlobs(deleteBlobs);
+            }
+
+            auto& counters = Self->TabletCounters->Simple();
+            counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_OBJECTS] = RefCountS3.size();
+            counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_SIZE] = TotalS3DataSize;
+
+            if (Self->MoveData.IsInProgress() && !Self->MoveData.ApplyingIndexUpdate) {
+                const TString binaryKey = key.MakeBinaryKey();
+                if (Self->MoveData.Key && *Self->MoveData.Key == binaryKey) {
+                    Self->MoveData.RecordTouched = true;
+                }
+                if (outcome != EUpdateOutcome::DROP) {
+                    for (const auto& item : value.ValueChain) {
+                        if (item.HasBlobLocator() && Self->NeedMoveBlob(item.GetBlobLocator())) {
+                            Self->MoveData.NeedsAnotherPass = true;
+                            break;
+                        }
+                    }
+                }
             }
 
             auto row = NIceDb::TNiceDb(txc.DB).Table<Schema::Data>().Key(key.MakeBinaryKey());
@@ -186,6 +299,21 @@ namespace NKikimr::NBlobDepot {
                     return true;
 
                 case EUpdateOutcome::CHANGE:
+                    {
+                        auto makeLocators = [&] {
+                            std::vector<TS3Locator> locators;
+                            EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), TOverloaded{
+                                [&](TLogoBlobID, ui32, ui32) {},
+                                [&](TS3Locator locator) { locators.push_back(locator); }
+                            });
+                            return locators;
+                        };
+                        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Change_key",
+                            {"marker", "BDEV28"},
+                            {"BDT", Self->TabletID()},
+                            {"key", key},
+                            {"locators", makeLocators()});
+                    }
                     row.template Update<Schema::Data::Value>(value.SerializeToString());
                     if (inserted || uncertainWriteBefore != value.UncertainWrite) {
                         if (value.UncertainWrite) {
@@ -196,6 +324,7 @@ namespace NKikimr::NBlobDepot {
                     }
                     if (wasUncertain && !value.IsWrittenUncertainly()) {
                         UncertaintyResolver->MakeKeyCertain(key);
+                        Self->S3Manager->OnKeyWritten(key, value.ValueChain);
                     }
                     if (wasGoingToAssimilate != value.GoingToAssimilate) {
                         const i64 sign = value.GoingToAssimilate - wasGoingToAssimilate;
@@ -219,19 +348,15 @@ namespace NKikimr::NBlobDepot {
 
     void TData::UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "UpdateKey", (Id, Self->GetLogId()), (Key, key), (Item, item));
+        YDB_LOG_DEBUG("UpdateKey",
+            {"marker", "BDT10"},
+            {"id", Self->GetLogId()},
+            {"key", key},
+            {"item", item});
         Y_ABORT_UNLESS(IsKeyLoaded(key));
         UpdateKey(key, txc, cookie, "UpdateKey", [&](TValue& value, bool inserted) {
             if (!inserted) { // update value items
-                value.Meta = item.GetMeta();
-                value.Public = false;
-                value.UncertainWrite = item.GetUncertainWrite();
-
-                // update it to keep new blob locator
-                value.ValueChain.Clear();
-                auto *chain = value.ValueChain.Add();
-                auto *locator = chain->MutableLocator();
-                locator->CopyFrom(item.GetBlobLocator());
+                value.UpdateFrom(item);
                 ++value.ValueVersion;
 
                 // clear assimilation flag -- we have blob overwritten with fresh copy (of the same data)
@@ -242,9 +367,102 @@ namespace NKikimr::NBlobDepot {
         }, item);
     }
 
+    TData::EMoveDataReplaceResult TData::ReplaceLocatorForMoveData(const TKey& key, ui32 valueChainIndex,
+            ui32 expectedValueVersion, const NKikimrBlobDepot::TBlobLocator& oldLocator,
+            const NKikimrBlobDepot::TBlobLocator& newLocator,
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
+        Y_ABORT_UNLESS(IsKeyLoaded(key));
+
+        const TValue *value = FindKey(key);
+        if (!value) {
+            return EMoveDataReplaceResult::KeyMissing;
+        }
+
+        auto locatorEquals = [](const NKikimrBlobDepot::TBlobLocator& left,
+                const NKikimrBlobDepot::TBlobLocator& right) {
+            TString leftSerialized;
+            TString rightSerialized;
+            Y_ABORT_UNLESS(left.SerializeToString(&leftSerialized));
+            Y_ABORT_UNLESS(right.SerializeToString(&rightSerialized));
+            return leftSerialized == rightSerialized;
+        };
+
+        if (value->ValueVersion != expectedValueVersion ||
+                valueChainIndex >= static_cast<ui32>(value->ValueChain.size()) ||
+                !value->ValueChain[valueChainIndex].HasBlobLocator() ||
+                !locatorEquals(value->ValueChain[valueChainIndex].GetBlobLocator(), oldLocator)) {
+            return EMoveDataReplaceResult::KeyChanged;
+        }
+
+        Self->MoveData.ApplyingIndexUpdate = true;
+        Y_DEFER {
+            Self->MoveData.ApplyingIndexUpdate = false;
+        };
+
+        const bool changed = UpdateKey(key, txc, cookie, "ReplaceLocatorForMoveData",
+            [&](TValue& mutableValue, bool inserted) {
+                Y_ABORT_UNLESS(!inserted);
+                Y_ABORT_UNLESS(mutableValue.ValueVersion == expectedValueVersion);
+                Y_ABORT_UNLESS(valueChainIndex < static_cast<ui32>(mutableValue.ValueChain.size()));
+                auto& item = mutableValue.ValueChain[valueChainIndex];
+                Y_ABORT_UNLESS(item.HasBlobLocator());
+                Y_ABORT_UNLESS(locatorEquals(item.GetBlobLocator(), oldLocator));
+                item.MutableBlobLocator()->CopyFrom(newLocator);
+                ++mutableValue.ValueVersion;
+                return EUpdateOutcome::CHANGE;
+            });
+        Y_ABORT_UNLESS(changed);
+        return EMoveDataReplaceResult::Replaced;
+    }
+
+    bool TData::IsBlobReferenced(TLogoBlobID id) const {
+        return RefCountBlobs.contains(id);
+    }
+
+    TData::EMoveDataTrashStatus TData::CheckMoveDataTrash(const TSet<ui32>& groups) {
+        // TODO: rewrite
+
+        bool hasUsed = false;
+        bool waitingForGC = false;
+
+        for (auto& [key, record] : RecordsPerChannelGroup) {
+            const auto& [channel, groupId] = key;
+            Y_UNUSED(channel);
+            if (!groups.contains(groupId)) {
+                continue;
+            }
+
+            hasUsed = hasUsed || !record.Used.empty();
+            waitingForGC = waitingForGC || !record.Trash.empty() || !record.TrashInFlight.empty() ||
+                record.CollectGarbageRequestsInFlight;
+            record.CollectIfPossible(this);
+        }
+
+        for (const TLogoBlobID& id : AllInFlightTrashBlobs) {
+            if (groups.contains(Self->Info()->GroupFor(id.Channel(), id.Generation()))) {
+                waitingForGC = true;
+                break;
+            }
+        }
+
+        if (hasUsed) {
+            return EMoveDataTrashStatus::NeedsIndexRescan;
+        }
+        if (waitingForGC || !IsTrashFullyLoaded()) {
+            IssueLoadTrashBatch();
+            return EMoveDataTrashStatus::WaitingForGC;
+        }
+        return EMoveDataTrashStatus::Clear;
+    }
+
     void TData::BindToBlob(const TKey& key, TBlobSeqId blobSeqId, bool keep, bool doNotKeep, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT49, "BindToBlob", (Id, Self->GetLogId()), (Key, key), (BlobSeqId, blobSeqId),
-            (Keep, keep), (DoNotKeep, doNotKeep));
+        YDB_LOG_DEBUG("BindToBlob",
+            {"marker", "BDT49"},
+            {"id", Self->GetLogId()},
+            {"key", key},
+            {"blobSeqId", blobSeqId},
+            {"keep", keep},
+            {"doNotKeep", doNotKeep});
         Y_ABORT_UNLESS(IsKeyLoaded(key));
         UpdateKey(key, txc, cookie, "BindToBlob", [&](TValue& value, bool /*inserted*/) {
             EUpdateOutcome outcome = EUpdateOutcome::NO_CHANGE;
@@ -257,7 +475,7 @@ namespace NKikimr::NBlobDepot {
             }
             if (value.ValueChain.empty()) {
                 auto *chain = value.ValueChain.Add();
-                auto *locator = chain->MutableLocator();
+                auto *locator = chain->MutableBlobLocator();
                 locator->SetGroupId(Self->Info()->GroupFor(blobSeqId.Channel, blobSeqId.Generation));
                 blobSeqId.ToProto(locator->MutableBlobSeqId());
                 locator->SetTotalDataLen(key.GetBlobId().BlobSize());
@@ -268,6 +486,14 @@ namespace NKikimr::NBlobDepot {
             }
             return outcome;
         });
+    }
+
+    void TData::AddToS3Trash(TS3Locator locator, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
+        NIceDb::TNiceDb(txc.DB).Table<Schema::TrashS3>().Key(locator.Generation, locator.KeyId)
+            .Update<Schema::TrashS3::Len>(locator.Len);
+        InFlightTrashSize += locator.Len;
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_IN_FLIGHT_TRASH_SIZE] = InFlightTrashSize;
+        InFlightTrashS3.emplace(cookie, locator);
     }
 
     void TData::MakeKeyCertain(const TKey& key) {
@@ -344,15 +570,24 @@ namespace NKikimr::NBlobDepot {
         const bool success = proto.ParseFromString(value);
         Y_ABORT_UNLESS(success);
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT79, "AddDataOnLoad", (Id, Self->GetLogId()), (Key, key), (Value, proto));
+        YDB_LOG_DEBUG("AddDataOnLoad",
+            {"marker", "BDT79"},
+            {"id", Self->GetLogId()},
+            {"key", key},
+            {"value", proto});
 
         // we can only add key that is not loaded before; if key exists, it MUST have been loaded from the dataset
         const auto [it, inserted] = Data.try_emplace(std::move(key), std::move(proto), uncertainWrite);
         Y_ABORT_UNLESS(inserted);
-        EnumerateBlobsForValueChain(it->second.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32, ui32) {
-            if (!RefCount[id]++) {
-                AddFirstMentionedBlob(id);
+
+        auto addRefCount = [&](auto& map, auto&& key) {
+            if (!map[key]++) {
+                AddFirstMentionedBlob(key);
             }
+        };
+        EnumerateBlobsForValueChain(it->second.ValueChain, Self->TabletID(), TOverloaded{
+            [&](TLogoBlobID id, ui32, ui32) { addRefCount(RefCountBlobs, id); },
+            [&](TS3Locator locator) { addRefCount(RefCountS3, locator); }
         });
         if (it->second.GoingToAssimilate) {
             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_BYTES_TO_DECOMMIT] += it->first.GetBlobId().BlobSize();
@@ -389,8 +624,14 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::AddTrashOnLoad(TLogoBlobID id) {
+        if (AllInFlightTrashBlobs.contains(id)) {
+            return; // we're trying to add just inserted item, ignore it
+        }
         auto& record = GetRecordsPerChannelGroup(id);
-        record.Trash.insert(id);
+        if (const auto [it, inserted] = record.Trash.insert(id); !inserted) {
+            return; // the same situation: this item has just been inserted into the set
+        }
+        ++LoadedTrashRecords;
         AccountBlob(id, true);
         TotalStoredTrashSize += id.BlobSize();
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = TotalStoredTrashSize;
@@ -407,8 +648,12 @@ namespace NKikimr::NBlobDepot {
     bool TData::UpdateKeepState(TKey key, EKeepState keepState, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         Y_ABORT_UNLESS(IsKeyLoaded(key));
         return UpdateKey(std::move(key), txc, cookie, "UpdateKeepState", [&](TValue& value, bool inserted) {
-             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT51, "UpdateKeepState", (Id, Self->GetLogId()), (Key, key),
-                (KeepState, keepState), (Value, value));
+             YDB_LOG_DEBUG("UpdateKeepState",
+                 {"marker", "BDT51"},
+                 {"id", Self->GetLogId()},
+                 {"key", key},
+                 {"keepState", keepState},
+                 {"value", value});
              if (inserted) {
                 return EUpdateOutcome::CHANGE;
              } else if (value.KeepState < keepState) {
@@ -421,7 +666,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::DeleteKey(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT14, "DeleteKey", (Id, Self->GetLogId()), (Key, key));
+        YDB_LOG_DEBUG("DeleteKey",
+            {"marker", "BDT14"},
+            {"id", Self->GetLogId()},
+            {"key", key});
         UpdateKey(key, txc, cookie, "DeleteKey", [&](TValue&, bool inserted) {
             Y_ABORT_UNLESS(!inserted);
             return EUpdateOutcome::DROP;
@@ -461,11 +709,16 @@ namespace NKikimr::NBlobDepot {
                 return s.Str();
             };
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT13, "Trim", (Id, Self->GetLogId()), (AgentId, agent.Connection->NodeId),
-                (Id, ev->Cookie), (Channel, int(channelIndex)), (InvalidatedStep, invalidatedStep),
-                (GivenIdRanges, channel.GivenIdRanges),
-                (Agent.GivenIdRanges, agent.GivenIdRanges[channelIndex]),
-                (WritesInFlight, makeWritesInFlight()));
+            YDB_LOG_DEBUG("Trim",
+                {"marker", "BDT13"},
+                {"id", Self->GetLogId()},
+                {"agentId", agent.Connection->NodeId},
+                {"cookie", ev->Cookie},
+                {"channel", int(channelIndex)},
+                {"invalidatedStep", invalidatedStep},
+                {"givenIdRanges", channel.GivenIdRanges},
+                {"Agent.GivenIdRanges", agent.GivenIdRanges[channelIndex]},
+                {"writesInFlight", makeWritesInFlight()});
 
             // sanity check -- ensure that current writes in flight would be conserved when processing garbage
             for (auto it = begin; it != writesInFlight.end() && it->Channel == channelIndex; ++it) {
@@ -492,8 +745,15 @@ namespace NKikimr::NBlobDepot {
 
     bool TData::OnBarrierShift(ui64 tabletId, ui8 channel, bool hard, TGenStep previous, TGenStep current, ui32& maxItems,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT18, "OnBarrierShift", (Id, Self->GetLogId()), (TabletId, tabletId),
-            (Channel, int(channel)), (Hard, hard), (Previous, previous), (Current, current), (MaxItems, maxItems));
+        YDB_LOG_DEBUG("OnBarrierShift",
+            {"marker", "BDT18"},
+            {"id", Self->GetLogId()},
+            {"tabletId", tabletId},
+            {"channel", int(channel)},
+            {"hard", hard},
+            {"previous", previous},
+            {"current", current},
+            {"maxItems", maxItems});
 
         Y_ABORT_UNLESS(Loaded);
 
@@ -527,7 +787,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::AddFirstMentionedBlob(TLogoBlobID id) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT80, "AddFirstMentionedBlob", (Id, Self->GetLogId()), (BlobId, id));
+        YDB_LOG_DEBUG("AddFirstMentionedBlob",
+            {"marker", "BDT80"},
+            {"id", Self->GetLogId()},
+            {"blobId", id});
         auto& record = GetRecordsPerChannelGroup(id);
         const auto [_, inserted] = record.Used.insert(id);
         Y_ABORT_UNLESS(inserted);
@@ -536,9 +799,19 @@ namespace NKikimr::NBlobDepot {
         Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_DATA_SIZE] = TotalStoredDataSize;
     }
 
+    void TData::AddFirstMentionedBlob(TS3Locator locator) {
+        auto& counters = Self->TabletCounters->Simple();
+        counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_OBJECTS] = RefCountS3.size();
+        counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_SIZE] = TotalS3DataSize += locator.Len;
+    }
+
     void TData::AccountBlob(TLogoBlobID id, bool add) {
         // account record
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT81, "AccountBlob", (Id, Self->GetLogId()), (BlobId, id), (Add, add));
+        YDB_LOG_DEBUG("AccountBlob",
+            {"marker", "BDT81"},
+            {"id", Self->GetLogId()},
+            {"blobId", id},
+            {"add", add});
         const ui32 groupId = Self->Info()->GroupFor(id.Channel(), id.Generation());
         auto& groupStat = Self->Groups[groupId];
         if (add) {
@@ -567,7 +840,9 @@ namespace NKikimr::NBlobDepot {
     void TData::TRecordsPerChannelGroup::MoveToTrash(TData *self, TLogoBlobID id) {
         const auto usedIt = Used.find(id);
         Y_ABORT_UNLESS(usedIt != Used.end());
-        Trash.insert(Used.extract(usedIt));
+        const bool inserted = Trash.insert(Used.extract(usedIt)).inserted;
+        Y_DEBUG_ABORT_UNLESS(inserted);
+        ++self->LoadedTrashRecords;
         self->TotalStoredTrashSize += id.BlobSize();
         self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
     }
@@ -584,6 +859,8 @@ namespace NKikimr::NBlobDepot {
 
     void TData::TRecordsPerChannelGroup::DeleteTrashRecord(TData *self, std::set<TLogoBlobID>::iterator& it) {
         self->AccountBlob(*it, false);
+        Y_ABORT_UNLESS(self->LoadedTrashRecords);
+        --self->LoadedTrashRecords;
         self->TotalStoredTrashSize -= it->BlobSize();
         self->Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_TOTAL_STORED_TRASH_SIZE] = self->TotalStoredTrashSize;
         it = Trash.erase(it);
@@ -600,7 +877,15 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::TRecordsPerChannelGroup::CollectIfPossible(TData *self) {
-        if (!CollectGarbageRequestsInFlight && self->Loaded && Collectible(self)) {
+        if (CollectGarbageRequestsInFlight || !self->Loaded) {
+            return;
+        }
+
+        if (Trash.empty() && self->TrashLoadState == ETrashLoadState::NeedMore && self->IssueLoadTrashBatch()) {
+            return;
+        }
+
+        if (Collectible(self)) {
             self->HandleTrash(*this);
         }
     }
@@ -687,21 +972,34 @@ namespace NKikimr::NBlobDepot {
         LastRecordsValidationTimestamp = now;
 
         TTabletStorageInfo *info = Self->Info();
-        THashMap<TLogoBlobID, ui32> refcounts;
+        THashMap<TLogoBlobID, ui32> refcountBlobs;
+        THashMap<TS3Locator, ui32> refcountS3;
         for (const auto& [key, value] : Data) {
-            EnumerateBlobsForValueChain(value.ValueChain, info->TabletID, [&](TLogoBlobID id, ui32, ui32) {
-                ++refcounts[id];
+            EnumerateBlobsForValueChain(value.ValueChain, info->TabletID, TOverloaded{
+                [&](TLogoBlobID id, ui32, ui32) {
+                    ++refcountBlobs[id];
+                },
+                [&](TS3Locator locator) {
+                    ++refcountS3[locator];
+                }
             });
         }
-        Y_ABORT_UNLESS(RefCount == refcounts);
+        Y_ABORT_UNLESS(RefCountBlobs == refcountBlobs);
+        Y_ABORT_UNLESS(RefCountS3 == refcountS3);
 
-        for (const auto& [cookie, id] : InFlightTrash) {
-            const bool inserted = refcounts.try_emplace(id).second;
+        for (const auto& [cookie, id] : InFlightTrashBlobs) {
+            const bool inserted = refcountBlobs.try_emplace(id).second;
+            Y_ABORT_UNLESS(inserted);
+            Y_ABORT_UNLESS(AllInFlightTrashBlobs.contains(id));
+        }
+
+        for (const auto& [cookie, locator] : InFlightTrashS3) {
+            const bool inserted = refcountS3.try_emplace(locator).second;
             Y_ABORT_UNLESS(inserted);
         }
 
         THashSet<std::tuple<ui8, ui32, TLogoBlobID>> used;
-        for (const auto& [id, count] : refcounts) {
+        for (const auto& [id, count] : refcountBlobs) {
             const ui32 groupId = info->GroupFor(id.Channel(), id.Generation());
             used.emplace(id.Channel(), groupId, id);
         }
@@ -714,6 +1012,11 @@ namespace NKikimr::NBlobDepot {
         }
         Y_ABORT_UNLESS(used.empty());
 #endif
+    }
+
+    bool TData::IsUseful(const TS3Locator& locator) const {
+        Y_DEBUG_ABORT_UNLESS(IsLoaded());
+        return RefCountS3.contains(locator);
     }
 
 } // NKikimr::NBlobDepot

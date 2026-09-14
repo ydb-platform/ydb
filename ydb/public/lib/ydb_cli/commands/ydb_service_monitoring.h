@@ -4,7 +4,7 @@
 #include "ydb_common.h"
 
 #include <ydb/public/lib/ydb_cli/common/format.h>
-#include <ydb-cpp-sdk/client/monitoring/monitoring.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/monitoring/monitoring.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -25,6 +25,8 @@ private:
     int PrintResponse(NMonitoring::TSelfCheckResult& result);
 
     bool Verbose = false;
+    bool NoMerge = false;
+    bool NoCache = false;
 };
 
 }

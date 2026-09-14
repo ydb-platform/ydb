@@ -6,6 +6,8 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/thread_safe_optional.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -17,7 +19,17 @@ namespace NKikimrColumnShardDataSharingProto {
 class TPortionInfo;
 }
 
+namespace NKikimr {
+namespace NIceDb {
+class TNiceDb;
+}
+}   // namespace NKikimr
+
 namespace NKikimr::NOlap {
+
+namespace NAssembling {
+class TColumnAssemblingInfo;
+}
 
 namespace NBlobOperations::NRead {
 class TCompositeReadBlobs;
@@ -44,79 +56,147 @@ public:
         : Address(address)
         , RecordsCount(recordsCount)
         , RawBytes(rawBytesSize)
-        , BlobRange(blobRange) {
+        , BlobRange(blobRange)
+    {
     }
 };
 
 class TPortionInfoConstructor;
 class TGranuleShardingInfo;
-class TPortionDataAccessor;
+class TCompactedPortionInfo;
+class TWrittenPortionInfo;
+
+enum class EPortionType {
+    Written,
+    Compacted
+};
 
 class TPortionInfo {
 public:
     using TConstPtr = std::shared_ptr<const TPortionInfo>;
     using TPtr = std::shared_ptr<TPortionInfo>;
     using TRuntimeFeatures = ui8;
-    enum class ERuntimeFeature : TRuntimeFeatures {
+    enum class ERuntimeFeature: TRuntimeFeatures {
         Optimized = 1 /* "optimized" */
     };
 
 private:
-    friend class TPortionDataAccessor;
     friend class TPortionInfoConstructor;
+    friend class TCompactedPortionInfo;
+    friend class TWrittenPortionInfo;
 
     TPortionInfo(const TPortionInfo&) = default;
     TPortionInfo& operator=(const TPortionInfo&) = default;
 
-    TPortionInfo(TPortionMeta&& meta)
-        : Meta(std::move(meta)) {
-        if (HasInsertWriteId()) {
-            AFL_VERIFY(!Meta.GetTierName());
-        }
-    }
-    std::optional<TSnapshot> CommitSnapshot;
-    std::optional<TInsertWriteId> InsertWriteId;
-
-    ui64 PathId = 0;
+    TInternalPathId PathId;
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
-    TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();   // {PlanStep, TxId} is min snapshot for {Granule, Portion}
-    TSnapshot RemoveSnapshot = TSnapshot::Zero();
-    std::optional<ui64> SchemaVersion;
+    TThreadSafeOptional<TSnapshot> RemoveSnapshot;
+    ui64 SchemaVersion = 0;
     std::optional<ui64> ShardingVersion;
 
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
 
+    virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const = 0;
+
+    virtual bool DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const = 0;
+
+    virtual TString DoDebugString(const bool /*withDetails*/) const {
+        return "";
+    }
+
+public:
+    struct TPortionAddressComparator {
+        bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
+            return left->GetAddress() < right->GetAddress();
+        }
+
+        bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) const {
+            return left->GetAddress() < right->GetAddress();
+        }
+    };
+
+    class TReversablePortionAddressComparator {
+    private:
+        const bool Reverse = false;
+
+    public:
+        TReversablePortionAddressComparator(const bool reverse)
+            : Reverse(reverse)
+        {
+        }
+
+        bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
+            if (!Reverse) {
+                return left->GetAddress() < right->GetAddress();
+            } else {
+                return right->GetAddress() < left->GetAddress();
+            }
+        }
+
+        bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) const {
+            if (!Reverse) {
+                return left->GetAddress() < right->GetAddress();
+            } else {
+                return right->GetAddress() < left->GetAddress();
+            }
+        }
+    };
+
     void FullValidation() const {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
-        AFL_VERIFY(MinSnapshotDeprecated.Valid());
+        AFL_VERIFY(SchemaVersion);
         Meta.FullValidation();
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
-public:
+    virtual EPortionType GetPortionType() const = 0;
+    virtual bool IsCommitted() const = 0;
+    virtual bool IsAborted() const = 0;
+
+    NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
+        return NPortion::TPortionInfoForCompaction(GetTotalBlobBytes(), GetMeta().IndexKeyStart(), GetMeta().IndexKeyEnd());
+    }
+
+    ui64 GetMemorySize() const {
+        return sizeof(TPortionInfo) + Meta.GetMemorySize() - sizeof(TPortionMeta);
+    }
+
+    virtual std::shared_ptr<TPortionInfo> MakeCopy() const = 0;
+
+    ui64 GetDataSize() const {
+        return sizeof(TPortionInfo) + Meta.GetDataSize() - sizeof(TPortionMeta);
+    }
+
+    virtual ~TPortionInfo() = default;
+
+    TPortionInfo(TPortionMeta&& meta)
+        : Meta(std::move(meta))
+    {
+    }
+
     TPortionInfo(TPortionInfo&&) = default;
     TPortionInfo& operator=(TPortionInfo&&) = default;
 
+    virtual void FillDefaultColumn(NAssembling::TColumnAssemblingInfo& column, const std::optional<TSnapshot>& defaultSnapshot) const = 0;
+
     ui32 PredictAccessorsMemory(const ISnapshotSchema::TPtr& schema) const {
-        return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * schema->GetColumnsCount() + schema->GetIndexesCount() * sizeof(TIndexChunk);
+        return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * schema->GetColumnsCount() +
+               schema->GetIndexesCount() * sizeof(TIndexChunk);
     }
 
     ui32 PredictMetadataMemorySize(const ui32 columnsCount) const {
         return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * columnsCount;
     }
 
-    void SaveMetaToDatabase(IDbWrapper& db) const;
-
-    TPortionInfo MakeCopy() const {
-        return *this;
+    void SaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const {
+        FullValidation();
+        DoSaveMetaToDatabase(blobIds, db);
     }
 
-    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
-        return Meta.GetBlobIds();
-    }
+    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const = 0;
 
     ui32 GetCompactionLevel() const {
         return GetMeta().GetCompactionLevel();
@@ -124,38 +204,14 @@ public:
 
     bool NeedShardingFilter(const TGranuleShardingInfo& shardingInfo) const;
 
-    NSplitter::TEntityGroups GetEntityGroupsByStorageId(
-        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const;
+    virtual NSplitter::TEntityGroups GetEntityGroupsByStorageId(
+        const TString& specialTier, const IStoragesManager& storages, const TIndexInfo& indexInfo) const = 0;
+    virtual const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const = 0;
+    virtual const TString& GetEntityStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const = 0;
+    virtual const TString& GetIndexStorageId(const ui32 indexId, const TIndexInfo& indexInfo) const = 0;
 
     const std::optional<ui64>& GetShardingVersionOptional() const {
         return ShardingVersion;
-    }
-
-    bool HasCommitSnapshot() const {
-        return !!CommitSnapshot;
-    }
-    bool HasInsertWriteId() const {
-        return !!InsertWriteId;
-    }
-    const TSnapshot& GetCommitSnapshotVerified() const {
-        AFL_VERIFY(!!CommitSnapshot);
-        return *CommitSnapshot;
-    }
-    TInsertWriteId GetInsertWriteIdVerified() const {
-        AFL_VERIFY(InsertWriteId);
-        return *InsertWriteId;
-    }
-    const std::optional<TSnapshot>& GetCommitSnapshotOptional() const {
-        return CommitSnapshot;
-    }
-    const std::optional<TInsertWriteId>& GetInsertWriteIdOptional() const {
-        return InsertWriteId;
-    }
-    void SetCommitSnapshot(const TSnapshot& value) {
-        AFL_VERIFY(!!InsertWriteId);
-        AFL_VERIFY(!CommitSnapshot);
-        AFL_VERIFY(value.Valid());
-        CommitSnapshot = value;
     }
 
     bool CrossSSWith(const TPortionInfo& p) const {
@@ -167,8 +223,8 @@ public:
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
-        AFL_VERIFY(!RemoveSnapshot.Valid());
-        RemoveSnapshot = snap;
+        AFL_VERIFY(!HasRemoveSnapshot());
+        RemoveSnapshot.Set(snap);
     }
 
     void SetRemoveSnapshot(const ui64 planStep, const ui64 txId) {
@@ -191,6 +247,13 @@ public:
         RuntimeFeatures &= (Max<TRuntimeFeatures>() - (TRuntimeFeatures)feature);
     }
 
+    bool IsDefaultTier(const TString& defaultTierName) const {
+        if (GetMeta().GetTierName()) {
+            return GetMeta().GetTierName() == defaultTierName;
+        }
+        return true;
+    }
+
     TString GetTierNameDef(const TString& defaultTierName) const {
         if (GetMeta().GetTierName()) {
             return GetMeta().GetTierName();
@@ -209,22 +272,6 @@ public:
         return (RuntimeFeatures & (TRuntimeFeatures)feature);
     }
 
-    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
-    }
-
-    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        return Meta.GetBlobId(linkId);
-    }
-
-    ui32 GetBlobIdsCount() const {
-        return Meta.GetBlobIdsCount();
-    }
-
-    const TString& GetColumnStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
-    const TString& GetIndexStorageId(const ui32 columnId, const TIndexInfo& indexInfo) const;
-    const TString& GetEntityStorageId(const ui32 entityId, const TIndexInfo& indexInfo) const;
-
     ui64 GetTxVolume() const {
         return 1024;
     }
@@ -232,9 +279,9 @@ public:
     ui64 GetApproxChunksCount(const ui32 schemaColumnsCount) const;
     ui64 GetMetadataMemorySize() const;
 
-    void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
+    void SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
-    ui64 GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 
@@ -246,7 +293,8 @@ public:
         return CrossPKWith(info.IndexKeyStart(), info.IndexKeyEnd());
     }
 
-    bool CrossPKWith(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const {
+    template <class TReplaceKeyImpl>
+    bool CrossPKWith(const TReplaceKeyImpl& from, const TReplaceKeyImpl& to) const {
         if (from < IndexKeyStart()) {
             if (to < IndexKeyEnd()) {
                 return IndexKeyStart() <= to;
@@ -291,14 +339,24 @@ public:
         return Meta;
     }
 
+    NPortion::EProduced GetProduced() const {
+        if (HasRemoveSnapshot()) {
+            return NPortion::INACTIVE;
+        }
+        if (!IsDefaultTier(NBlobOperations::TGlobal::DefaultStorageId)) {
+            return NPortion::EVICTED;
+        }
+        return GetPortionType() == EPortionType::Compacted ? NPortion::EProduced::SPLIT_COMPACTED : NPortion::EProduced::INSERTED;
+    }
+
     bool ValidSnapshotInfo() const {
-        return MinSnapshotDeprecated.Valid() && PathId && PortionId;
+        return SchemaVersion && PathId && PortionId;
     }
 
     TString DebugString(const bool withDetails = false) const;
 
     bool HasRemoveSnapshot() const {
-        return RemoveSnapshot.Valid();
+        return RemoveSnapshot.Has();
     }
 
     bool IsRemovedFor(const TSnapshot& snapshot) const {
@@ -309,12 +367,8 @@ public:
         }
     }
 
-    bool CheckForCleanup(const TSnapshot& snapshot) const {
-        return IsRemovedFor(snapshot);
-    }
-
-    bool CheckForCleanup() const {
-        return HasRemoveSnapshot();
+    virtual bool MayGetForScanAt(const TSnapshot& snapshot) const {
+        return !IsRemovedFor(snapshot);
     }
 
     TPortionAddress GetAddress() const {
@@ -325,7 +379,7 @@ public:
         ShardingVersion.reset();
     }
 
-    void SetPathId(const ui64 pathId) {
+    void SetPathId(const TInternalPathId pathId) {
         PathId = pathId;
     }
 
@@ -333,96 +387,49 @@ public:
         PortionId = id;
     }
 
-    const TSnapshot& GetMinSnapshotDeprecated() const {
-        return MinSnapshotDeprecated;
-    }
-
     const TSnapshot& GetRemoveSnapshotVerified() const {
         AFL_VERIFY(HasRemoveSnapshot());
-        return RemoveSnapshot;
+        return RemoveSnapshot.Get();
     }
 
     std::optional<TSnapshot> GetRemoveSnapshotOptional() const {
-        if (RemoveSnapshot.Valid()) {
-            return RemoveSnapshot;
+        if (HasRemoveSnapshot()) {
+            return RemoveSnapshot.Get();
         } else {
             return {};
         }
     }
 
-    ui64 GetSchemaVersionVerified() const {
-        AFL_VERIFY(SchemaVersion);
-        return SchemaVersion.value();
+    ui64 GetSchemaVersion() const {
+        return SchemaVersion;
     }
 
-    std::optional<ui64> GetSchemaVersionOptional() const {
+    ui64 GetSchemaVersionVerified() const {
+        AFL_VERIFY(SchemaVersion);
         return SchemaVersion;
     }
 
     bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
-        const bool visible = (Meta.RecordSnapshotMin <= snapshot) && (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) &&
-                             (!checkCommitSnapshot || !CommitSnapshot || *CommitSnapshot <= snapshot);
+        const bool visible = (!HasRemoveSnapshot() || snapshot < GetRemoveSnapshotVerified()) && DoIsVisible(snapshot, checkCommitSnapshot);
 
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)(
-            "snapshot", snapshot.DebugString());
+        YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+            {"event", "IsVisible"},
+            {"analyzePortion", DebugString()},
+            {"visible", visible},
+            {"snapshot", snapshot.DebugString()});
         return visible;
     }
 
-    const NArrow::TReplaceKey& IndexKeyStart() const {
-        return Meta.IndexKeyStart;
+    NArrow::TSimpleRow IndexKeyStart() const {
+        return Meta.IndexKeyStart();
     }
 
-    const NArrow::TReplaceKey& IndexKeyEnd() const {
-        return Meta.IndexKeyEnd;
+    NArrow::TSimpleRow IndexKeyEnd() const {
+        return Meta.IndexKeyEnd();
     }
 
-    const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const {
-        if (InsertWriteId) {
-            if (CommitSnapshot) {
-                return *CommitSnapshot;
-            } else {
-                AFL_VERIFY(snapshotDefault);
-                return *snapshotDefault;
-            }
-        } else {
-            return Meta.RecordSnapshotMin;
-        }
-    }
-
-    const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const {
-        if (InsertWriteId) {
-            if (CommitSnapshot) {
-                return *CommitSnapshot;
-            } else {
-                AFL_VERIFY(snapshotDefault);
-                return *snapshotDefault;
-            }
-        } else {
-            return Meta.RecordSnapshotMax;
-        }
-    }
-
-    class TSchemaCursor {
-        const NOlap::TVersionedIndex& VersionedIndex;
-        ISnapshotSchema::TPtr CurrentSchema;
-        TSnapshot LastSnapshot = TSnapshot::Zero();
-
-    public:
-        TSchemaCursor(const NOlap::TVersionedIndex& versionedIndex)
-            : VersionedIndex(versionedIndex) {
-        }
-
-        ISnapshotSchema::TPtr GetSchema(const TPortionInfoConstructor& portion);
-
-        ISnapshotSchema::TPtr GetSchema(const TPortionInfo& portion) {
-            if (!CurrentSchema || portion.MinSnapshotDeprecated != LastSnapshot) {
-                CurrentSchema = portion.GetSchema(VersionedIndex);
-                LastSnapshot = portion.MinSnapshotDeprecated;
-            }
-            AFL_VERIFY(!!CurrentSchema)("portion", portion.DebugString());
-            return CurrentSchema;
-        }
-    };
+    virtual const TSnapshot& RecordSnapshotMin(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const = 0;
+    virtual const TSnapshot& RecordSnapshotMax(const std::optional<TSnapshot>& snapshotDefault = std::nullopt) const = 0;
 
     ISnapshotSchema::TPtr GetSchema(const TVersionedIndex& index) const;
 
@@ -445,6 +452,10 @@ public:
         return GetIndexBlobBytes() + GetColumnBlobBytes();
     }
 
+    // There can be at most one small blob in blob storage for a portion.
+    // If bytes = 0, the portion does not have a small blob in blob storage.
+    ui64 GetSmallBlobBytesInBlobStorage(const ui64 smallBlobThresholdBytes) const;
+
     ui64 GetTotalRawBytes() const {
         return GetColumnRawBytes() + GetIndexRawBytes();
     }
@@ -454,11 +465,5 @@ public:
         return out;
     }
 };
-
-/// Ensure that TPortionInfo can be effectively assigned by moving the value.
-static_assert(std::is_nothrow_move_assignable<TPortionInfo>::value);
-
-/// Ensure that TPortionInfo can be effectively constructed by moving the value.
-static_assert(std::is_nothrow_move_constructible<TPortionInfo>::value);
 
 }   // namespace NKikimr::NOlap

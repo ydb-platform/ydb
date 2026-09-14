@@ -3,6 +3,8 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NDataSharing {
 
 bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
@@ -13,7 +15,7 @@ bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc
         auto& index = Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
         for (auto&& [_, i] : Session->GetCursorVerified()->GetPreviousSelected()) {
             for (auto&& portion : i.GetPortions()) {
-                portion.FillBlobIdsByStorage(sharedBlobIds, index);
+                portion->FillBlobIdsByStorage(sharedBlobIds, index);
             }
         }
         for (auto&& i : sharedBlobIds) {
@@ -30,7 +32,8 @@ bool TTxDataAckToSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc
 }
 
 void TTxDataAckToSource::DoComplete(const TActorContext& /*ctx*/) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("TTxDataAckToSource::DoComplete", "1");
+    YDB_LOG_NOTICE("",
+        {"event", "TTxDataAckToSource::DoComplete"});
 
     Session->ActualizeDestination(*Self, Self->GetDataLocksManager());
 }

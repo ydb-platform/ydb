@@ -84,6 +84,7 @@ struct aws_mqtt5_listener *aws_mqtt5_listener_new(
     struct aws_allocator *allocator,
     struct aws_mqtt5_listener_config *config) {
     if (config->client == NULL) {
+        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
         return NULL;
     }
 

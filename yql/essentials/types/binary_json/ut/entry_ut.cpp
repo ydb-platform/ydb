@@ -5,7 +5,7 @@
 
 using namespace NKikimr::NBinaryJson;
 
-class TBinaryJsonEntryTest : public TBinaryJsonTestBase {
+class TBinaryJsonEntryTest: public TBinaryJsonTestBase {
 public:
     TBinaryJsonEntryTest()
         : TBinaryJsonTestBase()
@@ -13,10 +13,11 @@ public:
     }
 
     UNIT_TEST_SUITE(TBinaryJsonEntryTest);
-        UNIT_TEST(TestGetType);
-        UNIT_TEST(TestGetContainer);
-        UNIT_TEST(TestGetString);
-        UNIT_TEST(TestGetNumber);
+    UNIT_TEST(TestGetType);
+    UNIT_TEST(TestGetContainer);
+    UNIT_TEST(TestGetString);
+    UNIT_TEST(TestGetNumber);
+    UNIT_TEST(TestOutOfBounds);
     UNIT_TEST_SUITE_END();
 
     void TestGetType() {
@@ -87,6 +88,27 @@ public:
 
         for (const auto& testCase : testCases) {
             const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.first));
+            const auto reader = TBinaryJsonReader::Make(binaryJson);
+            const auto container = reader->GetRootCursor();
+
+            UNIT_ASSERT_VALUES_EQUAL(container.GetElement(0).GetNumber(), testCase.second);
+        }
+    }
+
+    void TestOutOfBounds() {
+        const TVector<std::pair<TString, double>> testCases = {
+            {"1e100000000", std::numeric_limits<double>::infinity()},
+            {"-1e100000000", -std::numeric_limits<double>::infinity()},
+            {"1.797693135e+308", std::numeric_limits<double>::infinity()},
+            {"-1.797693135e+308", -std::numeric_limits<double>::infinity()},
+        };
+
+        for (const auto& testCase : testCases) {
+            UNIT_ASSERT(std::holds_alternative<TString>(SerializeToBinaryJson(testCase.first)));
+        }
+
+        for (const auto& testCase : testCases) {
+            const auto binaryJson = std::get<TBinaryJson>(SerializeToBinaryJson(testCase.first, /*allowInf=*/true));
             const auto reader = TBinaryJsonReader::Make(binaryJson);
             const auto container = reader->GetRootCursor();
 

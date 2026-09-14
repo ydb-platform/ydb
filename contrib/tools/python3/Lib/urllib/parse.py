@@ -1,6 +1,6 @@
 """Parse (absolute and relative) URLs.
 
-urlparse module is based upon the following RFC specifications.
+urllib.parse module is based upon the following RFC specifications.
 
 RFC 3986 (STD66): "Uniform Resource Identifiers" by T. Berners-Lee, R. Fielding
 and L.  Masinter, January 2005.
@@ -20,7 +20,7 @@ RFC 1738: "Uniform Resource Locators (URL)" by T. Berners-Lee, L. Masinter, M.
 McCahill, December 1994
 
 RFC 3986 is considered the current standard and any future changes to
-urlparse module should conform with it.  The urlparse module is
+urllib.parse module should conform with it.  The urllib.parse module is
 currently not entirely compliant with this RFC due to defacto
 scenarios for parsing, and for backward compatibility purposes, some
 parsing quirks from older RFCs are retained. The testcases in
@@ -390,6 +390,8 @@ def urlparse(url, scheme='', allow_fragments=True):
     path or query.
 
     Note that % escapes are not expanded.
+
+    urlsplit() should generally be used instead of urlparse().
     """
     url, scheme, _coerce_result = _coerce_args(url, scheme)
     splitresult = urlsplit(url, scheme, allow_fragments)
@@ -436,11 +438,28 @@ def _checknetloc(netloc):
             raise ValueError("netloc '" + netloc + "' contains invalid " +
                              "characters under NFKC normalization")
 
+def _check_bracketed_netloc(netloc):
+    # Note that this function must mirror the splitting
+    # done in NetlocResultMixins._hostinfo().
+    hostname_and_port = netloc.rpartition('@')[2]
+    before_bracket, have_open_br, bracketed = hostname_and_port.partition('[')
+    if have_open_br:
+        # No data is allowed before a bracket.
+        if before_bracket:
+            raise ValueError("Invalid IPv6 URL")
+        hostname, _, port = bracketed.partition(']')
+        # No data is allowed after the bracket but before the port delimiter.
+        if port and not port.startswith(":"):
+            raise ValueError("Invalid IPv6 URL")
+    else:
+        hostname, _, port = hostname_and_port.partition(':')
+    _check_bracketed_host(hostname)
+
 # Valid bracketed hosts are defined in
 # https://www.rfc-editor.org/rfc/rfc3986#page-49 and https://url.spec.whatwg.org/
 def _check_bracketed_host(hostname):
-    if hostname.startswith('v'):
-        if not re.match(r"\Av[a-fA-F0-9]+\..+\Z", hostname):
+    if hostname.startswith(('v', 'V')):
+        if not re.match(r"\A[vV][a-fA-F0-9]+\..+\Z", hostname):
             raise ValueError(f"IPvFuture address is invalid")
     else:
         ip = ipaddress.ip_address(hostname) # Throws Value Error if not IPv6 or IPv4
@@ -496,8 +515,7 @@ def urlsplit(url, scheme='', allow_fragments=True):
                 (']' in netloc and '[' not in netloc)):
             raise ValueError("Invalid IPv6 URL")
         if '[' in netloc and ']' in netloc:
-            bracketed_host = netloc.partition('[')[2].partition(']')[0]
-            _check_bracketed_host(bracketed_host)
+            _check_bracketed_netloc(netloc)
     if allow_fragments and '#' in url:
         url, fragment = url.split('#', 1)
     if '?' in url:

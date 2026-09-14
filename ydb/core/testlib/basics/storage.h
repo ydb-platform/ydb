@@ -25,9 +25,10 @@ namespace NKikimr {
         static constexpr bool USE_SYNC_PDISK = false;
         static constexpr bool USE_MEM_SYNC_PDISK = true;
 
-        TTestStorageFactory(TRuntime &runtime, NFake::TStorage conf, bool mock)
+        TTestStorageFactory(TRuntime &runtime, NFake::TStorage conf, bool mock, bool addGroups)
             : DomainsNum(TBlobStorageGroupType(BootGroupErasure).BlobSubgroupSize())
             , Mock(mock)
+            , AddGroups(addGroups)
             , Conf(FixConf(conf))
             , Runtime(runtime)
         {
@@ -43,12 +44,7 @@ namespace NKikimr {
                 }
             }
 
-            const bool strandedPDisk = STRAND_PDISK && !Runtime.IsRealThreads();
-            if (strandedPDisk) {
-                Factory = new TStrandedPDiskServiceFactory(Runtime);
-            } else {
-                Factory = new TRealPDiskServiceFactory();
-            }
+            SetupPDiskSubsystem(&Runtime, STRAND_PDISK);
 
             NPDisk::TKey mainKey = NPDisk::YdbDefaultPDiskSequence;
 
@@ -63,10 +59,13 @@ namespace NKikimr {
             PDiskPath = TStringBuilder() << baseDir << "pdisk_1.dat";
 
             if (!Mock && conf.FormatDisk) {
+                TFormatOptions options;
+                options.SectorMap = SectorMap;
+                options.EnableSmallDiskOptimization = false;
                 FormatPDisk(PDiskPath,
                     Conf.DiskSize, Conf.SectorSize, Conf.ChunkSize, PDiskGuid,
                     0x123 + salt, 0x456 + salt, 0x789 + salt, mainKey,
-                    "", false, false, SectorMap, false);
+                    "", options);
             }
         }
 
@@ -83,15 +82,15 @@ namespace NKikimr {
 
         TIntrusivePtr<TNodeWardenConfig> MakeWardenConf(const TDomainsInfo &domains, const NKikimrProto::TKeyConfig& keyConfig) const
         {
-            TIntrusivePtr<TNodeWardenConfig> conf(new TNodeWardenConfig(Factory));
+            TIntrusivePtr<TNodeWardenConfig> conf(new TNodeWardenConfig());
 
             {
                 auto text = MakeTextConf(domains);
 
-                google::protobuf::TextFormat::ParseFromString(text, conf->BlobStorageConfig.MutableServiceSet());
+                google::protobuf::TextFormat::ParseFromString(text, conf->BlobStorageConfig->MutableServiceSet());
             }
 
-            conf->BlobStorageConfig.MutableServiceSet()->SetEnableProxyMock(Mock);
+            conf->BlobStorageConfig->MutableServiceSet()->SetEnableProxyMock(Mock);
             conf->PDiskConfigOverlay.SetGetDriveDataSwitch(NKikimrBlobStorage::TPDiskConfig::DoNotTouch);
             conf->PDiskConfigOverlay.SetWriteCacheSwitch(NKikimrBlobStorage::TPDiskConfig::DoNotTouch);
 
@@ -142,26 +141,28 @@ namespace NKikimr {
                 }
             }
 
-            str << "" << Endl;
-            str << "Groups {" << Endl;
-            str << "    GroupID: 0" << Endl;
-            str << "    GroupGeneration: 1 " << Endl;
-            str << "    ErasureSpecies: " << (ui32)BootGroupErasure << Endl;
+            if (AddGroups) {
+                str << "" << Endl;
+                str << "Groups {" << Endl;
+                str << "    GroupID: 0" << Endl;
+                str << "    GroupGeneration: 1 " << Endl;
+                str << "    ErasureSpecies: " << (ui32)BootGroupErasure << Endl;
 
-            for (const ui32 ringIdx : xrange(1)) {
-                str << "    Rings {" << Endl;
-                for (const ui32 domainIdx : xrange(DomainsNum)) {
-                    str << "        FailDomains {" << Endl;
-                    for (const ui32 vDiskIdx : xrange(DisksInDomain)) {
-                        ui32 slotId = vDiskIdx + domainIdx * DisksInDomain + ringIdx * DomainsNum * DisksInDomain;
-                        str << "            VDiskLocations { NodeID: " << Runtime.GetNodeId(0) << " PDiskID: 1 VDiskSlotID: " << slotId
-                            << " PDiskGuid: " << PDiskGuid << " }" << Endl;
+                for (const ui32 ringIdx : xrange(1)) {
+                    str << "    Rings {" << Endl;
+                    for (const ui32 domainIdx : xrange(DomainsNum)) {
+                        str << "        FailDomains {" << Endl;
+                        for (const ui32 vDiskIdx : xrange(DisksInDomain)) {
+                            ui32 slotId = vDiskIdx + domainIdx * DisksInDomain + ringIdx * DomainsNum * DisksInDomain;
+                            str << "            VDiskLocations { NodeID: " << Runtime.GetNodeId(0) << " PDiskID: 1 VDiskSlotID: " << slotId
+                                << " PDiskGuid: " << PDiskGuid << " }" << Endl;
+                        }
+                        str << "        }" << Endl;
                     }
-                    str << "        }" << Endl;
+                    str << "    }" << Endl;
                 }
-                str << "    }" << Endl;
+                str << "}";
             }
-            str << "}";
 
             return str.Str();
         }
@@ -170,11 +171,11 @@ namespace NKikimr {
         const ui32 DomainsNum = 0;
         const ui64 PDiskGuid = 123;
         const bool Mock = false;
+        const bool AddGroups = true;
         const NFake::TStorage Conf;
 
     private:
         TTestActorRuntime &Runtime;
-        TIntrusivePtr<IPDiskServiceFactory> Factory;
         TString PDiskPath;
         TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
     };

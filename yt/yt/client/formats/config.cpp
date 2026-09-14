@@ -352,10 +352,24 @@ void TSkiffFormatConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TYamlFormatConfig::Register(TRegistrar registrar)
+void TArrowFormatConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("write_uint_tag", &TThis::WriteUintTag)
+    registrar.Parameter("enable_tz_index", &TThis::EnableTzIndex)
         .Default(false);
+    registrar.Parameter("enable_complex_types", &TThis::EnableComplexTypes)
+        .Default(false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TBlobFormatConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("part_index_column_name", &TThis::PartIndexColumnName)
+        .Default();
+    registrar.Parameter("data_column_name", &TThis::DataColumnName)
+        .Default();
+    registrar.Parameter("enable_part_index", &TThis::EnablePartIndex)
+        .Default(true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

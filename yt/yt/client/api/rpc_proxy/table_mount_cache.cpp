@@ -38,8 +38,8 @@ public:
 private:
     TFuture<TTableMountInfoPtr> DoGet(const NYPath::TYPath& path, bool /*isPeriodicUpdate*/) noexcept override
     {
-        YT_LOG_DEBUG("Requesting table mount info (Path: %v)",
-            path);
+        YT_TLOG_DEBUG("Requesting table mount info")
+            .With("Path", path);
 
         TApiServiceProxy proxy(Channel_);
         proxy.SetDefaultTimeout(Timeout_);
@@ -98,22 +98,7 @@ private:
                     tableInfo->Replicas.push_back(replicaInfo);
                 }
 
-                tableInfo->Indices.reserve(rsp->indices_size());
-                for (const auto& protoIndexInfo : rsp->indices()) {
-                    auto indexInfo = TIndexInfo{
-                        .TableId = FromProto<NObjectClient::TObjectId>(protoIndexInfo.index_table_id()),
-                        .Kind = FromProto<ESecondaryIndexKind>(protoIndexInfo.index_kind()),
-                        .Predicate = YT_PROTO_OPTIONAL(protoIndexInfo, predicate),
-                        .UnfoldedColumn = YT_PROTO_OPTIONAL(protoIndexInfo, unfolded_column),
-                        .Correspondence = protoIndexInfo.has_index_correspondence()
-                            ? FromProto<ETableToIndexCorrespondence>(protoIndexInfo.index_correspondence())
-                            : ETableToIndexCorrespondence::Unknown,
-                    };
-                    THROW_ERROR_EXCEPTION_UNLESS(TEnumTraits<ESecondaryIndexKind>::FindLiteralByValue(indexInfo.Kind).has_value(),
-                        "Unsupported secondary index kind %Qlv (client not up-to-date)",
-                        indexInfo.Kind);
-                    tableInfo->Indices.push_back(indexInfo);
-                }
+                FromProto(&tableInfo->Indices, rsp->indices());
 
                 if (tableInfo->IsSorted()) {
                     tableInfo->LowerCapBound = MinKey();
@@ -127,11 +112,11 @@ private:
                     tableInfo->UpperCapBound = MakeUnversionedOwningRow(tabletCount);
                 }
 
-                YT_LOG_DEBUG("Table mount info received (Path: %v, TableId: %v, TabletCount: %v, Dynamic: %v)",
-                    path,
-                    tableInfo->TableId,
-                    tableInfo->Tablets.size(),
-                    tableInfo->Dynamic);
+                YT_TLOG_DEBUG("Table mount info received")
+                    .With("Path", path)
+                    .With("TableId", tableInfo->TableId)
+                    .With("TabletCount", tableInfo->Tablets.size())
+                    .With("Dynamic", tableInfo->Dynamic);
 
                 return tableInfo;
             }));

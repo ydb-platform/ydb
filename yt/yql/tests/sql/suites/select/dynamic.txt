@@ -1,0 +1,3 @@
+{"key"="bar";"subkey"="wat";"value"=2};
+{"key"="foo";"subkey"="bar";"value"=1};
+{"key"="wtf";"subkey"="foo";"value"=3};

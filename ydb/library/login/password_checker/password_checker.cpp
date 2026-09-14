@@ -5,7 +5,7 @@
 namespace NLogin {
 
 TPasswordComplexity::TPasswordComplexity()
-    : SpecialChars(VALID_SPECIAL_CHARS.cbegin(), VALID_SPECIAL_CHARS.cend())
+    : SpecialChars(VALID_SPECIAL_CHARS)
 {}
 
 TPasswordComplexity::TPasswordComplexity(const TInitializer& initializer)
@@ -16,10 +16,13 @@ TPasswordComplexity::TPasswordComplexity(const TInitializer& initializer)
     , MinSpecialCharsCount(initializer.MinSpecialCharsCount)
     , CanContainUsername(initializer.CanContainUsername)
 {
-    static const std::unordered_set<char> validSpecialChars(VALID_SPECIAL_CHARS.cbegin(), VALID_SPECIAL_CHARS.cend());
-    for (const char ch : initializer.SpecialChars) {
-        if (validSpecialChars.contains(ch)) {
-            SpecialChars.insert(ch);
+    if (initializer.SpecialChars.empty()) {
+        SpecialChars.insert(VALID_SPECIAL_CHARS.begin(), VALID_SPECIAL_CHARS.end());
+    } else {
+        for (const char ch : initializer.SpecialChars) {
+            if (VALID_SPECIAL_CHARS.contains(ch)) {
+                SpecialChars.insert(ch);
+            }
         }
     }
 }
@@ -28,7 +31,9 @@ bool TPasswordComplexity::IsSpecialCharValid(char ch) const {
     return SpecialChars.contains(ch);
 }
 
-const TString TPasswordComplexity::VALID_SPECIAL_CHARS = "!@#$%^&*()_+{}|<>?=";
+const std::unordered_set<char> TPasswordComplexity::VALID_SPECIAL_CHARS {'!', '@', '#', '$', '%', '^', '&',
+                                                                         '*', '(', ')', '_', '+', '{',
+                                                                         '}', '|', '<', '>', '?', '='};
 
 TPasswordChecker::TComplexityState::TComplexityState(const TPasswordComplexity& passwordComplexity)
     : PasswordComplexity(passwordComplexity)
@@ -70,14 +75,14 @@ TPasswordChecker::TPasswordChecker(const TPasswordComplexity& passwordComplexity
     : PasswordComplexity(passwordComplexity)
 {}
 
-TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const TString& password) const {
+TPasswordChecker::TResult TPasswordChecker::Check(const std::string& username, const std::string& password) const {
     if (password.empty() && PasswordComplexity.MinLength == 0) {
         return {.Success = true};
     }
     if (password.length() < PasswordComplexity.MinLength) {
         return {.Success = false, .Error = "Password is too short"};
     }
-    if (!PasswordComplexity.CanContainUsername && password.Contains(username)) {
+    if (!PasswordComplexity.CanContainUsername && password.contains(username)) {
         return {.Success = false, .Error = "Password must not contain user name"};
     }
 
@@ -133,6 +138,10 @@ TPasswordChecker::TResult TPasswordChecker::Check(const TString& username, const
 
 void TPasswordChecker::Update(const TPasswordComplexity& passwordComplexity) {
     PasswordComplexity = passwordComplexity;
+}
+
+const TPasswordComplexity& TPasswordChecker::GetPasswordComplexity() const {
+    return PasswordComplexity;
 }
 
 } // NLogin

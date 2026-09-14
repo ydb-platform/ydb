@@ -12,15 +12,14 @@ namespace numpy
   namespace impl
   {
     template <class E, class F, class G>
-    typename __combined<F, G>::type where(E const &cond, F const &true_,
-                                          G const &false_);
+    typename __combined<F, G>::type where(E const &cond, F const &true_, G const &false_);
   }
 
-#define NUMPY_NARY_EXTRA_METHOD                                                \
-  template <class E>                                                           \
-  auto operator()(E &&expr)->decltype(nonzero{}(std::forward<E>(expr)))        \
-  {                                                                            \
-    return nonzero{}(std::forward<E>(expr));                                   \
+#define NUMPY_NARY_EXTRA_METHOD                                                                    \
+  template <class E>                                                                               \
+  auto operator()(E &&expr)->decltype(nonzero{}(std::forward<E>(expr)))                            \
+  {                                                                                                \
+    return nonzero{}(std::forward<E>(expr));                                                       \
   }
 
 #define NUMPY_NARY_FUNC_NAME where

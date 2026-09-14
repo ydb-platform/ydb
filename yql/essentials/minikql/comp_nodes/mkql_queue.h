@@ -4,8 +4,7 @@
 
 #include <yql/essentials/public/udf/udf_value.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 IComputationNode* WrapQueueCreate(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapQueuePush(TCallable& callable, const TComputationNodeFactoryContext& ctx);
@@ -14,5 +13,10 @@ IComputationNode* WrapQueuePeek(TCallable& callable, const TComputationNodeFacto
 IComputationNode* WrapQueueRange(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapPreserveStream(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+// #############################################################################
+// ###### Wrappers that are used by CoreWinFramesCollector API #######
+// #############################################################################
+IComputationNode* WrapWinFramesCollector(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapWinFrame(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+
+} // namespace NKikimr::NMiniKQL

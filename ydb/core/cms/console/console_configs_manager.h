@@ -18,6 +18,9 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NConsole {
 
@@ -27,21 +30,39 @@ using NTabletFlatExecutor::TTransactionContext;
 
 class TConsole;
 
+// Converts the unknown/deprecated field maps collected during YAML config validation
+// into the persisted/served proto snapshot. Deprecated fields get Deprecated=true.
+void BuildYamlConfigUnknownFields(
+    const TMap<TString, std::pair<TString, TString>>& unknownFields,
+    const TMap<TString, std::pair<TString, TString>>& deprecatedFields,
+    NKikimrConsole::TYamlConfigUnknownFields& out);
+
 class TConfigsManager : public TActorBootstrapped<TConfigsManager> {
 private:
 
     using TBase = TActorBootstrapped<TConfigsManager>;
 
-    struct TValidateConfigResult {
-        std::optional<TString> ErrorReason;
-        bool Modify = false;
+    struct TUpdateConfigOpBaseContext {
+        std::optional<TString> Error;
+
+        TMap<TString, std::pair<TString, TString>> DeprecatedFields;
+        TMap<TString, std::pair<TString, TString>> UnknownFields;
+    };
+
+    struct TUpdateConfigOpContext
+        : public TUpdateConfigOpBaseContext
+    {
         TString UpdatedConfig;
         ui32 Version;
         TString Cluster;
-        bool HasForbiddenUnknown = false;
-        TMap<TString, std::pair<TString, TString>> DeprecatedFields;
-        TMap<TString, std::pair<TString, TString>> UnknownFields;
-        bool ValidationFinished = false;
+    };
+
+    struct TUpdateDatabaseConfigOpContext
+        : public TUpdateConfigOpBaseContext
+    {
+        TString UpdatedConfig;
+        TString TargetDatabase;
+        ui32 Version;
     };
 
 public:
@@ -69,7 +90,14 @@ public:
     bool CheckConfig(const NKikimrConsole::TConfigsConfig &config,
                      Ydb::StatusIds::StatusCode &code,
                      TString &error);
-    TValidateConfigResult ValidateConfigAndReplaceMetadata(const TString& config, bool force = false, bool allowUnknownFields = false);
+
+
+    void ReplaceMainConfigMetadata(const TString &config, bool force, TUpdateConfigOpContext& opCtx);
+    void ValidateMainConfig(TUpdateConfigOpContext& opCtx);
+
+    void ReplaceDatabaseConfigMetadata(const TString &config, bool force, TUpdateDatabaseConfigOpContext& opCtx);
+    void ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opCtx);
+    bool IsDatabaseConfigSelectorsAllowed(const TString& database) const;
 
     void SendInReply(const TActorId& sender, const TActorId& icSession, std::unique_ptr<IEventBase> ev, ui64 cookie = 0);
 
@@ -128,7 +156,9 @@ private:
     class TTxUpdateLastProvidedConfig;
     class TTxGetLogTail;
     class TTxLogCleanup;
-    class TTxReplaceYamlConfig;
+    class TTxReplaceYamlConfigBase;
+    class TTxReplaceMainYamlConfig;
+    class TTxReplaceDatabaseYamlConfig;
     class TTxDropYamlConfig;
     class TTxGetYamlConfig;
     class TTxGetYamlMetadata;
@@ -145,8 +175,10 @@ private:
     ITransaction *CreateTxUpdateLastProvidedConfig(TEvConsole::TEvConfigNotificationResponse::TPtr &ev);
     ITransaction *CreateTxGetLogTail(TEvConsole::TEvGetLogTailRequest::TPtr &ev);
     ITransaction *CreateTxLogCleanup();
-    ITransaction *CreateTxReplaceYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev);
-    ITransaction *CreateTxSetYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev);
+    ITransaction *CreateTxReplaceMainYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev);
+    ITransaction *CreateTxReplaceDatabaseYamlConfig(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev);
+    ITransaction *CreateTxSetMainYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev);
+    ITransaction *CreateTxSetDatabaseYamlConfig(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev);
     ITransaction *CreateTxDropYamlConfig(TEvConsole::TEvDropConfigRequest::TPtr &ev);
     ITransaction *CreateTxGetYamlConfig(TEvConsole::TEvGetAllConfigsRequest::TPtr &ev);
     ITransaction *CreateTxGetYamlMetadata(TEvConsole::TEvGetAllMetadataRequest::TPtr &ev);
@@ -172,6 +204,8 @@ private:
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
+    void Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr & ev, const TActorContext & ctx);
+    void Handle(TEvConsole::TEvGetConfigurationVersionRequest::TPtr & ev, const TActorContext & ctx);
     void HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TPtr & ev, const TActorContext & ctx);
     void Handle(TEvConsole::TEvDropConfigRequest::TPtr & ev, const TActorContext & ctx);
@@ -180,6 +214,8 @@ private:
     void Handle(TEvBlobStorage::TEvControllerProposeConfigRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlobStorage::TEvControllerConsoleCommitRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlobStorage::TEvControllerValidateConfigRequest::TPtr &ev, const TActorContext &ctx);
+
+    void FailReplaceConfig(TActorId Sender, const TString& error, const TActorContext &ctx);
 
     static bool CheckRights(const TString& userToken);
 
@@ -191,6 +227,24 @@ private:
         constexpr bool HasHandleUnauthorized = requires(T &ev) {
             HandleUnauthorized(ev, ctx);
         };
+
+        constexpr bool HasBypassAuth = std::is_same_v<
+            std::decay_t<T>,
+            typename TEvConsole::TEvGetAllConfigsRequest::TPtr
+        > || std::is_same_v<
+            std::decay_t<T>,
+            typename TEvConsole::TEvReplaceYamlConfigRequest::TPtr
+        > || std::is_same_v<
+            std::decay_t<T>,
+            typename TEvConsole::TEvSetYamlConfigRequest::TPtr
+        >;
+
+        if constexpr (HasBypassAuth) {
+            if (ev->Get()->Record.HasBypassAuth() && ev->Get()->Record.GetBypassAuth()) {
+                Handle(ev, ctx);
+                return;
+            }
+        }
 
         if (IsAdministrator(AppData(ctx), ev->Get()->Record.GetUserToken())) {
             Handle(ev, ctx);
@@ -225,6 +279,8 @@ private:
             HFunc(TEvConsole::TEvGetAllConfigsRequest, HandleWithRights);
             HFunc(TEvConsole::TEvGetNodeLabelsRequest, HandleWithRights);
             HFunc(TEvConsole::TEvGetAllMetadataRequest, HandleWithRights);
+            HFunc(TEvConsole::TEvFetchStartupConfigRequest, HandleWithRights);
+            HFunc(TEvConsole::TEvGetConfigurationVersionRequest, HandleWithRights);
             HFunc(TEvConsole::TEvAddVolatileConfigRequest, HandleWithRights);
             HFunc(TEvConsole::TEvRemoveVolatileConfigRequest, HandleWithRights);
             FFunc(TEvConsole::EvGetConfigItemsRequest, ForwardToConfigsProvider);
@@ -252,14 +308,14 @@ private:
             IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
-            Y_ABORT("TConfigsManager::StateWork unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->ToString().data());
+            break;
         }
     }
 
 public:
-    TConfigsManager(TConsole &self)
+    TConfigsManager(TConsole &self, ::NMonitoring::TDynamicCounterPtr counters)
         : Self(self)
+        , Counters(counters)
     {
     }
 
@@ -278,7 +334,9 @@ public:
 
 private:
     TConsole &Self;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     TConfigsConfig Config;
+    TString DomainName;
     // All config items by id.
     TConfigIndex ConfigIndex;
     ui64 NextConfigItemId;
@@ -300,7 +358,11 @@ private:
 
     TString ClusterName;
     ui32 YamlVersion = 0;
-    TString YamlConfig;
+    TString MainYamlConfig;
+    // Unknown/deprecated fields of MainYamlConfig, cached from the moment the config was uploaded
+    // (computed during ValidateMainConfig, persisted in Schema::YamlConfig::UnknownFields).
+    NKikimrConsole::TYamlConfigUnknownFields MainYamlConfigUnknownFields;
+    THashMap<TString, TDatabaseYamlConfig> DatabaseYamlConfigs;
     bool YamlDropped = false;
     bool YamlReadOnly = true;
     TMap<ui64, TString> VolatileYamlConfigs;

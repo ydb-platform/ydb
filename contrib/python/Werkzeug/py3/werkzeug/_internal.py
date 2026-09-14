@@ -1,50 +1,18 @@
+from __future__ import annotations
+
 import logging
 import operator
 import re
-import string
 import sys
-import typing
 import typing as t
-from datetime import date
 from datetime import datetime
 from datetime import timezone
-from itertools import chain
-from weakref import WeakKeyDictionary
 
 if t.TYPE_CHECKING:
-    from _typeshed.wsgi import StartResponse
-    from _typeshed.wsgi import WSGIApplication
     from _typeshed.wsgi import WSGIEnvironment
-    from .wrappers.request import Request  # noqa: F401
+    from .wrappers.request import Request
 
-_logger: t.Optional[logging.Logger] = None
-_signature_cache = WeakKeyDictionary()  # type: ignore
-_epoch_ord = date(1970, 1, 1).toordinal()
-_legal_cookie_chars = frozenset(
-    c.encode("ascii")
-    for c in f"{string.ascii_letters}{string.digits}/=!#$%&'*+-.^_`|~:"
-)
-
-_cookie_quoting_map = {b",": b"\\054", b";": b"\\073", b'"': b'\\"', b"\\": b"\\\\"}
-for _i in chain(range(32), range(127, 256)):
-    _cookie_quoting_map[_i.to_bytes(1, sys.byteorder)] = f"\\{_i:03o}".encode("latin1")
-
-_octal_re = re.compile(rb"\\[0-3][0-7][0-7]")
-_quote_re = re.compile(rb"[\\].")
-_legal_cookie_chars_re = rb"[\w\d!#%&\'~_`><@,:/\$\*\+\-\.\^\|\)\(\?\}\{\=]"
-_cookie_re = re.compile(
-    rb"""
-    (?P<key>[^=;]+)
-    (?:\s*=\s*
-        (?P<val>
-            "(?:[^\\"]|\\.)*" |
-             (?:.*?)
-        )
-    )?
-    \s*;
-""",
-    flags=re.VERBOSE,
-)
+_logger: logging.Logger | None = None
 
 
 class _Missing:
@@ -58,12 +26,12 @@ class _Missing:
 _missing = _Missing()
 
 
-@typing.overload
+@t.overload
 def _make_encode_wrapper(reference: str) -> t.Callable[[str], str]:
     ...
 
 
-@typing.overload
+@t.overload
 def _make_encode_wrapper(reference: bytes) -> t.Callable[[str], bytes]:
     ...
 
@@ -78,7 +46,7 @@ def _make_encode_wrapper(reference: t.AnyStr) -> t.Callable[[str], t.AnyStr]:
     return operator.methodcaller("encode", "latin1")
 
 
-def _check_str_tuple(value: t.Tuple[t.AnyStr, ...]) -> None:
+def _check_str_tuple(value: tuple[t.AnyStr, ...]) -> None:
     """Ensure tuple items are all strings or all bytes."""
     if not value:
         return
@@ -93,7 +61,7 @@ _default_encoding = sys.getdefaultencoding()
 
 
 def _to_bytes(
-    x: t.Union[str, bytes], charset: str = _default_encoding, errors: str = "strict"
+    x: str | bytes, charset: str = _default_encoding, errors: str = "strict"
 ) -> bytes:
     if x is None or isinstance(x, bytes):
         return x
@@ -107,20 +75,20 @@ def _to_bytes(
     raise TypeError("Expected bytes")
 
 
-@typing.overload
+@t.overload
 def _to_str(  # type: ignore
     x: None,
-    charset: t.Optional[str] = ...,
+    charset: str | None = ...,
     errors: str = ...,
     allow_none_charset: bool = ...,
 ) -> None:
     ...
 
 
-@typing.overload
+@t.overload
 def _to_str(
     x: t.Any,
-    charset: t.Optional[str] = ...,
+    charset: str | None = ...,
     errors: str = ...,
     allow_none_charset: bool = ...,
 ) -> str:
@@ -128,11 +96,11 @@ def _to_str(
 
 
 def _to_str(
-    x: t.Optional[t.Any],
-    charset: t.Optional[str] = _default_encoding,
+    x: t.Any | None,
+    charset: str | None = _default_encoding,
     errors: str = "strict",
     allow_none_charset: bool = False,
-) -> t.Optional[t.Union[str, bytes]]:
+) -> str | bytes | None:
     if x is None or isinstance(x, str):
         return x
 
@@ -152,16 +120,11 @@ def _wsgi_decoding_dance(
     return s.encode("latin1").decode(charset, errors)
 
 
-def _wsgi_encoding_dance(
-    s: str, charset: str = "utf-8", errors: str = "replace"
-) -> str:
-    if isinstance(s, bytes):
-        return s.decode("latin1", errors)
-
+def _wsgi_encoding_dance(s: str, charset: str = "utf-8", errors: str = "strict") -> str:
     return s.encode(charset).decode("latin1", errors)
 
 
-def _get_environ(obj: t.Union["WSGIEnvironment", "Request"]) -> "WSGIEnvironment":
+def _get_environ(obj: WSGIEnvironment | Request) -> WSGIEnvironment:
     env = getattr(obj, "environ", obj)
     assert isinstance(
         env, dict
@@ -224,17 +187,17 @@ def _log(type: str, message: str, *args: t.Any, **kwargs: t.Any) -> None:
     getattr(_logger, type)(message.rstrip(), *args, **kwargs)
 
 
-@typing.overload
+@t.overload
 def _dt_as_utc(dt: None) -> None:
     ...
 
 
-@typing.overload
+@t.overload
 def _dt_as_utc(dt: datetime) -> datetime:
     ...
 
 
-def _dt_as_utc(dt: t.Optional[datetime]) -> t.Optional[datetime]:
+def _dt_as_utc(dt: datetime | None) -> datetime | None:
     if dt is None:
         return dt
 
@@ -257,11 +220,11 @@ class _DictAccessorProperty(t.Generic[_TAccessorValue]):
     def __init__(
         self,
         name: str,
-        default: t.Optional[_TAccessorValue] = None,
-        load_func: t.Optional[t.Callable[[str], _TAccessorValue]] = None,
-        dump_func: t.Optional[t.Callable[[_TAccessorValue], str]] = None,
-        read_only: t.Optional[bool] = None,
-        doc: t.Optional[str] = None,
+        default: _TAccessorValue | None = None,
+        load_func: t.Callable[[str], _TAccessorValue] | None = None,
+        dump_func: t.Callable[[_TAccessorValue], str] | None = None,
+        read_only: bool | None = None,
+        doc: str | None = None,
     ) -> None:
         self.name = name
         self.default = default
@@ -274,19 +237,19 @@ class _DictAccessorProperty(t.Generic[_TAccessorValue]):
     def lookup(self, instance: t.Any) -> t.MutableMapping[str, t.Any]:
         raise NotImplementedError
 
-    @typing.overload
+    @t.overload
     def __get__(
         self, instance: None, owner: type
-    ) -> "_DictAccessorProperty[_TAccessorValue]":
+    ) -> _DictAccessorProperty[_TAccessorValue]:
         ...
 
-    @typing.overload
+    @t.overload
     def __get__(self, instance: t.Any, owner: type) -> _TAccessorValue:
         ...
 
     def __get__(
-        self, instance: t.Optional[t.Any], owner: type
-    ) -> t.Union[_TAccessorValue, "_DictAccessorProperty[_TAccessorValue]"]:
+        self, instance: t.Any | None, owner: type
+    ) -> _TAccessorValue | _DictAccessorProperty[_TAccessorValue]:
         if instance is None:
             return self
 
@@ -324,225 +287,44 @@ class _DictAccessorProperty(t.Generic[_TAccessorValue]):
         return f"<{type(self).__name__} {self.name}>"
 
 
-def _cookie_quote(b: bytes) -> bytes:
-    buf = bytearray()
-    all_legal = True
-    _lookup = _cookie_quoting_map.get
-    _push = buf.extend
-
-    for char_int in b:
-        char = char_int.to_bytes(1, sys.byteorder)
-        if char not in _legal_cookie_chars:
-            all_legal = False
-            char = _lookup(char, char)
-        _push(char)
-
-    if all_legal:
-        return bytes(buf)
-    return bytes(b'"' + buf + b'"')
-
-
-def _cookie_unquote(b: bytes) -> bytes:
-    if len(b) < 2:
-        return b
-    if b[:1] != b'"' or b[-1:] != b'"':
-        return b
-
-    b = b[1:-1]
-
-    i = 0
-    n = len(b)
-    rv = bytearray()
-    _push = rv.extend
-
-    while 0 <= i < n:
-        o_match = _octal_re.search(b, i)
-        q_match = _quote_re.search(b, i)
-        if not o_match and not q_match:
-            rv.extend(b[i:])
-            break
-        j = k = -1
-        if o_match:
-            j = o_match.start(0)
-        if q_match:
-            k = q_match.start(0)
-        if q_match and (not o_match or k < j):
-            _push(b[i:k])
-            _push(b[k + 1 : k + 2])
-            i = k + 2
-        else:
-            _push(b[i:j])
-            rv.append(int(b[j + 1 : j + 4], 8))
-            i = j + 4
-
-    return bytes(rv)
-
-
-def _cookie_parse_impl(b: bytes) -> t.Iterator[t.Tuple[bytes, bytes]]:
-    """Lowlevel cookie parsing facility that operates on bytes."""
-    i = 0
-    n = len(b)
-
-    while i < n:
-        match = _cookie_re.search(b + b";", i)
-        if not match:
-            break
-
-        key = match.group("key").strip()
-        value = match.group("val") or b""
-        i = match.end(0)
-
-        yield key, _cookie_unquote(value)
-
-
-def _encode_idna(domain: str) -> bytes:
-    # If we're given bytes, make sure they fit into ASCII
-    if isinstance(domain, bytes):
-        domain.decode("ascii")
+def _decode_idna(domain: str) -> str:
+    try:
+        data = domain.encode("ascii")
+    except UnicodeEncodeError:
+        # If the domain is not ASCII, it's decoded already.
         return domain
 
-    # Otherwise check if it's already ascii, then return
     try:
-        return domain.encode("ascii")
-    except UnicodeError:
+        # Try decoding in one shot.
+        return data.decode("idna")
+    except UnicodeDecodeError:
         pass
 
-    # Otherwise encode each part separately
-    return b".".join(p.encode("idna") for p in domain.split("."))
+    # Decode each part separately, leaving invalid parts as punycode.
+    parts = []
 
-
-def _decode_idna(domain: t.Union[str, bytes]) -> str:
-    # If the input is a string try to encode it to ascii to do the idna
-    # decoding. If that fails because of a unicode error, then we
-    # already have a decoded idna domain.
-    if isinstance(domain, str):
+    for part in data.split(b"."):
         try:
-            domain = domain.encode("ascii")
-        except UnicodeError:
-            return domain  # type: ignore
+            parts.append(part.decode("idna"))
+        except UnicodeDecodeError:
+            parts.append(part.decode("ascii"))
 
-    # Decode each part separately. If a part fails, try to decode it
-    # with ascii and silently ignore errors. This makes sense because
-    # the idna codec does not have error handling.
-    def decode_part(part: bytes) -> str:
-        try:
-            return part.decode("idna")
-        except UnicodeError:
-            return part.decode("ascii", "ignore")
-
-    return ".".join(decode_part(p) for p in domain.split(b"."))
+    return ".".join(parts)
 
 
-@typing.overload
-def _make_cookie_domain(domain: None) -> None:
-    ...
+_plain_int_re = re.compile(r"-?\d+", re.ASCII)
 
 
-@typing.overload
-def _make_cookie_domain(domain: str) -> bytes:
-    ...
+def _plain_int(value: str) -> int:
+    """Parse an int only if it is only ASCII digits and ``-``.
 
+    This disallows ``+``, ``_``, and non-ASCII digits, which are accepted by ``int`` but
+    are not allowed in HTTP header values.
 
-def _make_cookie_domain(domain: t.Optional[str]) -> t.Optional[bytes]:
-    if domain is None:
-        return None
-    domain = _encode_idna(domain)
-    if b":" in domain:
-        domain = domain.split(b":", 1)[0]
-    if b"." in domain:
-        return domain
-    raise ValueError(
-        "Setting 'domain' for a cookie on a server running locally (ex: "
-        "localhost) is not supported by complying browsers. You should "
-        "have something like: '127.0.0.1 localhost dev.localhost' on "
-        "your hosts file and then point your server to run on "
-        "'dev.localhost' and also set 'domain' for 'dev.localhost'"
-    )
+    Any leading or trailing whitespace is stripped
+    """
+    value = value.strip()
+    if _plain_int_re.fullmatch(value) is None:
+        raise ValueError
 
-
-def _easteregg(app: t.Optional["WSGIApplication"] = None) -> "WSGIApplication":
-    """Like the name says.  But who knows how it works?"""
-
-    def bzzzzzzz(gyver: bytes) -> str:
-        import base64
-        import zlib
-
-        return zlib.decompress(base64.b64decode(gyver)).decode("ascii")
-
-    gyver = "\n".join(
-        [
-            x + (77 - len(x)) * " "
-            for x in bzzzzzzz(
-                b"""
-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
-7f2zLkGNv8b191cD/3vs9Q833z8t"""
-            ).splitlines()
-        ]
-    )
-
-    def easteregged(
-        environ: "WSGIEnvironment", start_response: "StartResponse"
-    ) -> t.Iterable[bytes]:
-        def injecting_start_response(
-            status: str, headers: t.List[t.Tuple[str, str]], exc_info: t.Any = None
-        ) -> t.Callable[[bytes], t.Any]:
-            headers.append(("X-Powered-By", "Werkzeug"))
-            return start_response(status, headers, exc_info)
-
-        if app is not None and environ.get("QUERY_STRING") != "macgybarchakku":
-            return app(environ, injecting_start_response)
-        injecting_start_response("200 OK", [("Content-Type", "text/html")])
-        return [
-            f"""\
-<!doctype html>
-<html lang=en>
-<head>
-<title>About Werkzeug</title>
-<style type="text/css">
-  body {{ font: 15px Georgia, serif; text-align: center; }}
-  a {{ color: #333; text-decoration: none; }}
-  h1 {{ font-size: 30px; margin: 20px 0 10px 0; }}
-  p {{ margin: 0 0 30px 0; }}
-  pre {{ font: 11px 'Consolas', 'Monaco', monospace; line-height: 0.95; }}
-</style>
-</head>
-<body>
-<h1><a href="http://werkzeug.pocoo.org/">Werkzeug</a></h1>
-<p>the Swiss Army knife of Python web development.</p>
-<pre>{gyver}\n\n\n</pre>
-</body>
-</html>""".encode(
-                "latin1"
-            )
-        ]
-
-    return easteregged
+    return int(value)

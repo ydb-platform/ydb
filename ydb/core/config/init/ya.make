@@ -3,6 +3,8 @@ LIBRARY()
 SRCS(
     init.h
     init.cpp
+    yaml_config_helpers.h
+    yaml_config_helpers.cpp
     init_noop.cpp
     dummy.h
     dummy.cpp
@@ -17,6 +19,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/public/udf
     ydb/public/lib/deprecated/kicli
+    ydb/public/sdk/cpp/src/client/config
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/driver
 )

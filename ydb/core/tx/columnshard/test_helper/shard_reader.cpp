@@ -11,10 +11,16 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TShardReader::BuildStartEvent
     ev->Record.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_FULL);
     ev->Record.SetTxId(Snapshot.GetTxId());
 
-    ev->Record.SetReverse(Reverse);
+    if (Reverse) {
+        ev->Record.SetReverse(*Reverse);
+    }
     ev->Record.SetItemsLimit(Limit);
 
     ev->Record.SetDataFormat(NKikimrDataEvents::FORMAT_ARROW);
+
+    if (StartCursor) {
+        *ev->Record.MutableScanCursor() = *StartCursor;
+    }
 
     auto protoRanges = ev->Record.MutableRanges();
     protoRanges->Reserve(Ranges.size());
@@ -46,32 +52,6 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TShardReader::BuildStartEvent
     return ev;
 }
 
-NKikimr::NTxUT::TShardReader& TShardReader::SetReplyColumns(const std::vector<TString>& replyColumns) {
-    AFL_VERIFY(!SerializedProgram);
-    if (!ProgramProto) {
-        ProgramProto = NKikimrSSA::TProgram();
-    }
-    for (auto&& command : *ProgramProto->MutableCommand()) {
-        if (command.HasProjection()) {
-            NKikimrSSA::TProgram::TProjection proj;
-            for (auto&& i : replyColumns) {
-                proj.AddColumns()->SetName(i);
-            }
-            *command.MutableProjection() = proj;
-            return *this;
-        }
-    }
-    {
-        auto* command = ProgramProto->AddCommand();
-        NKikimrSSA::TProgram::TProjection proj;
-        for (auto&& i : replyColumns) {
-            proj.AddColumns()->SetName(i);
-        }
-        *command->MutableProjection() = proj;
-    }
-    return *this;
-}
-
 NKikimr::NTxUT::TShardReader& TShardReader::SetReplyColumnIds(const std::vector<ui32>& replyColumnIds) {
     AFL_VERIFY(!SerializedProgram);
     if (!ProgramProto) {
@@ -98,4 +78,4 @@ NKikimr::NTxUT::TShardReader& TShardReader::SetReplyColumnIds(const std::vector<
     return *this;
 }
 
-}
+}   // namespace NKikimr::NTxUT

@@ -68,6 +68,24 @@ namespace NKikimr::NTestShard {
                 }
                 root["readLatencies"] = r;
 
+                TLoadActor::TOperationCounters total;
+                auto addCounters = [&](const char* name, const TLoadActor::TOperationCounters& counters) {
+                    NJson::TJsonValue c(NJson::JSON_MAP);
+                    c["ok"] = counters.OkCount;
+                    c["fail"] = counters.FailCount;
+                    c["total"] = counters.GetTotalCount();
+                    c["successRate"] = counters.GetSuccessRate();
+                    root[name] = c;
+                    total += counters;
+                };
+
+                addCounters("writeCounters", self->WriteCounters);
+                addCounters("patchCounters", self->PatchCounters);
+                addCounters("deleteCounters", self->DeleteCounters);
+                addCounters("readCounters", self->ReadCounters);
+
+                root["overallSuccessRate"] = total.GetSuccessRate();
+
                 return root;
             }
 
@@ -182,6 +200,33 @@ namespace NKikimr::NTestShard {
                                     TABLER() {
                                         TABLED() { str << "Count of validation runnings"; }
                                         TABLED() { str << self->ValidationRunningCount; }
+                                    }
+
+                                    TLoadActor::TOperationCounters total;
+                                    auto outputCounters = [&](const char* name, const TLoadActor::TOperationCounters& c) {
+                                        TABLER() {
+                                            TABLED() { str << name << " (ok/fail/total)"; }
+                                            TABLED() { str << c.OkCount << "/" << c.FailCount << "/" << c.GetTotalCount(); }
+                                        }
+                                        TABLER() {
+                                            TABLED() { str << name << " success rate"; }
+                                            TABLED() { str << Sprintf("%.4f", c.GetSuccessRate() * 100) << "%"; }
+                                        }
+                                        total += c;
+                                    };
+
+                                    outputCounters("Write", self->WriteCounters);
+                                    outputCounters("Patch", self->PatchCounters);
+                                    outputCounters("Delete", self->DeleteCounters);
+                                    outputCounters("Read", self->ReadCounters);
+
+                                    TABLER() {
+                                        TABLED() { str << "Overall (ok/fail/total)"; }
+                                        TABLED() { str << total.OkCount << "/" << total.FailCount << "/" << total.GetTotalCount(); }
+                                    }
+                                    TABLER() {
+                                        TABLED() { str << "Overall success rate"; }
+                                        TABLED() { str << Sprintf("%.4f", total.GetSuccessRate() * 100) << "%"; }
                                     }
 
                                     const std::vector<double> ps{0.0, 0.5, 0.9, 0.99, 1.0};

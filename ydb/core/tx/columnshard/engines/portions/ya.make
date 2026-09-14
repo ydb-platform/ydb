@@ -14,9 +14,12 @@ SRCS(
     common.cpp
     index_chunk.cpp
     data_accessor.cpp
+    compacted.cpp
+    written.cpp
 )
 
 PEERDIR(
+    ydb/core/formats/arrow/filter
     ydb/core/tx/columnshard/engines/scheme
     ydb/core/tx/columnshard/splitter
     ydb/core/tx/columnshard/common

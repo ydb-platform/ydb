@@ -1,5 +1,9 @@
 #include "impl.h"
 
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
+
 namespace NKikimr::NBsController {
 
     class TBlobStorageController::TTxGroupMetricsExchange : public TTransactionBase<TBlobStorageController> {
@@ -17,13 +21,18 @@ namespace NKikimr::NBsController {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             auto& record = Ev->Get()->Record;
 
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXGME00, "TTxGroupMetricsExchange::Execute", (Record, record));
+            YDB_LOG_DEBUG("TTxGroupMetricsExchange::Execute",
+                {"marker", "BSCTXGME00"},
+                {"record", record});
 
             NIceDb::TNiceDb db(txc.DB);
+
+            THashSet<TGroupId> groupsToCheck;
 
             for (NKikimrBlobStorage::TGroupMetrics& item : *record.MutableGroupMetrics()) {
                 if (TGroupInfo *group = Self->FindGroup(TGroupId::FromProto(&item, &NKikimrBlobStorage::TGroupMetrics::GetGroupId))) {
                     group->GroupMetrics = std::move(item);
+                    groupsToCheck.insert(group->ID);
 
                     TString s;
                     const bool success = group->GroupMetrics->SerializeToString(&s);
@@ -40,14 +49,12 @@ namespace NKikimr::NBsController {
                     if (TGroupInfo *group = Self->FindGroup(TGroupId::FromValue(groupId))) {
                         auto *item = outRecord.AddGroupMetrics();
                         item->SetGroupId(group->ID.GetRawId());
-                        group->FillInGroupParameters(item->MutableGroupParameters());
+                        group->FillInGroupParameters(item->MutableGroupParameters(), Self);
                     }
                 }
             }
 
-            for (auto it = Self->SelectGroupsQueue.begin(); it != Self->SelectGroupsQueue.end(); ) {
-                Self->ProcessSelectGroupsQueueItem(it++);
-            }
+            Self->UpdateWaitingGroups(groupsToCheck);
 
             return true;
         }

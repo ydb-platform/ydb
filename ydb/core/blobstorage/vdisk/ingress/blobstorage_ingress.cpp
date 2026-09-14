@@ -28,7 +28,7 @@ namespace NKikimr {
 
         Y_ABORT_UNLESS(domainsNum * disksInDomain == totalVDisks, "domainsNum# %" PRIu32 " disksInDomain# %" PRIu32
                 " totalVDisks# %" PRIu32 " erasure# %s", domainsNum, disksInDomain, totalVDisks,
-                TBlobStorageGroupType::ErasureName[top->GType.GetErasure()].data());
+                top->GType.ToString().data());
 
         // handoff
         ui32 handoff = top->GType.Handoff();
@@ -121,6 +121,16 @@ namespace NKikimr {
         }
     }
 
+
+    bool TIngress::IsDoNotKeep(const TBlobStorageGroupType& gtype) const {
+        return GetCollectMode(IngressMode(gtype)) & ECollectMode::CollectModeDoNotKeep;
+    }
+
+    bool TIngress::IsKeep(const TBlobStorageGroupType& gtype) const {
+        // DoNotKeep flag always wins, so == instead of & is intentional
+        return GetCollectMode(IngressMode(gtype)) == ECollectMode::CollectModeKeep;
+    }
+
     bool TIngress::MustKnowAboutLogoBlob(const TBlobStorageGroupInfo::TTopology *top,
                                          const TVDiskIdShort &vdisk,
                                          const TLogoBlobID &id) {
@@ -129,22 +139,24 @@ namespace NKikimr {
 
     TMaybe<TIngress> TIngress::CreateIngressWithLocal(const TBlobStorageGroupInfo::TTopology *top,
                                                       const TVDiskIdShort &vdisk,
-                                                      const TLogoBlobID &id) {
+                                                      const TLogoBlobID &id,
+                                                      bool issueKeepFlag) {
         const ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
-        return CreateIngressInternal(top->GType, nodeId, id, true); // create local bits
+        return CreateIngressInternal(top->GType, nodeId, id, true, issueKeepFlag); // create local bits
     }
 
     TMaybe<TIngress> TIngress::CreateIngressWOLocal(const TBlobStorageGroupInfo::TTopology *top,
                                                     const TVDiskIdShort &vdisk,
                                                     const TLogoBlobID &id) {
         const ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
-        return CreateIngressInternal(top->GType, nodeId, id, false); // w/o local bits
+        return CreateIngressInternal(top->GType, nodeId, id, false, false); // w/o local bits and keep flag
     }
 
     TMaybe<TIngress> TIngress::CreateIngressInternal(TBlobStorageGroupType gtype,
                                                      const ui8 nodeId,
                                                      const TLogoBlobID &id,
-                                                     const bool setUpLocalBits) {
+                                                     bool setUpLocalBits,
+                                                     bool issueKeepFlag) {
         if (nodeId == gtype.BlobSubgroupSize()) {
             return Nothing();
         }
@@ -152,6 +164,9 @@ namespace NKikimr {
         switch (IngressMode(gtype)) {
             case EMode::GENERIC: {
                 TIngress ingress;
+                if (issueKeepFlag) {
+                    ingress.SetKeep(EMode::GENERIC, CollectModeKeep);
+                }
                 const ui8 subgroupSz = gtype.BlobSubgroupSize();
                 Y_DEBUG_ABORT_UNLESS(subgroupSz <= MaxNodesPerBlob);
                 SETUP_VECTORS(ingress.Data, gtype);
@@ -192,7 +207,7 @@ namespace NKikimr {
                     raw |= static_cast<ui64>(v.Raw()) << (62 - 8);
                 }
                 raw |= static_cast<ui64>(v.Raw()) << (62 - 8 - gtype.TotalPartCount() * (1 + nodeId));
-                return TIngress(raw);
+                return TIngress(raw | (issueKeepFlag ? static_cast<ui64>(CollectModeKeep) << 62 : 0));
             }
         }
     }
@@ -337,20 +352,29 @@ namespace NKikimr {
 
     // Make a copy of ingress w/o local bits
     TIngress TIngress::CopyWithoutLocal(TBlobStorageGroupType gtype) const {
+        return ReplaceLocal(gtype, NMatrix::TVectorType(0, gtype.TotalPartCount()));
+    }
+
+    TIngress TIngress::ReplaceLocal(TBlobStorageGroupType gtype, NMatrix::TVectorType parts) const {
         switch (IngressMode(gtype)) {
             case EMode::GENERIC: {
                 TIngress res;
                 res.Data = Data;
 
                 SETUP_VECTORS(res.Data, gtype);
-                for (ui32 i = 0; i < totalParts; i++)
-                    local.Clear(i);
+                for (ui32 i = 0; i < totalParts; i++) {
+                    if (parts.Get(i)) {
+                        local.Set(i);
+                    } else {
+                        local.Clear(i);
+                    }
+                }
 
                 return res;
             }
             case EMode::MIRROR3OF4: {
                 const ui64 mask = ((static_cast<ui64>(1) << gtype.TotalPartCount()) - 1) << (62 - gtype.TotalPartCount());
-                return TIngress(Data & ~mask);
+                return TIngress((Data & ~mask) | static_cast<ui64>(parts.Raw()) << (62 - 8));
             }
         }
     }

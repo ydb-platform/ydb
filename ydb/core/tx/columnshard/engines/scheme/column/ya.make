@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/abstract
+    ydb/core/tx/columnshard/engines/protos  # stopgap: proper edge (-> storage/chunks) cycles
 
     ydb/core/formats/arrow/dictionary
     ydb/core/formats/arrow/serializer

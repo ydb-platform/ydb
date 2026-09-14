@@ -8,10 +8,12 @@
 #include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/conveyor_composite/usage/service.h>
 
 namespace NKikimr::NColumnShard {
 class TTablesManager;
 }
+
 namespace NKikimr::NOlap {
 
 template <class TConveyorTask>
@@ -28,7 +30,8 @@ public:
         : TBase(actions, "CS::NORMALIZER")
         , Data(std::move(data))
         , Schemas(std::move(schemas))
-        , NormContext(nCtx) {
+        , NormContext(nCtx)
+    {
     }
 
 protected:
@@ -36,7 +39,7 @@ protected:
         NormContext.SetResourcesGuard(resourcesGuard);
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<TConveyorTask>(std::move(ExtractBlobsData()), NormContext, std::move(Data), Schemas);
-        NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+        NConveyorComposite::TNormalizerServiceOperator::SendTaskToExecute(task);
     }
 
     virtual bool DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) override {
@@ -55,13 +58,15 @@ class TPortionsNormalizerTask: public INormalizerTask {
 
 public:
     TPortionsNormalizerTask(typename TConveyorTask::TDataContainer&& package)
-        : Package(std::move(package)) {
+        : Package(std::move(package))
+    {
     }
 
     TPortionsNormalizerTask(
         typename TConveyorTask::TDataContainer&& package, const std::shared_ptr<THashMap<ui64, ISnapshotSchema::TPtr>> schemas)
         : Package(std::move(package))
-        , Schemas(schemas) {
+        , Schemas(schemas)
+    {
     }
 
     void Start(const TNormalizationController& controller, const TNormalizationContext& nCtx) override {
@@ -83,10 +88,12 @@ public:
 class TPortionsNormalizerBase: public TNormalizationController::INormalizerComponent {
 private:
     using TBase = TNormalizationController::INormalizerComponent;
+
 public:
     TPortionsNormalizerBase(const TNormalizationController::TInitContext& info)
         : TBase(info)
-        , DsGroupSelector(info.GetStorageInfo()) {
+        , DsGroupSelector(info.GetStorageInfo())
+    {
     }
 
     TConclusionStatus InitPortions(

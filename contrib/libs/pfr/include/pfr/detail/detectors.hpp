@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2023 Antony Polukhin
+// Copyright (c) 2016-2025 Antony Polukhin
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -9,15 +9,17 @@
 
 #include <pfr/detail/config.hpp>
 
+#if !defined(PFR_INTERFACE_UNIT)
 #include <functional>
 #include <type_traits>
+#endif
 
 namespace pfr { namespace detail {
 ///////////////////// `value` is true if Detector<Tleft, Tright> does not compile (SFINAE)
     struct can_not_apply{};
 
     template <template <class, class> class Detector, class Tleft, class Tright>
-    struct not_appliable {
+    struct not_applicable {
         static constexpr bool value = std::is_same<
             Detector<Tleft, Tright>,
             can_not_apply

@@ -44,7 +44,7 @@ namespace NKikimr {
         };
 
         TFillInLogoBlobContext FillInLogoBlob(NSyncLog::TMemRecLog *mem, ui64 num, TFillInLogoBlobContext ctx) {
-            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+            TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 4);
             char buf[NSyncLog::MaxRecFullSize];
             ui32 size = 0;
 

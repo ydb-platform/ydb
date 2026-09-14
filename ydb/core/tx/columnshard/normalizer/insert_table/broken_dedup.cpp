@@ -3,22 +3,28 @@
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap::NInsertionDedup {
 
 class TNormalizerRemoveChanges: public INormalizerChanges {
 private:
     std::vector<TInsertTableRecordLoadContext> Insertions;
+
 public:
-    virtual bool ApplyOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normalizationContext*/) const override {
+    virtual bool ApplyOnExecute(
+        NTabletFlatExecutor::TTransactionContext& txc, const TNormalizationController& /*normalizationContext*/) const override {
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Insertions) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "remove_aborted_record")("write_id", i.GetInsertWriteId());
+            YDB_LOG_WARN("",
+                {"event", "remove_aborted_record"},
+                {"writeId", i.GetInsertWriteId()});
             i.Remove(db);
         }
         return true;
     }
-    virtual void ApplyOnComplete(const TNormalizationController& /*normalizationContext*/) const override {
 
+    virtual void ApplyOnComplete(const TNormalizationController& /*normalizationContext*/) const override {
     }
 
     virtual ui64 GetSize() const override {
@@ -28,7 +34,6 @@ public:
     TNormalizerRemoveChanges(const std::vector<TInsertTableRecordLoadContext>& insertions)
         : Insertions(insertions)
     {
-
     }
 };
 
@@ -42,13 +47,16 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Insertions) {
             AFL_VERIFY(i.GetDedupId());
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "correct_record")("dedup", i.GetDedupId());
+            YDB_LOG_WARN("",
+                {"event", "correct_record"},
+                {"dedup", i.GetDedupId()});
             i.Remove(db);
             i.SetDedupId("");
             i.Upsert(db);
         }
         return true;
     }
+
     virtual void ApplyOnComplete(const TNormalizationController& /*normalizationContext*/) const override {
     }
 
@@ -57,20 +65,22 @@ public:
     }
 
     TNormalizerCleanDedupChanges(const std::vector<TInsertTableRecordLoadContext>& insertions)
-        : Insertions(insertions) {
+        : Insertions(insertions)
+    {
     }
 };
-
 
 class TCollectionStates {
 private:
     YDB_READONLY_DEF(std::optional<TInsertTableRecordLoadContext>, Inserted);
     YDB_READONLY_DEF(std::optional<TInsertTableRecordLoadContext>, Aborted);
+
 public:
     void SetInserted(const TInsertTableRecordLoadContext& context) {
         AFL_VERIFY(!Inserted);
         Inserted = context;
     }
+
     void SetAborted(const TInsertTableRecordLoadContext& context) {
         AFL_VERIFY(!Aborted);
         Aborted = context;
@@ -147,4 +157,4 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TInsertionsDedupNormalizer::DoIn
     return result;
 }
 
-}   // namespace NKikimr::NOlap
+}   // namespace NKikimr::NOlap::NInsertionDedup

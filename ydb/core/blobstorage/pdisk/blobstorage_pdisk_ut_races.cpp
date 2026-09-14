@@ -13,10 +13,67 @@
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TPDiskRaces) {
+    void TestYardInitOrder(bool firstOwnerBusy) {
+        TActorTestContext testCtx({});
+        const TVDiskID firstVDisk(1, 1, 0, 0, 0);
+        const TVDiskID secondVDisk(2, 1, 0, 0, 0);
+        for (const auto& vdisk : {firstVDisk, secondVDisk}) {
+            testCtx.TestResponse<NPDisk::TEvYardInitResult>(
+                new NPDisk::TEvYardInit(2, vdisk, testCtx.TestCtx.PDiskGuid), NKikimrProto::OK);
+        }
+
+        auto* pdisk = testCtx.GetPDisk();
+        pdisk->PDiskThread.StopSync();
+        const NPDisk::TEvYardInit firstEvent(3, firstVDisk, testCtx.TestCtx.PDiskGuid);
+        const NPDisk::TEvYardInit secondEvent(3, secondVDisk, testCtx.TestCtx.PDiskGuid);
+        std::unique_ptr<NPDisk::TYardInit> first(
+            pdisk->ReqCreator.CreateFromEv<NPDisk::TYardInit>(firstEvent, testCtx.Sender));
+        std::unique_ptr<NPDisk::TYardInit> second(
+            pdisk->ReqCreator.CreateFromEv<NPDisk::TYardInit>(secondEvent, testCtx.Sender));
+        // Submit in descending pointer order to expose pointer-sorted pending requests.
+        if (std::less<NPDisk::TYardInit*>()(first.get(), second.get())) {
+            first.swap(second);
+        }
+        const auto firstOwner = pdisk->VDiskOwners.at(first->VDiskIdWOGeneration());
+        const auto secondOwner = pdisk->VDiskOwners.at(second->VDiskIdWOGeneration());
+        pdisk->InputRequest(first.release());
+        pdisk->InputRequest(second.release());
+        pdisk->EnqueueAll();
+        pdisk->ProcessFastOperationsQueue();
+
+        auto& inFlight = pdisk->OwnerData[firstOwner].InFlight->ChunkWrites;
+        if (firstOwnerBusy) {
+            ++inFlight;
+        }
+        pdisk->ProcessPendingYardInits();
+        auto result = testCtx.Recv<NPDisk::TEvYardInitResult>();
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->PDiskParams->Owner, firstOwnerBusy ? secondOwner : firstOwner);
+        if (firstOwnerBusy) {
+            --inFlight;
+            pdisk->ProcessPendingYardInits();
+        }
+        result = testCtx.Recv<NPDisk::TEvYardInitResult>();
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->PDiskParams->Owner, firstOwnerBusy ? firstOwner : secondOwner);
+        UNIT_ASSERT(pdisk->PendingYardInits.empty());
+    }
+
+    Y_UNIT_TEST(YardInitReadyOwnersPreserveOrder) {
+        TestYardInitOrder(false);
+    }
+
+    Y_UNIT_TEST(YardInitBusyOwnerDoesNotBlockReadyOwner) {
+        TestYardInitOrder(true);
+    }
+
     void TestKillOwnerWhileDeletingChunk(bool usePDiskMock, ui32 timeLimit, ui32 inflight, ui32 reservedChunks, ui32 vdisksNum) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
-            TActorTestContext testCtx({ false, usePDiskMock });
+            TActorTestContext::TSettings settings{};
+            settings.IsBad = false;
+            settings.UsePDiskMock = usePDiskMock;
+            TActorTestContext testCtx(settings);
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
@@ -91,7 +148,10 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     void TestDecommit(bool usePDiskMock, ui32 timeLimit, ui32 inflight, ui32 reservedChunks) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
-            TActorTestContext testCtx({ false, usePDiskMock });
+            TActorTestContext::TSettings settings{};
+            settings.IsBad = false;
+            settings.UsePDiskMock = usePDiskMock;
+            TActorTestContext testCtx(settings);
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
@@ -184,7 +244,10 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     void TestKillOwnerWhileDecommitting(bool usePDiskMock, ui32 timeLimit, ui32 inflight, ui32 reservedChunks, ui32 vdisksNum) {
         THPTimer timer;
         while (timer.Passed() < timeLimit) {
-            TActorTestContext testCtx({ false, usePDiskMock });
+            TActorTestContext::TSettings settings{};
+            settings.IsBad = false;
+            settings.UsePDiskMock = usePDiskMock;
+            TActorTestContext testCtx(settings);
             const TString data = PrepareData(4096);
 
             auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
@@ -258,7 +321,10 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
     }
 
     void OwnerRecreationRaces(bool usePDiskMock, ui32 timeLimit, ui32 vdisksNum) {
-        TActorTestContext testCtx({ false, usePDiskMock });
+        TActorTestContext::TSettings settings{};
+        settings.IsBad = false;
+        settings.UsePDiskMock = usePDiskMock;
+        TActorTestContext testCtx(settings);
 
         std::vector<TVDiskMock> mocks;
         enum EMockState {
@@ -332,7 +398,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
         while (timer.Passed() < timeLimit) {
             TStringStream ss;
 
-            TActorTestContext testCtx({ 
+            TActorTestContext testCtx({
                 .IsBad = false,
                 .UsePDiskMock = false,
                 .LogBackend = new TStreamLogBackend(&ss),
@@ -407,7 +473,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
         while (timer.Passed() < timeLimit) {
             TStringStream ss;
 
-            TActorTestContext testCtx({ 
+            TActorTestContext testCtx({
                 .IsBad = false,
                 .UsePDiskMock = false,
                 .LogBackend = new TStreamLogBackend(&ss),
@@ -464,7 +530,7 @@ Y_UNIT_TEST_SUITE(TPDiskRaces) {
 
             testCtx.Recv<NPDisk::TEvHarakiriResult>();
             testCtx.Recv<NPDisk::TEvHarakiriResult>();
-            
+
             {
                 TVDiskMock mock(&testCtx);
                 mock.Init();

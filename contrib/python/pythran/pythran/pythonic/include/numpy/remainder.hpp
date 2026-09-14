@@ -15,8 +15,7 @@ namespace numpy
   namespace wrapper
   {
     template <class T0, class T1>
-    auto remainder(T0 const &x,
-                   T1 const &y) -> decltype(x - y * xsimd::floor(x / y))
+    auto remainder(T0 const &x, T1 const &y) -> decltype(x - y * xsimd::floor(x / y))
     {
       return x - y * xsimd::floor(x / y);
     }

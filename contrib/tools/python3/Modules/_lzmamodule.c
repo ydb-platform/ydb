@@ -5,10 +5,12 @@
 
 */
 
-#define PY_SSIZE_T_CLEAN
+#ifndef Py_BUILD_CORE_BUILTIN
+#  define Py_BUILD_CORE_MODULE 1
+#endif
 
 #include "Python.h"
-#include "structmember.h"         // PyMemberDef
+
 
 #include <stdlib.h>               // free()
 #include <string.h>
@@ -242,15 +244,10 @@ parse_filter_spec_lzma(_lzma_state *state, PyObject *spec)
     /* First, fill in default values for all the options using a preset.
        Then, override the defaults with any values given by the caller. */
 
-    preset_obj = PyMapping_GetItemString(spec, "preset");
-    if (preset_obj == NULL) {
-        if (PyErr_ExceptionMatches(PyExc_KeyError)) {
-            PyErr_Clear();
-        }
-        else {
-            return NULL;
-        }
-    } else {
+    if (PyMapping_GetOptionalItemString(spec, "preset", &preset_obj) < 0) {
+        return NULL;
+    }
+    if (preset_obj != NULL) {
         int ok = uint32_converter(preset_obj, &preset);
         Py_DECREF(preset_obj);
         if (!ok) {
@@ -347,11 +344,12 @@ lzma_filter_converter(_lzma_state *state, PyObject *spec, void *ptr)
                         "Filter specifier must be a dict or dict-like object");
         return 0;
     }
-    id_obj = PyMapping_GetItemString(spec, "id");
+    if (PyMapping_GetOptionalItemString(spec, "id", &id_obj) < 0) {
+        return 0;
+    }
     if (id_obj == NULL) {
-        if (PyErr_ExceptionMatches(PyExc_KeyError))
-            PyErr_SetString(PyExc_ValueError,
-                            "Filter specifier must have an \"id\" entry");
+        PyErr_SetString(PyExc_ValueError,
+                        "Filter specifier must have an \"id\" entry");
         return 0;
     }
     f->id = PyLong_AsUnsignedLongLong(id_obj);
@@ -1114,6 +1112,7 @@ decompress(Decompressor *d, uint8_t *data, size_t len, Py_ssize_t max_length)
     return result;
 
 error:
+    lzs->next_in = NULL;
     Py_XDECREF(result);
     return NULL;
 }
@@ -1126,24 +1125,25 @@ _lzma.LZMADecompressor.decompress
 
 Decompress *data*, returning uncompressed data as bytes.
 
-If *max_length* is nonnegative, returns at most *max_length* bytes of
-decompressed data. If this limit is reached and further output can be
-produced, *self.needs_input* will be set to ``False``. In this case, the next
-call to *decompress()* may provide *data* as b'' to obtain more of the output.
+If *max_length* is nonnegative, returns at most *max_length* bytes
+of decompressed data. If this limit is reached and further output
+can be produced, *self.needs_input* will be set to ``False``.  In
+this case, the next call to *decompress()* may provide *data* as b''
+to obtain more of the output.
 
-If all of the input data was decompressed and returned (either because this
-was less than *max_length* bytes, or because *max_length* was negative),
-*self.needs_input* will be set to True.
+If all of the input data was decompressed and returned (either
+because this was less than *max_length* bytes, or because
+*max_length* was negative), *self.needs_input* will be set to True.
 
-Attempting to decompress data after the end of stream is reached raises an
-EOFError.  Any data found after the end of the stream is ignored and saved in
-the unused_data attribute.
+Attempting to decompress data after the end of stream is reached
+raises an EOFError.  Any data found after the end of the stream is
+ignored and saved in the unused_data attribute.
 [clinic start generated code]*/
 
 static PyObject *
 _lzma_LZMADecompressor_decompress_impl(Decompressor *self, Py_buffer *data,
                                        Py_ssize_t max_length)
-/*[clinic end generated code: output=ef4e20ec7122241d input=60c1f135820e309d]*/
+/*[clinic end generated code: output=ef4e20ec7122241d input=0eb62669c4315dee]*/
 {
     PyObject *result = NULL;
 
@@ -1346,13 +1346,13 @@ PyDoc_STRVAR(Decompressor_unused_data_doc,
 "Data found after the end of the compressed stream.");
 
 static PyMemberDef Decompressor_members[] = {
-    {"check", T_INT, offsetof(Decompressor, check), READONLY,
+    {"check", Py_T_INT, offsetof(Decompressor, check), Py_READONLY,
      Decompressor_check_doc},
-    {"eof", T_BOOL, offsetof(Decompressor, eof), READONLY,
+    {"eof", Py_T_BOOL, offsetof(Decompressor, eof), Py_READONLY,
      Decompressor_eof_doc},
-    {"needs_input", T_BOOL, offsetof(Decompressor, needs_input), READONLY,
+    {"needs_input", Py_T_BOOL, offsetof(Decompressor, needs_input), Py_READONLY,
      Decompressor_needs_input_doc},
-    {"unused_data", T_OBJECT_EX, offsetof(Decompressor, unused_data), READONLY,
+    {"unused_data", Py_T_OBJECT_EX, offsetof(Decompressor, unused_data), Py_READONLY,
      Decompressor_unused_data_doc},
     {NULL}
 };
@@ -1506,15 +1506,7 @@ _lzma__decode_filter_properties_impl(PyObject *module, lzma_vli filter_id,
 static int
 module_add_int_constant(PyObject *m, const char *name, long long value)
 {
-    PyObject *o = PyLong_FromLongLong(value);
-    if (o == NULL) {
-        return -1;
-    }
-    if (PyModule_AddObject(m, name, o) == 0) {
-        return 0;
-    }
-    Py_DECREF(o);
-    return -1;
+    return PyModule_Add(m, name, PyLong_FromLongLong(value));
 }
 
 static int
@@ -1614,6 +1606,7 @@ static PyMethodDef lzma_methods[] = {
 static PyModuleDef_Slot lzma_slots[] = {
     {Py_mod_exec, lzma_exec},
     {Py_mod_multiple_interpreters, Py_MOD_PER_INTERPRETER_GIL_SUPPORTED},
+    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
     {0, NULL}
 };
 

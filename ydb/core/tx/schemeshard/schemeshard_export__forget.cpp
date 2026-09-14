@@ -1,8 +1,8 @@
-#include "schemeshard_xxport__tx_base.h"
+#include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_export_helpers.h"
-#include "schemeshard_export.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -67,33 +67,13 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
         if (!exportPath.IsResolved()) {
             SendNotificationsIfFinished(exportInfo, true); // for tests
 
-            if (exportInfo->Uid) {
-                Self->ExportsByUid.erase(exportInfo->Uid);
-            }
-
-            Self->Exports.erase(exportInfo->Id);
-            Self->PersistRemoveExport(db, exportInfo);
+            Self->PersistRemoveExport(db, *exportInfo);
         } else {
             LOG_D("TExport::TTxForget, dropping export tables"
                 << ", info: " << exportInfo->ToString()
             );
-            exportInfo->WaitTxId = InvalidTxId;
-            exportInfo->State = TExportInfo::EState::Dropping;
-            Self->PersistExportState(db, exportInfo);
 
-            for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
-                auto& item = exportInfo->Items.at(itemIdx);
-
-                item.WaitTxId = InvalidTxId;
-                item.State = TExportInfo::EState::Dropped;
-
-                const TPath itemPath = TPath::Resolve(ExportItemPathName(Self, exportInfo, itemIdx), Self);
-                if (itemPath.IsResolved() && !itemPath.IsDeleted()) {
-                    item.State = TExportInfo::EState::Dropping;
-                }
-
-                Self->PersistExportItemState(db, exportInfo, itemIdx);
-            }
+            PrepareDropping(Self, *exportInfo, db);
 
             Progress = true;
         }

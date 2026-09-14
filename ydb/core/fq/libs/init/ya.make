@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/fq/libs/control_plane_config
     ydb/core/fq/libs/control_plane_proxy
     ydb/core/fq/libs/control_plane_storage
+    ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/fq/libs/events
     ydb/core/fq/libs/gateway
     ydb/core/fq/libs/health
@@ -33,11 +34,7 @@ PEERDIR(
     ydb/library/security
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/actors/input_transforms
-    ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/transform
-    yql/essentials/minikql/comp_nodes
-    yql/essentials/providers/common/comp_nodes
-    yql/essentials/providers/common/metrics
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/dq/provider
@@ -52,11 +49,14 @@ PEERDIR(
     ydb/library/yql/providers/s3/actors
     ydb/library/yql/providers/s3/proto
     ydb/library/yql/providers/s3/provider
-    ydb/library/yql/providers/solomon/async_io
+    ydb/library/yql/providers/solomon/actors
     ydb/library/yql/providers/solomon/gateway
     ydb/library/yql/providers/solomon/proto
     ydb/library/yql/providers/solomon/provider
     ydb/library/yql/utils/actor_log
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/providers/common/comp_nodes
+    yql/essentials/providers/common/metrics
 )
 
 YQL_LAST_ABI_VERSION()

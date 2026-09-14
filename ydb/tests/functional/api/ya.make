@@ -2,8 +2,10 @@ PY3TEST()
 
 FORK_TEST_FILES()
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:2)
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
+ENV(YDB_HARD_MEMORY_LIMIT_BYTES="8000000000")
 
 TEST_SRCS(
     test_session_pool.py
@@ -19,7 +21,6 @@ TEST_SRCS(
 )
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(
@@ -31,7 +32,7 @@ PEERDIR(
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:10)
+    REQUIREMENTS(ram:10 cpu:2)
 ENDIF()
 
 END()

@@ -10,6 +10,8 @@ items:
   href: yql.md
 - name: Analytics
   href: analytics.md
+- name: Known issues
+  href: known-issues.md
 - name: All questions on one page
   href: all.md
 # Essintial for build with contributors, as it fails without that

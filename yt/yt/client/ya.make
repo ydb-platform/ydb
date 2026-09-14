@@ -8,6 +8,7 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     api/config.cpp
+    api/chaos_lease.cpp
     api/client.cpp
     api/client_common.cpp
     api/client_cache.cpp
@@ -15,8 +16,12 @@ SRCS(
     api/delegating_transaction.cpp
     api/distributed_table_session.cpp
     api/distributed_table_client.cpp
+    api/distributed_file_session.cpp
+    api/distributed_file_client.cpp
     api/etc_client.cpp
+    api/file_client.cpp
     api/journal_client.cpp
+    api/not_implemented_client.cpp
     api/operation_client.cpp
     api/security_client.cpp
     api/table_client.cpp
@@ -33,28 +38,33 @@ SRCS(
     api/sticky_transaction_pool.cpp
     api/options.cpp
     api/shuffle_client.cpp
+    api/table_partition_reader.cpp
+    api/private.cpp
 
     api/rpc_proxy/address_helpers.cpp
-    api/rpc_proxy/public.cpp
-    api/rpc_proxy/config.cpp
-    api/rpc_proxy/helpers.cpp
-    api/rpc_proxy/client_impl.cpp
     api/rpc_proxy/client_base.cpp
-    api/rpc_proxy/connection.cpp
+    api/rpc_proxy/client_impl.cpp
+    api/rpc_proxy/cluster_directory.cpp
+    api/rpc_proxy/config.cpp
     api/rpc_proxy/connection_impl.cpp
+    api/rpc_proxy/connection.cpp
     api/rpc_proxy/file_reader.cpp
     api/rpc_proxy/file_writer.cpp
+    api/rpc_proxy/helpers.cpp
     api/rpc_proxy/journal_reader.cpp
     api/rpc_proxy/journal_writer.cpp
+    api/rpc_proxy/public.cpp
+    api/rpc_proxy/request_annotations.cpp
+    api/rpc_proxy/row_batch_reader.cpp
+    api/rpc_proxy/row_batch_writer.cpp
+    api/rpc_proxy/row_stream.cpp
     api/rpc_proxy/table_mount_cache.cpp
     api/rpc_proxy/table_reader.cpp
     api/rpc_proxy/table_writer.cpp
+    api/rpc_proxy/target_cluster_injecting_channel.cpp
     api/rpc_proxy/timestamp_provider.cpp
-    api/rpc_proxy/transaction.cpp
     api/rpc_proxy/transaction_impl.cpp
-    api/rpc_proxy/row_batch_reader.cpp
-    api/rpc_proxy/row_stream.cpp
-    api/rpc_proxy/row_batch_writer.cpp
+    api/rpc_proxy/transaction.cpp
     api/rpc_proxy/wire_row_stream.cpp
 
     bundle_controller_client/bundle_controller_client.cpp
@@ -62,6 +72,8 @@ SRCS(
 
     election/public.cpp
 
+    hive/cluster_directory.cpp
+    hive/config.cpp
     hive/timestamp_map.cpp
 
     hydra/version.cpp
@@ -103,9 +115,11 @@ SRCS(
     security_client/public.cpp
     security_client/helpers.cpp
 
+    signature/dynamic.cpp
+    signature/generator.cpp
+    signature/provided.cpp
     signature/signature.cpp
     signature/validator.cpp
-    signature/generator.cpp
 
     table_client/public.cpp
     table_client/adapters.cpp
@@ -118,6 +132,7 @@ SRCS(
     table_client/column_rename_descriptor.cpp
     table_client/column_sort_schema.cpp
     table_client/comparator.cpp
+    table_client/constrained_schema.cpp
     table_client/key.cpp
     table_client/key_bound.cpp
     table_client/key_bound_compressor.cpp
@@ -131,10 +146,10 @@ SRCS(
     table_client/row_buffer.cpp
     table_client/schema.cpp
     table_client/schema_serialization_helpers.cpp
-    table_client/schemaless_buffered_dynamic_table_writer.cpp
     table_client/schemaless_dynamic_table_writer.cpp
     table_client/serialize.cpp
     table_client/table_upload_options.cpp
+    table_client/tracked_memory_chunk_provider.cpp
     table_client/logical_type.cpp
     table_client/merge_table_schemas.cpp
     table_client/name_table.cpp
@@ -153,6 +168,7 @@ SRCS(
     table_client/record_helpers.cpp
 
     tablet_client/config.cpp
+    tablet_client/index_info.cpp
     tablet_client/watermark_runtime_data.cpp
     tablet_client/table_mount_cache_detail.cpp
     tablet_client/table_mount_cache.cpp
@@ -167,7 +183,7 @@ SRCS(
     queue_client/producer_client.cpp
     queue_client/queue_rowset.cpp
 
-    ypath/rich.cpp
+    ypath/rich_constrained.cpp
     ypath/parser_detail.cpp
 
     transaction_client/batching_timestamp_provider.cpp
@@ -190,8 +206,10 @@ SRCS(
 
     complex_types/check_yson_token.cpp
     complex_types/check_type_compatibility.cpp
+    complex_types/common_yson_converters.cpp
     complex_types/infinite_entity.cpp
     complex_types/merge_complex_types.cpp
+    complex_types/positional_yson_translation.cpp
     complex_types/time_text.cpp
     complex_types/uuid_text.cpp
     complex_types/yson_format_conversion.cpp
@@ -217,13 +235,16 @@ PEERDIR(
     yt/yt/core/https
     yt/yt/library/auth
     yt/yt/library/decimal
-    yt/yt/library/re2
     yt/yt/library/erasure
     yt/yt/library/numeric
     yt/yt/library/quantile_digest
+    yt/yt/library/re2
+    yt/yt/library/tz_types
     yt/yt_proto/yt/client
+    library/cpp/digest/crc32c
     library/cpp/json
     library/cpp/string_utils/base64
+    library/cpp/cron_expression
     contrib/libs/pfr
 )
 
@@ -240,6 +261,9 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     api/unittests
+    arrow/unittests
+    query_client/unittests
+    queue_client/unittests
     signature/unittests
     table_client/unittests
     unittests

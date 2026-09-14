@@ -8,10 +8,10 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <ydb-cpp-sdk/client/params/params.h>
-#include <ydb-cpp-sdk/client/params/params.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -201,7 +201,7 @@ private:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActor# " << Id
-            << " tablet recieved PoisonPill, going to die");
+            << " tablet received PoisonPill, going to die");
         CloseSession(ctx);
         Die(ctx);
     }
@@ -329,6 +329,7 @@ private:
     void DescribePath(const TActorContext& ctx) {
         TString path = Target.GetWorkingDir() + "/" + Target.GetTableName();
         auto request = std::make_unique<TEvTxUserProxy::TEvNavigate>();
+        request->Record.SetDatabaseName(Target.GetWorkingDir());
         request->Record.MutableDescribePath()->SetPath(path);
         ctx.Send(MakeTxProxyID(), request.release());
     }
@@ -493,7 +494,7 @@ private:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpSelectActorMultiSession# " << Id
-            << " tablet recieved PoisonPill, going to die");
+            << " tablet received PoisonPill, going to die");
         Stop(ctx);
     }
 

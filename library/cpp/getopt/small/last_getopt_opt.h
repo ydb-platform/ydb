@@ -13,7 +13,8 @@
 #include <util/string/join.h>
 
 #include <optional>
-#include <stdarg.h>
+#include <functional>
+#include <utility>
 
 namespace NLastGetopt {
     enum EHasArg {
@@ -22,6 +23,11 @@ namespace NLastGetopt {
         OPTIONAL_ARGUMENT,
         DEFAULT_HAS_ARG = REQUIRED_ARGUMENT
     };
+
+    template<class T>
+    concept ArgTagConcept =
+        std::is_enum_v<std::remove_cvref_t<T>> ||
+        std::is_same_v<std::remove_cvref_t<T>, ui32>;
 
     /**
      * NLastGetopt::TOpt is a storage of data about exactly one program option.
@@ -36,12 +42,12 @@ namespace NLastGetopt {
      *   argument parse politics: no/optional/required/
      *   option existence: required or optional
      *   handlers. See detailed documentation: <TODO:link>
-     *   default value: if the option has argument, but the option is ommited,
+     *   default value: if the option has argument, but the option is omitted,
      *                     then the <default value> is used as the value of the argument
      *   optional value: if the option has optional-argument, the option is present in parsed string,
      *                      but the argument is omitted, then <optional value is used>
-     *      in case of "not given <optional value>, omited optional argument" the <default value> is used
-     *   user value: allows to store arbitary pointer for handlers
+     *      in case of "not given <optional value>, omitted optional argument" the <default value> is used
+     *   user value: allows to store arbitrary pointer for handlers
      */
     class TOpt {
     public:
@@ -94,7 +100,7 @@ namespace NLastGetopt {
         /**
          *  Checks if given string can be a long name
          *  @param name            string to check
-         *  @param c               if given, the first bad charecter will be saved in c
+         *  @param c               if given, the first bad character will be saved in c
          */
         static bool IsAllowedLongName(const TString& name, unsigned char* c = nullptr);
 
@@ -798,6 +804,9 @@ namespace NLastGetopt {
      *   argument name (title)
      */
     struct TFreeArgSpec {
+        template <ArgTagConcept E>
+        using TTagger = std::function<E(const TString&)>;
+
         TFreeArgSpec() = default;
         TFreeArgSpec(const TString& title, const TString& help = TString(), bool optional = false)
             : Title_(title)
@@ -809,6 +818,7 @@ namespace NLastGetopt {
         TString Title_;
         TString Help_;
         TString CompletionArgHelp_;
+        TTagger<ui32> Tagger_;
 
         bool Optional_ = false;
         NComp::ICompleterPtr Completer_ = nullptr;
@@ -890,6 +900,49 @@ namespace NLastGetopt {
         TFreeArgSpec& Completer(NComp::ICompleterPtr completer) {
             Completer_ = std::move(completer);
             return *this;
+        }
+
+        /**
+         * Set a tagger that can compute tag dynamically for each argument value.
+         */
+        TFreeArgSpec& SetTag(TTagger<ui32>&& tagger) {
+            Tagger_ = std::forward<TTagger<ui32>>(tagger);
+            return *this;
+        }
+
+        /**
+         * Set a static tag for all arguments described by this spec.
+         */
+        template <ArgTagConcept E>
+        TFreeArgSpec& SetTag(E tag) {
+            Tagger_ = [tag](const TString&) -> ui32 {
+                return static_cast<ui32>(tag);
+            };
+            return *this;
+        }
+
+        /**
+         * Set a tagger that can compute tag dynamically for each argument value.
+         */
+        template <ArgTagConcept E>
+        TFreeArgSpec& SetTag(TTagger<E>&& tagger) {
+            Tagger_ = [tagger](const TString& value) -> ui32 {
+                return static_cast<ui32>(tagger(value));
+            };
+            return *this;
+        }
+
+        /**
+         * Compute tag for argument value at given position.
+         */
+        ui32 GetTag(const TString& value) const {
+            if (Tagger_) {
+                ui32 tag = Tagger_(value);
+                if (tag) {
+                    return tag;
+                }
+            }
+            return 0;
         }
     };
 }

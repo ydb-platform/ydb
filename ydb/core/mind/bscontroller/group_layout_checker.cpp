@@ -1,47 +1,38 @@
 #include "group_layout_checker.h"
-#include "group_geometry_info.h"
-
-namespace NKikimr::NBsController {
-
-    TLayoutCheckResult CheckGroupLayout(const TGroupGeometryInfo& geom, const THashMap<TVDiskIdShort, std::pair<TNodeLocation, TPDiskId>>& layout) {
-        using namespace NLayoutChecker;
-
-        if (layout.empty()) {
-            return {};
-        }
-
-        TBlobStorageGroupInfo::TTopology topology(geom.GetType(), geom.GetNumFailRealms(), geom.GetNumFailDomainsPerFailRealm(),
-            geom.GetNumVDisksPerFailDomain(), true);
-        TGroupLayout group(topology);
-        TDomainMapper mapper;
-        THashMap<TVDiskIdShort, TPDiskLayoutPosition> map;
-        for (const auto& [vdiskId, p] : layout) {
-            const auto& [location, pdiskId] = p;
-            TPDiskLayoutPosition pos(mapper, location, pdiskId, geom);
-            group.AddDisk(pos, topology.GetOrderNumber(vdiskId));
-            map.emplace(vdiskId, pos);
-        }
-
-        std::vector<std::pair<TScore, TVDiskIdShort>> scoreboard;
-        for (const auto& [vdiskId, pos] : map) {
-            scoreboard.emplace_back(group.GetCandidateScore(pos, topology.GetOrderNumber(vdiskId)), vdiskId);
-        }
-
-        auto comp1 = [](const auto& x, const auto& y) { return x.second < y.second; };
-        std::sort(scoreboard.begin(), scoreboard.end(), comp1);
-
-        auto comp = [](const auto& x, const auto& y) { return x.first.BetterThan(y.first); };
-        std::sort(scoreboard.begin(), scoreboard.end(), comp);
-        TLayoutCheckResult res;
-        const auto reference = scoreboard.back().first;
-        if (!reference.SameAs({})) { // not perfectly correct layout
-            for (; !scoreboard.empty() && !scoreboard.back().first.BetterThan(reference); scoreboard.pop_back()) {
-                res.Candidates.push_back(scoreboard.back().second);
-            }
-        }
-        return res;
-    }
-
-} // NKikimr::NBsController
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NBsController::NLayoutChecker::TEntityId, stream, value) { value.Output(stream); }
+
+namespace NKikimr::NBsController::NLayoutChecker {
+
+TPDiskLayoutPosition::TPDiskLayoutPosition(TDomainMapper& mapper, const TNodeLocation& location,
+        const std::optional<TString>& diskScope, TPDiskId pdiskId, const TGroupGeometryInfo& geom) {
+    TStringStream realmGroup, realm, domain, device;
+    ui32 diskScopeLevelEnd = TNodeLocation::TKeys::E::Unit + 10;
+    ui32 deviceLevelEnd = diskScopeLevelEnd + 1;
+    const std::pair<int, TStringStream*> levels[] = {
+        {geom.GetRealmLevelBegin(), &realmGroup},
+        {Max(geom.GetRealmLevelEnd(), geom.GetDomainLevelBegin()), &realm},
+        {Max(geom.GetRealmLevelEnd(), geom.GetDomainLevelEnd()), &domain},
+        {Max(geom.GetRealmLevelEnd(), geom.GetDomainLevelEnd(), deviceLevelEnd), &device}
+    };
+    auto addLevel = [&](int key, const TString& value) {
+        for (const auto& [reference, stream] : levels) {
+            if (key < reference) {
+                Save(stream, std::make_tuple(key, value));
+            }
+        }
+    };
+    for (const auto& [key, value] : location.GetItems()) {
+        addLevel(key, value);
+    }
+    if (diskScope) {
+        addLevel(diskScopeLevelEnd, *diskScope);
+    }
+    addLevel(255, pdiskId.ToString()); // ephemeral level to distinguish between PDisks on the same node
+    RealmGroup = mapper(realmGroup.Str());
+    Realm = mapper(realm.Str());
+    Domain = mapper(domain.Str());
+    Device = mapper(device.Str());
+}
+
+}

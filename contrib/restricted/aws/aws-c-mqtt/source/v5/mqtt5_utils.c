@@ -7,7 +7,6 @@
 
 #include <aws/common/byte_buf.h>
 #include <aws/common/device_random.h>
-#include <aws/common/encoding.h>
 #include <inttypes.h>
 
 uint8_t aws_mqtt5_compute_fixed_header_byte1(enum aws_mqtt5_packet_type packet_type, uint8_t flags) {
@@ -290,7 +289,7 @@ enum aws_mqtt5_client_session_behavior_type aws_mqtt5_client_session_behavior_ty
 const char *aws_mqtt5_outbound_topic_alias_behavior_type_to_c_string(
     enum aws_mqtt5_client_outbound_topic_alias_behavior_type outbound_aliasing_behavior) {
     switch (aws_mqtt5_outbound_topic_alias_behavior_type_to_non_default(outbound_aliasing_behavior)) {
-        case AWS_MQTT5_COTABT_USER:
+        case AWS_MQTT5_COTABT_MANUAL:
             return "User-controlled outbound topic aliasing behavior";
         case AWS_MQTT5_COTABT_LRU:
             return "LRU caching outbound topic aliasing behavior";
@@ -300,6 +299,13 @@ const char *aws_mqtt5_outbound_topic_alias_behavior_type_to_c_string(
         default:
             return "Unknown outbound topic aliasing behavior";
     }
+}
+
+bool aws_mqtt5_outbound_topic_alias_behavior_type_validate(
+    enum aws_mqtt5_client_outbound_topic_alias_behavior_type outbound_aliasing_behavior) {
+
+    return outbound_aliasing_behavior >= AWS_MQTT5_COTABT_DEFAULT &&
+           outbound_aliasing_behavior <= AWS_MQTT5_COTABT_DISABLED;
 }
 
 enum aws_mqtt5_client_outbound_topic_alias_behavior_type aws_mqtt5_outbound_topic_alias_behavior_type_to_non_default(
@@ -321,6 +327,13 @@ const char *aws_mqtt5_inbound_topic_alias_behavior_type_to_c_string(
         default:
             return "Unknown inbound topic aliasing behavior";
     }
+}
+
+bool aws_mqtt5_inbound_topic_alias_behavior_type_validate(
+    enum aws_mqtt5_client_inbound_topic_alias_behavior_type inbound_aliasing_behavior) {
+
+    return inbound_aliasing_behavior >= AWS_MQTT5_CITABT_DEFAULT &&
+           inbound_aliasing_behavior <= AWS_MQTT5_CITABT_DISABLED;
 }
 
 enum aws_mqtt5_client_inbound_topic_alias_behavior_type aws_mqtt5_inbound_topic_alias_behavior_type_to_non_default(
@@ -413,7 +426,7 @@ uint64_t aws_mqtt5_client_random_in_range(uint64_t from, uint64_t to) {
 
 static uint8_t s_aws_iot_core_rules_prefix[] = "$aws/rules/";
 
-struct aws_byte_cursor aws_mqtt5_topic_skip_aws_iot_rules_prefix(struct aws_byte_cursor topic_cursor) {
+static struct aws_byte_cursor s_aws_mqtt5_topic_skip_aws_iot_rules_prefix(struct aws_byte_cursor topic_cursor) {
     size_t prefix_length = AWS_ARRAY_SIZE(s_aws_iot_core_rules_prefix) - 1; /* skip 0-terminator */
 
     struct aws_byte_cursor rules_prefix = {
@@ -454,6 +467,65 @@ struct aws_byte_cursor aws_mqtt5_topic_skip_aws_iot_rules_prefix(struct aws_byte
     return topic_cursor_copy;
 }
 
+static uint8_t s_shared_subscription_prefix[] = "$share";
+
+static bool s_is_not_hash_or_plus(uint8_t byte) {
+    return byte != '+' && byte != '#';
+}
+
+static struct aws_byte_cursor s_aws_mqtt5_topic_skip_shared_prefix(struct aws_byte_cursor topic_cursor) {
+    /* shared subscription filters must have an initial segment of "$share" */
+    struct aws_byte_cursor first_segment_cursor;
+    AWS_ZERO_STRUCT(first_segment_cursor);
+    if (!aws_byte_cursor_next_split(&topic_cursor, '/', &first_segment_cursor)) {
+        return topic_cursor;
+    }
+
+    struct aws_byte_cursor share_prefix_cursor = {
+        .ptr = s_shared_subscription_prefix,
+        .len = AWS_ARRAY_SIZE(s_shared_subscription_prefix) - 1, /* skip null terminator */
+    };
+
+    if (!aws_byte_cursor_eq_ignore_case(&share_prefix_cursor, &first_segment_cursor)) {
+        return topic_cursor;
+    }
+
+    /*
+     * The next segment must be non-empty and cannot include '#', '/', or '+'.  In this case we know it already
+     * does not include '/'
+     */
+    struct aws_byte_cursor second_segment_cursor = first_segment_cursor;
+    if (!aws_byte_cursor_next_split(&topic_cursor, '/', &second_segment_cursor)) {
+        return topic_cursor;
+    }
+
+    if (second_segment_cursor.len == 0 ||
+        !aws_byte_cursor_satisfies_pred(&second_segment_cursor, s_is_not_hash_or_plus)) {
+        return topic_cursor;
+    }
+
+    /*
+     * Everything afterwards must form a normal, valid topic filter.
+     */
+    struct aws_byte_cursor remaining_cursor = topic_cursor;
+    size_t remaining_length =
+        topic_cursor.ptr + topic_cursor.len - (second_segment_cursor.len + second_segment_cursor.ptr);
+    if (remaining_length == 0) {
+        return topic_cursor;
+    }
+
+    aws_byte_cursor_advance(&remaining_cursor, topic_cursor.len - remaining_length + 1);
+
+    return remaining_cursor;
+}
+
+struct aws_byte_cursor aws_mqtt5_topic_skip_aws_iot_core_uncounted_prefix(struct aws_byte_cursor topic_cursor) {
+    struct aws_byte_cursor skip_shared = s_aws_mqtt5_topic_skip_shared_prefix(topic_cursor);
+    struct aws_byte_cursor skip_rules = s_aws_mqtt5_topic_skip_aws_iot_rules_prefix(skip_shared);
+
+    return skip_rules;
+}
+
 size_t aws_mqtt5_topic_get_segment_count(struct aws_byte_cursor topic_cursor) {
     size_t segment_count = 0;
 
@@ -468,12 +540,12 @@ size_t aws_mqtt5_topic_get_segment_count(struct aws_byte_cursor topic_cursor) {
 }
 
 bool aws_mqtt_is_valid_topic_filter_for_iot_core(struct aws_byte_cursor topic_filter_cursor) {
-    struct aws_byte_cursor post_rule_suffix = aws_mqtt5_topic_skip_aws_iot_rules_prefix(topic_filter_cursor);
+    struct aws_byte_cursor post_rule_suffix = aws_mqtt5_topic_skip_aws_iot_core_uncounted_prefix(topic_filter_cursor);
     return aws_mqtt5_topic_get_segment_count(post_rule_suffix) <= AWS_IOT_CORE_MAXIMUM_TOPIC_SEGMENTS;
 }
 
 bool aws_mqtt_is_valid_topic_for_iot_core(struct aws_byte_cursor topic_cursor) {
-    struct aws_byte_cursor post_rule_suffix = aws_mqtt5_topic_skip_aws_iot_rules_prefix(topic_cursor);
+    struct aws_byte_cursor post_rule_suffix = aws_mqtt5_topic_skip_aws_iot_core_uncounted_prefix(topic_cursor);
     if (aws_mqtt5_topic_get_segment_count(post_rule_suffix) > AWS_IOT_CORE_MAXIMUM_TOPIC_SEGMENTS) {
         return false;
     }
@@ -481,94 +553,16 @@ bool aws_mqtt_is_valid_topic_for_iot_core(struct aws_byte_cursor topic_cursor) {
     return post_rule_suffix.len <= AWS_IOT_CORE_MAXIMUM_TOPIC_LENGTH;
 }
 
-static uint8_t s_shared_subscription_prefix[] = "$share";
-
-static bool s_is_not_hash_or_plus(uint8_t byte) {
-    return byte != '+' && byte != '#';
-}
-
 /* $share/{ShareName}/{filter} */
 bool aws_mqtt_is_topic_filter_shared_subscription(struct aws_byte_cursor topic_cursor) {
-
-    /* shared subscription filters must have an initial segment of "$share" */
-    struct aws_byte_cursor first_segment_cursor;
-    AWS_ZERO_STRUCT(first_segment_cursor);
-    if (!aws_byte_cursor_next_split(&topic_cursor, '/', &first_segment_cursor)) {
+    struct aws_byte_cursor remaining_cursor = s_aws_mqtt5_topic_skip_shared_prefix(topic_cursor);
+    if (remaining_cursor.len == topic_cursor.len) {
         return false;
     }
-
-    struct aws_byte_cursor share_prefix_cursor = {
-        .ptr = s_shared_subscription_prefix,
-        .len = AWS_ARRAY_SIZE(s_shared_subscription_prefix) - 1, /* skip null terminator */
-    };
-
-    if (!aws_byte_cursor_eq_ignore_case(&share_prefix_cursor, &first_segment_cursor)) {
-        return false;
-    }
-
-    /*
-     * The next segment must be non-empty and cannot include '#', '/', or '+'.  In this case we know it already
-     * does not include '/'
-     */
-    struct aws_byte_cursor second_segment_cursor = first_segment_cursor;
-    if (!aws_byte_cursor_next_split(&topic_cursor, '/', &second_segment_cursor)) {
-        return false;
-    }
-
-    if (second_segment_cursor.len == 0 ||
-        !aws_byte_cursor_satisfies_pred(&second_segment_cursor, s_is_not_hash_or_plus)) {
-        return false;
-    }
-
-    /*
-     * Everything afterwards must form a normal, valid topic filter.
-     */
-    struct aws_byte_cursor remaining_cursor = topic_cursor;
-    size_t remaining_length =
-        topic_cursor.ptr + topic_cursor.len - (second_segment_cursor.len + second_segment_cursor.ptr);
-    if (remaining_length == 0) {
-        return false;
-    }
-
-    aws_byte_cursor_advance(&remaining_cursor, topic_cursor.len - remaining_length + 1);
 
     if (!aws_mqtt_is_valid_topic_filter(&remaining_cursor)) {
         return false;
     }
 
     return true;
-}
-
-/* UTF-8 encoded string validation respect to [MQTT-1.5.3-2]. */
-static int aws_mqtt5_utf8_decoder(uint32_t codepoint, void *user_data) {
-    (void)user_data;
-    /* U+0000 - A UTF-8 Encoded String MUST NOT include an encoding of the null character U+0000. [MQTT-1.5.4-2]
-     * U+0001..U+001F control characters are not valid
-     */
-    if (AWS_UNLIKELY(codepoint <= 0x001F)) {
-        return aws_raise_error(AWS_ERROR_MQTT5_INVALID_UTF8_STRING);
-    }
-
-    /* U+007F..U+009F control characters are not valid */
-    if (AWS_UNLIKELY((codepoint >= 0x007F) && (codepoint <= 0x009F))) {
-        return aws_raise_error(AWS_ERROR_MQTT5_INVALID_UTF8_STRING);
-    }
-
-    /* Unicode non-characters are not valid: https://www.unicode.org/faq/private_use.html#nonchar1 */
-    if (AWS_UNLIKELY((codepoint & 0x00FFFF) >= 0x00FFFE)) {
-        return aws_raise_error(AWS_ERROR_MQTT5_INVALID_UTF8_STRING);
-    }
-    if (AWS_UNLIKELY(codepoint >= 0xFDD0 && codepoint <= 0xFDEF)) {
-        return aws_raise_error(AWS_ERROR_MQTT5_INVALID_UTF8_STRING);
-    }
-
-    return AWS_ERROR_SUCCESS;
-}
-
-struct aws_utf8_decoder_options g_aws_mqtt5_utf8_decoder_options = {
-    .on_codepoint = aws_mqtt5_utf8_decoder,
-};
-
-int aws_mqtt5_validate_utf8_text(struct aws_byte_cursor text) {
-    return aws_decode_utf8(text, &g_aws_mqtt5_utf8_decoder_options);
 }

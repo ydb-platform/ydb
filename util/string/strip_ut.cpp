@@ -4,14 +4,50 @@
 
 #include <util/charset/wide.h>
 
+#include <string_view>
+
 Y_UNIT_TEST_SUITE(TStripStringTest) {
+    Y_UNIT_TEST(TestConstexprStrip) {
+        constexpr std::string_view stripped = StripString<std::string_view>("  \n\t abc def \r\n ");
+        static_assert(stripped == "abc def");
+
+        constexpr std::string_view strippedLeft = StripStringLeft(std::string_view("  \n abc \n "));
+        static_assert(strippedLeft == "abc \n ");
+
+        constexpr std::string_view strippedRight = StripStringRight(std::string_view("  \n abc \n "));
+        static_assert(strippedRight == "  \n abc");
+
+        constexpr std::string_view empty = StripString<std::string_view>(" \n\t\r ");
+        static_assert(empty.empty());
+
+        constexpr std::string_view unchanged = StripString<std::string_view>("abc");
+        static_assert(unchanged == "abc");
+
+        UNIT_ASSERT_VALUES_EQUAL(stripped, "abc def");
+        UNIT_ASSERT_VALUES_EQUAL(strippedLeft, "abc \n ");
+        UNIT_ASSERT_VALUES_EQUAL(strippedRight, "  \n abc");
+    }
+
+    Y_UNIT_TEST(TestConstexprCustomStrip) {
+        constexpr std::string_view stripped = StripString(std::string_view("//abc//"), EqualsStripAdapter('/'));
+        static_assert(stripped == "abc");
+
+        constexpr std::string_view strippedLeft = StripStringLeft(std::string_view("//abc//"), EqualsStripAdapter('/'));
+        static_assert(strippedLeft == "abc//");
+
+        constexpr std::string_view strippedRight = StripStringRight(std::string_view("//abc//"), EqualsStripAdapter('/'));
+        static_assert(strippedRight == "//abc");
+
+        UNIT_ASSERT_VALUES_EQUAL(stripped, "abc");
+    }
+
     struct TStripTest {
         TStringBuf Str;
         TStringBuf StripLeftRes;
         TStringBuf StripRightRes;
         TStringBuf StripRes;
     };
-    static constexpr TStripTest StripTests[] = {
+    constexpr TStripTest StripTests[] = {
         {"  012  ", "012  ", "  012", "012"},
         {"  012", "012", "  012", "012"},
         {"012\t\t", "012\t\t", "012", "012"},
@@ -103,7 +139,19 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
                 StripStringLeft(TString(test.Str), EqualsStripAdapter('/')),
                 test.ResultLeft);
             UNIT_ASSERT_EQUAL(
+                StripStringLeft(TStringBuf(test.Str), EqualsStripAdapter('/')),
+                test.ResultLeft);
+            UNIT_ASSERT_EQUAL(
+                StripStringLeft(std::string_view(test.Str), EqualsStripAdapter('/')),
+                test.ResultLeft);
+            UNIT_ASSERT_EQUAL(
                 StripStringRight(TString(test.Str), EqualsStripAdapter('/')),
+                test.ResultRight);
+            UNIT_ASSERT_EQUAL(
+                StripStringRight(TStringBuf(test.Str), EqualsStripAdapter('/')),
+                test.ResultRight);
+            UNIT_ASSERT_EQUAL(
+                StripStringRight(std::string_view(test.Str), EqualsStripAdapter('/')),
                 test.ResultRight);
         };
     }
@@ -127,6 +175,16 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
                 TWtringBuf(u"/abc/"),
                 EqualsStripAdapter(u'/')),
             u"abc");
+    }
+
+    Y_UNIT_TEST(TestSelfRefStringStrip) {
+        TStringBuf sb = "  abc ";
+        StripString(sb, sb);
+        UNIT_ASSERT_EQUAL(sb, "abc");
+
+        TString str = "  abc ";
+        StripString(str, str);
+        UNIT_ASSERT_EQUAL(str, "abc");
     }
 
     Y_UNIT_TEST(TestCollapseUtf32) {

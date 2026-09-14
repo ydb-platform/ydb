@@ -8,6 +8,7 @@
 
 #include <yt/yt/core/yson/tokenizer.h>
 #include <yt/yt/core/yson/writer.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <yt/yt/core/ypath/tokenizer.h>
 
@@ -22,6 +23,7 @@ using namespace NYPath;
 using namespace NConcurrency;
 
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -63,7 +65,15 @@ void ExecuteBatchRead(
         for (int index = 0; index < std::ssize(batchIndexRanges); ++index) {
             auto batchWriter = New<TAsyncYsonWriter>(ysonFragmentType);
             batchWriters.push_back(batchWriter);
-            auto batchFuture = BIND([writeItems, batchWriter, batchIndexRange = batchIndexRanges[index]] {
+            auto batchFuture = BIND([
+                writeItems,
+                createReadOffloadGuard = offloadParams->CreateReadOffloadGuard,
+                batchWriter,
+                batchIndexRange = batchIndexRanges[index]
+            ] {
+                auto guard = createReadOffloadGuard
+                    ? createReadOffloadGuard()
+                    : nullptr;
                 writeItems(batchIndexRange, batchWriter);
             })
                 .AsyncVia(offloadParams->OffloadInvoker)
@@ -72,8 +82,9 @@ void ExecuteBatchRead(
         }
 
         // NB: Must wait for all futures to become set to ensure all lambdas above have finished accessing the state.
-        auto results = WaitForWithStrategy(AllSet(std::move(batchFutures)), offloadParams->WaitForStrategy)
-            .ValueOrThrow();
+        auto resultsFuture = AllSet(std::move(batchFutures));
+        WaitUntilSet(resultsFuture.AsVoid(), {.Strategy = offloadParams->WaitForStrategy});
+        auto results = resultsFuture.GetOrCrash().ValueOrThrow();
         for (const auto& result : results) {
             result.ThrowOnError();
         }
@@ -98,7 +109,7 @@ void ReplyFromAsyncYsonWriter(
         .Subscribe(BIND([=] (const TErrorOr<TYsonString>& resultOrError) {
             if (resultOrError.IsOK()) {
                 auto* response = &context->Response();
-                response->set_value(resultOrError.Value().ToString());
+                response->set_value(ToProto(resultOrError.Value()));
                 context->Reply();
             } else {
                 context->Reply(resultOrError);
@@ -154,7 +165,7 @@ void TVirtualMapBase::GetSelf(
     TRspGet* /*response*/,
     const TCtxGetPtr& context)
 {
-    YT_ASSERT(!NYson::TTokenizer(GetRequestTargetYPath(context->RequestHeader())).ParseNext());
+    YT_VERIFY(!NYson::TTokenizer(GetRequestTargetYPath(context->RequestHeader())).ParseNext());
 
     auto attributeFilter = request->has_attributes()
         ? NYT::FromProto<TAttributeFilter>(request->attributes())
@@ -170,7 +181,7 @@ void TVirtualMapBase::GetSelf(
 
     if (limit < 0) {
         THROW_ERROR_EXCEPTION("Limit is negative")
-            << TErrorAttribute("limit", limit);
+            .With("limit", limit);
     }
 
     auto keys = GetKeys(limit);
@@ -200,7 +211,7 @@ void TVirtualMapBase::GetSelf(
         EYsonType::MapFragment,
         std::ssize(keys),
         [&] (std::pair<i64, i64> keyIndexRange, const TAsyncYsonWriterPtr& writer) {
-            if (attributeFilter) {
+            if (attributeFilter && !attributeFilter.IsEmpty()) {
                 for (i64 index = keyIndexRange.first; index < keyIndexRange.second; ++index) {
                     const auto& key = keys[index];
                     if (auto service = FindItemService(key)) {
@@ -255,7 +266,7 @@ void TVirtualMapBase::ListSelf(
 
     if (limit < 0) {
         THROW_ERROR_EXCEPTION("Limit is negative")
-            << TErrorAttribute("limit", limit);
+            .With("limit", limit);
     }
 
     auto keys = GetKeys(limit);
@@ -278,7 +289,7 @@ void TVirtualMapBase::ListSelf(
         EYsonType::MapFragment,
         std::ssize(keys),
         [&] (auto keyIndexRange, const TAsyncYsonWriterPtr& writer) {
-            if (attributeFilter) {
+            if (attributeFilter && !attributeFilter.IsEmpty()) {
                 for (i64 index = keyIndexRange.first; index < keyIndexRange.second; ++index) {
                     const auto& key = keys[index];
                     if (auto service = FindItemService(key)) {
@@ -364,119 +375,6 @@ bool TVirtualMapBase::RemoveBuiltinAttribute(TInternedAttributeKey /*key*/)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TCompositeMapService::TImpl
-    : public TRefCounted
-{
-public:
-    std::vector<std::string> GetKeys(i64 limit) const
-    {
-        std::vector<std::string> keys;
-        for (const auto& [key, _] : Services_) {
-            if (std::ssize(keys) >= limit) {
-                break;
-            }
-            keys.push_back(key);
-        }
-        return keys;
-    }
-
-    i64 GetSize() const
-    {
-        return Services_.size();
-    }
-
-    IYPathServicePtr FindItemService(const std::string& key) const
-    {
-        auto it = Services_.find(key);
-        return it != Services_.end() ? it->second : nullptr;
-    }
-
-    void ListSystemAttributes(std::vector<TAttributeDescriptor>* descriptors) const
-    {
-        for (const auto& it : Attributes_) {
-            descriptors->push_back(TAttributeDescriptor(it.first));
-        }
-    }
-
-    bool GetBuiltinAttribute(TInternedAttributeKey key, NYson::IYsonConsumer* consumer) const
-    {
-        auto it = Attributes_.find(key);
-        if (it != Attributes_.end()) {
-            it->second(consumer);
-            return true;
-        }
-
-        return false;
-    }
-
-    void AddChild(const TString& key, IYPathServicePtr service)
-    {
-        YT_VERIFY(Services_.emplace(key, service).second);
-    }
-
-    void AddAttribute(TInternedAttributeKey key, TYsonCallback producer)
-    {
-        YT_VERIFY(Attributes_.emplace(key, producer).second);
-    }
-
-private:
-    THashMap<TString, IYPathServicePtr> Services_;
-    THashMap<TInternedAttributeKey, TYsonCallback> Attributes_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-TCompositeMapService::TCompositeMapService()
-    : Impl_(New<TImpl>())
-{ }
-
-TCompositeMapService::~TCompositeMapService() = default;
-
-std::vector<std::string> TCompositeMapService::GetKeys(i64 limit) const
-{
-    return Impl_->GetKeys(limit);
-}
-
-i64 TCompositeMapService::GetSize() const
-{
-    return Impl_->GetSize();
-}
-
-IYPathServicePtr TCompositeMapService::FindItemService(const std::string& key) const
-{
-    return Impl_->FindItemService(key);
-}
-
-void TCompositeMapService::ListSystemAttributes(std::vector<TAttributeDescriptor>* descriptors)
-{
-    Impl_->ListSystemAttributes(descriptors);
-
-    TVirtualMapBase::ListSystemAttributes(descriptors);
-}
-
-bool TCompositeMapService::GetBuiltinAttribute(TInternedAttributeKey key, NYson::IYsonConsumer* consumer)
-{
-    if (Impl_->GetBuiltinAttribute(key, consumer)) {
-        return true;
-    }
-
-    return TVirtualMapBase::GetBuiltinAttribute(key, consumer);
-}
-
-TIntrusivePtr<TCompositeMapService> TCompositeMapService::AddChild(const TString& key, IYPathServicePtr service)
-{
-    Impl_->AddChild(key, std::move(service));
-    return this;
-}
-
-TIntrusivePtr<TCompositeMapService> TCompositeMapService::AddAttribute(TInternedAttributeKey key, TYsonCallback producer)
-{
-    Impl_->AddAttribute(key, producer);
-    return this;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TVirtualEntityNode
     : public TNodeBase
     , public TSupportsAttributes
@@ -533,7 +431,12 @@ private:
 
     // TSupportsAttributes members
 
-    IAttributeDictionary* GetCustomAttributes() override
+    const IAttributeDictionary& CustomAttributes() const override
+    {
+        return Attributes();
+    }
+
+    IAttributeDictionary* MutableCustomAttributesOrNull() override
     {
         return MutableAttributes();
     }
@@ -589,7 +492,7 @@ void TVirtualListBase::GetSelf(
     TRspGet* /*response*/,
     const TCtxGetPtr& context)
 {
-    YT_ASSERT(!NYson::TTokenizer(GetRequestTargetYPath(context->RequestHeader())).ParseNext());
+    YT_VERIFY(!NYson::TTokenizer(GetRequestTargetYPath(context->RequestHeader())).ParseNext());
 
     auto attributeFilter = request->has_attributes()
         ? FromProto<TAttributeFilter>(request->attributes())
@@ -648,7 +551,6 @@ void TVirtualListBase::GetSelf(
                         writer->OnEntity();
                     } else {
                         if (auto service = FindItemService(index)) {
-                            writer->OnListItem();
                             auto asyncResult = AsyncYPathGet(service, TYPath());
                             writer->OnRaw(asyncResult);
                         } else {

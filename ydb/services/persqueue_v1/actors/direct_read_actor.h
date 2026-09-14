@@ -5,11 +5,9 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
-
-#include <ydb/core/persqueue/pq_rl_helpers.h>
-
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -34,9 +32,10 @@ struct TFormedDirectReadResponse: public TSimpleRefCount<TFormedDirectReadRespon
 
 
 class TDirectReadSessionActor
-    : public TActorBootstrapped<TDirectReadSessionActor>
+    : public NPQ::TBaseActor<TDirectReadSessionActor>
     , private NPQ::TRlHelpers
 {
+    using TBase = NPQ::TBaseActor<TDirectReadSessionActor>;
     using TClientMessage = Topic::StreamDirectReadMessage::FromClient;
 
     using TServerMessage = Topic::StreamDirectReadMessage::FromServer;
@@ -54,10 +53,18 @@ public:
 
     void Bootstrap(const TActorContext& ctx);
 
+    bool OnUnhandledException(const std::exception& exc) override;
     void Die(const TActorContext& ctx) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FRONT_PQ_READ;
+    }
+
+    NPQ::TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"sessionCookie", Cookie},
+            {"consumer", ClientPath},
+            {"session", Session});
     }
 
 private:
@@ -103,10 +110,8 @@ private:
     // proxy events
     void Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev,  const TActorContext& ctx);
-    //void Handle(typename TEvReadResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx);
-    //void Handle(TEvPQProxy::TEvDieCommand::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvStartDirectRead::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDirectReadDataSessionConnectedResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQProxy::TEvAuth::TPtr& ev, const TActorContext& ctx);
@@ -134,7 +139,6 @@ private:
     std::unique_ptr<TEvStreamReadRequest> Request;
     ui64 Cookie;
     const TString ClientDC;
-    const TInstant StartTimestamp;
 
     TActorId SchemeCache;
     TActorId NewSchemeCache;
@@ -148,6 +152,7 @@ private:
     TString PeerName;
 
     bool InitDone;
+    bool ReadWithoutConsumer;
 
     TString Auth;
 

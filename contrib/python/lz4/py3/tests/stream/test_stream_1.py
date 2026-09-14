@@ -136,7 +136,7 @@ def test_invalid_config_c_4(store_comp_size):
     c_kwargs.update(store_comp_size)
 
     if store_comp_size['store_comp_size'] >= 4:
-        # No need for skiping this test case, since arguments check is
+        # No need for skipping this test case, since arguments check is
         # expecting to raise an error.
 
         # Make sure the page size is larger than what the input bound will be,
@@ -169,7 +169,7 @@ def test_invalid_config_d_4(store_comp_size):
         # but still fit in 4 bytes
         d_kwargs['buffer_size'] -= 1
 
-    # No failure expected during instanciation/initialization
+    # No failure expected during instantiation/initialization
     lz4.stream.LZ4StreamDecompressor(**d_kwargs)
 
 
@@ -199,7 +199,7 @@ def test_invalid_config_d_5():
     d_kwargs = {}
     d_kwargs['strategy'] = "double_buffer"
 
-    # No failure expected during instanciation/initialization
+    # No failure expected during instantiation/initialization
     d_kwargs['buffer_size'] = lz4.stream.LZ4_MAX_INPUT_SIZE
 
     if sys.maxsize < 0xffffffff:
@@ -207,7 +207,7 @@ def test_invalid_config_d_5():
 
     lz4.stream.LZ4StreamDecompressor(**d_kwargs)
 
-    # No failure expected during instanciation/initialization
+    # No failure expected during instantiation/initialization
     d_kwargs['buffer_size'] = lz4.stream.LZ4_MAX_INPUT_SIZE + 1
 
     if sys.maxsize < 0xffffffff:
@@ -215,7 +215,7 @@ def test_invalid_config_d_5():
 
     lz4.stream.LZ4StreamDecompressor(**d_kwargs)
 
-    # No failure expected during instanciation/initialization
+    # No failure expected during instantiation/initialization
     d_kwargs['buffer_size'] = _4GB - 1  # 4GB - 1 (to fit in 4 bytes)
 
     if sys.maxsize < 0xffffffff:

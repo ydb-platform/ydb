@@ -5,6 +5,6 @@ SRCS(
     enum_options.proto
 )
 
-EXCLUDE_TAGS(GO_PROTO)
+INCLUDE_TAGS(DOCS_PROTO)
 
 END()

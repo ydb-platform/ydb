@@ -1,12 +1,13 @@
 #include "local_bypass.h"
 
 #include <yt/yt/core/bus/bus.h>
+#include <yt/yt/core/bus/message_handler.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <yt/yt/core/net/address.h>
 
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 using namespace NYTree;
 
@@ -77,13 +78,13 @@ public:
 
     TFuture<void> GetReadyFuture() const override
     {
-        return VoidFuture;
+        return OKFuture;
     }
 
     TFuture<void> Send(TSharedRefArray message, const NBus::TSendOptions& /*options*/) override
     {
         ClientHandler_->HandleMessage(std::move(message), /*replyBus*/ nullptr);
-        return VoidFuture;
+        return OKFuture;
     }
 
     void SetTosLevel(TTosLevel /*tosLevel*/) override
@@ -135,5 +136,5 @@ IBusPtr CreateLocalBypassReplyBus(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp
 

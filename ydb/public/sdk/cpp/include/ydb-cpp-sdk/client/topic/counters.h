@@ -2,7 +2,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
@@ -70,6 +70,8 @@ struct TReaderCounters: public TThrRefBase {
         BytesInflightTotal = counters->GetCounter("bytesInflightTotal", false);
         MessagesInflight = counters->GetCounter("messagesInflight", false);
 
+        ReadSizeBudget = counters->GetCounter("readSizeBudget", false);
+
         TotalBytesInflightUsageByTime = counters->GetHistogram("totalBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
         UncompressedBytesInflightUsageByTime = counters->GetHistogram("uncompressedBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
         CompressedBytesInflightUsageByTime = counters->GetHistogram("compressedBytesInflightUsageByTime", TOPIC_COUNTERS_HISTOGRAM_SETUP);
@@ -81,6 +83,8 @@ struct TReaderCounters: public TThrRefBase {
     TCounterPtr BytesRead;
     TCounterPtr MessagesRead;
     TCounterPtr BytesReadCompressed;
+
+    TCounterPtr ReadSizeBudget;
 
     TCounterPtr BytesInflightUncompressed;
     TCounterPtr BytesInflightCompressed;
@@ -122,6 +126,10 @@ inline void MakeCountersNotNull(TReaderCounters& counters) {
         counters.BytesReadCompressed = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
     }
 
+    if (!counters.ReadSizeBudget) {
+        counters.ReadSizeBudget = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
+    }
+
     if (!counters.BytesInflightUncompressed) {
         counters.BytesInflightUncompressed = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
     }
@@ -158,6 +166,7 @@ inline bool HasNullCounters(TReaderCounters& counters) {
         || !counters.BytesRead
         || !counters.MessagesRead
         || !counters.BytesReadCompressed
+        || !counters.ReadSizeBudget
         || !counters.BytesInflightUncompressed
         || !counters.BytesInflightCompressed
         || !counters.BytesInflightTotal
@@ -169,4 +178,4 @@ inline bool HasNullCounters(TReaderCounters& counters) {
 
 #undef TOPIC_COUNTERS_HISTOGRAM_SETUP
 
-}  // namespace NYdb::V3::NTopic
+}  // namespace NYdb::NTopic

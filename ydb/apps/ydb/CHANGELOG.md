@@ -1,6 +1,191 @@
+
+* Added support for column-oriented (OLAP) tables to the `ydb tools dump` and `ydb tools restore` commands. `--import-data` is not supported for column tables and automatically falls back to `--bulk-upsert`.
+* Fixed `ydb tools restore` failing on `Float` and `Double` NaN/infinity values in local backups, and added file, line, column, and value context to parsing errors.
+* Added support for `--format svg` plan format to `ydb sql` command when used with `--explain` or `--explain-analyze` options
+* Added `--content-based-deduplication` option to `ydb topic create` and `ydb topic alter` commands.
+* Added `--aws-sdk-log` option to `ydb workload sqs run read|write` commands.
+* Added support for the new `setnotnull` operation in the `ydb operation` subcommands.
+
+## 2.33.0 ##
+
+* The `ydb` interactive AI mode can now search the YDB documentation.
+
+## 2.32.0 ##
+
+* Added `--no-consumer` option to `ydb topic read` command.
+* Added an AI mode to the `ydb` interactive mode. Press Ctrl+T to switch to it.
+* Added `--codec kafka-batch`, `--batch-inner-codec`, `--batch-flush-interval`, `--batch-flush-size`, and `--batch-flush-message-count` options to `ydb workload topic run write|full` commands.
+* `ydb scheme describe` now prints a human-readable description for external data sources (source type, location, auth method, database, properties and creation time) instead of empty output.
+* Added `--partition-max-inflight-bytes` option to `ydb topic workload`
+* Added `--partition-write-speed-mps` and `--partition-write-burst-messages` options to `ydb topic create` and `ydb topic alter` commands.
+* Added CPU Time statistics to benchmarks run commands.
+* `ydb sql`: add `--resource-pool` option
+* `ydb` interactive mode add `SET resource_pool` command
+* Added `ydb workload fulltext` command to make load testing and measure quality of fulltext indexes.
+
+## 2.31.0 ##
+
+* Added `--stats` option to `ydb workload * run` benchmarks to enable extended execution stats collection (e.g. `--stats profile`).
+
+## 2.30.0 ##
+
+* Added the `direct-read` option to the `ydb workload topic` command
+* Added the `ydb config completion` command to generate shell completion scripts for bash and zsh.
+* Added the `ydb export nfs` and `ydb import nfs` commands, allowing users to create and restore backups directly to/from a shared NFS directory mounted on every host in the cluster.
+* Added `--compact` option to `ydb workload tpcc import` command.
+* When a profile is explicitly specified with the `-p`/`--profile` option, the active profile is no longer used: all options are taken only from the specified profile, environment variables, and command line. This avoids confusion when the chosen profile was unexpectedly supplemented with settings from the active profile.
+* Added `--tx-mode` option to `ydb workload * run` benchmark commands, allowing to set the transaction mode (e.g. `no-tx`, `serializable-rw`, `snapshot-rw`).
+* Added support for the new compaction operation in the `ydb operation` subcommands.
+
+## 2.29.0 ##
+
+* Fixed Out Of Memory issue in the `ydb workload query run` command for queries with large result sets.
+* Improved the `ydb init` and `ydb config profile` commands with interactive menus.
+* Added download progress bar to the `ydb update` command.
+* Improved progress bars: consistent MiB/GiB units, stable speed display, dual progress bar for the `ydb import file` command showing both in-progress and confirmed bytes.
+* Interactive mode enhancements:
+  * Introduced `/help` for interactive command guidance.
+  * Introduced the `/config` command, providing an interactive dialog to view and customize CLI settings, including:
+    * Enabling/disabling autocompletion hints.
+    * Enabling/disabling color output in YDB CLI.
+    * Interactively selecting a color theme from a set of predefined options, with support for cloning and customizing your own theme.
+* Added the `Created by`, `Create time` and `End time` fields to the "build index" and the "execute script" operations in the `ydb operation` subcommands.
+* Added the `--include-index-data` option to the `ydb export s3` command, enabling index data export.
+* Added the `--index-population-mode` option to the `ydb import s3` command, allowing selection of the index population mode (e.g. build or import).
+* Added unified time interval format support across CLI commands. Options accepting time durations now support explicit time units (e.g., `5s`, `2m`, `1h`) while maintaining backward compatibility with plain numbers interpreted using their original default units.
+* Fixed static credentials parsing to avoid using a profile password when the username comes from another source.
+* Added "Cache mode" option to column families description instead of deprecated "Keep in memory" option in the `ydb scheme describe` command.
+
+## 2.28.0 ##
+
+* The `ydb admin cluster state fetch` command was renamed to the `ydb admin cluster diagnostics collect`.
+* Added a new `--no-sanitize` option of the `ydb admin cluster state fetch` command. The new option disable sanitization and preserve sensitive data in the output.
+* Added `snapshot-ro` and `snapshot-rw` transaction modes to `--tx-mode` option of the `ydb table query execute` command.
+* Added `NO_COLOR` environment variable support to disable ANSI colors in YDB CLI (no-color.org)
+* Added a new `--output` option to the `ydb admin cluster state fetch` command. The new option specify path to the output compressed file.
+* Added a simple progress bar for non-interactive stderr.
+* Added a new `omit-indexes` property to the `--item` option of the `ydb tools copy` command, allowing tables to be copied without their indexes.
+* Fixed a bug where the `ydb tools restore` command could crash with an `mutex lock failure (Invalid argument)` error due to an internal race condition.
+* The `ydb workload vector` now supports the `import files` subcommand to populate the table from CSV or parquet files.
+* The `ydb workload vector` now supports the `import generate` subcommand to populate the table with random data.
+* Named expression-containing view restoration and restoration of views that access secondary indexes have been fixed.
+
+## 2.27.0 ##
+
+* Added a new `--exclude` option to the `ydb import s3` command, allowing objects to be excluded from the operation if their names match a pattern.
+* Added a new `ydb admin cluster state fetch` command to collect information about cluster nodes state and metrics.
+* Fixed a bug with no consumer creation for transfers with absolute topic paths when no CONNECTION_STRING is provided.
+* Added transfer objects support to the `ydb tools dump` and `ydb tools restore` commands.
+* Fixed a bug where the `ydb debug ping` command crashed in case of any error.
+* Added a new `--retention-period` option to the `ydb topic` subcommands. The new option supports various time units, such as seconds, minutes, or days. Usage of the legacy `--retention-period-hours` option is discouraged.
+* The `ydb topic consumer add` subcommand now has a new `--availability-period` option, which overrides the consumer's retention guarantee.
+* The `ydb workload vector` now supports `build-index` and `drop-index` subcommands.
+
+## 2.26.0 ##
+
+* Added the `--no-merge` and `--no-cache` options to the `ydb monitoring healthcheck` command.
+* Added query compilation time statistics to the `ydb workload * run` command.
+* **_(Requires server v25.4+)_** Added the `--replace-sys-acl` option to the `tools restore` command, which specifies whether to replace ACL for system objects.
+* Added the `--retries` option to the `ydb tools restore` command.
+
+## 2.25.0 ##
+
+* Added the `ydb admin cluster bridge` commands to manage a cluster in bridge mode: list, switchover, failover, takedown, rejoin.
+* User and password authentication options are now parsed independently, allowing them to be sourced from different priority levels. For example, the username can be specified via the `--user` command-line option while the password is retrieved from the `YDB_PASSWORD` environment variable.
+* Removed the `--float-mode` option from the `ydb workload tpch run` and `ydb workload tpcds run` commands. Float mode is now inferred automatically from the table schema created during the `init` phase.
+* Added final execute statistics to `ydb workload * run` commands.
+* Fixed a bug where the `ydb import file csv command` with the `--newline-delimited` option could get stuck if the input had incorrect data.
+* Fixed a bug with the progress bar display in the `ydb workload clickbench import files` command — incorrect percentage value and excessive line breaks causing duplicated progress lines.
+* Fixed a bug where the `ydb workload topic write` command could crash with an `Unknown AckedMessageId` error due to an internal race condition.
+* Fixed decimal type comparison in `ydb workload * run` commands.
+* Changed the default logging level from `EMERGENCY` to `WARN` for commands that support multiple verbosity levels.
+* Added the `--start-offset` option to the `ydb topic read` command, which specifies a starting position for reading from the selected partition.
+* Added a new paths approach in the `ydb export s3` and `ydb import s3` commands with the new `--include` option instead of the `--item` option.
+* Added support for encryption features in the `ydb export s3` and `ydb import s3` commands.
+
+## 2.24.1 ##
+
+* Fixed a bug where the `ydb tools dump` command was skipping scheme objects of unsupported types without notification and leaving an empty directory for them.
+
+## 2.24.0 ##
+
+* Fixed a bug where executing the `ydb import file csv` command could hang.
+* Set default storage type as `column` (was `row`) and default datetime mode as `datetime32` (was `datetime64`) in `ydb workload * init` commands.
+* Added ability of `ydb workload tpch` and `ydb workload tpcds` commands to use fraction `--scale` option.
+* Added `ydb workload tpcc check` subcommand, which checks TPC-C data consistency.
+
+## 2.23.0 ##
+
+* Added connection check and hotkeys description in interactive mode.
+* Fixed `ydb tools restore` not being able to restore local backups on Windows.
+* Limited width of tables in benchmark reports.
+* Added `ydb workload vector select` to benchmark RPS and recall of vector index.
+* Added trivial columns completion in interactive mode.
+* Added the "ydb tools infer csv" command to generate a `CREATE TABLE` SQL query from a CSV file with data.
+* Fix inline hints
+* Added named expressions completion in interactive mode, cache schema responses.
+* Added processing of special values `null`, `/dev/null`, `stdout`, `cout`, `console`, `stderr` and `cerr` of `--output` option in `ydb workload * run` command.
+* Fixed bug when `ydb wokrload` commands did not work with absolute paths.
+* Added TPC-C benchmark as `ydb workload tpcc`.
+
+## 2.22.1 ##
+
+* Fixed bug with state working in commnads `ydb workload query import` and `ydb workload clickbench import files`.
+* Fixed bug with parsing certificate files from profile.
+
+## 2.22.0 ##
+
+* Ignore empty directories in dumps when restoring it with `ydb tools restore`. Empty directories are created for unknown scheme objects when dumping with `ydb tools dump`.
+* Added support of check canonical results in `ydb workload query run` command.
+* Added support of parquet format to `ydb workload query import` and `ydb workload clickbench import files` commands.
+* `ydb workload query` deep reworked. Now it can be used for user defined full cycle load testing.
+* Fixed an issue where the `ydb workload * clean` commands were deleting all contents from the target directory, instead of just the tables created by the init command.
+* Switched highlighting engine
+* Added `ydb admin cluster config verion` command to show configuration version (V1/V2) on nodes.
+* Removed `--executor` option from `ydb workload run` commands. Use always `generic`.
+* Added object names completion in interactive mode
+* Added `--threads` option to `ydb workload clickbench run`, `ydb workload tpch run` and `ydb workload tpcds run`. It allows to send workload queries by multiple threads.
+
+## 2.21.0 ##
+
+* Fixed a bug where ydb cli was trying to read parameters from stdin even if it had no data.
+* Add `--replace` option to `ydb tools restore` command. If enabled, scheme objects present in the backup would be dropped before restoring.
+* Added date range parameters (--date-to, --date-from to support uniform PK distribution) for ydb workload log run operations including bulk_upsert, insert, and upsert
+* Do not save to local backups destination tables of `ASYNC REPLICATION` and its changefeeds. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
+* Fix `ydb operation get` not working for running operations.
+* Improved `ydb import file` commands to support files with BOM (Byte Order Mark).
+* Brackets are now inserted in pairs in YDB CLI interactive mode
+* Added `--scale` option to `ydb workload tpch init` and `ydb workload tpcds init` commands. Sets the percentage of the benchmark's data size and workload to use, relative to full scale.
+* Added "--no-discovery" option. It allows to skip discovery and use user provided endpoint to connect to YDB cluster.
+* Added `--retries` to `ydb workload <clickbenh|tpch|tpcds> run` command.
+* Added `--partition-size` param to `ydb workload <clickbench/tpcds/tpch> init`.
+* Fixed bugs in `ydb scheme rmdir`: 1) do not try to delete subdomains, 2) order the deletion of external tables before the deletion of external data sources.
+* YDB CLI help message improvements. Different display for detailed help and brief help.
+* Support coordination nodes in `ydb scheme rmdir --recursive`.
+* Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.
+* Fixed scheme error in `ydb admin cluster dump` when specifying a domain database.
+* Fixed unauthorized error in `ydb admin database restore` when multiple database admins are in dump.
+* Added `--min-inflight` to `ydb debug latency` command.
+* Added support for multiple `-p` (percentile) params in `ydb debug latency` command.
+* `ydb debug latency` outputs additional measurements for GRPC ping.
+
+## 2.20.0 ##
+
+* Added support for dual configuration mode in the `ydb admin cluster config fetch` command, allowing it to handle separate cluster and storage config sections.
+* Add options for client certificates in SSL/TLS connections.
+* Add `ydb admin node config init` command to initialize directory with node config files.
+* Add `ydb admin cluster config generate` command to generate dynamic config from static config on cluster.
+* Fixed memory leak in tpcds generator.
+* Include external data sources and external tables in local backups (`ydb tools dump` and `ydb tools restore`). Both scheme objects are backed up as YQL creation queries saved in the `create_external_data_source.sql` and `create_external_table.sql` files respectively, which can be executed to recreate the original scheme objects.
+* Fixed a bug where `ydb auth get-token` command tried to authenticate twice: while listing andpoints and while executing actual token request.
+* Fixed a bug where `ydb import file csv` command was saving progress even if a batch upload had been failed.
+* Include coordination nodes in local backups (`ydb tools dump` and `ydb tools restore`). Rate limiters that utilize the coordination node are saved in the coordination node's backup folder, preserving the existing path hierarchy.
+* Fixed a bug where some errors could be ignored when restoring from a local backup.
 * Added `ydb workload log import generator` command.
 * Queries in `ydb workload run` command are now executed in random order.
 * Include topics in local backups (`ydb tools dump` and `ydb tools restore`). In this release, only the settings of the topics are retained; messages are not included in the backup.
+* Added `ydb admin cluster dump` and `ydb admin cluster restore` commands for dumping all cluster-level data
+* Added `ydb admin database dump` and `ydb admin database restore` commands for dumping all database-level data
 
 ## 2.19.0 ##
 
@@ -262,7 +447,7 @@ Also now you can load test YDB topics, using wide transactions that span over al
 * You can now save the IAM service URL in a profile.
 * Added support for username and password-based authentication without specifying the password.
 * Added support for AWS profiles in the [ydb export s3](reference/ydb-cli/export-import/auth-s3.md#auth) command.
-* You can now create profiles using `stdin`. For example, you can pass the [YC CLI](https://cloud.yandex.ru/docs/cli/) `yc ydb database get information` command output to the `ydb config profile create` command input.
+* You can now create profiles using `stdin`. For example, you can pass the [YC CLI](https://yandex.cloud/docs/cli/) `yc ydb database get information` command output to the `ydb config profile create` command input.
 
 ### Bug fixes
 

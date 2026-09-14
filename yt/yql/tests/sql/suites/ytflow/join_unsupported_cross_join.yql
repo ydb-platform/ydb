@@ -1,0 +1,35 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelinePath = "pipelines/test";
+
+$input_stream = 
+    select 
+        key || "_before" as key_before,
+        key,
+        value
+    from Input
+    where value > 2;
+
+$joined_stream =
+    select 
+        right_arg.key as key,
+        right_arg.value as value,
+        right_arg.key_before,
+        left_arg.kv_value
+    from InputKeyValueTable as left_arg
+    cross join $input_stream as right_arg;
+
+insert into Output
+select 
+    key,
+    value,
+    `right_arg.key_before` as key_before,
+    key || "_after" as key_after,
+    `left_arg.kv_value` as kv_value
+from $joined_stream
+where value * 2 <= `left_arg.kv_value` or value < 5;

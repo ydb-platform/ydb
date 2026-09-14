@@ -5,7 +5,6 @@ from devtools.yamaker.modules import GLOBAL, Linkable, Switch
 from devtools.yamaker import pathutil
 from devtools.yamaker.project import NixProject
 
-
 WINDOWS_SRCS = [
     "close.c",
     "dup2.c",
@@ -129,7 +128,7 @@ def post_install(self):
 
 m4 = NixProject(
     arcdir="contrib/tools/m4",
-    owners=["g:cpp-contrib"],
+    owners=["g:contrib"],
     nixattr="m4",
     ignore_commands=[
         "bash",

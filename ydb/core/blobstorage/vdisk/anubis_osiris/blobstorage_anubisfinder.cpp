@@ -2,6 +2,8 @@
 // FIXME: snapshot is enough
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullmergeits.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_SYNCER
+
 namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TLevelSliceSnapshotForwardIteratorWithStopper
@@ -88,8 +90,9 @@ namespace NKikimr {
                 Y_UNUSED(subsMerger);
                 // calculate keep status
                 bool allowKeepFlags = HullCtx->AllowKeepFlags;
-                NGc::TKeepStatus keep = brs->Keep(dbIt.GetCurKey(), dbMerger.GetMemRec(),
-                    {subsMerger, dbMerger}, allowKeepFlags, true /*allowGarbageCollection*/);
+                NGc::TKeepStatus keep = brs->Keep(dbIt.GetCurKey(), dbMerger.GetMemRec(), {subsMerger.GetNumKeepFlags(),
+                    subsMerger.GetNumDoNotKeepFlags(), dbMerger.GetNumKeepFlags(), dbMerger.GetNumDoNotKeepFlags()},
+                    allowKeepFlags, true /*allowGarbageCollection*/);
                 if (keep.KeepIndex && !keep.KeepByBarrier) {
                     // we keep this record because of keep flags
                     candidates.AddCandidate(dbIt.GetCurKey().LogoBlobID());
@@ -138,9 +141,7 @@ namespace NKikimr {
             TAnubisCandidatesFinder finder(HullCtx, Pos, std::move(LogoBlobsSnap), std::move(BarriersSnap));
             TAnubisCandidates res = finder.FindCandidates();
 
-            LOG_INFO(ctx, NKikimrServices::BS_SYNCER,
-                     VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                        "TAnubisCandidatesFinderActor actor: %s", res.ToString().data()));
+            YDB_LOG_INFO_CTX(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TAnubisCandidatesFinderActor actor: %s", res.ToString().data()));
 
             ctx.Send(ParentId, new TEvAnubisCandidates(std::move(res)));
             TThis::Die(ctx);

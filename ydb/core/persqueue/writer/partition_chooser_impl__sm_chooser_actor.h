@@ -2,23 +2,9 @@
 
 #include "partition_chooser_impl__abstract_chooser_actor.h"
 
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 namespace NKikimr::NPQ::NPartitionChooser {
-
-#if defined(LOG_PREFIX) || defined(TRACE) || defined(DEBUG) || defined(INFO) || defined(ERROR)
-#error "Already defined LOG_PREFIX or TRACE or DEBUG or INFO or ERROR"
-#endif
-
-
-#define LOG_PREFIX "TPartitionChooser " << SelfId()                         \
-                    << " (SourceId=" << TThis::SourceId                     \
-                    << ", PreferedPartition=" << TThis::PreferedPartition   \
-                    << ") "
-#define TRACE(message) LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define DEBUG(message) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define INFO(message)  LOG_INFO_S (*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
-#define ERROR(message) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, LOG_PREFIX << message);
 
 template<typename TPipeCreator>
 class TSMPartitionChooserActor: public TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator> {
@@ -28,13 +14,16 @@ public:
     using TParentActor = TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>;
 
     TSMPartitionChooserActor(TActorId parentId,
+                           const NKikimrSchemeOp::TPersQueueGroupDescription& config,
                            const std::shared_ptr<IPartitionChooser>& chooser,
                            const std::shared_ptr<NPQ::TPartitionGraph>& graph,
                            NPersQueue::TTopicConverterPtr& fullConverter,
                            const TString& sourceId,
                            std::optional<ui32> preferedPartition,
                            NWilson::TTraceId traceId)
-        : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId))
+        : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(
+                parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId),
+                config.GetPQTabletConfig().HasId() ? &config.GetPQTabletConfig().GetId() : nullptr)
         , Graph(graph) {
     }
 
@@ -113,7 +102,12 @@ private:
             return TThis::ReplyError(TThis::PreferedPartition ? ErrorCode::WRITE_ERROR_PARTITION_INACTIVE : ErrorCode::INITIALIZING, "A partition not choosed", ctx);
         }
 
-        DEBUG("GetOwnershipFast Partition=" << BoundaryPartition->PartitionId << " TabletId=" << BoundaryPartition->TabletId);
+        LOG_D(
+            "GetOwnershipFast",
+            {"partition", BoundaryPartition->PartitionId},
+                    {"tabletId",
+            BoundaryPartition->TabletId}
+        );
 
         TThis::PartitionHelper.Open(BoundaryPartition->TabletId, ctx);
         TThis::PartitionHelper.SendCheckPartitionStatusRequest(BoundaryPartition->PartitionId, TThis::SourceId, ctx);
@@ -148,7 +142,9 @@ private:
 
 private:
     void GetOldSeqNo(const TActorContext &ctx) {
-        DEBUG("GetOldSeqNo");
+        LOG_D(
+            "GetOldSeqNo"
+        );
         TThis::Become(&TThis::StateGetMaxSeqNo);
 
         const auto* oldNode = Graph->GetPartition(TThis::TableHelper.PartitionId().value());
@@ -175,6 +171,10 @@ private:
         }
 
         const auto& result = response.GetCmdGetMaxSeqNoResult();
+        if (result.GetIsPartitionActive()) {
+            return TThis::ReplyError(ErrorCode::INITIALIZING, "Got response from stale leader", ctx);
+        }
+
         if (result.SourceIdInfoSize() < 1) {
             return TThis::ReplyError(ErrorCode::INITIALIZING, "Empty source id info", ctx);
         }
@@ -206,7 +206,9 @@ private:
 
 private:
     void OnPartitionChosen(const TActorContext& ctx) {
-        TRACE("OnPartitionChosen");
+        LOG_T(
+            "OnPartitionChosen"
+        );
 
         if (!TThis::Partition && TThis::PreferedPartition) {
             return TThis::ReplyError(ErrorCode::BAD_REQUEST,
@@ -246,11 +248,5 @@ private:
     const TPartitionInfo* BoundaryPartition = nullptr;
     const std::shared_ptr<TPartitionGraph> Graph;
 };
-
-#undef LOG_PREFIX
-#undef TRACE
-#undef DEBUG
-#undef INFO
-#undef ERROR
 
 } // namespace NKikimr::NPQ::NPartitionChooser

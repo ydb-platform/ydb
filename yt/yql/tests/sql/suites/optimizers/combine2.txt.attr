@@ -1,0 +1,8 @@
+{"_yql_row_spec"={
+    "Type"=["StructType";[
+        ["date_from";["DataType";"String"]];
+        ["date_to";[OptionalType;["DataType";"String"]]];
+        ["id";["DataType";"Int32"]];
+        ["value";["DataType";"String"]]
+    ]];
+}}

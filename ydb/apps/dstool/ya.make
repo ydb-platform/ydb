@@ -10,6 +10,11 @@ PY_SRCS(
 
 PEERDIR(
     ydb/apps/dstool/lib
+    contrib/python/six
+)
+
+RESOURCE(
+    ydb/apps/dstool/version.txt version.txt
 )
 
 END()

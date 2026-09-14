@@ -1,6 +1,6 @@
-#include "bt_exception.h"
 #include "yexception.h"
 
+#include <util/stream/str.h>
 #include <util/system/backtrace.h>
 #include <util/system/type_name.h>
 

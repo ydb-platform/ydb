@@ -1,0 +1,47 @@
+package NShop;
+
+option java_package = "ru.yandex.shop.proto";
+
+message TFlowCtlConfig {
+    // Time-related stuff
+    optional double PeriodDuration = 100 [default = 1.0]; // in seconds
+    optional uint64 HistorySize = 101    [default = 9]; // in periods
+
+    // Measurements
+    optional double MeasurementError = 200 [default = 0.01]; // ratio (not percents)
+    optional double SteadyLimit = 201      [default = 0.5]; // ratio
+    optional double LatencyMACoef = 202    [default = 0.01]; // moving average coef (less=smooth)
+    optional double RealCostMACoef = 203   [default = 0.01]; // moving average coef (less=smooth)
+
+    // Controller
+    optional bool Disabled = 299          [default = false]; // Has always open window if disabled
+    optional uint64 FixedWindow = 300     [default = 0]; // Just use const window iff>0
+    optional double FixedLatencyMs = 301  [default = 0]; // Adjust window to contain queue of given length in milliseconds iff>0
+    optional uint64 MinCountInFly = 302   [default = 10];
+    optional uint64 MinCostInFly = 303    [default = 1];
+    optional double MultiplierLimit = 304 [default = 0.05]; // Max window multiplier per period
+    optional uint64 SlowdownLimit = 305   [default = 5]; // Max periods in slowest controlling mode
+    optional uint64 SlowStartLimit = 306  [default = 30]; // Max periods in SlowStart controlling mode
+    optional double CostCapToWindow = 307 [default = 0.5]; // Cap for request cost devided by window
+}
+
+message TProcCounters {
+    // Op or job result count
+    optional uint64 Done = 5;
+    optional uint64 Failed = 6;
+    optional uint64 Aborted = 7; // Op skip or job cancel
+
+    // Op or job processing time
+    optional uint64 Time1ms = 20;
+    optional uint64 Time3ms = 21;
+    optional uint64 Time10ms = 22;
+    optional uint64 Time30ms = 23;
+    optional uint64 Time100ms = 24;
+    optional uint64 Time300ms = 25;
+    optional uint64 Time1000ms = 26;
+    optional uint64 Time3000ms = 27;
+    optional uint64 Time10000ms = 28;
+    optional uint64 Time30000ms = 29;
+    optional uint64 Time100000ms = 30;
+    optional uint64 TimeGt100000ms = 31;
+}

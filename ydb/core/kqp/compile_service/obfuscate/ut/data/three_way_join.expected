@@ -1,0 +1,1 @@
+SELECT id . column_0 , id . column_5 , id . column_10 , id . column_11 FROM table_0 AS id JOIN table_1 AS id ON id . column_1 = id . column_0 JOIN table_2 AS id ON id . column_0 = id . column_8 WHERE id . column_2 > 0 AND id . column_7 >= 0

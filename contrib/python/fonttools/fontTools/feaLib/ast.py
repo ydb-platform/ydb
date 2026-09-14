@@ -1,3 +1,4 @@
+import weakref
 from fontTools.feaLib.error import FeatureLibError
 from fontTools.feaLib.location import FeatureLibLocation
 from fontTools.misc.encodingTools import getEncoding
@@ -382,8 +383,7 @@ class FeatureBlock(Block):
     def build(self, builder):
         """Call the ``start_feature`` callback on the builder object, visit
         all the statements in this feature, and then call ``end_feature``."""
-        # TODO(sascha): Handle use_extension.
-        builder.start_feature(self.location, self.name)
+        builder.start_feature(self.location, self.name, self.use_extension)
         # language exclude_dflt statements modify builder.features_
         # limit them to this block with temporary builder.features_
         features = builder.features_
@@ -433,8 +433,7 @@ class LookupBlock(Block):
         self.name, self.use_extension = name, use_extension
 
     def build(self, builder):
-        # TODO(sascha): Handle use_extension.
-        builder.start_lookup_block(self.location, self.name)
+        builder.start_lookup_block(self.location, self.name, self.use_extension)
         Block.build(self, builder)
         builder.end_lookup_block()
 
@@ -531,7 +530,7 @@ class MarkClass(object):
     def addDefinition(self, definition):
         """Add a :class:`MarkClassDefinition` statement to this mark class."""
         assert isinstance(definition, MarkClassDefinition)
-        self.definitions.append(definition)
+        self.definitions.append(weakref.proxy(definition))
         for glyph in definition.glyphSet():
             if glyph in self.glyphs:
                 otherLoc = self.glyphs[glyph].location
@@ -595,8 +594,8 @@ class MarkClassDefinition(Statement):
 class AlternateSubstStatement(Statement):
     """A ``sub ... from ...`` statement.
 
-    ``prefix``, ``glyph``, ``suffix`` and ``replacement`` should be lists of
-    `glyph-containing objects`_. ``glyph`` should be a `one element list`."""
+    ``glyph`` and ``replacement`` should be `glyph-containing objects`_.
+    ``prefix`` and ``suffix`` should be lists of `glyph-containing objects`_."""
 
     def __init__(self, prefix, glyph, suffix, replacement, location=None):
         Statement.__init__(self, location)
@@ -721,7 +720,7 @@ class ChainContextPosStatement(Statement):
         for i, lookup in enumerate(lookups):
             if lookup:
                 try:
-                    (_ for _ in lookup)
+                    iter(lookup)
                 except TypeError:
                     self.lookups[i] = [lookup]
 
@@ -753,7 +752,7 @@ class ChainContextPosStatement(Statement):
             if len(self.suffix):
                 res += " " + " ".join(map(asFea, self.suffix))
         else:
-            res += " ".join(map(asFea, self.glyph))
+            res += " ".join(map(asFea, self.glyphs))
         res += ";"
         return res
 
@@ -779,7 +778,7 @@ class ChainContextSubstStatement(Statement):
         for i, lookup in enumerate(lookups):
             if lookup:
                 try:
-                    (_ for _ in lookup)
+                    iter(lookup)
                 except TypeError:
                     self.lookups[i] = [lookup]
 
@@ -811,7 +810,7 @@ class ChainContextSubstStatement(Statement):
             if len(self.suffix):
                 res += " " + " ".join(map(asFea, self.suffix))
         else:
-            res += " ".join(map(asFea, self.glyph))
+            res += " ".join(map(asFea, self.glyphs))
         res += ";"
         return res
 
@@ -1512,7 +1511,9 @@ class SinglePosStatement(Statement):
                 res += " ".join(map(asFea, self.prefix)) + " "
             res += " ".join(
                 [
-                    asFea(x[0]) + "'" + ((" " + x[1].asFea()) if x[1] else "")
+                    asFea(x[0])
+                    + "'"
+                    + ((" " + x[1].asFea()) if x[1] is not None else "")
                     for x in self.pos
                 ]
             )
@@ -1520,7 +1521,10 @@ class SinglePosStatement(Statement):
                 res += " " + " ".join(map(asFea, self.suffix))
         else:
             res += " ".join(
-                [asFea(x[0]) + " " + (x[1].asFea() if x[1] else "") for x in self.pos]
+                [
+                    asFea(x[0]) + " " + (x[1].asFea() if x[1] is not None else "")
+                    for x in self.pos
+                ]
             )
         res += ";"
         return res
@@ -1828,15 +1832,16 @@ class BaseAxis(Statement):
     """An axis definition, being either a ``VertAxis.BaseTagList/BaseScriptList``
     pair or a ``HorizAxis.BaseTagList/BaseScriptList`` pair."""
 
-    def __init__(self, bases, scripts, vertical, location=None):
+    def __init__(self, bases, scripts, vertical, minmax=None, location=None):
         Statement.__init__(self, location)
         self.bases = bases  #: A list of baseline tag names as strings
         self.scripts = scripts  #: A list of script record tuplets (script tag, default baseline tag, base coordinate)
         self.vertical = vertical  #: Boolean; VertAxis if True, HorizAxis if False
+        self.minmax = []  #: A set of minmax record
 
     def build(self, builder):
         """Calls the builder object's ``set_base_axis`` callback."""
-        builder.set_base_axis(self.bases, self.scripts, self.vertical)
+        builder.set_base_axis(self.bases, self.scripts, self.vertical, self.minmax)
 
     def asFea(self, indent=""):
         direction = "Vert" if self.vertical else "Horiz"
@@ -1844,9 +1849,13 @@ class BaseAxis(Statement):
             "{} {} {}".format(a[0], a[1], " ".join(map(str, a[2])))
             for a in self.scripts
         ]
+        minmaxes = [
+            "\n{}Axis.MinMax {} {} {}, {};".format(direction, a[0], a[1], a[2], a[3])
+            for a in self.minmax
+        ]
         return "{}Axis.BaseTagList {};\n{}{}Axis.BaseScriptList {};".format(
             direction, " ".join(self.bases), indent, direction, ", ".join(scripts)
-        )
+        ) + "\n".join(minmaxes)
 
 
 class OS2Field(Statement):
@@ -2098,7 +2107,7 @@ class VariationBlock(Block):
     def build(self, builder):
         """Call the ``start_feature`` callback on the builder object, visit
         all the statements in this feature, and then call ``end_feature``."""
-        builder.start_feature(self.location, self.name)
+        builder.start_feature(self.location, self.name, self.use_extension)
         if (
             self.conditionset != "NULL"
             and self.conditionset not in builder.conditionsets_

@@ -1,6 +1,8 @@
 #include "yql_yt_file.h"
 #include "yql_yt_file_mkql_compiler.h"
 #include "yql_yt_file_comp_nodes.h"
+#include "yql_yt_file_row_count.h"
+#include "yql_yt_file_text_yson.h"
 
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -113,6 +115,7 @@ struct TSession {
         , KeepTempTables_(keepTempTables)
         , InflightTempTablesLimit_(Max<ui32>())
         , ConfigInitDone_(false)
+        , UseSecureTmp_(std::make_shared<std::atomic<bool>>(false))
     {
     }
 
@@ -130,7 +133,7 @@ struct TSession {
         }
     }
 
-    void DeleteAtFinalize(const TYtSettings::TConstPtr& config, const TString& cluster, const TString& table) {
+    void DeleteAtFinalize(const TYtSettings::TConstPtr& config, const TString& cluster, const TString& tablePath) {
         if (!ConfigInitDone_) {
             InflightTempTablesLimit_ = config->InflightTempTablesLimit.Get().GetOrElse(Max<ui32>());
             if (GetReleaseTempDataMode(*config) == EReleaseTempDataMode::Never) {
@@ -140,7 +143,7 @@ struct TSession {
         }
 
         auto& tempTables = TempTables_[cluster];
-        tempTables.insert(table);
+        tempTables.insert(tablePath);
         if (tempTables.size() > InflightTempTablesLimit_) {
             ythrow yexception() << "Too many temporary tables registered - limit is " << InflightTempTablesLimit_;
         }
@@ -157,6 +160,7 @@ struct TSession {
     bool ConfigInitDone_;
 
     THashMap<TString, THashSet<TString>> TempTables_;
+    const TSecureTmpStatePtr UseSecureTmp_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -164,9 +168,14 @@ struct TSession {
 struct TFileYtLambdaBuilder: public TLambdaBuilder {
     TFileYtLambdaBuilder(TScopedAlloc& alloc, const TSession& /*session*/,
         TIntrusivePtr<IFunctionRegistry> customFunctionRegistry,
-        const NUdf::ISecureParamsProvider* secureParamsProvider)
+        const NUdf::ISecureParamsProvider* secureParamsProvider,
+        TLangVersion langver,
+        TRuntimeSettings::TConstPtr runtimeSettings,
+        NUdf::EBridgeMode bridgeMode = NUdf::EBridgeMode::None,
+        TString bridgeBinaryPath = {}
+    )
         : TLambdaBuilder(customFunctionRegistry.Get(), alloc, nullptr, CreateDeterministicRandomProvider(1), CreateDeterministicTimeProvider(10000000),
-          nullptr, nullptr, secureParamsProvider)
+          nullptr, nullptr, secureParamsProvider, nullptr, langver, runtimeSettings, bridgeMode, std::move(bridgeBinaryPath))
         , CustomFunctionRegistry_(customFunctionRegistry)
     {}
 
@@ -211,7 +220,7 @@ public:
         }
 
         if (name == TYtTableContent::CallableName()) {
-            return [name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env,
                     TStringBuilder() << TYtTableContent::CallableName() << "File",
                     callable.GetType()->GetReturnType(), false);
@@ -223,7 +232,7 @@ public:
         }
 
         if (name == "YtTableInput") {
-            return [this, name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [this](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env, "YtTableInputFile", callable.GetType()->GetReturnType(), false);
                 for (ui32 i: xrange(callable.GetInputsCount())) {
                     callableBuilder.Add(callable.GetInput(i));
@@ -237,7 +246,7 @@ public:
         }
 
         if (name == "YtTableInputNoCtx") {
-            return [name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env, "YtTableInputNoCtxFile", callable.GetType()->GetReturnType(), false);
                 for (ui32 i: xrange(callable.GetInputsCount())) {
                     callableBuilder.Add(callable.GetInput(i));
@@ -247,7 +256,7 @@ public:
         }
 
         if (name == "YtUngroupingList") {
-            return [this, name](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+            return [this](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 TCallableBuilder callableBuilder(env, "YtUngroupingListFile", callable.GetType()->GetReturnType(), false);
                 for (ui32 i: xrange(callable.GetInputsCount())) {
                     callableBuilder.Add(callable.GetInput(i));
@@ -362,8 +371,9 @@ public:
         TTableInfoResult res;
         try {
             for (const TTableReq& req: options.Tables()) {
-                auto path = Services_->GetTablePath(req.Cluster(), req.Table(), req.Anonymous(), true);
-                const bool exists = NFs::Exists(path) && !ShouldEmulateOutputForMultirun(req);
+
+                auto path = Services_->GetTablePath(req.Cluster(), req.Table(), req.Anonymous());
+                const bool exists = (NFs::Exists(path) || NFs::Exists(path + ".part.0")) && !ShouldEmulateOutputForMultirun(req);
 
                 res.Data.emplace_back();
 
@@ -371,31 +381,28 @@ public:
 
                 TYtTableMetaInfo::TPtr metaData = new TYtTableMetaInfo;
                 metaData->DoesExist = exists;
+                res.Data.back().Meta = metaData;
+
                 if (exists) {
+                    auto lockPath = Services_->SnapshotTable(path, req.Cluster(), req.Table(), options.Epoch());
                     try {
-                        LoadTableMetaInfo(req, path, *metaData);
+                        LoadTableMetaInfo(req, lockPath, *metaData);
                     } catch (const TErrorException& e) {
                         throw TErrorException(e.GetCode()) << "Error loading " << req.Cluster() << '.' << req.Table() << " table metadata: " << e.what();
                     } catch (const yexception& e) {
                         throw yexception() << "Error loading " << req.Cluster() << '.' << req.Table() << " table metadata: " << e.what();
                     }
-                }
-                res.Data.back().Meta = metaData;
 
-                if (exists) {
                     TYtTableStatInfo::TPtr statData = new TYtTableStatInfo;
                     statData->Id = req.Table();
                     if (metaData->SqlView.empty()) {
                         try {
-                            LoadTableStatInfo(path, *statData);
+                            LoadTableStatInfo(lockPath, *statData);
                         } catch (const TErrorException& e) {
                             throw TErrorException(e.GetCode()) << "Error loading " << req.Cluster() << '.' << req.Table() << " table stat: " << e.what();
                         } catch (const yexception& e) {
                             throw yexception() << "Error loading " << req.Cluster() << '.' << req.Table() << " table stat: " << e.what();
                         }
-
-                        auto fullTableName = TString(YtProviderName).append('.').append(req.Cluster()).append('.').append(req.Table());
-                        Services_->LockPath(path, fullTableName);
                     }
                     res.Data.back().Stat = statData;
                 }
@@ -406,6 +413,13 @@ public:
             res = NCommon::ResultFromException<TTableInfoResult>(e);
         }
         return MakeFuture(res);
+    }
+
+    void ThrowNonConsumedLinear(IComputationGraph& graph) const {
+        graph.Invalidate();
+        if (auto pos = graph.GetNotConsumedLinear()) {
+            throw TErrorException(0) << pos << " Linear value is not consumed";
+        }
     }
 
     TFuture<TTableRangeResult> GetTableRange(TTableRangeOptions&& options) final {
@@ -447,7 +461,9 @@ public:
                     auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
                     TVector<TFileLinkPtr> externalFiles;
                     TFileYtLambdaBuilder builder(alloc, *session,
-                        MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+                        MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
+                        Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+                        options.BridgeMode(), options.BridgeBinaryPath());
                     TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), *Services_->GetFunctionRegistry());
 
                     TVector<TRuntimeNode> strings;
@@ -471,14 +487,18 @@ public:
                         NUdf::EValidatePolicy::Exception, options.OptLLVM(), EGraphPerProcess::Multi, explorer, data);
                     compGraph->Prepare();
                     const TBindTerminator bind(compGraph->GetTerminator());
-                    const auto& value = compGraph->GetValue();
-                    const auto it = value.GetListIterator();
+                    auto value = compGraph->GetValue();
+                    auto it = value.GetListIterator();
                     for (NUdf::TUnboxedValue current; it.Next(current);) {
                         TString tableName = TString(current.AsStringRef());
                         tableName.prepend(fullPrefix);
                         tableName.append(fullSuffix);
                         res.Tables.push_back(TCanonizedPath{std::move(tableName), Nothing(), {}, Nothing()});
                     }
+
+                    value = {};
+                    it = {};
+                    ThrowNonConsumedLinear(*compGraph);
                 }
                 else {
                     std::transform(
@@ -524,7 +544,7 @@ public:
                 TFolderResult::TFolderItem item;
                 item.Path = table;
                 item.Type = "table";
-                auto allAttrs = LoadTableAttrs(Services_->GetTablePath(options.Cluster(), table, false, true));
+                auto allAttrs = LoadTableAttrs(Services_->GetTablePath(options.Cluster(), table, false));
                 auto attrs = NYT::TNode::CreateMap();
                 for (const auto& attrName : options.Attributes()) {
                     if (attrName && allAttrs.HasKey(attrName)) {
@@ -681,7 +701,7 @@ public:
     }
 
 
-    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const final {
+    TFuture<TRunResult> Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) final {
         TRunResult res;
         auto nodePos = ctx.GetPosition(node->Pos());
 
@@ -711,7 +731,7 @@ public:
             const auto table = op.Output().Item(0);
 
             TYtOutTableInfo tableInfo(table);
-            auto outTablePath = Services_->GetTablePath(cluster, tableInfo.Name, true);
+            auto outTablePath = Services_->GetTmpTablePath(tableInfo.Name);
             TFsQueryCacheItem queryCacheItem(*options.Config(), cluster, Services_->GetTmpDir(), options.OperationHash(), outTablePath);
 
             NYT::TNode outSpec = NYT::TNode::CreateList();
@@ -775,7 +795,9 @@ public:
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
+                Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+                options.BridgeMode(), options.BridgeBinaryPath());
             auto nodeFactory = GetYtFileFullFactory(Services_);
             for (auto& node: nodes) {
                 auto data = builder.BuildLambda(*MkqlCompiler_, node, ctx);
@@ -788,6 +810,8 @@ public:
                 compGraph->Prepare();
                 auto value = compGraph->GetValue();
                 res.Data.push_back(NCommon::ValueToNode(value, data.GetStaticType()));
+                value = {};
+                ThrowNonConsumedLinear(*compGraph);
             }
             res.SetSuccess();
         } catch (const yexception& e) {
@@ -802,6 +826,7 @@ public:
             TSession* session = GetSession(options);
 
             auto publish = TYtPublish(node);
+            auto dstIsDynamic = TYtTableBaseInfo::GetMeta(publish.Publish())->IsDynamic;
 
             EYtWriteMode mode = EYtWriteMode::Renew;
             if (const auto modeSetting = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::Mode)) {
@@ -812,7 +837,7 @@ public:
             auto cluster = TString{publish.DataSink().Cluster().Value()};
 
             bool isAnonymous = NYql::HasSetting(publish.Publish().Settings().Ref(), EYtSettingType::Anonymous);
-            auto destFilePath = Services_->GetTablePath(cluster, publish.Publish().Name().Value(), isAnonymous, true);
+            auto destFilePath = Services_->GetTablePath(cluster, publish.Publish().Name().Value(), isAnonymous);
 
             append = append && NFs::Exists(destFilePath);
 
@@ -821,7 +846,8 @@ public:
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), {}, Services_->GetFileStorage(), externalFiles), nullptr);
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), {}, Services_->GetFileStorage(), externalFiles),
+                nullptr, UnknownLangVersion, MakeRuntimeSettings());
 
             TProgramBuilder pgmBuilder(builder.GetTypeEnvironment(), builder.GetFunctionRegistry());
             TMkqlBuildContext ctx(*MkqlCompiler_, pgmBuilder, exprCtx);
@@ -848,7 +874,7 @@ public:
             }
 
             for (auto out: publish.Input()) {
-                inputs.push_back(BuildTableContentCall("YtTableInputNoCtx", srcType, cluster, out.Ref(), Nothing(), ctx, false));
+                inputs.push_back(BuildTableContentCall("YtTableInputNoCtx", srcType, out.Ref(), Nothing(), ctx, false));
             }
 
             auto data = pgmBuilder.Extend(inputs);
@@ -875,34 +901,73 @@ public:
                 compGraph->GetContext(),
                 compGraph->GetValue(),
                 outSpec);
+            ThrowNonConsumedLinear(*compGraph);
             YQL_ENSURE(1 == outTableContent.size());
 
-            {
+            ui64 publishedRowCount = 0;
+            TString srcFilePath = Services_->GetTmpTablePath(GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value());
+            const i64 numParts = NFile::ReadSplittedPartsCount(srcFilePath);
+
+            if (numParts > 0) {
+                // Part files are already formatted — hardlink or copy them directly.
+                for (i64 p = 0; p < numParts; ++p) {
+                    NFs::HardLinkOrCopy(
+                        srcFilePath + ".part." + ToString(p),
+                        destFilePath + ".part." + ToString(p));
+                }
+                if (Services_->GetWriteOutputRowCount()) {
+                    const TString srcAttrPath = srcFilePath + ".attr";
+                    if (NFs::Exists(srcAttrPath)) {
+                        TIFStream input(srcAttrPath);
+                        const auto srcAttrs = NYT::NodeFromYsonStream(&input);
+                        if (srcAttrs.HasKey("row_count")) {
+                            publishedRowCount = static_cast<ui64>(srcAttrs["row_count"].AsInt64());
+                        }
+                    }
+                }
+            } else {
                 TMemoryInput in(outTableContent.front());
                 TOFStream of(destFilePath);
                 TDoubleHighPrecisionYsonWriter writer(&of, ::NYson::EYsonType::ListFragment);
-                NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
-                parser.Parse();
+                if (Services_->GetWriteOutputRowCount()) {
+                    auto counting = NFile::MakeRowCountingYsonConsumer(&writer, publishedRowCount);
+                    NYson::TYsonParser parser(counting.get(), &in, ::NYson::EYsonType::ListFragment);
+                    parser.Parse();
+                } else {
+                    NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
+                    parser.Parse();
+                }
             }
 
             {
                 NYT::TNode attrs = NYT::TNode::CreateMap();
-                TString srcFilePath = Services_->GetTablePath(cluster, GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value(), true);
+                NYT::TNode destAttrs = NYT::TNode::CreateMap();
                 if (NFs::Exists(srcFilePath + ".attr")) {
                     TIFStream input(srcFilePath + ".attr");
                     attrs = NYT::NodeFromYsonStream(&input);
                 }
+                if (dstIsDynamic && NFs::Exists(destFilePath + ".attr")) {
+                    TIFStream input(destFilePath + ".attr");
+                    destAttrs = NYT::NodeFromYsonStream(&input);
+                }
 
-                const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
+                const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *options.Config());
                 const bool rowSpecCompactForm = options.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-                dstRowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
+                dstRowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
                 NYT::TNode columnGroupsSpec;
                 if (options.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) != NYT::OF_LOOKUP_ATTR) {
                     if (auto setting = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::ColumnGroups)) {
                         columnGroupsSpec = NYT::NodeFromYsonString(setting->Tail().Content());
                     }
                 }
-                if (!append || !attrs.HasKey("schema") || !columnGroupsSpec.IsUndefined() || dstRowSpec->IsSorted()) {
+
+                if (dstIsDynamic) {
+                    attrs["schema"] = destAttrs["schema"];
+                    attrs["_yql_dynamic"] = true;
+                    if (destAttrs.HasKey("_yql_dynamic_native_read")) {
+                        attrs["_yql_dynamic_native_read"] = destAttrs["_yql_dynamic_native_read"];
+                    }
+                } else if (!append || !attrs.HasKey("schema") || !columnGroupsSpec.IsUndefined() || dstRowSpec->IsSorted()) {
                     attrs["schema"] = RowSpecToYTSchema(spec[YqlRowSpecAttribute], nativeYtTypeCompatibility, columnGroupsSpec).ToNode();
                 }
 
@@ -924,8 +989,15 @@ public:
                     if (interval || isDuration) {
                         attrs["expiration_timeout"] = isDuration ? duration.MilliSeconds() : interval->MilliSeconds();
                     }
-                    if (options.Config()->NightlyCompress.Get(cluster).GetOrElse(false)) {
-                        attrs["force_nightly_compress"] = true;
+                    const TMaybe<bool> nightlyCompress = options.Config()->NightlyCompress.Get(cluster);
+                    if (nightlyCompress.Defined()) {
+                        if (*nightlyCompress) {
+                            attrs["force_nightly_compress"] = true;
+                        } else {
+                            NYT::TNode compressSettings = NYT::TNode::CreateMap();
+                            compressSettings["enabled"] = false;
+                            attrs["nightly_compression_settings"] = compressSettings;
+                        }
                     }
                 }
 
@@ -961,6 +1033,9 @@ public:
                     }
                 }
 
+                if (Services_->GetWriteOutputRowCount()) {
+                    attrs["row_count"] = static_cast<i64>(publishedRowCount);
+                }
                 TOFStream ofAttr(destFilePath + ".attr");
                 ofAttr.Write(NYT::NodeToYsonString(attrs, NYson::EYsonFormat::Pretty));
             }
@@ -1002,7 +1077,7 @@ public:
                 const TString& cluster = i.Cluster;
                 const TString& path = i.Path;
 
-                auto tmpPath = Services_->GetTablePath(cluster, path, true);
+                auto tmpPath = Services_->GetTmpTablePath(path);
 
                 session->CancelDeleteAtFinalize(cluster, tmpPath);
 
@@ -1038,11 +1113,17 @@ public:
         return cluster;
     }
 
-    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const final {
+    TString GetClusterYtName(const TString& cluster) const final {
+        return cluster;
+    }
+
+    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
         Y_UNUSED(sessionId);
         Y_UNUSED(cluster);
         Y_UNUSED(epoch);
         Y_UNUSED(tmpFolder);
+        Y_UNUSED(temp);
+        Y_UNUSED(anonymous);
         return NYT::TRichYPath().Path(table);
     }
 
@@ -1076,9 +1157,9 @@ public:
             for (auto& a: options.OutTable().Meta->Attrs) {
                 attrs[a.first] = a.second;
             }
-            const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(TString{cluster}).GetOrElse(NTCF_LEGACY);
+            const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *options.Config());
             const bool rowSpecCompactForm = options.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-            options.OutTable().RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
+            options.OutTable().RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
             NYT::TNode rowSpecYson;
             options.OutTable().RowSpec->FillCodecNode(rowSpecYson);
             attrs["schema"] = RowSpecToYTSchema(rowSpecYson, nativeYtTypeCompatibility).ToNode();
@@ -1090,7 +1171,7 @@ public:
             TFullResultTableResult res;
 
             TString name = TStringBuilder() << "tmp/" << GetGuidAsString(session->RandomProvider_->GenGuid());
-            TString path = Services_->GetTablePath(cluster, name, true);
+            TString path = Services_->GetTmpTablePath(name);
 
             res.Server = cluster;
             res.Path = path;
@@ -1118,10 +1199,10 @@ public:
     }
 
     TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) override {
-        const TString tmpFolder = GetTablesTmpFolder(*options.Config());
         auto res = TGetTablePartitionsResult();
         TVector<NYT::TRichYPath> paths;
         for (const auto& pathInfo: options.Paths()) {
+            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), pathInfo->Table->Cluster, GetSession(options)->UseSecureTmp_, {});
             const auto tablePath = TransformPath(tmpFolder, pathInfo->Table->Name, pathInfo->Table->IsTemp, options.SessionId());
             NYT::TRichYPath richYtPath{NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix)};
             pathInfo->FillRichYPath(richYtPath);  // n.b. throws exception, if there is no RowSpec (we assume it is always there)
@@ -1134,6 +1215,12 @@ public:
     }
 
     void AddCluster(const TYtClusterConfig&) override {
+    }
+
+    TFuture<TDumpResult> Dump(TDumpOptions&& /*options*/) override {
+        TDumpResult res;
+        res.SetSuccess();
+        return MakeFuture(res);
     }
 
 private:
@@ -1180,6 +1267,21 @@ private:
         if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
             info.Attrs["schema_mode"] = attrs["schema_mode"].AsString();
         }
+        if (attrs.AsMap().contains("compression_codec") && attrs["compression_codec"].AsString() != "none") {
+            info.Attrs["compression_codec"] = attrs["compression_codec"].AsString();
+        }
+        if (attrs.AsMap().contains("primary_medium") && attrs["primary_medium"].AsString() != "default") {
+            info.Attrs["primary_medium"] = attrs["primary_medium"].AsString();
+        }
+        if (attrs.AsMap().contains("media") && (!attrs["media"].AsMap().contains("default") || attrs["media"].AsMap().size() != 1)) {
+            info.Attrs["media"] = NYT::NodeToYsonString(attrs["media"]);
+        }
+        if (info.IsDynamic && attrs.AsMap().contains("enable_dynamic_store_read") && NYT::GetBool(attrs["enable_dynamic_store_read"])) {
+            info.Attrs["enable_dynamic_store_read"] = "true";
+        }
+        if (!attrs.AsMap().contains("schema") || !attrs["schema"].Attributes().AsMap().contains("strict") || !NYT::GetBool(attrs["schema"].Attributes()["strict"])) {
+            info.Attrs["native_strict_schema"] = "false";
+        }
 
         NYT::TNode schemaAttrs;
         if (req.ForceInferSchema() && req.InferSchemaRows() > 0) {
@@ -1217,17 +1319,55 @@ private:
     }
 
     static void LoadTableStatInfo(const TString& path, TYtTableStatInfo& info) {
-        NYT::TNode inputList = LoadTableContent(path);
-        info.RecordsCount = inputList.AsList().size();
+        NYT::TNode attrs = LoadTableAttrs(path);
+
+        const TMaybe<i64> numParts = attrs.HasKey("splitted")
+            ? TMaybe<i64>(attrs["splitted"].AsInt64())
+            : Nothing();
+
+        if (attrs.HasKey("row_count")) {
+            info.RecordsCount = attrs["row_count"].AsInt64();
+        } else {
+            NYT::TNode inputList = LoadTableContent(path, numParts);
+            info.RecordsCount = inputList.AsList().size();
+        }
         if (!info.IsEmpty()) {
-            info.DataSize = TFileStat(path).Size;
-            info.ChunkCount = 1;
+            if (numParts.Defined()) {
+                i64 totalSize = 0;
+                for (i64 p = 0; p < *numParts; ++p) {
+                    totalSize += static_cast<i64>(TFileStat(path + ".part." + ToString(p)).Size);
+                }
+                info.DataSize = totalSize;
+                info.ChunkCount = *numParts;
+            } else {
+                info.DataSize = TFileStat(path).Size;
+                info.ChunkCount = 1;
+            }
         }
     }
 
-    static NYT::TNode LoadTableContent(const TString& path) {
+
+    // numParts: when Defined, use the provided count directly (caller already has attrs loaded);
+    // when Nothing, read the .attr file to detect splitted format.
+    static NYT::TNode LoadTableContent(const TString& path, TMaybe<i64> numParts = Nothing()) {
         NYT::TNode inputList = NYT::TNode::CreateList();
-        if (TFileStat(path).Size) {
+        if (!numParts.Defined()) {
+            const i64 n = NFile::ReadSplittedPartsCount(path);
+            if (n > 0) {
+                numParts = n;
+            }
+        }
+        if (numParts.Defined()) {
+            for (i64 p = 0; p < *numParts; ++p) {
+                const TString partPath = path + ".part." + ToString(p);
+                if (TFileStat(partPath).Size) {
+                    TIFStream input(partPath);
+                    NYT::TNodeBuilder builder(&inputList);
+                    NYson::TYsonParser parser(&builder, &input, ::NYson::EYsonType::ListFragment);
+                    parser.Parse();
+                }
+            }
+        } else if (TFileStat(path).Size) {
             TIFStream input(path);
             NYT::TNodeBuilder builder(&inputList);
             NYson::TYsonParser parser(&builder, &input, ::NYson::EYsonType::ListFragment);
@@ -1245,7 +1385,9 @@ private:
         auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
         TVector<TFileLinkPtr> externalFiles;
         TFileYtLambdaBuilder builder(alloc, session,
-            MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+            MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(),
+            Services_->GetFileStorage(), externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+            options.BridgeMode(), options.BridgeBinaryPath());
         auto data = builder.BuildLambda(*MkqlCompiler_, input.Ptr(), exprCtx);
         auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
         data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1261,6 +1403,7 @@ private:
             options.FillSettings().AllResultsBytesLimit, MakeMaybe(columns));
 
         resultData.WriteValue(compGraph->GetValue(), data.GetStaticType());
+        ThrowNonConsumedLinear(*compGraph);
         auto dataRes = resultData.Finish();
 
         writer.OnKeyedItem("Data");
@@ -1281,14 +1424,14 @@ private:
         }
 
         if (writeRef && !options.FillSettings().Discard) {
-            auto cluster = GetClusterName(pull.Input());
             writer.OnKeyedItem("Ref");
             writer.OnBeginList();
             for (auto& tableInfo: GetInputTableInfos(pull.Input())) {
+                TString cluster = tableInfo->Cluster;
                 writer.OnListItem();
                 if (tableInfo->IsTemp) {
-                    auto outPath = Services_->GetTablePath(cluster, tableInfo->Name, true);
-                    session.CancelDeleteAtFinalize(TString{cluster}, outPath);
+                    auto outPath = Services_->GetTmpTablePath(tableInfo->Name);
+                    session.CancelDeleteAtFinalize(cluster, outPath);
                 }
                 NYql::WriteTableReference(writer, YtProviderName, cluster, tableInfo->Name, tableInfo->IsTemp, columns);
             }
@@ -1310,13 +1453,14 @@ private:
         for (auto table: op.Output()) {
             TString name = TStringBuilder() << "tmp/" << GetGuidAsString(session.RandomProvider_->GenGuid());
 
-            outTablePaths.push_back(Services_->GetTablePath(cluster, name, true));
+            outTablePaths.push_back(Services_->GetTmpTablePath(name));
 
             outTableInfos.emplace_back(table);
             outTableInfos.back().Name = name;
         }
 
-        TFsQueryCacheItem queryCacheItem(*options.Config(), cluster, Services_->GetTmpDir(), options.OperationHash(), outTablePaths);
+        TFsQueryCacheItem queryCacheItem(*options.Config(), cluster, Services_->GetTmpDir(), options.OperationHash(),
+             outTablePaths, options.OutputHash());
         if (!queryCacheItem.Lookup(FakeQueue_)) {
             TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
@@ -1324,7 +1468,9 @@ private:
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, session,
-                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(), externalFiles), secureParamsProvider.get());
+                MakeFunctionRegistry(*Services_->GetFunctionRegistry(), options.UserDataBlocks(), Services_->GetFileStorage(),
+                externalFiles), secureParamsProvider.get(), options.LangVer(), options.RuntimeSettings(),
+                options.BridgeMode(), options.BridgeBinaryPath());
             auto data = builder.BuildLambda(*MkqlCompiler_, node, exprCtx);
             auto transform = TFileTransformProvider(Services_, options.UserDataBlocks());
             data = builder.TransformAndOptimizeProgram(data, transform);
@@ -1337,6 +1483,7 @@ private:
             compGraph->Prepare();
 
             WriteOutTables(builder, options.Config(), session, cluster, outTableInfos, compGraph.Get());
+            ThrowNonConsumedLinear(*compGraph);
             queryCacheItem.Store();
         }
 
@@ -1345,7 +1492,6 @@ private:
             TYtTableStatInfo::TPtr statInfo = MakeIntrusive<TYtTableStatInfo>();
             statInfo->Id = outTableInfos[i].Name;
             LoadTableStatInfo(outTablePaths.at(i), *statInfo);
-
             outStat.emplace_back(statInfo->Id, statInfo);
         }
         return outStat;
@@ -1363,8 +1509,8 @@ private:
 
             TYtTableStatInfo::TPtr statInfo = MakeIntrusive<TYtTableStatInfo>();
             statInfo->Id = name;
-            LoadTableStatInfo(Services_->GetTablePath(cluster, name, true), *statInfo);
-
+            const TString touchPath = Services_->GetTmpTablePath(name);
+            LoadTableStatInfo(touchPath, *statInfo);
             outStat.emplace_back(statInfo->Id, statInfo);
         }
 
@@ -1376,7 +1522,7 @@ private:
         YQL_ENSURE(op.Output().Size() == 1U);
 
         const TString name = TStringBuilder() << "tmp/" << GetGuidAsString(session.RandomProvider_->GenGuid());
-        const auto path = Services_->GetTablePath(cluster, name, true);
+        const auto path = Services_->GetTmpTablePath(name);
 
         TFsQueryCacheItem queryCacheItem(*options.Config(), cluster, Services_->GetTmpDir(), options.OperationHash(), path);
         if (queryCacheItem.Lookup(FakeQueue_)) {
@@ -1397,7 +1543,7 @@ private:
         TYtDropTable op(node);
         auto table = op.Table();
         bool isAnonymous = NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous);
-        auto path = Services_->GetTablePath(op.DataSink().Cluster().Value(), table.Name().Value(), isAnonymous, true);
+        auto path = Services_->GetTablePath(op.DataSink().Cluster().Value(), table.Name().Value(), isAnonymous);
 
         NFs::Remove(path);
         NFs::Remove(path + ".attr");
@@ -1428,16 +1574,23 @@ private:
     void WriteOutTable(const TYtSettings::TConstPtr& config, TSession& session, const TString& cluster,
         const TYtOutTableInfo& outTableInfo, TStringBuf binaryYson) const
     {
-        auto outPath = Services_->GetTablePath(cluster, outTableInfo.Name, true);
+        auto outPath = Services_->GetTmpTablePath(outTableInfo.Name);
         session.DeleteAtFinalize(config, cluster, outPath);
+
+        ui64 rowCount = 0;
         if (binaryYson) {
             TMemoryInput in(binaryYson);
             TOFStream of(outPath);
             TDoubleHighPrecisionYsonWriter writer(&of, ::NYson::EYsonType::ListFragment);
-            NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
-            parser.Parse();
-        }
-        else {
+            if (Services_->GetWriteOutputRowCount()) {
+                auto counting = NFile::MakeRowCountingYsonConsumer(&writer, rowCount);
+                NYson::TYsonParser parser(counting.get(), &in, ::NYson::EYsonType::ListFragment);
+                parser.Parse();
+            } else {
+                NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
+                parser.Parse();
+            }
+        } else {
             YQL_ENSURE(TFile(outPath, CreateAlways | WrOnly).IsOpen(), "Failed to create " << outPath.Quote() << " file");
         }
 
@@ -1446,14 +1599,17 @@ private:
             for (auto& a: outTableInfo.Meta->Attrs) {
                 attrs[a.first] = a.second;
             }
-            const auto nativeYtTypeCompatibility = config->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
+            const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *config);
             const bool rowSpecCompactForm = config->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
             const bool optimizeForScan = config->OptimizeFor.Get(cluster).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
-            outTableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
+            outTableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
             NYT::TNode rowSpecYson;
             outTableInfo.RowSpec->FillCodecNode(rowSpecYson);
 
             attrs["schema"] = RowSpecToYTSchema(rowSpecYson, nativeYtTypeCompatibility, optimizeForScan ? outTableInfo.GetColumnGroups() : NYT::TNode{}).ToNode();
+            if (Services_->GetWriteOutputRowCount()) {
+                attrs["row_count"] = static_cast<i64>(rowCount);
+            }
             TOFStream ofAttr(outPath + ".attr");
             NYson::TYsonWriter writer(&ofAttr, NYson::EYsonFormat::Pretty, ::NYson::EYsonType::Node);
             NYT::TNodeVisitor visitor(&writer);
@@ -1470,6 +1626,7 @@ private:
     TPathStatResult DoPathStat(TPathStatOptions&& options, bool onlyCached) {
         TPathStatResult res;
         res.DataSize.reserve(options.Paths().size());
+        res.Extended.reserve(options.Paths().size());
 
         auto extractSysColumns = [] (NYT::TRichYPath& ytPath) -> TVector<TString> {
             TVector<TString> res;
@@ -1486,12 +1643,15 @@ private:
         };
 
         for (auto& req: options.Paths()) {
-            auto path = Services_->GetTablePath(options.Cluster(), req.Path().Path_, req.IsTemp());
+            auto path = req.IsTemp() && !req.IsAnonymous()
+                ? Services_->GetTmpTablePath(req.Path().Path_)
+                : Services_->GetTableSnapshotPath(options.Cluster(), req.Path().Path_, req.IsAnonymous(), req.Epoch());
 
             const NYT::TNode attrs = LoadTableAttrs(path);
             bool inferSchema = attrs.HasKey("infer_schema") && attrs["infer_schema"].AsBool();
 
             res.DataSize.push_back(0);
+            res.Extended.push_back(Nothing());
             auto ytPath = req.Path();
             if (auto sysColumns = extractSysColumns(ytPath)) {
                 NYT::TNode inputList = LoadTableContent(path);
@@ -1567,12 +1727,10 @@ private:
                                 }
                             }
                         }
-                        res.Extended.push_back(IYtGateway::TPathStatResult::TExtendedResult{
+                        res.Extended.back() = IYtGateway::TPathStatResult::TExtendedResult{
                             .DataWeight = dataWeight,
                             .EstimatedUniqueCounts = estimatedUniqueCounts
-                        });
-                    } else {
-                        res.Extended.push_back(Nothing());
+                        };
                     }
                 }
             } else {
@@ -1583,6 +1741,32 @@ private:
         return res;
     }
 
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& /*options*/) const override {
+        return TClusterConnectionResult();
+    }
+
+    TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override {
+        return Services_->GetTablePath(options.Cluster(), options.Path(), options.IsTemp());
+    }
+
+    NThreading::TFuture<IYtGateway::TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&&) override {
+        return MakeFuture<IYtGateway::TLayersSnapshotResult>();
+    }
+
+    NThreading::TFuture<IYtGateway::TDownloadTableResult> DownloadTable(TDownloadTableOptions&&) override {
+        return MakeFuture<IYtGateway::TDownloadTableResult>();
+    }
+
+    NThreading::TFuture<TUploadFilesToCacheResult> UploadFilesToCache(TUploadFilesToCacheOptions&& options) override {
+        TUploadFilesToCacheResult res;
+        res.SetSuccess();
+        res.Files = options.Files();
+        return MakeFuture(std::move(res));
+    }
+
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override {
+        return nullptr;
+    }
 
 private:
     TYtFileServices::TPtr Services_;

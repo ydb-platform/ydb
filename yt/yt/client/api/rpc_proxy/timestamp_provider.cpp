@@ -47,7 +47,7 @@ private:
         }
 
         return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGenerateTimestampsPtr& rsp) {
-            return rsp->timestamp();
+            return FromProto<NTransactionClient::TTimestamp>(rsp->timestamp());
         }));
     }
 };

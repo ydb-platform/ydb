@@ -20,6 +20,7 @@ public:
         , TypeAnnotationTransformer_(CreateSolomonDataSinkTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreateSolomonDataSinkExecTransformer(State_))
         , PhysicalOptProposalTransformer_(CreateSoPhysicalOptProposalTransformer(State_))
+        , LogicalOptProposalTransformer_(CreateSolomonLogicalOptProposalTransformer(State_))
     {
     }
 
@@ -43,6 +44,10 @@ public:
         return &State_->Configuration->Tokens;
     }
 
+    const THashSet<TString>& GetValidClusters() override {
+        return State_->Configuration->GetValidClusters();
+    }
+
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer_;
@@ -54,6 +59,10 @@ public:
 
     IGraphTransformer& GetPhysicalOptProposalTransformer() override {
         return *PhysicalOptProposalTransformer_;
+    }
+
+    IGraphTransformer& GetLogicalOptProposalTransformer() override {
+        return *LogicalOptProposalTransformer_;
     }
 
     bool CanParse(const TExprNode& node) override {
@@ -166,12 +175,21 @@ public:
         return State_->IsRtmrMode() ? nullptr : State_->DqIntegration.Get();
     }
 
+    IYtflowIntegration* GetYtflowIntegration() override {
+        return State_->YtflowIntegration.Get();
+    }
+
+    IYtflowOptimization* GetYtflowOptimization() override {
+        return State_->YtflowOptimization.Get();
+    }
+
 private:
     TSolomonState::TPtr State_;
 
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<TExecTransformerBase> ExecutionTransformer_;
     THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
+    THolder<IGraphTransformer> LogicalOptProposalTransformer_;
 };
 
 

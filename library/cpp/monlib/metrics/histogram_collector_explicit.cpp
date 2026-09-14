@@ -36,6 +36,21 @@ namespace NMonitoring {
             return ExplicitHistogramSnapshot(Bounds_, values);
         }
 
+        THolder<IHistogramCollector> Clone() override {
+            TBucketBounds copyBounds(Bounds_);
+            return MakeHolder<TExplicitHistogramCollector>(TExplicitHistogramCollector(copyBounds, Values_));
+        }
+
+    private:
+        TExplicitHistogramCollector(TBucketBounds bounds, TAtomicsArray const& values)
+            : Values_(bounds.size())
+            , Bounds_(std::move(bounds))
+        {
+            for(size_t i = 0; i < Values_.Size(); ++i) {
+                Values_.Add(i, values[i]);
+            }
+        }
+
     private:
         TAtomicsArray Values_;
         TBucketBounds Bounds_;

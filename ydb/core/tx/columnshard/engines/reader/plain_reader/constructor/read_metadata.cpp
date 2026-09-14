@@ -7,26 +7,10 @@
 namespace NKikimr::NOlap::NReader::NPlain {
 
 std::unique_ptr<TScanIteratorBase> TReadMetadata::StartScan(const std::shared_ptr<TReadContext>& readContext) const {
-    return std::make_unique<TColumnShardScanIterator>(readContext, readContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>());
+    return std::make_unique<TColumnShardScanIterator>(readContext);
 }
 
-TConclusionStatus TReadMetadata::DoInitCustom(
-    const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const TDataStorageAccessor& dataAccessor) {
-    CommittedBlobs =
-        dataAccessor.GetCommitedBlobs(readDescription, ResultIndexSchema->GetIndexInfo().GetReplaceKey(), LockId, GetRequestSnapshot());
-
-    if (LockId) {
-        for (auto&& i : CommittedBlobs) {
-            if (!i.IsCommitted()) {
-                if (owner->HasLongTxWrites(i.GetInsertWriteId())) {
-                } else {
-                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i.GetInsertWriteId());
-                    AddWriteIdToCheck(i.GetInsertWriteId(), op->GetLockId());
-                }
-            }
-        }
-    }
-
+TConclusionStatus TReadMetadata::DoInitCustom(const NColumnShard::TColumnShard* /*owner*/, const TReadDescription& /*readDescription*/) {
     return TConclusionStatus::Success();
 }
 

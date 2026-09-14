@@ -1,4 +1,14 @@
+liburing-2.9 release
+
+- Add support for ring resizing
+- Add support for registered waits
+- Test additions and improvements
+- Fix bug with certain ring setups with SQE128 set not fully closing
+  the ring after io_uring_queue_exit(3) had been called.
+- Various man page fixes and updates
+
 liburing-2.8 release
+
 - Add support for incrementally/partially consumed provided buffers,
   usable with the provided buffer ring support.
 - Add support for foo_and_wait_min_timeout(), where it's possible to

@@ -18,6 +18,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateRawRead
     const TTxId& txId,
     IHTTPGateway::TPtr gateway,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
     const TString& url,
     const TS3Credentials& credentials,
     const TString& pattern,

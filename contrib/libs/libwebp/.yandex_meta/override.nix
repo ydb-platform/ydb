@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "1.2.2";
+  version = "1.6.0";
 
   src = fetchFromGitHub {
     owner = "webmproject";
     repo = "libwebp";
     rev = "v${version}";
-    hash = "sha256-WF2HZPS7mbotk+d1oLM/JC5l/FWfkrk+T3Z6EW9oYEI=";
+    hash = "sha256-7i4fGBTsTjAkBzCjVqXqX4n22j6dLgF/0mz4ajNA45U=";
   };
 
   patches = [];

@@ -5,6 +5,8 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -32,6 +34,7 @@ private:
     bool CheckCreatePersistentSnapshot(TActiveTransaction *activeTx);
     bool CheckDropPersistentSnapshot(TActiveTransaction *activeTx);
     bool CheckInitiateBuildIndex(TActiveTransaction *activeTx);
+    bool CheckPrepareIndexValidation(TActiveTransaction *activeTx);
     bool CheckFinalizeBuildIndex(TActiveTransaction *activeTx);
     bool CheckDropIndexNotice(TActiveTransaction *activeTx);
     bool CheckMoveTable(TActiveTransaction *activeTx);
@@ -39,8 +42,9 @@ private:
     bool CheckCreateCdcStream(TActiveTransaction *activeTx);
     bool CheckAlterCdcStream(TActiveTransaction *activeTx);
     bool CheckDropCdcStream(TActiveTransaction *activeTx);
-    bool CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx);
+    bool CheckRotateCdcStream(TActiveTransaction *activeTx);
     bool CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx);
+    bool CheckTruncate(TActiveTransaction *activeTx);
 
     bool CheckSchemaVersion(TActiveTransaction *activeTx, ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion);
 
@@ -73,13 +77,13 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
                                              TTransactionContext &txc,
                                              const TActorContext &ctx)
 {
-    Y_ABORT_UNLESS(op->IsSchemeTx());
-    Y_ABORT_UNLESS(!op->IsAborted());
+    Y_ENSURE(op->IsSchemeTx());
+    Y_ENSURE(!op->IsAborted());
 
     Pipeline.RemoveWaitingSchemeOp(op);
 
     TActiveTransaction *activeTx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(activeTx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(activeTx, "cannot cast operation of kind " << op->GetKind());
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
     bool unfreezeTx = false;
     if (tx.HasAlterTable() && tx.GetAlterTable().HasPartitionConfig() &&
@@ -100,7 +104,8 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
                                          error);
         op->Abort(EExecutionUnitKind::FinishPropose);
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, error);
+        YDB_LOG_NOTICE_CTX(ctx, "TCheckSchemeTxUnit::Execute: wrong shard state for scheme transaction",
+            {"errorMessage", error});
 
         return EExecutionStatus::Executed;
     }
@@ -118,7 +123,8 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
                 << " lastSeqNo " << lastSeqNo.Generation << ":"
                 << lastSeqNo.Round;
 
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, error);
+        YDB_LOG_INFO_CTX(ctx, "TCheckSchemeTxUnit::Execute: ignoring outdated schema tx proposal",
+            {"errorMessage", error});
 
         BuildResult(op)->SetProcessError(NKikimrTxDataShard::TError::SCHEME_CHANGED, error);
         op->Abort(EExecutionUnitKind::FinishPropose);
@@ -126,10 +132,12 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
         return EExecutionStatus::Executed;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Propose scheme transaction at tablet " << DataShard.TabletID()
-                << " txId " << op->GetTxId() << " ssId " << activeTx->GetSchemeShardId()
-                << " seqNo "  << seqNo.Generation << ":" << seqNo.Round);
+    YDB_LOG_DEBUG_CTX(ctx, "TCheckSchemeTxUnit::Execute: propose scheme transaction",
+        {"tabletId", DataShard.TabletID()},
+        {"txId", op->GetTxId()},
+        {"schemeShardId", activeTx->GetSchemeShardId()},
+        {"generation", seqNo.Generation},
+        {"round", seqNo.Round});
 
     // Preserve new seqno to correctly filter out tx duplicates.
     DataShard.UpdateLastSchemeOpSeqNo(seqNo, txc);
@@ -144,7 +152,7 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     if (existingOp && existingOp->IsSchemeTx()) {
         // Check if we have propose for the same transaction type
         auto *schemaOp = Pipeline.FindSchemaTx(activeTx->GetTxId());
-        Y_VERIFY_S(schemaOp, "Unexpected failure to find schema tx " << activeTx->GetTxId());
+        Y_ENSURE(schemaOp, "Unexpected failure to find schema tx " << activeTx->GetTxId());
 
         // N.B. cannot use existingOp as it may not be loaded yet
         if (activeTx->GetSchemeTxType() != schemaOp->Type) {
@@ -187,7 +195,7 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
 
     // Check scheme tx content.
     if (!CheckSchemeTx(activeTx)) {
-        Y_ABORT_UNLESS(op->Result());
+        Y_ENSURE(op->Result());
         op->Abort(EExecutionUnitKind::FinishPropose);
 
         return EExecutionStatus::ExecutedNoMoreRestarts;
@@ -215,9 +223,9 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     op->SetMinStep(Pipeline.AllowedSchemaStep());
     op->SetMaxStep(Max<ui64>());
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Prepared scheme transaction txId " << op->GetTxId() << " at tablet "
-                << DataShard.TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "TCheckSchemeTxUnit::Execute: prepared scheme transaction",
+        {"txId", op->GetTxId()},
+        {"tabletId", DataShard.TabletID()});
 
     BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
 
@@ -227,11 +235,12 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
 bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx,
     ui64 proposedSchemaVersion, ui64 currentSchemaVersion, ui64 expectedSchemaVersion)
 {
-    LOG_INFO_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                "Check scheme tx, proposed scheme version# " << proposedSchemaVersion <<
-                " current version# " << currentSchemaVersion <<
-                " expected version# " << expectedSchemaVersion <<
-                " at tablet# " << DataShard.TabletID() << " txId# " << activeTx->GetTxId());
+    YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "TCheckSchemeTxUnit::CheckSchemaVersion: check scheme tx schema versions",
+        {"schemeVersion", proposedSchemaVersion},
+        {"currentVersion", currentSchemaVersion},
+        {"expectedVersion", expectedSchemaVersion},
+        {"tabletId", DataShard.TabletID()},
+        {"txId", activeTx->GetTxId()});
 
     // Allow scheme tx if proposed or current schema version is zero. This simplify migration a lot.
     if (proposedSchemaVersion && currentSchemaVersion && expectedSchemaVersion != proposedSchemaVersion) {
@@ -241,7 +250,8 @@ bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx,
                " expected version# " << expectedSchemaVersion <<
                " at tablet# " << DataShard.TabletID() << " txId# " << activeTx->GetTxId();
 
-        LOG_CRIT_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, err);
+        YDB_LOG_CRIT_CTX(TActivationContext::AsActorContext(), "TCheckSchemeTxUnit::CheckSchemaVersion: wrong schema version",
+            {"errorMessage", err});
         return false;
     }
 
@@ -253,11 +263,11 @@ bool TCheckSchemeTxUnit::HasDuplicate(TActiveTransaction *activeTx, const TStrin
         return false;
     }
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-        "Ignoring " << kind << " duplicate"
-            << " at tablet " << DataShard.TabletID()
-            << " txId " << activeTx->GetTxId()
-            << " currentTxId " << Pipeline.CurrentSchemaTxId());
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TCheckSchemeTxUnit::HasDuplicate: ignoring duplicate scheme tx",
+        {"kind", kind},
+        {"tabletId", DataShard.TabletID()},
+        {"activeTxId", activeTx->GetTxId()},
+        {"currentSchemaTxId", Pipeline.CurrentSchemaTxId()});
     BuildResult(activeTx)->SetSchemeTxDuplicate(Pipeline.CurrentSchemaTxId() == activeTx->GetTxId());
 
     return true;
@@ -272,11 +282,12 @@ bool TCheckSchemeTxUnit::HasConflicts(TActiveTransaction *activeTx, const TStrin
             continue;
         }
 
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-            "Ignoring " << kind << " during ongoing " << conflicting
-                << " at tablet " << DataShard.TabletID()
-                << " txId " << activeTx->GetTxId()
-                << " currentTxId " << Pipeline.CurrentSchemaTxId());
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TCheckSchemeTxUnit::HasConflicts: ignoring during ongoing scheme tx",
+            {"kind", kind},
+            {"conflicting", conflicting},
+            {"tabletId", DataShard.TabletID()},
+            {"activeTxId", activeTx->GetTxId()},
+            {"currentSchemaTxId", Pipeline.CurrentSchemaTxId()});
         BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
 
         return true;
@@ -291,11 +302,11 @@ bool TCheckSchemeTxUnit::HasPathId(TActiveTransaction *activeTx, const T &op, co
         return true;
     }
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-        kind << " description has no PathId"
-            << " at tablet " << DataShard.TabletID()
-            << " txId " << activeTx->GetTxId()
-            << " currentTxId " << Pipeline.CurrentSchemaTxId());
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TCheckSchemeTxUnit::HasPathId: description has no PathId",
+        {"kind", kind},
+        {"tabletId", DataShard.TabletID()},
+        {"activeTxId", activeTx->GetTxId()},
+        {"currentSchemaTxId", Pipeline.CurrentSchemaTxId()});
     BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
 
     return false;
@@ -304,7 +315,7 @@ bool TCheckSchemeTxUnit::HasPathId(TActiveTransaction *activeTx, const T &op, co
 template <typename T>
 TPathId TCheckSchemeTxUnit::GetPathId(const T &op) const {
     auto pathId = TPathId::FromProto(op.GetPathId());
-    Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == pathId.OwnerId);
+    Y_ENSURE(DataShard.GetPathOwnerId() == pathId.OwnerId);
     return pathId;
 }
 
@@ -312,7 +323,7 @@ template <typename T>
 bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx, ui64 tableId, const T &op) {
     const auto tablePtr = DataShard.GetUserTables().FindPtr(tableId);
 
-    Y_ABORT_UNLESS(tablePtr);
+    Y_ENSURE(tablePtr);
     const auto &table = **tablePtr;
 
     const auto current = table.GetTableSchemaVersion();
@@ -356,6 +367,9 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
     case TSchemaOperation::ETypeCreatePersistentSnapshot:
         res = CheckCreatePersistentSnapshot(activeTx);
         break;
+    case TSchemaOperation::ETypePrepareIndexValidation:
+        res = CheckPrepareIndexValidation(activeTx);
+        break;
     case TSchemaOperation::ETypeDropPersistentSnapshot:
         res = CheckDropPersistentSnapshot(activeTx);
         break;
@@ -383,17 +397,20 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
     case TSchemaOperation::ETypeDropCdcStream:
         res = CheckDropCdcStream(activeTx);
         break;
-    case TSchemaOperation::ETypeCreateIncrementalRestoreSrc:
-        res = CheckCreateIncrementalRestoreSrc(activeTx);
+    case TSchemaOperation::ETypeRotateCdcStream:
+        res = CheckRotateCdcStream(activeTx);
         break;
     case TSchemaOperation::ETypeCreateIncrementalBackupSrc:
         res = CheckCreateIncrementalBackupSrc(activeTx);
         break;
+    case TSchemaOperation::ETypeTruncate:
+        res = CheckTruncate(activeTx);
+        break;
     default:
-        LOG_ERROR_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "Unknown scheme tx type detected at tablet "
-                    << DataShard.TabletID() << " txId " << activeTx->GetTxId()
-                    << " txBody " << tx.ShortDebugString());
+        YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "TCheckSchemeTxUnit::CheckSchemeTx: unknown scheme tx type detected",
+            {"tabletId", DataShard.TabletID()},
+            {"activeTxId", activeTx->GetTxId()},
+            {"tx", tx.ShortDebugString()});
         BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
     }
 
@@ -410,11 +427,11 @@ bool TCheckSchemeTxUnit::CheckCreate(TActiveTransaction *activeTx) {
     const auto &create = tx.GetCreateTable();
     ui64 tableId = create.GetId_Deprecated();
     if (create.HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == create.GetPathId().GetOwnerId() || DataShard.GetPathOwnerId() == INVALID_TABLET_ID);
+        Y_ENSURE(DataShard.GetPathOwnerId() == create.GetPathId().GetOwnerId() || DataShard.GetPathOwnerId() == INVALID_TABLET_ID);
         tableId = create.GetPathId().GetLocalId();
     }
 
-    Y_ABORT_UNLESS(!DataShard.GetUserTables().contains(tableId));
+    Y_ENSURE(!DataShard.GetUserTables().contains(tableId));
 
     return true;
 }
@@ -429,10 +446,10 @@ bool TCheckSchemeTxUnit::CheckDrop(TActiveTransaction *activeTx) {
     const auto &drop = tx.GetDropTable();
     ui64 tableId = drop.GetId_Deprecated();
     if (drop.HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == drop.GetPathId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == drop.GetPathId().GetOwnerId());
         tableId = drop.GetPathId().GetLocalId();
     }
-    Y_ABORT_UNLESS(DataShard.GetUserTables().FindPtr(tableId));
+    Y_ENSURE(DataShard.GetUserTables().FindPtr(tableId));
 
     return true;
 }
@@ -440,7 +457,7 @@ bool TCheckSchemeTxUnit::CheckDrop(TActiveTransaction *activeTx) {
 bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
 {
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
-    Y_ABORT_UNLESS(!Pipeline.HasDrop());
+    Y_ENSURE(!Pipeline.HasDrop());
 
     const TStringBuf kind = "Alter";
     if (HasDuplicate(activeTx, kind, &TPipeline::HasAlter)) {
@@ -460,19 +477,19 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
 
     if (alter.HasPartitionConfig() && alter.GetPartitionConfig().HasFreezeState()) {
         if (alter.ColumnsSize() || alter.DropColumnsSize()) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Ignoring alter, combine freeze with other actions is forbiden, tablet " << DataShard.TabletID()
-                        << " txId " << activeTx->GetTxId() <<  " currentTxId "
-                        << Pipeline.CurrentSchemaTxId());
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TCheckSchemeTxUnit::CheckAlter: ignoring alter, combine freeze with other actions is forbidden",
+                {"tabletId", DataShard.TabletID()},
+                {"activeTxId", activeTx->GetTxId()},
+                {"currentSchemaTxId", Pipeline.CurrentSchemaTxId()});
             BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST);
             return false;
         }
 
         if (DataShard.IsFollower()) {
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                        "Ignoring alter, attempt to freeze follower, tablet " << DataShard.TabletID()
-                        << " txId " << activeTx->GetTxId() <<  " currentTxId "
-                        << Pipeline.CurrentSchemaTxId());
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TCheckSchemeTxUnit::CheckAlter: ignoring alter, attempt to freeze follower",
+                {"tabletId", DataShard.TabletID()},
+                {"activeTxId", activeTx->GetTxId()},
+                {"currentSchemaTxId", Pipeline.CurrentSchemaTxId()});
             BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST);
             return false;
         }
@@ -497,7 +514,8 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
                     << DatashardStateName(curState) << " tablet "<< DataShard.TabletID()
                     << " txId " << activeTx->GetTxId() <<  " currentTxId "
                     << Pipeline.CurrentSchemaTxId();
-            LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, errText);
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TCheckSchemeTxUnit::CheckAlter: ignoring alter due to wrong shard state",
+                {"errorMessage", errText});
             BuildResult(activeTx)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, errText);
             return false;
         }
@@ -505,37 +523,37 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
 
     ui64 tableId = alter.GetId_Deprecated();
     if (alter.HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == alter.GetPathId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == alter.GetPathId().GetOwnerId());
         tableId = alter.GetPathId().GetLocalId();
     }
 
     const auto tablePtr = DataShard.GetUserTables().FindPtr(tableId);
-    Y_VERIFY_S(tablePtr, "tableId: " << tableId);
+    Y_ENSURE(tablePtr, "tableId: " << tableId);
     const TUserTable &table = **tablePtr;
 
     auto curSchemaVersion = table.GetTableSchemaVersion();
 
     for (const auto &col : alter.GetColumns()) {
-        Y_ABORT_UNLESS(col.HasId());
-        Y_ABORT_UNLESS(col.HasTypeId());
-        Y_ABORT_UNLESS(col.HasName());
+        Y_ENSURE(col.HasId());
+        Y_ENSURE(col.HasTypeId());
+        Y_ENSURE(col.HasName());
 
         ui32 colId = col.GetId();
         if (table.Columns.contains(colId)) {
             const TUserTable::TUserColumn &column = table.Columns.at(colId);
-            Y_ABORT_UNLESS(column.Name == col.GetName());
+            Y_ENSURE(column.Name == col.GetName());
             const auto& typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(col.GetTypeId(), &col.GetTypeInfo());
-            Y_ABORT_UNLESS(column.Type == typeInfoMod.TypeInfo);
-            Y_ABORT_UNLESS(column.TypeMod == typeInfoMod.TypeMod);
-            Y_ABORT_UNLESS(col.HasFamily());
+            Y_ENSURE(column.Type == typeInfoMod.TypeInfo);
+            Y_ENSURE(column.TypeMod == typeInfoMod.TypeMod);
+            Y_ENSURE(col.HasFamily());
         }
     }
 
     for (const auto &col : alter.GetDropColumns()) {
         ui32 colId = col.GetId();
         const TUserTable::TUserColumn *userColumn = table.Columns.FindPtr(colId);
-        Y_ABORT_UNLESS(userColumn);
-        Y_ABORT_UNLESS(userColumn->Name == col.GetName());
+        Y_ENSURE(userColumn);
+        Y_ENSURE(userColumn->Name == col.GetName());
     }
 
     auto res = CheckSchemaVersion(activeTx, proposedSchemaVersion, curSchemaVersion, curSchemaVersion + 1);
@@ -546,7 +564,7 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
 bool TCheckSchemeTxUnit::CheckBackup(TActiveTransaction *activeTx)
 {
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
-    Y_ABORT_UNLESS(!Pipeline.HasDrop());
+    Y_ENSURE(!Pipeline.HasDrop());
 
     const TStringBuf kind = "Backup";
     if (HasDuplicate(activeTx, kind, &TPipeline::HasBackup)) {
@@ -562,7 +580,7 @@ bool TCheckSchemeTxUnit::CheckBackup(TActiveTransaction *activeTx)
     }
 
     const auto &backup = tx.GetBackup();
-    Y_ABORT_UNLESS(DataShard.GetUserTables().contains(backup.GetTableId()));
+    Y_ENSURE(DataShard.GetUserTables().contains(backup.GetTableId()));
 
     return true;
 }
@@ -570,7 +588,7 @@ bool TCheckSchemeTxUnit::CheckBackup(TActiveTransaction *activeTx)
 bool TCheckSchemeTxUnit::CheckRestore(TActiveTransaction *activeTx)
 {
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
-    Y_ABORT_UNLESS(!Pipeline.HasDrop());
+    Y_ENSURE(!Pipeline.HasDrop());
 
     const TStringBuf kind = "Restore";
     if (HasDuplicate(activeTx, kind, &TPipeline::HasRestore)) {
@@ -586,7 +604,7 @@ bool TCheckSchemeTxUnit::CheckRestore(TActiveTransaction *activeTx)
     }
 
     const auto &restore = tx.GetRestore();
-    Y_ABORT_UNLESS(DataShard.GetUserTables().contains(restore.GetTableId()));
+    Y_ENSURE(DataShard.GetUserTables().contains(restore.GetTableId()));
 
     return true;
 }
@@ -601,10 +619,10 @@ bool TCheckSchemeTxUnit::CheckCopy(TActiveTransaction *activeTx) {
     const auto &snap = tx.GetSendSnapshot();
     ui64 tableId = snap.GetTableId_Deprecated();
     if (snap.HasTableId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
         tableId = snap.GetTableId().GetTableId();
     }
-    Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+    Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
     return true;
 }
@@ -613,6 +631,18 @@ bool TCheckSchemeTxUnit::CheckCreatePersistentSnapshot(TActiveTransaction *activ
     const auto& tx = activeTx->GetSchemeTx();
 
     if (HasDuplicate(activeTx, "CreatePersistentSnapshot", &TPipeline::HasCreatePersistentSnapshot)) {
+        return false;
+    }
+
+    Y_UNUSED(tx);
+
+    return true;
+}
+
+bool TCheckSchemeTxUnit::CheckPrepareIndexValidation(TActiveTransaction *activeTx) {
+    const auto& tx = activeTx->GetSchemeTx();
+
+    if (HasDuplicate(activeTx, "PrepareIndexValidation", &TPipeline::HasPrepareIndexValidation)) {
         return false;
     }
 
@@ -660,12 +690,11 @@ bool TCheckSchemeTxUnit::CheckFinalizeBuildIndex(TActiveTransaction *activeTx) {
     const auto snapshotKey = TSnapshotKey(pathId, finalize.GetSnapshotStep(), finalize.GetSnapshotTxId());
 
     if (DataShard.GetSnapshotManager().FindAvailable(snapshotKey) == nullptr) {
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                    "FinalizeBuildIndex description has unexisting snapshot key."
-                        << " Tablet " << DataShard.TabletID()
-                        << " txId " << activeTx->GetTxId()
-                        << " pathId " << pathId
-                        << " snapshotKey " << snapshotKey);
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TCheckSchemeTxUnit::CheckFinalizeBuildIndex: description has nonexistent snapshot key",
+            {"tabletId", DataShard.TabletID()},
+            {"activeTxId", activeTx->GetTxId()},
+            {"pathId", pathId},
+            {"snapshotKey", snapshotKey});
         BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
         return false;
     }
@@ -753,14 +782,17 @@ bool TCheckSchemeTxUnit::CheckDropCdcStream(TActiveTransaction *activeTx) {
     return CheckSchemaVersion(activeTx, notice);
 }
 
-bool TCheckSchemeTxUnit::CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx) {
-    if (HasDuplicate(activeTx, "CreateIncrementalRestoreSrc", &TPipeline::HasCreateIncrementalRestoreSrc)) {
+bool TCheckSchemeTxUnit::CheckRotateCdcStream(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "RotateCdcStream", &TPipeline::HasRotateCdcStream)) {
         return false;
     }
 
-    // TODO: add additional checks
+    const auto &notice = activeTx->GetSchemeTx().GetRotateCdcStreamNotice();
+    if (!HasPathId(activeTx, notice, "RotateCdcStream")) {
+        return false;
+    }
 
-    return true;
+    return CheckSchemaVersion(activeTx, notice);
 }
 
 bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx) {
@@ -768,16 +800,49 @@ bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *act
         return false;
     }
 
-    const auto &snap = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc().GetSendSnapshot();
+    const auto& op = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc();
+
+    const auto& snap = op.GetSendSnapshot();
     ui64 tableId = snap.GetTableId_Deprecated();
     if (snap.HasTableId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
         tableId = snap.GetTableId().GetTableId();
     }
-    Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+    Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
-    const auto &notice = activeTx->GetSchemeTx().GetCreateIncrementalBackupSrc().GetCreateCdcStreamNotice();
-    if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc")) {
+    if (op.HasDropCdcStreamNotice()) {
+        const auto& notice = op.GetDropCdcStreamNotice();
+        if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc (Drop)")) {
+            return false;
+        }
+    }
+
+    if (op.HasCreateCdcStreamNotice()) {
+        const auto& notice = op.GetCreateCdcStreamNotice();
+        if (!HasPathId(activeTx, notice, "CreateIncrementalBackupSrc (Create)")) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TCheckSchemeTxUnit::CheckTruncate(TActiveTransaction *activeTx) {
+    const auto& tx = activeTx->GetSchemeTx();
+
+    if (HasDuplicate(activeTx, "Truncate", &TPipeline::HasTruncate)) {
+        return false;
+    }
+
+    const auto& truncate = tx.GetTruncateTable();
+    if (!HasPathId(activeTx, truncate, "Truncate")) {
+        return false;
+    }
+
+    const auto pathId = GetPathId(truncate);
+    const auto tablePtr = DataShard.GetUserTables().FindPtr(pathId.LocalPathId);
+    if (!tablePtr) {
+        BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
         return false;
     }
 
@@ -797,3 +862,7 @@ THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

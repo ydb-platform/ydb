@@ -164,35 +164,44 @@ void SetDefaultLogConfig(NKikimrConsole::TConfigItem &item)
     AddEntry(item, "CMS_CONFIGS", PRI_TRACE, Max<ui32>(), Max<ui32>());
 }
 
-void WaitForUpdate(TTenantTestRuntime &runtime)
-{
-    struct TIsConfigNotificationProcessed {
-        bool operator()(IEventHandle& ev)
-        {
-            if (ev.GetTypeRewrite() == NConsole::TEvConsole::EvConfigNotificationResponse) {
-                auto &rec = ev.Get<NConsole::TEvConsole::TEvConfigNotificationResponse>()->Record;
-                if (rec.GetConfigId().ItemIdsSize() != 1 || rec.GetConfigId().GetItemIds(0).GetId())
-                    return true;
-            }
+class TConfigUpdatesObserver {
+public:
+    TConfigUpdatesObserver(TTestActorRuntime& runtime)
+        : Runtime(runtime)
+        , Holder(Runtime.AddObserver<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+            [this](auto& ev) {
+                auto& rec = ev->Get()->Record;
+                if (rec.GetConfigId().ItemIdsSize() != 1 || rec.GetConfigId().GetItemIds(0).GetId()) {
+                    ++Count;
+                }
+            }))
+    {}
 
-            return false;
-        }
-    };
+    void Clear() {
+        Count = 0;
+    }
 
-    TDispatchOptions options;
-    options.FinalEvents.emplace_back(TIsConfigNotificationProcessed(), 1);
-    runtime.DispatchEvents(options);
-}
+    void Wait() {
+        Runtime.WaitFor("config update", [this]{ return this->Count > 0; });
+        --Count;
+    }
+
+private:
+    TTestActorRuntime& Runtime;
+    TTestActorRuntime::TEventObserverHolder Holder;
+    size_t Count = 0;
+};
 
 template <typename ...Ts>
-void ConfigureAndWaitUpdate(TTenantTestRuntime &runtime,
+void ConfigureAndWaitUpdate(TTenantTestRuntime &runtime, TConfigUpdatesObserver &updates,
                             Ts... args)
 {
     auto *event = new TEvConsole::TEvConfigureRequest;
     CollectActions(event->Record, args...);
 
+    updates.Clear();
     runtime.SendToConsole(event);
-    WaitForUpdate(runtime);
+    updates.Wait();
 }
 
 void CompareSettings(TTenantTestRuntime &runtime,
@@ -234,11 +243,14 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
     Y_UNIT_TEST(TestNoChanges)
     {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        runtime.SimulateSleep(TDuration::MilliSeconds(100)); // settle down
+
+        TConfigUpdatesObserver updates(runtime);
         auto settings = InitLogSettingsConfigurator(runtime);
-        WaitForUpdate(runtime); // initial update
+        updates.Wait(); // initial update
 
         SetDefaultLogConfig(ITEM_DOMAIN_LOG_1);
-        ConfigureAndWaitUpdate(runtime,
+        ConfigureAndWaitUpdate(runtime, updates,
                                MakeAddAction(ITEM_DOMAIN_LOG_1));
         CompareSettings(runtime, settings);
     }
@@ -246,14 +258,17 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
     Y_UNIT_TEST(TestAddComponentEntries)
     {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        runtime.SimulateSleep(TDuration::MilliSeconds(100)); // settle down
+
+        TConfigUpdatesObserver updates(runtime);
         auto settings = InitLogSettingsConfigurator(runtime);
-        WaitForUpdate(runtime); // initial update
+        updates.Wait(); // initial update
 
         SetDefaultLogConfig(ITEM_DOMAIN_LOG_1);
         AddEntry(ITEM_DOMAIN_LOG_1, "CMS_CLUSTER", 5, Max<ui32>(), Max<ui32>());
         AddEntry(ITEM_DOMAIN_LOG_1, "CMS_CONFIGS", Max<ui32>(), 5, Max<ui32>());
         AddEntry(ITEM_DOMAIN_LOG_1, "CMS_TENANTS", Max<ui32>(), Max<ui32>(), 5);
-        ConfigureAndWaitUpdate(runtime,
+        ConfigureAndWaitUpdate(runtime, updates,
                                MakeAddAction(ITEM_DOMAIN_LOG_1));
         settings[NKikimrServices::CMS_CLUSTER].Raw.X.Level = 5;
         settings[NKikimrServices::CMS_CONFIGS].Raw.X.SamplingLevel = 5;
@@ -268,14 +283,17 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
         label.SetName("tenant");
         label.SetValue(TENANT1_1_NAME);
         TTenantTestRuntime runtime(DefaultConsoleTestConfig(), ext);
+        runtime.SimulateSleep(TDuration::MilliSeconds(100)); // settle down
+
+        TConfigUpdatesObserver updates(runtime);
         auto settings = InitLogSettingsConfigurator(runtime);
-        WaitForUpdate(runtime); // initial update
+        updates.Wait(); // initial update
 
         SetDefaultLogConfig(ITEM_DOMAIN_LOG_1);
         AddEntry(ITEM_TENANT1_LOG_1, "CMS_CLUSTER", 5, Max<ui32>(), Max<ui32>());
         AddEntry(ITEM_TENANT1_LOG_1, "CMS_CONFIGS", Max<ui32>(), 5, Max<ui32>());
         AddEntry(ITEM_TENANT1_LOG_1, "CMS_TENANTS", Max<ui32>(), Max<ui32>(), 5);
-        ConfigureAndWaitUpdate(runtime,
+        ConfigureAndWaitUpdate(runtime, updates,
                                MakeAddAction(ITEM_DOMAIN_LOG_1),
                                MakeAddAction(ITEM_TENANT1_LOG_1));
         settings[NKikimrServices::CMS_CLUSTER].Raw.X.Level = 5;
@@ -286,7 +304,7 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
         auto ids = GetTenantItemIds(runtime, TENANT1_1_NAME);
         AssignIds(ids, ITEM_TENANT1_LOG_1);
 
-        ConfigureAndWaitUpdate(runtime,
+        ConfigureAndWaitUpdate(runtime, updates,
                                MakeRemoveAction(ITEM_TENANT1_LOG_1));
         settings[NKikimrServices::CMS_CLUSTER].Raw.X.Level = 4;
         settings[NKikimrServices::CMS_CONFIGS].Raw.X.SamplingLevel = 4;
@@ -301,12 +319,15 @@ Y_UNIT_TEST_SUITE(TLogSettingsConfiguratorTests)
         label.SetName("tenant");
         label.SetValue(TENANT1_1_NAME);
         TTenantTestRuntime runtime(DefaultConsoleTestConfig(), ext);
+        runtime.SimulateSleep(TDuration::MilliSeconds(100)); // settle down
+
+        TConfigUpdatesObserver updates(runtime);
         auto settings = InitLogSettingsConfigurator(runtime);
-        WaitForUpdate(runtime); // initial update
+        updates.Wait(); // initial update
 
         SetDefaultLogConfig(ITEM_DOMAIN_LOG_1);
         SetDefaults(ITEM_TENANT1_LOG_1, PRI_ALERT, PRI_ALERT, 10);
-        ConfigureAndWaitUpdate(runtime,
+        ConfigureAndWaitUpdate(runtime, updates,
                                MakeAddAction(ITEM_DOMAIN_LOG_1),
                                MakeAddAction(ITEM_TENANT1_LOG_1));
         for (auto &set : settings)

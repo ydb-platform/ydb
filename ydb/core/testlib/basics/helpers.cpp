@@ -46,22 +46,25 @@ namespace NKikimr {
     }
 
     struct TPDiskReplyChecker : IReplyChecker {
-        ~TPDiskReplyChecker()
-        {
-        }
-
-        void OnRequest(IEventHandle *request) override {
-            if (request->Type == TEvBlobStorage::EvMultiLog) {
-                NPDisk::TEvMultiLog *evLogs = request->Get<NPDisk::TEvMultiLog>();
-                LastLsn = evLogs->LsnSeg.Last;
+        bool OnRequest(IEventHandle *request) override {
+            if (const ui32 type = request->GetTypeRewrite(); type == TEvBlobStorage::EvMultiLog) {
+                LastLsn = request->Get<NPDisk::TEvMultiLog>()->LsnSeg.Last;
+                return true;
             } else {
                 LastLsn = {};
+                // PDisk replies with EvConfigureSchedulerResult, so we must wait for it.
+                return true;
             }
         }
 
         bool IsWaitingForMoreResponses(IEventHandle *response) override {
             if (!LastLsn) {
                 return false;
+            }
+            if (response->Type == TEvBlobStorage::EvConfigureSchedulerResult) {
+                // Scheduler reconfiguration responses may interleave with MultiLog replies.
+                // Keep waiting for EvLogResult that carries requested LSNs.
+                return true;
             }
             Y_VERIFY_S(response->Type == TEvBlobStorage::EvLogResult, "expected EvLogResult "
                     << (ui64)TEvBlobStorage::EvLogResult << ", but given " << response->Type);
@@ -73,7 +76,7 @@ namespace NKikimr {
         TMaybe<ui64> LastLsn;
     };
 
-    void TStrandedPDiskServiceFactory::Create(const TActorContext &ctx, ui32 pDiskID,
+    void TStrandedPDiskSubsystem::Start(const TActorContext &ctx, ui32 pDiskID,
             const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TMainKey &mainKey, ui32 poolId, ui32 nodeId)
     {
         Y_UNUSED(ctx);
@@ -92,4 +95,20 @@ namespace NKikimr {
         TActorId wrappedActorId = Runtime.Register(wrappedActor, nodeIndex, poolId, TMailboxType::Revolving);
         Runtime.RegisterService(pDiskServiceId, wrappedActorId, nodeIndex);
     }
+
+    void SetupPDiskSubsystem(TTestActorRuntime* runtime, bool stranded) {
+        auto previous = std::move(runtime->SetupNodeSubSystems);
+        runtime->SetupNodeSubSystems = [runtime, stranded, previous = std::move(previous)](
+                ui32 nodeIndex, TActorSystemSetup* setup) {
+            if (previous) {
+                previous(nodeIndex, setup);
+            }
+            if (stranded && !runtime->IsRealThreads()) {
+                setup->RegisterSubSystem<IPDiskSubsystem>(std::make_unique<TStrandedPDiskSubsystem>(runtime));
+            } else {
+                setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
+            }
+        };
+    }
+
 }

@@ -62,12 +62,12 @@ namespace NTest {
 
             for (ui32 tableId = 0; tableId < NumSysTables(); ++tableId) {
                 delta.AddTable(TString("Table") + ('A'+tableId), tableId);
-                delta.AddColumn(tableId, "key", 0, NScheme::NTypeIds::Uint32, false);
+                delta.AddColumn(tableId, "key", 0, NScheme::NTypeIds::Uint32, false, false);
                 delta.AddColumnToKey(tableId, 0);
             }
 
             delta.AddTable("user____Table", EUserTableId);
-            delta.AddColumn(EUserTableId, "key", 0, NScheme::NTypeIds::Uint32, false);
+            delta.AddColumn(EUserTableId, "key", 0, NScheme::NTypeIds::Uint32, false, false);
             delta.AddColumnToKey(EUserTableId, 0);
 
 
@@ -201,7 +201,7 @@ namespace NTest {
         }
 
         TVector<TSysLocks::TLock> ApplyTxLocks() {
-            auto locks = Locks.ApplyLocks();
+            auto [locks, _] = Locks.ApplyLocks();
             Locks.ResetUpdate();
             return locks;
         }

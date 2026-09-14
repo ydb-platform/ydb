@@ -37,8 +37,7 @@
 #include "nghttp3_tnode.h"
 #include "nghttp3_idtr.h"
 #include "nghttp3_gaptr.h"
-
-#define NGHTTP3_VARINT_MAX ((1ull << 62) - 1)
+#include "nghttp3_ratelim.h"
 
 /* NGHTTP3_QPACK_ENCODER_MAX_TABLE_CAPACITY is the maximum dynamic
    table size for QPACK encoder. */
@@ -49,28 +48,28 @@
 #define NGHTTP3_QPACK_ENCODER_MAX_BLOCK_STREAMS 100
 
 /* NGHTTP3_CONN_FLAG_NONE indicates that no flag is set. */
-#define NGHTTP3_CONN_FLAG_NONE 0x0000u
+#define NGHTTP3_CONN_FLAG_NONE 0x0000U
 /* NGHTTP3_CONN_FLAG_SETTINGS_RECVED is set when SETTINGS frame has
    been received. */
-#define NGHTTP3_CONN_FLAG_SETTINGS_RECVED 0x0001u
+#define NGHTTP3_CONN_FLAG_SETTINGS_RECVED 0x0001U
 /* NGHTTP3_CONN_FLAG_CONTROL_OPENED is set when a control stream has
    opened. */
-#define NGHTTP3_CONN_FLAG_CONTROL_OPENED 0x0002u
+#define NGHTTP3_CONN_FLAG_CONTROL_OPENED 0x0002U
 /* NGHTTP3_CONN_FLAG_QPACK_ENCODER_OPENED is set when a QPACK encoder
    stream has opened. */
-#define NGHTTP3_CONN_FLAG_QPACK_ENCODER_OPENED 0x0004u
+#define NGHTTP3_CONN_FLAG_QPACK_ENCODER_OPENED 0x0004U
 /* NGHTTP3_CONN_FLAG_QPACK_DECODER_OPENED is set when a QPACK decoder
    stream has opened. */
-#define NGHTTP3_CONN_FLAG_QPACK_DECODER_OPENED 0x0008u
+#define NGHTTP3_CONN_FLAG_QPACK_DECODER_OPENED 0x0008U
 /* NGHTTP3_CONN_FLAG_SHUTDOWN_COMMENCED is set when graceful shutdown
    has started. */
-#define NGHTTP3_CONN_FLAG_SHUTDOWN_COMMENCED 0x0010u
+#define NGHTTP3_CONN_FLAG_SHUTDOWN_COMMENCED 0x0010U
 /* NGHTTP3_CONN_FLAG_GOAWAY_RECVED indicates that GOAWAY frame has
    received. */
-#define NGHTTP3_CONN_FLAG_GOAWAY_RECVED 0x0020u
+#define NGHTTP3_CONN_FLAG_GOAWAY_RECVED 0x0020U
 /* NGHTTP3_CONN_FLAG_GOAWAY_QUEUED indicates that GOAWAY frame has
    been submitted for transmission. */
-#define NGHTTP3_CONN_FLAG_GOAWAY_QUEUED 0x0040u
+#define NGHTTP3_CONN_FLAG_GOAWAY_QUEUED 0x0040U
 
 typedef struct nghttp3_chunk {
   nghttp3_opl_entry oplent;
@@ -86,6 +85,7 @@ struct nghttp3_conn {
   nghttp3_qpack_decoder qdec;
   nghttp3_qpack_encoder qenc;
   nghttp3_pq qpack_blocked_streams;
+  nghttp3_ratelim glitch_rlim;
   struct {
     nghttp3_pq spq;
   } sched[NGHTTP3_URGENCY_LEVELS];
@@ -95,6 +95,11 @@ struct nghttp3_conn {
   uint16_t flags;
 
   struct {
+    /* origin_list contains the shallow copy of
+       nghttp3_settings.origin_list passed from an application if this
+       object is initialized as server.  settings.origin_list may
+       point to the address of this field. */
+    nghttp3_vec origin_list;
     nghttp3_settings settings;
     struct {
       /* max_pushes is the number of push IDs that local endpoint can
@@ -116,7 +121,7 @@ struct nghttp3_conn {
          use only. */
       size_t num_streams;
     } bidi;
-    nghttp3_settings settings;
+    nghttp3_proto_settings settings;
   } remote;
 
   struct {
@@ -125,12 +130,36 @@ struct nghttp3_conn {
 
     int64_t max_stream_id_bidi;
 
-    /* pri_fieldbuf is a buffer to store incoming Priority Field Value
-       in PRIORITY_UPDATE frame. */
-    uint8_t pri_fieldbuf[8];
-    /* pri_fieldlen is the number of bytes written into
-       pri_fieldbuf. */
-    size_t pri_fieldbuflen;
+    union {
+      struct {
+        /* pri_fieldbuf is a buffer to store incoming Priority Field Value
+           in PRIORITY_UPDATE frame. */
+        uint8_t pri_fieldbuf[8];
+        /* pri_fieldlen is the number of bytes written into
+           pri_fieldbuf. */
+        size_t pri_fieldbuflen;
+      };
+      /* ORIGIN frame */
+      struct {
+        /* originlen_offset is the offset to Origin-Len that is going
+           to be added to originlen.  If this value equals
+           sizeof(originlen), Origin-Len is fully read, and the length
+           of ASCII-Origin is determined. */
+        size_t originlen_offset;
+        /* originlen is Origin-Len of ASCII-Origin currently read. */
+        uint16_t originlen;
+      };
+    };
+
+    /* originbuf points to the buffer that contains ASCII-Origin that
+       is not fully available in a single input buffer.  If it is
+       fully available in the input buffer, it is emitted to an
+       application without using this field.  Otherwise, partial
+       ASCII-Origin is copied to this field, and the complete
+       ASCII-Origin is emitted when the assembly finishes. */
+    uint8_t *originbuf;
+    /* originbuflen is the length of bytes written to originbuf. */
+    size_t originbuflen;
   } rx;
 
   struct {
@@ -146,25 +175,28 @@ struct nghttp3_conn {
   } tx;
 };
 
-nghttp3_stream *nghttp3_conn_find_stream(nghttp3_conn *conn, int64_t stream_id);
+nghttp3_stream *nghttp3_conn_find_stream(const nghttp3_conn *conn,
+                                         int64_t stream_id);
 
 int nghttp3_conn_create_stream(nghttp3_conn *conn, nghttp3_stream **pstream,
                                int64_t stream_id);
 
 nghttp3_ssize nghttp3_conn_read_bidi(nghttp3_conn *conn, size_t *pnproc,
                                      nghttp3_stream *stream, const uint8_t *src,
-                                     size_t srclen, int fin);
+                                     size_t srclen, int fin, nghttp3_tstamp ts);
 
 nghttp3_ssize nghttp3_conn_read_uni(nghttp3_conn *conn, nghttp3_stream *stream,
-                                    const uint8_t *src, size_t srclen, int fin);
+                                    const uint8_t *src, size_t srclen, int fin,
+                                    nghttp3_tstamp ts);
 
 nghttp3_ssize nghttp3_conn_read_control(nghttp3_conn *conn,
                                         nghttp3_stream *stream,
-                                        const uint8_t *src, size_t srclen);
+                                        const uint8_t *src, size_t srclen,
+                                        nghttp3_tstamp ts);
 
 nghttp3_ssize nghttp3_conn_read_qpack_encoder(nghttp3_conn *conn,
-                                              const uint8_t *src,
-                                              size_t srclen);
+                                              const uint8_t *src, size_t srclen,
+                                              nghttp3_tstamp ts);
 
 nghttp3_ssize nghttp3_conn_read_qpack_decoder(nghttp3_conn *conn,
                                               const uint8_t *src,
@@ -188,6 +220,9 @@ int nghttp3_conn_qpack_blocked_streams_push(nghttp3_conn *conn,
                                             nghttp3_stream *stream);
 
 void nghttp3_conn_qpack_blocked_streams_pop(nghttp3_conn *conn);
+
+void nghttp3_conn_qpack_blocked_streams_remove(nghttp3_conn *conn,
+                                               nghttp3_stream *stream);
 
 int nghttp3_conn_schedule_stream(nghttp3_conn *conn, nghttp3_stream *stream);
 

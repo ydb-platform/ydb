@@ -2,7 +2,13 @@
 import abc
 import enum
 from abc import abstractmethod
+from typing import Generic, TYPE_CHECKING
+
 from . import issues, operation, settings as settings_impl, _apis
+from ._typing import DriverT
+
+if TYPE_CHECKING:
+    from .driver import Driver as SyncDriver  # noqa: F401
 
 
 @enum.unique
@@ -24,6 +30,13 @@ class SchemeEntryType(enum.IntEnum):
     SEQUENCE = 15
     REPLICATION = 16
     TOPIC = 17
+    EXTERNAL_TABLE = 18
+    EXTERNAL_DATA_SOURCE = 19
+    VIEW = 20
+    RESOURCE_POOL = 21
+    TRANSFER = 23
+    SYS_VIEW = 24
+    SECRET = 25
 
     @classmethod
     def _missing_(cls, value):
@@ -103,6 +116,62 @@ class SchemeEntryType(enum.IntEnum):
         """
         return entry == SchemeEntryType.DATABASE or entry == SchemeEntryType.DIRECTORY
 
+    @staticmethod
+    def is_external_table(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is an external table and False otherwise
+        """
+        return entry == SchemeEntryType.EXTERNAL_TABLE
+
+    @staticmethod
+    def is_external_data_source(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is an external data source and False otherwise
+        """
+        return entry == SchemeEntryType.EXTERNAL_DATA_SOURCE
+
+    @staticmethod
+    def is_view(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a view and False otherwise
+        """
+        return entry == SchemeEntryType.VIEW
+
+    @staticmethod
+    def is_resource_pool(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a resource pool and False otherwise
+        """
+        return entry == SchemeEntryType.RESOURCE_POOL
+
+    @staticmethod
+    def is_topic(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a topic and False otherwise
+        """
+        return entry == SchemeEntryType.TOPIC
+
+    @staticmethod
+    def is_sysview(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a system view and False otherwise
+        """
+        return entry == SchemeEntryType.SYS_VIEW
+
+    @staticmethod
+    def is_secret(entry):
+        """
+        :param entry: A scheme entry to check
+        :return: True if scheme entry is a secret and False otherwise
+        """
+        return entry == SchemeEntryType.SECRET
+
 
 class SchemeEntry(object):
     __slots__ = (
@@ -112,9 +181,21 @@ class SchemeEntry(object):
         "effective_permissions",
         "permissions",
         "size_bytes",
+        "interrupt_permission_inheritance",
     )
 
-    def __init__(self, name, owner, type, effective_permissions, permissions, size_bytes, *args, **kwargs):
+    def __init__(
+        self,
+        name,
+        owner,
+        type,
+        effective_permissions,
+        permissions,
+        size_bytes,
+        *args,
+        interrupt_permission_inheritance=False,
+        **kwargs
+    ):
         """
         Represents a scheme entry.
         :param name: A name of a scheme entry
@@ -123,6 +204,7 @@ class SchemeEntry(object):
         :param effective_permissions: A list of effective permissions applied to this scheme entry
         :param permissions: A list of permissions applied to this scheme entry
         :param size_bytes: Size of entry in bytes
+        :param interrupt_permission_inheritance: True if this scheme entry does not inherit permissions from its parents
         """
         self.name = name
         self.owner = owner
@@ -130,6 +212,7 @@ class SchemeEntry(object):
         self.effective_permissions = effective_permissions
         self.permissions = permissions
         self.size_bytes = size_bytes
+        self.interrupt_permission_inheritance = interrupt_permission_inheritance
 
     def is_directory(self):
         """
@@ -185,6 +268,42 @@ class SchemeEntry(object):
         """
         return SchemeEntryType.is_coordination_node(self.type)
 
+    def is_external_table(self):
+        """
+        :return: True if scheme entry is an external table and False otherwise
+        """
+        return SchemeEntryType.is_external_table(self.type)
+
+    def is_external_data_source(self):
+        """
+        :return: True if scheme entry is an external data source and False otherwise
+        """
+        return SchemeEntryType.is_external_data_source(self.type)
+
+    def is_view(self):
+        """
+        :return: True if scheme entry is a view and False otherwise
+        """
+        return SchemeEntryType.is_view(self.type)
+
+    def is_resource_pool(self):
+        """
+        :return: True if scheme entry is a resource pool and False otherwise
+        """
+        return SchemeEntryType.is_resource_pool(self.type)
+
+    def is_sysview(self):
+        """
+        :return: True if scheme entry is a system view and False otherwise
+        """
+        return SchemeEntryType.is_sysview(self.type)
+
+    def is_secret(self):
+        """
+        :return: True if scheme entry is a secret and False otherwise
+        """
+        return SchemeEntryType.is_secret(self.type)
+
 
 class Directory(SchemeEntry):
     __slots__ = ("children",)
@@ -199,7 +318,7 @@ class Directory(SchemeEntry):
         :param permissions: A list of permissions applied to this scheme entry
         :param children: A list of children
         """
-        super(Directory, self).__init__(name, owner, type, effective_permissions, permissions, 0)
+        super(Directory, self).__init__(name, owner, type, effective_permissions, permissions, 0, **kwargs)
         self.children = children
 
 
@@ -327,7 +446,7 @@ def _wrap_scheme_entry(entry_pb, scheme_entry_cls=None, *args, **kwargs):
     by default that is generic SchemeEntry)
     :param args: A list of optional arguments
     :param kwargs: A dictionary of with optional arguments
-    :return: A native Python reprensentation of scheme entry
+    :return: A native Python representation of scheme entry
     """
     scheme_entry_cls = SchemeEntry if scheme_entry_cls is None else scheme_entry_cls
     return scheme_entry_cls(
@@ -338,6 +457,7 @@ def _wrap_scheme_entry(entry_pb, scheme_entry_cls=None, *args, **kwargs):
         _wrap_permissions(entry_pb.permissions),
         entry_pb.size_bytes,
         *args,
+        interrupt_permission_inheritance=entry_pb.interrupt_permission_inheritance,
         **kwargs
     )
 
@@ -366,6 +486,7 @@ def _wrap_list_directory_response(rpc_state, response):
         _wrap_permissions(message.self.effective_permissions),
         _wrap_permissions(message.self.permissions),
         tuple(children),
+        interrupt_permission_inheritance=message.self.interrupt_permission_inheritance,
     )
 
 
@@ -410,10 +531,12 @@ class ISchemeClient(abc.ABC):
         pass
 
 
-class BaseSchemeClient(ISchemeClient):
+class BaseSchemeClient(ISchemeClient, Generic[DriverT]):
     __slots__ = ("_driver",)
 
-    def __init__(self, driver):
+    _driver: DriverT
+
+    def __init__(self, driver: DriverT) -> None:
         self._driver = driver
 
     def make_directory(self, path, settings=None):
@@ -470,7 +593,7 @@ class BaseSchemeClient(ISchemeClient):
         )
 
 
-class SchemeClient(BaseSchemeClient):
+class SchemeClient(BaseSchemeClient["SyncDriver"]):
     def async_make_directory(self, path, settings=None):
         return self._driver.future(
             _make_directory_request_factory(path),

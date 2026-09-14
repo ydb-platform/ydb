@@ -7,7 +7,7 @@ RECURSE(
     public
     services
     tools
-    yql_docs
+    udfs
 )
 
 IF(NOT EXPORT_CMAKE)

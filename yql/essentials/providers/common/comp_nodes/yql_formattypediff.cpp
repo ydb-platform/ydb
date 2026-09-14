@@ -7,22 +7,23 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
-template<bool Pretty>
-class TFormatTypeDiffWrapper : public TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>> {
-    typedef TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>> TBaseComputation;
+template <bool Pretty>
+class TFormatTypeDiffWrapper: public TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>> {
+    using TBaseComputation = TMutableComputationNode<TFormatTypeDiffWrapper<Pretty>>;
+
 public:
     TFormatTypeDiffWrapper(TComputationMutables& mutables, IComputationNode* handle_left, IComputationNode* handle_right)
         : TBaseComputation(mutables)
-        , HandleLeft(handle_left)
-        , HandleRight(handle_right)
-    {}
+        , HandleLeft_(handle_left)
+        , HandleRight_(handle_right)
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        const NYql::TTypeAnnotationNode* type_left = GetYqlType(HandleLeft->GetValue(ctx));
-        const NYql::TTypeAnnotationNode* type_right =  GetYqlType(HandleRight->GetValue(ctx));
+        const NYql::TTypeAnnotationNode* type_left = GetYqlType(HandleLeft_->GetValue(ctx));
+        const NYql::TTypeAnnotationNode* type_right = GetYqlType(HandleRight_->GetValue(ctx));
         if constexpr (Pretty) {
             return MakeString(NYql::GetTypePrettyDiff(*type_left, *type_right));
         } else {
@@ -31,13 +32,13 @@ public:
     }
 
     void RegisterDependencies() const override {
-        this->DependsOn(HandleLeft);
-        this->DependsOn(HandleRight);
+        this->DependsOn(HandleLeft_);
+        this->DependsOn(HandleRight_);
     }
 
 private:
-    IComputationNode* HandleLeft;
-    IComputationNode* HandleRight;
+    IComputationNode* HandleLeft_;
+    IComputationNode* HandleRight_;
 };
 
 IComputationNode* WrapFormatTypeDiff(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex) {
@@ -48,9 +49,8 @@ IComputationNode* WrapFormatTypeDiff(TCallable& callable, const TComputationNode
     auto handle_right = LocateNode(ctx.NodeLocator, callable, 1);
     if (pretty) {
         return new TFormatTypeDiffWrapper<true>(ctx.Mutables, handle_left, handle_right);
-    } 
+    }
     return new TFormatTypeDiffWrapper<false>(ctx.Mutables, handle_left, handle_right);
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

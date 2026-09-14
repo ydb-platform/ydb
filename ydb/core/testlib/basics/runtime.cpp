@@ -3,6 +3,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
 #include <ydb/library/actors/dnsresolver/dnsresolver.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <util/generic/xrange.h>
@@ -74,23 +75,6 @@ namespace NActors {
                 auto listener = new TInterconnectListenerTCP(nameNode.first, nameNode.second, common);
                 AddLocalService({}, TActorSetupCmd(listener, TMailboxType::Simple, InterconnectPoolId()), num);
                 AddLocalService(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::Simple, 0), num);
-            }
-        }
-    }
-
-    void TTestBasicRuntime::AddAuditLogStuff()
-    {
-        if (AuditLogBackends) {
-            for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
-                AddLocalService(
-                    NKikimr::NAudit::MakeAuditServiceID(),
-                    TActorSetupCmd(
-                        NKikimr::NAudit::CreateAuditWriter(std::move(AuditLogBackends)).Release(),
-                        TMailboxType::HTSwap,
-                        0
-                    ),
-                    nodeIndex
-                );
             }
         }
     }

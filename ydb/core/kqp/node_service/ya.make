@@ -2,6 +2,8 @@ LIBRARY()
 
 SRCS(
     kqp_node_service.cpp
+    kqp_node_state.cpp
+    kqp_query_control_plane.cpp
 )
 
 PEERDIR(
@@ -16,6 +18,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/library/yql/dq/actors/compute
+    ydb/library/actors/async
 )
 
 YQL_LAST_ABI_VERSION()

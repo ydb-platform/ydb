@@ -103,7 +103,15 @@ static struct aws_error_info s_errors[] = {
     AWS_DEFINE_ERROR_INFO_AUTH(
         AWS_AUTH_CREDENTIALS_PROVIDER_SSO_SOURCE_FAILURE,
         "Valid credentials could not be sourced by the sso credentials provider"),
-
+    AWS_DEFINE_ERROR_INFO_AUTH(
+        AWS_AUTH_IMDS_CLIENT_SOURCE_FAILURE,
+        "Failed to source the IMDS resource"),
+            AWS_DEFINE_ERROR_INFO_AUTH(
+    AWS_AUTH_PROFILE_STS_CREDENTIALS_PROVIDER_CYCLE_FAILURE,
+        "Failed to resolve credentials because the profile contains a cycle in the assumeRole chain."),
+        AWS_DEFINE_ERROR_INFO_AUTH(
+    AWS_AUTH_CREDENTIALS_PROVIDER_ECS_INVALID_TOKEN_FILE_PATH,
+        "Failed to read the ECS token file specified in the AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE environment variable."),
 };
 /* clang-format on */
 

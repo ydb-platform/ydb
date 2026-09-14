@@ -6,6 +6,7 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     tokenizer_ut.cpp
+    trie_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/yt/opensource.inc)
@@ -29,7 +30,12 @@ SIZE(MEDIUM)
 
 IF (OS_DARWIN)
     SIZE(LARGE)
-    TAG(ya:fat ya:force_sandbox ya:exotic_platform)
+    TAG(
+        ya:fat
+        ya:force_sandbox
+        ya:exotic_platform
+        ya:large_tests_on_single_slots
+    )
 ENDIF()
 
 END()

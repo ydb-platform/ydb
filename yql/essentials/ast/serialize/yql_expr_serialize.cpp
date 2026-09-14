@@ -13,8 +13,8 @@ enum ESerializeCommands {
     INLINE_STR = 0x08, // string is unique, don't write it to the pool
     SAME_POSITION = 0x40,
     ATOM_FLAG = 0x20,
-    WIDE = 0x80, // mark wide lambdas
-    ATOM = ATOM_FLAG | NODE_VALUE,  // for atoms we will use TNodeFlags bits (1/2/4)
+    WIDE = 0x80,                   // mark wide lambdas
+    ATOM = ATOM_FLAG | NODE_VALUE, // for atoms we will use TNodeFlags bits (1/2/4)
     LIST = TExprNode::List | NODE_VALUE,
     CALLABLE = TExprNode::Callable | NODE_VALUE,
     LAMBDA = TExprNode::Lambda | NODE_VALUE,
@@ -34,7 +34,7 @@ public:
     }
 
     const TString& Out() const {
-        //Cerr << "Nodes:" << WrittenNodes_.size() << ", pos: " << Positions_.size() << ", bytes: " << Out_.size() << "\n";
+        // Cerr << "Nodes:" << WrittenNodes_.size() << ", pos: " << Positions_.size() << ", bytes: " << Out_.size() << "\n";
         return Out_;
     }
 
@@ -58,7 +58,7 @@ public:
         sortedStrings.reserve(reusedStringCount);
         for (const auto& x : StringCounters_) {
             if (x.second.first > 1) {
-                sortedStrings.push_back({ x.first, x.second.second });
+                sortedStrings.push_back({x.first, x.second.second});
             }
         }
 
@@ -74,7 +74,7 @@ public:
             TVector<std::pair<TStringBuf, ui32>> sortedFiles;
             sortedFiles.reserve(Files_.size());
             for (const auto& x : Files_) {
-                sortedFiles.push_back({ x.first, x.second });
+                sortedFiles.push_back({x.first, x.second});
             }
 
             Sort(sortedFiles.begin(), sortedFiles.end(), [](const auto& x, const auto& y) { return x.second < y.second; });
@@ -87,11 +87,11 @@ public:
             TVector<std::tuple<ui32, ui32, ui32, ui32>> sortedPositions;
             sortedPositions.reserve(Positions_.size());
             for (const auto& x : Positions_) {
-                sortedPositions.push_back({ std::get<0>(x.first), std::get<1>(x.first), std::get<2>(x.first), x.second });
+                sortedPositions.push_back({std::get<0>(x.first), std::get<1>(x.first), std::get<2>(x.first), x.second});
             }
 
             Sort(sortedPositions.begin(), sortedPositions.end(), [](const auto& x, const auto& y)
-                { return std::get<3>(x) < std::get<3>(y); });
+                 { return std::get<3>(x) < std::get<3>(y); });
 
             for (const auto& x : sortedPositions) {
                 WriteVar32(std::get<0>(x));
@@ -148,7 +148,7 @@ public:
             }
 
             auto posIt = Positions_.find(std::make_tuple(std::move(pos.Row), std::move(pos.Column),
-                std::move(fileNum)));
+                                                         std::move(fileNum)));
             YQL_ENSURE(posIt != Positions_.end());
             WriteVar32(posIt->second);
             LastPosition_ = pos;
@@ -189,7 +189,7 @@ private:
             }
 
             Positions_.emplace(std::make_tuple(std::move(pos.Row), std::move(pos.Column),
-                std::move(fileNum)), (ui32)Positions_.size());
+                                               std::move(fileNum)), (ui32)Positions_.size());
         }
 
         if (node.IsAtom() || node.IsCallable() || node.Type() == TExprNode::Argument) {
@@ -269,7 +269,7 @@ public:
                         ThrowCorrupted();
                     }
 
-                    Positions_.push_back({ row, column, fileNum });
+                    Positions_.push_back({row, column, fileNum});
                 }
             }
 
@@ -280,7 +280,8 @@ public:
 
             return result;
         } catch (const yexception& e) {
-            TIssue issue(Pos_, TStringBuilder() << "Failed to deserialize expression graph, reason:\n" << e.what());
+            TIssue issue(Pos_, TStringBuilder() << "Failed to deserialize expression graph, reason:\n"
+                                                << e.what());
             issue.SetCode(UNEXPECTED_ERROR, ESeverity::TSeverityIds_ESeverityId_S_FATAL);
             Ctx_.AddError(issue);
             return nullptr;
@@ -298,7 +299,6 @@ private:
 
             return Nodes_[nodeId - 1];
         }
-
 
         command &= ~NODE_VALUE;
         TPosition pos = Pos_;
@@ -360,67 +360,67 @@ private:
 
         TExprNode::TPtr ret;
         switch (command) {
-        case TExprNode::Atom:
-            ret = Ctx_.NewAtom(pos, content, atomFlags);
-            break;
-        case TExprNode::List: {
-            TExprNode::TListType children;
-            children.reserve(childrenSize);
-            for (ui32 i = 0U; i < childrenSize; ++i) {
-                children.emplace_back(Fetch());
-            }
-
-            ret = Ctx_.NewList(pos, std::move(children));
-            break;
-        }
-
-        case TExprNode::Callable: {
-            TExprNode::TListType children;
-            children.reserve(childrenSize);
-            for (ui32 i = 0U; i < childrenSize; ++i) {
-                children.emplace_back(Fetch());
-            }
-
-            ret = Ctx_.NewCallable(pos, content, std::move(children));
-            break;
-        }
-
-        case TExprNode::Argument:
-            ret = Ctx_.NewArgument(pos, content);
-            break;
-
-        case TExprNode::Arguments: {
-            TExprNode::TListType children;
-            children.reserve(childrenSize);
-            for (ui32 i = 0U; i < childrenSize; ++i) {
-                children.emplace_back(Fetch());
-            }
-
-            ret = Ctx_.NewArguments(pos, std::move(children));
-            break;
-        }
-
-        case TExprNode::Lambda:
-            if (wide) {
+            case TExprNode::Atom:
+                ret = Ctx_.NewAtom(pos, content, atomFlags);
+                break;
+            case TExprNode::List: {
                 TExprNode::TListType children;
                 children.reserve(childrenSize);
                 for (ui32 i = 0U; i < childrenSize; ++i) {
                     children.emplace_back(Fetch());
                 }
-                ret = Ctx_.NewLambda(pos, std::move(children));
-            } else {
-                auto args = Fetch();
-                auto body = Fetch();
-                ret = Ctx_.NewLambda(pos, {std::move(args), std::move(body)});
+
+                ret = Ctx_.NewList(pos, std::move(children));
+                break;
             }
-            break;
 
-        case TExprNode::World:
-            ret = Ctx_.NewWorld(pos);
-            break;
+            case TExprNode::Callable: {
+                TExprNode::TListType children;
+                children.reserve(childrenSize);
+                for (ui32 i = 0U; i < childrenSize; ++i) {
+                    children.emplace_back(Fetch());
+                }
 
-        default:
-            ThrowCorrupted();
+                ret = Ctx_.NewCallable(pos, content, std::move(children));
+                break;
+            }
+
+            case TExprNode::Argument:
+                ret = Ctx_.NewArgument(pos, content);
+                break;
+
+            case TExprNode::Arguments: {
+                TExprNode::TListType children;
+                children.reserve(childrenSize);
+                for (ui32 i = 0U; i < childrenSize; ++i) {
+                    children.emplace_back(Fetch());
+                }
+
+                ret = Ctx_.NewArguments(pos, std::move(children));
+                break;
+            }
+
+            case TExprNode::Lambda:
+                if (wide) {
+                    TExprNode::TListType children;
+                    children.reserve(childrenSize);
+                    for (ui32 i = 0U; i < childrenSize; ++i) {
+                        children.emplace_back(Fetch());
+                    }
+                    ret = Ctx_.NewLambda(pos, std::move(children));
+                } else {
+                    auto args = Fetch();
+                    auto body = Fetch();
+                    ret = Ctx_.NewLambda(pos, {std::move(args), std::move(body)});
+                }
+                break;
+
+            case TExprNode::World:
+                ret = Ctx_.NewWorld(pos);
+                break;
+
+            default:
+                ThrowCorrupted();
         }
 
         Nodes_.push_back(ret);
@@ -428,15 +428,17 @@ private:
     }
 
     Y_FORCE_INLINE char Read() {
-        if (Current_ == End_)
+        if (Current_ == End_) {
             ThrowNoData();
+        }
 
         return *Current_++;
     }
 
     Y_FORCE_INLINE const char* ReadMany(ui32 count) {
-        if (Current_ + count > End_)
+        if (Current_ + count > End_) {
             ThrowNoData();
+        }
 
         const char* result = Current_;
         Current_ += count;
@@ -476,7 +478,7 @@ private:
     TDeque<TExprNode::TPtr> Nodes_;
 };
 
-}
+} // namespace
 
 TString SerializeGraph(const TExprNode& node, TExprContext& ctx, ui16 components) {
     TWriter writer(ctx, components);
@@ -496,4 +498,3 @@ TExprNode::TPtr DeserializeGraph(TPosition pos, TStringBuf buffer, TExprContext&
 }
 
 } // namespace NYql
-

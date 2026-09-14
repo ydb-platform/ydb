@@ -1,12 +1,12 @@
 #pragma once
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-
+#include <ydb/core/kqp/compute_actor/kqp_compute_events_stats.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 
 namespace NKikimr::NKqp {
@@ -54,8 +54,10 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
 
     TOwnedCellVec LastKey;
     NKikimrKqp::TEvKqpScanCursor LastCursorProto;
+    TScanStatistics CurrentStats;
     TDuration CpuTime;
     TDuration WaitTime;
+    ui64 RawBytes = 0;
     ui32 PageFaults = 0; // number of page faults occurred when filling in this message
     bool RequestedBytesLimitReached = false;
     bool Finished = false;
@@ -110,8 +112,8 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     }
 
 
-    static NActors::IEventBase* Load(TEventSerializedData* data) {
-        auto pbEv = THolder<TEvRemoteScanData>(static_cast<TEvRemoteScanData*>(TEvRemoteScanData::Load(data)));
+    static TEvScanData* Load(const TEventSerializedData* data) {
+        auto pbEv = THolder<TEvRemoteScanData>(TEvRemoteScanData::Load(data));
         auto ev = MakeHolder<TEvScanData>(pbEv->Record.GetScanId(), pbEv->Record.GetGeneration());
 
         ev->CpuTime = TDuration::MicroSeconds(pbEv->Record.GetCpuTimeUs());
@@ -173,7 +175,7 @@ private:
                     Y_DEBUG_ABORT_UNLESS(ArrowBatch != nullptr);
                     auto* protoArrowBatch = Remote->Record.MutableArrowBatch();
                     protoArrowBatch->SetSchema(NArrow::SerializeSchema(*ArrowBatch->schema()));
-                    protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(NArrow::ToBatch(ArrowBatch, true)));
+                    protoArrowBatch->SetBatch(NArrow::SerializeBatchNoCompression(NArrow::ToBatch(ArrowBatch)));
                     break;
                 }
             }
@@ -220,8 +222,8 @@ struct TEvKqpCompute {
             return Remote->SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data) {
-            auto pbEv = THolder<TEvRemoteScanDataAck>(static_cast<TEvRemoteScanDataAck *>(TEvRemoteScanDataAck::Load(data)));
+        static TEvScanDataAck* Load(const TEventSerializedData* data) {
+            auto pbEv = THolder<TEvRemoteScanDataAck>(TEvRemoteScanDataAck::Load(data));
             ui32 maxChunksCount = Max<ui32>();
             if (pbEv->Record.HasMaxChunksCount()) {
                 maxChunksCount = pbEv->Record.GetMaxChunksCount();
@@ -250,16 +252,22 @@ struct TEvKqpCompute {
         }
     };
 
+    struct TEvScanPing : public NActors::TEventPB<TEvScanPing, NKikimrKqp::TEvScanPing,
+        TKqpComputeEvents::EvScanPing>
+    {
+    };
+
     struct TEvScanInitActor : public NActors::TEventPB<TEvScanInitActor, NKikimrKqp::TEvScanInitActor,
         TKqpComputeEvents::EvScanInitActor>
     {
         TEvScanInitActor() = default;
 
-        TEvScanInitActor(ui64 scanId, const NActors::TActorId& scanActor, ui32 generation, const ui64 tabletId) {
+        TEvScanInitActor(ui64 scanId, const NActors::TActorId& scanActor, ui32 generation, const ui64 tabletId, bool allowPings = false) {
             Record.SetScanId(scanId);
             ActorIdToProto(scanActor, Record.MutableScanActorId());
             Record.SetGeneration(generation);
             Record.SetTabletId(tabletId);
+            Record.SetAllowPings(allowPings);
         }
     };
 

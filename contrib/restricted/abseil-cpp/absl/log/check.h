@@ -42,7 +42,8 @@
 
 // CHECK()
 //
-// `CHECK` terminates the program with a fatal error if `condition` is not true.
+// `CHECK` enforces that the `condition` is true. If the condition is false,
+// the program is terminated with a fatal error.
 //
 // The message may include additional information such as stack traces, when
 // available.
@@ -101,11 +102,11 @@
 //   Check failed: 2 * x == y (6 vs. 5) oops!
 //
 // The values must implement the appropriate comparison operator as well as
-// `operator<<(std::ostream&, ...)`.  Care is taken to ensure that each
-// argument is evaluated exactly once, and that anything which is legal to pass
-// as a function argument is legal here.  In particular, the arguments may be
-// temporary expressions which will end up being destroyed at the end of the
-// statement,
+// either `operator<<(std::ostream&, ...)` or `AbslStringify`.  Care is taken to
+// ensure that each argument is evaluated exactly once, and that anything which
+// is legal to pass as a function argument is legal here.  In particular, the
+// arguments may be temporary expressions which will end up being destroyed at
+// the end of the statement,
 //
 // Example:
 //

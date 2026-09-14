@@ -15,24 +15,21 @@ namespace builtins
   {
 
     template <typename T, typename... Types>
-    types::none_type intersection_update(types::set<T> &set,
-                                         Types const &...others)
+    types::none_type intersection_update(types::set<T> &set, Types const &...others)
     {
       set.intersection_update(others...);
       return {};
     }
 
     template <typename T, typename... Types>
-    types::none_type intersection_update(types::set<T> &&set,
-                                         Types const &...others)
+    types::none_type intersection_update(types::set<T> &&set, Types const &...others)
     {
       // If it is an rvalue, we don't really want to update
       return {};
     }
 
     template <typename... Types>
-    types::none_type intersection_update(types::empty_set &&set,
-                                         Types const &...others)
+    types::none_type intersection_update(types::empty_set &&set, Types const &...others)
     {
       // If it is an empty_set, it is ! really updated otherwise we have a
       // typing issue

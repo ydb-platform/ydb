@@ -1,0 +1,8 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:10:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, Column names in SELECT don't match column specification in parenthesis
+    	SELECT 1 FROM x;
+	^
+        <tmp_path>/program.sql:<main>:9:12: Warning: At position 2 actual "c" doesn't match expected "b"
+        	WITH x (a, b) AS (SELECT 1, '2' AS c)
+	           ^

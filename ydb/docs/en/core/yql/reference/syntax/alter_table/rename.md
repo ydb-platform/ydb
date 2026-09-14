@@ -1,14 +1,18 @@
 # Renaming a table
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% endif %}
-
 ```yql
 ALTER TABLE old_table_name RENAME TO new_table_name;
 ```
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% note info %}
+
+When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+{% endnote %}
+
+{% endif %}
 
 If a table with the new name already exists, an error will be returned. The ability to transactionally replace a table under load is supported by specialized methods in CLI and SDK.
 

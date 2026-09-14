@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "blob_depot_tablet.h"
 #include "closed_interval_set.h"
+#include "coro_tx.h"
 
 #include <util/generic/hash_multi_map.h>
 
@@ -132,6 +133,18 @@ namespace NKikimr::NBlobDepot {
             TString MakeBinaryKey() const {
                 if (Data.Type == BlobIdType) {
                     return GetBlobId().AsBinaryString();
+                } else if (Data.Type <= MaxInlineStringLen || Data.Type == StringType) {
+                    return TString(GetStringBuf());
+                } else if (Data.Type == MinType) {
+                    return {};
+                } else {
+                    Y_ABORT();
+                }
+            }
+
+            TString MakeTextualKey() const {
+                if (Data.Type == BlobIdType) {
+                    return GetBlobId().ToString();
                 } else if (Data.Type <= MaxInlineStringLen || Data.Type == StringType) {
                     return TString(GetStringBuf());
                 } else if (Data.Type == MinType) {
@@ -283,14 +296,8 @@ namespace NKikimr::NBlobDepot {
                 , UncertainWrite(uncertainWrite)
             {}
 
-            explicit TValue(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item)
-                : Meta(item.GetMeta())
-                , Public(false)
-                , UncertainWrite(item.GetUncertainWrite())
-            {
-                auto *chain = ValueChain.Add();
-                auto *locator = chain->MutableLocator();
-                locator->CopyFrom(item.GetBlobLocator());
+            explicit TValue(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item) {
+                UpdateFrom(item);
             }
 
             explicit TValue(EKeepState keepState)
@@ -298,6 +305,24 @@ namespace NKikimr::NBlobDepot {
                 , Public(false)
                 , UncertainWrite(false)
             {}
+
+            void UpdateFrom(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item) {
+                Meta = item.GetMeta();
+                Public = false;
+                UncertainWrite = item.GetUncertainWrite();
+                if (item.GetIssueKeepFlag() && KeepState == EKeepState::Default) {
+                    KeepState = EKeepState::Keep;
+                }
+
+                ValueChain.Clear();
+                auto *chain = ValueChain.Add();
+                if (item.HasBlobLocator()) {
+                    chain->MutableBlobLocator()->CopyFrom(item.GetBlobLocator());
+                }
+                if (item.HasS3Locator()) {
+                    chain->MutableS3Locator()->CopyFrom(item.GetS3Locator());
+                }
+            }
 
             bool IsWrittenUncertainly() const {
                 return UncertainWrite && !ValueChain.empty();
@@ -364,6 +389,24 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
+        enum class ETrashLoadState {
+            Complete,
+            NeedMore,
+            Loading,
+        };
+
+        static constexpr const char *TrashLoadStateToString(ETrashLoadState state) {
+            switch (state) {
+                case ETrashLoadState::Complete:
+                    return "complete";
+                case ETrashLoadState::NeedMore:
+                    return "need more";
+                case ETrashLoadState::Loading:
+                    return "loading";
+            }
+            return "unknown";
+        }
+
         enum EScanFlags : ui32 {
             INCLUDE_BEGIN = 1,
             INCLUDE_END = 2,
@@ -382,6 +425,19 @@ namespace NKikimr::NBlobDepot {
 #ifndef NDEBUG
             std::set<TKey> KeysInRange = {}; // runtime state
 #endif
+        };
+
+        struct TAssimilatedBlobInfo {
+            struct TDrop {};
+
+            struct TUpdate {
+                TBlobSeqId BlobSeqId;
+                bool Keep = false;
+                bool DoNotKeep = false;
+            };
+
+            TKey Key;
+            std::variant<TDrop, TUpdate> Action;
         };
 
     private:
@@ -420,17 +476,33 @@ namespace NKikimr::NBlobDepot {
         bool Loaded = false;
         std::map<TKey, TValue> Data;
         TClosedIntervalSet<TKey> LoadedKeys; // keys that are already scanned and loaded in the local database
-        THashMap<TLogoBlobID, ui32> RefCount;
+        THashMap<TLogoBlobID, ui32> RefCountBlobs;
+        THashMap<TS3Locator, ui32> RefCountS3;
         THashMap<std::tuple<ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
         std::optional<TLogoBlobID> LastAssimilatedBlobId;
         THashSet<std::tuple<ui8, ui32>> AlreadyCutHistory;
         ui64 TotalStoredDataSize = 0;
         ui64 TotalStoredTrashSize = 0;
         ui64 InFlightTrashSize = 0;
+        ui64 TotalS3DataSize = 0;
+
+        ui64 LoadRestartTx = 0;
+        ui64 LoadRunSuccessorTx = 0;
+        ui64 LoadProcessingCycles = 0;
+        ui64 LoadFinishTxCycles = 0;
+        ui64 LoadRestartTxCycles = 0;
+        ui64 LoadRunSuccessorTxCycles = 0;
+        ui64 LoadTotalCycles = 0;
+        ui64 LoadedTrashRecords = 0;
+
+        ETrashLoadState TrashLoadState = ETrashLoadState::Loading;
+        TString TrashLoadFrom;
 
         friend class TGroupAssimilator;
 
-        THashMultiMap<void*, TLogoBlobID> InFlightTrash; // being committed, but not yet confirmed
+        THashMultiMap<void*, TLogoBlobID> InFlightTrashBlobs; // being committed, but not yet confirmed
+        THashMultiMap<void*, TS3Locator> InFlightTrashS3; // being committed, but not yet confirmed
+        THashSet<TLogoBlobID> AllInFlightTrashBlobs;
 
         class TTxIssueGC;
         class TTxConfirmGC;
@@ -503,8 +575,12 @@ namespace NKikimr::NBlobDepot {
                 }
                 while (rowset.IsValid()) {
                     TKey key = TKey::FromBinaryKey(rowset.GetKey(), Data->Self->Config);
-                    STLOG(PRI_TRACE, BLOB_DEPOT, BDT46, "ScanRange.Load", (Id, Data->Self->GetLogId()), (Left, left),
-                        (Right, right), (Key, key));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT, "ScanRange.Load",
+                        {"marker", "BDT46"},
+                        {"id", Data->Self->GetLogId()},
+                        {"left", left},
+                        {"right", right},
+                        {"key", key});
                     if (left < key && key < right) {
                         TValue* const value = Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(),
                             rowset.template GetValueOrDefault<Schema::Data::UncertainWrite>());
@@ -536,8 +612,13 @@ namespace NKikimr::NBlobDepot {
 
         template<typename TCallback>
         bool ScanRange(TScanRange& range, NTabletFlatExecutor::TTransactionContext *txc, bool *progress, TCallback&& callback) {
-            STLOG(PRI_TRACE, BLOB_DEPOT, BDT76, "ScanRange", (Id, Self->GetLogId()), (Begin, range.Begin), (End, range.End),
-                (Flags, range.Flags), (MaxKeys, range.MaxKeys));
+            YDB_LOG_TRACE_COMP(BLOB_DEPOT, "ScanRange",
+                {"marker", "BDT76"},
+                {"id", Self->GetLogId()},
+                {"begin", range.Begin},
+                {"end", range.End},
+                {"flags", range.Flags},
+                {"maxKeys", range.MaxKeys});
 
             const bool reverse = range.Flags & EScanFlags::REVERSE;
             TLoadRangeFromDB loader{this, range, progress};
@@ -561,8 +642,14 @@ namespace NKikimr::NBlobDepot {
             const auto& from = reverse ? TKey::Min() : range.Begin;
             const auto& to = reverse ? range.End : TKey::Max();
             LoadedKeys.EnumInRange(from, to, reverse, [&](const TKey& left, const TKey& right, bool isRangeLoaded) {
-                STLOG(PRI_TRACE, BLOB_DEPOT, BDT83, "ScanRange.Step", (Id, Self->GetLogId()), (Left, left), (Right, right),
-                    (IsRangeLoaded, isRangeLoaded), (From, from), (To, to));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT, "ScanRange.Step",
+                    {"marker", "BDT83"},
+                    {"id", Self->GetLogId()},
+                    {"left", left},
+                    {"right", right},
+                    {"isRangeLoaded", isRangeLoaded},
+                    {"from", from},
+                    {"to", to});
                 if (!isRangeLoaded) {
                     // we have to load range (left, right), not including both ends
                     Y_ABORT_UNLESS(txc && progress);
@@ -635,6 +722,8 @@ namespace NKikimr::NBlobDepot {
         void BindToBlob(const TKey& key, TBlobSeqId blobSeqId, bool keep, bool doNotKeep,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
+        void AddToS3Trash(TS3Locator locator, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+
         void MakeKeyCertain(const TKey& key);
         void HandleCommitCertainKeys();
 
@@ -646,6 +735,26 @@ namespace NKikimr::NBlobDepot {
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void AddTrashOnLoad(TLogoBlobID id);
         void AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep);
+
+        enum class EMoveDataReplaceResult {
+            Replaced,
+            KeyChanged,
+            KeyMissing,
+        };
+
+        EMoveDataReplaceResult ReplaceLocatorForMoveData(const TKey& key, ui32 valueChainIndex,
+            ui32 expectedValueVersion, const NKikimrBlobDepot::TBlobLocator& oldLocator,
+            const NKikimrBlobDepot::TBlobLocator& newLocator,
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+
+        enum class EMoveDataTrashStatus {
+            Clear,
+            NeedsIndexRescan,
+            WaitingForGC,
+        };
+
+        EMoveDataTrashStatus CheckMoveDataTrash(const TSet<ui32>& groups);
+        bool IsBlobReferenced(TLogoBlobID id) const;
 
         bool UpdateKeepState(TKey key, EKeepState keepState, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void DeleteKey(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
@@ -662,6 +771,7 @@ namespace NKikimr::NBlobDepot {
         void TrimChannelHistory(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted);
 
         void AddFirstMentionedBlob(TLogoBlobID id);
+        void AddFirstMentionedBlob(TS3Locator locator);
         void AccountBlob(TLogoBlobID id, bool add);
 
         bool CanBeCollected(TBlobSeqId id) const;
@@ -670,7 +780,10 @@ namespace NKikimr::NBlobDepot {
 
         template<typename TCallback>
         void EnumerateRefCount(TCallback&& callback) {
-            for (const auto& [key, value] : RefCount) {
+            for (const auto& [key, value] : RefCountBlobs) {
+                callback(key, value);
+            }
+            for (const auto& [key, value] : RefCountS3) {
                 callback(key, value);
             }
         }
@@ -685,13 +798,31 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
+        enum class ELoadTrashResult {
+            NotReady,
+            BatchFull,
+            Complete,
+        };
+
         void StartLoad();
-        bool LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress);
+        ELoadTrashResult LoadTrash(NTabletFlatExecutor::TTransactionContext& txc, TString& from, bool& progress);
+        bool LoadTrashS3(NTabletFlatExecutor::TTransactionContext& txc, TS3Locator& from, bool& progress);
         void OnLoadComplete();
         bool IsLoaded() const { return Loaded; }
         bool IsKeyLoaded(const TKey& key) const { return Loaded || LoadedKeys[key]; }
+        bool IsTrashFullyLoaded() const;
 
-        bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc);
+        ETrashLoadState GetTrashLoadState() const;
+        ui64 GetLoadedTrashRecords() const;
+
+        bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, bool *progress = nullptr);
+
+        template<typename TRecord>
+        bool LoadMissingKeys(const TRecord& record, NTabletFlatExecutor::TTransactionContext& txc);
+
+        std::optional<TString> CheckKeyAgainstBarrier(const TKey& key);
+
+        bool IsUseful(const TS3Locator& locator) const;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -699,8 +830,11 @@ namespace NKikimr::NBlobDepot {
         IActor *CreateResolveDecommitActor(TEvBlobDepot::TEvResolve::TPtr ev);
 
         class TTxCommitAssimilatedBlob;
-        void ExecuteTxCommitAssimilatedBlob(NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId, TData::TKey key,
-            ui32 notifyEventType, TActorId parentId, ui64 cookie, bool keep = false, bool doNotKeep = false);
+        void ExecuteTxCommitAssimilatedBlob(std::vector<TAssimilatedBlobInfo>&& blobs, ui32 notifyEventType,
+            TActorId parentId, ui64 cookie);
+
+        class TTxHardCollectAssimilatedBlobs;
+        void ExecuteTxHardCollectAssimilatedBlobs(ui64 tabletId, ui8 channel, TGenStep barrier, TActorId parentId);
 
         class TTxResolve;
         void ExecuteTxResolve(TEvBlobDepot::TEvResolve::TPtr ev, THashSet<TLogoBlobID>&& resolutionErrors = {});
@@ -709,9 +843,10 @@ namespace NKikimr::NBlobDepot {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        ui64 GetTotalStoredDataSize() const {
-            return TotalStoredDataSize;
-        }
+        ui64 GetTotalStoredDataSize() const { return TotalStoredDataSize; }
+        ui64 GetTotalStoredTrashSize() const { return TotalStoredTrashSize; }
+        ui64 GetInFlightTrashSize() const { return InFlightTrashSize; }
+        ui64 GetTotalS3DataSize() const { return TotalS3DataSize; }
 
         void RenderMainPage(IOutputStream& s);
 
@@ -734,6 +869,15 @@ namespace NKikimr::NBlobDepot {
             TGenStep confirmedGenStep);
 
         void ExecuteHardGC(ui8 channel, ui32 groupId, TGenStep hardGenStep);
+
+        bool IssueLoadTrashBatch();
+        void OnLoadTrashBatchComplete(ELoadTrashResult result);
+
+        class TLoadCycleAccounting;
+
+        void FinishLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx);
+        void RestartLoadTx(TLoadCycleAccounting& accounting, TCoroTx::TContextBase& tx, bool progress);
+        ELoadTrashResult RunLoadTrashLoop(TCoroTx::TContextBase& tx, TLoadCycleAccounting& accounting, TString& from);
     };
 
     Y_DECLARE_OPERATORS_FOR_FLAGS(TBlobDepot::TData::TScanFlags);

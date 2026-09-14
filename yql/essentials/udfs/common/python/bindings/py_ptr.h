@@ -7,8 +7,7 @@
 namespace NPython {
 
 template <typename T>
-class TPyPtrOps
-{
+class TPyPtrOps {
 public:
     static inline void Ref(T* t) {
         Y_ASSERT(t);
@@ -26,22 +25,20 @@ public:
     }
 };
 
-class TPyObjectPtr:
-        public NYql::NUdf::TRefCountedPtr<PyObject, TPyPtrOps<PyObject>>
-{
+class TPyObjectPtr: public NYql::NUdf::TRefCountedPtr<PyObject, TPyPtrOps<PyObject>> {
     using TSelf = NYql::NUdf::TRefCountedPtr<PyObject, TPyPtrOps<PyObject>>;
 
 public:
-    inline TPyObjectPtr()
-    {
-    }
+    inline TPyObjectPtr() = default;
 
+    // Implicit ownership capturing is okay for smart pointers
+    // NOLINTNEXTLINE(google-explicit-constructor)
     inline TPyObjectPtr(PyObject* p)
-        : TSelf(p, STEAL_REF)   // do not increment refcounter by default
+        : TSelf(p, STEAL_REF) // do not increment refcounter by default
     {
     }
 
-    inline TPyObjectPtr(PyObject* p, AddRef)
+    inline TPyObjectPtr(PyObject* p, EAddRef)
         : TSelf(p)
     {
     }
@@ -66,4 +63,4 @@ public:
     void Reset(PyObject* p) = delete;
 };
 
-} // namspace NPython
+} // namespace NPython

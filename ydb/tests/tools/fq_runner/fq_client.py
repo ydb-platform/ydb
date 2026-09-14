@@ -15,13 +15,16 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 from google.protobuf.duration_pb2 import Duration
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
+import ydb.tests.library.common.yatest_common as yatest_common
 
 final_statuses = [fq.QueryMeta.COMPLETED, fq.QueryMeta.FAILED, fq.QueryMeta.ABORTED_BY_SYSTEM,
                   fq.QueryMeta.ABORTED_BY_USER, fq.QueryMeta.PAUSED]
 
-CONTROL_PLANE_REQUEST_TIMEOUT = plain_or_under_sanitizer(30.0, 60.0)
+CONTROL_PLANE_REQUEST_TIMEOUT = yatest_common.plain_or_under_sanitizer(30, 60)
+WAIT_QUERY_TIMEOUT = yatest_common.plain_or_under_sanitizer(40, 200)
+WAIT_QUERY_SLEEP_TIME = yatest_common.plain_or_under_sanitizer(0.5, 2)
+WAIT_QUERY_STATUS_TIMEOUT = yatest_common.plain_or_under_sanitizer(60, 150)
 
 
 class FederatedQueryException(Exception):
@@ -48,7 +51,7 @@ class StreamingDisposition(object):
         disposition = fq.StreamingDisposition()
         t = Timestamp()
         t.FromMilliseconds(int(seconds * 1000))
-        disposition.from_time.timestamp = t
+        disposition.from_time.timestamp.CopyFrom(t)
         return disposition
 
     @staticmethod
@@ -56,7 +59,7 @@ class StreamingDisposition(object):
         disposition = fq.StreamingDisposition()
         d = Duration()
         d.FromMilliseconds(int(seconds * 1000))
-        disposition.time_ago.duration = d
+        disposition.time_ago.duration.CopyFrom(d)
         return disposition
 
     @staticmethod
@@ -229,6 +232,23 @@ class FederatedQueryClient(object):
         return FederatedQueryClient.Response(response.operation.issues, result, check_issues)
 
     @retry.retry_intrusive
+    def list_queries(self, visibility, name_substring=None, limit=100, check_issues=True, page_token=""):
+        request = fq.ListQueriesRequest()
+        request.filter.visibility = visibility
+        request.limit = limit
+        request.page_token = page_token
+        if name_substring:
+            request.filter.name = name_substring
+        response = self.service.ListQueries(
+            request,
+            metadata=self._create_meta(),
+            timeout=CONTROL_PLANE_REQUEST_TIMEOUT,
+        )
+        result = fq.ListQueriesResult()
+        response.operation.result.Unpack(result)
+        return FederatedQueryClient.Response(response.operation.issues, result, check_issues)
+
+    @retry.retry_intrusive
     def control_query(self, query_id, action, check_issues=True):
         request = fq.ControlQueryRequest()
         request.query_id = query_id
@@ -281,7 +301,7 @@ class FederatedQueryClient(object):
         return result.status
 
     # TODO: merge wait_query() and wait_query_status
-    def wait_query(self, query_id, timeout=plain_or_under_sanitizer(40, 200), statuses=final_statuses):
+    def wait_query(self, query_id, timeout=WAIT_QUERY_TIMEOUT, statuses=final_statuses):
         start = time.time()
         deadline = start + timeout
         while True:
@@ -299,10 +319,10 @@ class FederatedQueryClient(object):
                     response.result.query.issue,
                     response.result.query.transient_issue
                 )
-            time.sleep(plain_or_under_sanitizer(0.5, 2))
+            time.sleep(WAIT_QUERY_SLEEP_TIME)
 
     # Wait query status or one of statuses in list
-    def wait_query_status(self, query_id, expected_status, timeout=plain_or_under_sanitizer(60, 150)):
+    def wait_query_status(self, query_id, expected_status, timeout=WAIT_QUERY_STATUS_TIMEOUT):
         statuses = expected_status if isinstance(expected_status, list) else [expected_status]
         return self.wait_query(query_id, timeout, statuses=statuses).query.meta.status
 
@@ -466,6 +486,21 @@ class FederatedQueryClient(object):
         pg.password = password
 
         pg.auth.CopyFrom(auth_method)
+        request.content.acl.visibility = visibility
+        return self.create_connection(request, check_issues)
+
+    @retry.retry_intrusive
+    def create_mysql_connection(self, name, database_name, database_id, login, password,
+                                secure=False, visibility=fq.Acl.Visibility.PRIVATE, auth_method=AuthMethod.service_account('sa'), check_issues=True):
+        request = fq.CreateConnectionRequest()
+        request.content.name = name
+        my = request.content.setting.mysql_cluster
+        my.database_name = database_name
+        my.database_id = database_id
+        my.login = login
+        my.password = password
+
+        my.auth.CopyFrom(auth_method)
         request.content.acl.visibility = visibility
         return self.create_connection(request, check_issues)
 

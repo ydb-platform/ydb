@@ -1,24 +1,22 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     test_workload.py
 )
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
-ENDIF()
+REQUIREMENTS(ram:32 cpu:4)
 
 SIZE(MEDIUM)
 
 DEPENDS(
-    ydb/apps/ydbd
-    ydb/apps/ydb
-    ydb/tests/stress/oltp_workload
 )
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/stress
+    ydb/tests/stress/oltp_workload/workload
+    ydb/tests/stress/common
 )
 
 

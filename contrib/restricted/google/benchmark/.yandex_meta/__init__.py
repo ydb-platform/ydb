@@ -71,13 +71,12 @@ def post_install(self):
 
 
 benchmark = CMakeNinjaNixProject(
-    owners=["bulatman", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/restricted/google/benchmark",
     license="Apache-2.0",
     nixattr="gbenchmark",
     addincl_global={".": {"./include"}},
     disable_includes=[
-        "emscripten.h",
         "kstat.h",
         "qurt.h",
         "perfmon/",

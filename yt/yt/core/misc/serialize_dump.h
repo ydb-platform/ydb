@@ -13,52 +13,44 @@ namespace NYT {
 class TSerializationDumper
 {
 public:
-    Y_FORCE_INLINE ESerializationDumpMode GetMode() const
+    void ConfigureMode(ESerializationDumpMode value);
+
+
+    Y_FORCE_INLINE void BeginIndentedBlock()
     {
-        return Mode_;
+        ++IndentDepth_;
     }
 
-    Y_FORCE_INLINE void SetMode(ESerializationDumpMode value)
+    Y_FORCE_INLINE void EndIndentBlock()
     {
-        Mode_ = value;
-    }
-
-    Y_FORCE_INLINE void Indent()
-    {
-        ++IndentCount_;
-    }
-
-    Y_FORCE_INLINE void Unindent()
-    {
-        --IndentCount_;
+        --IndentDepth_;
     }
 
 
-    Y_FORCE_INLINE void Suspend()
+    Y_FORCE_INLINE void BeginSuspendedBlock()
     {
-        ++SuspendCount_;
+        ContentDumpLock_ += SuspendLockDelta;
     }
 
-    Y_FORCE_INLINE void Resume()
+    Y_FORCE_INLINE void EndSuspendedBlock()
     {
-        --SuspendCount_;
+        ContentDumpLock_ -= SuspendLockDelta;
     }
-
-    Y_FORCE_INLINE bool IsSuspended() const
-    {
-        return SuspendCount_ > 0;
-    }
-
 
     Y_FORCE_INLINE bool IsContentDumpActive() const
     {
-        return GetMode() == ESerializationDumpMode::Content && !IsSuspended();
+        return ContentDumpLock_ > 0;
     }
 
     Y_FORCE_INLINE bool IsChecksumDumpActive() const
     {
-        return GetMode() == ESerializationDumpMode::Checksum;
+        return Mode_ == ESerializationDumpMode::Checksum;
     }
+
+
+    void DisableScopeFiltering();
+    void BeginScopeFilterMatchBlock(TStringBuf path);
+    void EndScopeFilterMatchBlock(TStringBuf path);
 
 
     void SetFieldName(TStringBuf name)
@@ -66,17 +58,18 @@ public:
         FieldName_ = name;
     }
 
+
     template <class... TArgs>
-    void WriteContent(const char* format, const TArgs&... args)
+    void WriteContent(TFormatString<TArgs...> format, TArgs&&... args)
     {
         BeginWrite();
-        ScratchBuilder_.AppendChar(' ', IndentCount_ * 2);
+        ScratchBuilder_.AppendChar(' ', IndentDepth_ * 2);
         if (FieldName_) {
             ScratchBuilder_.AppendString(FieldName_);
             ScratchBuilder_.AppendString(": ");
             FieldName_ = {};
         }
-        ScratchBuilder_.AppendFormat(format, args...);
+        ScratchBuilder_.AppendFormat(format, std::forward<TArgs>(args)...);
         ScratchBuilder_.AppendChar('\n');
         EndWrite();
     }
@@ -90,8 +83,15 @@ public:
 
 private:
     ESerializationDumpMode Mode_ = ESerializationDumpMode::None;
-    int IndentCount_ = 0;
-    int SuspendCount_ = 0;
+
+    int IndentDepth_ = 0;
+
+    // Positive values indicate that content dump is active.
+    // Initial value is effective -INF to suppress any dump.
+    static constexpr i64 ScopeFilterMatchLockDelta = +1;
+    static constexpr i64 SuspendLockDelta = -(1LL << 32);
+    i64 ContentDumpLock_ = -(1LL << 62);
+
     TStringBuf FieldName_;
     TStringBuilder ScratchBuilder_;
 
@@ -116,10 +116,10 @@ public:
     explicit TSerializeDumpIndentGuard(TSerializationDumper* dumper)
         : Dumper_(dumper)
     {
-        Dumper_->Indent();
+        Dumper_->BeginIndentedBlock();
     }
 
-    TSerializeDumpIndentGuard(TSerializeDumpIndentGuard&& other)
+    TSerializeDumpIndentGuard(TSerializeDumpIndentGuard&& other) noexcept
         : Dumper_(other.Dumper_)
     {
         other.Dumper_ = nullptr;
@@ -128,7 +128,7 @@ public:
     ~TSerializeDumpIndentGuard()
     {
         if (Dumper_) {
-            Dumper_->Unindent();
+            Dumper_->EndIndentBlock();
         }
     }
 
@@ -151,10 +151,10 @@ public:
     explicit TSerializeDumpSuspendGuard(TSerializationDumper* dumper)
         : Dumper_(dumper)
     {
-        Dumper_->Suspend();
+        Dumper_->BeginSuspendedBlock();
     }
 
-    TSerializeDumpSuspendGuard(TSerializeDumpSuspendGuard&& other)
+    TSerializeDumpSuspendGuard(TSerializeDumpSuspendGuard&& other) noexcept
         : Dumper_(other.Dumper_)
     {
         other.Dumper_ = nullptr;
@@ -163,7 +163,7 @@ public:
     ~TSerializeDumpSuspendGuard()
     {
         if (Dumper_) {
-            Dumper_->Resume();
+            Dumper_->EndSuspendedBlock();
         }
     }
 
@@ -180,7 +180,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 #define SERIALIZATION_DUMP_WRITE(context, ...) \
-    if (Y_LIKELY(!(context).Dumper().IsContentDumpActive())) { \
+    if (!(context).Dumper().IsContentDumpActive()) [[likely]] { \
     } else \
         (context).Dumper().WriteContent(__VA_ARGS__)
 
@@ -196,7 +196,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline TString DumpRangeToHex(TRef data)
+inline std::string DumpRangeToHex(TRef data)
 {
     TStringBuilder builder;
     builder.AppendChar('<');

@@ -7,15 +7,14 @@ would cause circular references.
 
 Also this makes the module light to import, as it should.
 """
+
 from enum import Enum
 from functools import total_ordering
+from typing import Literal
 from typing import Optional
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from typing_extensions import Literal
 
-    _ScopeName = Literal["session", "package", "module", "class", "function"]
+_ScopeName = Literal["session", "package", "module", "class", "function"]
 
 
 @total_ordering
@@ -33,11 +32,11 @@ class Scope(Enum):
     """
 
     # Scopes need to be listed from lower to higher.
-    Function: "_ScopeName" = "function"
-    Class: "_ScopeName" = "class"
-    Module: "_ScopeName" = "module"
-    Package: "_ScopeName" = "package"
-    Session: "_ScopeName" = "session"
+    Function: _ScopeName = "function"
+    Class: _ScopeName = "class"
+    Module: _ScopeName = "module"
+    Package: _ScopeName = "package"
+    Session: _ScopeName = "session"
 
     def next_lower(self) -> "Scope":
         """Return the next lower scope."""
@@ -54,13 +53,37 @@ class Scope(Enum):
         return _ALL_SCOPES[index + 1]
 
     def __lt__(self, other: "Scope") -> bool:
-        self_index = _SCOPE_INDICES[self]
-        other_index = _SCOPE_INDICES[other]
+        if self == other:
+            return False
+        self_index = 0
+        if self is Scope.Function:
+            self_index = 0
+        elif self is Scope.Class:
+            self_index = 1
+        elif self is Scope.Module:
+            self_index = 2
+        elif self is Scope.Package:
+            self_index = 3
+        elif self is Scope.Session:
+            self_index = 4
+
+        other_index = 0
+        if other is Scope.Function:
+            other_index = 0
+        elif other is Scope.Class:
+            other_index = 1
+        elif other is Scope.Module:
+            other_index = 2
+        elif other is Scope.Package:
+            other_index = 3
+        elif other is Scope.Session:
+            other_index = 4
+
         return self_index < other_index
 
     @classmethod
     def from_user(
-        cls, scope_name: "_ScopeName", descr: str, where: Optional[str] = None
+        cls, scope_name: _ScopeName, descr: str, where: Optional[str] = None
     ) -> "Scope":
         """
         Given a scope name from the user, return the equivalent Scope enum. Should be used

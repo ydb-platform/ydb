@@ -1,3 +1,6 @@
+ENABLE(TIDY_ALLOW_GENERATED)
+SET(TIDY_HEADER_FILTER "${ARCADIA_ROOT}/yql/essentials/minikql/codegen/")
+
 ADDINCL(
     ${ARCADIA_BUILD_ROOT}/${MODDIR}
 )
@@ -24,23 +27,25 @@ COPY_FILE(
 SRCDIR(yql/essentials/minikql/codegen/ut)
 
 IF (OS_WINDOWS)
-    LLVM_BC(
-        fib.cpp
-        sum_sqr.cpp
-        sum_sqr2.cpp
-        str.cpp
-        128_bit.cpp
-        128_bit_win.ll
-        NAME Funcs
-        SUFFIX .${LLVM_VER}
-        SYMBOLS
-        fib
-        sum_sqr
-        sum_sqr2
-        sum_sqr_128
-        sum_sqr_128_ir
-        str_size
-    )
+    PEERDIR(library/cpp/resource)
+    # FIXME: llvm18
+    #LLVM_BC(
+    #    fib.cpp
+    #    sum_sqr.cpp
+    #    sum_sqr2.cpp
+    #    str.cpp
+    #    128_bit.cpp
+    #    128_bit_win.ll
+    #    NAME Funcs
+    #    SUFFIX .${LLVM_VER}
+    #    SYMBOLS
+    #    fib
+    #    sum_sqr
+    #    sum_sqr2
+    #    sum_sqr_128
+    #    sum_sqr_128_ir
+    #    str_size
+    #)
 ELSE()
     LLVM_BC(
         fib.cpp
@@ -60,5 +65,3 @@ ELSE()
         str_size
     )
 ENDIF()
-
-

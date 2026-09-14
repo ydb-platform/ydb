@@ -4,6 +4,7 @@ SRCS(
     granule.cpp
     storage.cpp
     portions_index.cpp
+    portion_interval_tree.cpp
     stages.cpp
 )
 
@@ -15,8 +16,8 @@ PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/base
     ydb/core/formats/arrow/reader
-    ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/optimizer
     ydb/core/tx/columnshard/engines/storage/optimizer/lbuckets/planner
+    ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner
 )
 
 GENERATE_ENUM_SERIALIZATION(granule.h)

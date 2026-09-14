@@ -1,23 +1,60 @@
 #include "load_actor_impl.h"
 
+#include <ydb/library/actors/interconnect/interconnect_stream.h>
+#include <util/network/address.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
+
 namespace NKikimr::NTestShard {
 
     class TStateServerInterfaceActor : public TActor<TStateServerInterfaceActor> {
         struct TServerContext : TThrRefBase {
-            const TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
+            TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
             const TString Host;
             i32 Port;
             std::unordered_set<TActorId, THash<TActorId>> Subscribers;
 
             TServerContext(const TString& host, i32 port, const TActorIdentity& self)
-                : Socket(NInterconnect::TStreamSocket::Make(AF_INET6))
-                , Host(host)
+                : Host(host)
                 , Port(port)
             {
+                NInterconnect::TAddress addr;
+                try {
+                    TNetworkAddress netAddr(host, port);
+                    bool found = false;
+                    for (auto it = netAddr.Begin(); it != netAddr.End(); ++it) {
+                        if (it->ai_family == AF_INET6) {
+                            auto* sin6 = reinterpret_cast<sockaddr_in6*>(it->ai_addr);
+                            addr = NInterconnect::TAddress(sin6->sin6_addr, port);
+                            found = true;
+                            break;
+                        } else if (it->ai_family == AF_INET) {
+                            if (!found) {
+                                auto* sin = reinterpret_cast<sockaddr_in*>(it->ai_addr);
+                                addr = NInterconnect::TAddress(sin->sin_addr, port);
+                                found = true;
+                            }
+                        }
+                    }
+                } catch (const yexception& e) {
+                    YDB_LOG_WARN("Hostname resolution failed for falling back to raw address",
+                        {"marker", "TS36"},
+                        {"host", host},
+                        {"error", e.what()});
+                    addr = NInterconnect::TAddress(host, port);
+                }
+
+                int family = addr.GetFamily();
+                if (family == 0) {
+                    family = AF_INET6;
+                }
+
+                Socket = NInterconnect::TStreamSocket::Make(family);
+
                 Y_ABORT_UNLESS(*Socket != INVALID_SOCKET);
                 SetNonBlock(*Socket);
                 SetNoDelay(*Socket, true);
-                Socket->Connect(NInterconnect::TAddress(host, port));
+                Socket->Connect(addr);
                 self.Send(MakePollerActorId(), new TEvPollerRegister(Socket, self, self));
             }
 
@@ -42,12 +79,14 @@ namespace NKikimr::NTestShard {
                 if (err == EAGAIN || err == EINPROGRESS) {
                     NeedWrite = true;
                 } else if (!err) {
-                    STLOG(PRI_INFO, TEST_SHARD, TS06, "successfully connected to state server");
+                    YDB_LOG_INFO("Successfully connected to state server",
+                        {"marker", "TS06"});
                     IsConnected = true;
                     return Read(self) && Write();
                 } else {
-                    STLOG(PRI_ERROR, TEST_SHARD, TS01, "failed to establish connection to state server",
-                        (Error, strerror(err)));
+                    YDB_LOG_ERROR("Failed to establish connection to state server",
+                        {"marker", "TS01"},
+                        {"error", strerror(err)});
                     return false;
                 }
                 return true;
@@ -79,8 +118,9 @@ namespace NKikimr::NTestShard {
                         } else if (-read == EINTR) {
                             continue;
                         } else {
-                            STLOG(PRI_ERROR, TEST_SHARD, TS02, "failed to receive data from state server",
-                                (Error, strerror(-read)));
+                            YDB_LOG_ERROR("Failed to receive data from state server",
+                                {"marker", "TS02"},
+                                {"error", strerror(-read)});
                             return false;
                         }
                     } else {
@@ -130,8 +170,9 @@ namespace NKikimr::NTestShard {
                         } else if (-written == EINTR) {
                             continue;
                         } else {
-                            STLOG(PRI_ERROR, TEST_SHARD, TS03, "failed to send data to state server",
-                                (Error, strerror(-written)));
+                            YDB_LOG_ERROR("Failed to send data to state server",
+                                {"marker", "TS03"},
+                                {"error", strerror(-written)});
                             return false;
                         }
                     }

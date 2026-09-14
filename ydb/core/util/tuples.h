@@ -276,6 +276,11 @@ struct tuple_cast {
     }
 };
 
+template<typename... T, typename... U>
+std::tuple<U...> cast_like(const std::tuple<T...> a, const std::tuple<U...>) {
+    return tuple_cast<U...>::cast(a);
+}
+
 // sum(tuple<>) - returns sum of all tuple elements
 
 template <typename T>

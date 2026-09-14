@@ -1,6 +1,8 @@
 #pragma once
 #include "defs.h"
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
+#include <ydb/core/protos/blobstorage_disk_color.pb.h>
 
 #include <util/generic/map.h>
 
@@ -15,6 +17,7 @@ namespace NPDisk {
 struct TOwnerInfo {
     i64 ChunksOwned;
     TVDiskID VDiskId;
+    ui32 Weight;
 };
 
 struct TKeeperParams {
@@ -24,16 +27,20 @@ struct TKeeperParams {
     // Split main chunk pool between this many owners (or 0 for 'split as you go' mode)
     i64 ExpectedOwnerCount = 0;
 
+    // Exact chunk quota for one owner weight unit; 0 means derive it from ExpectedOwnerCount
+    i64 ExpectedOwnerSize = 0;
+
     // Number of chunks used for format record and system log
     i64 SysLogSize = 0;
 
     // Number of chunks actually used by the common log at the moment
     i64 CommonLogSize = 0;
 
-    i64 MaxCommonLogChunks = 200;
+    // Maximum number of chunks in common log
+    i64 MaxCommonLogChunks = (i64)NPDisk::MaxCommonLogChunks;
 
-    // Should be true for disks that have one or more static group
-    bool HasStaticGroups = false;
+    // Special reserve of log chunks for disks with static groups
+    i64 CommonStaticLogChunks = (i64)NPDisk::CommonStaticLogChunks;
 
     // Initially owned chunk count for each owner, must be present for all currently present owners
     TMap<TOwner, TOwnerInfo> OwnersInfo;
@@ -45,8 +52,11 @@ struct TKeeperParams {
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
+
+    // Upper bound for the total chunk reserve of static group owners, in permille of the user chunk pool.
+    // 0 disables the reserve.
+    ui32 StaticGroupChunkReservePerMille = NPDisk::StaticGroupChunkReservePerMille;
 };
 
 } // NPDisk
 } // NKikimr
-

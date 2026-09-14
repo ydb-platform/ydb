@@ -1,11 +1,12 @@
 //
 // Copyright (c) 2009-2011 Artyom Beilis (Tonkikh)
+// Copyright (c) 2022-2024 Alexander Grund
 //
 // Distributed under the Boost Software License, Version 1.0.
 // https://www.boost.org/LICENSE_1_0.txt
 
-#ifndef BOOST_LOCLAE_GNU_GETTEXT_HPP
-#define BOOST_LOCLAE_GNU_GETTEXT_HPP
+#ifndef BOOST_LOCALE_GNU_GETTEXT_HPP
+#define BOOST_LOCALE_GNU_GETTEXT_HPP
 
 #include <boost/locale/detail/is_supported_char.hpp>
 #include <boost/locale/message.hpp>

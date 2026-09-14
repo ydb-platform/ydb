@@ -27,9 +27,8 @@ namespace builtins
     template <class T, class K>
     types::none_type sort(types::list<T> &seq, K key)
     {
-      pdqsort(seq.begin(), seq.end(), [&key](T const &self, T const &other) {
-        return key(self) < key(other);
-      });
+      pdqsort(seq.begin(), seq.end(),
+              [&key](T const &self, T const &other) { return key(self) < key(other); });
       return builtins::None;
     }
   } // namespace list

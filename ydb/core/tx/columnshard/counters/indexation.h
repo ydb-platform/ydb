@@ -1,6 +1,9 @@
 #pragma once
-#include "common/owner.h"
+#include "error_collector.h"
 #include "splitter.h"
+#include "sub_columns.h"
+
+#include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -16,6 +19,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr CompactionHugePartsCount;
 
 public:
+    const std::shared_ptr<NKikimr::NColumnShard::TErrorCollector> TieringErrors = std::make_shared<NKikimr::NColumnShard::TErrorCollector>();
+    std::shared_ptr<TSubColumnCounters> SubColumnCounters;
     NMonitoring::TDynamicCounters::TCounterPtr CompactionInputBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr ReadErrors;
@@ -62,4 +67,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

@@ -1,7 +1,8 @@
 #pragma once
-#include "columns_set.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -16,6 +17,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TReadContext>, CommonContext);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TProcessGuard>, ProcessMemoryGuard);
     YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TScopeGuard>, ProcessScopeGuard);
+    const EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator;
 
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, SpecColumns);
     YDB_READONLY_DEF(std::shared_ptr<TColumnsSet>, MergeColumns);
@@ -34,20 +36,20 @@ private:
 
     TReadMetadata::TConstPtr ReadMetadata;
 
-    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) = 0;
+    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(
+        const std::shared_ptr<IDataSource>& source, const bool isFinalSyncPoint) = 0;
 
 protected:
-    NIndexes::TIndexCheckerContainer IndexChecker;
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
 
 public:
     template <class T>
-    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<T>& source) {
-        return GetColumnsFetchingPlan(std::static_pointer_cast<IDataSource>(source));
+    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<T>& source, const bool isFinalSyncPoint) {
+        return DoGetColumnsFetchingPlan(std::static_pointer_cast<IDataSource>(source), isFinalSyncPoint);
     }
 
-    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<IDataSource>& source) {
-        return DoGetColumnsFetchingPlan(source);
+    std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source, const bool isFinalSyncPoint) {
+        return DoGetColumnsFetchingPlan(source, isFinalSyncPoint);
     }
 
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
@@ -66,6 +68,12 @@ public:
         return ProcessMemoryGuard->GetProcessId();
     }
 
+    bool SendToGroupedMemoryAllocation(const ui64 groupId, const std::vector<std::shared_ptr<NGroupedMemoryManager::IAllocation>>& tasks,
+        const std::optional<ui32>& stageIdx) const {
+        return SendScanToAllocation(
+            GroupedMemoryLimiterOperator, GetProcessMemoryControlId(), GetCommonContext()->GetScanId(), groupId, tasks, stageIdx);
+    }
+
     bool IsActive() const {
         return !CommonContext->IsAborted();
     }
@@ -79,7 +87,8 @@ public:
     }
 
     virtual ~TSpecialReadContext() {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("fetching", DebugString());
+        YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"fetching", DebugString()});
     }
 
     TString DebugString() const;

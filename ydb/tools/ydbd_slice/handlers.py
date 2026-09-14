@@ -3,7 +3,9 @@ import time
 import logging
 import subprocess
 from collections import deque, defaultdict
-
+from uuid import uuid4
+from ydb.tools.ydbd_slice import config_client
+from ydb.tools.ydbd_slice import blobstorage_init
 
 logger = logging.getLogger(__name__)
 
@@ -21,21 +23,56 @@ class CalledProcessError(subprocess.CalledProcessError):
 
 
 class Slice:
-    def __init__(self, components, nodes, cluster_details, configurator, do_clear_logs, yav_version, walle_provider):
+    def __init__(
+        self,
+        components,
+        nodes,
+        cluster_details,
+        bin=None,
+        compressed_bin=None,
+        do_clear_logs=False,
+        yav_version=None,
+        walle_provider=None,
+        configurator=None,
+    ):
         self.slice_kikimr_path = '/Berkanavt/kikimr/bin/kikimr'
-        self.slice_cfg_path = '/Berkanavt/kikimr/cfg'
+        self.__slice_cfg_path = '/Berkanavt/kikimr/cfg'
+        self.__slice_tenants_path = '/Berkanavt/tenants'
         self.slice_secrets_path = '/Berkanavt/kikimr/token'
         self.components = components
         self.nodes = nodes
         self.cluster_details = cluster_details
+        self.bin = bin
+        self.compressed_bin = compressed_bin
         self.configurator = configurator
         self.do_clear_logs = do_clear_logs
         self.yav_version = yav_version
         self.walle_provider = walle_provider
+        self._host_dynamic_slot_counts = cluster_details.host_dynamic_slot_counts or {}
+        self._host_storage_enabled_map = cluster_details.host_storage_enabled or {}
+        self.__config_client = config_client.ConfigClient(
+            self.nodes.nodes_list[0],
+            self.cluster_details.grpc_config.get('port'),
+            retry_count=10,
+        )
+
+    @property
+    def slice_cfg_path(self) -> str:
+        return self.__slice_cfg_path
+
+    @property
+    def slice_tenants_path(self) -> str:
+        return self.__slice_tenants_path
+
+    @property
+    def v2(self):
+        return self.configurator.v2 if hasattr(self.configurator, 'v2') else False
 
     def _ensure_berkanavt_exists(self):
-        cmd = r"sudo mkdir -p /Berkanavt"
-        self.nodes.execute_async(cmd)
+        self.nodes.execute_async(r"sudo mkdir -p /Berkanavt")
+
+    def _clear_config(self):
+        self.nodes.execute_async(r"sudo rm -f {cfg_dir}/config.yaml".format(cfg_dir=self.slice_cfg_path))
 
     def _clear_registered_slots(self):
         self.nodes.execute_async(r"sudo find /Berkanavt/ -maxdepth 1 -type d  -name 'kikimr_*' -exec  rm -rf -- {} \;")
@@ -60,9 +97,23 @@ class Slice:
     def _format_drives(self):
         tasks = []
         for (host_name, drive_path) in self._get_all_drives():
-            cmd = "sudo dd if=/dev/zero of={} bs=1M count=1 status=none conv=notrunc".format(drive_path)
+            cmd = "sudo {} admin bs disk obliterate {}".format(self.slice_kikimr_path, drive_path)
             tasks.extend(self.nodes.execute_async_ret(cmd, nodes=[host_name]))
         self.nodes._check_async_execution(tasks)
+
+    def _set_locations(self):
+        # Set location for each group of hosts sharing the same datacenter
+        for datacenter, hosts in self.configurator.group_hosts_by_datacenter.items():
+            cmd = "sudo sh -c 'echo {} > {}/location'".format(datacenter, self.slice_tenants_path)
+            self.nodes.execute_async(cmd, nodes=hosts)
+
+        # Set bridge-pile for each group of hosts sharing the same pile
+        for pile, hosts in self.configurator.group_hosts_by_bridge_pile.items():
+            cmd = "sudo sh -c 'echo {} > {}/bridge-pile'".format(pile, self.slice_tenants_path)
+            self.nodes.execute_async(cmd, nodes=hosts)
+
+    def _clear_locations(self):
+        self.nodes.execute_async("sudo rm -f {}/{{location,bridge-pile}}".format(self.slice_tenants_path))
 
     def slice_format(self):
         self.slice_stop()
@@ -71,9 +122,11 @@ class Slice:
 
     def slice_clear(self):
         self.slice_stop()
+        self._clear_config()
+        self._clear_locations()
 
         if 'dynamic_slots' in self.components:
-            for slot in self.cluster_details.dynamic_slots.values():
+            for slot in self.cluster_details.dynamic_slots:
                 self._clear_slot(slot)
 
         if 'kikimr' in self.components:
@@ -90,7 +143,11 @@ class Slice:
                 except subprocess.CalledProcessError as er:
                     raise CalledProcessError(er)
 
+    # Not realy needed function
     def _dynamic_configure(self):
+        if self.configurator is None:
+            raise ValueError("Configurator is required for dynamic configuration")
+
         dynamic_cfg_path = self.configurator.create_dynamic_cfg()
         # wait for bs to configure
         time_remaining = 120
@@ -113,9 +170,54 @@ class Slice:
             )
         )
 
+    def __create_databases(self, serverless=False):
+        create_db_template = f"{self.slice_kikimr_path} admin database /{{}}/{{}} create {{}}"
+        for domain in self.cluster_details.domains:
+            for tenant in domain.tenants:
+                opts = []
+                for storage in tenant.storage_units:
+                    opts.append(':'.join([storage.kind, str(storage.count)]))
+                if tenant.shared_database_path:
+                    if serverless:
+                        opts.append("--serverless")
+                        opts.append(tenant.shared_database_path)
+                    else:
+                        continue
+                elif serverless:
+                    continue
+                elif tenant.shared:
+                    opts.append("--shared")
+                self.nodes.execute_async(
+                    create_db_template.format(domain.domain_name, tenant.name, ' '.join(opts)),
+                    nodes=self.nodes.nodes_list[:1]
+                )
+
+    def __init_blobstorage_kikimr(self):
+        host = self.nodes.nodes_list[0]
+        cmd = (
+            f"{self.slice_kikimr_path} admin blobstorage config init "
+            f"--yaml-file {self.slice_cfg_path}/config.yaml"
+        )
+        blobstorage_init.run_blobstorage_config_init_with_retry(self.nodes, host, cmd)
+
+    def __cluster_bootstrap(self):
+        try:
+            self.__config_client.bootstrap_cluster(str(uuid4()))
+        except config_client.ConfigClientError as e:
+            raise RuntimeError(f"Failed to bootstrap cluster: {e}")
+
+    def _dynamic_provision(self):
+        self.__init_blobstorage_kikimr()
+        self.__create_databases()
+
+        return
+
     def slice_install(self):
         self._ensure_berkanavt_exists()
         self.slice_stop()
+
+        if self.configurator is None:
+            raise ValueError("Configurator is required for static configuration")
 
         if 'dynamic_slots' in self.components or 'kikimr' in self.components:
             self._stop_all_slots()
@@ -125,39 +227,61 @@ class Slice:
             self._clear_logs()
 
         if 'kikimr' in self.components:
-            self._format_drives()
-
             if 'bin' in self.components.get('kikimr', []):
                 self._update_kikimr()
 
+            self._format_drives()
+            self._set_locations()
             if 'cfg' in self.components.get('kikimr', []):
                 static_cfg_path = self.configurator.create_static_cfg()
-                self._update_cfg(static_cfg_path)
+                self._upload_cfg(static_cfg_path)
                 self._deploy_secrets()
 
             self._start_static()
-            self._dynamic_configure()
+            if self.v2:
+                self.__cluster_bootstrap()
+            else:
+                self.__init_blobstorage_kikimr()
+                # Old bootstrap via proto files
+                # self._dynamic_configure()
+
+            self.__create_databases()
 
         self._deploy_slot_configs()
         self._start_dynamic()
 
+        if 'kikimr' in self.components:
+            self.__create_databases(serverless=True)  # create serverless databases if any
+
+    def _host_dynamic_slot_limit(self, node):
+        return self._host_dynamic_slot_counts.get(node)
+
+    def _host_storage_enabled(self, node):
+        return self._host_storage_enabled_map.get(node, True)
+
+    def _storage_hosts(self):
+        return [node for node in self.nodes.nodes_list if self._host_storage_enabled(node)]
+
     def _get_available_slots(self):
         if 'dynamic_slots' not in self.components:
-            return {}
+            return ({}, 0)
 
         slots_per_domain = {}
 
+        all_available_slots_count = 0
         for domain in self.cluster_details.domains:
             available_slots_per_zone = defaultdict(deque)
-            all_available_slots_count = 0
+            domain_slots = [slot for slot in self.cluster_details.dynamic_slots if slot.domain == domain.domain_name]
 
-            for slot in self.cluster_details.dynamic_slots.values():
-                if slot.domain == domain.domain_name:
-                    for node in self.nodes.nodes_list:
-                        item = (slot, node)
-                        available_slots_per_zone[self.walle_provider.get_datacenter(node).lower()].append(item)
-                        available_slots_per_zone['any'].append(item)
-                        all_available_slots_count += 1
+            for slot_index, slot in enumerate(domain_slots, 1):
+                for node in self.nodes.nodes_list:
+                    host_limit = self._host_dynamic_slot_limit(node)
+                    if host_limit is not None and slot_index > host_limit:
+                        continue
+                    item = (slot, node)
+                    available_slots_per_zone[self.walle_provider.get_datacenter(node).lower()].append(item)
+                    available_slots_per_zone['any'].append(item)
+                    all_available_slots_count += 1
             slots_per_domain[domain.domain_name] = available_slots_per_zone
 
         return (slots_per_domain, all_available_slots_count, )
@@ -170,6 +294,7 @@ class Slice:
         cfg = """\
 tenant=/{domain}/{tenant}
 grpc={grpc}
+kafka_port={kafka_port}
 mbus={mbus}
 ic={ic}
 mon={mon}""".format(
@@ -179,6 +304,7 @@ mon={mon}""".format(
             grpc=slot.grpc,
             mon=slot.mon,
             ic=slot.ic,
+            kafka_port=slot.kafka_port,
         )
 
         escaped_cmd = cfg.encode('unicode_escape').decode()
@@ -218,19 +344,20 @@ mon={mon}""".format(
 
     def _start_slot(self, slot):
         cmd = "sudo sh -c \"if [ -x /sbin/start ]; "\
-            "    then start kikimr-multi slot={slot} tenant=dynamic mbus={mbus} grpc={grpc} mon={mon} ic={ic}; "\
+            "    then start kikimr-multi slot={slot} tenant=dynamic mbus={mbus} grpc={grpc} mon={mon} ic={ic} kafka_port={kafka_port}; "\
             "    else systemctl start kikimr-multi@{slot}; fi\"".format(
                 slot=slot.slot,
                 mbus=slot.mbus,
                 grpc=slot.grpc,
                 mon=slot.mon,
-                ic=slot.ic
+                ic=slot.ic,
+                kafka_port=slot.kafka_port,
             )
         self.nodes.execute_async(self, cmd, check_retcode=False)
 
     def _start_slot_for_tenant(self, slot, tenant, host, node_bind=None):
         cmd = "sudo sh -c \"if [ -x /sbin/start ]; "\
-            "    then start kikimr-multi slot={slot} tenant=/{domain}/{name} mbus={mbus} grpc={grpc} mon={mon} ic={ic}; "\
+            "    then start kikimr-multi slot={slot} tenant=/{domain}/{name} mbus={mbus} grpc={grpc} mon={mon} ic={ic} kafka_port={kafka_port}; "\
             "    else systemctl start kikimr-multi@{slot}; fi\"".format(
                 slot=slot.slot,
                 domain=slot.domain,
@@ -238,7 +365,8 @@ mon={mon}""".format(
                 mbus=slot.mbus,
                 grpc=slot.grpc,
                 mon=slot.mon,
-                ic=slot.ic
+                ic=slot.ic,
+                kafka_port=slot.kafka_port,
             )
         if node_bind is not None:
             cmd += " bindnumanode={bind}".format(bind=node_bind)
@@ -254,7 +382,15 @@ mon={mon}""".format(
         self.nodes.execute_async(cmd, check_retcode=False)
 
     def _start_static(self):
-        self.nodes.execute_async("sudo service kikimr start", check_retcode=True)
+        storage_hosts = self._storage_hosts()
+        storage_host_set = set(storage_hosts)
+        skip_hosts = [node for node in self.nodes.nodes_list if node not in storage_host_set]
+        if skip_hosts:
+            # Static unit only (`kikimr`). Dynnodes are kikimr-multi@<slot> and stay running.
+            # check_retcode=False: stop is idempotent; the unit may already be inactive.
+            self._stop_static_on_hosts(skip_hosts)
+        if storage_hosts:
+            self.nodes.execute_async("sudo service kikimr start", check_retcode=True, nodes=storage_hosts)
 
     def _start_dynamic(self):
         if 'dynamic_slots' in self.components:
@@ -291,7 +427,7 @@ mon={mon}""".format(
                                     if (slot, node) in slots_taken:
                                         continue
                                     slots_taken.add((slot, node))
-                                    if domain.bind_slots_to_numa_nodes and numa_nodes[node] > 0:
+                                    if domain.bind_slots_to_numa_nodes and numa_nodes and numa_nodes[node] > 0:
                                         self._start_slot_for_tenant(
                                             slot,
                                             tenant,
@@ -336,13 +472,16 @@ mon={mon}""".format(
         tasks = self._stop_slot_ret(slot)
         self.nodes._check_async_execution(tasks, False)
 
+    def _stop_static_on_hosts(self, hosts):
+        self.nodes.execute_async("sudo service kikimr stop", check_retcode=False, nodes=hosts)
+
     def _stop_static(self):
-        self.nodes.execute_async("sudo service kikimr stop", check_retcode=False)
+        self._stop_static_on_hosts(self.nodes.nodes_list)
 
     def _stop_dynamic(self):
         if 'dynamic_slots' in self.components:
             tasks = []
-            for slot in self.cluster_details.dynamic_slots.values():
+            for slot in self.cluster_details.dynamic_slots:
                 tasks_slot = self._stop_slot_ret(slot)
                 for task in tasks_slot:
                     tasks.append(task)
@@ -355,15 +494,15 @@ mon={mon}""".format(
             self._stop_static()
 
     def _update_kikimr(self):
-        bin_directory = os.path.dirname(self.configurator.kikimr_bin)
-        self.nodes.copy(self.configurator.kikimr_bin, self.slice_kikimr_path, compressed_path=self.configurator.kikimr_compressed_bin)
+        bin_directory = os.path.dirname(self.bin)
+        self.nodes.copy(self.bin, self.slice_kikimr_path, compressed_path=self.compressed_bin)
         for lib in ['libiconv.so', 'liblibaio-dynamic.so', 'liblibidn-dynamic.so']:
             lib_path = os.path.join(bin_directory, lib)
             if os.path.exists(lib_path):
                 remote_lib_path = os.path.join('/lib', lib)
                 self.nodes.copy(lib_path, remote_lib_path)
 
-    def _update_cfg(self, cfg_path):
+    def _upload_cfg(self, cfg_path):
         self.nodes.copy(cfg_path, self.slice_cfg_path, directory=True)
 
     def _deploy_secrets(self):
@@ -395,6 +534,9 @@ mon={mon}""".format(
         )
 
     def slice_update(self):
+        if self.configurator is None:
+            raise ValueError("Configurator is required for static configuration")
+
         if self.do_clear_logs:
             self._clear_logs()
 
@@ -402,13 +544,19 @@ mon={mon}""".format(
             if 'bin' in self.components.get('kikimr', []):
                 self._update_kikimr()
 
-        self.slice_stop()
-        if 'kikimr' in self.components:
-            if 'cfg' in self.components.get('kikimr', []):
+        if 'kikimr' in self.components and 'cfg' in self.components.get('kikimr', []):
+            if self.v2:
+                try:
+                    self.__config_client.replace_config(self.configurator.static)
+                except config_client.ConfigClientError as e:
+                    raise RuntimeError(f"Failed to config replace cluster: {e}")
+            else:
                 static = self.configurator.create_static_cfg()
-                self._update_cfg(static)
-                self._deploy_secrets()
+                self._upload_cfg(static)
 
+            self._deploy_secrets()
+
+        self.slice_stop()
         self._deploy_slot_configs()
         self.slice_start()
 
@@ -417,6 +565,6 @@ mon={mon}""".format(
         if 'kikimr' in self.components:
             if 'cfg' in self.components.get('kikimr', []):
                 kikimr_cfg = os.path.join(raw_config_path, 'kikimr-static')
-                self._update_cfg(kikimr_cfg)
+                self._upload_cfg(kikimr_cfg)
 
         self.slice_start()

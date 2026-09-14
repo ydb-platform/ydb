@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/core/actorid.h>
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
@@ -32,7 +33,6 @@ private:
     NActors::TActorId SchemeCache;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    NKikimr::NGRpcProxy::V1::IClustersCfgProvider* ClustersCfgProvider = nullptr;
 };
 
 } // namespace NKikimr::NGRpcService::V1

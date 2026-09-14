@@ -1,14 +1,18 @@
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+
+#include <exception>
 
 #include <util/string/cast.h>
 
-namespace NYdb::inline V3 {
+#include <functional>
+
+namespace NYdb::inline Dev {
 
 class TStatus::TImpl {
 public:
@@ -71,7 +75,7 @@ const std::multimap<std::string, std::string>& TStatus::GetResponseMetadata() co
 }
 
 float TStatus::GetConsumedRu() const {
-    return Impl_->Status.ConstInfo.consumed_units();
+    return Impl_->Status.CostInfo.consumed_units();
 }
 
 void TStatus::Out(IOutputStream& out) const {
@@ -101,7 +105,32 @@ bool TStreamPartStatus::EOS() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+template <typename TIssuePredicate>
+bool StatusContainsIssueIf(const TStatus& status, TIssuePredicate&& pred) {
+    for (const auto& top : status.GetIssues()) {
+        const bool walkedToEnd = NYdb::NIssue::WalkThroughIssues(
+            top,
+            false,
+            std::function<bool(const NYdb::NIssue::TIssue&, uint16_t)>(
+                [&](const NYdb::NIssue::TIssue& issue, uint16_t /*level*/) -> bool {
+                    return !static_cast<bool>(pred(issue));
+                }));
+        if (!walkedToEnd) {
+            return true;
+        }
+    }
+    return false;
+}
+} // anonymous namespace
+
 namespace NStatusHelpers {
+
+bool StatusContainsIssueWithCode(const TStatus& status, NYdb::NIssue::TIssueCode code) {
+    return StatusContainsIssueIf(status, [code](const NYdb::NIssue::TIssue& issue) noexcept {
+        return issue.GetCode() == code;
+    });
+}
 
 void ThrowOnError(TStatus status, std::function<void(TStatus)> onSuccess) {
     if (!status.IsSuccess()) {
@@ -119,6 +148,6 @@ void ThrowOnErrorOrPrintIssues(TStatus status) {
     });
 }
 
-}
+} // namespace NStatusHelpers
 
 } // namespace NYdb

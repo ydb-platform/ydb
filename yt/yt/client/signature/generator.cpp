@@ -2,6 +2,8 @@
 
 #include "signature.h"
 
+#include <yt/yt/client/api/public.h>
+
 #include <yt/yt/core/ytree/convert.h>
 
 namespace NYT::NSignature {
@@ -10,56 +12,51 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignaturePtr TSignatureGeneratorBase::Sign(TYsonString data)
+TSignaturePtr ISignatureGenerator::Sign(std::string payload) const
 {
     auto signature = New<TSignature>();
-    signature->Payload_ = std::move(data);
-    Sign(signature);
+    signature->Payload_ = std::move(payload);
+    Resign(signature);
     return signature;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TYsonString& TSignatureGeneratorBase::GetHeader(const TSignaturePtr& signature)
-{
-    return signature->Header_;
-}
+namespace {
 
-std::vector<std::byte>& TSignatureGeneratorBase::GetSignature(const TSignaturePtr& signature)
+struct TDummySignatureGenerator
+    : public ISignatureGenerator
 {
-    return signature->Signature_;
-}
+    void Resign(const TSignaturePtr& /*signature*/) const final
+    { }
+};
 
-////////////////////////////////////////////////////////////////////////////////
-
-class TDummySignatureGenerator
-    : public TSignatureGeneratorBase
+struct TAlwaysThrowingSignatureGenerator
+    : public ISignatureGenerator
 {
-public:
-    void Sign(const TSignaturePtr& signature) override
+    void Resign(const TSignaturePtr& /*signature*/) const final
     {
-        GetHeader(signature) = NYson::TYsonString("DummySignature"_sb);
+        THROW_ERROR_EXCEPTION(NYT::NApi::EErrorCode::SignatureGenerationIsUnsupported,
+            "Signature generation is unsupported");
     }
 };
 
-TSignatureGeneratorBasePtr CreateDummySignatureGenerator()
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+ISignatureGeneratorPtr CreateDummySignatureGenerator()
 {
     return New<TDummySignatureGenerator>();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-class TAlwaysThrowingSignatureGenerator
-    : public TSignatureGeneratorBase
+const ISignatureGeneratorPtr& GetDummySignatureGenerator()
 {
-public:
-    void Sign(const TSignaturePtr& /*signature*/) override
-    {
-        THROW_ERROR_EXCEPTION("Signature generation is unsupported");
-    }
-};
+    static ISignatureGeneratorPtr signatureGenerator = CreateDummySignatureGenerator();
+    return signatureGenerator;
+}
 
-TSignatureGeneratorBasePtr CreateAlwaysThrowingSignatureGenerator()
+ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator()
 {
     return New<TAlwaysThrowingSignatureGenerator>();
 }

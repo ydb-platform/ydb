@@ -38,12 +38,7 @@ namespace NKikimr {
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
-                            VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "%s: DelSst: action# %s timeSpent# %s sstsToDelete# %" PRIu32,
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ActionToStr(action), (finishTime - startTime).ToString().data(),
-                                SstToDelete));
+                    YDB_LOG_CTX_COMP(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: DelSst: action# %s timeSpent# %s sstsToDelete# %" PRIu32, PDiskSignatureForHullDbKey<TKey>().ToString().data(), ActionToStr(action), (finishTime - startTime).ToString().data(), SstToDelete));
                 }
 
                 return action;
@@ -66,6 +61,12 @@ namespace NKikimr {
                     TSstRatioPtr ratio = p.SstPtr->StorageRatio.Get();
                     if (p.Level > 0 && ratio && ratio->CanDeleteSst()) {
                         action = ActDeleteSsts;
+                        if (HullCtx->VCtx->ActorSystem) {
+                            YDB_LOG_INFO_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyDelSst going to delete because of",
+                                {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
+                                {"SST", p},
+                                {"ration", ratio->ToString()});
+                        }
                         Task->DeleteSsts.DeleteSst(p.Level, p.SstPtr);
                         SstToDelete++;
                     }

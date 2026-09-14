@@ -5,11 +5,17 @@
 #include "helpers.h"
 #include "http.h"
 
+#include <yt/cpp/mapreduce/common/abortable_stream.h>
+#include <yt/cpp/mapreduce/common/expected_error_guard.h>
+#include <yt/cpp/mapreduce/common/halting_stream.h>
+
 #include <yt/cpp/mapreduce/interface/config.h>
 
+#include <yt/cpp/mapreduce/interface/error_codes.h>
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 
 #include <yt/yt/core/http/client.h>
 #include <yt/yt/core/http/config.h>
@@ -40,24 +46,24 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
         return {};
     }
 
-    TErrorResponse errorResponse(static_cast<int>(httpCode), requestId);
-
-    auto logAndSetError = [&] (const TString& rawError) {
+    auto logAndSetError = [&] (int code, const TString& rawError) {
         YT_LOG_ERROR("RSP %v - HTTP %v - %v",
             requestId,
             httpCode,
             rawError.data());
-        errorResponse.SetRawError(rawError);
+        return TErrorResponse(TYtError(code, rawError), requestId);
     };
+
 
     switch (httpCode) {
         case NHttp::EStatusCode::TooManyRequests:
-            logAndSetError("request rate limit exceeded");
-            break;
+            return logAndSetError(NClusterErrorCodes::NSecurityClient::RequestQueueSizeLimitExceeded, "request rate limit exceeded");
 
         case NHttp::EStatusCode::InternalServerError:
-            logAndSetError("internal error in proxy " + hostName);
-            break;
+            return logAndSetError(NClusterErrorCodes::NRpc::Unavailable, "internal error in proxy " + hostName);
+
+        case NHttp::EStatusCode::ServiceUnavailable:
+            return logAndSetError(NClusterErrorCodes::NBus::TransportError, "service unavailable");
 
         default: {
             TStringStream httpHeaders;
@@ -72,24 +78,29 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
                 static_cast<int>(httpCode),
                 httpHeaders.Str().data());
 
-            YT_LOG_ERROR("%v",
-                errorString.data());
-
+            TMaybe<TErrorResponse> errorResponse;
             if (auto errorHeader = response->GetHeaders()->Find("X-YT-Error")) {
-                errorResponse.ParseFromJsonError(*errorHeader);
-                if (errorResponse.IsOk()) {
-                    return Nothing();
+                TYtError error;
+                error.ParseFrom(*errorHeader);
+
+                if (error.GetCode() != 0) {
+                    errorResponse.Emplace(std::move(error), requestId);
                 }
-                return errorResponse;
+            } else {
+                errorResponse = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), requestId);
             }
 
-            errorResponse.SetRawError(
-                    errorString + " - X-YT-Error is missing in headers");
-            break;
+            if (errorResponse && TExpectedErrorGuard::IsErrorExpected(*errorResponse)) {
+                YT_LOG_INFO("%v",
+                    errorString.data());
+            } else {
+                YT_LOG_ERROR("%v",
+                    errorString.data());
+            }
+
+            return errorResponse;
         }
     }
-
-    return errorResponse;
 }
 
 void CheckErrorResponse(const TString& hostName, const TString& requestId, const NHttp::IResponsePtr& response)
@@ -117,9 +128,12 @@ public:
         return Request_->GetHttpCode();
     }
 
-    IInputStream* GetResponseStream() override
+    IAbortableInputStream* GetResponseStream() override
     {
-        return Request_->GetResponseStream();
+        if (!Stream_) {
+            Stream_ = NDetail::CreateAbortableInputStreamAdapterFallback(Request_->GetResponseStream());
+        }
+        return Stream_.get();
     }
 
     TString GetResponse() override
@@ -134,6 +148,7 @@ public:
 
 private:
     std::unique_ptr<THttpRequest> Request_;
+    std::unique_ptr<IAbortableInputStream> Stream_;
 };
 
 class TDefaultHttpRequest
@@ -216,11 +231,15 @@ public:
         return static_cast<int>(Response_->GetStatusCode());
     }
 
-    IInputStream* GetResponseStream() override
+    IAbortableInputStream* GetResponseStream() override
     {
         if (!Stream_) {
+            NConcurrency::IAsyncInputStreamPtr asyncStream = NConcurrency::CreateCopyingAdapter(Response_);
+            if (TConfig::Get()->UseHaltingResponse) {
+                asyncStream = NDetail::CreateHaltingAsyncStream(std::move(asyncStream), TConfig::Get()->HaltingResponseBytesLimit);
+            }
             auto stream = std::make_unique<TWrappedStream>(
-                NConcurrency::CreateSyncAdapter(NConcurrency::CreateCopyingAdapter(Response_), NConcurrency::EWaitForStrategy::WaitFor),
+                NDetail::CreateAbortableInputStreamAdapter(std::move(asyncStream)),
                 Response_,
                 Context_.RequestId);
             CheckErrorResponse(Context_.HostName, Context_.RequestId, Response_);
@@ -268,14 +287,24 @@ public:
 
 private:
     class TWrappedStream
-        : public IInputStream
+        : public IAbortableInputStream
     {
     public:
-        TWrappedStream(std::unique_ptr<IInputStream> underlying, NHttp::IResponsePtr response, TString requestId)
+        TWrappedStream(std::unique_ptr<IAbortableInputStream> underlying, NHttp::IResponsePtr response, TString requestId)
             : Underlying_(std::move(underlying))
             , Response_(std::move(response))
             , RequestId_(std::move(requestId))
         { }
+
+        void Abort() override
+        {
+            Underlying_->Abort();
+        }
+
+        bool IsAborted() const override
+        {
+            return Underlying_->IsAborted();
+        }
 
     protected:
         size_t DoRead(void* buf, size_t len) override
@@ -312,8 +341,9 @@ private:
         TMaybe<TErrorResponse> ParseError(const NHttp::THeadersPtr& headers)
         {
             if (auto errorHeader = headers->Find("X-YT-Error")) {
-                TErrorResponse errorResponse(static_cast<int>(Response_->GetStatusCode()), RequestId_);
-                errorResponse.ParseFromJsonError(*errorHeader);
+                TYtError error;
+                error.ParseFrom(*errorHeader);
+                TErrorResponse errorResponse(std::move(error), RequestId_);
                 if (errorResponse.IsOk()) {
                     return Nothing();
                 }
@@ -323,7 +353,7 @@ private:
         }
 
     private:
-        std::unique_ptr<IInputStream> Underlying_;
+        std::unique_ptr<IAbortableInputStream> Underlying_;
         NHttp::IResponsePtr Response_;
         TString RequestId_;
     };
@@ -331,7 +361,7 @@ private:
 private:
     TCoreRequestContext Context_;
     NHttp::IResponsePtr Response_;
-    std::unique_ptr<IInputStream> Stream_;
+    std::unique_ptr<IAbortableInputStream> Stream_;
 };
 
 class TCoreHttpRequest
@@ -353,7 +383,7 @@ public:
     IHttpResponsePtr Finish() override
     {
         WrappedStream_.Flush();
-        auto response = ActiveRequest_->Finish().Get().ValueOrThrow();
+        auto response = ActiveRequest_->Finish().BlockingGet().ValueOrThrow();
         return std::make_unique<TCoreHttpResponse>(std::move(Context_), std::move(response));
     }
 
@@ -465,10 +495,12 @@ public:
         if (useTLS) {
             auto httpsConfig = NYT::New<NYT::NHttps::TClientConfig>();
             httpsConfig->MaxIdleConnections = config->ConnectionPoolSize;
+            httpsConfig->DnsResolveOptions = GetDnsResolveOptions(config);
             Client_ = NHttps::CreateClient(httpsConfig, Poller_);
         } else {
             auto httpConfig = NYT::New<NYT::NHttp::TClientConfig>();
             httpConfig->MaxIdleConnections = config->ConnectionPoolSize;
+            httpConfig->DnsResolveOptions = GetDnsResolveOptions(config);
             Client_ = NHttp::CreateClient(httpConfig, Poller_);
         }
     }
@@ -497,8 +529,8 @@ public:
 
             auto activeRequest = StartRequestImpl(header.GetMethod(), url, headers);
 
-            activeRequest->GetRequestStream()->Write(TSharedRef::FromString(parametersStr)).Get().ThrowOnError();
-            response = activeRequest->Finish().Get().ValueOrThrow();
+            activeRequest->GetRequestStream()->Write(TSharedRef::FromString(parametersStr)).BlockingGet().ThrowOnError();
+            response = activeRequest->Finish().BlockingGet().ValueOrThrow();
         } else {
             auto bodyRef = TSharedRef::FromString(TString(body ? *body : ""));
             bool includeParameters = true;
@@ -557,11 +589,11 @@ private:
     NHttp::IResponsePtr RequestImpl(const TString& method, const TString& url, const NHttp::THeadersPtr& headers, const TSharedRef& body)
     {
         if (method == "GET") {
-            return Client_->Get(url, headers).Get().ValueOrThrow();
+            return Client_->Get(url, headers).BlockingGet().ValueOrThrow();
         } else if (method == "POST") {
-            return Client_->Post(url, body, headers).Get().ValueOrThrow();
+            return Client_->Post(url, body, headers).BlockingGet().ValueOrThrow();
         } else if (method == "PUT") {
-            return Client_->Put(url, body, headers).Get().ValueOrThrow();
+            return Client_->Put(url, body, headers).BlockingGet().ValueOrThrow();
         } else {
             YT_LOG_FATAL("Unsupported http method (Method: %v, Url: %v)",
                 method,
@@ -572,9 +604,9 @@ private:
     NHttp::IActiveRequestPtr StartRequestImpl(const TString& method, const TString& url, const NHttp::THeadersPtr& headers)
     {
         if (method == "POST") {
-            return Client_->StartPost(url, headers).Get().ValueOrThrow();
+            return Client_->StartPost(url, headers).BlockingGet().ValueOrThrow();
         } else if (method == "PUT") {
-            return Client_->StartPut(url, headers).Get().ValueOrThrow();
+            return Client_->StartPut(url, headers).BlockingGet().ValueOrThrow();
         } else {
             YT_LOG_FATAL("Unsupported http method (Method: %v, Url: %v)",
                 method,

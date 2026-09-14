@@ -1,4 +1,5 @@
 #include "control.h"
+
 #include <ydb/core/tx/columnshard/bg_tasks/protos/data.pb.h>
 
 namespace NKikimr::NOlap::NBackground {
@@ -32,4 +33,4 @@ void ISessionLogicControl::SerializeToProto(TProto& proto) const {
     proto.SetSessionControlDescription(SerializeToString());
 }
 
-}
+}   // namespace NKikimr::NOlap::NBackground

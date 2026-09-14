@@ -8,4 +8,15 @@ namespace NKafka {
     static const TString RETENTION_MS_CONFIG_NAME = "retention.ms";
     static const TString RETENTION_BYTES_CONFIG_NAME = "retention.bytes";
     static const TString COMPRESSION_TYPE = "compression.type";
+    static const TString CLEANUP_POLICY = "cleanup.policy";
+    static const TString MESSAGE_TIMESTAMP_TYPE = "message.timestamp.type";
+    static const TString MESSAGE_TIMESTAMP_LOG_APPEND = "LogAppendTime";
+    static const TString MESSAGE_TIMESTAMP_CREATE_TIME = "CreateTime";
+    constexpr ui32 MAX_SESSION_TIMEOUT_MS = 300000;
+
+
+    static const ui64 TRANSACTIONAL_ID_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+    static const i64 NO_PRODUCER_ID = -1;
+    static const i16 NO_PRODUCER_EPOCH = -1;
 }

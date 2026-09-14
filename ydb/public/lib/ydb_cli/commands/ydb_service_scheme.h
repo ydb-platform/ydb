@@ -6,19 +6,15 @@
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
-#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
-#include <ydb-cpp-sdk/client/draft/ydb_view.h>
-#include <ydb-cpp-sdk/client/coordination/coordination.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 
 namespace NYdb {
 
 namespace NTopic {
-struct TDescribeConsumerResult;
-} // namespace NTopic
+    class TConsumerDescription;
+}
+
 namespace NConsoleClient {
 
 class TCommandScheme : public TClientCommandTree {
@@ -30,7 +26,7 @@ class TCommandMakeDirectory : public TYdbOperationCommand, public TCommandWithPa
 public:
     TCommandMakeDirectory();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 
@@ -38,7 +34,7 @@ class TCommandRemoveDirectory : public TYdbOperationCommand, public TCommandWith
 public:
     TCommandRemoveDirectory();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -46,14 +42,8 @@ private:
     TMaybe<ERecursiveRemovePrompt> Prompt;
 };
 
-void PrintAllPermissions(
-    const std::string& owner,
-    const std::vector<NScheme::TPermissions>& permissions,
-    const std::vector<NScheme::TPermissions>& effectivePermissions
-);
-
 // Pretty print consumer info ('scheme describe' and 'topic consumer describe' commands)
-int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& description, bool withPartitionsStats);
+int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& description, bool withPartitionsStats, IOutputStream& out = Cout);
 
 template <typename TCommand, typename TValue>
 using TPrettyPrinter = int(TCommand::*)(const TValue&) const;
@@ -69,7 +59,7 @@ static int PrintDescription(TCommand* self, EDataFormat format, const TValue& va
                  << "Use \"--format proto-json-base64\" option instead." << Endl;
             [[fallthrough]];
         case EDataFormat::ProtoJsonBase64:
-            return PrintProtoJsonBase64(TProtoAccessor::GetProto(value));
+            return PrintProtoJsonBase64(NDraft::TProtoAccessor::GetProto(value), Cout);
         default:
             throw TMisuseException() << "This command doesn't support " << format << " output format";
     }
@@ -82,44 +72,12 @@ public:
     TCommandDescribe();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
+    IOutputStream* OutputStream;
+
 private:
-    int PrintPathResponse(TDriver& driver, const NScheme::TDescribePathResult& result);
-    int DescribeEntryDefault(NScheme::TSchemeEntry entry);
-    int DescribeTable(TDriver& driver);
-    int DescribeColumnTable(TDriver& driver);
-    int PrintTableResponsePretty(const NTable::TTableDescription& tableDescription) const;
-    void WarnAboutTableOptions();
-
-    int DescribeTopic(TDriver& driver);
-    int PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& settings) const;
-
-    int DescribeCoordinationNode(const TDriver& driver);
-    int PrintCoordinationNodeResponsePretty(const NYdb::NCoordination::TNodeDescription& result) const;
-
-    int DescribeReplication(const TDriver& driver);
-    int PrintReplicationResponsePretty(const NYdb::NReplication::TDescribeReplicationResult& result) const;
-
-    int DescribeView(const TDriver& driver);
-    int PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const;
-
-    int TryTopicConsumerDescribeOrFail(NYdb::TDriver& driver, const NScheme::TDescribePathResult& result);
-    std::pair<TString, TString> ParseTopicConsumer() const;
-    int PrintConsumerResponsePretty(const NYdb::NTopic::TConsumerDescription& description) const;
-
-    template<typename TDescriptionType>
-    void PrintPermissionsIfNeeded(const TDescriptionType& description) const {
-        if (ShowPermissions) {
-            Cout << Endl;
-            PrintAllPermissions(
-                description.GetOwner(),
-                description.GetPermissions(),
-                description.GetEffectivePermissions()
-            );
-        }
-    }
-
     // Common options
     bool ShowPermissions = false;
     // Table options
@@ -134,6 +92,7 @@ public:
     TCommandList();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -153,6 +112,7 @@ public:
     TCommandPermissionGrant();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -165,6 +125,7 @@ public:
     TCommandPermissionRevoke();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -177,6 +138,7 @@ public:
     TCommandPermissionSet();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -189,6 +151,7 @@ public:
     TCommandChangeOwner();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -199,7 +162,7 @@ class TCommandPermissionClear : public TYdbOperationCommand, public TCommandWith
 public:
     TCommandPermissionClear();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 
@@ -207,7 +170,7 @@ class TCommandPermissionSetInheritance : public TYdbOperationCommand, public TCo
 public:
     TCommandPermissionSetInheritance();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 
@@ -215,7 +178,7 @@ class TCommandPermissionClearInheritance : public TYdbOperationCommand, public T
 public:
     TCommandPermissionClearInheritance();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 
@@ -223,7 +186,7 @@ class TCommandPermissionList : public TYdbOperationCommand, public TCommandWithP
 public:
     TCommandPermissionList();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 

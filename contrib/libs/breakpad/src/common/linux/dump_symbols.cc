@@ -1,5 +1,4 @@
-// Copyright (c) 2011 Google Inc.
-// All rights reserved.
+// Copyright 2011 Google LLC
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -11,7 +10,7 @@
 // copyright notice, this list of conditions and the following disclaimer
 // in the documentation and/or other materials provided with the
 // distribution.
-//     * Neither the name of Google Inc. nor the names of its
+//     * Neither the name of Google LLC nor the names of its
 // contributors may be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
@@ -47,8 +46,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <zlib.h>
 
-#include <iostream>
 #include <set>
 #include <string>
 #include <utility>
@@ -283,6 +282,55 @@ class DumperLineToModule: public DwarfCUToModule::LineToModuleHandler {
 };
 
 template<typename ElfClass>
+bool IsCompressedHeader(const typename ElfClass::Shdr* section) {
+  return (section->sh_flags & SHF_COMPRESSED) != 0;
+}
+
+template<typename ElfClass>
+uint32_t GetCompressionHeader(
+    typename ElfClass::Chdr& compression_header,
+    const uint8_t* content, uint64_t size) {
+  const typename ElfClass::Chdr* header =
+      reinterpret_cast<const typename ElfClass::Chdr *>(content);
+
+  if (size < sizeof (*header)) {
+    return 0;
+  }
+
+  compression_header = *header;
+  return sizeof (*header);
+}
+
+std::pair<uint8_t *, uint64_t> UncompressSectionContents(
+    const uint8_t* compressed_buffer, uint64_t compressed_size, uint64_t uncompressed_size) {
+  z_stream stream;
+  memset(&stream, 0, sizeof stream);
+
+  stream.avail_in = compressed_size;
+  stream.avail_out = uncompressed_size;
+  stream.next_in = const_cast<uint8_t *>(compressed_buffer);
+
+  google_breakpad::scoped_array<uint8_t> uncompressed_buffer(
+    new uint8_t[uncompressed_size]);
+
+  int status = inflateInit(&stream);
+  while (stream.avail_in != 0 && status == Z_OK) {
+    stream.next_out =
+      uncompressed_buffer.get() + uncompressed_size - stream.avail_out;
+
+    if ((status = inflate(&stream, Z_FINISH)) != Z_STREAM_END) {
+      break;
+    }
+
+    status = inflateReset(&stream);
+  }
+
+  return inflateEnd(&stream) != Z_OK || status != Z_OK || stream.avail_out != 0
+    ? std::make_pair(nullptr, 0)
+    : std::make_pair(uncompressed_buffer.release(), uncompressed_size);
+}
+
+template<typename ElfClass>
 bool LoadDwarf(const string& dwarf_filename,
                const typename ElfClass::Ehdr* elf_header,
                const bool big_endian,
@@ -312,7 +360,31 @@ bool LoadDwarf(const string& dwarf_filename,
                   section->sh_name;
     const uint8_t* contents = GetOffset<ElfClass, uint8_t>(elf_header,
                                                            section->sh_offset);
-    file_context.AddSectionToSectionMap(name, contents, section->sh_size);
+    uint64_t size = section->sh_size;
+
+    if (!IsCompressedHeader<ElfClass>(section)) {
+      file_context.AddSectionToSectionMap(name, contents, size);
+      continue;
+    }
+
+    typename ElfClass::Chdr chdr;
+
+    uint32_t compression_header_size =
+      GetCompressionHeader<ElfClass>(chdr, contents, size);
+
+    if (compression_header_size == 0 || chdr.ch_size == 0) {
+      continue;
+    }
+
+    contents += compression_header_size;
+    size -= compression_header_size;
+
+    std::pair<uint8_t *, uint64_t> uncompressed =
+      UncompressSectionContents(contents, size, chdr.ch_size);
+
+    if (uncompressed.first != nullptr && uncompressed.second != 0) {
+      file_context.AddManagedSectionToSectionMap(name, uncompressed.first, uncompressed.second);
+    }
   }
 
   // .debug_ranges and .debug_rnglists reader
@@ -423,9 +495,42 @@ bool LoadDwarfCFI(const string& dwarf_filename,
 
   google_breakpad::CallFrameInfo::Reporter dwarf_reporter(dwarf_filename,
                                                        section_name);
-  google_breakpad::CallFrameInfo parser(cfi, cfi_size,
-                                     &byte_reader, &handler, &dwarf_reporter,
-                                     eh_frame);
+  if (!IsCompressedHeader<ElfClass>(section)) {
+    google_breakpad::CallFrameInfo parser(cfi, cfi_size,
+                                          &byte_reader, &handler,
+                                          &dwarf_reporter, eh_frame);
+    parser.Start();
+    return true;
+  }
+
+  typename ElfClass::Chdr chdr;
+  uint32_t compression_header_size =
+    GetCompressionHeader<ElfClass>(chdr, cfi, cfi_size);
+
+  if (compression_header_size == 0 || chdr.ch_size == 0) {
+    fprintf(stderr, "%s: decompression failed at header\n",
+            dwarf_filename.c_str());
+    return false;
+  }
+  if (compression_header_size > cfi_size) {
+    fprintf(stderr, "%s: decompression error, compression_header too large\n",
+            dwarf_filename.c_str());
+    return false;
+  }
+
+  cfi += compression_header_size;
+  cfi_size -= compression_header_size;
+
+  std::pair<uint8_t *, uint64_t> uncompressed =
+    UncompressSectionContents(cfi, cfi_size, chdr.ch_size);
+
+  if (uncompressed.first == nullptr || uncompressed.second == 0) {
+    fprintf(stderr, "%s: decompression failed\n", dwarf_filename.c_str());
+    return false;
+  }
+  google_breakpad::CallFrameInfo parser(uncompressed.first, uncompressed.second,
+                                        &byte_reader, &handler, &dwarf_reporter,
+                                        eh_frame);
   parser.Start();
   return true;
 }
@@ -952,7 +1057,8 @@ template<typename ElfClass>
 bool InitModuleForElfClass(const typename ElfClass::Ehdr* elf_header,
                            const string& obj_filename,
                            const string& obj_os,
-                           scoped_ptr<Module>& module) {
+                           scoped_ptr<Module>& module,
+                           bool enable_multiple_field) {
   PageAllocator allocator;
   wasteful_vector<uint8_t> identifier(&allocator, kDefaultBuildIdSize);
   if (!FileID::ElfFileIdentifierFromMappedFile(elf_header, identifier)) {
@@ -981,7 +1087,8 @@ bool InitModuleForElfClass(const typename ElfClass::Ehdr* elf_header,
   // This is just the raw Build ID in hex.
   string code_id = FileID::ConvertIdentifierToString(identifier);
 
-  module.reset(new Module(name, obj_os, architecture, id, code_id));
+  module.reset(new Module(name, obj_os, architecture, id, code_id,
+                          enable_multiple_field));
 
   return true;
 }
@@ -998,8 +1105,8 @@ bool ReadSymbolDataElfClass(const typename ElfClass::Ehdr* elf_header,
   *out_module = NULL;
 
   scoped_ptr<Module> module;
-  if (!InitModuleForElfClass<ElfClass>(elf_header, obj_filename, obj_os,
-                                       module)) {
+  if (!InitModuleForElfClass<ElfClass>(elf_header, obj_filename, obj_os, module,
+                                       options.enable_multiple_field)) {
     return false;
   }
 
@@ -1111,14 +1218,14 @@ bool WriteSymbolFileHeader(const string& load_path,
   if (elfclass == ELFCLASS32) {
     if (!InitModuleForElfClass<ElfClass32>(
         reinterpret_cast<const Elf32_Ehdr*>(elf_header), obj_file, obj_os,
-        module)) {
+        module, /*enable_multiple_field=*/false)) {
       fprintf(stderr, "Failed to load ELF module: %s\n", obj_file.c_str());
       return false;
     }
   } else if (elfclass == ELFCLASS64) {
     if (!InitModuleForElfClass<ElfClass64>(
         reinterpret_cast<const Elf64_Ehdr*>(elf_header), obj_file, obj_os,
-        module)) {
+        module, /*enable_multiple_field=*/false)) {
       fprintf(stderr, "Failed to load ELF module: %s\n", obj_file.c_str());
       return false;
     }

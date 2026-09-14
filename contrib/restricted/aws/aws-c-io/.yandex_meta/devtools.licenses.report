@@ -31,18 +31,17 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     Custom-Oasis-Pkcs11  2661c322534a1eac3a81a0e2c173c27e
+KEEP     Public-Domain        036b6be51c84bc54e82d1dc5d9f297f2
 BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
+    License text:
+        The source/pkcs11/v2.40/pkcs11.h header file is based on Public Domain content from https://github.com/latchset/pkcs11-headers
     Scancode info:
-        Original SPDX id: LicenseRef-scancode-oasis-ipr-policy-2014
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/oasis-ipr-policy-2014.LICENSE, https://www.oasis-open.org/policies-guidelines/ipr
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 99.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        source/pkcs11/v2.40/pkcs11.h [2:5]
-        source/pkcs11/v2.40/pkcs11f.h [2:5]
-        source/pkcs11/v2.40/pkcs11t.h [2:5]
+        NOTICE [5:5]
 
 KEEP     Apache-2.0           2b42edef8fa55315f34f2370b4715ca9
 BELONGS ya.make
@@ -56,18 +55,29 @@ FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LI
     Files with this license:
         LICENSE [2:202]
 
-KEEP     Custom-Oasis-Pkcs11  34e6010c1f019f721ac79740e9f0a963
+KEEP     Public-Domain        3049c5f7a0e142a3ee62eb098a0987ea
 BELONGS ya.make
     License text:
-        FITNESS FOR A PARTICULAR PURPOSE. OASIS AND ITS MEMBERS WILL NOT BE LIABLE FOR
-        ANY DIRECT, INDIRECT, SPECIAL OR CONSEQUENTIAL DAMAGES ARISING OUT OF ANY USE
+        /* This file is in the Public Domain. */
     Scancode info:
-        Original SPDX id: LicenseRef-scancode-warranty-disclaimer
-        Score           : 19.35
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
         Match type      : TEXT
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/warranty-disclaimer.LICENSE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        THIRD-PARTY-LICENSES.txt [29:30]
+        source/pkcs11/v2.40/pkcs11.h [1:1]
+
+KEEP     Public-Domain        3483f96bb9a2043f114ebeb1ec77ead5
+BELONGS ya.make
+    License text:
+        /* This file is based on: https://github.com/latchset/pkcs11-headers/blob/main/public-domain/2.40/pkcs11.h */
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        source/pkcs11/v2.40/pkcs11.h [2:2]
 
 KEEP     Apache-2.0           43f57e875cdc02e8385ff667f85d702e
 BELONGS ya.make
@@ -117,20 +127,24 @@ BELONGS ya.make
         Match type      : TAG
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
+        include/aws/io/async_stream.h [3:3]
         include/aws/io/channel.h [5:5]
         include/aws/io/channel_bootstrap.h [6:6]
         include/aws/io/event_loop.h [6:6]
         include/aws/io/exports.h [6:6]
         include/aws/io/file_utils.h [6:6]
+        include/aws/io/future.h [3:3]
         include/aws/io/host_resolver.h [5:5]
         include/aws/io/io.h [6:6]
         include/aws/io/logging.h [6:6]
         include/aws/io/message_pool.h [5:5]
+        include/aws/io/pem.h [6:6]
         include/aws/io/pipe.h [6:6]
         include/aws/io/pkcs11.h [5:5]
         include/aws/io/private/pem_utils.h [6:6]
         include/aws/io/private/pki_utils.h [5:5]
         include/aws/io/private/tls_channel_handler_shared.h [5:5]
+        include/aws/io/private/tracing.h [6:6]
         include/aws/io/retry_strategy.h [5:5]
         include/aws/io/shared_library.h [6:6]
         include/aws/io/socket.h [5:5]
@@ -140,20 +154,21 @@ BELONGS ya.make
         include/aws/io/tls_channel_handler.h [5:5]
         include/aws/io/uri.h [5:5]
         source/alpn_handler.c [3:3]
+        source/async_stream.c [3:3]
         source/bsd/kqueue_event_loop.c [3:3]
         source/channel.c [3:3]
         source/channel_bootstrap.c [3:3]
         source/event_loop.c [3:3]
         source/exponential_backoff_retry_strategy.c [3:3]
+        source/future.c [3:3]
         source/host_resolver.c [3:3]
         source/io.c [3:3]
         source/linux/epoll_event_loop.c [3:3]
         source/message_pool.c [3:3]
-        source/pem_utils.c [3:3]
+        source/pem.c [3:3]
         source/pkcs11_lib.c [3:3]
         source/pkcs11_private.h [6:6]
         source/pkcs11_tls_op_handler.c [3:3]
-        source/pki_utils.c [3:3]
         source/posix/host_resolver.c [3:3]
         source/posix/pipe.c [3:3]
         source/posix/shared_library.c [3:3]
@@ -161,22 +176,13 @@ BELONGS ya.make
         source/retry_strategy.c [3:3]
         source/s2n/s2n_tls_channel_handler.c [3:3]
         source/socket_channel_handler.c [3:3]
+        source/socket_shared.c [3:3]
         source/standard_retry_strategy.c [3:3]
         source/statistics.c [3:3]
         source/stream.c [3:3]
         source/tls_channel_handler.c [3:3]
         source/tls_channel_handler_shared.c [3:3]
-
-KEEP     Custom-Oasis-Pkcs11  e561d19ebbe9cbf3e19e2ad68aca5ade
-BELONGS ya.make
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-ecma-documentation
-        Score           : 93.43
-        Match type      : TEXT
-        Links           : http://www.ecma-international.org/publications/DISCLAIMER.pdf, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/ecma-documentation.LICENSE
-    Files with this license:
-        THIRD-PARTY-LICENSES.txt [10:29]
+        source/tracing.c [3:3]
 
 SKIP     LicenseRef-scancode-generic-cla ee24fdc60600747c7d12c32055b0011d
 BELONGS ya.make

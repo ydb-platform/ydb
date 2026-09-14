@@ -21,8 +21,8 @@ TTableSchemaPtr ToLatestTimestampSchema(const TTableSchemaPtr& schema)
 
     return New<TTableSchema>(
         std::move(columns),
-        schema->GetStrict(),
-        schema->GetUniqueKeys(),
+        schema->IsStrict(),
+        schema->IsUniqueKeys(),
         schema->GetSchemaModification(),
         schema->DeletedColumns());
 }
@@ -32,7 +32,9 @@ TColumnFilter ToLatestTimestampColumnFilter(
     const TTimestampReadOptions& timestampReadOptions,
     int columnCount)
 {
-    YT_ASSERT(!timestampReadOptions.TimestampColumnMapping.empty());
+    if (timestampReadOptions.TimestampColumnMapping.empty()) {
+        return columnFilter;
+    }
 
     TColumnFilter::TIndexes indexes;
 

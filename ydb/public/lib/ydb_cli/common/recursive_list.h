@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <util/generic/vector.h>
 
@@ -12,6 +12,7 @@ struct TRecursiveListSettings {
 
     FLUENT_SETTING_DEFAULT(NScheme::TListDirectorySettings, ListDirectorySettings, {});
     FLUENT_SETTING_DEFAULT(bool, SkipSys, true);
+    FLUENT_SETTING_DEFAULT(bool, SkipOldSecrets, true);
     FLUENT_SETTING_DEFAULT(TFilterOp, Filter, &NopFilter);
 
 private:

@@ -1,5 +1,5 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/tx/sequenceshard/public/events.h>
@@ -291,19 +291,24 @@ public:
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
                 .IsResolved()
-                .NotDeleted()
-                .IsCommonSensePath();
+                .NotDeleted();
 
             if (checks) {
-                if (parent->IsTable()) {
+                if (parent.Parent()->IsTableIndex()) {
+                    checks.IsInsideTableIndexPath()
+                        .IsUnderDeleting()
+                        .IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                } else if (parent->IsTable()) {
                     // allow immediately inside a normal table
                     if (parent.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                     }
+                    checks.IsCommonSensePath();
                 } else {
                     checks
                         .NotUnderDeleting()
-                        .IsLikeDirectory();
+                        .IsLikeDirectory()
+                        .IsCommonSensePath();
                 }
             }
 

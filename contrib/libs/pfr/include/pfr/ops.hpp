@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2023 Antony Polukhin
+// Copyright (c) 2016-2025 Antony Polukhin
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -8,6 +8,8 @@
 #pragma once
 
 #include <pfr/detail/config.hpp>
+
+#if !defined(PFR_USE_MODULES) || defined(PFR_INTERFACE_UNIT)
 
 #include <pfr/detail/detectors.hpp>
 #include <pfr/ops_fields.hpp>
@@ -40,13 +42,13 @@ namespace detail {
 ///////////////////// Helper typedefs that are used by all the ops
     template <template <class, class> class Detector, class T, class U>
     using enable_not_comp_base_t = std::enable_if_t<
-        not_appliable<Detector, T const&, U const&>::value,
+        not_applicable<Detector, T const&, U const&>::value,
         bool
     >;
 
     template <template <class, class> class Detector, class T, class U>
     using enable_comp_base_t = std::enable_if_t<
-        !not_appliable<Detector, T const&, U const&>::value,
+        !not_applicable<Detector, T const&, U const&>::value,
         bool
     >;
 ///////////////////// std::enable_if_t like functions that enable only if types do not support operation
@@ -59,7 +61,7 @@ namespace detail {
     template <class T, class U> using enable_not_ge_comp_t = enable_not_comp_base_t<comp_ge_detector, T, U>;
 
     template <class T> using enable_not_hashable_t = std::enable_if_t<
-        not_appliable<hash_detector, const T&, const T&>::value,
+        not_applicable<hash_detector, const T&, const T&>::value,
         std::size_t
     >;
 ///////////////////// std::enable_if_t like functions that enable only if types do support operation
@@ -72,11 +74,12 @@ namespace detail {
     template <class T, class U> using enable_ge_comp_t = enable_comp_base_t<comp_ge_detector, T, U>;
 
     template <class T> using enable_hashable_t = std::enable_if_t<
-        !not_appliable<hash_detector, const T&, const T&>::value,
+        !not_applicable<hash_detector, const T&, const T&>::value,
         std::size_t
     >;
 } // namespace detail
 
+PFR_BEGIN_MODULE_EXPORT
 
 /// \brief Compares lhs and rhs for equality using their own comparison and conversion operators; if no operators available returns \forcedlink{eq_fields}(lhs, rhs).
 ///
@@ -182,6 +185,10 @@ constexpr detail::enable_hashable_t<T> hash_value(const T& value) {
     return std::hash<T>{}(value);
 }
 
+PFR_END_MODULE_EXPORT
+
 } // namespace pfr
+
+#endif  // #if !defined(PFR_USE_MODULES) || defined(PFR_INTERFACE_UNIT)
 
 #endif // PFR_OPS_HPP

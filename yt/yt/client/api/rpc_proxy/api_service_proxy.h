@@ -64,6 +64,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetTablePivotKeys);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CreateTableBackup);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RestoreTableBackup);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, TransferBundleResources);
 
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, LookupRows);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, VersionedLookupRows);
@@ -83,13 +84,14 @@ public:
 
     // Chaos
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterReplicationCard);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingChaosLease);
 
     // Queues
-    // COMPAT(nadya73): For compatability with old versions of clients.
+    // COMPAT(nadya73): For compatibility with old versions of clients.
     DEFINE_RPC_PROXY_METHOD_GENERIC(AdvanceConsumer, NRpcProxy::NProto::TReqAdvanceQueueConsumer, NRpcProxy::NProto::TRspAdvanceQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AdvanceQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullQueue);
-    // COMPAT(nadya73): For compatability with old versions of clients.
+    // COMPAT(nadya73): For compatibility with old versions of clients.
     DEFINE_RPC_PROXY_METHOD_GENERIC(PullConsumer, NRpcProxy::NProto::TReqPullQueueConsumer, NRpcProxy::NProto::TRspPullQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PullQueueConsumer);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RegisterQueueConsumer);
@@ -112,20 +114,28 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PatchOperationSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetOperation);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListOperations);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListOperationEvents);
 
     // Jobs
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListJobs);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListJobTraces);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJob);
+
+    // Operations
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckOperationPermission);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, DumpJobContext);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobInput,
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobInputPaths);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobStderr);
-    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobTrace);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobTrace,
+        .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobFailContext);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AbandonJob);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PollJobShell);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RunJobShellCommand,
+        .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AbortJob);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, DumpJobProxyLog);
 
@@ -133,6 +143,9 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ReadFile,
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteFile,
+        .SetStreamingEnabled(true));
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PartitionFile);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ReadFilePartition,
         .SetStreamingEnabled(true));
 
     // Journals
@@ -149,6 +162,8 @@ public:
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetColumnarStatistics);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PartitionTables);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ReadTablePartition,
+        .SetStreamingEnabled(true));
 
     // File caching
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetFileFromCache);
@@ -162,6 +177,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, BuildSnapshot);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ExitReadOnly);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, MasterExitReadOnly);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ResetDynamicallyPropagatedMasterCells);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, DiscombobulateNonvotingPeers);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GCCollect);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, SuspendCoordinator);
@@ -179,6 +195,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RequestRestart);
 
     // Security
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetCurrentUser);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AddMember);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RemoveMember);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckPermission);
@@ -195,6 +212,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PausePipeline);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetPipelineState);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetFlowView);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FlowExecute);
 
     // Query tracker
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartQuery);
@@ -205,11 +223,20 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ListQueries);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AlterQuery);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetQueryTrackerInfo);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetQueryDeclaredParametersInfo);
 
     // Distributed table client
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartDistributedWriteSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingDistributedWriteSession);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishDistributedWriteSession);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteTableFragment,
+        .SetStreamingEnabled(true));
+
+    // Distributed file client
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteFileFragment,
         .SetStreamingEnabled(true));
 
     // Shuffle service

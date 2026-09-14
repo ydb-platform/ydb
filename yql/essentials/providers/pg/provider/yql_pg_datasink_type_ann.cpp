@@ -9,15 +9,17 @@
 
 #include <yql/essentials/utils/log/log.h>
 
+#include <utility>
+
 namespace NYql {
 
 using namespace NNodes;
 
-class TPgDataSinkTypeAnnotationTransformer : public TVisitorTransformerBase {
+class TPgDataSinkTypeAnnotationTransformer: public TVisitorTransformerBase {
 public:
-    TPgDataSinkTypeAnnotationTransformer(TPgState::TPtr state)
+    explicit TPgDataSinkTypeAnnotationTransformer(TPgState::TPtr state)
         : TVisitorTransformerBase(true)
-        , State_(state)
+        , State_(std::move(state))
     {
         using TSelf = TPgDataSinkTypeAnnotationTransformer;
         AddHandler({TCoCommit::CallableName()}, Hndl(&TSelf::HandleCommit));

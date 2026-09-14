@@ -1,28 +1,34 @@
 #!/usr/bin/env python3
 
-import ydb
-import configparser
 import os
+import sys
+import time
 
-# Load configuration
-dir = os.path.dirname(__file__)
-config = configparser.ConfigParser()
-config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
-config.read(config_file_path)
+import ydb
+from ydb_wrapper import YDBWrapper
 
-DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
-DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
+TESTS_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'tests'))
+if TESTS_DIR not in sys.path:
+    sys.path.insert(0, TESTS_DIR)
+from error_type_utils import (  # noqa: E402
+    DEFAULT_PREFETCH_MAX_WORKERS,
+    DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH,
+    BACKFILL_FETCH_TIMEOUT_SEC,
+    BACKFILL_FETCH_MAX_ATTEMPTS,
+    BACKFILL_PREFETCH_RETRY_PASSES,
+    build_error_type_csv_for_storage,
+    failure_row_from_ydb,
+    get_debug_texts_from_cache,
+    is_failure_like_status,
+    prefetch_text_cache_for_failure_rows,
+    source_has_tag,
+)
 
 
-def drop_table(session, table_path):
-    print(f"> Dropping table if exists: '{table_path}'")
-    session.execute_scheme(f"DROP TABLE IF EXISTS `{table_path}`;")
-
-
-def create_test_history_fast_table(session, table_path):
+def create_test_history_fast_table(ydb_wrapper, table_path):
     print(f"> Creating table: '{table_path}'")
-    session.execute_scheme(f"""
-        CREATE TABLE `{table_path}` (
+    create_sql = f"""
+        CREATE TABLE IF NOT EXISTS  `{table_path}` (
             `build_type` Utf8 NOT NULL,
             `job_name` Utf8 NOT NULL,
             `job_id` Uint64,
@@ -37,115 +43,199 @@ def create_test_history_fast_table(session, table_path):
             `duration` Double,
             `status` Utf8,
             `status_description` Utf8,
+            `error_type` Utf8,
             `owners` Utf8,
-            PRIMARY KEY (`full_name`, `run_timestamp`, `job_name`, `branch`, `build_type`, test_id)
+            `log` Utf8,
+            `logsdir` Utf8,
+            `stderr` Utf8,
+            `stdout` Utf8,
+            PRIMARY KEY (`run_timestamp`, `build_type`, `branch`, `full_name`, `job_name`, `test_id`)
         )
-        PARTITION BY HASH(run_timestamp)
+        PARTITION BY HASH(`run_timestamp`, `build_type`, `branch`, `full_name`)
         WITH (
         STORE = COLUMN,
-        TTL = Interval("P7D") ON run_timestamp
+        TTL = Interval("P60D") ON run_timestamp
         )
-    """)
+    """
+    ydb_wrapper.create_table(table_path, create_sql)
 
 
-def bulk_upsert(table_client, table_path, rows):
-    print(f"> Bulk upsert into: {table_path}")
-    column_types = (
-        ydb.BulkUpsertColumns()
-        .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("job_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("job_id", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("pull", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("run_timestamp", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("test_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("duration", ydb.OptionalType(ydb.PrimitiveType.Double))
-        .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("status_description", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    )
-    table_client.bulk_upsert(table_path, rows, column_types)
+def get_missed_data_for_upload(
+    ydb_wrapper,
+    test_runs_table,
+    test_history_fast_table,
+    full_day_refresh=False,
+    prefetch_max_workers=None,
+):
+    join_clause = ""
+    dedup_where_clause = ""
+    if not full_day_refresh:
+        join_clause = f"""
+    LEFT JOIN (
+        select distinct test_id  from `{test_history_fast_table}`
+        where run_timestamp >= CurrentUtcDate() - 1*Interval("P1D")
+    ) as fast_data_missed
+    ON all_data.test_id = fast_data_missed.test_id
+"""
+        dedup_where_clause = "and fast_data_missed.test_id is NULL"
 
-
-def get_missed_data_for_upload(driver):
-    results = []
     query = f"""
-        SELECT 
+       SELECT 
         build_type, 
         job_name, 
         job_id, 
         commit, 
         branch, 
         pull, 
-        all_data.run_timestamp as run_timestamp, 
-        test_id, 
+        run_timestamp, 
+        all_data.test_id as test_id, 
         suite_folder, 
         test_name,
         cast(suite_folder || '/' || test_name as UTF8)  as full_name, 
         duration,
         status,
         status_description,
-        owners
-    FROM `test_results/test_runs_column`  as all_data
-    LEFT JOIN (
-        select distinct run_timestamp  from `test_results/analytics/test_history_fast`
-    ) as fast_data_missed
-    ON all_data.run_timestamp = fast_data_missed.run_timestamp
+        error_type,
+        owners,
+        log,
+        logsdir,
+        stderr,
+        stdout
+    FROM `{test_runs_table}`  as all_data
+    {join_clause}
     WHERE
-        all_data.run_timestamp >= CurrentUtcDate() - 6*Interval("P1D") AND
-        fast_data_missed.run_timestamp is NULL
+        all_data.run_timestamp >= CurrentUtcDate() - 1*Interval("P1D")
+        and String::Contains(all_data.test_name, '.flake8')  = FALSE
+        and (CASE 
+            WHEN String::Contains(all_data.test_name, 'sole chunk') 
+                OR String::Contains(all_data.test_name, 'chunk+chunk') 
+                OR String::Contains(all_data.test_name, '[chunk]') 
+            THEN TRUE
+            ELSE FALSE
+            END) = FALSE
+        and (all_data.branch = 'main' or all_data.branch like 'stable-%' or all_data.branch like 'stream-nb-2%')
+        {dedup_where_clause}
     """
 
-    scan_query = ydb.ScanQuery(query, {})
-    it = driver.table_client.scan_query(scan_query)
-    print(f'missed data capturing')
-    while True:
-        try:
-            result = next(it)
-            results.extend(result.result_set.rows)
-        except StopIteration:
-            break
+    print('missed data capturing')
+    results = ydb_wrapper.execute_scan_query(query, query_name="get_missed_data_for_upload")
+
+    print(f"scan done: {len(results)} rows; building failure rows for prefetch...", flush=True)
+    row_pairs = [
+        (row, failure_row_from_ydb(row))
+        for row in results
+        if is_failure_like_status(row.get("status"))
+    ]
+
+    fetch_cache = prefetch_text_cache_for_failure_rows(
+        [fr for _, fr in row_pairs],
+        max_workers=prefetch_max_workers,
+        fetch_timeout=BACKFILL_FETCH_TIMEOUT_SEC,
+        fetch_attempts=BACKFILL_FETCH_MAX_ATTEMPTS,
+        retry_passes=BACKFILL_PREFETCH_RETRY_PASSES,
+    )
+
+    # Classify failure rows and write error_type back into the row dict in-place
+    # (the same dict is later passed to bulk_upsert_batches).
+    total = len(row_pairs)
+    print(f"[classify] {total} failure rows...", flush=True)
+    verify_count = 0
+    sanitizer_count = 0
+    possible_oom_count = 0
+    t_classify = time.time()
+    progress_step = max(200, total // 10) if total > 200 else 0
+
+    for i, (row, fr) in enumerate(row_pairs, 1):
+        stderr_text, log_text = get_debug_texts_from_cache(fr, fetch_cache)
+        row["error_type"] = build_error_type_csv_for_storage(
+            fr.status,
+            fr.status_description,
+            fr.source_error_type,
+            stderr_text,
+            log_text,
+            status_name_for_not_launched=fr.status,
+        )
+        if source_has_tag(row["error_type"], "VERIFY"):
+            verify_count += 1
+        if source_has_tag(row["error_type"], "SANITIZER"):
+            sanitizer_count += 1
+        if source_has_tag(row["error_type"], "POSSIBLE_OOM"):
+            possible_oom_count += 1
+        if progress_step and i % progress_step == 0 and i < total:
+            print(f"[classify] {i}/{total} ({time.time() - t_classify:.1f}s)", flush=True)
+    print(
+        f"[classify] done {total} rows in {time.time() - t_classify:.1f}s, "
+        f"verify={verify_count}, sanitizer={sanitizer_count}, possible_oom={possible_oom_count}",
+        flush=True,
+    )
     return results
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--full-day-refresh",
+        action="store_true",
+        help=(
+            "Re-upload all data for the last day (disable dedup by existing test_id in fast table). "
+            f"Uses {DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH} parallel workers for stderr/log prefetch "
+            f"(default run uses {DEFAULT_PREFETCH_MAX_WORKERS})."
+        ),
+    )
+    args = parser.parse_args()
 
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print(
-            "Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping"
+    with YDBWrapper() as ydb_wrapper:
+        if not ydb_wrapper.check_credentials():
+            return 1
+
+        test_runs_table = ydb_wrapper.get_table_path("test_results")
+        test_history_fast_table = ydb_wrapper.get_table_path("test_history_fast")
+        batch_size = 1000
+
+        create_test_history_fast_table(ydb_wrapper, test_history_fast_table)
+        
+        prefetch_max_workers = (
+            DEFAULT_PREFETCH_MAX_WORKERS_FULL_REFRESH if args.full_day_refresh else DEFAULT_PREFETCH_MAX_WORKERS
         )
-        return 1
-    else:
-        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
-        # So, set up it locally
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        ]
+        rows = get_missed_data_for_upload(
+            ydb_wrapper,
+            test_runs_table,
+            test_history_fast_table,
+            full_day_refresh=args.full_day_refresh,
+            prefetch_max_workers=prefetch_max_workers,
+        )
+        print(f'Preparing to upsert: {len(rows)} rows')
 
-    table_path = "test_results/analytics/test_history_fast"
-    batch_size = 50000
-
-    with ydb.Driver(
-        endpoint=DATABASE_ENDPOINT,
-        database=DATABASE_PATH,
-        credentials=ydb.credentials_from_env_variables()
-    ) as driver:
-        driver.wait(timeout=10, fail_fast=True)
-        with ydb.SessionPool(driver) as pool:
-            prepared_for_upload_rows = get_missed_data_for_upload(driver)
-            print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
-            if prepared_for_upload_rows:
-                for start in range(0, len(prepared_for_upload_rows), batch_size):
-                    batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_size]
-                    print(f'upserting: {start}-{start + len(batch_rows_for_upload)}/{len(prepared_for_upload_rows)} rows')
-                    bulk_upsert(driver.table_client, f'{DATABASE_PATH}/{table_path}', batch_rows_for_upload)
-                print('Tests uploaded')
-            else:
-                print('Nothing to upload')
+        if rows:
+            column_types = (
+                ydb.BulkUpsertColumns()
+                .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("job_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("job_id", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                .add_column("commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("pull", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("run_timestamp", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                .add_column("test_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("duration", ydb.OptionalType(ydb.PrimitiveType.Double))
+                .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("status_description", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("error_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("log", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("logsdir", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("stderr", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("stdout", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            )
+            
+            ydb_wrapper.bulk_upsert_batches(test_history_fast_table, rows, column_types, batch_size)
+            print('Tests uploaded')
+        else:
+            print('Nothing to upload')
 
 
 if __name__ == "__main__":

@@ -1,4 +1,8 @@
 ====================BSD-3-Clause====================
+   In short, Diff Template Library is distributed under so called "BSD license",
+
+
+====================BSD-3-Clause====================
    Redistribution and use in source and binary forms, with or without modification,
    are permitted provided that the following conditions are met:
    
@@ -25,6 +29,13 @@
    NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+
+====================BSD-3-Clause====================
+In short, Diff Template Library is distributed under so called "BSD license",
+
+
+====================BSD-3-Clause====================
+Please read the file [COPYING](https://github.com/cubicdaiya/dtl/blob/master/COPYING).
 
 ====================BSD-3-Clause====================
 Redistribution and use in source and binary forms, with or without modification, 
@@ -61,14 +72,3 @@ All rights reserved.
 ====================File: CONTRIBUTORS====================
 Tatsuhiko Kubo <cubicdaiya@gmail.com>
 Jan Weiß <jan@geheimwerk.de>
-
-
-====================LicenseRef-scancode-unknown-license-reference====================
-Please read the file [COPYING](https://github.com/cubicdaiya/dtl/blob/master/COPYING).
-
-====================LicenseRef-scancode-unknown-license-reference AND BSD-3-Clause====================
-   In short, Diff Template Library is distributed under so called "BSD license",
-
-
-====================LicenseRef-scancode-unknown-license-reference AND BSD-3-Clause====================
-In short, Diff Template Library is distributed under so called "BSD license",

@@ -32,12 +32,9 @@ public:
     TDqDataProviderSink(const TDqState::TPtr& state)
         : State(state)
         , LogOptTransformer([state] () { return CreateDqsLogOptTransformer(state->TypeCtx, state->Settings); })
-        , PhyOptTransformer([state] () { return CreateDqsPhyOptTransformer(/*TODO*/nullptr, state->Settings); })
+        , PhyOptTransformer([state] () { return CreateDqsPhyOptTransformer(state->TypeCtx, state->Settings); })
         , PhysicalFinalizingTransformer([] () { return CreateDqsFinalizingOptTransformer(); })
-        , TypeAnnotationTransformer([state] () {
-            return CreateDqsDataSinkTypeAnnotationTransformer(
-                state->TypeCtx, state->Settings->IsDqReplicateEnabled(*state->TypeCtx));
-        })
+        , TypeAnnotationTransformer([state] () { return CreateDqsDataSinkTypeAnnotationTransformer(state->TypeCtx); })
         , ConstraintsTransformer([] () { return CreateDqDataSinkConstraintTransformer(); })
         , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); })
     { }
@@ -224,6 +221,15 @@ public:
             NCommon::WriteStreams(writer, "Program", maybeStage.Cast().Program());
             writer.OnEndMap();
         }
+    }
+
+    bool IsFullCaptureReady() override {
+        return State->IsFullCaptureReady;
+    }
+
+    void Reset() override {
+        TDataProviderBase::Reset();
+        State->IsFullCaptureReady = true;
     }
 
     const TDqState::TPtr State;

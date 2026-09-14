@@ -1,0 +1,19 @@
+use plato;
+
+insert into Output1
+select
+  key in ("020", "075") as key_filtered_1,
+  key in ToSet(["020", "075"]) as key_filtered_2,
+  key in ToSet([value,subkey]) as key_filtered_3
+from Input;
+
+$list = select aggregate_list(distinct key) from Input;
+
+insert into Output2
+select 
+  subkey in key as subkey_filtered_1,
+  subkey in ToSet($list) as subkey_filtered_2,
+  ListTopSort($list, 1)[0] in key as key_filtered_1,
+  "020" in key as key_filtered_2,
+  key[1] in ("20") as key_filtered_3
+from InputList;

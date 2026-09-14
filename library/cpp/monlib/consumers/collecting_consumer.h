@@ -3,6 +3,7 @@
 #include <library/cpp/monlib/metrics/labels.h>
 #include <library/cpp/monlib/metrics/metric_value.h>
 #include <library/cpp/monlib/metrics/metric_consumer.h>
+#include <library/cpp/monlib/metrics/metric_registry.h>
 
 #include <util/datetime/base.h>
 
@@ -26,6 +27,7 @@ namespace NMonitoring {
         // TODO(ivanzhukov@): rename to Type
         NMonitoring::EMetricType Kind{NMonitoring::EMetricType::UNKNOWN};
         THolder<NMonitoring::TMetricTimeSeries> Values;
+        NMonitoring::TMetricOpts Opts;
     };
 
     template <typename TLabelsImpl>
@@ -94,6 +96,10 @@ namespace NMonitoring {
         void OnLogHistogram(TInstant time, NMonitoring::TLogHistogramSnapshotPtr snapshot) override {
             auto& val = Metrics.back().Values;
             val->Add(time, snapshot.Get());
+        }
+
+        virtual void OnMemOnly(bool isMemOnly) override{
+            Metrics.back().Opts.MemOnly = isMemOnly;
         }
 
         bool DoMergeCommonLabels{false};

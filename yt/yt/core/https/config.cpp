@@ -6,10 +6,6 @@ namespace NYT::NHttps {
 
 void TServerCredentialsConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("private_key", &TThis::PrivateKey)
-        .Optional();
-    registrar.Parameter("cert_chain", &TThis::CertChain)
-        .Optional();
     registrar.Parameter("update_period", &TThis::UpdatePeriod)
         .Optional();
 }
@@ -18,18 +14,20 @@ void TServerCredentialsConfig::Register(TRegistrar registrar)
 
 void TServerConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("credentials", &TThis::Credentials);
+    // Null credentials are tolerated by CreateServer (falls back to a plain HTTP
+    // server); this lets the multi-protocol "http" backend omit TLS config.
+    registrar.Parameter("credentials", &TThis::Credentials)
+        .Default();
+
+    registrar.Preprocessor([] (TThis* config) {
+        config->ServerName = "Https";
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TClientCredentialsConfig::Register(TRegistrar registrar)
-{
-    registrar.Parameter("private_key", &TThis::PrivateKey)
-        .Optional();
-    registrar.Parameter("cert_chain", &TThis::CertChain)
-        .Optional();
-}
+void TClientCredentialsConfig::Register(TRegistrar /*registrar*/)
+{ }
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -37,6 +35,8 @@ void TClientConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("credentials", &TThis::Credentials)
         .Optional();
+    registrar.Parameter("allow_http", &TThis::AllowHttp)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

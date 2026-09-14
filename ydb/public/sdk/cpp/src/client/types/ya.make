@@ -1,6 +1,9 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+SRCS(
+    virtual_timestamp.cpp
+    ydb.cpp
+)
 
 PEERDIR(
     contrib/libs/protobuf
@@ -10,5 +13,6 @@ PEERDIR(
 
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h)
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h)
+GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/ydb.h)
 
 END()

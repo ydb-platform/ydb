@@ -1,23 +1,27 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <ydb/public/api/protos/ydb_federation_discovery.pb.h>
 
-#include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
 #include <unordered_set>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 using NTopic::TPrintable;
 using TDbInfo = Ydb::FederationDiscovery::DatabaseInfo;
 
 using TSessionClosedEvent = NTopic::TSessionClosedEvent;
 
+using TAsyncDescribeTopicResult = NTopic::TAsyncDescribeTopicResult;
+
 //! Federated partition session.
 struct TFederatedPartitionSession : public TThrRefBase, public TPrintable<TFederatedPartitionSession> {
     using TPtr = TIntrusivePtr<TFederatedPartitionSession>;
+
+    friend class TDeferredCommit;
 
 public:
     TFederatedPartitionSession(const NTopic::TPartitionSession::TPtr& partitionSession,
@@ -27,7 +31,7 @@ public:
         : PartitionSession(partitionSession)
         , ReadSourceDatabase(std::move(db))
         , TopicOriginDatabase(originDb ? std::move(originDb) : ReadSourceDatabase)
-        , TopicOriginPath(!originPath.empty() ? std::move(originPath) : PartitionSession->GetTopicPath())
+        , TopicOriginPath(!originPath.empty() ? originPath : PartitionSession->GetTopicPath())
         {
             Y_ABORT_UNLESS(ReadSourceDatabase);
         }
@@ -221,10 +225,10 @@ public:
     void Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent);
 
     //! Add offsets range to set.
-    void Add(const TFederatedPartitionSession& partitionSession, ui64 startOffset, ui64 endOffset);
+    void Add(const TFederatedPartitionSession::TPtr& partitionSession, ui64 startOffset, ui64 endOffset);
 
     //! Add offset to set.
-    void Add(const TFederatedPartitionSession& partitionSession, ui64 offset);
+    void Add(const TFederatedPartitionSession::TPtr& partitionSession, ui64 offset);
 
     //! Commit all added offsets.
     void Commit();
@@ -390,14 +394,14 @@ struct TFederatedReadSessionSettings: public NTopic::TReadSessionSettings {
         //! Executor for handlers.
         //! If not set, default single threaded executor will be used.
         //! Shared between subsessions
-        FLUENT_SETTING(NTopic::IExecutor::TPtr, HandlersExecutor);
+        FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
     };
 
     //! Federated event handlers.
     //! See description in TFederatedEventHandlers class.
     FLUENT_SETTING(TFederatedEventHandlers, FederatedEventHandlers);
 
-    
+
 
     //! Read policy settings
 
@@ -488,10 +492,10 @@ struct TFederatedTopicClientSettings : public TCommonClientSettingsBase<TFederat
     using TSelf = TFederatedTopicClientSettings;
 
     //! Default executor for compression tasks.
-    FLUENT_SETTING_DEFAULT(NTopic::IExecutor::TPtr, DefaultCompressionExecutor, NTopic::CreateThreadPoolExecutor(2));
+    FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultCompressionExecutor, CreateThreadPoolExecutor(2));
 
     //! Default executor for callbacks.
-    FLUENT_SETTING_DEFAULT(NTopic::IExecutor::TPtr, DefaultHandlersExecutor, NTopic::CreateThreadPoolExecutor(1));
+    FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultHandlersExecutor, CreateThreadPoolExecutor(1));
 
     //! Connection timeoout for federation discovery.
     FLUENT_SETTING_DEFAULT(TDuration, ConnectionTimeout, TDuration::Seconds(30));
@@ -513,8 +517,34 @@ public:
     std::shared_ptr<IFederatedReadSession> CreateReadSession(const TFederatedReadSessionSettings& settings);
 
     //! Create write session.
-    // std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
+    std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
     std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
+
+    struct TClusterInfo {
+        enum class EStatus : int {
+            STATUS_UNSPECIFIED,
+            AVAILABLE,
+            READ_ONLY,
+            UNAVAILABLE,
+        };
+        std::string Name;
+        std::string Endpoint;
+        std::string Path;
+        EStatus Status;
+        // TODO: Id, Weight, ...?
+        //! Replaces Endpoint and Database for federated clusters
+        void AdjustTopicClientSettings(NTopic::TTopicClientSettings& settings) const;
+        //! Prepend Database for federated clusters
+        void AdjustTopicPath(std::string& path) const;
+        //! Usable for at least read operations
+        bool IsAvailableForRead() const;
+        bool IsAvailableForWrite() const;
+    };
+
+    //! Discover all clusters for federated topic.
+    // Will return single cluster with empty name for non-federated clusters.
+    // May return empty list if FederatedTopicClient was destroyed when future fired.
+    NThreading::TFuture<std::vector<TClusterInfo>> GetAllClusterInfo();
 
 protected:
     void OverrideCodec(NTopic::ECodec codecId, std::unique_ptr<NTopic::ICodec>&& codecImpl);
@@ -525,7 +555,7 @@ private:
 
 } // namespace NYdb::NFederatedTopic
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 using namespace NFederatedTopic;
 
@@ -534,20 +564,20 @@ void TPrintable<TFederatedPartitionSession>::DebugString(TStringBuilder& res, bo
 template<>
 void TPrintable<NFederatedTopic::TReadSessionEvent::TDataReceivedEvent>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TStartPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TStartPartitionSessionEvent>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TStopPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TStopPartitionSessionEvent>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TEndPartitionSessionEvent>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TEndPartitionSessionEvent>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TPartitionSessionStatusEvent>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TPartitionSessionStatusEvent>::DebugString(TStringBuilder& res, bool) const;
 template<>
-void TPrintable<NFederatedTopic::TReadSessionEvent::TFederated<NFederatedTopic::TReadSessionEvent::TPartitionSessionClosedEvent>>::DebugString(TStringBuilder& res, bool) const;
+void TPrintable<NFederatedTopic::TReadSessionEvent::TPartitionSessionClosedEvent>::DebugString(TStringBuilder& res, bool) const;
 
 }

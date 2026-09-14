@@ -5,11 +5,23 @@
 #include "scheme.h"
 #include "diff.h"
 
+#include <ydb/core/tablet_flat/tablet_flat_executor.h> // NTabletFlatExecutor
+
+// protobuf forward declarations
+namespace NKikimrBlobStorage::NDDisk {
+    class TDDiskId;
+};
+
 namespace NKikimr::NBsController {
+    struct TDDiskId;
     struct TPDiskId;
     struct TVSlotId;
 }
 
+template<>
+struct THash<NKikimr::NBsController::TDDiskId> {
+    size_t operator ()(NKikimr::NBsController::TDDiskId) const;
+};
 template<>
 struct THash<NKikimr::NBsController::TPDiskId> {
     size_t operator ()(NKikimr::NBsController::TPDiskId) const;
@@ -150,6 +162,53 @@ namespace NKikimr {
             friend bool operator ==(const TVSlotId &x, const TVSlotId &y) { return x.GetKey() == y.GetKey(); }
             friend bool operator !=(const TVSlotId &x, const TVSlotId &y) { return x.GetKey() != y.GetKey(); }
             friend bool operator < (const TVSlotId &x, const TVSlotId &y) { return x.GetKey() <  y.GetKey(); }
+        };
+
+        struct TDDiskId {
+            Schema::VSlot::NodeID::Type NodeId = 0;
+            Schema::VSlot::PDiskID::Type PDiskId = 0;
+            Schema::VSlot::VSlotID::Type DDiskSlotId = 0;
+
+            TDDiskId(const Schema::VSlot::TKey::Type &key)
+                : NodeId(std::get<0>(key))
+                , PDiskId(std::get<1>(key))
+                , DDiskSlotId(std::get<2>(key))
+            {}
+
+            TDDiskId(Schema::VSlot::NodeID::Type nodeId, Schema::VSlot::PDiskID::Type pdiskId, Schema::VSlot::VSlotID::Type vslotId)
+                : NodeId(nodeId)
+                , PDiskId(pdiskId)
+                , DDiskSlotId(vslotId)
+            {}
+
+            TDDiskId() = default;
+            TDDiskId(const TDDiskId&) = default;
+
+            TDDiskId(TPDiskId pdiskId, Schema::VSlot::VSlotID::Type ddiskSlotId)
+                : NodeId(pdiskId.NodeId)
+                , PDiskId(pdiskId.PDiskId)
+                , DDiskSlotId(ddiskSlotId)
+            {}
+
+            TDDiskId(const NKikimrBlobStorage::NDDisk::TDDiskId& pb);
+
+            TDDiskId &operator=(const TDDiskId &other) = default;
+
+            TString ToString() const {
+                return TStringBuilder() << NodeId << ":" << PDiskId << ":" << DDiskSlotId;
+            }
+
+            Schema::VSlot::TKey::Type GetKey() const {
+                return std::tie(NodeId, PDiskId, DDiskSlotId);
+            }
+
+            TPDiskId ComprisingPDiskId() const {
+                return TPDiskId(NodeId, PDiskId);
+            }
+
+            void Serialize(NKikimrBlobStorage::NDDisk::TDDiskId *pb) const;
+
+            friend constexpr std::strong_ordering operator <=>(const TDDiskId& x, const TDDiskId& y) = default;
         };
 
         template<typename TKey, typename TValue>
@@ -396,7 +455,7 @@ namespace NKikimr {
                     if (baseIt == Base.end()) {
                         break;
                     }
-                    if (overlay && baseIt->first == key) {
+                    if (baseIt->first == key) {
                         baseIt->second->OnRollback();
                     }
                 }
@@ -410,10 +469,26 @@ namespace NKikimr {
             }
         };
 
+        struct TConfigTxFlags {
+            bool SuppressFailModelChecking = false;
+            bool SuppressDegradedGroupsChecking = false;
+            bool SuppressDisintegratedGroupsChecking = false;
+
+            static TConfigTxFlags SuppressAll() {
+                return {true, true, true};
+            }
+        };
+
     } // NBsController
 } // NKikimr
 
 inline size_t THash<NKikimr::NBsController::TPDiskId>::operator ()(NKikimr::NBsController::TPDiskId x) const {
+    auto key = x.GetKey();
+    using T = decltype(key);
+    return THash<T>()(key);
+}
+
+inline size_t THash<NKikimr::NBsController::TDDiskId>::operator ()(NKikimr::NBsController::TDDiskId x) const {
     auto key = x.GetKey();
     using T = decltype(key);
     return THash<T>()(key);

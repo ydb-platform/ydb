@@ -3,13 +3,17 @@
 #include <ydb/core/tablet/defs.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/http/http_proxy.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <util/string/strip.h>
 
 namespace NKikimr::NViewer {
+
+using TTabletId = ui64;
 
 inline TActorId MakeViewerID(ui32 node) {
     char x[12] = {'v','i','e','w','e','r'};
@@ -21,7 +25,8 @@ struct TEvViewer {
         // requests
         EvViewerRequest = EventSpaceBegin(TKikimrEvents::ES_VIEWER),
         EvViewerResponse,
-
+        EvUpdateSharedCacheTabletRequest,
+        EvUpdateSharedCacheTabletResponse,
         EvEnd
     };
 
@@ -33,6 +38,45 @@ struct TEvViewer {
 
     struct TEvViewerResponse : TEventPB<TEvViewerResponse, NKikimrViewer::TEvViewerResponse, EvViewerResponse> {
         TEvViewerResponse() = default;
+    };
+
+    struct TEvUpdateSharedCacheTabletRequest : TEventLocal<TEvUpdateSharedCacheTabletRequest, EvUpdateSharedCacheTabletRequest> {
+        TTabletId TabletId;
+        std::unique_ptr<IEventBase> Request;
+
+        TEvUpdateSharedCacheTabletRequest(TTabletId tabletId, std::unique_ptr<IEventBase> request)
+            : TabletId(tabletId)
+            , Request(std::move(request))
+        {}
+    };
+
+    struct TEvUpdateSharedCacheTabletResponse : TEventLocal<TEvUpdateSharedCacheTabletResponse, EvUpdateSharedCacheTabletResponse> {
+        std::variant<
+            std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse>> Response;
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse> response)
+            : Response(std::move(response))
+        {}
     };
 };
 
@@ -133,10 +177,33 @@ struct TRequestState {
         return {};
     }
 
+    bool Accepts(const TString& type) const {
+        const TString acceptHeader = GetHeader("Accept");
+        if (acceptHeader.empty()) {
+            return false;
+        }
+        TVector<TString> acceptedTypes = StringSplitter(acceptHeader).Split(',');
+        for (const auto& token : acceptedTypes) {
+            TString trimmed = StripString(token);
+            if (trimmed.empty()) {
+                continue;
+            }
+            if (const size_t semicolonPos = trimmed.find(';'); semicolonPos != TString::npos) {
+                trimmed = StripString(trimmed.substr(0, semicolonPos));
+            }
+            if (trimmed == type) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     explicit operator bool() const {
         return Request.index() != 0;
     }
 };
+
+struct TViewerSharedCacheState;
 
 class IViewer {
 public:
@@ -248,12 +315,14 @@ public:
 
     virtual TString GetHTTPGATEWAYTIMEOUT(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPBADREQUEST(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
-    virtual TString GetHTTPFORBIDDEN(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
+    virtual TString GETHTTPACCESSDENIED(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
     virtual TString GetHTTPNOTFOUND(const TRequestState& request) = 0;
     virtual TString GetHTTPINTERNALERROR(const TRequestState& request, TString contentType = {}, TString response = {}) = 0;
-    virtual TString GetHTTPFORWARD(const TRequestState& request, const TString& location) = 0;
+    virtual TString GetHTTPFORWARD(const TRequestState& request, const TString& location, const TString& candidates) = 0;
+    virtual bool CheckAccessViewer(const TRequestState& request) = 0;
+    virtual bool CheckAccessMonitoring(const TRequestState& request) = 0;
     virtual bool CheckAccessAdministration(const TRequestState& request) = 0;
-    virtual void TranslateFromBSC2Human(const NKikimrBlobStorage::TConfigResponse& response, TString& bscError, bool& forceRetryPossible) = 0;
+    virtual void BSCError2JSON(const NKikimrBlobStorage::TConfigResponse& response, const TRequestState& request, NJson::TJsonValue& json, bool forced) = 0;
     virtual TString MakeForward(const TRequestState& request, const std::vector<ui32>& nodes) = 0;
 
     virtual void AddRunningQuery(const TString& queryId, const TActorId& actorId) = 0;
@@ -262,6 +331,11 @@ public:
 
     virtual NJson::TJsonValue GetCapabilities() = 0;
     virtual int GetCapabilityVersion(const TString& name) = 0;
+
+    void UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> ev);
+    void DeleteOldSharedCacheData();
+    std::shared_ptr<TViewerSharedCacheState> CreateSharedCacheState();
+    std::shared_ptr<TViewerSharedCacheState> SharedCacheState = CreateSharedCacheState();
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);
@@ -321,8 +395,6 @@ TBSGroupState GetBSGroupOverallState(
         const NKikimrWhiteboard::TBSGroupStateInfo& info,
         const TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&>& vDisksIndex,
         const TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&>& pDisksIndex);
-
-NKikimrViewer::EFlag GetFlagFromUsage(double usage);
 
 NKikimrWhiteboard::EFlag GetWhiteboardFlag(NKikimrViewer::EFlag flag);
 NKikimrViewer::EFlag GetViewerFlag(NKikimrWhiteboard::EFlag flag);

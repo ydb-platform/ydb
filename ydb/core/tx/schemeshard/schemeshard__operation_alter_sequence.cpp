@@ -1,5 +1,5 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -198,7 +198,7 @@ public:
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        context.SS->Sequences[pathId] = alterData;
+        context.SS->Sequences.Set(pathId, alterData);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -429,18 +429,26 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .NotUnderDeleting()
-                .IsCommonSensePath();
+                .NotUnderDeleting();
 
             if (checks) {
-                if (parentPath->IsTable()) {
+                if (parentPath.Parent()->IsTableIndex()) {
+                    checks.IsInsideTableIndexPath();
+                    // Index sequences can be altered only by internal transactions (build_index__progress)
+                    if (!Transaction.GetInternal()) {
+                        result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
+                        return result;
+                    }
+                } else if (parentPath->IsTable()) {
                     // allow immediately inside a normal table
+                    checks.IsCommonSensePath();
                     if (parentPath.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                     }
                 } else {
                     // otherwise don't allow unexpected object types
-                    checks.IsLikeDirectory();
+                    checks.IsCommonSensePath()
+                        .IsLikeDirectory();
                 }
             }
 
@@ -488,7 +496,7 @@ public:
 
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         auto description = GetAlterSequenceDescription(
-                sequenceInfo->Description, sequenceAlter, *typeRegistry, context.SS->EnableTablePgTypes, errStr);
+                sequenceInfo->Description, sequenceAlter, *typeRegistry, AppData()->FeatureFlags.GetEnableTablePgTypes(), errStr);
         if (!description) {
             status = NKikimrScheme::StatusInvalidParameter;
             result->SetError(status, errStr);
@@ -524,6 +532,7 @@ public:
 
         sequencePath->PathState = TPathElement::EPathState::EPathStateAlter;
         sequencePath->LastTxId = OperationId.GetTxId();
+        context.SS->PersistSequenceAlter(db, dstPath->PathId, *alterData);
         context.SS->PersistLastTxId(db, sequencePath);
         context.SS->PersistTxState(db, OperationId);
 

@@ -1,0 +1,121 @@
+
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/blockstore/public/api/protos/encryption.proto";
+import "ydb/core/nbs/cloud/blockstore/public/api/protos/headers.proto";
+import "ydb/core/nbs/cloud/blockstore/public/api/protos/rdma.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/media.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/trace.proto";
+
+package NYdb.NBS.NProto;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/core/nbs/cloud/blockstore/public/api/protos";
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume create request/response.
+
+message TCreateVolumeRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to create.
+    string DiskId = 2;
+
+    // Owner information.
+    string ProjectId = 3;
+
+    // Minimum addressable block size (smallest unit of I/O operations).
+    uint32 BlockSize = 4;
+
+    // Maximum number of blocks stored in volume.
+    uint64 BlocksCount = 5;
+
+    // Number of user channels to store blobs (unused, computed automatically instead).
+    uint32 ChannelsCount = 6;
+
+    // Storage media to use.
+    NYdb.NBS.NProto.EStorageMediaKind StorageMediaKind = 7;
+
+    // User folder Id, used for billing.
+    string FolderId = 8;
+
+    // Cloud Id, used for billing.
+    string CloudId = 9;
+
+    // Partition tablet version.
+    uint32 TabletVersion = 10;
+
+    // Performance profile, used for throttling
+    TVolumePerformanceProfile PerformanceProfile = 11;
+
+    // Optional id of base disk.
+    string BaseDiskId = 12;
+
+    // Optional id of base disk checkpoint.
+    string BaseDiskCheckpointId = 13;
+
+    // Placement group id, allowed only for nonreplicated volumes.
+    string PlacementGroupId = 14;
+
+    // If set, forces creation of the specified partition tablet count.
+    uint32 PartitionsCount = 15;
+
+    // Encryption spec.
+    TEncryptionSpec EncryptionSpec = 16;
+
+    // Indicates that volume does not belong to user directly, but used for system needs.
+    bool IsSystem = 17;
+
+    // Optional storage pool name (e.g. local:ssd), allowed only for nonreplicated volumes.
+    string StoragePoolName = 18;
+
+    // Optional list of nodes to allocate disk, allowed only for nonreplicated volumes.
+    repeated string AgentIds = 19;
+
+    // Placement partition index, allowed only for nonreplicated volumes.
+    // Takes values from 1 to PlacementPartitionCount.
+    uint32 PlacementPartitionIndex = 20;
+
+    // Mount requests with incorrect FillGeneration will be rejected unless filling is finished.
+    uint64 FillGeneration = 21;
+}
+
+message TCreateVolumeResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Volume destroy request/response.
+
+message TDestroyVolumeRequest
+{
+    reserved 5;
+
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to destroy.
+    string DiskId = 2;
+
+    // If this flag is set, nbs will destroy the specified disk only if it's
+    // broken and can't be repaired
+    bool DestroyIfBroken = 3;
+
+    // Synchronous force deallocation: deallocate nonrepl. backend and wait for
+    // devices cleanup.
+    bool Sync = 4;
+
+    // Delete requests with incorrect FillGeneration will be rejected.
+    uint64 FillGeneration = 6;
+}
+
+message TDestroyVolumeResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}

@@ -1,9 +1,13 @@
 {%- if dir_macroses|length -%}
 {%-     for dir_macros in dir_macroses -%}
 {%-         if dir_macros.macro == "set_vars" -%}
-{%-             for set_var in dir_macros.args %}
+{%-             for set_var in dir_macros.args -%}
+{%-                 if set_var|replace("BUILD_TYPE=", ' ') != set_var %}
+set(BUILD_TYPE $<CONFIGURATION>)
+{%                  else %}
 set({{ set_var|replace("=", ' ') }})
-{%              endfor -%}
+{%                  endif -%}
+{%-             endfor -%}
 {%          else %}
 {{ dir_macros.macro }}(
 {%-             for arg in dir_macros.args %}

@@ -4,12 +4,13 @@ option cc_enable_arenas = true;
 package Ydb.Auth;
 option java_package = "com.yandex.ydb.auth";
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 
 message LoginRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string user = 2;
-    string password = 3;
+    string password = 3 [(Ydb.sensitive) = true];
 }
 
 message LoginResponse {
@@ -18,5 +19,5 @@ message LoginResponse {
 }
 
 message LoginResult {
-    string token = 1;
+    string token = 1 [(Ydb.sensitive) = true];
 }

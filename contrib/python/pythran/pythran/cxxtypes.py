@@ -3,6 +3,7 @@ This module defines classes needed to manipulate c++ types from pythran.
 '''
 
 from inspect import isclass
+from pythran.utils import cxxid
 
 
 class ordered_set(object):
@@ -47,8 +48,7 @@ class TypeBuilder(object):
     typename __combined<long,char>::type
 
     >>> builder.ArgumentType(4)
-    typename std::remove_cv<typename std::remove_reference<argument_type4>::\
-type>::type
+    std::remove_cv_t<std::remove_reference_t<argument_type4>>
 
     >>> builder.Assignable(builder.NamedType("long"))
     typename pythonic::assignable<long>::type
@@ -59,9 +59,8 @@ type>::type
     >>> builder.Lazy(builder.NamedType("long"))
     typename pythonic::lazy<long>::type
 
-    >>> builder.DeclType("toto")
-    typename std::remove_cv<\
-typename std::remove_reference<decltype(toto)>::type>::type
+    >>> builder.FunctionType("toto")
+    toto
 
     >>> builder.IteratorOfType(builder.NamedType('some'))
     typename some::iterator
@@ -69,38 +68,38 @@ typename std::remove_reference<decltype(toto)>::type>::type
     typename some::stuff::iterator
 
     >>> builder.IteratorContentType(builder.NamedType('str'))
-    typename std::remove_cv<typename std::iterator_traits<\
-typename std::remove_reference<str>::type::iterator>::value_type>::type
+    std::remove_cv_t<typename std::iterator_traits<\
+typename std::remove_reference_t<str>::iterator>::value_type>
 
     >>> builder.GetAttr(builder.NamedType('complex'), 'real')
     decltype(pythonic::builtins::getattr(\
 pythonic::types::attr::REAL{}, std::declval<complex>()))
 
     >>> builder.ReturnType(builder.NamedType('math::cos'), f_ty)
-    decltype(std::declval<math::cos>()(std::declval<float>()))
+    std::result_of_t<math::cos(float)>
 
     >>> t = builder.TupleType(i_ty, builder.NamedType('str'))
     >>> builder.ElementType(1, t)
-    typename std::tuple_element<1,typename std::remove_reference<\
-decltype(pythonic::types::make_tuple(std::declval<int>(), \
-std::declval<str>()))>::type>::type
+    std::tuple_element_t<1, std::remove_reference_t<pythonic::types::make_tuple_t<int, str>>>
 
 
     >>> builder.ListType(builder.NamedType('int'))
-    pythonic::types::list<typename std::remove_reference<int>::type>
+    pythonic::types::list<std::remove_reference_t<int>>
+
+    >>> builder.NDArrayType(builder.NamedType('int'), 1)
+    pythonic::types::ndarray<int, pythonic::types::pshape<long>>
 
     >>> builder.SetType(builder.NamedType('int'))
     pythonic::types::set<int>
 
     >>> builder.TupleType(i_ty, builder.NamedType('bool'))
-    decltype(pythonic::types::make_tuple(std::declval<int>(), \
-std::declval<bool>()))
+    pythonic::types::make_tuple_t<int, bool>
 
     >>> builder.DictType(builder.NamedType('int'), builder.NamedType('float'))
     pythonic::types::dict<int,float>
 
     >>> builder.ContainerType(builder.NamedType('int'))
-    container<typename std::remove_reference<int>::type>
+    container<std::remove_reference_t<int>>
 
     >>> builder.IndexableType(builder.NamedType('int'))
     indexable<int>
@@ -117,7 +116,7 @@ std::declval<bool>()))
             """
             A generic type object to be sub-classed
 
-            The keyword arguments are used to built the internal representation
+            The keyword arguments are used to build the internal representation
             one attribute per key with the associated value
             """
 
@@ -171,15 +170,10 @@ std::declval<bool>()))
             A generic parametric type
             """
 
-            prefix = "__ptype{0}"
-            count = 0
-
-            def __init__(self, fun, ptype):
+            def __init__(self, fun, ptype, index):
                 super(PType, self).__init__(fun=fun,
                                             type=ptype,
-                                            name=PType.prefix.format(
-                                                PType.count))
-                PType.count += 1
+                                            name=f"__ptype{index}")
 
             def generate(self, ctx):
                 return ctx(self.type)
@@ -202,7 +196,9 @@ std::declval<bool>()))
                     return ctx(self.orig)
                 else:
                     self.isrec = True
-                    return ctx(self.final_type)
+                    res = ctx(self.final_type)
+                    self.isrec = False
+                    return res
 
         class InstantiatedType(Type):
             """
@@ -216,13 +212,11 @@ std::declval<bool>()))
             def generate(self, ctx):
                 if self.arguments:
                     args = ", ".join(ctx(arg) for arg in self.arguments)
-                    template_params = "<{0}>".format(args)
+                    template_params = f"<{args}>"
                 else:
                     template_params = ""
 
-                return "typename {0}::type{1}::{2}".format(self.fun.name,
-                                                           template_params,
-                                                           self.name)
+                return f"typename {self.fun.name}::type{template_params}::{self.name}"
 
         class CombinedTypes(Type):
             """
@@ -256,10 +250,21 @@ std::declval<bool>()))
                     sys.setrecursionlimit(current_recursion_limit)
                     return stypes[0]
                 else:
-                    stmp = 'typename __combined<{}>::type'.format(
-                        ','.join(stypes))
+                    stmp = f'typename __combined<{",".join(stypes)}>::type'
                     sys.setrecursionlimit(current_recursion_limit)
                     return stmp
+
+        class IntegralConstant(Type):
+            """
+            A generic type object, to hold scalar types and such
+            """
+
+            def __init__(self, of, index):
+                super(IntegralConstant, self).__init__(of=of, index=index)
+
+            def generate(self, ctx):
+                ty = ctx(self.of)
+                return f"std::integral_constant<{ty}, {str(self.index).lower()}>"
 
         class ArgumentType(Type):
             """
@@ -269,10 +274,7 @@ std::declval<bool>()))
                 super(ArgumentType, self).__init__(num=num)
 
             def generate(self, _):
-                argtype = "argument_type{0}".format(self.num)
-                noref = "typename std::remove_reference<{0}>::type".format(
-                    argtype)
-                return "typename std::remove_cv<{0}>::type".format(noref)
+                return f'std::remove_cv_t<std::remove_reference_t<argument_type{self.num}>>'
 
         class DependentType(Type):
             """
@@ -285,6 +287,7 @@ std::declval<bool>()))
             def iscombined(self):
                 return self.of.iscombined()
 
+
         class Assignable(DependentType):
             """
             A type which can be assigned
@@ -295,8 +298,7 @@ std::declval<bool>()))
             """
 
             def generate(self, ctx):
-                return 'typename pythonic::assignable<{0}>::type'.format(
-                    ctx(self.of))
+                return f'typename pythonic::assignable<{ctx(self.of)}>::type'
 
         class AssignableNoEscape(DependentType):
             """
@@ -304,8 +306,7 @@ std::declval<bool>()))
             """
 
             def generate(self, ctx):
-                return 'typename pythonic::assignable_noescape<{0}>::type'.format(
-                    ctx(self.of))
+                return f'typename pythonic::assignable_noescape<{ctx(self.of)}>::type'
 
         class Returnable(DependentType):
             """
@@ -319,8 +320,7 @@ std::declval<bool>()))
             """
 
             def generate(self, ctx):
-                return 'typename pythonic::returnable<{0}>::type'.format(
-                    ctx(self.of))
+                return f'typename pythonic::returnable<{ctx(self.of)}>::type'
 
         class Lazy(DependentType):
             """
@@ -331,17 +331,18 @@ std::declval<bool>()))
             """
 
             def generate(self, ctx):
-                return 'typename pythonic::lazy<{}>::type'.format(ctx(self.of))
+                return f'typename pythonic::lazy<{ctx(self.of)}>::type'
 
-        class DeclType(NamedType):
+        class FunctionType(Type):
             """
-            Gather the type of a variable
+            Gather the type of a function reference
             """
+
+            def __init__(self, *path):
+                super(FunctionType, self).__init__(path=path)
 
             def generate(self, _):
-                return ('typename std::remove_cv<'
-                        'typename std::remove_reference<'
-                        'decltype({0})>::type>::type'.format(self.srepr))
+                return '::'.join(map(cxxid, self.path))
 
 
         class AddConst(DependentType):
@@ -350,8 +351,7 @@ std::declval<bool>()))
             '''
             def generate(self, ctx):
                 of_type = ctx(self.of)
-                return ('decltype(pythonic::types::as_const(std::declval<'
-                        + of_type + '>()))')
+                return f'decltype(pythonic::types::as_const(std::declval<{of_type}>()))'
 
         class IteratorOfType(DependentType):
             '''
@@ -360,9 +360,9 @@ std::declval<bool>()))
             def generate(self, ctx):
                 container_type = ctx(self.of)
                 if container_type.startswith('typename'):
-                    return container_type + '::iterator'
+                    return f'{container_type}::iterator'
                 else:
-                    return 'typename ' + container_type + '::iterator'
+                    return f'typename {container_type}::iterator'
 
         class IteratorContentType(DependentType):
             '''
@@ -371,12 +371,7 @@ std::declval<bool>()))
 
             def generate(self, ctx):
                 iterator_value_type = ctx(self.of)
-                return 'typename std::remove_cv<{0}>::type'.format(
-                    'typename std::iterator_traits<{0}>::value_type'.format(
-                        'typename std::remove_reference<{0}>::type::iterator'
-                        .format(iterator_value_type)
-                        )
-                    )
+                return f'std::remove_cv_t<typename std::iterator_traits<typename std::remove_reference_t<{iterator_value_type}>::iterator>::value_type>'
 
         class GetAttr(Type):
             '''
@@ -386,9 +381,8 @@ std::declval<bool>()))
                 super(GetAttr, self).__init__(param=param, attr=attr)
 
             def generate(self, ctx):
-                return ('decltype(pythonic::builtins::getattr({}{{}}, {}))'
-                        .format('pythonic::types::attr::' + self.attr.upper(),
-                                'std::declval<' + ctx(self.param) + '>()'))
+                attr = f'pythonic::types::attr::{self.attr.upper()}'
+                return f'decltype(pythonic::builtins::getattr({attr}{{}}, std::declval<{ctx(self.param)}>()))'
 
         class ReturnType(Type):
             '''
@@ -399,10 +393,9 @@ std::declval<bool>()))
 
             def generate(self, ctx):
                 # the return type of a constructor is obvious
-                cg = 'std::declval<{0}>()'.format(ctx(self.ftype))
-                args = ("std::declval<{0}>()".format(ctx(arg))
-                        for arg in self.args)
-                return 'decltype({0}({1}))'.format(cg, ", ".join(args))
+                cg = ctx(self.ftype)
+                args = [ctx(arg) for arg in self.args]
+                return f'std::result_of_t<{cg}({", ".join(args)})>'
 
         class ElementType(Type):
             '''
@@ -416,12 +409,16 @@ std::declval<bool>()))
                 return self.of.iscombined()
 
             def generate(self, ctx):
-                return 'typename std::tuple_element<{0},{1}>::type'.format(
-                    self.index,
-                    'typename std::remove_reference<{0}>::type'.format(
-                        ctx(self.of)
-                        )
-                    )
+                return f'std::tuple_element_t<{self.index}, std::remove_reference_t<{ctx(self.of)}>>'
+
+        class TypeType(DependentType):
+            '''
+            Type holding a type
+            '''
+
+            def generate(self, ctx):
+                return f'pythonic::types::type_t<{ctx(self.of)}>'
+
 
         class ListType(DependentType):
             '''
@@ -429,9 +426,7 @@ std::declval<bool>()))
             '''
 
             def generate(self, ctx):
-                return 'pythonic::types::list<{}>'.format(
-                    'typename std::remove_reference<{0}>::type'.format(
-                        ctx(self.of)))
+                return f'pythonic::types::list<std::remove_reference_t<{ctx(self.of)}>>'
 
         class SetType(DependentType):
             '''
@@ -439,7 +434,7 @@ std::declval<bool>()))
             '''
 
             def generate(self, ctx):
-                return 'pythonic::types::set<{0}>'.format(ctx(self.of))
+                return f'pythonic::types::set<{ctx(self.of)}>'
 
         class TupleType(Type):
             '''
@@ -453,9 +448,7 @@ std::declval<bool>()))
 
             def generate(self, ctx):
                 elts = (ctx(of) for of in self.ofs)
-                telts = ('std::declval<{0}>()'.format(elt) for elt in elts)
-                return 'decltype(pythonic::types::make_tuple({0}))'.format(
-                    ", ".join(telts))
+                return f'pythonic::types::make_tuple_t<{", ".join(elts)}>'
 
         class DictType(Type):
             '''
@@ -470,8 +463,18 @@ std::declval<bool>()))
                             for of in (self.of_key, self.of_val)))
 
             def generate(self, ctx):
-                return 'pythonic::types::dict<{},{}>'.format(ctx(self.of_key),
-                                                             ctx(self.of_val))
+                return f'pythonic::types::dict<{ctx(self.of_key)},{ctx(self.of_val)}>'
+
+        class NDArrayType(DependentType):
+            '''
+            Type holding a numpy array without view
+            '''
+            def __init__(self, dtype, nbdims):
+                super(DependentType, self).__init__(of=dtype, nbdims=nbdims)
+
+            def generate(self, ctx):
+                return f'pythonic::types::ndarray<{ctx(self.of)}, pythonic::types::pshape<{", ".join(["long"] * self.nbdims)}>>'
+
 
         class ContainerType(DependentType):
             '''
@@ -479,8 +482,7 @@ std::declval<bool>()))
             '''
 
             def generate(self, ctx):
-                return ('container<typename std::remove_reference<{0}>::type>'
-                        .format(ctx(self.of)))
+                return f'container<std::remove_reference_t<{ctx(self.of)}>>'
 
         class IndexableType(DependentType):
             '''
@@ -488,7 +490,7 @@ std::declval<bool>()))
             '''
 
             def generate(self, ctx):
-                return 'indexable<{0}>'.format(ctx(self.of))
+                return f'indexable<{ctx(self.of)}>'
 
         class IndexableContainerType(Type):
             '''
@@ -504,10 +506,7 @@ std::declval<bool>()))
                             for of in (self.of_key, self.of_val)))
 
             def generate(self, ctx):
-                return ('indexable_container<'
-                        '{0}, typename std::remove_reference<{1}>::type'
-                        '>'
-                        .format(ctx(self.of_key), ctx(self.of_val)))
+                return f'indexable_container<{ctx(self.of_key)}, std::remove_reference_t<{ctx(self.of_val)}>>'
 
         class ExpressionType(Type):
 
@@ -522,9 +521,8 @@ std::declval<bool>()))
                 return any(expr.iscombined() for expr in self.exprs)
 
             def generate(self, ctx):
-                gexprs = ["std::declval<{0}>()".format(ctx(expr))
-                          for expr in self.exprs]
-                return 'decltype({0})'.format(self.op(*gexprs))
+                gexprs = [f"std::declval<{ctx(expr)}>()" for expr in self.exprs]
+                return f'decltype({self.op(*gexprs)})'
 
         builder.UnknownType = Type()
 

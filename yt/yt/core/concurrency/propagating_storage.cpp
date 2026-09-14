@@ -2,132 +2,52 @@
 
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
+#include <library/cpp/yt/containers/static_ring_queue.h>
+
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
-#include <yt/yt/core/misc/static_ring_queue.h>
+#include <library/cpp/yt/memory/leaky_singleton.h>
 
 namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPropagatingStorageImplBase
+namespace NDetail {
+
+std::optional<std::any> TPropagatingStorageImpl::ExchangeRaw(std::any value)
 {
-public:
-    using TStorage = TCompactFlatMap<std::type_index, std::any, 16>;
-
-    bool IsEmpty() const
-    {
-        return Data_.empty();
+    std::type_index key(value.type());
+    auto iter = Data_.find(key);
+    if (iter == Data_.end()) {
+        Data_.emplace(key, std::move(value));
+        return std::nullopt;
     }
+    return std::exchange(iter->second, std::move(value));
+}
 
-    const std::any* GetRaw(const std::type_info& typeInfo) const
-    {
-        auto iter = Data_.find(std::type_index(typeInfo));
-        return iter == Data_.end() ? nullptr : &iter->second;
+std::optional<std::any> TPropagatingStorageImpl::RemoveRaw(const std::type_info& typeInfo)
+{
+    auto iter = Data_.find(std::type_index(typeInfo));
+    if (iter == Data_.end()) {
+        return std::nullopt;
     }
+    auto result = std::make_optional<std::any>(iter->second);
+    Data_.erase(iter);
+    return result;
+}
 
-    std::optional<std::any> ExchangeRaw(std::any value)
-    {
-        std::type_index key(value.type());
-        auto iter = Data_.find(key);
-        if (iter == Data_.end()) {
-            Data_.emplace(key, std::move(value));
-            return std::nullopt;
-        }
-        return std::exchange(iter->second, std::move(value));
-    }
+TIntrusivePtr<TPropagatingStorageImpl> TPropagatingStorageImpl::Clone() const
+{
+    return New<TPropagatingStorageImpl>(*this);
+}
 
-    std::optional<std::any> RemoveRaw(const std::type_info& typeInfo)
-    {
-        auto iter = Data_.find(std::type_index(typeInfo));
-        if (iter == Data_.end()) {
-            return std::nullopt;
-        }
-        auto result = std::make_optional<std::any>(iter->second);
-        Data_.erase(iter);
-        return result;
-    }
-
-    DEFINE_SIGNAL_SIMPLE(void(), OnBeforeUninstall);
-    DEFINE_SIGNAL_SIMPLE(void(), OnAfterInstall);
-
-    void RecordLocation(TSourceLocation loc)
-    {
-        Locations_.Append(&loc, &loc + 1);
-    }
-
-    void PrintModificationLocationsToStderr()
-    {
-        size_t size = Locations_.Size();
-        TSourceLocation lastLocations[MaxSize];
-        Locations_.CopyTailTo(size, &lastLocations[0]);
-        for (size_t i = 0; i < size; ++i) {
-            Cerr << NYT::ToString(lastLocations[i]) << Endl;
-        }
-    }
-
-private:
-    TStorage Data_;
-
-    static constexpr int MaxSize = 8;
-    TStaticRingQueue<TSourceLocation, MaxSize> Locations_;
-};
+} // namespace NDetail
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPropagatingStorage::TImpl
-    : public TRefCounted
-    , public TPropagatingStorageImplBase
-{
-public:
-    TImpl() = default;
-
-    TIntrusivePtr<TImpl> Clone() const
-    {
-        return New<TImpl>(static_cast<const TPropagatingStorageImplBase&>(*this));
-    }
-
-private:
-    DECLARE_NEW_FRIEND()
-
-    explicit TImpl(const TPropagatingStorageImplBase& base)
-        : TPropagatingStorageImplBase(base)
-    { }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-TPropagatingStorage::TPropagatingStorage() = default;
-
-TPropagatingStorage::TPropagatingStorage(TIntrusivePtr<TImpl> impl)
+TPropagatingStorage::TPropagatingStorage(TIntrusivePtr<NDetail::TPropagatingStorageImpl> impl)
     : Impl_(std::move(impl))
 { }
-
-TPropagatingStorage::~TPropagatingStorage() = default;
-
-TPropagatingStorage::TPropagatingStorage(const TPropagatingStorage& other) = default;
-TPropagatingStorage::TPropagatingStorage(TPropagatingStorage&& other) = default;
-
-TPropagatingStorage& TPropagatingStorage::operator=(const TPropagatingStorage& other) = default;
-TPropagatingStorage& TPropagatingStorage::operator=(TPropagatingStorage&& other) = default;
-
-bool TPropagatingStorage::IsNull() const
-{
-    return !static_cast<bool>(Impl_);
-}
-
-bool TPropagatingStorage::IsEmpty() const
-{
-    return !Impl_ || Impl_->IsEmpty();
-}
-
-const std::any* TPropagatingStorage::FindRaw(const std::type_info& typeInfo) const
-{
-    if (!Impl_) {
-        return nullptr;
-    }
-    return Impl_->GetRaw(typeInfo);
-}
 
 std::optional<std::any> TPropagatingStorage::ExchangeRaw(std::any value)
 {
@@ -167,13 +87,13 @@ void TPropagatingStorage::UnsubscribeOnBeforeUninstall(const TCallback<void()>& 
 
 TPropagatingStorage TPropagatingStorage::Create()
 {
-    return TPropagatingStorage(New<TImpl>());
+    return TPropagatingStorage(New<NDetail::TPropagatingStorageImpl>());
 }
 
 void TPropagatingStorage::EnsureUnique()
 {
     if (!Impl_) {
-        Impl_ = New<TImpl>();
+        Impl_ = New<NDetail::TPropagatingStorageImpl>();
         return;
     }
 
@@ -196,122 +116,66 @@ void TPropagatingStorage::EnsureUnique()
     Impl_ = Impl_->Clone();
 }
 
-void TPropagatingStorage::RecordLocation(TSourceLocation loc)
-{
-    Impl_->RecordLocation(loc);
-}
-
-void TPropagatingStorage::PrintModificationLocationsToStderr()
-{
-    Impl_->PrintModificationLocationsToStderr();
-}
-
-struct TPropagatingStorageInfo
-{
-    TPropagatingStorage Storage;
-    TSourceLocation Location;
-    TSourceLocation PrevLocation;
-};
-
-static YT_DEFINE_GLOBAL(TFlsSlot<TPropagatingStorageInfo>, PropagatingStorageSlot);
-
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPropagatingStorageManager
+namespace NDetail {
+
+void TPropagatingStorageManager::RunSwitchHandlers(
+    const TPropagatingStorage& oldStorage,
+    const TPropagatingStorage& newStorage,
+    int count)
 {
-public:
-    static TPropagatingStorageManager* Get()
-    {
-        return Singleton<TPropagatingStorageManager>();
+    for (int index = 0; index < count; ++index) {
+        SwitchHandlers_[index](oldStorage, newStorage);
     }
-
-    TPropagatingStorage& GetCurrentPropagatingStorage()
-    {
-        return PropagatingStorageSlot()->Storage;
-    }
-
-    const TPropagatingStorage* TryGetPropagatingStorage(const TFls& fls)
-    {
-        auto* info = PropagatingStorageSlot().Get(fls);
-        return info != nullptr ? &info->Storage : nullptr;
-    }
-
-    void InstallGlobalSwitchHandler(TPropagatingStorageGlobalSwitchHandler handler)
-    {
-        auto guard = Guard(Lock_);
-        int index = SwitchHandlerCount_.load();
-        YT_VERIFY(index < MaxSwitchHandlerCount);
-        SwitchHandlers_[index] = handler;
-        ++SwitchHandlerCount_;
-    }
-
-    TPropagatingStorage SwitchPropagatingStorage(TPropagatingStorage newStorage)
-    {
-        auto& storage = GetCurrentPropagatingStorage();
-        int count = SwitchHandlerCount_.load(std::memory_order::acquire);
-        for (int index = 0; index < count; ++index) {
-            SwitchHandlers_[index](storage, newStorage);
-        }
-        return std::exchange(storage, std::move(newStorage));
-    }
-
-private:
-    NThreading::TForkAwareSpinLock Lock_;
-
-    static constexpr int MaxSwitchHandlerCount = 16;
-    std::array<TPropagatingStorageGlobalSwitchHandler, MaxSwitchHandlerCount> SwitchHandlers_;
-    std::atomic<int> SwitchHandlerCount_ = 0;
-
-    TPropagatingStorageManager() = default;
-    Y_DECLARE_SINGLETON_FRIEND()
-};
-
-TPropagatingStorage& GetCurrentPropagatingStorage()
-{
-    return TPropagatingStorageManager::Get()->GetCurrentPropagatingStorage();
 }
+
+void TPropagatingStorageManager::InstallSwitchHandler(TPropagatingStorageGlobalSwitchHandler handler)
+{
+    auto guard = Guard(SwitchHandlerLock_);
+    int index = SwitchHandlerCount_.load();
+    YT_VERIFY(index < MaxSwitchHandlerCount_);
+    SwitchHandlers_[index] = handler;
+    ++SwitchHandlerCount_;
+}
+
+TPropagatingStorage TPropagatingStorageManager::SwitchPropagatingStorage(TPropagatingStorage newStorage, TFls*& cachedFls)
+{
+    auto* fls = cachedFls;
+    if (!fls) {
+        fls = cachedFls = GetCurrentFls();
+    }
+    auto& slot = PropagatingStorageSlot();
+    auto* current = slot.TryGet(*fls);
+    if (!current || current->IsNull()) {
+        // Nothing meaningful installed currently.
+        if (newStorage.IsNull()) {
+            return TPropagatingStorage();
+        }
+        RunSwitchHandlers(EmptyPropagatingStorage(), newStorage, SwitchHandlerCount_.load(std::memory_order::acquire));
+        // Lazily allocates the slot via GetOrCreate (does its own TLS lookup).
+        // This branch is only taken once per fiber, so the extra lookup is
+        // negligible.
+        *slot = std::move(newStorage);
+        return TPropagatingStorage();
+    }
+    RunSwitchHandlers(*current, newStorage, SwitchHandlerCount_.load(std::memory_order::acquire));
+    return std::exchange(*current, std::move(newStorage));
+}
+
+} // namespace NDetail
 
 const TPropagatingStorage* TryGetPropagatingStorage(const TFls& fls)
 {
-    return TPropagatingStorageManager::Get()->TryGetPropagatingStorage(fls);
+    return NDetail::PropagatingStorageSlot().TryGet(fls);
 }
 
 void InstallGlobalPropagatingStorageSwitchHandler(TPropagatingStorageGlobalSwitchHandler handler)
 {
-    TPropagatingStorageManager::Get()->InstallGlobalSwitchHandler(handler);
+    NDetail::PropagatingStorageManager.InstallSwitchHandler(handler);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-
-TSourceLocation SwitchPropagatingStorageLocation(TSourceLocation loc)
-{
-    PropagatingStorageSlot()->PrevLocation = PropagatingStorageSlot()->Location;
-    return std::exchange(PropagatingStorageSlot()->Location, loc);
-}
-
-void PrintLocationToStderr()
-{
-    Cerr << Format(
-        "PropagatingStorageLocation: %v, PrevLocation: %v, ModificationLocations:",
-        PropagatingStorageSlot()->Location,
-        PropagatingStorageSlot()->PrevLocation) << Endl;
-
-    PropagatingStorageSlot()->Storage.PrintModificationLocationsToStderr();
-}
-
-TPropagatingStorageGuard::TPropagatingStorageGuard(TPropagatingStorage storage, TSourceLocation loc)
-    : OldStorage_(TPropagatingStorageManager::Get()->SwitchPropagatingStorage(std::move(storage)))
-    , OldLocation_(SwitchPropagatingStorageLocation(loc))
-{
-    YT_VERIFY((OldLocation_.GetFileName() == nullptr) == (OldLocation_.GetLine() == -1));
-    YT_VERIFY((loc.GetFileName() == nullptr) == (loc.GetLine() == -1));
-}
-
-TPropagatingStorageGuard::~TPropagatingStorageGuard()
-{
-    TPropagatingStorageManager::Get()->SwitchPropagatingStorage(std::move(OldStorage_));
-    SwitchPropagatingStorageLocation(OldLocation_);
-}
 
 const TPropagatingStorage& TPropagatingStorageGuard::GetOldStorage() const
 {
@@ -320,8 +184,8 @@ const TPropagatingStorage& TPropagatingStorageGuard::GetOldStorage() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TNullPropagatingStorageGuard::TNullPropagatingStorageGuard(TSourceLocation loc)
-    : TPropagatingStorageGuard(TPropagatingStorage(), loc)
+TNullPropagatingStorageGuard::TNullPropagatingStorageGuard()
+    : TPropagatingStorageGuard(TPropagatingStorage())
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

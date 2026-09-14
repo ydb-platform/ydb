@@ -3,12 +3,13 @@
 
 #include <library/cpp/yt/assert/assert.h>
 
-#include <library/cpp/yt/misc/thread_name.h>
 #include <library/cpp/yt/misc/tls.h>
 
 #include <library/cpp/yt/string/format.h>
 
-#include <util/system/thread.h>
+#include <library/cpp/yt/system/process_id.h>
+#include <library/cpp/yt/system/thread_id.h>
+#include <library/cpp/yt/system/thread_name.h>
 
 namespace NYT {
 
@@ -51,7 +52,8 @@ bool TOriginAttributes::operator==(const TOriginAttributes& other) const noexcep
         Datetime == other.Datetime &&
         Pid == other.Pid &&
         Tid == other.Tid &&
-        ExtensionData == other.ExtensionData;
+        ExtensionData.has_value() == other.ExtensionData.has_value() &&
+        (!ExtensionData.has_value() || NDetail::CompareExtensionData(*ExtensionData, *other.ExtensionData));
 }
 
 void TOriginAttributes::Capture()
@@ -64,8 +66,8 @@ void TOriginAttributes::Capture()
     }
 
     Datetime = TInstant::Now();
-    Pid = GetPID();
-    Tid = TThread::CurrentThreadId();
+    Pid = GetProcessId();
+    Tid = GetSystemThreadId();
     ThreadName = GetCurrentThreadName();
     ExtensionData = NDetail::GetExtensionData();
 }
@@ -84,9 +86,9 @@ std::optional<TOriginAttributes::TErasedExtensionData> GetExtensionData()
     return std::nullopt;
 }
 
-TString FormatOrigin(const TOriginAttributes& attributes)
+std::string FormatOrigin(const TOriginAttributes& attributes)
 {
-    using TFunctor = TString(*)(const TOriginAttributes&);
+    using TFunctor = std::string(*)(const TOriginAttributes&);
 
     if (auto strong = NGlobal::GetErasedVariable(FormatOriginTag)) {
         return strong->AsConcrete<TFunctor>()(attributes);
@@ -104,6 +106,16 @@ TString FormatOrigin(const TOriginAttributes& attributes)
             }
             FormatValue(builder, threadName, "v");
         }));
+}
+
+bool CompareExtensionData(const TOriginAttributes::TErasedExtensionData& lhs, const TOriginAttributes::TErasedExtensionData& rhs)
+{
+    using TFunctor = bool(*)(const TOriginAttributes::TErasedExtensionData&, const TOriginAttributes::TErasedExtensionData&);
+
+    if (auto strong = NGlobal::GetErasedVariable(CompareExtensionDataTag)) {
+        return strong->AsConcrete<TFunctor>()(lhs, rhs);
+    }
+    return lhs == rhs;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -124,7 +136,7 @@ TOriginAttributes ExtractFromDictionary(TErrorAttributes* attributes)
 TOriginAttributes ExtractFromDictionaryDefault(TErrorAttributes* attributes)
 {
     TOriginAttributes result;
-    if (attributes == nullptr) {
+    if (!attributes) {
         return result;
     }
 
@@ -142,7 +154,7 @@ TOriginAttributes ExtractFromDictionaryDefault(TErrorAttributes* attributes)
     result.Tid = attributes->GetAndRemove(TidKey, NThreading::InvalidThreadId);
 
     static const std::string ThreadNameKey("thread");
-    result.ThreadName = TString(attributes->GetAndRemove(ThreadNameKey, std::string()));
+    result.ThreadName = {attributes->GetAndRemove(ThreadNameKey, std::string())};
 
     return result;
 }

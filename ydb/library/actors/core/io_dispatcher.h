@@ -4,7 +4,6 @@
 #include "event_local.h"
 #include "events.h"
 #include "actorsystem.h"
-#include "executor_thread.h"
 #include "executelater.h"
 
 namespace NActors {

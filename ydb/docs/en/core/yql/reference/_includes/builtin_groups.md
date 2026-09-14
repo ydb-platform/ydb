@@ -17,4 +17,4 @@ By default, all users are included in the `USERS` group, and the `root` user is 
 
 Below is a diagram demonstrating how groups inherit permissions from each other. For example, `DATA-WRITERS` includes all permissions of `DATA-READERS`:
 
-![builtin_groups](../_assets/builtin_groups.svg)
+![builtin_groups](../_assets/builtin_groups.svg){inline=false}

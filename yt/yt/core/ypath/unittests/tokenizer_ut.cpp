@@ -16,7 +16,7 @@ class TYPathTokenizerTest
 private:
     std::unique_ptr<TTokenizer> Tokenizer;
     std::vector<ETokenType> TokenTypes;
-    std::vector<TString> Literals;
+    std::vector<std::string> Literals;
 
 public:
     void Prepare(const char* input)
@@ -45,23 +45,23 @@ public:
         while (Tokenize());
     }
 
-    TString GetFlattenedTokens()
+    std::string GetFlattenedTokens()
     {
-        TString result;
+        std::string result;
         result.reserve(TokenTypes.size());
         for (auto type : TokenTypes) {
             switch (type) {
-                case ETokenType::Literal:   result.append('L'); break;
-                case ETokenType::Slash:     result.append('/'); break;
-                case ETokenType::Ampersand: result.append('&'); break;
-                case ETokenType::At:        result.append('@'); break;
+                case ETokenType::Literal:   result.push_back('L'); break;
+                case ETokenType::Slash:     result.push_back('/'); break;
+                case ETokenType::Ampersand: result.push_back('&'); break;
+                case ETokenType::At:        result.push_back('@'); break;
                 default:                                        break;
             }
         }
         return result;
     }
 
-    const std::vector<TString>& GetLiterals()
+    const std::vector<std::string>& GetLiterals()
     {
         return Literals;
     }
@@ -71,35 +71,35 @@ TEST_F(TYPathTokenizerTest, SimpleCase1)
 {
     PrepareAndTokenize("hello");
     EXPECT_EQ("L", GetFlattenedTokens());
-    EXPECT_EQ(std::vector<TString>(1, "hello"), GetLiterals());
+    EXPECT_EQ(std::vector<std::string>(1, "hello"), GetLiterals());
 }
 
 TEST_F(TYPathTokenizerTest, SimpleCase2)
 {
     PrepareAndTokenize("/");
     EXPECT_EQ("/", GetFlattenedTokens());
-    EXPECT_EQ(std::vector<TString>(), GetLiterals());
+    EXPECT_EQ(std::vector<std::string>(), GetLiterals());
 }
 
 TEST_F(TYPathTokenizerTest, SimpleCase3)
 {
     PrepareAndTokenize("&");
     EXPECT_EQ("&", GetFlattenedTokens());
-    EXPECT_EQ(std::vector<TString>(), GetLiterals());
+    EXPECT_EQ(std::vector<std::string>(), GetLiterals());
 }
 
 TEST_F(TYPathTokenizerTest, SimpleCase4)
 {
     PrepareAndTokenize("@");
     EXPECT_EQ("@", GetFlattenedTokens());
-    EXPECT_EQ(std::vector<TString>(), GetLiterals());
+    EXPECT_EQ(std::vector<std::string>(), GetLiterals());
 }
 
 TEST_F(TYPathTokenizerTest, SimpleCase5)
 {
     PrepareAndTokenize("&//@@&&@/&"); // There are all pairs within this string.
     EXPECT_EQ("&//@@&&@/&", GetFlattenedTokens());
-    EXPECT_EQ(std::vector<TString>(), GetLiterals());
+    EXPECT_EQ(std::vector<std::string>(), GetLiterals());
 }
 
 TEST_F(TYPathTokenizerTest, SimpleCase6)
@@ -107,7 +107,7 @@ TEST_F(TYPathTokenizerTest, SimpleCase6)
     PrepareAndTokenize("hello/cruel@world&");
     EXPECT_EQ("L/L@L&", GetFlattenedTokens());
 
-    std::vector<TString> expectedLiterals;
+    std::vector<std::string> expectedLiterals;
     expectedLiterals.push_back("hello");
     expectedLiterals.push_back("cruel");
     expectedLiterals.push_back("world");
@@ -119,32 +119,32 @@ TEST_F(TYPathTokenizerTest, SeeminglyImpossibleLiteral)
     const char* string = "Hello, cruel world; I am here to destroy you.";
     PrepareAndTokenize(string);
     EXPECT_EQ("L", GetFlattenedTokens());
-    EXPECT_EQ(std::vector<TString>(1, string), GetLiterals());
+    EXPECT_EQ(std::vector<std::string>(1, string), GetLiterals());
 }
 
 TEST_F(TYPathTokenizerTest, IntegersAndDoubles)
 {
     PrepareAndTokenize("0123456789.01234567890");
     EXPECT_EQ("L", GetFlattenedTokens());
-    EXPECT_EQ(std::vector<TString>(1, "0123456789.01234567890"), GetLiterals());
+    EXPECT_EQ(std::vector<std::string>(1, "0123456789.01234567890"), GetLiterals());
 }
 
 TEST_F(TYPathTokenizerTest, GUID)
 {
     PrepareAndTokenize("c61834-c8f650dc-90b0dfdc-21c02eed");
     EXPECT_EQ("L", GetFlattenedTokens());
-    EXPECT_EQ(std::vector<TString>(1, "c61834-c8f650dc-90b0dfdc-21c02eed"), GetLiterals());
+    EXPECT_EQ(std::vector<std::string>(1, "c61834-c8f650dc-90b0dfdc-21c02eed"), GetLiterals());
 
     PrepareAndTokenize("000000-11111111-22222222-33333333");
     EXPECT_EQ("L", GetFlattenedTokens());
-    EXPECT_EQ(std::vector<TString>(1, "000000-11111111-22222222-33333333"), GetLiterals());
+    EXPECT_EQ(std::vector<std::string>(1, "000000-11111111-22222222-33333333"), GetLiterals());
 }
 
 TEST_F(TYPathTokenizerTest, EscapedSpecial)
 {
     PrepareAndTokenize("\\@\\&\\/\\\\\\[\\{");
     EXPECT_EQ("L", GetFlattenedTokens());
-    EXPECT_EQ(std::vector<TString>(1, "@&/\\[{"), GetLiterals());
+    EXPECT_EQ(std::vector<std::string>(1, "@&/\\[{"), GetLiterals());
 }
 
 TEST_F(TYPathTokenizerTest, EscapedHex)
@@ -184,7 +184,7 @@ TEST_F(TYPathTokenizerTest, EscapedAsInRealWorld)
 {
     PrepareAndTokenize("Madness\\x3f This is Sparta\\x21");
     EXPECT_EQ("L", GetFlattenedTokens());
-    EXPECT_EQ(std::vector<TString>(1, "Madness? This is Sparta!"), GetLiterals());
+    EXPECT_EQ(std::vector<std::string>(1, "Madness? This is Sparta!"), GetLiterals());
 }
 
 TEST_F(TYPathTokenizerTest, InvalidEscapeSequences)
@@ -202,7 +202,7 @@ TEST_F(TYPathTokenizerTest, InvalidEscapeSequences)
 TEST(TYPathHelpersTest, DirNameAndBaseName)
 {
     auto toPair = [] (auto lhs, auto rhs) {
-        return std::pair(TString(lhs), TString(rhs));
+        return std::pair(std::string(lhs), std::string(rhs));
     };
 
     EXPECT_EQ(DirNameAndBaseName("//path/to/smth"), toPair("//path/to", "smth"));

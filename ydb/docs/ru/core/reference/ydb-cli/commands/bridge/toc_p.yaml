@@ -1,0 +1,13 @@
+items:
+  - name: Обзор
+    href: index.md
+  - name: ydb admin cluster bridge list
+    href: list.md
+  - name: ydb admin cluster bridge switchover
+    href: switchover.md
+  - name: ydb admin cluster bridge failover
+    href: failover.md
+  - name: ydb admin cluster bridge takedown
+    href: takedown.md
+  - name: ydb admin cluster bridge rejoin
+    href: rejoin.md

@@ -1,0 +1,224 @@
+#pragma once
+
+#include <yt/yql/providers/yt/fmr/proto/request_options.pb.h>
+#include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
+
+namespace NYql::NFmr {
+
+NProto::TFmrError FmrErrorToProto(const TFmrError& error);
+
+TFmrError FmrErrorFromProto(const NProto::TFmrError& protoError);
+
+NProto::TYtTableRef YtTableRefToProto(const TYtTableRef& ytTableRef);
+
+TYtTableRef YtTableRefFromProto(const NProto::TYtTableRef protoYtTableRef);
+
+NProto::TYtTableTaskRef YtTableTaskRefToProto(const TYtTableTaskRef& ytTableTaskRef);
+
+TYtTableTaskRef YtTableTaskRefFromProto(const NProto::TYtTableTaskRef protoYtTableTaskRef);
+
+NProto::TFmrTableId FmrTableIdToProto(const TFmrTableId& fmrTableId);
+
+TFmrTableId FmrTableIdFromProto(const NProto::TFmrTableId& protoFmrTableId);
+
+NProto::TFmrTableRef FmrTableRefToProto(const TFmrTableRef& fmrTableRef);
+
+TFmrTableRef FmrTableRefFromProto(const NProto::TFmrTableRef protoFmrTableRef);
+
+NProto::TTableRange TableRangeToProto(const TTableRange& tableRange);
+
+TTableRange TableRangeFromProto(const NProto::TTableRange& protoTableRange);
+
+NProto::TFmrTableInputRef FmrTableInputRefToProto(const TFmrTableInputRef& fmrTableInputRef);
+
+TFmrTableInputRef FmrTableInputRefFromProto(const NProto::TFmrTableInputRef& protoFmrTableInputRef);
+
+NProto::TFmrTableOutputRef FmrTableOutputRefToProto(const TFmrTableOutputRef& fmrTableOutputRef);
+
+TFmrTableOutputRef FmrTableOutputRefFromProto(const NProto::TFmrTableOutputRef& protoFmrTableOutputRef);
+
+NProto::TTableStats TableStatsToProto(const TTableStats& tableStats);
+
+TTableStats TableStatsFromProto(const NProto::TTableStats& protoTableStats);
+
+NProto::TSortedChunkStats SortedChunkStatsToProto(const TSortedChunkStats& sortedChunkStats);
+
+TSortedChunkStats SortedChunkStatsFromProto(const NProto::TSortedChunkStats& protoSortedChunkStats);
+
+NProto::TChunkStats ChunkStatsToProto(const TChunkStats& chunkStats);
+
+TChunkStats ChunkStatsFromProto(const NProto::TChunkStats& protoChunkStats);
+
+NProto::TTableChunkStats TableChunkStatsToProto(const TTableChunkStats& tableChunkStats);
+
+TTableChunkStats TableChunkStatsFromProto(const NProto::TTableChunkStats& protoTableChunkStats);
+
+NProto::TStatistics StatisticsToProto(const TStatistics& stats);
+
+TStatistics StatisticsFromProto(const NProto::TStatistics& protoStats);
+
+NProto::TOperationTableRef OperationTableRefToProto(const TOperationTableRef& operationTableRef);
+
+TOperationTableRef OperationTableRefFromProto(const NProto::TOperationTableRef& protoOperationTableRef);
+
+NProto::TTaskTableRef TaskTableRefToProto(const TTaskTableRef& taskTableRef);
+
+TTaskTableRef TaskTableRefFromProto(const NProto::TTaskTableRef& protoTaskTableRef);
+
+NProto::TTaskTableInputRef TaskTableInputRefToProto(const TTaskTableInputRef& taskTableInputRef);
+
+TTaskTableInputRef TaskTableInputRefFromProto(const NProto::TTaskTableInputRef& protoTaskTableInputRef);
+
+NProto::TUploadOperationParams UploadOperationParamsToProto(const TUploadOperationParams& uploadOperationParams);
+
+TUploadOperationParams UploadOperationParamsFromProto(const NProto::TUploadOperationParams& protoUploadOperationParams);
+
+NProto::TSortedUploadOperationParams SortedUploadOperationParamsToProto(const TSortedUploadOperationParams& SortedUploadOperationParams);
+
+TSortedUploadOperationParams SortedUploadOperationParamsFromProto(const NProto::TSortedUploadOperationParams& protoSortedUploadOperationParams);
+
+NProto::TUploadTaskParams UploadTaskParamsToProto(const TUploadTaskParams& uploadTaskParams);
+
+TUploadTaskParams UploadTaskParamsFromProto(const NProto::TUploadTaskParams& protoUploadTaskParams);
+
+NProto::TSortedUploadTaskParams SortedUploadTaskParamsToProto(const TSortedUploadTaskParams& SortedUploadTaskParams);
+
+TSortedUploadTaskParams SortedUploadTaskParamsFromProto(const NProto::TSortedUploadTaskParams& protoSortedUploadTaskParams);
+
+NProto::TDownloadOperationParams DownloadOperationParamsToProto(const TDownloadOperationParams& downloadOperationParams);
+
+TDownloadOperationParams DownloadOperationParamsFromProto(const NProto::TDownloadOperationParams& protoDownloadOperationParams);
+
+NProto::TDownloadTaskParams DownloadTaskParamsToProto(const TDownloadTaskParams& downloadTaskParams);
+
+TDownloadTaskParams DownloadTaskParamsFromProto(const NProto::TDownloadTaskParams& protoDownloadTaskParams);
+
+NProto::TMergeOperationParams MergeOperationParamsToProto(const TMergeOperationParams& mergeOperationParams);
+
+TMergeOperationParams MergeOperationParamsFromProto(const NProto::TMergeOperationParams& protoMergeOperationParams);
+
+NProto::TMergeTaskParams MergeTaskParamsToProto(const TMergeTaskParams& mergeTaskParams);
+
+TMergeTaskParams MergeTaskParamsFromProto(const NProto::TMergeTaskParams& protoMergeTaskParams);
+
+NProto::TMapOperationParams MapOperationParamsToProto(const TMapOperationParams& mapOperationParams);
+
+TMapOperationParams MapOperationParamsFromProto(const NProto::TMapOperationParams& protoMapOperationParams);
+
+NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams);
+
+TMapTaskParams MapTaskParamsFromProto(const NProto::TMapTaskParams& protoMapTaskParams);
+
+NProto::TReduceOperationSpec ReduceOperationSpecToProto(const TReduceOperationSpec& reduceOperationSpec);
+
+TReduceOperationSpec ReduceOperationSpecFromProto (const NProto::TReduceOperationSpec& protoReduceOperationSpec);
+
+NProto::TReduceOperationParams ReduceOperationParamsToProto(const TReduceOperationParams& reduceOperationParams);
+
+TReduceOperationParams ReduceOperationParamsFromProto(const NProto::TReduceOperationParams& protoReduceOperationParams);
+
+NProto::TReduceTaskParams ReduceTaskParamsToProto(const TReduceTaskParams& reduceTaskParams);
+
+TReduceTaskParams ReduceTaskParamsFromProto(const NProto::TReduceTaskParams& protoReduceTaskParams);
+
+NProto::TSortOperationParams SortOperationParamsToProto(const TSortOperationParams& sortOperationParams);
+
+TSortOperationParams SortOperationParamsFromProto(const NProto::TSortOperationParams& protoSortOperationParams);
+
+NProto::TLocalSortTaskParams LocalSortTaskParamsToProto(const TLocalSortTaskParams& localSortTaskParams);
+
+TLocalSortTaskParams LocalSortTaskParamsFromProto(const NProto::TLocalSortTaskParams& protoLocalSortTaskParams);
+
+NProto::TOperationParams OperationParamsToProto(const TOperationParams& operationParams);
+
+TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoOperationParams);
+
+NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams);
+
+TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams);
+
+NProto::TClusterConnection ClusterConnectionToProto(const TClusterConnection& clusterConnection);
+
+TClusterConnection ClusterConnectionFromProto(const NProto::TClusterConnection& protoClusterConnection);
+
+NProto::TFileInfo FileInfoToProto(const TFileInfo& fileInfo);
+
+TFileInfo FileInfoFromProto(const NProto::TFileInfo& protoFileInfo);
+
+NProto::TYtResourceInfo YtResourceInfoToProto(const TYtResourceInfo& ytResourceInfo);
+
+TYtResourceInfo YtResourceInfoFromProto(const NProto::TYtResourceInfo& protoYtResourceInfo);
+
+NProto::TFmrResourceOperationInfo FmrResourceOperationInfoToProto(const TFmrResourceOperationInfo& fmrResourceOperationInfo);
+
+TFmrResourceOperationInfo FmrResourceOperationInfoFromProto(const NProto::TFmrResourceOperationInfo& protoFmrResourceOperationInfo);
+
+NProto::TFmrResourceTaskInfo FmrResourceTaskInfoToProto(const TFmrResourceTaskInfo& fmrResourceTaskInfo);
+
+TFmrResourceTaskInfo FmrResourceTaskInfoFromProto(const NProto::TFmrResourceTaskInfo& protoFmrResourceTaskInfo);
+
+NProto::TTask TaskToProto(const TTask& task);
+
+TTask TaskFromProto(const NProto::TTask& protoTask);
+
+NProto::TTaskUploadResult TaskUploadResultToProto(const TTaskUploadResult& taskUploadResult);
+
+TTaskUploadResult TaskUploadResultFromProto(const NProto::TTaskUploadResult& protoTaskUploadResult);
+
+NProto::TTaskDownloadResult TaskDownloadResultToProto(const TTaskDownloadResult& taskDownloadResult);
+
+TTaskDownloadResult TaskDownloadResultFromProto(const NProto::TTaskDownloadResult& protoTaskDownloadResult);
+
+NProto::TTaskMergeResult TaskMergeResultToProto(const TTaskMergeResult& taskMergeResult);
+
+TTaskMergeResult TaskMergeResultFromProto(const NProto::TTaskMergeResult& protoTaskMergeResult);
+
+NProto::TTaskMapResult TaskMapResultToProto(const TTaskMapResult& taskMapResult);
+
+TTaskMapResult TaskMapResultFromProto(const NProto::TTaskMapResult& protoTaskMapResult);
+
+NProto::TTaskSortedUploadResult TaskSortedUploadResultToProto(const TTaskSortedUploadResult& taskSortedUploadResult);
+
+TTaskSortedUploadResult TaskSortedUploadResultFromProto(const NProto::TTaskSortedUploadResult& protoTaskSortedUploadResult);
+
+NProto::TPullOperationParams PullOperationParamsToProto(const TPullOperationParams& pullOperationParams);
+
+TPullOperationParams PullOperationParamsFromProto(const NProto::TPullOperationParams& protoPullOperationParams);
+
+NProto::TPullTaskParams PullTaskParamsToProto(const TPullTaskParams& pullTaskParams);
+
+TPullTaskParams PullTaskParamsFromProto(const NProto::TPullTaskParams& protoPullTaskParams);
+
+NProto::TTaskPullResult TaskPullResultToProto(const TTaskPullResult& taskPullResult);
+
+TTaskPullResult TaskPullResultFromProto(const NProto::TTaskPullResult& protoTaskPullResult);
+
+NProto::TFillOperationParams FillOperationParamsToProto(const TFillOperationParams& fillOperationParams);
+
+TFillOperationParams FillOperationParamsFromProto(const NProto::TFillOperationParams& protoFillOperationParams);
+
+NProto::TTouchOperationParams TouchOperationParamsToProto(const TTouchOperationParams& touchOperationParams);
+
+TTouchOperationParams TouchOperationParamsFromProto(const NProto::TTouchOperationParams& protoTouchOperationParams);
+
+NProto::TFillTaskParams FillTaskParamsToProto(const TFillTaskParams& fillTaskParams);
+
+TFillTaskParams FillTaskParamsFromProto(const NProto::TFillTaskParams& protoFillTaskParams);
+
+NProto::TMapReduceOperationParams MapReduceOperationParamsToProto(const TMapReduceOperationParams& mapReduceOperationParams);
+
+TMapReduceOperationParams MapReduceOperationParamsFromProto(const NProto::TMapReduceOperationParams& protoMapReduceOperationParams);
+
+NProto::TMapReduceMapTaskParams MapReduceMapTaskParamsToProto(const TMapReduceMapTaskParams& mapReduceMapTaskParams);
+
+TMapReduceMapTaskParams MapReduceMapTaskParamsFromProto(const NProto::TMapReduceMapTaskParams& protoMapReduceMapTaskParams);
+
+NProto::TTaskResult TaskResultToProto(const TTaskResult& taskResult);
+
+TTaskResult TaskResultFromProto(const NProto::TTaskResult& protoTaskResult);
+
+NProto::TTaskState TaskStateToProto(const TTaskState& taskState);
+
+TTaskState TaskStateFromProto(const NProto::TTaskState& protoTaskState);
+
+} // namespace NYql::NFmr

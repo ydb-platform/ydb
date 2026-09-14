@@ -1,0 +1,29 @@
+hosts:
+- host: host1
+  drive:
+    - path: ydb.data
+- host: host2
+  drive:
+    - path: ydb.data
+erasure: mirror-3-dc
+self_management_config:
+  enabled: true
+storage_pool_types:
+- kind: ssd
+  pool_config:
+    box_id: '1'
+    erasure_species: mirror-3-dc
+    kind: ssd
+    pdisk_filter:
+    - property:
+      - type: SSD
+    vdisk_kind: Default
+- kind: hdd
+  pool_config:
+    box_id: '1'
+    erasure_species: mirror-3-dc
+    kind: hdd
+    pdisk_filter:
+    - property:
+      - type: ROT
+    vdisk_kind: Default

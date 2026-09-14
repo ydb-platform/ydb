@@ -4,25 +4,23 @@ LIBRARY()
 
 LICENSE(
     APSL-2.0 AND
+    Apache-2.0 AND
     BSD-2-Clause AND
     BSD-3-Clause AND
     BSD-4-Clause-UC AND
+    Custom-clarified-artistic-proofread AND
     FSFAP AND
-    GPL-2.0-only AND
-    LicenseRef-scancode-other-permissive AND
-    LicenseRef-scancode-unknown-license-reference AND
     MIT AND
     MIT WITH Musl-Exception AND
     MIT-Nagy AND
     Public-Domain AND
     Unicode AND
-    Unicode-Mappings AND
     curl
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2022.07.12)
+VERSION(2023.01.27)
 
 ADDINCL(
     GLOBAL contrib/libs/breakpad/src
@@ -43,6 +41,7 @@ SRCS(
     processor/call_stack.cc
     processor/cfi_frame_info.cc
     processor/convert_old_arm64_context.cc
+    processor/disassembler_objdump.cc
     processor/disassembler_x86.cc
     processor/dump_context.cc
     processor/dump_object.cc
@@ -73,10 +72,26 @@ SRCS(
     processor/stackwalker_mips.cc
     processor/stackwalker_ppc.cc
     processor/stackwalker_ppc64.cc
+    processor/stackwalker_riscv.cc
+    processor/stackwalker_riscv64.cc
     processor/stackwalker_sparc.cc
     processor/stackwalker_x86.cc
     processor/symbolic_constants_win.cc
     processor/tokenize.cc
+    third_party/libdisasm/ia32_implicit.c
+    third_party/libdisasm/ia32_insn.c
+    third_party/libdisasm/ia32_invariant.c
+    third_party/libdisasm/ia32_modrm.c
+    third_party/libdisasm/ia32_opcode_tables.c
+    third_party/libdisasm/ia32_operand.c
+    third_party/libdisasm/ia32_reg.c
+    third_party/libdisasm/ia32_settings.c
+    third_party/libdisasm/x86_disasm.c
+    third_party/libdisasm/x86_format.c
+    third_party/libdisasm/x86_imm.c
+    third_party/libdisasm/x86_insn.c
+    third_party/libdisasm/x86_misc.c
+    third_party/libdisasm/x86_operand_list.c
 )
 
 END()

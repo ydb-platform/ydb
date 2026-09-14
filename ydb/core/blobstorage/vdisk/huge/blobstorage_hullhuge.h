@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
@@ -20,9 +21,12 @@ namespace NKikimr {
         const TIngress Ingress;
         TRope Data;
         const bool IgnoreBlock;
+        const bool IssueKeepFlag;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
+        const TWriteSource WriteSource;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
+        const bool RewriteBlob;
 
         mutable NLWTrace::TOrbit Orbit;
 
@@ -32,17 +36,23 @@ namespace NKikimr {
                              const TIngress &ingress,
                              TRope&& data,
                              bool ignoreBlock,
+                             bool issueKeepFlag,
                              NKikimrBlobStorage::EPutHandleClass handleClass,
                              std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
-                             NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks)
+                             NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
+                             TWriteSource writeSource = UnknownWriteSource(),
+                             bool rewriteBlob = false)
             : SenderId(senderId)
             , Cookie(cookie)
             , LogoBlobId(logoBlobId)
             , Ingress(ingress)
             , Data(std::move(data))
             , IgnoreBlock(ignoreBlock)
+            , IssueKeepFlag(issueKeepFlag)
             , HandleClass(handleClass)
+            , WriteSource(writeSource)
             , Result(std::move(result))
+            , RewriteBlob(rewriteBlob)
         {
             if (extraBlockChecks) {
                 ExtraBlockChecks.Swap(extraBlockChecks);
@@ -70,28 +80,43 @@ namespace NKikimr {
         const TIngress Ingress;
         const TDiskPart HugeBlob;
         const bool IgnoreBlock;
+        const bool IssueKeepFlag;
         const TActorId OrigClient;
         const ui64 OrigCookie;
+        const NKikimrBlobStorage::EPutHandleClass HandleClass;
+        const TWriteSource WriteSource;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
+        const bool RewriteBlob;
+        const bool IsStripe;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,
                            const TIngress &ingress,
                            const TDiskPart &hugeBlob,
                            bool ignoreBlock,
+                           bool issueKeepFlag,
                            const TActorId &origClient,
                            ui64 origCookie,
+                           NKikimrBlobStorage::EPutHandleClass handleClass,
                            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
-                           NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks)
+                           NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
+                           TWriteSource writeSource,
+                           bool rewriteBlob = false,
+                           bool isStripe = false)
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)
             , Ingress(ingress)
             , HugeBlob(hugeBlob)
             , IgnoreBlock(ignoreBlock)
+            , IssueKeepFlag(issueKeepFlag)
             , OrigClient(origClient)
             , OrigCookie(origCookie)
+            , HandleClass(handleClass)
+            , WriteSource(writeSource)
             , Result(std::move(result))
+            , RewriteBlob(rewriteBlob)
+            , IsStripe(isStripe)
         {
             if (extraBlockChecks) {
                 ExtraBlockChecks.Swap(extraBlockChecks);
@@ -175,15 +200,6 @@ namespace NKikimr {
         }
     };
 
-    class TEvHugeUnlockChunks : public TEventLocal<TEvHugeUnlockChunks, TEvBlobStorage::EvHugeUnlockChunks> {
-    public:
-        TDefragChunks Chunks;
-
-        TEvHugeUnlockChunks(TDefragChunks chunks)
-            : Chunks(std::move(chunks))
-        {}
-    };
-
     ////////////////////////////////////////////////////////////////////////////
     // TEvHugeLockChunksResult
     ////////////////////////////////////////////////////////////////////////////
@@ -229,9 +245,14 @@ namespace NKikimr {
 
     struct TEvHugeAllocateSlotsResult : TEventLocal<TEvHugeAllocateSlotsResult, TEvBlobStorage::EvHugeAllocateSlotsResult> {
         std::vector<TDiskPart> Locations;
+        // Heap ownership at allocation time. Do not re-read the feature flag to classify these:
+        // EnableVDiskHeapAllocator is RequireRestart, but tests (and a missed restart) can still
+        // disagree with the heap that actually produced the location.
+        std::vector<bool> IsStripe;
 
-        TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations)
+        TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations, std::vector<bool> isStripe)
             : Locations(std::move(locations))
+            , IsStripe(std::move(isStripe))
         {}
     };
 
@@ -241,6 +262,22 @@ namespace NKikimr {
         TEvHugeDropAllocatedSlots(std::vector<TDiskPart> locations)
             : Locations(std::move(locations))
         {}
+    };
+
+    struct TEvHugeShredNotify : TEventLocal<TEvHugeShredNotify, TEvBlobStorage::EvHugeShredNotify> {
+        std::vector<TChunkIdx> ChunksToShred;
+        TEvHugeShredNotify(std::vector<TChunkIdx> chunksToShred) : ChunksToShred(std::move(chunksToShred)) {}
+    };
+
+    struct TEvHugeForbiddenChunks : TEventLocal<TEvHugeForbiddenChunks, TEvBlobStorage::EvHugeForbiddenChunks> {
+        THashSet<TChunkIdx> ForbiddenChunks;
+        TEvHugeForbiddenChunks(THashSet<TChunkIdx> forbiddenChunks) : ForbiddenChunks(std::move(forbiddenChunks)) {}
+    };
+
+    // an immutable snapshot of chunks currently owned by the stripe heap; the requester keeps it for the whole scan
+    struct TEvHugeStripeChunks : TEventLocal<TEvHugeStripeChunks, TEvBlobStorage::EvHugeStripeChunks> {
+        THashSet<TChunkIdx> StripeChunks;
+        TEvHugeStripeChunks(THashSet<TChunkIdx> stripeChunks) : StripeChunks(std::move(stripeChunks)) {}
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -259,6 +296,7 @@ namespace NKikimr {
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TDskOutOfSpaceGroup DskOutOfSpaceGroup;
         const bool IsReadOnlyVDisk;
+        THugeBlobCtxPtr HugeBlobCtx;
 
         THugeKeeperCtx(
                 TIntrusivePtr<TVDiskContext> vctx,

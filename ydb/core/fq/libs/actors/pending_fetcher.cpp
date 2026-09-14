@@ -1,8 +1,6 @@
 #include "proxy.h"
 #include "nodes_manager.h"
 
-#include "database_resolver.h"
-
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -37,12 +35,12 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/protos/issue_message.pb.h>
 
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/value/value.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
-#include <ydb/core/fq/libs/common/compression.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
 #include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/compute/common/config.h>
@@ -52,6 +50,8 @@
 #include <ydb/core/fq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/database_resolver.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
@@ -64,11 +64,7 @@
 #include <util/generic/guid.h>
 #include <util/system/hostname.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
-#define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
-#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FQ_PENDING_FETCHER, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_PENDING_FETCHER
 
 namespace NFq {
 
@@ -104,6 +100,13 @@ struct TEvPrivate {
 };
 
 constexpr auto CLEANUP_PERIOD = TDuration::Seconds(60);
+
+TDuration GetPendingFetchPeriod(const NFq::NConfig::TPendingFetcherConfig& config) {
+    if (const auto periodMs = config.GetPendingFetchPeriodMs()) {
+        return TDuration::MilliSeconds(periodMs);
+    }
+    return TDuration::Seconds(1);
+}
 
 } // namespace
 
@@ -150,14 +153,15 @@ public:
         TIntrusivePtr<IRandomProvider> randomProvider,
         NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
         const ::NYql::NCommon::TServiceCounters& serviceCounters,
-        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr s3Gateway,
         NYql::NConnector::IClient::TPtr connectorClient,
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
         const ::NMonitoring::TDynamicCounterPtr& clientCounters,
         const TString& tenantName,
         NActors::TMon* monitoring,
-        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory
+        std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+        NYql::IPqGatewayFactory::TPtr pqGatewayFactory
         )
         : YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
@@ -169,6 +173,7 @@ public:
         , ServiceCounters(serviceCounters, "pending_fetcher")
         , GetTaskCounters("GetTask", ServiceCounters.Counters)
         , FailedStatusCodeCounters(MakeIntrusive<TStatusCodeByScopeCounters>("IntermediateFailedStatusCode", ServiceCounters.RootCounters->GetSubgroup("component", "QueryDiagnostic")))
+        , PendingFetchPeriod(GetPendingFetchPeriod(config.GetPendingFetcher()))
         , CredentialsFactory(credentialsFactory)
         , S3Gateway(s3Gateway)
         , ConnectorClient(connectorClient)
@@ -180,6 +185,7 @@ public:
         , Monitoring(monitoring)
         , ComputeConfig(config.GetCompute())
         , S3ActorsFactory(std::move(s3ActorsFactory))
+        , PqGatewayFactory(std::move(pqGatewayFactory))
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -187,7 +193,7 @@ public:
     static constexpr char ActorName[] = "YQ_PENDING_FETCHER";
 
     void PassAway() final {
-        LOG_D("Stop Fetcher");
+        YDB_LOG_DEBUG("Stop Fetcher");
         Send(DatabaseResolver, new NActors::TEvents::TEvPoison());
         NActors::IActor::PassAway();
     }
@@ -209,7 +215,7 @@ public:
 
 private:
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
-        LOG_E("TYqlPendingFetcher::OnUndelivered");
+        YDB_LOG_ERROR("TYqlPendingFetcher::OnUndelivered");
 
         HasRunningRequest = false;
     }
@@ -241,19 +247,21 @@ private:
 
     void Handle(TEvInternalService::TEvGetTaskResponse::TPtr& ev) {
         HasRunningRequest = false;
-        LOG_T("Got GetTask response from PrivateApi");
+        YDB_LOG_TRACE("Got GetTask response from PrivateApi");
         GetTaskCounters.LatencyMs->Collect((TInstant::Now() - StartGetTaskTime).MilliSeconds());
         GetTaskCounters.InFly->Dec();
         if (!ev->Get()->Status.IsSuccess()) {
             GetTaskCounters.Error->Inc();
-            LOG_E("Error with GetTask: "<< ev->Get()->Status.GetIssues().ToString());
+            YDB_LOG_ERROR("Error with",
+                {"getTask", ev->Get()->Status.GetIssues()});
             return;
         }
         GetTaskCounters.Ok->Inc();
 
         const auto& res = ev->Get()->Result;
 
-        LOG_T("Tasks count: " << res.tasks().size());
+        YDB_LOG_TRACE("Tasks",
+            {"count", res.tasks().size()});
         if (!res.tasks().empty()) {
             ProcessTask(res);
             HasRunningRequest = true;
@@ -299,7 +307,8 @@ private:
 
         auto itA = RunActorMap.find(runActorId);
         if (itA == RunActorMap.end()) {
-            LOG_W("Unknown RunActor " << runActorId << " destroyed");
+            YDB_LOG_WARN("Unknown RunActor destroyed",
+                {"runActorId", runActorId});
             return;
         }
         auto queryId = itA->second.QueryId;
@@ -316,11 +325,15 @@ private:
 
     void GetPendingTask() {
         FetcherGeneration++;
-        LOG_T("Request Private::GetTask" << ", Owner: " << GetOwnerId() << ", Host: " << HostName() << ", Tenant: " << TenantName);
+        YDB_LOG_TRACE("Request Private::GetTask",
+            {"owner", GetOwnerId()},
+            {"host", HostName()},
+            {"tenant", TenantName});
         Fq::Private::GetTaskRequest request;
         request.set_owner_id(GetOwnerId());
         request.set_host(HostName());
         request.set_tenant(TenantName);
+        request.set_node_id(SelfId().NodeId());
         GetTaskCounters.InFly->Inc();
         StartGetTaskTime = TInstant::Now();
         Send(InternalServiceId, new TEvInternalService::TEvGetTaskRequest(request));
@@ -343,11 +356,11 @@ private:
     }
 
     void RunTask(const Fq::Private::GetTaskResult::Task& task) {
-        LOG_D("NewTask:"
-              << " Scope: " << task.scope()
-              << " Id: " << task.query_id().value()
-              << " UserId: " << task.user_id()
-              << " AuthToken: " << NKikimr::MaskTicket(task.user_token()));
+        YDB_LOG_DEBUG("NewTask",
+            {"scope", task.scope()},
+            {"id", task.query_id().value()},
+            {"userId", task.user_id()},
+            {"authToken", NKikimr::MaskTicket(task.user_token())});
 
         THashMap<TString, TString> serviceAccounts;
         for (const auto& identity : task.service_accounts()) {
@@ -410,7 +423,7 @@ private:
         if (!task.dq_graph_compressed().empty()) {
             dqGraphs.reserve(task.dq_graph_compressed().size());
             for (auto& g : task.dq_graph_compressed()) {
-                TCompressor compressor(g.method());
+                NKikimr::NKqp::TCompressor compressor(g.method());
                 dqGraphs.emplace_back(compressor.Decompress(g.data()));
             }
         } else {
@@ -472,7 +485,10 @@ private:
             NProtoInterop::CastFromProto(task.result_ttl()),
             std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end()),
             S3ActorsFactory,
-            ComputeConfig.GetWorkloadManagerConfig(task.scope())
+            ComputeConfig.GetWorkloadManagerConfig(task.scope()),
+            PqGatewayFactory,
+            std::vector<std::pair<TString, TString>>{sensorLabels.begin(), sensorLabels.end()},
+            std::vector<ui64>{task.node_id().begin(), task.node_id().end()}
             );
 
         auto runActorId =
@@ -481,9 +497,7 @@ private:
                 : Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 
         RunActorMap[runActorId] = TRunActorInfo { .QueryId = queryId, .QueryName = task.query_name() };
-        if (!task.automatic()) {
-            CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
-        }
+        CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
     }
 
     NActors::IActor* CreateYdbRunActor(TRunActorParams&& params, const ::NYql::NCommon::TServiceCounters& queryCounters) const {
@@ -517,11 +531,12 @@ private:
     IModuleResolver::TPtr ModuleResolver;
 
     bool HasRunningRequest = false;
-    const TDuration PendingFetchPeriod = TDuration::Seconds(1);
+    const TDuration PendingFetchPeriod;
 
     TActorId DatabaseResolver;
 
-    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
+
     const IHTTPGateway::TPtr S3Gateway;
     const NYql::NConnector::IClient::TPtr ConnectorClient;
     const ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
@@ -550,6 +565,7 @@ private:
     NActors::TMon* Monitoring;
     TComputeConfig ComputeConfig;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
+    NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
 };
 
 
@@ -562,14 +578,15 @@ NActors::IActor* CreatePendingFetcher(
     TIntrusivePtr<IRandomProvider> randomProvider,
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr s3Gateway,
     NYql::NConnector::IClient::TPtr connectorClient,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     const TString& tenantName,
     NActors::TMon* monitoring,
-    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory)
+    std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory)
 {
     return new TPendingFetcher(
         yqSharedResources,
@@ -587,7 +604,8 @@ NActors::IActor* CreatePendingFetcher(
         clientCounters,
         tenantName,
         monitoring,
-        std::move(s3ActorsFactory));
+        std::move(s3ActorsFactory),
+        std::move(pqGatewayFactory));
 }
 
 TActorId MakePendingFetcherId(ui32 nodeId) {

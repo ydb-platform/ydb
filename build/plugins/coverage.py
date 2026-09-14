@@ -1,7 +1,7 @@
 import re
 
 import _common
-import lib.test_const as consts
+from ymake import macro, Unit
 
 
 def get_coverage_filter_regexp(pattern, cache={}):
@@ -17,7 +17,7 @@ def should_be_covered(unit, filters):
     return not any(pred(unit_path) for pred in filters)
 
 
-def get_cpp_coverage_filters(unit, filters=[]):
+def get_coverage_filters(unit, filters=[]):
     # don`t calculate filters if it already was calculated
     if filters:
         return filters
@@ -31,37 +31,33 @@ def get_cpp_coverage_filters(unit, filters=[]):
         cov_exclude_re = get_coverage_filter_regexp(coverage_exclude_regexp)
         filters.append(lambda x: re.match(cov_exclude_re, x) is not None)
     if unit.get("ENABLE_CONTRIB_COVERAGE") != "yes":
-        paths_to_exclude = ("contrib",)
-        filters.append(lambda x: x.startswith(paths_to_exclude))
+        if unit.get("ENABLE_CONTRIB_YDB_COVERAGE") == "yes":
+            pattern = r'^contrib/(?!ydb)'
+            filters.append(lambda x: re.match(pattern, x) is not None)
+        else:
+            paths_to_exclude = ("contrib",)
+            filters.append(lambda x: x.startswith(paths_to_exclude))
     return filters
 
 
-def add_cpp_coverage_ldflags(unit):
-    ldflags = unit.get("LDFLAGS")
-    changed = False
-    for flag in consts.COVERAGE_LDFLAGS:
-        if flag not in ldflags:
-            ldflags = ldflags + ' ' + flag
-            changed = True
-    if changed:
-        unit.set(["LDFLAGS", ldflags])
-
-
-def add_cpp_coverage_cflags(unit):
-    cflags = unit.get("CFLAGS")
-    changed = False
-    for flag in consts.COVERAGE_CFLAGS:
-        if flag not in cflags:
-            cflags = cflags + ' ' + flag
-            changed = True
-    if changed:
-        unit.set(["CFLAGS", cflags])
-
-
-def onset_cpp_coverage_flags(unit):
-    if unit.get("CLANG_COVERAGE") == "no":
+@macro
+def SET_CPP_COVERAGE_FLAGS(unit: Unit):
+    if unit.get("CLANG_COVERAGE") != "yes":
         return
-    filters = get_cpp_coverage_filters(unit)
+    filters = get_coverage_filters(unit)
     if should_be_covered(unit, filters):
-        add_cpp_coverage_cflags(unit)
-        add_cpp_coverage_ldflags(unit)
+        unit.on_setup_clang_coverage()
+
+
+@macro
+def _FILTER_PY_COVERAGE(unit: Unit):
+    if unit.get("PYTHON_COVERAGE") != "yes":
+        return
+
+    if unit.get("COVERAGE_FILTER_PROGRAMS") != "yes" or unit.get("CYTHON_COVERAGE") == "yes":
+        unit.on_enable_python_coverage()
+        return
+
+    filters = get_coverage_filters(unit)
+    if should_be_covered(unit, filters):
+        unit.on_enable_python_coverage()

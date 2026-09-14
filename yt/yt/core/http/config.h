@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/dns/public.h>
+
 #include <yt/yt/core/net/public.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
@@ -10,10 +12,9 @@ namespace NYT::NHttp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THttpIOConfig
+struct THttpIOConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     int ReadBufferSize;
 
     int MaxRedirectCount;
@@ -36,10 +37,9 @@ DEFINE_REFCOUNTED_TYPE(THttpIOConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerConfig
+struct TServerConfig
     : public THttpIOConfig
 {
-public:
     //! If zero then the port is chosen automatically.
     int Port;
 
@@ -51,6 +51,7 @@ public:
     TDuration BindRetryBackoff;
 
     bool EnableKeepAlive;
+    std::optional<TDuration> MaxConnectionAge;
 
     std::optional<bool> CancelFiberOnConnectionClose;
 
@@ -62,8 +63,9 @@ public:
 
     //! Used for thread naming.
     //! CamelCase identifiers are preferred.
-    //! This field is not accessible from config.
-    TString ServerName = "Http";
+    std::string ServerName;
+
+    bool EnablePerPathRequestProfiling;
 
     REGISTER_YSON_STRUCT(TServerConfig);
 
@@ -74,13 +76,14 @@ DEFINE_REFCOUNTED_TYPE(TServerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TClientConfig
+struct TClientConfig
     : public THttpIOConfig
 {
-public:
     int MaxIdleConnections;
-    NNet::TDialerConfigPtr Dialer;
+    //! When set, these options override the ones from the global address resolver config.
+    std::optional<NDns::TDnsResolveOptions> DnsResolveOptions;
     bool OmitQuestionMarkForEmptyQuery;
+    NNet::TDialerConfigPtr Dialer;
 
     REGISTER_YSON_STRUCT(TClientConfig);
 
@@ -91,10 +94,9 @@ DEFINE_REFCOUNTED_TYPE(TClientConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRetryingClientConfig
+struct TRetryingClientConfig
     : public NYTree::TYsonStruct
 {
-public:
     TDuration RequestTimeout;
     TDuration AttemptTimeout;
     TDuration BackoffTimeout;
@@ -109,13 +111,12 @@ DEFINE_REFCOUNTED_TYPE(TRetryingClientConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TCorsConfig
+struct TCorsConfig
     : public NYTree::TYsonStruct
 {
-public:
     bool DisableCorsCheck;
-    std::vector<TString> HostAllowList;
-    std::vector<TString> HostSuffixAllowList;
+    std::vector<std::string> HostAllowList;
+    std::vector<std::string> HostSuffixAllowList;
 
     REGISTER_YSON_STRUCT(TCorsConfig);
 

@@ -1055,7 +1055,7 @@
         {"shape":"ValidationException"},
         {"shape":"ConflictException"}
       ],
-      "documentation":"<p>Updates multiple LaunchConfigurations by Source Server ID.</p>",
+      "documentation":"<p>Updates multiple LaunchConfigurations by Source Server ID.</p> <note> <p>bootMode valid values are <code>LEGACY_BIOS | UEFI</code> </p> </note>",
       "idempotent":true
     },
     "UpdateLaunchConfigurationTemplate":{
@@ -1196,6 +1196,7 @@
         "LICENSE_AND_SUBSCRIPTION",
         "VALIDATION",
         "OBSERVABILITY",
+        "REFACTORING",
         "SECURITY",
         "NETWORKING",
         "CONFIGURATION",
@@ -1443,7 +1444,8 @@
       "type":"string",
       "enum":[
         "LEGACY_BIOS",
-        "UEFI"
+        "UEFI",
+        "USE_SOURCE"
       ]
     },
     "BoundedString":{
@@ -2954,6 +2956,7 @@
     },
     "Iops":{
       "type":"long",
+      "box":true,
       "max":64000,
       "min":100
     },
@@ -3937,6 +3940,7 @@
     },
     "MaxResultsType":{
       "type":"integer",
+      "box":true,
       "max":1000,
       "min":1
     },
@@ -3980,6 +3984,7 @@
     },
     "OrderType":{
       "type":"integer",
+      "box":true,
       "max":10000,
       "min":1001
     },
@@ -5122,6 +5127,7 @@
     },
     "StrictlyPositiveInteger":{
       "type":"integer",
+      "box":true,
       "min":1
     },
     "SubnetID":{
@@ -5314,6 +5320,7 @@
     },
     "Throughput":{
       "type":"long",
+      "box":true,
       "max":1000,
       "min":125
     },

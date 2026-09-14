@@ -1,5 +1,7 @@
 #include "serializable_logger.h"
 
+#include "serializable_tag.h"
+
 #include <yt/yt/core/misc/serialize.h>
 
 namespace NYT::NLogging {
@@ -24,7 +26,7 @@ void TSerializableLogger::Save(TStreamSaveContext& context) const
     Save(context, Essential_);
     Save(context, MinLevel_);
 
-    Save(context, GetTag());
+    Save(context, GetTags());
     TVectorSerializer<TTupleSerializer<TStructuredTag, 2>>::Save(context, GetStructuredTags());
 }
 
@@ -44,9 +46,9 @@ void TSerializableLogger::Load(TStreamLoadContext& context)
     Load(context, MinLevel_);
 
     TCoWState state;
-    Load<std::string>(context, state.Tag);
+    Load(context, state.Tags);
     TVectorSerializer<TTupleSerializer<TStructuredTag, 2>>::Load(context, state.StructuredTags);
-    if (state.Tag.empty() && state.StructuredTags.empty()) {
+    if (state.Tags.IsEmpty() && state.StructuredTags.empty()) {
         ResetCoWState();
     } else {
         *GetMutableCoWState() = std::move(state);

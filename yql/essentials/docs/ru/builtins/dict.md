@@ -3,7 +3,7 @@
 
 ## DictCreate {#dictcreate}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictCreate(K,V)->Dict<K,V>
@@ -19,7 +19,7 @@ DictCreate(K,V)->Dict<K,V>
 
 [Документация по формату описания типа](../types/type_string.md).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictCreate(String, Tuple<String,Double?>);
@@ -35,17 +35,17 @@ SELECT DictCreate(ParseType("Tuple<Int32?,String>"), ParseType("Tuple<String,Dou
 
 ## SetCreate {#setcreate}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetCreate(T)->Set<T>
 ```
 
-Сконструировать пустое множество. Передается аргумент - тип ключа, возможно, полученный с помощью [предназначенных для этого функций](types.md). Множеств с неизвестным типом ключа в YQL не бывает. Ограничения на тип ключа такие же как и на тип ключа для словаря. Следует иметь ввиду, что множество это словарь с типом значения `Void` и множество также можно создать и с помощью функции `DictCreate`. Отсюда также следует, что все функции, которые принимают на вход `Dict<K,V>` могут также принимать `Set<K>`.
+Сконструировать пустое множество. Передается аргумент - тип ключа, возможно, полученный с помощью [предназначенных для этого функций](types.md). Множеств с неизвестным типом ключа в YQL не бывает. Ограничения на тип ключа такие же, как и на тип ключа для словаря. Следует иметь в виду, что множество это словарь с типом значения `Void` и множество также можно создать и с помощью функции `DictCreate`. Отсюда также следует, что все функции, которые принимают на вход `Dict<K,V>` могут также принимать `Set<K>`.
 
 [Документация по формату описания типа](../types/type_string.md).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetCreate(String);
@@ -57,7 +57,7 @@ SELECT SetCreate(Tuple<Int32?,String>);
 
 ## DictLength {#dictlength}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictLength(Dict<K,V>)->Uint64
@@ -66,7 +66,7 @@ DictLength(Dict<K,V>?)->Uint64?
 
 Количество элементов в словаре.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictLength(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -78,7 +78,7 @@ SELECT DictLength(dict_column) FROM my_table;
 
 ## DictHasItems {#dicthasitems}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictHasItems(Dict<K,V>)->Bool
@@ -87,7 +87,7 @@ DictHasItems(Dict<K,V>?)->Bool?
 
 Проверка того, что словарь содержит хотя бы один элемент.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictHasItems(AsDict(AsTuple(1, AsList("foo", "bar")))) FROM my_table;
@@ -99,7 +99,7 @@ SELECT DictHasItems(dict_column) FROM my_table;
 
 ## DictItems {#dictitems}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictItems(Dict<K,V>)->List<Tuple<K,V>>
@@ -108,7 +108,7 @@ DictItems(Dict<K,V>?)->List<Tuple<K,V>>?
 
 Получение содержимого словаря в виде списка кортежей с парами ключ-значение (`List<Tuple<key_type,value_type>>`).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictItems(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -122,7 +122,7 @@ FROM my_table;
 
 ## DictKeys {#dictkeys}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictKeys(Dict<K,V>)->List<K>
@@ -131,7 +131,7 @@ DictKeys(Dict<K,V>?)->List<K>?
 
 Получение списка ключей словаря.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictKeys(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -145,7 +145,7 @@ FROM my_table;
 
 ## DictPayloads {#dictpayloads}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictPayloads(Dict<K,V>)->List<V>
@@ -154,7 +154,7 @@ DictPayloads(Dict<K,V>?)->List<V>?
 
 Получение списка значений словаря.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictPayloads(AsDict(AsTuple(1, AsList("foo", "bar"))));
@@ -168,7 +168,7 @@ FROM my_table;
 
 ## DictLookup {#dictlookup}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictLookup(Dict<K,V>, K)->V?
@@ -179,7 +179,7 @@ DictLookup(Dict<K,V>?, K?)->V?
 
 Получение элемента словаря по ключу.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictLookup(AsDict(
@@ -196,7 +196,7 @@ FROM my_table;
 
 ## DictContains {#dictcontains}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictContains(Dict<K,V>, K)->Bool
@@ -207,7 +207,7 @@ DictContains(Dict<K,V>?, K?)->Bool
 
 Проверка наличия элемента в словаре по ключу. Возвращает true или false.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictContains(AsDict(
@@ -224,7 +224,7 @@ FROM my_table;
 
 ## DictAggregate {#dictaggregate}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DictAggregate(Dict<K,List<V>>, List<V>->T)->Dict<K,T>
@@ -242,7 +242,7 @@ DictAggregate(Dict<K,List<V>>?, List<V>->T)->Dict<K,T>?
 2. [Фабрика агрегационных функций](basic.md#aggregationfactory).
 
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT DictAggregate(AsDict(
@@ -254,7 +254,7 @@ SELECT DictAggregate(AsDict(
 
 ## SetIsDisjoint {#setisjoint}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetIsDisjoint(Dict<K,V1>, Dict<K,V2>)->Bool
@@ -275,7 +275,7 @@ SetIsDisjoint(Dict<K,V1>?, List<K>?)->Bool?
 * С аргументами `Dict<K,V1>` и `List<K>`;
 * С аргументами `Dict<K,V1>` и `Dict<K,V2>`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetIsDisjoint(ToSet(AsList(1, 2, 3)), AsList(7, 4)); -- true
@@ -284,7 +284,7 @@ SELECT SetIsDisjoint(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- false
 
 ## SetIntersection {#setintersection}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetIntersection(Dict<K,V1>, Dict<K,V2>)->Set<K>
@@ -305,7 +305,7 @@ SetIntersection(Dict<K,V1>?, Dict<K,V2>?, (K,V1,V2)->U)->Dict<K,U>?
 * Два словаря: `Dict<K,V1>` и `Dict<K,V2>`.
 * Необязательная функция, которая объединяет значения из исходных словарей для построения значений выходного словаря. Если тип такой функции `(K,V1,V2) -> U`, то типом результата будет `Dict<K,U>`. Если функция не задана, типом результата будет `Dict<K,Void>`, а значения из исходных словарей игнорируются.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetIntersection(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 3 }
@@ -324,7 +324,7 @@ SELECT SetIntersection(
 
 ## SetIncludes {#setincludes}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetIncludes(Dict<K,V1>, List<K>)->Bool
@@ -345,7 +345,7 @@ SetIncludes(Dict<K,V1>?, Dict<K,V2>?)->Bool?
 * С аргументами `Dict<K,V1>` и `List<K>`;
 * С аргументами `Dict<K,V1>` и `Dict<K,V2>`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetIncludes(ToSet(AsList(1, 2, 3)), AsList(3, 4)); -- false
@@ -354,7 +354,7 @@ SELECT SetIncludes(ToSet(AsList(1, 2, 3)), ToSet(AsList(2, 3))); -- true
 
 ## SetUnion {#setunion}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetUnion(Dict<K,V1>, Dict<K,V2>)->Set<K>
@@ -375,7 +375,7 @@ SetUnion(Dict<K,V1>?, Dict<K,V2>?,(K,V1?,V2?)->U)->Dict<K,U>?
 * Два словаря: `Dict<K,V1>` и `Dict<K,V2>`.
 * Необязательная функция, которая объединяет значения из исходных словарей для построения значений выходного словаря. Если тип такой функции `(K,V1?,V2?) -> U`, то типом результата будет `Dict<K,U>`. Если функция не задана, типом результата будет `Dict<K,Void>`, а значения из исходных словарей игнорируются.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetUnion(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2, 3, 4 }
@@ -388,7 +388,7 @@ SELECT SetUnion(
 
 ## SetDifference {#setdifference}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetDifference(Dict<K,V1>, Dict<K,V2>)->Dict<K,V1>
@@ -399,7 +399,7 @@ SetDifference(Dict<K,V1>?, Dict<K,V2>?)->Dict<K,V1>?
 
 Строит словарь, в котором есть все ключи с соответствующими значениями первого словаря, для которых нет ключа во втором словаре.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetDifference(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2 }
@@ -411,7 +411,7 @@ SELECT SetDifference(
 
 ## SetSymmetricDifference {#setsymmetricdifference}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 SetSymmetricDifference(Dict<K,V1>, Dict<K,V2>)->Set<K>
@@ -432,7 +432,7 @@ SetSymmetricDifference(Dict<K,V1>?, Dict<K,V2>?,(K,V1?,V2?)->U)->Dict<K,U>?
 * Два словаря: `Dict<K,V1>` и `Dict<K,V2>`.
 * Необязательная функция, которая объединяет значения из исходных словарей для построения значений выходного словаря. Если тип такой функции `(K,V1?,V2?) -> U`, то типом результата будет `Dict<K,U>`. Если функция не задана, типом результата будет `Dict<K,Void>`, а значения из исходных словарей игнорируются.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SetSymmetricDifference(ToSet(AsList(1, 2, 3)), ToSet(AsList(3, 4))); -- { 1, 2, 4 }
@@ -443,3 +443,496 @@ SELECT SetSymmetricDifference(
 -- { 2 : (null, "qwe"), 3 : ("bar", null) }
 ```
 
+## DictInsert {#dictinsert}
+
+#### Сигнатура
+
+```yql
+DictInsert(Dict<K,V>,K,V)->Dict<K,V>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Возвращает новый словарь, в который добавлены заданный ключ и значение. Если ключ уже существовал, словарь не изменяется.
+При работе с множеством (`Set`) в качестве значения следует передавать функцию `Void()`.
+
+#### Примеры
+
+```yql
+SELECT DictInsert({'foo':1}, 'bar', 2); -- {'foo':1,'bar':2}
+SELECT DictInsert({'foo':1}, 'foo', 2); -- {'foo':1}
+SELECT DictInsert({'foo'}, 'bar', Void()); -- {'foo','bar'}
+```
+
+## DictUpsert {#dictupsert}
+
+#### Сигнатура
+
+```yql
+DictUpsert(Dict<K,V>,K,V)->Dict<K,V>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Возвращает новый словарь, в который добавлены или заменены заданный ключ и значение. Если ключ уже существовал, значение обновляется.
+
+#### Примеры
+
+```yql
+SELECT DictUpsert({'foo':1}, 'bar', 2); -- {'foo':1,'bar':2}
+SELECT DictUpsert({'foo':1}, 'foo', 2); -- {'foo':2}
+```
+
+## DictUpdate {#dictupdate}
+
+#### Сигнатура
+
+```yql
+DictUpdate(Dict<K,V>,K,V)->Dict<K,V>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Возвращает новый словарь, в котором заменено значение по заданному ключу. Если ключ не существовал, словарь не меняется.
+
+#### Примеры
+
+```yql
+SELECT DictUpdate({'foo':1}, 'bar', 2); -- {'foo':1}
+SELECT DictUpdate({'foo':1}, 'foo', 2); -- {'foo':2}
+```
+
+## DictRemove {#dictremove}
+
+#### Сигнатура
+
+```yql
+DictRemove(Dict<K,V>,K)->Dict<K,V>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Возвращает новый словарь без заданного ключа. Если ключ не существовал, словарь не меняется.
+
+#### Примеры
+
+```yql
+SELECT DictRemove({'foo':1}, 'bar'); -- {'foo':1}
+SELECT DictRemove({'foo':1}, 'foo'); -- {}
+```
+
+## ToMutDict {#tomutdict}
+
+#### Сигнатура
+
+```yql
+ToMutDict(Dict<K,V>,dependArg1...)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Конвертирует словарь в свою мутабельную версию. Также необходимо передать одно или более зависимое выражение, например, используя аргумент `lambda` в функции [`Block`](basic.md#block).
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+## MutDictCreate {#mutdictcreate}
+
+#### Сигнатура
+
+```yql
+MutDictCreate(KeyType,ValueType,dependArg1...)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Строит пустой мутабельный словарь с заданными типами ключа и значения. Также необходимо передать одно или более зависимое выражение, например, используя аргумент `lambda` в функции [`Block`](basic.md#block).
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        return FromMutDict($dict);
+    }); -- {}
+```
+
+## FromMutDict {#frommutdict}
+
+#### Сигнатура
+
+```yql
+FromMutDict(Linear<mutDictType for Dict<K,V>>)->Dict<K,V>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Поглощает мутабельный словарь и преобразует его в иммутабельный.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+## MutDictInsert {#mutdictinsert}
+
+#### Сигнатура
+
+```yql
+MutDictInsert(Linear<mutDictType for Dict<K,V>>,K,V)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Добавляет в мутабельный словарь заданные ключ и значение, возвращает этот же мутабельный словарь. Если ключ в словаре уже существовал, словарь не меняется.
+При работе с множеством (`Set`) в качестве значения следует передавать функцию `Void()`.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictInsert($dict,'foo',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictInsert($dict,'bar',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1,'bar':2}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo'}, $arg);
+        $dict = MutDictInsert($dict,'bar', Void());
+        return FromMutDict($dict);
+    }); -- {'foo','bar'}
+```
+
+## MutDictUpsert {#mutdictupsert}
+
+#### Сигнатура
+
+```yql
+MutDictUpsert(Linear<mutDictType for Dict<K,V>>,K,V)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Добавляет или заменяет в мутабельном словаре заданные ключ и значение, возвращает этот же мутабельный словарь. Если ключ в словаре уже существовал, значение обновляется.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpsert($dict,'foo',2);
+        return FromMutDict($dict);
+    }); -- {'foo':2}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpsert($dict,'bar',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1,'bar':2}
+```
+
+## MutDictUpdate {#mutdictupdate}
+
+#### Сигнатура
+
+```yql
+MutDictUpdate(Linear<mutDictType for Dict<K,V>>,K,V)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Заменяет в мутабельном словаре значение по заданному ключу, возвращает этот же мутабельный словарь. Если ключ в словаре не существовал, словарь не меняется.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpdate($dict,'foo',2);
+        return FromMutDict($dict);
+    }); -- {'foo':2}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictUpdate($dict,'bar',2);
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+## MutDictRemove {#mutdictremove}
+
+#### Сигнатура
+
+```yql
+MutDictRemove(Linear<mutDictType for Dict<K,V>>,K)->Linear<mutDictType for Dict<K,V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Удаляет в мутабельном словаре значение по заданному ключу, возвращает этот же мутабельный словарь. Если ключ в словаре не существовал, словарь не меняется.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictRemove($dict,'foo');
+        return FromMutDict($dict);
+    }); -- {}
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict = MutDictRemove($dict,'bar');
+        return FromMutDict($dict);
+    }); -- {'foo':1}
+```
+
+
+## MutDictPop {#mutdictpop}
+
+#### Сигнатура
+
+```yql
+MutDictPop(Linear<mutDictType for Dict<K,V>>,K)->Tuple<Linear<mutDictType for Dict<K,V>>,V?>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Удаляет в мутабельном словаре значение по заданному ключу, возвращает этот же мутабельный словарь и значение по удаленному ключу. Если ключ в словаре не существовал, словарь не меняется и возвращается пустой Optional.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictPop($dict,'foo');
+        return (FromMutDict($dict), $val);
+    }); -- ({},1)
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictPop($dict,'bar');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},null)
+```
+
+## MutDictContains {#mutdictcontains}
+
+#### Сигнатура
+
+```yql
+MutDictContains(Linear<mutDictType for Dict<K,V>>,K)->Tuple<Linear<mutDictType for Dict<K,V>>,Bool>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Проверяет существование ключа в мутабельном словаре, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictContains($dict,'foo');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},True)
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictContains($dict,'bar');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},False)
+```
+
+## MutDictLookup {#mutdictlookup}
+
+#### Сигнатура
+
+```yql
+MutDictLookup(Linear<mutDictType for Dict<K,V>>,K)->Tuple<Linear<mutDictType for Dict<K,V>>,V?>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Получает значение по ключу в мутабельном словаре, возвращает этот же мутабельный словарь и опциональный результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictLookup($dict,'foo');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},1)
+
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictLookup($dict,'bar');
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},null)
+```
+
+## MutDictHasItems {#mutdicthasitems}
+
+#### Сигнатура
+
+```yql
+MutDictHasItems(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,Bool>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Проверяет непустоту мутабельного словаря, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictHasItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},True)
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictHasItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},False)
+```
+
+## MutDictLength {#mutdictlength}
+
+#### Сигнатура
+
+```yql
+MutDictLength(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,Uint64>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Получает количество элементов в мутабельном словаре, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictLength($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},1)
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictLength($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},0)
+```
+
+## MutDictKeys {#mutdictkeys}
+
+#### Сигнатура
+
+```yql
+MutDictKeys(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,List<K>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Получает список ключей в мутабельном словаре, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictKeys($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},['foo'])
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictKeys($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},[])
+```
+
+## MutDictPayloads {#mutdictpayloads}
+
+#### Сигнатура
+
+```yql
+MutDictPayloads(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,List<V>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Получает список значений в мутабельном словаре, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictPayloads($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},['1'])
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictPayloads($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},[])
+```
+
+## MutDictItems {#mutdictitems}
+
+#### Сигнатура
+
+```yql
+MutDictItems(Linear<mutDictType for Dict<K,V>>)->Tuple<Linear<mutDictType for Dict<K,V>>,List<Tuple<K,V>>>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Получает список кортежей с парами ключ-значение в мутабельном словаре, возвращает этот же мутабельный словарь и результат.
+
+#### Примеры
+
+```yql
+SELECT Block(
+    ($arg)->{
+        $dict = ToMutDict({'foo':1}, $arg);
+        $dict, $val = MutDictItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({'foo':1},[('foo',1)])
+
+SELECT Block(
+    ($arg)->{
+        $dict = MutDictCreate(String, Int32, $arg);
+        $dict, $val = MutDictItems($dict);
+        return (FromMutDict($dict), $val);
+    }); -- ({},[])
+```

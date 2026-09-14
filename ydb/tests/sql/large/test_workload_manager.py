@@ -2,6 +2,7 @@
 import concurrent.futures
 from ydb.tests.sql.lib.test_base import TpchTestBaseH1
 from ydb.tests.library.common import workload_manager
+from ydb.tests.library.test_meta import link_test_case
 import ydb
 import time
 import pytest
@@ -57,6 +58,7 @@ class TestWorkloadManager(TpchTestBaseH1):
             """
         self.query(pool_definition)
 
+    @link_test_case("#14602")
     @pytest.mark.parametrize("wait_for_timeout", [(False), (True)])
     def test_pool_classifier_init(self, wait_for_timeout):
         """

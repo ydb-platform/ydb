@@ -1,28 +1,18 @@
 """Exception classes and constants handling test outcomes as well as
 functions creating them."""
+
 import sys
-import warnings
 from typing import Any
 from typing import Callable
 from typing import cast
 from typing import NoReturn
 from typing import Optional
+from typing import Protocol
 from typing import Type
 from typing import TypeVar
+import warnings
 
 from _pytest.deprecated import KEYWORD_MSG_ARG
-
-TYPE_CHECKING = False  # Avoid circular import through compat.
-
-if TYPE_CHECKING:
-    from typing_extensions import Protocol
-else:
-    # typing.Protocol is only available starting from Python 3.8. It is also
-    # available from typing_extensions, but we don't want a runtime dependency
-    # on that. So use a dummy runtime implementation.
-    from typing import Generic
-
-    Protocol = Generic
 
 
 class OutcomeException(BaseException):
@@ -244,6 +234,9 @@ def xfail(reason: str = "") -> NoReturn:
 
     This function should be called only during testing (setup, call or teardown).
 
+    No other code is executed after using ``xfail()`` (it is implemented
+    internally by raising an exception).
+
     :param reason:
         The message to show the user as reason for the xfail.
 
@@ -304,8 +297,7 @@ def importorskip(
 
         if verattr is None or Version(verattr) < Version(minversion):
             raise Skipped(
-                "module %r has __version__ %r, required is: %r"
-                % (modname, verattr, minversion),
+                f"module {modname!r} has __version__ {verattr!r}, required is: {minversion!r}",
                 allow_module_level=True,
             )
     return mod

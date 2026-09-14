@@ -3,17 +3,14 @@ UNITTEST_FOR(ydb/core/kqp)
 FORK_SUBTESTS()
 SPLIT_FACTOR(50)
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+REQUIREMENTS(cpu:2)
+SIZE(MEDIUM)
 
 SRCS(
     kqp_flowcontrol_ut.cpp
     kqp_scan_ut.cpp
     kqp_split_ut.cpp
+    kqp_point_consolidation_ut.cpp
 )
 
 PEERDIR(

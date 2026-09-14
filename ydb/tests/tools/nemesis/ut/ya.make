@@ -1,7 +1,7 @@
 SUBSCRIBER(g:kikimr)
 
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 
 TEST_SRCS(
     test_disk.py
@@ -9,10 +9,10 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
+REQUIREMENTS(cpu:4)
 
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

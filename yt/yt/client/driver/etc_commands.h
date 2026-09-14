@@ -19,8 +19,8 @@ class TUpdateMembershipCommand
     : public TTypedCommand<TOptions>
 {
 protected:
-    TString Group;
-    TString Member;
+    std::string Group;
+    std::string Member;
 
     REGISTER_YSON_STRUCT_LITE(TUpdateMembershipCommand);
 
@@ -29,6 +29,21 @@ protected:
         registrar.Parameter("group", &TUpdateMembershipCommand::Group);
         registrar.Parameter("member", &TUpdateMembershipCommand::Member);
     }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TGetCurrentUserCommand
+    : public TCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetCurrentUserCommand);
+
+    static void Register(TRegistrar)
+    { }
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -70,7 +85,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString Path;
+    std::string Path;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -132,7 +147,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    std::optional<TString> User;
+    std::optional<std::string> User;
     NYTree::EPermission Permission;
     NYTree::INodePtr Acl;
 
@@ -150,8 +165,8 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString SourceAccount;
-    TString DestinationAccount;
+    std::string SourceAccount;
+    std::string DestinationAccount;
     NYTree::INodePtr ResourceDelta;
 
     void DoExecute(ICommandContextPtr context) override;
@@ -168,9 +183,27 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString SourcePool;
-    TString DestinationPool;
-    TString PoolTree;
+    std::string SourcePool;
+    std::string DestinationPool;
+    std::string PoolTree;
+    NYTree::INodePtr ResourceDelta;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TTransferBundleResourcesCommand
+    : public TTypedCommand<NApi::TTransferBundleResourcesOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TTransferBundleResourcesCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    std::string SourceBundle;
+    std::string DestinationBundle;
     NYTree::INodePtr ResourceDelta;
 
     void DoExecute(ICommandContextPtr context) override;
@@ -184,11 +217,10 @@ struct TExecuteBatchOptions
     int Concurrency;
 };
 
-class TExecuteBatchCommandRequest
+struct TExecuteBatchCommandRequest
     : public NYTree::TYsonStruct
 {
-public:
-    TString Command;
+    std::string Command;
     NYTree::IMapNodePtr Parameters;
     NYTree::INodePtr Input;
 
@@ -230,9 +262,9 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    NApi::EProxyType Type;
-    std::string Role;
-    NApi::NRpcProxy::EAddressType AddressType;
+    NApi::EProxyKind Kind;
+    std::optional<std::string> Role;
+    std::optional<NApi::NRpcProxy::EAddressType> AddressType;
     std::string NetworkName;
     bool IgnoreBalancers;
 
@@ -250,8 +282,25 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString TabletCellBundle;
+    std::string TabletCellBundle;
     std::vector<NYPath::TYPath> MovableTables;
+
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TCheckClusterLivenessCommand
+    : public TTypedCommand<NApi::TCheckClusterLivenessOptions>
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TCheckClusterLivenessCommand);
+
+    static void Register(TRegistrar registrar);
+
+private:
+    bool CheckCypressRoot;
+    bool CheckSecondaryMasterCells;
 
     void DoExecute(ICommandContextPtr context) override;
 };

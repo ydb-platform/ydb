@@ -1,12 +1,29 @@
 #include "auth.h"
+#include "appdata.h"
+
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/library/aclib/aclib.h>
 
 namespace NKikimr {
 
 namespace {
 
-bool HasToken(const TAppData* appData, const NACLib::TUserToken& userToken) {
-    for (const auto& sid : appData->AdministrationAllowedSIDs) {
-        if (userToken.IsExist(sid)) {
+template <class Iterable>
+bool IsTokenAllowedImpl(const NACLib::TUserToken* userToken, const Iterable& allowedSIDs) {
+    // empty set contains any element
+    if (allowedSIDs.empty()) {
+        return true;
+    }
+
+    // empty element does not belong to any non-empty set
+    if (!userToken || userToken->GetUserSID().empty()) {
+        return false;
+    }
+
+    // its enough to a single sid (user or group) from the token to be in the set
+    for (const auto& sid : allowedSIDs) {
+        if (userToken->IsExist(sid)) {
             return true;
         }
     }
@@ -14,35 +31,115 @@ bool HasToken(const TAppData* appData, const NACLib::TUserToken& userToken) {
     return false;
 }
 
+NACLib::TUserToken ParseUserToken(const TString& userTokenSerialized) {
+    NACLibProto::TUserToken tokenPb;
+    if (!tokenPb.ParseFromString(userTokenSerialized)) {
+        // we want to treat invalid token as empty,
+        // so then result object must be recreated (or cleared)
+        // because failed parsing makes result object dirty
+        tokenPb = NACLibProto::TUserToken();
+    }
+    return NACLib::TUserToken(tokenPb);
 }
 
-bool IsAdministrator(const TAppData* appData, const TString& userToken) {
-    if (appData->AdministrationAllowedSIDs.empty()) {
-        return true;
-    }
+} // namespace
 
-    if (!userToken) {
-        return false;
-    }
+bool IsTokenAllowed(const NACLib::TUserToken* userToken, const TVector<TString>& allowedSIDs) {
+    return IsTokenAllowedImpl(userToken, allowedSIDs);
+}
 
-    NACLibProto::TUserToken tokenPb;
-    if (!tokenPb.ParseFromString(userToken)) {
-        return false;
-    }
+bool IsTokenAllowed(const NACLib::TUserToken* userToken, const NProtoBuf::RepeatedPtrField<TString>& allowedSIDs) {
+    return IsTokenAllowedImpl(userToken, allowedSIDs);
+}
 
-    return HasToken(appData, NACLib::TUserToken(std::move(tokenPb)));
+bool IsTokenAllowed(const TString& userTokenSerialized, const TVector<TString>& allowedSIDs) {
+    NACLib::TUserToken userToken = ParseUserToken(userTokenSerialized);
+    return IsTokenAllowed(&userToken, allowedSIDs);
+}
+
+bool IsTokenAllowed(const TString& userTokenSerialized, const NProtoBuf::RepeatedPtrField<TString>& allowedSIDs) {
+    NACLib::TUserToken userToken = ParseUserToken(userTokenSerialized);
+    return IsTokenAllowed(&userToken, allowedSIDs);
+}
+
+bool IsAdministrator(const TAppData* appData, const TString& userTokenSerialized) {
+    return IsTokenAllowed(userTokenSerialized, appData->AdministrationAllowedSIDs);
 }
 
 bool IsAdministrator(const TAppData* appData, const NACLib::TUserToken* userToken) {
-    if (appData->AdministrationAllowedSIDs.empty()) {
-        return true;
-    }
+    return IsTokenAllowed(userToken, appData->AdministrationAllowedSIDs);
+}
 
-    if (!userToken || userToken->GetSerializedToken().empty()) {
+EAccessLevel GetHighestAccessLevel(const TAppData* appData, const NACLib::TUserToken* userToken) {
+    const auto& securityConfig = appData->DomainsConfig.GetSecurityConfig();
+    const bool isAdministrationAllowed = IsAdministrator(appData, userToken);
+    const bool isMonitoringAllowed = isAdministrationAllowed
+        || IsTokenAllowed(userToken, securityConfig.GetMonitoringAllowedSIDs());
+    const bool isViewerAllowed = isMonitoringAllowed
+        || IsTokenAllowed(userToken, securityConfig.GetViewerAllowedSIDs());
+    const bool isDatabaseAllowed = isViewerAllowed
+        || IsTokenAllowed(userToken, securityConfig.GetDatabaseAllowedSIDs());
+
+    // The order of checks is important: we want to return the highest level that is allowed.
+    // I.e. if a user is in any sids list, but the administration allowed sids list is empty,
+    // we need to return the EAccessLevel::Administration access level.
+    if (isAdministrationAllowed) {
+        return EAccessLevel::Administration;
+    }
+    if (isMonitoringAllowed) {
+        return EAccessLevel::Monitoring;
+    }
+    if (isViewerAllowed) {
+        return EAccessLevel::Viewer;
+    }
+    if (isDatabaseAllowed) {
+        return EAccessLevel::Database;
+    }
+    return EAccessLevel::None;
+}
+
+EAccessLevel GetHighestAccessLevel(const TAppData* appData, const TString& userTokenSerialized) {
+    NACLib::TUserToken userToken = ParseUserToken(userTokenSerialized);
+    return GetHighestAccessLevel(appData, &userToken);
+}
+
+bool IsStrictDatabaseOnlyToken(const TAppData* appData, const TString& userTokenSerialized) {
+    return GetHighestAccessLevel(appData, userTokenSerialized) == EAccessLevel::Database;
+}
+
+bool IsDatabaseAdministrator(const NACLib::TUserToken* userToken, const NACLib::TSID& databaseOwner) {
+    // no database, no access
+    if (databaseOwner.empty()) {
         return false;
     }
-
-    return HasToken(appData, *userToken);
+    // empty token can't have raised access level
+    if (!userToken || userToken->GetUserSID().empty()) {
+        return false;
+    }
+    return userToken->IsExist(databaseOwner);
 }
 
+TString ChooseAppropriateOwner(const NKikimrScheme::TEvModifySchemeTransaction& record,
+    const TAppData* appData, const std::optional<NACLib::TUserToken>& userToken)
+{
+    const bool alwaysSetSystemOwner = appData->AlwaysSetSystemOwner
+        || appData->FeatureFlags.GetEnableIdmPermissionsManagement();
+
+    if (!alwaysSetSystemOwner) {
+        if (userToken) {
+            return userToken->GetUserSID();
+        } else {
+            return record.GetOwner();
+        }
+    } else {
+        if ((userToken && userToken->GetUserSID() == BUILTIN_ACL_METADATA)
+            || record.GetOwner() == BUILTIN_ACL_METADATA)
+        {
+            return BUILTIN_ACL_METADATA;
+        } else {
+            return BUILTIN_ACL_BASIC_OWNER;
+        }
+    }
 }
+
+} // namespace NKikimr

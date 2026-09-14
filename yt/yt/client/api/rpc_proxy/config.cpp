@@ -1,7 +1,5 @@
 #include "config.h"
 
-#include "address_helpers.h"
-
 #include <yt/yt/core/net/address.h>
 
 #include <yt/yt/core/bus/tcp/config.h>
@@ -50,6 +48,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("enable_proxy_discovery", &TThis::EnableProxyDiscovery)
         .Default(true);
+    registrar.Parameter("proxy_url_aliasing_rules", &TThis::ProxyUrlAliasingRules)
+        .Default();
 
     registrar.Parameter("dynamic_channel_pool", &TThis::DynamicChannelPool)
         .DefaultNew();
@@ -82,6 +82,10 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Default(TDuration::Minutes(15));
     registrar.Parameter("default_streaming_stall_timeout", &TThis::DefaultStreamingStallTimeout)
         .Default(TDuration::Minutes(1));
+    registrar.Parameter("use_total_streaming_timeout_for_heavy_reads", &TThis::UseTotalStreamingTimeoutForHeavyReads)
+        .Default(true);
+    registrar.Parameter("default_chaos_lease_timeout", &TThis::DefaultChaosLeaseTimeout)
+        .Default(TDuration::Seconds(30));
 
     registrar.Parameter("default_ping_period", &TThis::DefaultPingPeriod)
         .Default(TDuration::Seconds(5));
@@ -126,6 +130,12 @@ void TConnectionConfig::Register(TRegistrar registrar)
     registrar.Parameter("enable_select_query_tracing_tag", &TThis::EnableSelectQueryTracingTag)
         .Default(false);
 
+    registrar.Parameter("do_not_drop_pure_exclusive_locks", &TThis::DoNotDropPureExclusiveLocks)
+        .Default(true);
+
+    registrar.Parameter("enable_control_multiplexing_band", &TThis::EnableControlMultiplexingBand)
+        .Default(false);
+
     registrar.Postprocessor([] (TThis* config) {
         if (!config->ClusterName && config->ClusterUrl) {
             config->ClusterName = InferYTClusterFromClusterUrl(*config->ClusterUrl);
@@ -146,8 +156,8 @@ void ValidateConnectionConfig(const TConnectionConfigPtr& config)
     if (config->ProxyAddresses && config->ProxyAddresses->empty()) {
         THROW_ERROR_EXCEPTION("\"proxy_addresses\" must not be empty");
     }
-    if (!config->EnableProxyDiscovery && !config->ProxyAddresses) {
-        THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" should be specified");
+    if (!config->EnableProxyDiscovery && !config->ProxyAddresses && !config->ProxyUnixDomainSocket) {
+        THROW_ERROR_EXCEPTION("If proxy discovery is disabled, \"proxy_addresses\" or \"proxy_unix_domain_socket\" must be specified");
     }
 }
 

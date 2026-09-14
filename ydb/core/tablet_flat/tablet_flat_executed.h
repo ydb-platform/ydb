@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "flat_executor_counters.h"
 #include "tablet_flat_executor.h"
 
 namespace NKikimr {
@@ -15,7 +16,10 @@ struct IMiniKQLFactory {
     virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalReadColumns::TPtr&) = 0;
 };
 
-class TTabletExecutedFlat : public NFlatExecutorSetup::ITablet {
+class TTabletExecutedFlat
+    : public NFlatExecutorSetup::ITablet
+    , public IActorExceptionHandler
+{
 protected:
     using IExecutor = NFlatExecutorSetup::IExecutor;
 
@@ -23,11 +27,15 @@ protected:
     IExecutor* Executor() const { return Executor0; }
     const TInstant StartTime() const { return StartTime0; }
 
+    bool OnUnhandledException(const std::exception& exc) override;
+
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
     void Execute(TAutoPtr<ITransaction> transaction);
-    void EnqueueExecute(TAutoPtr<ITransaction> transaction);
+    ui64 Enqueue(TAutoPtr<ITransaction> transaction);
+    ui64 EnqueueExecute(TAutoPtr<ITransaction> transaction);
+    ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction);
 
-    const NTable::TScheme& Scheme() const noexcept;
+    const NTable::TScheme& Scheme() const;
 
     TActorContext ExecutorCtx(const TActivationContext &ctx) {
         return TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ExecutorID());
@@ -53,6 +61,8 @@ protected:
      */
     virtual void DefaultSignalTabletActive(const TActorContext &ctx) = 0;
 
+    void ReportStartTime();
+
     /**
      * Called by StateInitImpl for unhandled non-system events. Used to delay
      * processing of requests until tablet implementation is fully initialized.
@@ -72,6 +82,7 @@ protected:
     void Handle(TEvTablet::TEvNewFollowerAttached::TPtr&);
     void Handle(TEvTablet::TEvFollowerDetached::TPtr&);
     void Handle(TEvTablet::TEvUpdateConfig::TPtr&);
+    void Handle(TEvTablet::TEvMoveData::TPtr&);
 
     /**
      * Common handler for TEvPoison, detaches from executor and calls Detach,
@@ -104,6 +115,8 @@ protected:
             TxCacheQuota->ReleaseQuota(size);
     }
 
+    void SetExternalExecutor(IExecutor* executor);
+
 private:
     IExecutor* CreateExecutor(const TActorContext &ctx);
 
@@ -117,22 +130,22 @@ private:
 
 }}
 
-#define STFUNC_TABLET_INIT(NAME, HANDLERS)                                                           \
+#define STFUNC_TABLET_INIT(NAME, HANDLERS)                                                          \
     void NAME(STFUNC_SIG) {                                                                         \
-        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
+        switch ([[maybe_unused]] const ui32 etype = ev->GetTypeRewrite()) {                         \
             HANDLERS                                                                                \
             default:                                                                                \
-                TTabletExecutedFlat::StateInitImpl(ev, SelfId());                                             \
+                TTabletExecutedFlat::StateInitImpl(ev, SelfId());                                   \
         }                                                                                           \
     }
 
-#define STFUNC_TABLET_DEF(NAME, HANDLERS)                                                            \
+#define STFUNC_TABLET_DEF(NAME, HANDLERS)                                                           \
     void NAME(STFUNC_SIG) {                                                                         \
-        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
+        switch ([[maybe_unused]] const ui32 etype = ev->GetTypeRewrite()) {                         \
             HANDLERS                                                                                \
             default:                                                                                \
-                if (!TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId()))                             \
-                    Y_DEBUG_ABORT("%s: unexpected event type: %" PRIx32 " event: %s",       \
+                if (!TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId()))                        \
+                    Y_DEBUG_ABORT("%s: unexpected event type: %" PRIx32 " event: %s",               \
                                    __func__, ev->GetTypeRewrite(),                                  \
                                    ev->ToString().data());                                          \
         }                                                                                           \
@@ -140,9 +153,9 @@ private:
 
 #define STFUNC_TABLET_IGN(NAME, HANDLERS)                                                           \
     void NAME(STFUNC_SIG) {                                                                         \
-        switch (const ui32 etype = ev->GetTypeRewrite()) {                                          \
+        switch ([[maybe_unused]] const ui32 etype = ev->GetTypeRewrite()) {                         \
             HANDLERS                                                                                \
             default:                                                                                \
-                TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId());                                  \
+                TTabletExecutedFlat::HandleDefaultEvents(ev, SelfId());                             \
         }                                                                                           \
     }

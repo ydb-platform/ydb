@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yt/yt/library/tvm/public.h>
+
 #include <library/cpp/yt/memory/ref_counted.h>
 
 #include <util/generic/hash_set.h>
@@ -9,7 +11,9 @@ namespace NYT::NAuth {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TTvmServiceConfig)
+DECLARE_REFCOUNTED_STRUCT(TUserTicketAuthenticationConfig)
+DECLARE_REFCOUNTED_STRUCT(TTvmServiceConfig)
+DECLARE_REFCOUNTED_STRUCT(TTvmServiceDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(ITvmService)
 DECLARE_REFCOUNTED_STRUCT(IDynamicTvmService)
 
@@ -17,11 +21,9 @@ DECLARE_REFCOUNTED_STRUCT(IDynamicTvmService)
 
 struct TParsedTicket
 {
-    ui64 DefaultUid;
-    THashSet<TString> Scopes;
+    TUid DefaultUid;
+    THashSet<std::string> Scopes;
 };
-
-using TTvmId = ui64;
 
 struct TParsedServiceTicket
 {

@@ -17,10 +17,10 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsDistributedEraseTx());
+        Y_ENSURE(op->IsDistributedEraseTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);
         tx->ClearTxBody();

@@ -2,6 +2,8 @@
 
 #include <util/string/vector.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -13,11 +15,11 @@ TDataShard::TTxPlanStep::TTxPlanStep(TDataShard *self, TEvTxProcessing::TEvPlanS
     , IsAccepted(false)
     , RequestStartTime(TAppData::TimeProvider->Now())
 {
-    Y_ABORT_UNLESS(Ev);
+    Y_ENSURE(Ev);
 }
 
 bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorContext &ctx) {
-    Y_ABORT_UNLESS(Ev);
+    Y_ENSURE(Ev);
 
     // TEvPlanStep are strictly ordered by mediator so this Tx must not be retried not to break this ordering!
     txc.DB.NoMoreReadsForTx();
@@ -31,13 +33,19 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     TVector<ui64> txIds;
     txIds.reserve(Ev->Get()->Record.TransactionsSize());
     for (const auto& tx : Ev->Get()->Record.GetTransactions()) {
-        Y_ABORT_UNLESS(tx.HasTxId());
-        Y_ABORT_UNLESS(tx.HasAckTo());
+        Y_ENSURE(tx.HasTxId());
 
         txIds.push_back(tx.GetTxId());
 
-        TActorId txOwner = ActorIdFromProto(tx.GetAckTo());
-        TxByAck[txOwner].push_back(tx.GetTxId());
+        // Note: we plan to remove AckTo in the future
+        if (tx.HasAckTo()) {
+            TActorId txOwner = ActorIdFromProto(tx.GetAckTo());
+            // Note: when mediators ack transactions on their own they also
+            // specify an empty AckTo. Sends to empty actors are a no-op anyway.
+            if (txOwner) {
+                TxByAck[txOwner].push_back(tx.GetTxId());
+            }
+        }
     }
 
     if (Self->State != TShardState::Offline && Self->State != TShardState::PreOffline) {
@@ -49,18 +57,21 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     }
 
     if (! IsAccepted) {
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Ignore old txIds [" << JoinStrings(txIds.begin(), txIds.end(), ", ")
-            << "] for step " << step << " outdated step " << Self->Pipeline.OutdatedCleanupStep()
-            << " at tablet " << Self->TabletID());
+        YDB_LOG_ERROR_CTX(ctx, "Ignore old txIds",
+            {"txIds", JoinStrings(txIds.begin(), txIds.end(), ", ")},
+            {"step", step},
+            {"outdatedCleanupStep", Self->Pipeline.OutdatedCleanupStep()},
+            {"tabletId", Self->TabletID()});
         Self->IncCounter(COUNTER_PLAN_STEP_IGNORED);
         return true;
     }
 
     for (ui64 txId : txIds) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    "Planned transaction txId " << txId << " at step " << step
-                    << " at tablet " << Self->TabletID() << " " << Ev->Get()->Record);
+        YDB_LOG_DEBUG_CTX(ctx, "Planned transaction",
+            {"txId", txId},
+            {"step", step},
+            {"tabletId", Self->TabletID()},
+            {"eventRecord", Ev->Get()->Record});
     }
 
     // We already know that max observed step is at least this step, avoid
@@ -76,20 +87,22 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
 }
 
 void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
-    Y_ABORT_UNLESS(Ev);
+    Y_ENSURE(Ev);
     ui64 step = Ev->Get()->Record.GetStep();
 
     for (auto& kv : TxByAck) {
         THolder<TEvTxProcessing::TEvPlanStepAck> ack =
             MakeHolder<TEvTxProcessing::TEvPlanStepAck>(Self->TabletID(), step, kv.second.begin(), kv.second.end());
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Sending '" << ack->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Sending Ack",
+            {"ack", ack->ToString()});
 
         ctx.Send(kv.first, ack.Release()); // Ack to Tx coordinator
     }
 
     THolder<TEvTxProcessing::TEvPlanStepAccepted> accepted =
         MakeHolder<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step);
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Sending '" << accepted->ToString());
+    YDB_LOG_DEBUG_CTX(ctx, "Sending accepted",
+        {"accepted", accepted->ToString()});
 
     ctx.Send(Ev->Sender, accepted.Release()); // Reply to the mediator
 
@@ -115,7 +128,7 @@ public:
 
         if (Self->Pipeline.HasPredictedPlan()) {
             ui64 nextStep = Self->Pipeline.NextPredictedPlanStep();
-            Y_ABORT_UNLESS(step < nextStep);
+            Y_ENSURE(step < nextStep);
             Self->WaitPredictedPlanStep(nextStep);
         }
 
@@ -131,7 +144,7 @@ public:
 };
 
 void TDataShard::Handle(TEvPrivate::TEvPlanPredictedTxs::TPtr&, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(ScheduledPlanPredictedTxs);
+    Y_ENSURE(ScheduledPlanPredictedTxs);
     Execute(new TTxPlanPredictedTxs(this), ctx);
 }
 
@@ -143,3 +156,7 @@ void TDataShard::SchedulePlanPredictedTxs() {
 }
 
 }}
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

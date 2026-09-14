@@ -20,8 +20,8 @@ protected:
 
     TSchedulerThread(
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        TString threadGroupName,
-        TString threadName,
+        std::string threadGroupName,
+        std::string threadName,
         NThreading::TThreadOptions options = {});
 
     ~TSchedulerThread();
@@ -44,11 +44,6 @@ protected:
     TClosure BeginExecuteImpl(bool dequeued, TEnqueuedAction* action);
 
 private:
-    TCpuInstant LastMaintenanceInstant_ = 0;
-
-    void MaybeRunMaintenance(TCpuInstant now);
-    void RunMaintenance();
-
     void StartEpilogue() override;
     void StopPrologue() override;
     void StopEpilogue() override;
@@ -58,4 +53,4 @@ DEFINE_REFCOUNTED_TYPE(TSchedulerThread)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency

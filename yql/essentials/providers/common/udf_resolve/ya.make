@@ -9,6 +9,7 @@ SRCS(
     yql_simple_udf_resolver.h
     yql_udf_resolver_with_index.cpp
     yql_udf_resolver_with_index.h
+    yql_udf_resolver_logger.cpp
 )
 
 PEERDIR(
@@ -20,8 +21,10 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/log
     yql/essentials/core
+    yql/essentials/core/url_preprocessing/interface
     yql/essentials/providers/common/mkql
     yql/essentials/providers/common/proto
+    yql/essentials/minikql/runtime_settings
     yql/essentials/providers/common/schema/expr
 )
 

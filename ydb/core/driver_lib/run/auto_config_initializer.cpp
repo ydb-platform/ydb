@@ -39,12 +39,17 @@ namespace {
     constexpr i16 GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase = 1000;
     constexpr i16 GRpcHandlersPerCompletionQueuePerCpu = GRpcHandlersPerCompletionQueueInMaxPreparedCpuCase / MaxPreparedCpuCount;
 
+    constexpr i16 SchedulerTinyCoresThreshold = 4;
+
+    constexpr ::arc_ui64 SchedulerDefaultResolution = 64;
+    constexpr ::arc_ui64 SchedulerTinyResolution = 1024;
+
     TShortPoolCfg ComputeCpuTable[MaxPreparedCpuCount + 1][5] {
         {  {0, 0},  {0, 0},   {0, 0}, {0, 0}, {0, 0} },     // 0
         {  {1, 1},  {0, 1},   {0, 1}, {0, 0}, {0, 0} },     // 1
-        {  {1, 1},  {0, 2},   {0, 1}, {0, 0}, {1, 1} },     // 2
-        {  {1, 2},  {0, 3},   {1, 1}, {0, 0}, {1, 1} },     // 3
-        {  {1, 2},  {1, 4},   {1, 1}, {0, 0}, {1, 2} },     // 4
+        {  {1, 2},  {0, 2},   {1, 1}, {0, 0}, {0, 1} },     // 2
+        {  {1, 3},  {0, 3},   {1, 1}, {0, 0}, {1, 1} },     // 3
+        {  {1, 3},  {1, 4},   {1, 1}, {0, 0}, {1, 2} },     // 4
         {  {1, 3},  {2, 5},   {1, 1}, {0, 0}, {1, 2} },     // 5
         {  {1, 3},  {3, 6},   {1, 1}, {0, 0}, {1, 3} },     // 6
         {  {2, 4},  {3, 7},   {1, 2}, {0, 0}, {1, 3} },     // 7
@@ -76,11 +81,11 @@ namespace {
     TShortPoolCfg HybridCpuTable[MaxPreparedCpuCount + 1][5] {
         {  {0, 0},   {0, 0},   {0, 0}, {0, 0}, {0, 0} },     // 0
         {  {1, 1},   {0, 1},   {0, 1}, {0, 0}, {0, 0} },     // 1
-        {  {1, 1},   {0, 2},   {0, 1}, {0, 0}, {1, 1} },     // 2
-        {  {1, 2},   {0, 3},   {1, 1}, {0, 0}, {1, 1} },     // 3
-        {  {1, 2},   {1, 4},   {1, 1}, {0, 0}, {1, 2} },     // 4
-        {  {1, 2},   {2, 5},   {1, 1}, {0, 0}, {1, 2} },     // 5
-        {  {1, 2},   {2, 6},   {1, 1}, {0, 0}, {2, 3} },     // 6
+        {  {1, 2},   {0, 2},   {1, 1}, {0, 0}, {0, 1} },     // 2
+        {  {1, 3},   {0, 3},   {1, 1}, {0, 0}, {1, 1} },     // 3
+        {  {1, 3},   {1, 4},   {1, 1}, {0, 0}, {1, 2} },     // 4
+        {  {1, 3},   {2, 5},   {1, 1}, {0, 0}, {1, 2} },     // 5
+        {  {1, 3},   {2, 6},   {1, 1}, {0, 0}, {2, 3} },     // 6
         {  {2, 3},   {2, 7},   {1, 2}, {0, 0}, {2, 3} },     // 7
         {  {2, 3},   {3, 8},   {1, 2}, {0, 0}, {2, 4} },     // 8
         {  {2, 4},   {3, 9},   {1, 2}, {0, 0}, {3, 4} },     // 9
@@ -110,7 +115,7 @@ namespace {
     TShortPoolCfg StorageCpuTable[MaxPreparedCpuCount + 1][5] {
         {  {0, 0},   {0, 0},  {0, 0}, {0, 0}, {0, 0} },     // 0
         {  {1, 1},   {0, 1},  {0, 1}, {0, 0}, {0, 0} },     // 1
-        {  {1, 2},   {0, 2},  {0, 1}, {0, 0}, {1, 1} },     // 2
+        {  {1, 2},   {0, 2},  {1, 1}, {0, 0}, {0, 1} },     // 2
         {  {1, 3},   {0, 3},  {1, 1}, {0, 0}, {1, 1} },     // 3
         {  {1, 4},   {1, 4},  {1, 1}, {0, 0}, {1, 2} },     // 4
         {  {2, 5},   {1, 5},  {1, 1}, {0, 0}, {1, 2} },     // 5
@@ -180,7 +185,7 @@ namespace NKikimr::NAutoConfigInitializer {
             return TASPools {.SystemPoolId = 0, .UserPoolId = 0, .BatchPoolId = 1, .IOPoolId = 2, .ICPoolId = 3};
         } else {
             return TASPools {.SystemPoolId = 0, .UserPoolId = 0, .BatchPoolId = 0, .IOPoolId = 1, .ICPoolId = 0};
-        } 
+        }
     }
 
     TASPools GetASPools(const NKikimrConfig::TActorSystemConfig &config, bool useAutoConfig) {
@@ -227,21 +232,84 @@ namespace NKikimr::NAutoConfigInitializer {
         return servicePools;
     }
 
-    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config) {
+    void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, bool isDynamicNode, bool tinyMode) {
         config->SetUseAutoConfig(true);
         config->ClearExecutor();
+        // These lists hold indices into Executor; the auto config replaces the executor
+        // list entirely, so any configured indices no longer reference the intended pools.
+        config->ClearBlobStorageExecutor();
+        config->ClearInterconnectSessionExecutor();
 
         i16 cpuCount = config->HasCpuCount() ? config->GetCpuCount() : GetCpuCount();
         Y_ABORT_UNLESS(cpuCount);
         config->SetCpuCount(cpuCount);
 
         bool useSharedThreads = config->GetUseSharedThreads();
+        bool useUnitedPool = config->GetUseUnitedPool();
 
         if (!config->HasScheduler()) {
             auto *scheduler = config->MutableScheduler();
-            scheduler->SetResolution(64);
+
+            bool useTiny = tinyMode || (cpuCount >= 1 && cpuCount <= SchedulerTinyCoresThreshold);
+            scheduler->SetResolution(useTiny ? SchedulerTinyResolution : SchedulerDefaultResolution);
+
             scheduler->SetSpinThreshold(0);
             scheduler->SetProgressThreshold(10'000);
+        }
+
+        auto *serviceExecutor = config->AddServiceExecutor();
+        serviceExecutor->SetServiceName("Interconnect");
+
+        if (useSharedThreads && cpuCount >= 1 && cpuCount <= 3) {
+            config->SetUserExecutor(0);
+            config->SetSysExecutor(1);
+            config->SetBatchExecutor(2);
+            config->SetIoExecutor(3);
+            serviceExecutor->SetExecutorId(4);
+
+            auto *systemExecutor = config->AddExecutor();
+            auto *userExecutor = config->AddExecutor();
+            auto *batchExecutor = config->AddExecutor();
+            auto *ioExecutor = config->AddExecutor();
+            auto *icExecutor = config->AddExecutor();
+
+            ioExecutor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::IO);
+            ioExecutor->SetThreads(config->HasForceIOPoolThreads() ? config->GetForceIOPoolThreads() : 1);
+            ioExecutor->SetName("IO");
+
+            auto assignPool = [&](auto *executor, TString name, i16 priority, bool hasSharedThread) {
+                executor->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);
+                executor->SetThreads(hasSharedThread);
+                executor->SetMaxThreads(hasSharedThread);
+                executor->SetName(name);
+                executor->SetPriority(priority);
+                executor->SetSpinThreshold(0);
+                executor->SetHasSharedThread(hasSharedThread);
+                executor->SetAllThreadsAreShared(useUnitedPool);
+            };
+
+            assignPool(systemExecutor, "System", 30, cpuCount >= 3);
+            assignPool(userExecutor, "User", 20, cpuCount >= 2);
+            assignPool(batchExecutor, "Batch", 10, false);
+            assignPool(icExecutor, "IC", 40, true);
+
+            batchExecutor->SetForcedForeignSlots(0);
+            userExecutor->SetForcedForeignSlots(cpuCount - 1);
+            icExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
+            systemExecutor->SetForcedForeignSlots(Min(1, cpuCount - 1));
+
+            if (cpuCount >= 2) {
+                userExecutor->AddAdjacentPools(2);
+            }
+            if (cpuCount <= 2) {
+                icExecutor->AddAdjacentPools(0);
+            }
+            if (cpuCount == 1) {
+                icExecutor->AddAdjacentPools(1);
+                icExecutor->AddAdjacentPools(2);
+            }
+
+            return;
         }
 
         TASPools pools = GetASPools(cpuCount);
@@ -249,9 +317,6 @@ namespace NKikimr::NAutoConfigInitializer {
         std::vector<TString> names = pools.GetRealPoolNames();
         std::vector<ui8> executorIds = pools.GetIndeces();
         std::vector<ui8> priorities = pools.GetPriorities();
-
-        auto *serviceExecutor = config->AddServiceExecutor();
-        serviceExecutor->SetServiceName("Interconnect");
 
         config->SetUserExecutor(pools.SystemPoolId);
         config->SetSysExecutor(pools.UserPoolId);
@@ -270,6 +335,10 @@ namespace NKikimr::NAutoConfigInitializer {
         TVector<NKikimrConfig::TActorSystemConfig::TExecutor *> executors;
         for (ui32 poolIdx = 0; poolIdx < poolCount; ++poolIdx) {
             executors.push_back(config->AddExecutor());
+        }
+
+        if (!config->HasNodeType()) {
+            config->SetNodeType(isDynamicNode ? NKikimrConfig::TActorSystemConfig::COMPUTE : NKikimrConfig::TActorSystemConfig::STORAGE);
         }
 
         auto &cpuTable = (config->GetNodeType() == NKikimrConfig::TActorSystemConfig::STORAGE ? StorageCpuTable :
@@ -317,6 +386,7 @@ namespace NKikimr::NAutoConfigInitializer {
             executor->SetMaxThreads(Max(cfg.MaxThreadCount, threadsCount));
             executor->SetPriority(priorities[poolIdx]);
             executor->SetName(names[poolIdx]);
+            executor->SetAllThreadsAreShared(useUnitedPool);
 
             if (names[poolIdx] == TASPools::CommonPoolName) {
                 executor->SetSpinThreshold(0);
@@ -327,6 +397,13 @@ namespace NKikimr::NAutoConfigInitializer {
                 executor->SetMaxAvgPingDeviation(500);
             } else {
                 executor->SetSpinThreshold(1);
+            }
+
+            if (config->HasMinLocalQueueSize()) {
+                executor->SetMinLocalQueueSize(config->GetMinLocalQueueSize());
+            }
+            if (config->HasMaxLocalQueueSize()) {
+                executor->SetMaxLocalQueueSize(config->GetMaxLocalQueueSize());
             }
         }
     }
@@ -346,3 +423,13 @@ namespace NKikimr::NAutoConfigInitializer {
     }
 
 } // NKikimr::NActorSystemInitializer
+
+namespace NKikimr {
+    bool NeedToUseAutoConfig(const NKikimrConfig::TActorSystemConfig& config) {
+        bool hasSpecialFields = config.HasNodeType() || config.HasCpuCount();
+        if (!config.HasUseAutoConfig() && hasSpecialFields) {
+            return true;
+        }
+        return config.GetUseAutoConfig();
+    }
+}

@@ -7,6 +7,8 @@
 
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 LWTRACE_USING(DATASHARD_PROVIDER)
 
 namespace NKikimr {
@@ -79,14 +81,14 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
                                                const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto duration = TAppData::TimeProvider->Now() - op->GetStartExecutionAt();
 
     if (DataShard.GetDataTxProfileLogThresholdMs()
         && duration.MilliSeconds() >= DataShard.GetDataTxProfileLogThresholdMs()) {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                   op->ExecutionProfileLogString(DataShard.TabletID()));
+        YDB_LOG_WARN_CTX(ctx, "TCompleteOperationUnit::CompleteOperation: slow transaction execution profile",
+            {"executionProfile", op->ExecutionProfileLogString(DataShard.TabletID())});
     }
 
     if (DataShard.GetDataTxProfileBufferThresholdMs()
@@ -162,3 +164,7 @@ THolder<TExecutionUnit> CreateCompleteOperationUnit(TDataShard &dataShard,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

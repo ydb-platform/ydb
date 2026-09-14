@@ -2,6 +2,8 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -65,11 +67,11 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext&, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSnapshotTx());
-        Y_ABORT_UNLESS(!op->IsAborted());
+        Y_ENSURE(op->IsSnapshotTx());
+        Y_ENSURE(!op->IsAborted());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (CheckRejectDataTx(op, ctx)) {
             op->Abort(EExecutionUnitKind::FinishPropose);
@@ -141,16 +143,18 @@ public:
                 BuildResult(op)->AddError(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED, err);
                 op->Abort(EExecutionUnitKind::FinishPropose);
 
-                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);
+                YDB_LOG_NOTICE_CTX(ctx, "TCheckSnapshotTxUnit::Execute: cannot propose tx at blocked shard",
+                    {"errorMessage", err});
 
                 return EExecutionStatus::Executed;
             }
 
             BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "Prepared " << op->GetKind() << " transaction txId " << op->GetTxId()
-                        << " at tablet " << DataShard.TabletID());
+            YDB_LOG_DEBUG_CTX(ctx, "TCheckSnapshotTxUnit::Execute: prepared transaction",
+                {"opKind", op->GetKind()},
+                {"txId", op->GetTxId()},
+                {"tabletId", DataShard.TabletID()});
         }
 
         return EExecutionStatus::Executed;
@@ -170,3 +174,7 @@ THolder<TExecutionUnit> CreateCheckSnapshotTxUnit(
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

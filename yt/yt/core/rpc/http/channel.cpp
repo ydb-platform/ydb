@@ -12,6 +12,8 @@
 #include <yt/yt/core/https/config.h>
 #include <yt/yt/core/https/client.h>
 
+#include <yt/yt/core/concurrency/thread_pool_poller.h>
+
 #include <yt/yt/core/rpc/grpc/helpers.h>
 
 namespace NYT::NRpc::NHttp {
@@ -21,6 +23,8 @@ namespace {
 using namespace NRpc;
 using namespace NYTree;
 using namespace NYT::NHttp;
+
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -67,7 +71,7 @@ public:
         if (!TerminationError_.IsOK()) {
             auto error = TerminationError_;
             guard.Release();
-            responseHandler->HandleError(error);
+            responseHandler->HandleError(error, EndpointAddress_);
             return nullptr;
         }
 
@@ -133,7 +137,7 @@ private:
     IClientPtr Client_;
     std::optional<TDuration> ClientTimeout_;
 
-    const TString EndpointAddress_;
+    const std::string EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const NConcurrency::IPollerPtr Poller_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
@@ -174,6 +178,7 @@ private:
             const IClientRequestPtr& request,
             IClientResponseHandlerPtr responseHandler)
         {
+            request->Header().set_start_time(ToProto(TInstant::Now()));
             auto httpRequestHeaders = TranslateRequest(request);
 
             auto protocol = channel->IsHttps_ ? "https" : "http";
@@ -193,8 +198,9 @@ private:
                     httpRequestBody = requestBody[1];
                 }
             } catch (const std::exception& ex) {
-                responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Request serialization failed")
-                    << ex);
+                responseHandler->HandleError(
+                    TError(NRpc::EErrorCode::TransportError, "Request serialization failed").With(ex),
+                    channel->EndpointAddress_);
                 return;
             }
 
@@ -229,7 +235,7 @@ private:
         TFuture<IResponsePtr> Response_;
 
         static void OnResponse(
-            const TString& address,
+            const std::string& address,
             TRequestId requestId,
             const std::string& service,
             const std::string& method,
@@ -238,25 +244,30 @@ private:
         {
             try {
                 if (!responseOrError.IsOK()) {
-                    responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "HTTP client request failed")
-                        << responseOrError);
+                    responseHandler->HandleError(
+                        TError(NRpc::EErrorCode::TransportError, "HTTP client request failed").With(responseOrError),
+                        address);
                     return;
                 }
 
                 const auto& response = responseOrError.Value();
                 if (response->GetStatusCode() == EStatusCode::NotFound) {
-                    responseHandler->HandleError(TError(NRpc::EErrorCode::NoSuchService, "URL was not resolved to a service"));
+                    responseHandler->HandleError(
+                        TError(NRpc::EErrorCode::NoSuchService, "URL was not resolved to a service"),
+                        address);
                     return;
                 }
 
                 if (response->GetStatusCode() == EStatusCode::BadRequest) {
-                    responseHandler->HandleError(ParseYTError(response));
+                    responseHandler->HandleError(ParseYTError(response), address);
                     return;
                 }
 
                 if (response->GetStatusCode() != EStatusCode::OK) {
-                    responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Unexpected HTTP status code")
-                        << TErrorAttribute("status", response->GetStatusCode()));
+                    responseHandler->HandleError(
+                        TError(NRpc::EErrorCode::TransportError, "Unexpected HTTP status code")
+                            .With("status", response->GetStatusCode()),
+                        address);
                     return;
                 }
 
@@ -264,8 +275,8 @@ private:
 
                 NRpc::NProto::TResponseHeader responseHeader;
                 ToProto(responseHeader.mutable_request_id(), requestId);
-                NYT::ToProto(responseHeader.mutable_service(), service);
-                NYT::ToProto(responseHeader.mutable_method(), method);
+                ToProto(responseHeader.mutable_service(), service);
+                ToProto(responseHeader.mutable_method(), method);
 
                 auto responseMessage = CreateResponseMessage(
                     responseHeader,
@@ -273,8 +284,9 @@ private:
                     /*attachments*/ {});
                 responseHandler->HandleResponse(responseMessage, address);
             } catch (const std::exception& ex) {
-                responseHandler->HandleError(TError(NRpc::EErrorCode::TransportError, "Response deserialization failed")
-                    << ex);
+                responseHandler->HandleError(
+                    TError(NRpc::EErrorCode::TransportError, "Response deserialization failed").With(ex),
+                    address);
             }
         }
 
@@ -310,6 +322,10 @@ private:
                 httpHeaders->Add(RequestIdHeaderName, ToString(requestId));
             }
 
+            if (rpcHeader.has_start_time()) {
+                httpHeaders->Add(StartTimeHeaderName, ToString(rpcHeader.start_time()));
+            }
+
             if (rpcHeader.HasExtension(NRpc::NProto::TCredentialsExt::credentials_ext)) {
                 const auto& credentialsExt = rpcHeader.GetExtension(NRpc::NProto::TCredentialsExt::credentials_ext);
 
@@ -322,19 +338,19 @@ private:
                 }
 
                 if (credentialsExt.has_session_id() || credentialsExt.has_ssl_session_id()) {
-                    TString cookieString;
+                    std::string cookieString;
 
-                    static const TString SessionIdCookieName("Session_id");
-                    static const TString SessionId2CookieName("sessionid2");
                     if (credentialsExt.has_session_id()) {
-                        cookieString = TString::Join(SessionIdCookieName, "=", credentialsExt.session_id());
+                        static const std::string SessionIdCookieName("Session_id");
+                        cookieString += SessionIdCookieName + "=" + credentialsExt.session_id();
                     }
 
                     if (credentialsExt.has_ssl_session_id()) {
-                        if (credentialsExt.has_session_id()) {
+                        if (!cookieString.empty()) {
                             cookieString += "; ";
                         }
-                        cookieString += TString::Join(SessionId2CookieName, "=", credentialsExt.ssl_session_id());
+                        static const std::string SessionId2CookieName("sessionid2");
+                        cookieString += SessionId2CookieName + "=" + credentialsExt.ssl_session_id();
                     }
 
                     httpHeaders->Add(CookieHeaderName, cookieString);
@@ -346,13 +362,11 @@ private:
             }
 
             if (const auto& user = request->GetUser(); !user.empty()) {
-                // TODO(babenko): switch to std:::string
-                httpHeaders->Add(UserNameHeaderName, TString(user));
+                httpHeaders->Add(UserNameHeaderName, user);
             }
 
             if (const auto& userTag = request->GetUserTag(); !userTag.empty()) {
-                // TODO(babenko): switch to std:::string
-                httpHeaders->Add(UserTagHeaderName, TString(userTag));
+                httpHeaders->Add(UserTagHeaderName, userTag);
             }
 
             if (rpcHeader.has_timeout()) {
@@ -370,7 +384,7 @@ private:
             if (rpcHeader.HasExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext)) {
                 const auto& customMetadataExt = rpcHeader.GetExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext);
                 for (const auto& [key, value] : customMetadataExt.entries()) {
-                    httpHeaders->Add(TString::Join("X-", key), value);
+                    httpHeaders->Add("X-" + key, value);
                 }
             }
 
@@ -388,10 +402,43 @@ DEFINE_REFCOUNTED_TYPE(THttpChannel)
 IChannelPtr CreateHttpChannel(
     const std::string& address,
     const NConcurrency::IPollerPtr& poller,
-    bool isHttps,
+    bool secure,
     NHttps::TClientCredentialsConfigPtr credentials)
 {
-    return New<THttpChannel>(address, poller, isHttps, credentials);
+    return New<THttpChannel>(address, poller, secure, credentials);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace {
+
+class THttpChannelFactory
+    : public IChannelFactory
+{
+public:
+    THttpChannelFactory(
+        TClientConfigPtr config,
+        NConcurrency::IPollerPtr poller)
+        : Config_(std::move(config))
+        , Poller_(std::move(poller))
+    { }
+
+    IChannelPtr CreateChannel(const std::string& address) override
+    {
+        return CreateHttpChannel(address, Poller_, Config_->Secure, Config_->Credentials);
+    }
+
+private:
+    const TClientConfigPtr Config_;
+    const NConcurrency::IPollerPtr Poller_;
+};
+
+} // namespace
+
+IChannelFactoryPtr CreateHttpChannelFactory(TClientConfigPtr config)
+{
+    auto poller = NConcurrency::CreateThreadPoolPoller(config->PollerThreadCount, "HttpChannel");
+    return New<THttpChannelFactory>(config, std::move(poller));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

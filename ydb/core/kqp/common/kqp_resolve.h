@@ -11,6 +11,7 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 
 #include <util/generic/map.h>
 
@@ -32,8 +33,7 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
     TVector<TString> KeyColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     ETableKind TableKind = ETableKind::Unknown;
-    THashMap<TString, std::pair<TString, NYql::TKikimrPathId>> Sequences;
-    THashMap<TString, Ydb::TypedValue> DefaultFromLiteral;
+    TMaybe<NKikimrSysView::TSysViewDescription> SysViewInfo;
     bool IsBuildInProgress = false;
 
     TTableConstInfo() {}
@@ -65,22 +65,9 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
         }
         column.NotNull = phyColumn.GetNotNull();
         column.IsBuildInProgress = phyColumn.GetIsBuildInProgress();
+        column.SetNotNullInProgress = phyColumn.GetSetNotNullInProgress();
 
         Columns.emplace(phyColumn.GetId().GetName(), std::move(column));
-        if (!phyColumn.GetDefaultFromSequence().empty()) {
-            TString seq = phyColumn.GetDefaultFromSequence();
-            if (!seq.StartsWith("/")) {
-                seq = Path + "/" + seq;
-            }
-            NYql::TKikimrPathId pathId(phyColumn.GetDefaultFromSequencePathId().GetOwnerId(), phyColumn.GetDefaultFromSequencePathId().GetLocalPathId());
-            Sequences.emplace(phyColumn.GetId().GetName(), std::make_pair(seq, pathId));
-        }
-
-        if (phyColumn.HasDefaultFromLiteral()) {
-            DefaultFromLiteral.emplace(
-                phyColumn.GetId().GetName(),
-                phyColumn.GetDefaultFromLiteral());
-        }
     }
 
     void AddColumn(const TString& columnName) {
@@ -117,6 +104,10 @@ struct TTableConstInfo : public TAtomicRefCount<TTableConstInfo> {
                 return;
             default:
                 YQL_ENSURE(false, "Unexpected phy table kind: " << (i64) phyTable.GetKind());
+        }
+
+        if (phyTable.HasSysViewInfo()) {
+            SysViewInfo = phyTable.GetSysViewInfo();
         }
 
         for (const auto& [_, phyColumn] : phyTable.GetColumns()) {
@@ -232,36 +223,7 @@ private:
     THashMap<TTableId, TTable> TablesById;
 };
 
-TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NScheme::TTypeInfo>& keyColumnTypes,
-    const TVector<ui32>& keyColumnIndices, const NMiniKQL::TTypeEnvironment& typeEnv, bool copyValues);
-
-template<typename TList, typename TRangeFunc>
-size_t FindKeyPartitionIndex(const TVector<TCell>& key, const TList& partitions,
-    const TVector<NScheme::TTypeInfo>& keyColumnTypes, const TRangeFunc& rangeFunc)
-{
-    auto it = std::lower_bound(partitions.begin(), partitions.end(), key,
-        [&keyColumnTypes, &rangeFunc](const auto& partition, const auto& key) {
-            const auto& range = rangeFunc(partition);
-            const int cmp = CompareBorders<true, false>(range.EndKeyPrefix.GetCells(), key,
-                range.IsInclusive || range.IsPoint, true, keyColumnTypes);
-
-            return (cmp < 0);
-        });
-
-    MKQL_ENSURE_S(it != partitions.end());
-
-    return std::distance(partitions.begin(), it);
-}
-
-template<typename TList, typename TRangeFunc>
-size_t FindKeyPartitionIndex(const NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NUdf::TUnboxedValue& value,
-     const TList& partitions, const TVector<NScheme::TTypeInfo>& keyColumnTypes, const TVector<ui32>& keyColumnIndices,
-     const TRangeFunc& rangeFunc)
-{
-    auto key = MakeKeyCells(value, keyColumnTypes, keyColumnIndices, typeEnv, /* copyValues */ true);
-
-    return FindKeyPartitionIndex(key, partitions, keyColumnTypes, rangeFunc);
-}
+NUdf::TUnboxedValue MakeDefaultValueByType(NKikimr::NMiniKQL::TType* type);
 
 using TSerializedPointOrRange = std::variant<TSerializedCellVec, TSerializedTableRange>;
 

@@ -1,7 +1,7 @@
-import base64
+from __future__ import annotations
+
 import email.utils
 import re
-import typing
 import typing as t
 import warnings
 from datetime import date
@@ -13,74 +13,20 @@ from enum import Enum
 from hashlib import sha1
 from time import mktime
 from time import struct_time
-from urllib.parse import unquote_to_bytes as _unquote
+from urllib.parse import quote
+from urllib.parse import unquote
 from urllib.request import parse_http_list as _parse_list_header
 
-from ._internal import _cookie_quote
 from ._internal import _dt_as_utc
-from ._internal import _make_cookie_domain
-from ._internal import _to_bytes
-from ._internal import _to_str
-from ._internal import _wsgi_decoding_dance
+from ._internal import _plain_int
 
 if t.TYPE_CHECKING:
     from _typeshed.wsgi import WSGIEnvironment
 
-# for explanation of "media-range", etc. see Sections 5.3.{1,2} of RFC 7231
-_accept_re = re.compile(
-    r"""
-    (                       # media-range capturing-parenthesis
-      [^\s;,]+              # type/subtype
-      (?:[ \t]*;[ \t]*      # ";"
-        (?:                 # parameter non-capturing-parenthesis
-          [^\s;,q][^\s;,]*  # token that doesn't start with "q"
-        |                   # or
-          q[^\s;,=][^\s;,]* # token that is more than just "q"
-        )
-      )*                    # zero or more parameters
-    )                       # end of media-range
-    (?:[ \t]*;[ \t]*q=      # weight is a "q" parameter
-      (\d*(?:\.\d+)?)       # qvalue capturing-parentheses
-      [^,]*                 # "extension" accept params: who cares?
-    )?                      # accept params are optional
-    """,
-    re.VERBOSE,
-)
 _token_chars = frozenset(
     "!#$%&'*+-.0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ^_`abcdefghijklmnopqrstuvwxyz|~"
 )
 _etag_re = re.compile(r'([Ww]/)?(?:"(.*?)"|(.*?))(?:\s*,\s*|$)')
-_option_header_piece_re = re.compile(
-    r"""
-    ;\s*,?\s*  # newlines were replaced with commas
-    (?P<key>
-        "[^"\\]*(?:\\.[^"\\]*)*"  # quoted string
-    |
-        [^\s;,=*]+  # token
-    )
-    (?:\*(?P<count>\d+))?  # *1, optional continuation index
-    \s*
-    (?:  # optionally followed by =value
-        (?:  # equals sign, possibly with encoding
-            \*\s*=\s*  # * indicates extended notation
-            (?:  # optional encoding
-                (?P<encoding>[^\s]+?)
-                '(?P<language>[^\s]*?)'
-            )?
-        |
-            =\s*  # basic notation
-        )
-        (?P<value>
-            "[^"\\]*(?:\\.[^"\\]*)*"  # quoted string
-        |
-            [^;,]+  # token
-        )?
-    )?
-    \s*
-    """,
-    flags=re.VERBOSE,
-)
-_option_header_start_mime_type = re.compile(r",\s*([^;,\s]+)([;,]\s*.+)?")
 _entity_headers = frozenset(
     [
         "allow",
@@ -191,107 +137,202 @@ class COOP(Enum):
 
 
 def quote_header_value(
-    value: t.Union[str, int], extra_chars: str = "", allow_token: bool = True
+    value: t.Any,
+    extra_chars: str | None = None,
+    allow_token: bool = True,
 ) -> str:
-    """Quote a header value if necessary.
+    """Add double quotes around a header value. If the header contains only ASCII token
+    characters, it will be returned unchanged. If the header contains ``"`` or ``\\``
+    characters, they will be escaped with an additional ``\\`` character.
+
+    This is the reverse of :func:`unquote_header_value`.
+
+    :param value: The value to quote. Will be converted to a string.
+    :param allow_token: Disable to quote the value even if it only has token characters.
+
+    .. versionchanged:: 2.3
+        The value is quoted if it is the empty string.
+
+    .. versionchanged:: 2.3
+        Passing bytes is deprecated and will not be supported in Werkzeug 3.0.
+
+    .. versionchanged:: 2.3
+        The ``extra_chars`` parameter is deprecated and will be removed in Werkzeug 3.0.
 
     .. versionadded:: 0.5
-
-    :param value: the value to quote.
-    :param extra_chars: a list of extra characters to skip quoting.
-    :param allow_token: if this is enabled token values are returned
-                        unchanged.
     """
     if isinstance(value, bytes):
+        warnings.warn(
+            "Passing bytes is deprecated and will not be supported in Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         value = value.decode("latin1")
+
+    if extra_chars is not None:
+        warnings.warn(
+            "The 'extra_chars' parameter is deprecated and will be"
+            " removed in Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
     value = str(value)
+
+    if not value:
+        return '""'
+
     if allow_token:
-        token_chars = _token_chars | set(extra_chars)
-        if set(value).issubset(token_chars):
+        token_chars = _token_chars
+
+        if extra_chars:
+            token_chars |= set(extra_chars)
+
+        if token_chars.issuperset(value):
             return value
+
     value = value.replace("\\", "\\\\").replace('"', '\\"')
     return f'"{value}"'
 
 
-def unquote_header_value(value: str, is_filename: bool = False) -> str:
-    r"""Unquotes a header value.  (Reversal of :func:`quote_header_value`).
-    This does not use the real unquoting but what browsers are actually
-    using for quoting.
+def unquote_header_value(value: str, is_filename: bool | None = None) -> str:
+    """Remove double quotes and decode slash-escaped ``"`` and ``\\`` characters in a
+    header value.
 
-    .. versionadded:: 0.5
+    This is the reverse of :func:`quote_header_value`.
 
-    :param value: the header value to unquote.
-    :param is_filename: The value represents a filename or path.
+    :param value: The header value to unquote.
+
+    .. versionchanged:: 2.3
+        The ``is_filename`` parameter is deprecated and will be removed in Werkzeug 3.0.
     """
-    if value and value[0] == value[-1] == '"':
-        # this is not the real unquoting, but fixing this so that the
-        # RFC is met will result in bugs with internet explorer and
-        # probably some other browsers as well.  IE for example is
-        # uploading files with "C:\foo\bar.txt" as filename
+    if is_filename is not None:
+        warnings.warn(
+            "The 'is_filename' parameter is deprecated and will be"
+            " removed in Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    if len(value) >= 2 and value[0] == value[-1] == '"':
         value = value[1:-1]
 
-        # if this is a filename and the starting characters look like
-        # a UNC path, then just return the value without quotes.  Using the
-        # replace sequence below on a UNC path has the effect of turning
-        # the leading double slash into a single slash and then
-        # _fix_ie_filename() doesn't work correctly.  See #458.
-        if not is_filename or value[:2] != "\\\\":
+        if not is_filename:
             return value.replace("\\\\", "\\").replace('\\"', '"')
+
     return value
 
 
-def dump_options_header(
-    header: t.Optional[str], options: t.Mapping[str, t.Optional[t.Union[str, int]]]
-) -> str:
-    """The reverse function to :func:`parse_options_header`.
+def dump_options_header(header: str | None, options: t.Mapping[str, t.Any]) -> str:
+    """Produce a header value and ``key=value`` parameters separated by semicolons
+    ``;``. For example, the ``Content-Type`` header.
 
-    :param header: the header to dump
-    :param options: a dict of options to append.
+    .. code-block:: python
+
+        dump_options_header("text/html", {"charset": "UTF-8"})
+        'text/html; charset=UTF-8'
+
+    This is the reverse of :func:`parse_options_header`.
+
+    If a value contains non-token characters, it will be quoted.
+
+    If a value is ``None``, the parameter is skipped.
+
+    In some keys for some headers, a UTF-8 value can be encoded using a special
+    ``key*=UTF-8''value`` form, where ``value`` is percent encoded. This function will
+    not produce that format automatically, but if a given key ends with an asterisk
+    ``*``, the value is assumed to have that form and will not be quoted further.
+
+    :param header: The primary header value.
+    :param options: Parameters to encode as ``key=value`` pairs.
+
+    .. versionchanged:: 2.3
+        Keys with ``None`` values are skipped rather than treated as a bare key.
+
+    .. versionchanged:: 2.2.3
+        If a key ends with ``*``, its value will not be quoted.
     """
     segments = []
+
     if header is not None:
         segments.append(header)
+
     for key, value in options.items():
         if value is None:
-            segments.append(key)
+            continue
+
+        if key[-1] == "*":
+            segments.append(f"{key}={value}")
         else:
             segments.append(f"{key}={quote_header_value(value)}")
+
     return "; ".join(segments)
 
 
 def dump_header(
-    iterable: t.Union[t.Dict[str, t.Union[str, int]], t.Iterable[str]],
-    allow_token: bool = True,
+    iterable: dict[str, t.Any] | t.Iterable[t.Any],
+    allow_token: bool | None = None,
 ) -> str:
-    """Dump an HTTP header again.  This is the reversal of
-    :func:`parse_list_header`, :func:`parse_set_header` and
-    :func:`parse_dict_header`.  This also quotes strings that include an
-    equals sign unless you pass it as dict of key, value pairs.
+    """Produce a header value from a list of items or ``key=value`` pairs, separated by
+    commas ``,``.
 
-    >>> dump_header({'foo': 'bar baz'})
-    'foo="bar baz"'
-    >>> dump_header(('foo', 'bar baz'))
-    'foo, "bar baz"'
+    This is the reverse of :func:`parse_list_header`, :func:`parse_dict_header`, and
+    :func:`parse_set_header`.
 
-    :param iterable: the iterable or dict of values to quote.
-    :param allow_token: if set to `False` tokens as values are disallowed.
-                        See :func:`quote_header_value` for more details.
+    If a value contains non-token characters, it will be quoted.
+
+    If a value is ``None``, the key is output alone.
+
+    In some keys for some headers, a UTF-8 value can be encoded using a special
+    ``key*=UTF-8''value`` form, where ``value`` is percent encoded. This function will
+    not produce that format automatically, but if a given key ends with an asterisk
+    ``*``, the value is assumed to have that form and will not be quoted further.
+
+    .. code-block:: python
+
+        dump_header(["foo", "bar baz"])
+        'foo, "bar baz"'
+
+        dump_header({"foo": "bar baz"})
+        'foo="bar baz"'
+
+    :param iterable: The items to create a header from.
+
+    .. versionchanged:: 2.3
+        The ``allow_token`` parameter is deprecated and will be removed in Werkzeug 3.0.
+
+    .. versionchanged:: 2.2.3
+        If a key ends with ``*``, its value will not be quoted.
     """
+    if allow_token is not None:
+        warnings.warn(
+            "'The 'allow_token' parameter is deprecated and will be"
+            " removed in Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    else:
+        allow_token = True
+
     if isinstance(iterable, dict):
         items = []
+
         for key, value in iterable.items():
             if value is None:
                 items.append(key)
+            elif key[-1] == "*":
+                items.append(f"{key}={value}")
             else:
                 items.append(
                     f"{key}={quote_header_value(value, allow_token=allow_token)}"
                 )
     else:
         items = [quote_header_value(x, allow_token=allow_token) for x in iterable]
+
     return ", ".join(items)
 
 
-def dump_csp_header(header: "ds.ContentSecurityPolicy") -> str:
+def dump_csp_header(header: ds.ContentSecurityPolicy) -> str:
     """Dump a Content Security Policy header.
 
     These are structured into policies such as "default-src 'self';
@@ -304,187 +345,304 @@ def dump_csp_header(header: "ds.ContentSecurityPolicy") -> str:
     return "; ".join(f"{key} {value}" for key, value in header.items())
 
 
-def parse_list_header(value: str) -> t.List[str]:
-    """Parse lists as described by RFC 2068 Section 2.
+def parse_list_header(value: str) -> list[str]:
+    """Parse a header value that consists of a list of comma separated items according
+    to `RFC 9110 <https://httpwg.org/specs/rfc9110.html#abnf.extension>`__.
 
-    In particular, parse comma-separated lists where the elements of
-    the list may include quoted-strings.  A quoted-string could
-    contain a comma.  A non-quoted string could have quotes in the
-    middle.  Quotes are removed automatically after parsing.
+    This extends :func:`urllib.request.parse_http_list` to remove surrounding quotes
+    from values.
 
-    It basically works like :func:`parse_set_header` just that items
-    may appear multiple times and case sensitivity is preserved.
+    .. code-block:: python
 
-    The return value is a standard :class:`list`:
+        parse_list_header('token, "quoted value"')
+        ['token', 'quoted value']
 
-    >>> parse_list_header('token, "quoted value"')
-    ['token', 'quoted value']
-
-    To create a header from the :class:`list` again, use the
-    :func:`dump_header` function.
-
-    :param value: a string with a list header.
-    :return: :class:`list`
-    """
-    result = []
-    for item in _parse_list_header(value):
-        if item[:1] == item[-1:] == '"':
-            item = unquote_header_value(item[1:-1])
-        result.append(item)
-    return result
-
-
-def parse_dict_header(value: str, cls: t.Type[dict] = dict) -> t.Dict[str, str]:
-    """Parse lists of key, value pairs as described by RFC 2068 Section 2 and
-    convert them into a python dict (or any other mapping object created from
-    the type with a dict like interface provided by the `cls` argument):
-
-    >>> d = parse_dict_header('foo="is a fish", bar="as well"')
-    >>> type(d) is dict
-    True
-    >>> sorted(d.items())
-    [('bar', 'as well'), ('foo', 'is a fish')]
-
-    If there is no value for a key it will be `None`:
-
-    >>> parse_dict_header('key_without_value')
-    {'key_without_value': None}
-
-    To create a header from the :class:`dict` again, use the
-    :func:`dump_header` function.
-
-    .. versionchanged:: 0.9
-       Added support for `cls` argument.
-
-    :param value: a string with a dict header.
-    :param cls: callable to use for storage of parsed results.
-    :return: an instance of `cls`
-    """
-    result = cls()
-    if isinstance(value, bytes):
-        value = value.decode("latin1")
-    for item in _parse_list_header(value):
-        if "=" not in item:
-            result[item] = None
-            continue
-        name, value = item.split("=", 1)
-        if value[:1] == value[-1:] == '"':
-            value = unquote_header_value(value[1:-1])
-        result[name] = value
-    return result
-
-
-def parse_options_header(value: t.Optional[str]) -> t.Tuple[str, t.Dict[str, str]]:
-    """Parse a ``Content-Type``-like header into a tuple with the
-    value and any options:
-
-    >>> parse_options_header('text/html; charset=utf8')
-    ('text/html', {'charset': 'utf8'})
-
-    This should is not for ``Cache-Control``-like headers, which use a
-    different format. For those, use :func:`parse_dict_header`.
+    This is the reverse of :func:`dump_header`.
 
     :param value: The header value to parse.
+    """
+    result = []
+
+    for item in _parse_list_header(value):
+        if len(item) >= 2 and item[0] == item[-1] == '"':
+            item = item[1:-1]
+
+        result.append(item)
+
+    return result
+
+
+def parse_dict_header(value: str, cls: type[dict] | None = None) -> dict[str, str]:
+    """Parse a list header using :func:`parse_list_header`, then parse each item as a
+    ``key=value`` pair.
+
+    .. code-block:: python
+
+        parse_dict_header('a=b, c="d, e", f')
+        {"a": "b", "c": "d, e", "f": None}
+
+    This is the reverse of :func:`dump_header`.
+
+    If a key does not have a value, it is ``None``.
+
+    This handles charsets for values as described in
+    `RFC 2231 <https://www.rfc-editor.org/rfc/rfc2231#section-3>`__. Only ASCII, UTF-8,
+    and ISO-8859-1 charsets are accepted, otherwise the value remains quoted.
+
+    :param value: The header value to parse.
+
+    .. versionchanged:: 2.3
+        Added support for ``key*=charset''value`` encoded items.
+
+    .. versionchanged:: 2.3
+        Passing bytes is deprecated, support will be removed in Werkzeug 3.0.
+
+    .. versionchanged:: 2.3
+        The ``cls`` argument is deprecated and will be removed in Werkzeug 3.0.
+
+    .. versionchanged:: 0.9
+       The ``cls`` argument was added.
+    """
+    if cls is None:
+        cls = dict
+    else:
+        warnings.warn(
+            "The 'cls' parameter is deprecated and will be removed in Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    result = cls()
+
+    if isinstance(value, bytes):
+        warnings.warn(
+            "Passing bytes is deprecated and will be removed in Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        value = value.decode("latin1")
+
+    for item in parse_list_header(value):
+        key, has_value, value = item.partition("=")
+        key = key.strip()
+
+        if not has_value:
+            result[key] = None
+            continue
+
+        value = value.strip()
+        encoding: str | None = None
+
+        if key[-1] == "*":
+            # key*=charset''value becomes key=value, where value is percent encoded
+            # adapted from parse_options_header, without the continuation handling
+            key = key[:-1]
+            match = _charset_value_re.match(value)
+
+            if match:
+                # If there is a charset marker in the value, split it off.
+                encoding, value = match.groups()
+                encoding = encoding.lower()
+
+            # A safe list of encodings. Modern clients should only send ASCII or UTF-8.
+            # This list will not be extended further. An invalid encoding will leave the
+            # value quoted.
+            if encoding in {"ascii", "us-ascii", "utf-8", "iso-8859-1"}:
+                # invalid bytes are replaced during unquoting
+                value = unquote(value, encoding=encoding)
+
+        if len(value) >= 2 and value[0] == value[-1] == '"':
+            value = value[1:-1]
+
+        result[key] = value
+
+    return result
+
+
+# https://httpwg.org/specs/rfc9110.html#parameter
+_parameter_re = re.compile(
+    r"""
+    # don't match multiple empty parts, that causes backtracking
+    \s*;\s*  # find the part delimiter
+    (?:
+        ([\w!#$%&'*+\-.^`|~]+)  # key, one or more token chars
+        =  # equals, with no space on either side
+        (  # value, token or quoted string
+            [\w!#$%&'*+\-.^`|~]+  # one or more token chars
+        |
+            "(?:\\\\|\\"|.)*?"  # quoted string, consuming slash escapes
+        )
+    )?  # optionally match key=value, to account for empty parts
+    """,
+    re.ASCII | re.VERBOSE,
+)
+# https://www.rfc-editor.org/rfc/rfc2231#section-4
+_charset_value_re = re.compile(
+    r"""
+    ([\w!#$%&*+\-.^`|~]*)'  # charset part, could be empty
+    [\w!#$%&*+\-.^`|~]*'  # don't care about language part, usually empty
+    ([\w!#$%&'*+\-.^`|~]+)  # one or more token chars with percent encoding
+    """,
+    re.ASCII | re.VERBOSE,
+)
+# https://www.rfc-editor.org/rfc/rfc2231#section-3
+_continuation_re = re.compile(r"\*(\d+)$", re.ASCII)
+
+
+def parse_options_header(value: str | None) -> tuple[str, dict[str, str]]:
+    """Parse a header that consists of a value with ``key=value`` parameters separated
+    by semicolons ``;``. For example, the ``Content-Type`` header.
+
+    .. code-block:: python
+
+        parse_options_header("text/html; charset=UTF-8")
+        ('text/html', {'charset': 'UTF-8'})
+
+        parse_options_header("")
+        ("", {})
+
+    This is the reverse of :func:`dump_options_header`.
+
+    This parses valid parameter parts as described in
+    `RFC 9110 <https://httpwg.org/specs/rfc9110.html#parameter>`__. Invalid parts are
+    skipped.
+
+    This handles continuations and charsets as described in
+    `RFC 2231 <https://www.rfc-editor.org/rfc/rfc2231#section-3>`__, although not as
+    strictly as the RFC. Only ASCII, UTF-8, and ISO-8859-1 charsets are accepted,
+    otherwise the value remains quoted.
+
+    Clients may not be consistent in how they handle a quote character within a quoted
+    value. The `HTML Standard <https://html.spec.whatwg.org/#multipart-form-data>`__
+    replaces it with ``%22`` in multipart form data.
+    `RFC 9110 <https://httpwg.org/specs/rfc9110.html#quoted.strings>`__ uses backslash
+    escapes in HTTP headers. Both are decoded to the ``"`` character.
+
+    Clients may not be consistent in how they handle non-ASCII characters. HTML
+    documents must declare ``<meta charset=UTF-8>``, otherwise browsers may replace with
+    HTML character references, which can be decoded using :func:`html.unescape`.
+
+    :param value: The header value to parse.
+    :return: ``(value, options)``, where ``options`` is a dict
+
+    .. versionchanged:: 2.3
+        Invalid parts, such as keys with no value, quoted keys, and incorrectly quoted
+        values, are discarded instead of treating as ``None``.
+
+    .. versionchanged:: 2.3
+        Only ASCII, UTF-8, and ISO-8859-1 are accepted for charset values.
+
+    .. versionchanged:: 2.3
+        Escaped quotes in quoted values, like ``%22`` and ``\\"``, are handled.
 
     .. versionchanged:: 2.2
         Option names are always converted to lowercase.
 
-    .. versionchanged:: 2.1
-        The ``multiple`` parameter is deprecated and will be removed in
-        Werkzeug 2.2.
+    .. versionchanged:: 2.2
+        The ``multiple`` parameter was removed.
 
     .. versionchanged:: 0.15
         :rfc:`2231` parameter continuations are handled.
 
     .. versionadded:: 0.5
     """
-    if not value:
+    if value is None:
         return "", {}
 
-    result: t.List[t.Any] = []
+    value, _, rest = value.partition(";")
+    value = value.strip()
+    rest = rest.strip()
 
-    value = "," + value.replace("\n", ",")
-    while value:
-        match = _option_header_start_mime_type.match(value)
-        if not match:
-            break
-        result.append(match.group(1))  # mimetype
-        options: t.Dict[str, str] = {}
-        # Parse options
-        rest = match.group(2)
-        encoding: t.Optional[str]
-        continued_encoding: t.Optional[str] = None
-        while rest:
-            optmatch = _option_header_piece_re.match(rest)
-            if not optmatch:
-                break
-            option, count, encoding, language, option_value = optmatch.groups()
-            # Continuations don't have to supply the encoding after the
-            # first line. If we're in a continuation, track the current
-            # encoding to use for subsequent lines. Reset it when the
-            # continuation ends.
-            if not count:
-                continued_encoding = None
-            else:
-                if not encoding:
-                    encoding = continued_encoding
+    if not value or not rest:
+        # empty (invalid) value, or value without options
+        return value, {}
+
+    rest = f";{rest}"
+    options: dict[str, str] = {}
+    encoding: str | None = None
+    continued_encoding: str | None = None
+
+    for pk, pv in _parameter_re.findall(rest):
+        if not pk:
+            # empty or invalid part
+            continue
+
+        pk = pk.lower()
+
+        if pk[-1] == "*":
+            # key*=charset''value becomes key=value, where value is percent encoded
+            pk = pk[:-1]
+            match = _charset_value_re.match(pv)
+
+            if match:
+                # If there is a valid charset marker in the value, split it off.
+                encoding, pv = match.groups()
+                # This might be the empty string, handled next.
+                encoding = encoding.lower()
+
+            # No charset marker, or marker with empty charset value.
+            if not encoding:
+                encoding = continued_encoding
+
+            # A safe list of encodings. Modern clients should only send ASCII or UTF-8.
+            # This list will not be extended further. An invalid encoding will leave the
+            # value quoted.
+            if encoding in {"ascii", "us-ascii", "utf-8", "iso-8859-1"}:
+                # Continuation parts don't require their own charset marker. This is
+                # looser than the RFC, it will persist across different keys and allows
+                # changing the charset during a continuation. But this implementation is
+                # much simpler than tracking the full state.
                 continued_encoding = encoding
-            option = unquote_header_value(option).lower()
+                # invalid bytes are replaced during unquoting
+                pv = unquote(pv, encoding=encoding)
 
-            if option_value is not None:
-                option_value = unquote_header_value(option_value, option == "filename")
+        # Remove quotes. At this point the value cannot be empty or a single quote.
+        if pv[0] == pv[-1] == '"':
+            # HTTP headers use slash, multipart form data uses percent
+            pv = pv[1:-1].replace("\\\\", "\\").replace('\\"', '"').replace("%22", '"')
 
-                if encoding is not None:
-                    option_value = _unquote(option_value).decode(encoding)
+        match = _continuation_re.search(pk)
 
-            if count:
-                # Continuations append to the existing value. For
-                # simplicity, this ignores the possibility of
-                # out-of-order indices, which shouldn't happen anyway.
-                if option_value is not None:
-                    options[option] = options.get(option, "") + option_value
-            else:
-                options[option] = option_value  # type: ignore[assignment]
+        if match:
+            # key*0=a; key*1=b becomes key=ab
+            pk = pk[: match.start()]
+            options[pk] = options.get(pk, "") + pv
+        else:
+            options[pk] = pv
 
-            rest = rest[optmatch.end() :]
-        result.append(options)
-        return tuple(result)  # type: ignore[return-value]
-
-    return tuple(result) if result else ("", {})  # type: ignore[return-value]
+    return value, options
 
 
+_q_value_re = re.compile(r"-?\d+(\.\d+)?", re.ASCII)
 _TAnyAccept = t.TypeVar("_TAnyAccept", bound="ds.Accept")
 
 
-@typing.overload
-def parse_accept_header(value: t.Optional[str]) -> "ds.Accept":
+@t.overload
+def parse_accept_header(value: str | None) -> ds.Accept:
     ...
 
 
-@typing.overload
-def parse_accept_header(
-    value: t.Optional[str], cls: t.Type[_TAnyAccept]
-) -> _TAnyAccept:
+@t.overload
+def parse_accept_header(value: str | None, cls: type[_TAnyAccept]) -> _TAnyAccept:
     ...
 
 
 def parse_accept_header(
-    value: t.Optional[str], cls: t.Optional[t.Type[_TAnyAccept]] = None
+    value: str | None, cls: type[_TAnyAccept] | None = None
 ) -> _TAnyAccept:
-    """Parses an HTTP Accept-* header.  This does not implement a complete
-    valid algorithm but one that supports at least value and quality
-    extraction.
+    """Parse an ``Accept`` header according to
+    `RFC 9110 <https://httpwg.org/specs/rfc9110.html#field.accept>`__.
 
-    Returns a new :class:`Accept` object (basically a list of ``(value, quality)``
-    tuples sorted by the quality with some additional accessor methods).
+    Returns an :class:`.Accept` instance, which can sort and inspect items based on
+    their quality parameter. When parsing ``Accept-Charset``, ``Accept-Encoding``, or
+    ``Accept-Language``, pass the appropriate :class:`.Accept` subclass.
 
-    The second parameter can be a subclass of :class:`Accept` that is created
-    with the parsed values and returned.
+    :param value: The header value to parse.
+    :param cls: The :class:`.Accept` class to wrap the result in.
+    :return: An instance of ``cls``.
 
-    :param value: the accept header string to be parsed.
-    :param cls: the wrapper class for the return value (can be
-                         :class:`Accept` or a subclass thereof)
-    :return: an instance of `cls`.
+    .. versionchanged:: 2.3
+        Parse according to RFC 9110. Items with invalid ``q`` values are skipped.
     """
     if cls is None:
         cls = t.cast(t.Type[_TAnyAccept], ds.Accept)
@@ -493,38 +651,57 @@ def parse_accept_header(
         return cls(None)
 
     result = []
-    for match in _accept_re.finditer(value):
-        quality_match = match.group(2)
-        if not quality_match:
-            quality: float = 1
+
+    for item in parse_list_header(value):
+        item, options = parse_options_header(item)
+
+        if "q" in options:
+            # pop q, remaining options are reconstructed
+            q_str = options.pop("q").strip()
+
+            if _q_value_re.fullmatch(q_str) is None:
+                # ignore an invalid q
+                continue
+
+            q = float(q_str)
+
+            if q < 0 or q > 1:
+                # ignore an invalid q
+                continue
         else:
-            quality = max(min(float(quality_match), 1), 0)
-        result.append((match.group(1), quality))
+            q = 1
+
+        if options:
+            # reconstruct the media type with any options
+            item = dump_options_header(item, options)
+
+        result.append((item, q))
+
     return cls(result)
 
 
-_TAnyCC = t.TypeVar("_TAnyCC", bound="ds._CacheControl")
+_TAnyCC = t.TypeVar("_TAnyCC", bound="ds.cache_control._CacheControl")
 _t_cc_update = t.Optional[t.Callable[[_TAnyCC], None]]
 
 
-@typing.overload
+@t.overload
 def parse_cache_control_header(
-    value: t.Optional[str], on_update: _t_cc_update, cls: None = None
-) -> "ds.RequestCacheControl":
+    value: str | None, on_update: _t_cc_update, cls: None = None
+) -> ds.RequestCacheControl:
     ...
 
 
-@typing.overload
+@t.overload
 def parse_cache_control_header(
-    value: t.Optional[str], on_update: _t_cc_update, cls: t.Type[_TAnyCC]
+    value: str | None, on_update: _t_cc_update, cls: type[_TAnyCC]
 ) -> _TAnyCC:
     ...
 
 
 def parse_cache_control_header(
-    value: t.Optional[str],
+    value: str | None,
     on_update: _t_cc_update = None,
-    cls: t.Optional[t.Type[_TAnyCC]] = None,
+    cls: type[_TAnyCC] | None = None,
 ) -> _TAnyCC:
     """Parse a cache control header.  The RFC differs between response and
     request cache control, this method does not.  It's your responsibility
@@ -555,24 +732,24 @@ _TAnyCSP = t.TypeVar("_TAnyCSP", bound="ds.ContentSecurityPolicy")
 _t_csp_update = t.Optional[t.Callable[[_TAnyCSP], None]]
 
 
-@typing.overload
+@t.overload
 def parse_csp_header(
-    value: t.Optional[str], on_update: _t_csp_update, cls: None = None
-) -> "ds.ContentSecurityPolicy":
+    value: str | None, on_update: _t_csp_update, cls: None = None
+) -> ds.ContentSecurityPolicy:
     ...
 
 
-@typing.overload
+@t.overload
 def parse_csp_header(
-    value: t.Optional[str], on_update: _t_csp_update, cls: t.Type[_TAnyCSP]
+    value: str | None, on_update: _t_csp_update, cls: type[_TAnyCSP]
 ) -> _TAnyCSP:
     ...
 
 
 def parse_csp_header(
-    value: t.Optional[str],
+    value: str | None,
     on_update: _t_csp_update = None,
-    cls: t.Optional[t.Type[_TAnyCSP]] = None,
+    cls: type[_TAnyCSP] | None = None,
 ) -> _TAnyCSP:
     """Parse a Content Security Policy header.
 
@@ -606,9 +783,9 @@ def parse_csp_header(
 
 
 def parse_set_header(
-    value: t.Optional[str],
-    on_update: t.Optional[t.Callable[["ds.HeaderSet"], None]] = None,
-) -> "ds.HeaderSet":
+    value: str | None,
+    on_update: t.Callable[[ds.HeaderSet], None] | None = None,
+) -> ds.HeaderSet:
     """Parse a set-like header and return a
     :class:`~werkzeug.datastructures.HeaderSet` object:
 
@@ -639,8 +816,8 @@ def parse_set_header(
 
 
 def parse_authorization_header(
-    value: t.Optional[str],
-) -> t.Optional["ds.Authorization"]:
+    value: str | None,
+) -> ds.Authorization | None:
     """Parse an HTTP basic/digest authorization header transmitted by the web
     browser.  The return value is either `None` if the header was invalid or
     not given, otherwise an :class:`~werkzeug.datastructures.Authorization`
@@ -648,46 +825,25 @@ def parse_authorization_header(
 
     :param value: the authorization header to parse.
     :return: a :class:`~werkzeug.datastructures.Authorization` object or `None`.
+
+    .. deprecated:: 2.3
+        Will be removed in Werkzeug 3.0. Use :meth:`.Authorization.from_header` instead.
     """
-    if not value:
-        return None
-    value = _wsgi_decoding_dance(value)
-    try:
-        auth_type, auth_info = value.split(None, 1)
-        auth_type = auth_type.lower()
-    except ValueError:
-        return None
-    if auth_type == "basic":
-        try:
-            username, password = base64.b64decode(auth_info).split(b":", 1)
-        except Exception:
-            return None
-        try:
-            return ds.Authorization(
-                "basic",
-                {
-                    "username": _to_str(username, "utf-8"),
-                    "password": _to_str(password, "utf-8"),
-                },
-            )
-        except UnicodeDecodeError:
-            return None
-    elif auth_type == "digest":
-        auth_map = parse_dict_header(auth_info)
-        for key in "username", "realm", "nonce", "uri", "response":
-            if key not in auth_map:
-                return None
-        if "qop" in auth_map:
-            if not auth_map.get("nc") or not auth_map.get("cnonce"):
-                return None
-        return ds.Authorization("digest", auth_map)
-    return None
+    from .datastructures import Authorization
+
+    warnings.warn(
+        "'parse_authorization_header' is deprecated and will be removed in Werkzeug"
+        " 2.4. Use 'Authorization.from_header' instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return Authorization.from_header(value)
 
 
 def parse_www_authenticate_header(
-    value: t.Optional[str],
-    on_update: t.Optional[t.Callable[["ds.WWWAuthenticate"], None]] = None,
-) -> "ds.WWWAuthenticate":
+    value: str | None,
+    on_update: t.Callable[[ds.WWWAuthenticate], None] | None = None,
+) -> ds.WWWAuthenticate:
     """Parse an HTTP WWW-Authenticate header into a
     :class:`~werkzeug.datastructures.WWWAuthenticate` object.
 
@@ -696,18 +852,29 @@ def parse_www_authenticate_header(
                       on the :class:`~werkzeug.datastructures.WWWAuthenticate`
                       object is changed.
     :return: a :class:`~werkzeug.datastructures.WWWAuthenticate` object.
+
+    .. deprecated:: 2.3
+        Will be removed in Werkzeug 3.0. Use :meth:`.WWWAuthenticate.from_header`
+        instead.
     """
-    if not value:
-        return ds.WWWAuthenticate(on_update=on_update)
-    try:
-        auth_type, auth_info = value.split(None, 1)
-        auth_type = auth_type.lower()
-    except (ValueError, AttributeError):
-        return ds.WWWAuthenticate(value.strip().lower(), on_update=on_update)
-    return ds.WWWAuthenticate(auth_type, parse_dict_header(auth_info), on_update)
+    from .datastructures.auth import WWWAuthenticate
+
+    warnings.warn(
+        "'parse_www_authenticate_header' is deprecated and will be removed in Werkzeug"
+        " 2.4. Use 'WWWAuthenticate.from_header' instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    rv = WWWAuthenticate.from_header(value)
+
+    if rv is None:
+        rv = WWWAuthenticate("basic")
+
+    rv._on_update = on_update
+    return rv
 
 
-def parse_if_range_header(value: t.Optional[str]) -> "ds.IfRange":
+def parse_if_range_header(value: str | None) -> ds.IfRange:
     """Parses an if-range header which can be an etag or a date.  Returns
     a :class:`~werkzeug.datastructures.IfRange` object.
 
@@ -726,8 +893,8 @@ def parse_if_range_header(value: t.Optional[str]) -> "ds.IfRange":
 
 
 def parse_range_header(
-    value: t.Optional[str], make_inclusive: bool = True
-) -> t.Optional["ds.Range"]:
+    value: str | None, make_inclusive: bool = True
+) -> ds.Range | None:
     """Parses a range header into a :class:`~werkzeug.datastructures.Range`
     object.  If the header is missing or malformed `None` is returned.
     `ranges` is a list of ``(start, stop)`` tuples where the ranges are
@@ -751,7 +918,7 @@ def parse_range_header(
             if last_end < 0:
                 return None
             try:
-                begin = int(item)
+                begin = _plain_int(item)
             except ValueError:
                 return None
             end = None
@@ -762,7 +929,7 @@ def parse_range_header(
             end_str = end_str.strip()
 
             try:
-                begin = int(begin_str)
+                begin = _plain_int(begin_str)
             except ValueError:
                 return None
 
@@ -770,7 +937,7 @@ def parse_range_header(
                 return None
             if end_str:
                 try:
-                    end = int(end_str) + 1
+                    end = _plain_int(end_str) + 1
                 except ValueError:
                     return None
 
@@ -785,9 +952,9 @@ def parse_range_header(
 
 
 def parse_content_range_header(
-    value: t.Optional[str],
-    on_update: t.Optional[t.Callable[["ds.ContentRange"], None]] = None,
-) -> t.Optional["ds.ContentRange"]:
+    value: str | None,
+    on_update: t.Callable[[ds.ContentRange], None] | None = None,
+) -> ds.ContentRange | None:
     """Parses a range header into a
     :class:`~werkzeug.datastructures.ContentRange` object or `None` if
     parsing is not possible.
@@ -813,19 +980,22 @@ def parse_content_range_header(
         length = None
     else:
         try:
-            length = int(length_str)
+            length = _plain_int(length_str)
         except ValueError:
             return None
 
     if rng == "*":
+        if not is_byte_range_valid(None, None, length):
+            return None
+
         return ds.ContentRange(units, None, None, length, on_update=on_update)
     elif "-" not in rng:
         return None
 
     start_str, stop_str = rng.split("-", 1)
     try:
-        start = int(start_str)
-        stop = int(stop_str) + 1
+        start = _plain_int(start_str)
+        stop = _plain_int(stop_str) + 1
     except ValueError:
         return None
 
@@ -850,8 +1020,8 @@ def quote_etag(etag: str, weak: bool = False) -> str:
 
 
 def unquote_etag(
-    etag: t.Optional[str],
-) -> t.Union[t.Tuple[str, bool], t.Tuple[None, None]]:
+    etag: str | None,
+) -> tuple[str, bool] | tuple[None, None]:
     """Unquote a single etag:
 
     >>> unquote_etag('W/"bar"')
@@ -874,7 +1044,7 @@ def unquote_etag(
     return etag, weak
 
 
-def parse_etags(value: t.Optional[str]) -> "ds.ETags":
+def parse_etags(value: str | None) -> ds.ETags:
     """Parse an etag header.
 
     :param value: the tag header to parse
@@ -912,7 +1082,7 @@ def generate_etag(data: bytes) -> str:
     return sha1(data).hexdigest()
 
 
-def parse_date(value: t.Optional[str]) -> t.Optional[datetime]:
+def parse_date(value: str | None) -> datetime | None:
     """Parse an :rfc:`2822` date into a timezone-aware
     :class:`datetime.datetime` object, or ``None`` if parsing fails.
 
@@ -942,7 +1112,7 @@ def parse_date(value: t.Optional[str]) -> t.Optional[datetime]:
 
 
 def http_date(
-    timestamp: t.Optional[t.Union[datetime, date, int, float, struct_time]] = None
+    timestamp: datetime | date | int | float | struct_time | None = None,
 ) -> str:
     """Format a datetime object or timestamp into an :rfc:`2822` date
     string.
@@ -973,7 +1143,7 @@ def http_date(
     return email.utils.formatdate(timestamp, usegmt=True)
 
 
-def parse_age(value: t.Optional[str] = None) -> t.Optional[timedelta]:
+def parse_age(value: str | None = None) -> timedelta | None:
     """Parses a base-10 integer count of seconds into a timedelta.
 
     If parsing fails, the return value is `None`.
@@ -995,7 +1165,7 @@ def parse_age(value: t.Optional[str] = None) -> t.Optional[timedelta]:
         return None
 
 
-def dump_age(age: t.Optional[t.Union[timedelta, int]] = None) -> t.Optional[str]:
+def dump_age(age: timedelta | int | None = None) -> str | None:
     """Formats the duration as a base-10 integer.
 
     :param age: should be an integer number of seconds,
@@ -1016,10 +1186,10 @@ def dump_age(age: t.Optional[t.Union[timedelta, int]] = None) -> t.Optional[str]
 
 
 def is_resource_modified(
-    environ: "WSGIEnvironment",
-    etag: t.Optional[str] = None,
-    data: t.Optional[bytes] = None,
-    last_modified: t.Optional[t.Union[datetime, str]] = None,
+    environ: WSGIEnvironment,
+    etag: str | None = None,
+    data: bytes | None = None,
+    last_modified: datetime | str | None = None,
     ignore_if_range: bool = True,
 ) -> bool:
     """Convenience method for conditional requests.
@@ -1054,7 +1224,7 @@ def is_resource_modified(
 
 
 def remove_entity_headers(
-    headers: t.Union["ds.Headers", t.List[t.Tuple[str, str]]],
+    headers: ds.Headers | list[tuple[str, str]],
     allowed: t.Iterable[str] = ("expires", "content-location"),
 ) -> None:
     """Remove all entity headers from a list or :class:`Headers` object.  This
@@ -1077,9 +1247,7 @@ def remove_entity_headers(
     ]
 
 
-def remove_hop_by_hop_headers(
-    headers: t.Union["ds.Headers", t.List[t.Tuple[str, str]]]
-) -> None:
+def remove_hop_by_hop_headers(headers: ds.Headers | list[tuple[str, str]]) -> None:
     """Remove all HTTP/1.1 "Hop-by-Hop" headers from a list or
     :class:`Headers` object.  This operation works in-place.
 
@@ -1115,11 +1283,11 @@ def is_hop_by_hop_header(header: str) -> bool:
 
 
 def parse_cookie(
-    header: t.Union["WSGIEnvironment", str, bytes, None],
-    charset: str = "utf-8",
-    errors: str = "replace",
-    cls: t.Optional[t.Type["ds.MultiDict"]] = None,
-) -> "ds.MultiDict[str, str]":
+    header: WSGIEnvironment | str | None,
+    charset: str | None = None,
+    errors: str | None = None,
+    cls: type[ds.MultiDict] | None = None,
+) -> ds.MultiDict[str, str]:
     """Parse a cookie from a string or WSGI environ.
 
     The same key can be provided multiple times, the values are stored
@@ -1129,44 +1297,62 @@ def parse_cookie(
 
     :param header: The cookie header as a string, or a WSGI environ dict
         with a ``HTTP_COOKIE`` key.
-    :param charset: The charset for the cookie values.
-    :param errors: The error behavior for the charset decoding.
     :param cls: A dict-like class to store the parsed cookies in.
         Defaults to :class:`MultiDict`.
 
-    .. versionchanged:: 1.0.0
-        Returns a :class:`MultiDict` instead of a
-        ``TypeConversionDict``.
+    .. versionchanged:: 2.3
+        Passing bytes, and the ``charset`` and ``errors`` parameters, are deprecated and
+        will be removed in Werkzeug 3.0.
+
+    .. versionchanged:: 1.0
+        Returns a :class:`MultiDict` instead of a ``TypeConversionDict``.
 
     .. versionchanged:: 0.5
-       Returns a :class:`TypeConversionDict` instead of a regular dict.
-       The ``cls`` parameter was added.
+        Returns a :class:`TypeConversionDict` instead of a regular dict. The ``cls``
+        parameter was added.
     """
     if isinstance(header, dict):
-        cookie = header.get("HTTP_COOKIE", "")
-    elif header is None:
-        cookie = ""
+        cookie = header.get("HTTP_COOKIE")
+    elif isinstance(header, bytes):
+        warnings.warn(
+            "Passing bytes is deprecated and will not be supported in Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        cookie = header.decode()
     else:
         cookie = header
+
+    if cookie:
+        cookie = cookie.encode("latin1").decode()
 
     return _sansio_http.parse_cookie(
         cookie=cookie, charset=charset, errors=errors, cls=cls
     )
 
 
+_cookie_no_quote_re = re.compile(r"[\w!#$%&'()*+\-./:<=>?@\[\]^`{|}~]*", re.A)
+_cookie_slash_re = re.compile(rb"[\x00-\x19\",;\\\x7f-\xff]", re.A)
+_cookie_slash_map = {b'"': b'\\"', b"\\": b"\\\\"}
+_cookie_slash_map.update(
+    (v.to_bytes(1, "big"), b"\\%03o" % v)
+    for v in [*range(0x20), *b",;", *range(0x7F, 256)]
+)
+
+
 def dump_cookie(
     key: str,
-    value: t.Union[bytes, str] = "",
-    max_age: t.Optional[t.Union[timedelta, int]] = None,
-    expires: t.Optional[t.Union[str, datetime, int, float]] = None,
-    path: t.Optional[str] = "/",
-    domain: t.Optional[str] = None,
+    value: str = "",
+    max_age: timedelta | int | None = None,
+    expires: str | datetime | int | float | None = None,
+    path: str | None = "/",
+    domain: str | None = None,
     secure: bool = False,
     httponly: bool = False,
-    charset: str = "utf-8",
+    charset: str | None = None,
     sync_expires: bool = True,
     max_size: int = 4093,
-    samesite: t.Optional[str] = None,
+    samesite: str | None = None,
 ) -> str:
     """Create a Set-Cookie header without the ``Set-Cookie`` prefix.
 
@@ -1187,7 +1373,7 @@ def dump_cookie(
     :param path: limits the cookie to a given path, per default it will
                  span the whole domain.
     :param domain: Use this if you want to set a cross-domain cookie. For
-                   example, ``domain=".example.com"`` will set a cookie
+                   example, ``domain="example.com"`` will set a cookie
                    that is readable by the domain ``www.example.com``,
                    ``foo.example.com`` etc. Otherwise, a cookie will only
                    be readable by the domain that set it.
@@ -1206,18 +1392,62 @@ def dump_cookie(
 
     .. _`cookie`: http://browsercookielimits.squawky.net/
 
+    .. versionchanged:: 2.3.3
+        The ``path`` parameter is ``/`` by default.
+
+    .. versionchanged:: 2.3.1
+        The value allows more characters without quoting.
+
+    .. versionchanged:: 2.3
+        ``localhost`` and other names without a dot are allowed for the domain. A
+        leading dot is ignored.
+
+    .. versionchanged:: 2.3
+        The ``path`` parameter is ``None`` by default.
+
+    .. versionchanged:: 2.3
+        Passing bytes, and the ``charset`` parameter, are deprecated and will be removed
+        in Werkzeug 3.0.
+
     .. versionchanged:: 1.0.0
         The string ``'None'`` is accepted for ``samesite``.
     """
-    key = _to_bytes(key, charset)
-    value = _to_bytes(value, charset)
+    if charset is not None:
+        warnings.warn(
+            "The 'charset' parameter is deprecated and will be removed"
+            " in Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    else:
+        charset = "utf-8"
+
+    if isinstance(key, bytes):
+        warnings.warn(
+            "The 'key' parameter must be a string. Bytes are deprecated"
+            " and will not be supported in Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        key = key.decode()
+
+    if isinstance(value, bytes):
+        warnings.warn(
+            "The 'value' parameter must be a string. Bytes are"
+            " deprecated and will not be supported in Werkzeug 3.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        value = value.decode()
 
     if path is not None:
-        from .urls import iri_to_uri
+        # safe = https://url.spec.whatwg.org/#url-path-segment-string
+        # as well as percent for things that are already quoted
+        # excluding semicolon since it's part of the header syntax
+        path = quote(path, safe="%!$&'()*+,/:=@", encoding=charset)
 
-        path = iri_to_uri(path, charset)
-
-    domain = _make_cookie_domain(domain)
+    if domain:
+        domain = domain.partition(":")[0].lstrip(".").encode("idna").decode("ascii")
 
     if isinstance(max_age, timedelta):
         max_age = int(max_age.total_seconds())
@@ -1234,54 +1464,51 @@ def dump_cookie(
         if samesite not in {"Strict", "Lax", "None"}:
             raise ValueError("SameSite must be 'Strict', 'Lax', or 'None'.")
 
-    buf = [key + b"=" + _cookie_quote(value)]
+    # Quote value if it contains characters not allowed by RFC 6265. Slash-escape with
+    # three octal digits, which matches http.cookies, although the RFC suggests base64.
+    if not _cookie_no_quote_re.fullmatch(value):
+        # Work with bytes here, since a UTF-8 character could be multiple bytes.
+        value = _cookie_slash_re.sub(
+            lambda m: _cookie_slash_map[m.group()], value.encode(charset)
+        ).decode("ascii")
+        value = f'"{value}"'
 
-    # XXX: In theory all of these parameters that are not marked with `None`
-    # should be quoted.  Because stdlib did not quote it before I did not
-    # want to introduce quoting there now.
-    for k, v, q in (
-        (b"Domain", domain, True),
-        (b"Expires", expires, False),
-        (b"Max-Age", max_age, False),
-        (b"Secure", secure, None),
-        (b"HttpOnly", httponly, None),
-        (b"Path", path, False),
-        (b"SameSite", samesite, False),
+    # Send a non-ASCII key as mojibake. Everything else should already be ASCII.
+    # TODO Remove encoding dance, it seems like clients accept UTF-8 keys
+    buf = [f"{key.encode().decode('latin1')}={value}"]
+
+    for k, v in (
+        ("Domain", domain),
+        ("Expires", expires),
+        ("Max-Age", max_age),
+        ("Secure", secure),
+        ("HttpOnly", httponly),
+        ("Path", path),
+        ("SameSite", samesite),
     ):
-        if q is None:
-            if v:
-                buf.append(k)
+        if v is None or v is False:
             continue
 
-        if v is None:
+        if v is True:
+            buf.append(k)
             continue
 
-        tmp = bytearray(k)
-        if not isinstance(v, (bytes, bytearray)):
-            v = _to_bytes(str(v), charset)
-        if q:
-            v = _cookie_quote(v)
-        tmp += b"=" + v
-        buf.append(bytes(tmp))
+        buf.append(f"{k}={v}")
 
-    # The return value will be an incorrectly encoded latin1 header for
-    # consistency with the headers object.
-    rv = b"; ".join(buf)
-    rv = rv.decode("latin1")
+    rv = "; ".join(buf)
 
-    # Warn if the final value of the cookie is larger than the limit. If the
-    # cookie is too large, then it may be silently ignored by the browser,
-    # which can be quite hard to debug.
+    # Warn if the final value of the cookie is larger than the limit. If the cookie is
+    # too large, then it may be silently ignored by the browser, which can be quite hard
+    # to debug.
     cookie_size = len(rv)
 
     if max_size and cookie_size > max_size:
         value_size = len(value)
         warnings.warn(
-            f"The {key.decode(charset)!r} cookie is too large: the value was"
-            f" {value_size} bytes but the"
+            f"The '{key}' cookie is too large: the value was {value_size} bytes but the"
             f" header required {cookie_size - value_size} extra bytes. The final size"
             f" was {cookie_size} bytes but the limit is {max_size} bytes. Browsers may"
-            f" silently ignore cookies larger than this.",
+            " silently ignore cookies larger than this.",
             stacklevel=2,
         )
 
@@ -1289,7 +1516,7 @@ def dump_cookie(
 
 
 def is_byte_range_valid(
-    start: t.Optional[int], stop: t.Optional[int], length: t.Optional[int]
+    start: int | None, stop: int | None, length: int | None
 ) -> bool:
     """Checks if a given byte content range is valid for the given length.
 

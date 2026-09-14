@@ -16,19 +16,19 @@
 #define ABSL_RANDOM_INTERNAL_NONSECURE_BASE_H_
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
-#include "absl/base/macros.h"
+#include "absl/base/config.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/meta/type_traits.h"
-#include "absl/random/internal/pool_urbg.h"
+#include "absl/random/internal/entropy_pool.h"
 #include "absl/random/internal/salted_seed_seq.h"
 #include "absl/random/internal/seed_material.h"
-#include "absl/types/span.h"
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
@@ -46,8 +46,7 @@ class RandenPoolSeedSeq {
   void generate_impl(ContiguousTag, Contiguous begin, Contiguous end) {
     const size_t n = static_cast<size_t>(std::distance(begin, end));
     auto* a = &(*begin);
-    RandenPool<uint8_t>::Fill(
-        absl::MakeSpan(reinterpret_cast<uint8_t*>(a), sizeof(*a) * n));
+    GetEntropyFromRandenPool(a, sizeof(*a) * n);
   }
 
   // Construct a buffer of size n and fill it with values, then copy
@@ -57,7 +56,7 @@ class RandenPoolSeedSeq {
                      RandomAccessIterator end) {
     const size_t n = std::distance(begin, end);
     absl::InlinedVector<uint32_t, 8> data(n, 0);
-    RandenPool<uint32_t>::Fill(absl::MakeSpan(data.begin(), data.end()));
+    GetEntropyFromRandenPool(data.begin(), sizeof(data[0]) * n);
     std::copy(std::begin(data), std::end(data), begin);
   }
 
@@ -79,10 +78,10 @@ class RandenPoolSeedSeq {
       // std::contiguous_iterator_tag provides a mechanism for testing this
       // capability, however until Abseil's support requirements allow us to
       // assume C++20, limit checks to a few common cases.
-      using TagType = absl::conditional_t<
-          (std::is_pointer<RandomAccessIterator>::value ||
-           std::is_same<RandomAccessIterator,
-                        typename std::vector<U>::iterator>::value),
+      using TagType = std::conditional_t<
+          (std::is_pointer_v<RandomAccessIterator> ||
+           std::is_same_v<RandomAccessIterator,
+                          typename std::vector<U>::iterator>),
           ContiguousTag, BufferTag>;
 
       generate_impl(TagType{}, begin, end);
@@ -107,8 +106,8 @@ class NonsecureURBGBase {
   NonsecureURBGBase& operator=(NonsecureURBGBase&&) = default;
 
   // Constructor using a seed
-  template <class SSeq, typename = typename absl::enable_if_t<
-                            !std::is_same<SSeq, NonsecureURBGBase>::value>>
+  template <class SSeq, typename = typename std::enable_if_t<
+                            !std::is_same_v<SSeq, NonsecureURBGBase>>>
   explicit NonsecureURBGBase(SSeq&& seq)
       : urbg_(ConstructURBG(std::forward<SSeq>(seq))) {}
 

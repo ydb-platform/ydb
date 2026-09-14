@@ -3,7 +3,7 @@
 import logging
 import pytest
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.ydb_fixtures import ydb_database_ctx
+from ydb.tests.library.fixtures import ydb_database_ctx
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -19,8 +19,8 @@ def domain_login_only(request):
 
 
 @pytest.fixture(scope='module')
-def ydb_configurator(ydb_cluster_configuration, domain_login_only):
-    config_generator = KikimrConfigGenerator(**ydb_cluster_configuration)
+def ydb_configurator(ydb_cluster_configuration, domain_login_only, ydb_flavour_path):
+    config_generator = KikimrConfigGenerator(binary_paths=[ydb_flavour_path], **ydb_cluster_configuration)
     config_generator.yaml_config['auth_config'] = {
         'domain_login_only': domain_login_only,
     }

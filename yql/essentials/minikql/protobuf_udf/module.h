@@ -10,21 +10,20 @@
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
-class TProtobufBase : public IUdfModule {
+class TProtobufBase: public IUdfModule {
 public:
     void CleanupOnTerminate() const override;
 
     void GetAllFunctions(IFunctionsSink& sink) const override;
 
     void BuildFunctionTypeInfo(
-            const TStringRef& name,
-            TType* userType,
-            const TStringRef& typeConfig,
-            ui32 flags,
-            IFunctionTypeInfoBuilder& builder) const override;
+        const TStringRef& name,
+        TType* userType,
+        const TStringRef& typeConfig,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& builder) const override;
 
 protected:
     virtual const NProtoBuf::Descriptor* GetDescriptor() const = 0;
@@ -34,11 +33,9 @@ protected:
     virtual TProtobufSerialize* CreateSerialize(const TProtoInfo& info, bool asText) const = 0;
 };
 
-
 template <typename T>
-class TProtobufModule : public TProtobufBase {
-
-    class TValue : public TProtobufValue {
+class TProtobufModule: public TProtobufBase {
+    class TValue: public TProtobufValue {
     public:
         TValue(const TProtoInfo& info, bool asText)
             : TProtobufValue(info)
@@ -65,7 +62,7 @@ class TProtobufModule : public TProtobufBase {
         const bool AsText_;
     };
 
-    class TSerialize : public TProtobufSerialize {
+    class TSerialize: public TProtobufSerialize {
     public:
         TSerialize(const TProtoInfo& info, bool asText)
             : TProtobufSerialize(info)
@@ -91,6 +88,7 @@ class TProtobufModule : public TProtobufBase {
         TAutoPtr<NProtoBuf::Message> MakeProto() const override {
             return TAutoPtr<NProtoBuf::Message>(new T);
         }
+
     private:
         const bool AsText_;
     };
@@ -109,5 +107,4 @@ private:
     }
 };
 
-} // namespace NUdf
-} // namespace NYql
+} // namespace NYql::NUdf

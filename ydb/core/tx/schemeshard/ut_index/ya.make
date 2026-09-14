@@ -4,9 +4,11 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(80)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+REQUIREMENTS(cpu:2)
+
+IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -16,13 +18,14 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/testlib/default
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/public/lib/deprecated/kicli
 )
 
 SRCS(
     ut_async_index.cpp
     ut_unique_index.cpp
     ut_vector_index.cpp
+    ut_fulltext_index.cpp
+    ut_json_index.cpp
 )
 
 YQL_LAST_ABI_VERSION()

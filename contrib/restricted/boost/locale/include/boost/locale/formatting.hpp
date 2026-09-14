@@ -122,7 +122,7 @@ namespace boost { namespace locale {
         /// Set time zone for formatting dates and time
         void time_zone(const std::string&);
         /// Get time zone for formatting dates and time
-        std::string time_zone() const;
+        const std::string& time_zone() const;
 
         /// Set date/time pattern (strftime like)
         template<typename CharType>

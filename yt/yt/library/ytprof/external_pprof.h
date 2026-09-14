@@ -8,11 +8,11 @@ namespace NYT::NYTProf {
 
 struct TSymbolizationOptions
 {
-    TString TmpDir = "/tmp";
+    std::string TmpDir = "/tmp";
 
     bool KeepTmpDir = false;
 
-    std::function<void(const std::vector<TString>&)> RunTool;
+    std::function<void(const std::vector<std::string>&)> RunTool;
 };
 
 void SymbolizeByExternalPProf(

@@ -1,0 +1,3 @@
+{"nested_struct_field"={"string_field"="foo";"bool_field"=%true};"int64_field"=1};
+{"nested_struct_field"={"string_field"="bar";"bool_field"=%false};"int64_field"=10};
+{"nested_struct_field"={"string_field"="foobar";"bool_field"=%true};"int64_field"=100};

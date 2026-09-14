@@ -1,9 +1,9 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
@@ -231,6 +231,7 @@ public:
             colDescr->SetDeleteVersion(column.DeleteVersion);
             colDescr->SetFamily(column.Family);
             colDescr->SetNotNull(column.NotNull);
+            colDescr->SetSetNotNullInProgress(column.SetNotNullInProgress);
             colDescr->SetIsBuildInProgress(column.IsBuildInProgress);
             if (column.DefaultKind != ETableColumnDefaultKind::None) {
                 colDescr->SetDefaultKind(ui32(column.DefaultKind));
@@ -239,16 +240,16 @@ public:
         }
 
         for (ui32 partNum = 0; partNum < tableInfo->GetPartitions().size(); ++partNum) {
-            const TTableShardInfo& partition = tableInfo->GetPartitions().at(partNum);
+            const TTableShardInfo* partition = tableInfo->GetPartitions().at(partNum);
 
             auto partDescr = descr.AddPartitions();
             partDescr->SetId(partNum);
-            partDescr->SetRangeEnd(partition.EndOfRange);
-            partDescr->MutableShardIdx()->SetOwnerId(partition.ShardIdx.GetOwnerId());
-            partDescr->MutableShardIdx()->SetLocalId(ui64(partition.ShardIdx.GetLocalId()));
-            if (tableInfo->PerShardPartitionConfig.contains(partition.ShardIdx)) {
+            partDescr->SetRangeEnd(partition->EndOfRange);
+            partDescr->MutableShardIdx()->SetOwnerId(partition->ShardIdx.GetOwnerId());
+            partDescr->MutableShardIdx()->SetLocalId(ui64(partition->ShardIdx.GetLocalId()));
+            if (tableInfo->PerShardPartitionConfig.contains(partition->ShardIdx)) {
                 TString partitionConfig;
-                Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PerShardPartitionConfig.at(partition.ShardIdx).SerializeToString(&partitionConfig);
+                Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PerShardPartitionConfig.at(partition->ShardIdx).SerializeToString(&partitionConfig);
                 partDescr->SetPartitionConfig(partitionConfig);
             }
         }
@@ -309,6 +310,9 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
             case NKikimrSchemeOp::EPathType::EPathTypeView:
             case NKikimrSchemeOp::EPathType::EPathTypeResourcePool:
+            case NKikimrSchemeOp::EPathType::EPathTypeSysView:
+            case NKikimrSchemeOp::EPathType::EPathTypeSecret:
+            case NKikimrSchemeOp::EPathType::EPathTypeStreamingQuery:
                 Y_ABORT_UNLESS(!path.Base()->IsRoot());
                 //no shards
                 break;
@@ -323,8 +327,8 @@ public:
                 *event->Record.MutableTable() = DescribeTable(context, pathId);
 
                 TTableInfo::TPtr tableInfo = context.SS->Tables.at(pathId);
-                for (auto part: tableInfo->GetPartitions()) {
-                    TShardIdx shardIdx = part.ShardIdx;
+                for (const auto* part: tableInfo->GetPartitions()) {
+                    TShardIdx shardIdx = part->ShardIdx;
                     *migrateShards->Add() = DescribeShard(context, shardIdx);
                 }
 
@@ -365,6 +369,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
             case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
             case NKikimrSchemeOp::EPathType::EPathTypeBackupCollection:
+            case NKikimrSchemeOp::EPathType::EPathTypeTestShardSet:
                 Y_ABORT("UNIMPLEMENTED");
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
                 Y_UNREACHABLE();
@@ -619,7 +624,7 @@ public:
         subDomain->SetAlterPrivate(nullptr);
 
         alterData->SetVersion(alterData->GetVersion() + 1);
-        context.SS->SubDomains[pathId] = alterData;
+        context.SS->SubDomains.Set(pathId, alterData);
 
         context.SS->PersistSubDomainVersion(db, pathId, *alterData);
         context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alterData);
@@ -672,7 +677,7 @@ public:
 
         alterData->SetAlterPrivate(subDomain);
         subDomain->SetAlterPrivate(nullptr);
-        context.SS->SubDomains[pathId] = alterData;
+        context.SS->SubDomains.Set(pathId, alterData);
 
         item->SwapChildren(HiddenChildren);
         item->PreSerializedChildrenListing.clear();
@@ -852,8 +857,8 @@ public:
                 {
                     Y_ABORT_UNLESS(context.SS->Tables.contains(pId));
                     TTableInfo::TPtr table = context.SS->Tables.at(pId);
-                    for (auto item: table->GetPartitions()) {
-                        auto shardIdx = item.ShardIdx;
+                    for (const auto* item: table->GetPartitions()) {
+                        auto shardIdx = item->ShardIdx;
                         const auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
 
                         bool inserted = false;

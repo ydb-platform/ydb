@@ -2,7 +2,7 @@
 #include "permissions.h"
 
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
@@ -20,10 +20,11 @@ public:
     using TScanBase = TScanActorBase<TPermissionsScan>;
     using TAuthBase = TAuthScanBase<TPermissionsScan>;
 
-    TPermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TPermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), false, true)
+        : TAuthBase(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken), true, false, true)
         , Effective(effective)
     {
     }
@@ -38,7 +39,7 @@ protected:
         }
 
         auto entryPath = CanonizePath(entry.Path);
-        
+
         TVector<std::pair<TString, TString>> permissions;
         for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
             if (ace.GetAccessType() != (ui32)NACLib::EAccessType::Allow) {
@@ -91,19 +92,19 @@ protected:
             batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
             cells.clear();
         }
-
-        batch.Finished = false;
     }
 
 private:
     const bool Effective;
 };
 
-THolder<NActors::IActor> CreatePermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreatePermissionsScan(bool effective, const NActors::TActorId& ownerId, ui32 scanId,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TPermissionsScan>(effective, ownerId, scanId, tableId, tableRange, columns, std::move(userToken));
+    return MakeHolder<TPermissionsScan>(effective, ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        std::move(userToken));
 }
 
 }

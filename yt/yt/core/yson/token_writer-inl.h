@@ -19,7 +19,7 @@ namespace NYT::NYson {
 
 void TUncheckedYsonTokenWriter::Flush()
 {
-    if (Y_LIKELY(Writer_->RemainingBytes() > 0)) {
+    if (Writer_->RemainingBytes() > 0) [[likely]] {
         Writer_->UndoRemaining();
     }
 }

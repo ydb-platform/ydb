@@ -1,5 +1,7 @@
 #pragma once
 #include "abstract.h"
+
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 
@@ -9,7 +11,8 @@ class TSnapshotLock: public ILock {
 private:
     using TBase = ILock;
     const TSnapshot SnapshotBarrier;
-    const THashSet<ui64> PathIds;
+    const THashSet<TInternalPathId> PathIds;
+
 protected:
     virtual std::optional<TString> DoIsLocked(
         const TPortionInfo& portion, const ELockCategory /*category*/, const THashSet<TString>& /*excludedLocks*/) const override {
@@ -18,9 +21,11 @@ protected:
         }
         return {};
     }
+
     virtual bool DoIsEmpty() const override {
         return PathIds.empty();
     }
+
     virtual std::optional<TString> DoIsLocked(
         const TGranuleMeta& granule, const ELockCategory /*category*/, const THashSet<TString>& /*excludedLocks*/) const override {
         if (PathIds.contains(granule.GetPathId())) {
@@ -28,8 +33,10 @@ protected:
         }
         return {};
     }
+
 public:
-    TSnapshotLock(const TString& lockName, const TSnapshot& snapshotBarrier, const THashSet<ui64>& pathIds, const ELockCategory category, const bool readOnly = false)
+    TSnapshotLock(const TString& lockName, const TSnapshot& snapshotBarrier, const THashSet<TInternalPathId>& pathIds,
+        const ELockCategory category, const bool readOnly = false)
         : TBase(lockName, category, readOnly)
         , SnapshotBarrier(snapshotBarrier)
         , PathIds(pathIds)
@@ -38,4 +45,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NDataLocks

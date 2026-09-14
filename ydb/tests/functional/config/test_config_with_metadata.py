@@ -1,16 +1,24 @@
 # -*- coding: utf-8 -*-
+import copy
+import grpc
 import logging
+import pytest
+import yaml
 import time
 from hamcrest import assert_that
 
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.wait_for import retry_assertions
 import ydb.tests.library.common.cms as cms
-from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.clients.kikimr_config_client import ConfigClient
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+
+import ydb.public.api.protos.ydb_config_pb2 as config
 
 
 logger = logging.getLogger(__name__)
@@ -19,6 +27,92 @@ logger = logging.getLogger(__name__)
 def value_for(key, tablet_id):
     return "Value: <key = {key}, tablet_id = {tablet_id}>".format(
         key=key, tablet_id=tablet_id)
+
+
+def get_config_version(yaml_config):
+    config = yaml.safe_load(yaml_config)
+    return config.get('metadata', {}).get('version', 0)
+
+
+def fetch_config(config_client):
+    try:
+        response = config_client.fetch_all_configs()
+    except grpc.RpcError as error:
+        raise AssertionError(str(error)) from error
+    assert response.operation.status == StatusIds.SUCCESS, response.operation
+    result = config.FetchConfigResult()
+    assert response.operation.result.Unpack(result)
+    assert len(result.config) == 1, result
+    return result.config[0].config
+
+
+def check_replace_config_unknown_fields(cluster, config_client, location):
+    def assert_config(expected):
+        actual = yaml.safe_load(fetch_config(config_client))
+        assert actual == expected
+
+    original = yaml.safe_load(fetch_config(config_client))
+    updated = copy.deepcopy(original)
+    updated['metadata']['version'] += 1
+    if location == 'root':
+        target = updated['config']
+    elif location == 'nested':
+        target = updated['config'].setdefault('feature_flags', {})
+    elif location == 'array':
+        target = {'component': 'BS_NODE', 'level': 3}
+        updated['config'].setdefault('log_config', {}).setdefault('entry', []).append(target)
+    elif location == 'host_config':
+        target = updated['config']['host_configs'][0]
+    else:
+        target = {}
+        updated.setdefault('selector_config', []).append({
+            'description': 'Unknown fields in a selector',
+            'selector': {},
+            'config': target,
+        })
+    target['unknown_field_for_test'] = True
+    config_yaml = '# Preserve the submitted YAML\n' + yaml.safe_dump(updated, sort_keys=False)
+
+    for dry_run, allow_unknown_fields in [(True, False), (True, True), (False, False)]:
+        response = config_client.replace_config(config_yaml, dry_run=dry_run, allow_unknown_fields=allow_unknown_fields)
+        if allow_unknown_fields:
+            assert response.operation.status == StatusIds.SUCCESS, response.operation
+        else:
+            assert response.operation.status != StatusIds.SUCCESS, response.operation
+            assert 'unknown' in str(response.operation.issues).lower(), response.operation
+        assert_config(original)
+
+    response = config_client.replace_config(config_yaml, allow_unknown_fields=True)
+    assert response.operation.status == StatusIds.SUCCESS, response.operation
+    assert_config(updated)
+    assert fetch_config(config_client) == config_yaml
+
+    invalid = copy.deepcopy(updated)
+    invalid['metadata']['version'] += 1
+    invalid['config'].setdefault('log_config', {}).setdefault('entry', []).append('not-a-map')
+    response = config_client.replace_config(yaml.safe_dump(invalid), dry_run=True, allow_unknown_fields=True)
+    assert response.operation.status != StatusIds.SUCCESS, response.operation
+    assert 'expected json map' in str(response.operation.issues), response.operation
+    assert_config(updated)
+
+    def assert_saved_config():
+        for node in cluster.nodes.values():
+            try:
+                assert node.read_node_config() == updated
+            except OSError as error:
+                raise AssertionError(str(error)) from error
+
+    retry_assertions(assert_saved_config, timeout_seconds=60)
+    cluster.restart_nodes()
+    config_client = cluster.config_client
+    config_client.set_auth_token('root@builtin')
+    retry_assertions(lambda: assert_config(updated), timeout_seconds=60)
+    assert fetch_config(config_client) == config_yaml
+
+    original['metadata']['version'] = updated['metadata']['version'] + 1
+    response = config_client.replace_config(yaml.safe_dump(original))
+    assert response.operation.status == StatusIds.SUCCESS, response.operation
+    assert_config(original)
 
 
 class AbstractKiKiMRTest(object):
@@ -31,21 +125,35 @@ class AbstractKiKiMRTest(object):
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
-                                             additional_log_configs={'CMS': LogLevels.DEBUG},
                                              metadata_section=cls.metadata_section,
+                                             simple_config=True,
                                              )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
 
-        time.sleep(120)
+        time.sleep(10)
         cms.request_increase_ratio_limit(cls.cluster.client)
         host = cls.cluster.nodes[1].host
-        mon_port = cls.cluster.nodes[1].mon_port
-        cls.swagger_client = SwaggerClient(host, mon_port)
+        grpc_port = cls.cluster.nodes[1].port
+        cls.swagger_client = SwaggerClient(host, cls.cluster.nodes[1].mon_port)
+        cls.config_client = ConfigClient(host, grpc_port)
+        cls.config_client.set_auth_token('root@builtin')
 
     @classmethod
     def teardown_class(cls):
         cls.cluster.stop()
+
+    def check_kikimr_is_operational(self, table_path, tablet_ids):
+        for partition_id, tablet_id in enumerate(tablet_ids):
+            write_resp = self.cluster.kv_client.kv_write(
+                table_path, partition_id, "key", value_for("key", tablet_id)
+            )
+            assert_that(write_resp.operation.status == StatusIds.SUCCESS)
+
+            read_resp = self.cluster.kv_client.kv_read(
+                table_path, partition_id, "key"
+            )
+            assert_that(read_resp.operation.status == StatusIds.SUCCESS)
 
 
 class TestKiKiMRWithMetadata(AbstractKiKiMRTest):
@@ -64,15 +172,9 @@ class TestKiKiMRWithMetadata(AbstractKiKiMRTest):
             self.swagger_client,
             number_of_tablets,
             table_path,
-            timeout_seconds=120
+            timeout_seconds=10
         )
-
-        for partition_id, tablet_id in enumerate(tablet_ids):
-            resp = self.cluster.kv_client.kv_write(table_path, partition_id, "key", value_for("key", tablet_id))
-            assert_that(resp.operation.status == StatusIds.SUCCESS)
-
-            resp = self.cluster.kv_client.kv_read(table_path, partition_id, "key")
-            assert_that(resp.operation.status == StatusIds.SUCCESS)
+        self.check_kikimr_is_operational(table_path, tablet_ids)
 
 
 class TestKiKiMRWithoutMetadata(AbstractKiKiMRTest):
@@ -87,15 +189,9 @@ class TestKiKiMRWithoutMetadata(AbstractKiKiMRTest):
             self.swagger_client,
             number_of_tablets,
             table_path,
-            timeout_seconds=120
+            timeout_seconds=10
         )
-
-        for partition_id, tablet_id in enumerate(tablet_ids):
-            resp = self.cluster.kv_client.kv_write(table_path, partition_id, "key", value_for("key", tablet_id))
-            assert_that(resp.operation.status == StatusIds.SUCCESS)
-
-            resp = self.cluster.kv_client.kv_read(table_path, partition_id, "key")
-            assert_that(resp.operation.status == StatusIds.SUCCESS)
+        self.check_kikimr_is_operational(table_path, tablet_ids)
 
 
 class TestConfigWithMetadataBlock(TestKiKiMRWithMetadata):
@@ -112,3 +208,81 @@ class TestConfigWithMetadataMirrorMax(TestKiKiMRWithMetadata):
 
 class TestConfigWithoutMetadataMirror(TestKiKiMRWithoutMetadata):
     erasure = Erasure.MIRROR_3_DC
+
+
+class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
+    erasure = Erasure.BLOCK_4_2
+
+    metadata_section = {
+        'kind': 'MainConfig',
+        'cluster': '',
+        'version': 0
+    }
+
+    @classmethod
+    def setup_class(cls):
+        nodes_count = 8
+        configurator = KikimrConfigGenerator(
+            erasure=cls.erasure,
+            nodes=nodes_count,
+            use_in_memory_pdisks=False,
+            use_config_store=True,
+            separate_node_configs=True,
+            extra_grpc_services=['config'],
+            metadata_section=cls.metadata_section,
+            additional_log_configs={'BS_NODE': LogLevels.DEBUG,
+                                    'BS_CONTROLLER': LogLevels.DEBUG},
+            enable_audit_log=True,
+            explicit_hosts_and_host_configs=True,
+            default_users=dict((i, '') for i in ('root', 'other-user')),
+            extra_feature_flags=['switch_to_config_v2'],
+        )
+        cls.cluster = KiKiMR(configurator=configurator)
+        cls.cluster.start()
+        cms.request_increase_ratio_limit(cls.cluster.client)
+        host = cls.cluster.nodes[1].host
+        grpc_port = cls.cluster.nodes[1].port
+        cls.swagger_client = SwaggerClient(host, cls.cluster.nodes[1].mon_port)
+        cls.config_client = ConfigClient(host, grpc_port)
+        cls.config_client.set_auth_token('root@builtin')
+
+    def test_cluster_works_with_auto_conf_dir(self):
+        table_path = '/Root/mydb/mytable_auto_conf'
+        number_of_tablets = 3
+        tablet_ids = create_kv_tablets_and_wait_for_start(
+            self.cluster.client,
+            self.cluster.kv_client,
+            self.swagger_client,
+            number_of_tablets,
+            table_path,
+            timeout_seconds=10
+        )
+        self.check_kikimr_is_operational(table_path, tablet_ids)
+
+    @pytest.mark.parametrize('unknown_field_location', ['root', 'nested', 'selector', 'array'])
+    def test_config_stored_in_config_store(self, unknown_field_location):
+        node = self.cluster.nodes[1]
+        initial_config = node.read_node_config()
+        initial_version = get_config_version(yaml.dump(initial_config))
+
+        initial_config['metadata']['version'] = initial_version
+
+        config_yaml = yaml.dump(initial_config)
+        replace_config_response = self.config_client.replace_config(config_yaml)
+        logger.debug(f"Replace config response: {replace_config_response}")
+        assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
+
+        fetched_config = fetch_config(self.config_client)
+        parsed_fetched_config = yaml.safe_load(fetched_config)
+        assert_that(parsed_fetched_config is not None)
+        assert_that(parsed_fetched_config.get('metadata') is not None)
+        assert_that(parsed_fetched_config.get('config') is not None)
+
+        for node in self.cluster.nodes.values():
+            node_config = node.read_node_config()
+            assert_that(
+                yaml.dump(yaml.safe_load(fetched_config), sort_keys=True) ==
+                yaml.dump(yaml.safe_load(yaml.dump(node_config)), sort_keys=True)
+            )
+
+        check_replace_config_unknown_fields(self.cluster, self.config_client, unknown_field_location)

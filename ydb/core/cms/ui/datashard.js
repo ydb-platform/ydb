@@ -1,6 +1,43 @@
 'use strict';
 
-var TabletId;
+var TabletId = 0;
+var FollowerId = 0;
+var EnableTabletDevUiSecurePath = false;
+
+function getMonRootPath() {
+    var marker = '/tablets/app';
+    var markerPos = window.location.pathname.indexOf(marker);
+    return markerPos >= 0 ? window.location.pathname.slice(0, markerPos) : '';
+}
+
+function makeMonUrl(path) {
+    return getMonRootPath() + path;
+}
+
+function getTabletDevUiPath() {
+    return EnableTabletDevUiSecurePath ? 'app/secure' : 'app';
+}
+
+function makeTabletDevUiUrl(queryAndMaybeHash) {
+    return makeMonUrl('/tablets/' + getTabletDevUiPath() + '?' + queryAndMaybeHash);
+}
+
+function detectTabletDevUiModeAndRun(onReady) {
+    $.get(makeMonUrl('/viewer/capabilities'))
+        .done(function(data) {
+            EnableTabletDevUiSecurePath = Boolean(
+                data &&
+                data.Settings &&
+                data.Settings.Features &&
+                data.Settings.Features.EnableTabletDevUiSecurePath
+            );
+            onReady();
+        })
+        .fail(function() {
+            EnableTabletDevUiSecurePath = false;
+            onReady();
+        });
+}
 
 function main() {
     // making main container wider
@@ -25,6 +62,9 @@ function main() {
     if (args.TabletID !== undefined) {
         TabletId = args.TabletID;
     }
+    if (args.FollowerID !== undefined) {
+        FollowerId = args.FollowerID;
+    }
 
     document.getElementById('host-ref').textContent += " - " + window.location.hostname;
     $('#shard-ref').text('DataShard ' + TabletId);
@@ -34,13 +74,15 @@ function main() {
         setHashParam('page', e.target.hash.substr(1));
     })
 
-    initCommon();
-    initDataShardInfoTab();
-    initOperationsListTab();
-    initOperationTab();
-    initSlowOperationsTab();
-    initReadSetsTab();
-    initHistogramTab();
+    detectTabletDevUiModeAndRun(function() {
+        initCommon();
+        initDataShardInfoTab();
+        initOperationsListTab();
+        initOperationTab();
+        initSlowOperationsTab();
+        initReadSetsTab();
+        initHistogramTab();
+    });
 }
 
 $(document).ready(main);

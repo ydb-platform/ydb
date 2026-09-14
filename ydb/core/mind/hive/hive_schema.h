@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/protos/bridge.pb.h>
 #include <ydb/core/protos/metrics.pb.h>
 #include "hive.h"
 
@@ -37,6 +38,7 @@ struct TSchemeIds {
         TabletKickCooldownPeriod,
         ResourceOvercommitment,
         TabletOwnersSynced,
+        LastReassignStatus,
     };
 };
 
@@ -45,9 +47,10 @@ struct Schema : NIceDb::Schema {
         struct KeyCol : Column<0, NScheme::NTypeIds::Uint64> { static TString GetColumnName(const TString&) { return "Key"; } using Type = TSchemeIds::State; };
         struct Value : Column<1, NScheme::NTypeIds::Uint64> {};
         struct Config : Column<2, NScheme::NTypeIds::String> { using Type = NKikimrConfig::THiveConfig; };
+        struct StringValue : Column<3, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<KeyCol>;
-        using TColumns = TableColumns<KeyCol, Value, Config>;
+        using TColumns = TableColumns<KeyCol, Value, Config, StringValue>;
     };
 
     struct OldTablet : Table<1> {
@@ -91,9 +94,12 @@ struct Schema : NIceDb::Schema {
         };
         struct Statistics : Column<120, NScheme::NTypeIds::String> { using Type = NKikimrHive::TTabletStatistics; };
         struct DataCentersPreference : Column<121, NScheme::NTypeIds::String> { using Type = NKikimrHive::TDataCentersPreference; };
-        struct AllowedDataCenterIds : Column<122, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
+        //struct AllowedDataCenterIds : Column<122, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
 
         struct BalancerPolicy : Column<123, NScheme::NTypeIds::Uint64> { using Type = NKikimrHive::EBalancerPolicy; static constexpr NKikimrHive::EBalancerPolicy Default = NKikimrHive::EBalancerPolicy::POLICY_BALANCE; };
+        struct StoppedByTenant : Column<124, NScheme::NTypeIds::Bool> {};
+        struct NewAllowedDataCenterIds : Column<125, NScheme::NTypeIds::String> { using Type = NKikimrHive::TDataCentersGroup; };
+        struct IsBackup : Column<126, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<
@@ -120,8 +126,10 @@ struct Schema : NIceDb::Schema {
             ReassignReason,
             Statistics,
             DataCentersPreference,
-            AllowedDataCenterIds,
-            BalancerPolicy
+            NewAllowedDataCenterIds,
+            BalancerPolicy,
+            StoppedByTenant,
+            IsBackup
         >;
     };
 
@@ -137,12 +145,13 @@ struct Schema : NIceDb::Schema {
         struct LocalNodeOnly : Column<9, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
         struct FollowerCountPerDataCenter : Column<10, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
         struct RequireDifferentNodes : Column<11, NScheme::NTypeIds::Bool> {};
-        struct AllowedDataCenterIds : Column<12, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
+        //struct AllowedDataCenterIds : Column<12, NScheme::NTypeIds::String> { using Type = TVector<TString>; };
+        struct NewAllowedDataCenterIds : Column<13, NScheme::NTypeIds::String> { using Type = NKikimrHive::TDataCentersGroup; };
 
         using TKey = TableKey<TabletID, GroupID>;
         using TColumns = TableColumns<TabletID, GroupID, FollowerCount, AllowLeaderPromotion, AllowClientRead,
                                       AllowedNodes, AllowedDataCenters, RequireAllDataCenters, LocalNodeOnly,
-                                      FollowerCountPerDataCenter, RequireDifferentNodes, AllowedDataCenterIds>;
+                                      FollowerCountPerDataCenter, RequireDifferentNodes, NewAllowedDataCenterIds>;
     };
 
     struct TabletFollowerTablet : Table<10> {
@@ -197,9 +206,10 @@ struct Schema : NIceDb::Schema {
         struct Name : Column<10, NScheme::NTypeIds::String> {};
         struct BecomeUpOnRestart : Column<11, NScheme::NTypeIds::Bool> {};
         struct DrainSeqNo : Column<12, NScheme::NTypeIds::Uint64> { static constexpr bool Default = 0; };
+        struct BridgePileId : Column<13, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, Local, Down, Freeze, ServicedDomains, Statistics, Drain, DrainInitiators, Location, Name, BecomeUpOnRestart, DrainSeqNo>;
+        using TColumns = TableColumns<ID, Local, Down, Freeze, ServicedDomains, Statistics, Drain, DrainInitiators, Location, Name, BecomeUpOnRestart, DrainSeqNo, BridgePileId>;
     };
 
     struct TabletCategory : Table<6> {
@@ -227,13 +237,14 @@ struct Schema : NIceDb::Schema {
         struct TabletID : Column<1, Tablet::ID::ColumnType> {};
         struct FollowerID : Column<2, TabletFollowerTablet::FollowerID::ColumnType> {};
         struct ProtoMetrics : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrTabletBase::TMetrics; };
+        struct UsageImpact : Column<4, NScheme::NTypeIds::Double> {};
 
         struct MaximumCPU : Column<100 + (int)NMetrics::EResource::CPU, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
         struct MaximumMemory : Column<100 + (int)NMetrics::EResource::Memory, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
         struct MaximumNetwork : Column<100 + (int)NMetrics::EResource::Network, NScheme::NTypeIds::String> { using Type = NKikimrMetricsProto::TMaximumValueUI64; };
 
         using TKey = TableKey<TabletID, FollowerID>;
-        using TColumns = TableColumns<TabletID, FollowerID, ProtoMetrics, MaximumCPU, MaximumMemory, MaximumNetwork>;
+        using TColumns = TableColumns<TabletID, FollowerID, ProtoMetrics, UsageImpact, MaximumCPU, MaximumMemory, MaximumNetwork>;
     };
 
     struct TabletTypeMetrics : Table<13> {
@@ -274,10 +285,12 @@ struct Schema : NIceDb::Schema {
         struct HiveId : Column<5, NScheme::NTypeIds::Uint64> {};
         struct ServerlessComputeResourcesMode : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrSubDomains::EServerlessComputeResourcesMode; };
         struct ScaleRecommenderPolicies : Column<7, NScheme::NTypeIds::String> { using Type = NKikimrHive::TScaleRecommenderPolicies; };
+        struct Stopped : Column<8, NScheme::NTypeIds::Bool> {};
+        struct ShrinkingStoragePools : Column<9, NScheme::NTypeIds::Utf8> {}; // ;-separated list
 
         using TKey = TableKey<SchemeshardId, PathId>;
         using TColumns = TableColumns<SchemeshardId, PathId, Path, Primary, HiveId, ServerlessComputeResourcesMode,
-            ScaleRecommenderPolicies>;
+            ScaleRecommenderPolicies, Stopped, ShrinkingStoragePools>;
     };
 
     struct BlockedOwner : Table<18> {
@@ -315,6 +328,27 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Index, User, Operation, OperationTimestamp>;
     };
 
+    struct BridgePile : Table<22> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct State : Column<2, NScheme::NTypeIds::Uint32> { using Type = NKikimrBridge::TClusterState::EPileState; };
+        struct IsPrimary : Column<3, NScheme::NTypeIds::Bool> {};
+        struct IsPromoted : Column<4, NScheme::NTypeIds::Bool> {};
+        struct Drain : Column<5, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<Id, State, IsPrimary, IsPromoted, Drain>;
+    };
+
+    // Note: this does not store groups with active status
+    struct Group : Table<23> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct StoragePool : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Status : Column<3, NScheme::NTypeIds::Uint32> { using Type = EGroupState; static constexpr auto Default = EGroupState::Active; };
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<Id, StoragePool, Status>;
+    };
+
     using TTables = SchemaTables<
                                 State,
                                 Tablet,
@@ -331,7 +365,9 @@ struct Schema : NIceDb::Schema {
                                 BlockedOwner,
                                 TabletOwners,
                                 TabletAvailabilityRestrictions,
-                                OperationsLog
+                                OperationsLog,
+                                BridgePile,
+                                Group
                                 >;
     using TSettings = SchemaSettings<
                                     ExecutorLogBatching<true>,

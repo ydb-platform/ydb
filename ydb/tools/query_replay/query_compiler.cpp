@@ -278,11 +278,6 @@ public:
             Config->_KqpTablePathPrefix = ReplayDetails["query_database"].GetStringSafe();
         }
 
-        ui32 syntax = (ReplayDetails["query_syntax"].GetStringSafe() == "1") ? 1 : 0;
-        if (queryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
-            syntax = 1;
-        }
-	Config->_KqpYqlSyntaxVersion = syntax;
         Config->FreezeDefaults();
     }
 
@@ -297,7 +292,7 @@ public:
 
         Gateway = CreateKikimrIcGateway(Query->Cluster, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, Query->Database, Query->DatabaseId, std::move(loader),
             TActivationContext::ActorSystem(), SelfId().NodeId(), counters);
-        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, nullptr, {}});
+        auto federatedQuerySetup = std::make_optional<TKqpFederatedQuerySetup>({nullptr, NYql::IHTTPGateway::Make(), nullptr, nullptr, nullptr, {}, {}, {}, nullptr, {}, nullptr, {}, nullptr, {}, nullptr, nullptr});
         KqpHost = CreateKqpHost(Gateway, Query->Cluster, Query->Database, Config, ModuleResolverState->ModuleResolver,
             federatedQuerySetup, nullptr, GUCSettings, NKikimrConfig::TQueryServiceConfig(), Nothing(), FunctionRegistry, false);
 

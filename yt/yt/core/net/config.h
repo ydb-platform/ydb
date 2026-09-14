@@ -12,12 +12,12 @@ namespace NYT::NNet {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDialerConfig
-    : public NYTree::TYsonStruct
+struct TDialerConfig
+    : public virtual NYTree::TYsonStruct
 {
-public:
     bool EnableNoDelay;
     bool EnableAggressiveReconnect;
+    bool AllowBypassTls;
 
     TDuration MinRto;
     TDuration MaxRto;
@@ -34,13 +34,13 @@ DEFINE_REFCOUNTED_TYPE(TDialerConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Configuration for TAddressResolver singleton.
-class TAddressResolverConfig
+struct TAddressResolverConfig
     : public TAsyncExpiringCacheConfig
     , public NDns::TAresDnsResolverConfig
 {
-public:
     bool EnableIPv4;
     bool EnableIPv6;
+
     //! If true, when determining local host name, it will additionally be resolved
     //! into FQDN by calling |getaddrinfo|. Setting this option to false may be
     //! useful in MTN environment, in which hostnames are barely resolvable.
@@ -48,9 +48,10 @@ public:
     //! exposed under localhost name to anyone; in particular, any kind of discovery
     //! should be done using some other kind of addresses.
     bool ResolveHostNameIntoFqdn;
+
     //! If set, localhost name will be forcefully set to the given value rather
-    //! than retrieved via |NYT::NNet::UpdateLocalHostName|.
-    std::optional<TString> LocalHostNameOverride;
+    //! than retrieved from the system.
+    std::optional<std::string> LocalHostNameOverride;
 
     REGISTER_YSON_STRUCT(TAddressResolverConfig);
 

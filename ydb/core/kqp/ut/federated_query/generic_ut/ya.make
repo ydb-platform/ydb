@@ -1,9 +1,18 @@
 UNITTEST_FOR(ydb/core/kqp)
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(cpu:2)
+    SIZE(MEDIUM)
+ELSE()
+    SIZE(SMALL)
+ENDIF()
+
 FORK_SUBTESTS()
 
 SRCS(
     kqp_generic_provider_ut.cpp
+    iceberg_ut_data.cpp
+    iceberg_ut_data.h
 )
 
 PEERDIR(

@@ -207,10 +207,10 @@ Creating a new `mydb1` profile:
    ```text
    Pick desired action to configure authentication method:
      [1] Use static credentials (user & password)
-     [2] Use IAM token (iam-token) cloud.yandex.com/docs/iam/concepts/authorization/iam-token
-     [3] Use OAuth token of a Yandex Passport user (yc-token). Doesn't work with federative accounts. cloud.yandex.com/docs/iam/concepts/authorization/oauth-token
-     [4] Use metadata service on a virtual machine (use-metadata-credentials) cloud.yandex.com/docs/compute/operations/vm-connect/auth-inside-vm
-     [5] Use service account key file (sa-key-file) cloud.yandex.com/docs/iam/operations/iam-token/create-for-sa
+     [2] Use IAM token (iam-token) yandex.cloud/docs/iam/concepts/authorization/iam-token
+     [3] Use OAuth token of a Yandex Passport user (yc-token). Doesn't work with federative accounts. yandex.cloud/docs/iam/concepts/authorization/oauth-token
+     [4] Use metadata service on a virtual machine (use-metadata-credentials) yandex.cloud/docs/compute/operations/vm-connect/auth-inside-vm
+     [5] Use service account key file (sa-key-file) yandex.cloud/docs/iam/operations/iam-token/create-for-sa
      [6] Set new access token (ydb-token)
      [7] Don't save authentication data for profile "mydb1"
    Please enter your numeric choice:

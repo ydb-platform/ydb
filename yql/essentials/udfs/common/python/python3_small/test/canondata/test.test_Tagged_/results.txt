@@ -1,0 +1,32 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "column0";
+                                [
+                                    "TaggedType";
+                                    "y";
+                                    [
+                                        "DataType";
+                                        "Int32"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "2"
+                    ]
+                ]
+            }
+        ]
+    }
+]

@@ -1987,14 +1987,24 @@ OPJ_BOOL opj_jp2_setup_encoder(opj_jp2_t *jp2,
     if (image->icc_profile_len) {
         jp2->meth = 2;
         jp2->enumcs = 0;
+        jp2->color.icc_profile_buf = (OPJ_BYTE *)opj_malloc(image->icc_profile_len);
+        if (jp2->color.icc_profile_buf) {
+            jp2->color.icc_profile_len = image->icc_profile_len;
+            memcpy(jp2->color.icc_profile_buf, image->icc_profile_buf,
+                   image->icc_profile_len);
+        }
     } else {
         jp2->meth = 1;
-        if (image->color_space == 1) {
+        if (image->color_space == OPJ_CLRSPC_SRGB) {
             jp2->enumcs = 16;    /* sRGB as defined by IEC 61966-2-1 */
-        } else if (image->color_space == 2) {
-            jp2->enumcs = 17;    /* greyscale */
-        } else if (image->color_space == 3) {
+        } else if (image->color_space == OPJ_CLRSPC_GRAY) {
+            jp2->enumcs = 17;
+        } else if (image->color_space == OPJ_CLRSPC_SYCC) {
             jp2->enumcs = 18;    /* YUV */
+        } else if (image->color_space == OPJ_CLRSPC_EYCC) {
+            jp2->enumcs = 24;
+        } else if (image->color_space == OPJ_CLRSPC_CMYK) {
+            jp2->enumcs = 12;
         }
     }
 
@@ -2869,7 +2879,7 @@ OPJ_BOOL opj_jp2_read_header(opj_stream_private_t *p_stream,
                               p_image,
                               p_manager);
 
-    if (p_image && *p_image) {
+    if (ret && p_image && *p_image) {
         /* Set Image Color Space */
         if (jp2->enumcs == 16) {
             (*p_image)->color_space = OPJ_CLRSPC_SRGB;

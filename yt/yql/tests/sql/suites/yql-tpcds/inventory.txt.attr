@@ -1,0 +1,31 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "inv_date_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "inv_item_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "inv_warehouse_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "inv_quantity_on_hand";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+    ];
+}

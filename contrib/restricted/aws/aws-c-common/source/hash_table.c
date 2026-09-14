@@ -34,7 +34,7 @@ static void s_suppress_unused_lookup3_func_warnings(void) {
 /**
  * Calculate the hash for the given key.
  * Ensures a reasonable semantics for null keys.
- * Ensures that no object ever hashes to 0, which is the sentinal value for an empty hash element.
+ * Ensures that no object ever hashes to 0, which is the sentinel value for an empty hash element.
  */
 static uint64_t s_hash_for(struct hash_table_state *state, const void *key) {
     AWS_PRECONDITION(hash_table_state_is_valid(state));
@@ -973,7 +973,7 @@ uint64_t aws_hash_byte_cursor_ptr(const void *item) {
     /* first digits of pi in hex */
     uint32_t b = 0x3243F6A8, c = 0x885A308D;
     hashlittle2(cur->ptr, cur->len, &c, &b);
-    AWS_RETURN_WITH_POSTCONDITION(((uint64_t)b << 32) | c, aws_byte_cursor_is_valid(cur));
+    AWS_RETURN_WITH_POSTCONDITION(((uint64_t)b << 32) | c, aws_byte_cursor_is_valid(cur)); /* NOLINT */
 }
 
 uint64_t aws_hash_ptr(const void *item) {
@@ -1103,4 +1103,12 @@ int hash_table_state_required_bytes(size_t size, size_t *required_bytes) {
     }
 
     return AWS_OP_SUCCESS;
+}
+
+uint64_t aws_hash_uint64_t_by_identity(const void *item) {
+    return *(uint64_t *)item;
+}
+
+bool aws_hash_compare_uint64_t_eq(const void *a, const void *b) {
+    return *(uint64_t *)a == *(uint64_t *)b;
 }

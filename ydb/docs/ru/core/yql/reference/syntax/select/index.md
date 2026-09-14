@@ -14,23 +14,27 @@ SELECT "Hello, world!";
 SELECT 2 + 2;
 ```
 
-
 ## Процедура выполнения SELECT {#selectexec}
 
 Результат запроса `SELECT` вычисляется следующим образом:
 
 * определяется набор входных таблиц – вычисляются выражения после [FROM](../select/from.md);
-* к входным таблицам применяется [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
-* выполняется [FLATTEN COLUMNS](../flatten.md#flatten-columns) или [FLATTEN BY](../flatten.md); алиасы, заданные во `FLATTEN BY`, становятся видны после этой точки;
-{% if feature_join %}
-* выполняются все [JOIN](../join.md);
+{% if feature_match_recogznize==true %}
+* к входным таблицам применяется [MATCH_RECOGNIZE](match_recognize.md)
 {% endif %}
-* к полученным данным добавляются (или заменяются) колонки, заданные в [GROUP BY ... AS ...](../group_by.md);
-* выполняется [WHERE](where.md) &mdash; все данные не удовлетворяющие предикату отфильтровываются;
-* выполняется [GROUP BY](../group_by.md), вычисляются значения агрегатных функций;
-* выполняется фильтрация [HAVING](../group_by.md#having);
+{% if feature_tablesample==true %}
+* вычисляется [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
+{% endif %}
+* выполняется [FLATTEN COLUMNS](flatten.md#flatten-columns) или [FLATTEN BY](flatten.md); алиасы, заданные во `FLATTEN BY`, становятся видны после этой точки;
+{% if feature_join %}
+* выполняются все [JOIN](join.md);
+{% endif %}
+* к полученным данным добавляются (или заменяются) колонки, заданные в [GROUP BY ... AS ...](group-by.md);
+* выполняется [WHERE](where.md): все данные, не удовлетворяющие предикату, отфильтровываются;
+* выполняется [GROUP BY](group-by.md), вычисляются значения агрегатных функций;
+* выполняется фильтрация [HAVING](group-by.md#having);
 {% if feature_window_functions %}
-* вычисляются значения [оконных функций](../window.md);
+* вычисляются значения [оконных функций](window.md);
 {% endif %}
 * вычисляются выражения в `SELECT`;
 * выражениям в `SELECT` назначаются имена заданные алиасами;
@@ -55,9 +59,7 @@ SELECT 2 + 2;
 * `SELECT` со звездочкой (`SELECT * FROM ...`) наследует порядок из своего входа;
 
 {% if feature_join %}
-
-* порядок колонок после [JOIN](../join.md): сначала колонки левой стороны, потом правой. Если порядок какой-либо из сторон присутствующей в выходе `JOIN` не определен, порядок колонок результата также не определен;
-
+* порядок колонок после [JOIN](join.md): сначала колонки левой стороны, потом правой. Если порядок какой-либо из сторон, присутствующей в выходе `JOIN`, не определен, порядок колонок результата также не определен;
 {% endif %}
 
 * порядок `UNION ALL` зависит от режима выполнения [UNION ALL](union.md#union-all);
@@ -131,7 +133,6 @@ query1 UNION query2 UNION ALL query3
 ### Примеры
 
 ```yql
-USE some_cluster;
 SELECT * FROM CONCAT(
   `table1`,
   `table2`,
@@ -139,7 +140,6 @@ SELECT * FROM CONCAT(
 ```
 
 ```yql
-USE some_cluster;
 $indices = ListFromRange(1, 4);
 $tables = ListMap($indices, ($index) -> {
     RETURN "table" || CAST($index AS String);
@@ -148,7 +148,6 @@ SELECT * FROM EACH($tables); -- идентично предыдущему при
 ```
 
 ```yql
-USE some_cluster;
 SELECT * FROM RANGE(`my_folder`);
 ```
 
@@ -160,7 +159,6 @@ SELECT * FROM some_cluster.RANGE( -- Кластер можно указать п
 ```
 
 ```yql
-USE some_cluster;
 SELECT * FROM RANGE(
   `my_folder`,
   `from_folder`,
@@ -169,7 +167,6 @@ SELECT * FROM RANGE(
 ```
 
 ```yql
-USE some_cluster;
 SELECT * FROM RANGE(
   `my_folder`,
   `from_table`,
@@ -179,7 +176,6 @@ SELECT * FROM RANGE(
 ```
 
 ```yql
-USE some_cluster;
 SELECT * FROM LIKE(
   `my_folder`,
   "2017-03-%"
@@ -187,7 +183,6 @@ SELECT * FROM LIKE(
 ```
 
 ```yql
-USE some_cluster;
 SELECT * FROM REGEXP(
   `my_folder`,
   "2017-03-1[2-4]?"
@@ -199,7 +194,6 @@ $callable = ($table_name) -> {
     return $table_name > "2017-03-13";
 };
 
-USE some_cluster;
 SELECT * FROM FILTER(
   `my_folder`,
   $callable
@@ -220,8 +214,21 @@ SELECT * FROM FILTER(
 * [ORDER BY](order_by.md)
 * [ASSUME ORDER BY](assume_order_by.md)
 * [LIMIT OFFSET](limit_offset.md)
+{% if feature_tablesample==true %}
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
+{% endif %}
+{% if feature_match_recogznize==true %}
+* [MATCH_RECOGNIZE](match_recognize.md)
+{% endif %}
+{% if feature_join %}
+* [JOIN](join.md)
+{% endif %}
+* [GROUP BY](group-by.md)
+* [FLATTEN](flatten.md)
+{% if feature_window_functions %}
+* [WINDOW](window.md)
+{% endif %}
 
 {% if yt %}
 
@@ -250,6 +257,10 @@ SELECT * FROM FILTER(
 
 {% if feature_secondary_index %}
 
-* [VIEW INDEX](secondary_index.md)
+* [VIEW secondary_index](secondary_index.md)
+
+* [VIEW vector_index](vector_index.md)
+* [VIEW fulltext_index](fulltext_index.md)
+* [VIEW json_index](json_index.md)
 
 {% endif %}

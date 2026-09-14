@@ -12,9 +12,9 @@ namespace NActors {
         std::array<std::optional<TEventOutputChannel>, 16> ChannelArray;
         THashMap<ui16, TEventOutputChannel> ChannelMap;
         std::shared_ptr<IInterconnectMetrics> Metrics;
-        TEventHolderPool& Pool;
         const ui32 MaxSerializedEventSize;
         const TSessionParams Params;
+        std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
 
         struct THeapItem {
             TEventOutputChannel *Channel;
@@ -29,13 +29,13 @@ namespace NActors {
 
     public:
         TChannelScheduler(ui32 peerNodeId, const TChannelsConfig& predefinedChannels,
-                std::shared_ptr<IInterconnectMetrics> metrics, TEventHolderPool& pool, ui32 maxSerializedEventSize,
-                TSessionParams params)
+                std::shared_ptr<IInterconnectMetrics> metrics, ui32 maxSerializedEventSize,
+                TSessionParams params, std::shared_ptr<NInterconnect::NRdma::IMemPool> rdmaMemPool)
             : PeerNodeId(peerNodeId)
             , Metrics(std::move(metrics))
-            , Pool(pool)
             , MaxSerializedEventSize(maxSerializedEventSize)
             , Params(std::move(params))
+            , RdmaMemPool(std::move(rdmaMemPool))
         {
             for (const auto& item : predefinedChannels) {
                 GetOutputChannel(item.first);
@@ -72,16 +72,16 @@ namespace NActors {
             if (channel < ChannelArray.size()) {
                 auto& res = ChannelArray[channel];
                 if (Y_UNLIKELY(!res)) {
-                    res.emplace(Pool, channel, PeerNodeId, MaxSerializedEventSize, Metrics,
-                        Params);
+                    res.emplace(channel, PeerNodeId, MaxSerializedEventSize, Metrics,
+                        Params, RdmaMemPool);
                 }
                 return *res;
             } else {
                 auto it = ChannelMap.find(channel);
                 if (Y_UNLIKELY(it == ChannelMap.end())) {
                     it = ChannelMap.emplace(std::piecewise_construct, std::forward_as_tuple(channel),
-                        std::forward_as_tuple(Pool, channel, PeerNodeId, MaxSerializedEventSize,
-                        Metrics, Params)).first;
+                        std::forward_as_tuple(channel, PeerNodeId, MaxSerializedEventSize,
+                        Metrics, Params, RdmaMemPool)).first;
                 }
                 return it->second;
             }

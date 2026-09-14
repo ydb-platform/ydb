@@ -67,12 +67,13 @@ public:
     TFuture<TAuthenticationResult> AsyncAuthenticate(
         const TAuthenticationContext& context) override
     {
-        static const auto Realm = TString("noop");
-        static const auto UserTicket = TString();
+        static const auto Realm = std::string("noop");
+        static const auto UserTicket = std::string();
         TAuthenticationResult result{
             context.Header->has_user() ? FromProto<std::string>(context.Header->user()) : RootUserName,
             Realm,
             UserTicket,
+            {},
         };
         return MakeFuture<TAuthenticationResult>(result);
     }

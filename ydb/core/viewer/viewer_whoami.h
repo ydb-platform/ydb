@@ -1,7 +1,9 @@
 #pragma once
 #include "json_handlers.h"
+#include "json_pipe_req.h"
 #include "viewer.h"
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/auth.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
 #include <ydb/library/aclib/aclib.h>
@@ -11,39 +13,27 @@ namespace NKikimr::NViewer {
 
 using namespace NActors;
 
-class TJsonWhoAmI : public TActorBootstrapped<TJsonWhoAmI> {
-    IViewer* Viewer;
-    NMon::TEvHttpInfo::TPtr Event;
-
+class TJsonWhoAmI : public TViewerPipeClient {
+    using TBase = TViewerPipeClient;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonWhoAmI(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : Viewer(viewer)
-        , Event(ev)
+    TJsonWhoAmI(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
+        : TViewerPipeClient(viewer, ev)
     {}
 
-    void Bootstrap(const TActorContext& ctx) {
-        ReplyAndDie(ctx);
+    void Bootstrap() {
+        if (NeedToRedirect()) {
+            return;
+        }
+        ReplyAndPassAway();
     }
 
-    bool CheckGroupMembership(std::unique_ptr<NACLib::TUserToken>& token, const NProtoBuf::RepeatedPtrField<TString>& sids) {
-        if (sids.empty()) {
-            return true;
-        }
-        for (const auto& sid : sids) {
-            if (token->IsExist(sid)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void ReplyAndDie(const  TActorContext &ctx) {
+    void ReplyAndPassAway() {
         NACLibProto::TUserToken userToken;
-        Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(Event->Get()->UserToken);
+        Y_PROTOBUF_SUPPRESS_NODISCARD userToken.ParseFromString(GetRequest().GetUserTokenObject());
         NJson::TJsonValue json(NJson::JSON_MAP);
         if (userToken.HasUserSID()) {
             json["UserSID"] = userToken.GetUserSID();
@@ -57,23 +47,21 @@ public:
                 }
             }
         }
-        if (userToken.HasOriginalUserToken()) {
-            json["OriginalUserToken"] = userToken.GetOriginalUserToken();
-        }
         if (userToken.HasAuthType()) {
             json["AuthType"] = userToken.GetAuthType();
         }
-        auto token = std::make_unique<NACLib::TUserToken>(userToken);
-        json["IsViewerAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
-        json["IsMonitoringAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
-        json["IsAdministrationAllowed"] = CheckGroupMembership(token, AppData()->DomainsConfig.GetSecurityConfig().GetAdministrationAllowedSIDs());
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json, false)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        Die(ctx);
-    }
 
-    void HandleTimeout(const TActorContext &ctx) {
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        Die(ctx);
+        NACLib::TUserToken token(std::move(userToken));
+        json["IsTokenRequired"] = AppData()->EnforceUserTokenRequirement;
+        bool isAdministrationAllowed = IsAdministrator(AppData(), &token);
+        bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
+        bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
+        bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(&token, AppData()->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());
+        json["IsAdministrationAllowed"] = isAdministrationAllowed;
+        json["IsMonitoringAllowed"] = isMonitoringAllowed;
+        json["IsViewerAllowed"] = isViewerAllowed;
+        json["IsDatabaseAllowed"] = isDatabaseAllowed;
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 
     static YAML::Node GetSwaggerSchema() {
@@ -89,9 +77,6 @@ public:
                     items:
                         type: string
                     description: User groups
-                OriginalUserToken:
-                    type: string
-                    description: User's token used to authenticate
                 AuthType:
                     type: string
                     description: Authentication type

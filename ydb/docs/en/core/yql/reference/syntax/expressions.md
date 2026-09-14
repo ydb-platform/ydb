@@ -38,6 +38,17 @@ All other characters are literals that represent themselves.
 
 The most popular way to use the `LIKE` and `REGEXP` keywords is to filter a table using the statements with the `WHERE` clause. However, there are no restrictions on using templates in this context: you can use them in most of contexts involving strings, for example, with concatenation by using `||`.
 
+### LIKE / ILIKE with a fulltext index {#like-ilike-with-fulltext-index}
+
+For [fulltext indexes](../../../dev/fulltext-indexes.md) with n-grams (`use_filter_ngram` / `use_filter_edge_ngram`), `LIKE`/`ILIKE` over the indexed text column is supported.
+
+```yql
+SELECT id, title
+FROM articles VIEW ft_idx
+WHERE body ILIKE "%learn%ing%"
+LIMIT 20;
+```
+
 ### Examples
 
 ```yql
@@ -88,7 +99,7 @@ SELECT 0.0 / 0.0;
 
 ### Comparison operators {#comparison-operators}
 
-The operators `=`, `==`, `!=`, `<>`, `>`, `<` are defined for:
+The operators `=`, `==`, `!=`, `<>`, `>`, `<`, `>=`, `<=` are defined for:
 
 * Primitive data types except Yson and Json.
 * Tuples and structures with the same set of fields. No order is defined for structures, but you can check for (non-)equality. Tuples are compared element-by-element left to right.
@@ -395,7 +406,6 @@ An attempt to reference an anonymous named expression results in an error:
 ```yql
 $_ = 1;
 select $_; --- error: Unable to reference anonymous name $_
-export $_; --- An error: Can not export anonymous name $_
 ```
 
 {% if feature_mapreduce %}
@@ -465,7 +475,7 @@ A table expression is an expression that returns a table. Table expressions in Y
 
 Semantics of a table expression depends on the context where it is used. In YQL, table expressions can be used in the following contexts:
 
-* Table context: after [FROM](select/from.md). In this case, table expressions work as expected: for example, `$input = SELECT a, b, c FROM T; SELECT * FROM $input` returns a table with three columns. The table context also occurs after [UNION ALL](select/union.md#unionall){% if feature_join %}, [JOIN](join.md#join){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](process.md#process), [REDUCE](reduce.md#reduce){% endif %};
+* Table context: after [FROM](select/from.md). In this case, table expressions work as expected: for example, `$input = SELECT a, b, c FROM T; SELECT * FROM $input` returns a table with three columns. The table context also occurs after [UNION ALL](select/index.md#unionall){% if feature_join %}, [JOIN](select/join.md#join){% endif %}{% if feature_mapreduce and process_command == "PROCESS" %}, [PROCESS](process.md#process), [REDUCE](reduce.md#reduce){% endif %};
 * Vector context: after [IN](#in). In this context, the table expression must contain exactly one column (the name of this column doesn't affect the expression result in any way). A table expression in a vector context is typed as a list (the type of the list element is the same as the column type in this case). Example: `SELECT * FROM T WHERE key IN (SELECT k FROM T1)`;
 * A scalar context arises *in all the other cases*. As in a vector context, a table expression must contain exactly one column, but the value of the table expression is a scalar, that is, an arbitrarily selected value of this column (if no rows are returned, the result is `NULL`). Example: `$count = SELECT COUNT(*) FROM T; SELECT * FROM T ORDER BY key LIMIT $count / 2`;
 

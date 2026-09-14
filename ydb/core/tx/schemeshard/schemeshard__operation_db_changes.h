@@ -1,8 +1,8 @@
 #pragma once
 
 #include "schemeshard_identificators.h"
-#include "schemeshard_path_element.h"
 #include "schemeshard_info_types.h"
+#include "schemeshard_path_element.h"
 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 
@@ -16,6 +16,8 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<TPathId> Paths;
 
     TDeque<TPathId> Tables;
+    TDeque<TPathId> ColumnTables;
+    TDeque<std::tuple<TShardIdx, TPathId, TTxId>> SharedShards;
     TDeque<std::pair<TPathId, TTxId>> TableSnapshots;
     TDeque<std::pair<TPathId, TTxId>> LongLocks;
     TDeque<TPathId> Unlocks;
@@ -39,6 +41,29 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
 
     TDeque<TPathId> Sequences;
     TDeque<TPathId> AlterSequences;
+
+    TDeque<TPathId> Secrets;
+    TDeque<TPathId> AlterSecrets;
+
+    TDeque<TPathId> SysViews;
+
+    TDeque<std::pair<TPathId, TBackupCollectionInfo::TPtr>> BackupCollections;
+
+    // Can we have multiple long incremental restore operations?
+    TDeque<NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
+
+    TDeque<ui64> IncrementalBackups;
+
+    // Full-backup control op ids to flush on Apply(); same shape as IncrementalBackups.
+    TDeque<ui64> FullBackups;
+
+    TDeque<TPathId> StreamingQueries;
+
+    TDeque<TPathId> ExternalDataSources;
+    TDeque<TPathId> ExternalTables;
+    TDeque<TPathId> ResourcePools;
+
+    TDeque<TPathId> TestShardSets;
 
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
@@ -66,6 +91,14 @@ public:
 
     void PersistTable(const TPathId& pathId) {
         Tables.push_back(pathId);
+    }
+
+    void PersistColumnTable(const TPathId& pathId) {
+        ColumnTables.push_back(pathId);
+    }
+
+    void PersistSharedShard(const TShardIdx& shardIdx, const TPathId& pathId, TTxId txId = InvalidTxId) {
+        SharedShards.emplace_back(shardIdx, pathId, txId);
     }
 
     void PersistTableSnapshot(const TPathId& pathId, TTxId snapshotTxId) {
@@ -126,6 +159,54 @@ public:
 
     void PersistSequence(const TPathId& pathId) {
         Sequences.push_back(pathId);
+    }
+
+    void PersistAlterSecret(const TPathId& pathId) {
+        AlterSecrets.emplace_back(pathId);
+    }
+
+    void PersistSecret(const TPathId& pathId) {
+        Secrets.emplace_back(pathId);
+    }
+
+    void PersistSysView(const TPathId& pathId) {
+        SysViews.emplace_back(pathId);
+    }
+
+    void PersistBackupCollection(const TPathId& pathId, const TBackupCollectionInfo::TPtr& info) {
+        BackupCollections.emplace_back(pathId, info);
+    }
+
+    void PersistLongIncrementalRestoreOp(const NKikimrSchemeOp::TLongIncrementalRestoreOp& op) {
+        LongIncrementalRestoreOps.emplace_back(op);
+    }
+
+    void PersistLongIncrementalBackupOp(ui64 id) {
+        IncrementalBackups.emplace_back(id);
+    }
+
+    void PersistFullBackupOp(ui64 id) {
+        FullBackups.emplace_back(id);
+    }
+
+    void PersistStreamingQuery(const TPathId& pathId) {
+        StreamingQueries.emplace_back(pathId);
+    }
+
+    void PersistExternalDataSource(const TPathId& pathId) {
+        ExternalDataSources.emplace_back(pathId);
+    }
+
+    void PersistExternalTable(const TPathId& pathId) {
+        ExternalTables.emplace_back(pathId);
+    }
+
+    void PersistResourcePool(const TPathId& pathId) {
+        ResourcePools.emplace_back(pathId);
+    }
+
+    void PersistTestShardSet(const TPathId& pathId) {
+        TestShardSets.emplace_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

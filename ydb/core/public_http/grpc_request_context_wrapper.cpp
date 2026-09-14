@@ -58,15 +58,17 @@ namespace NKikimr::NPublicHttp {
 
     TVector<TStringBuf> TGrpcRequestContextWrapper::GetPeerMetaValues(TStringBuf key) const {
         if (key == "x-ydb-database"sv) {
-            return { RequestContext.GetDb() };
+            MetaValueCache = RequestContext.GetDb();
+            return { TStringBuf(MetaValueCache) };
         }
 
         if (key == "x-ydb-fq-project"sv) {
-            return { LongProject };
+            return { TStringBuf(LongProject) };
         }
 
         if (key == "x-ydb-auth-ticket"sv) {
-            return { RequestContext.GetToken() };
+            MetaValueCache = RequestContext.GetToken();
+            return { TStringBuf(MetaValueCache) };
         }
 
         return { };
@@ -81,5 +83,13 @@ namespace NKikimr::NPublicHttp {
     }
 
     TString TGrpcRequestContextWrapper::GetEndpointId() const { return {}; }
+
+    TString TGrpcRequestContextWrapper::GetRpcMethodName() const {
+        // We have no grpc method, but the closest analog is protobuf name
+        if (Request) {
+            return Request->GetDescriptor()->name();
+        }
+        return {};
+    }
 
 } // namespace NKikimr::NPublicHttp

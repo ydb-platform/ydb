@@ -45,4 +45,4 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        include/boost/array.hpp [12:14]
+        include/boost/array.hpp [15:17]

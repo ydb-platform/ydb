@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "requests.h"
 #endif
-#undef REQUESTS_INL_H_
 
 namespace NYT::NKafka {
 
@@ -39,7 +38,11 @@ void Deserialize(std::vector<T>& data, IKafkaProtocolReader* reader, bool isComp
         }
         data.resize(size);
     } else {
-        data.resize(reader->ReadInt32());
+        auto size = reader->ReadInt32();
+        if (size < 0) {
+            return;
+        }
+        data.resize(size);
     }
     for (auto& item : data) {
         item.Deserialize(reader, args...);

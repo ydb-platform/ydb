@@ -1,3 +1,10 @@
+$input = AsList(
+    <|value:"   !qwe rty   uiop [ ]$"|>,
+    <|value:"@as       dfgh jkl\\n;'\%  "|>,
+    <|value:"   #zxc\tvbn \t\n\b m,./?^   "|>,
+    <|value:"1!2@3#4$5%6^7&8*9(0)-_=+,<.>"|>
+);
+
 SELECT
     String::Base32Encode(value) as b32enc,
     String::Base64Encode(value) as b64enc,
@@ -12,4 +19,4 @@ SELECT
     String::Collapse(value) as clps,
     String::Strip(value) as strp,
     String::CollapseText(value, 9) as clpst,
-FROM Input
+FROM AS_TABLE($input)

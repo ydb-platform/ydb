@@ -1,10 +1,10 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common_subdomain.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_subdomain.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/config/config.h>
+#include <ydb/core/persqueue/public/config.h>
 
 namespace {
 
@@ -297,12 +297,26 @@ public:
             }
             alterData->SetDatabaseQuotas(settings.GetDatabaseQuotas());
         }
+        if (settings.HasSchemeLimits()) {
+            alterData->MergeSchemeLimits(settings.GetSchemeLimits());
+        }
 
         if (const auto& auditSettings = subDomainInfo->GetAuditSettings()) {
             alterData->SetAuditSettings(*auditSettings);
         }
         if (settings.HasAuditSettings()) {
             alterData->ApplyAuditSettings(settings.GetAuditSettings());
+        }
+
+        // alterData is copy-constructed from subDomainInfo, so the current
+        // level is already carried over; only an explicit request changes it.
+        if (settings.HasTablesMetricsLevel()) {
+            const bool isRootDomain = subDomain->IsRoot() && context.SS->IsDomainSchemeShard;
+            if (!CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), isRootDomain, errStr)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
+            }
+            alterData->SetTablesMetricsLevel(settings.GetTablesMetricsLevel());
         }
 
         NIceDb::TNiceDb db(context.GetDB());

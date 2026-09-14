@@ -1,0 +1,13 @@
+items:
+- name: Процесс ревью
+  href: review.md
+- name: Руководство по стилю
+  href: style-guide.md
+- name: Структура
+  href: structure.md
+- name: Жанры
+  href: genres.md
+- name: Добавление медиа в публичные материалы
+  href: guide-to-public-material.md
+- name: Документирование новых команд CLI
+  href: cli-command-documentation.md

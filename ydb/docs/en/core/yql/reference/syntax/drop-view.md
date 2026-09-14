@@ -1,15 +1,16 @@
 # DROP VIEW
 
-`DROP VIEW` deletes an existing [view](concepts/datamodel/view).
+`DROP VIEW` deletes an existing [view](../../../concepts/datamodel/view.md).
 
 ## Syntax
 
 ```yql
-DROP VIEW <name>
+DROP VIEW [IF EXISTS] <name>
 ```
 
 ### Parameters
 
+* `IF EXISTS` - when specified, the statement does not return an error if a view with the given name does not exist.
 * `name` - the name of the view to be deleted.
 
 ## Examples

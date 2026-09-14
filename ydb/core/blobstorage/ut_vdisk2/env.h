@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
+
 namespace NKikimr {
 
     class TTestEnv : TNonCopyable {
@@ -92,10 +94,23 @@ namespace NKikimr {
             return PDiskMockState;
         }
 
+        ::NMonitoring::TDynamicCounterPtr GetCounters() {
+            return Counters;
+        }
+
+        void Compact(bool freshOnly = false) {
+            const TActorId& edge = Runtime->AllocateEdgeActor(NodeId);
+            TEvCompactVDisk* ev = TEvCompactVDisk::Create(EHullDbType::LogoBlobs, freshOnly ? TEvCompactVDisk::EMode::FRESH_ONLY : TEvCompactVDisk::EMode::FULL, true);
+            Runtime->Send(new IEventHandle(VDiskServiceId, edge, ev), NodeId);
+            auto res = Runtime->WaitForEdgeActorEvent({edge});
+            Runtime->DestroyActor(edge);
+            Y_VERIFY(res->GetTypeRewrite() == TEvBlobStorage::EvCompactVDiskResult);
+        }
+
         NKikimrBlobStorage::TEvVPutResult Put(const TLogoBlobID& id, TString buffer,
                 NKikimrBlobStorage::EPutHandleClass prio = NKikimrBlobStorage::EPutHandleClass::TabletLog) {
             return ExecuteQuery<TEvBlobStorage::TEvVPutResult>(std::make_unique<TEvBlobStorage::TEvVPut>(id, TRope(buffer),
-                VDiskId, false, nullptr, TInstant::Max(), prio), GetQueueId(prio));
+                VDiskId, false, nullptr, TInstant::Max(), prio, false), GetQueueId(prio));
         }
 
         NKikimrBlobStorage::TEvVGetResult Get(const TLogoBlobID& id,
@@ -111,6 +126,14 @@ namespace NKikimr {
                 }
             }
             return r;
+        }
+
+        NKikimrBlobStorage::TEvVGetResult GetIndex(const TLogoBlobID& id,
+                NKikimrBlobStorage::EGetHandleClass prio = NKikimrBlobStorage::EGetHandleClass::FastRead) {
+            auto query = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(VDiskId, TInstant::Max(), prio,
+                TEvBlobStorage::TEvVGet::EFlags::None, Nothing(), {id.FullID()});
+            return ExecuteQuery<TEvBlobStorage::TEvVGetResult>(std::unique_ptr<IEventBase>(query.release()),
+                GetQueueId(prio));
         }
 
         NKikimrBlobStorage::TEvVCollectGarbageResult Collect(ui64 tabletId, ui32 gen, ui32 counter,
@@ -129,10 +152,10 @@ namespace NKikimr {
             auto perfConfig = NKikimrConfig::TBlobStorageConfig_TVDiskPerformanceConfig();
             perfConfig.SetPDiskType(PDiskTypeToPDiskType(VDiskConfig->BaseInfo.DeviceType));
             perfConfig.SetMinHugeBlobSizeInBytes(minHugeBlobSize);
-            
+
             auto* vdiskTypes = request->Record.MutableConfig()->MutableBlobStorageConfig()->MutableVDiskPerformanceSettings()->MutableVDiskTypes();
             vdiskTypes->Add(std::move(perfConfig));
-            
+
             Runtime->Send(new IEventHandle(NConsole::MakeConfigsDispatcherID(NodeId), edge, request.Release()), NodeId);
             auto ev = Runtime->WaitForEdgeActorEvent({edge});
             Runtime->DestroyActor(edge);

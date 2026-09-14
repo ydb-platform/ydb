@@ -30,9 +30,9 @@ public:
         , VDiskIncarnationGuid(vDiskIncarnationGuid)
         , GInfo(gInfo)
     {
-        Y_ABORT_UNLESS(ev->Get()->Record.HasForceBlockTabletData());
-        Y_ABORT_UNLESS(ev->Get()->Record.GetForceBlockTabletData().HasId());
-        Y_ABORT_UNLESS(ev->Get()->Record.GetForceBlockTabletData().HasGeneration());
+        Y_VERIFY_S(ev->Get()->Record.HasForceBlockTabletData(), VCtx->VDiskLogPrefix);
+        Y_VERIFY_S(ev->Get()->Record.GetForceBlockTabletData().HasId(), VCtx->VDiskLogPrefix);
+        Y_VERIFY_S(ev->Get()->Record.GetForceBlockTabletData().HasGeneration(), VCtx->VDiskLogPrefix);
         Request = std::move(ev);
     }
 
@@ -46,7 +46,8 @@ public:
             Request->Get()->Record.GetForceBlockTabletData().GetId(),
             Request->Get()->Record.GetForceBlockTabletData().GetGeneration(),
             VDiskIDFromVDiskID(Request->Get()->Record.GetVDiskID()),
-            deadline
+            deadline,
+            TWriteSource::SkeletonForceBlock
         );
 
         // send TEvVBlock request
@@ -79,7 +80,7 @@ public:
                     VDiskIncarnationGuid,
                     GInfo
                 );
-                SendVDiskResponse(TActivationContext::AsActorContext(), SenderId, response.release(), Request->Cookie, VCtx);
+                SendVDiskResponse(TActivationContext::AsActorContext(), SenderId, response.release(), Request->Cookie, VCtx, {});
                 return PassAway();
             }
         }

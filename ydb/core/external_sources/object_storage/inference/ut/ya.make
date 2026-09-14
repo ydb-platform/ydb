@@ -2,6 +2,7 @@ GTEST()
 
 PEERDIR(
     yql/essentials/public/udf/service/stub
+    yql/essentials/sql/pg_dummy
     ydb/core/external_sources/object_storage/inference
     ydb/core/external_sources/object_storage
     ydb/core/tx/scheme_board

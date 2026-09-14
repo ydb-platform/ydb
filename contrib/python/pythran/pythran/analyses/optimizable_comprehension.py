@@ -6,11 +6,9 @@ from pythran.analyses.identifiers import Identifiers
 from pythran.passmanager import NodeAnalysis
 
 
-class OptimizableComprehension(NodeAnalysis):
+class OptimizableComprehension(NodeAnalysis[Identifiers]):
     """Find whether a comprehension can be optimized."""
-    def __init__(self):
-        self.result = set()
-        super(OptimizableComprehension, self).__init__(Identifiers)
+    ResultType = set
 
     def check_comprehension(self, iters):
         targets = {gen.target.id for gen in iters}

@@ -1,18 +1,23 @@
 #include <yt/yt/client/chaos_client/replication_card.h>
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
+#include <yt/yt/client/transaction_client/ts_literal.h>
+
 #include <yt/yt/core/test_framework/framework.h>
 
 namespace NYT::NChaosClient {
 namespace {
 
 using namespace NTabletClient;
+using namespace NTransactionClient;
 using namespace NYTree;
 using namespace NYson;
 
+using NTransactionClient::operator""_ts;
+
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationCardFetchOptionsTest
+class TReplicationCardFetchOptionsContainsTest
     : public ::testing::Test
     , public ::testing::WithParamInterface<std::tuple<
         TReplicationCardFetchOptions,
@@ -20,13 +25,12 @@ class TReplicationCardFetchOptionsTest
         bool>>
 { };
 
-TEST_P(TReplicationCardFetchOptionsTest, Contains)
+TEST_P(TReplicationCardFetchOptionsContainsTest, Contains)
 {
     const auto& params = GetParam();
     auto self = std::get<0>(params);
     auto& other = std::get<1>(params);
     auto expected = std::get<2>(params);
-
 
     EXPECT_EQ(self.Contains(other), expected)
         << "progress: " << std::get<0>(params) << std::endl
@@ -36,8 +40,8 @@ TEST_P(TReplicationCardFetchOptionsTest, Contains)
 }
 
 INSTANTIATE_TEST_SUITE_P(
-    TReplicationCardFetchOptionsTest,
-    TReplicationCardFetchOptionsTest,
+    TReplicationCardFetchOptionsContainsTest,
+    TReplicationCardFetchOptionsContainsTest,
     ::testing::Values(
         std::tuple(
             TReplicationCardFetchOptions {
@@ -94,8 +98,91 @@ INSTANTIATE_TEST_SUITE_P(
                 .IncludeHistory = true,
                 .IncludeReplicatedTableOptions = false,
             },
-            false)
-));
+            false)));
+
+class TReplicationCardFetchOptionsOrTest
+    : public ::testing::Test
+    , public ::testing::WithParamInterface<std::tuple<
+        TReplicationCardFetchOptions,
+        TReplicationCardFetchOptions,
+        TReplicationCardFetchOptions>>
+{ };
+
+TEST_P(TReplicationCardFetchOptionsOrTest, Or)
+{
+    const auto& params = GetParam();
+    auto self = std::get<0>(params);
+    auto& other = std::get<1>(params);
+    auto expected = std::get<2>(params);
+
+    EXPECT_EQ(self |= other, expected)
+        << "progress: " << std::get<0>(params) << std::endl
+        << "update: " << std::get<1>(params) << std::endl
+        << "expected: " << std::get<2>(params) << std::endl
+        << "actual: " << self.Contains(other) << std::endl;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    TReplicationCardFetchOptionsOrTest,
+    TReplicationCardFetchOptionsOrTest,
+    ::testing::Values(
+        std::tuple(
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = true,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = false,
+                .IncludeProgress = false,
+                .IncludeHistory = false,
+                .IncludeReplicatedTableOptions = false,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = true,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            }),
+        std::tuple(
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = true,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = true,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = true,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            }),
+        std::tuple(
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = false,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = false,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = false,
+                .IncludeProgress = false,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            },
+            TReplicationCardFetchOptions {
+                .IncludeCoordinators = false,
+                .IncludeProgress = true,
+                .IncludeHistory = true,
+                .IncludeReplicatedTableOptions = true,
+            })));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -140,7 +227,7 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = 0,
+                    .Timestamp = NullTimestamp,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -152,13 +239,13 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = 0,
+                    .Timestamp = NullTimestamp,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Disabled,
                 },
                 TReplicaHistoryItem{
                     .Era = 1,
-                    .Timestamp = 1,
+                    .Timestamp = 2_ts,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -170,7 +257,7 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = 0,
+                    .Timestamp = 1_ts,
                     .Mode = ETableReplicaMode::Async,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -182,7 +269,7 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = 0,
+                    .Timestamp = 1_ts,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Disabled,
                 }
@@ -192,8 +279,7 @@ INSTANTIATE_TEST_SUITE_P(
             ETableReplicaMode::Async,
             ETableReplicaState::Enabled,
             std::vector<TReplicaHistoryItem>(),
-            false)
-));
+            false)));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -219,7 +305,7 @@ public:
             .History = {
                 TReplicaHistoryItem{
                     .Era = 1,
-                    .Timestamp = 10ull << 30,
+                    .Timestamp = NYT::NTransactionClient::TTimestamp(10ull << 30),
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -235,7 +321,7 @@ public:
             .History = {
                 TReplicaHistoryItem{
                     .Era = 1,
-                    .Timestamp = 10ull << 30,
+                    .Timestamp = NYT::NTransactionClient::TTimestamp(10ull << 30),
                     .Mode = ETableReplicaMode::Async,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -266,13 +352,13 @@ public:
             .History = {
                 TReplicaHistoryItem{
                     .Era = 1,
-                    .Timestamp = 10ull << 30,
+                    .Timestamp = NYT::NTransactionClient::TTimestamp(10ull << 30),
                     .Mode = ETableReplicaMode::Async,
                     .State = ETableReplicaState::Enabled,
                 },
                 TReplicaHistoryItem{
                     .Era = 2,
-                    .Timestamp = 30ull << 30,
+                    .Timestamp = NYT::NTransactionClient::TTimestamp(30ull << 30),
                     .Mode = ETableReplicaMode::Async,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -288,7 +374,7 @@ public:
             .History = {
                 TReplicaHistoryItem{
                     .Era = 1,
-                    .Timestamp = 10ull << 30,
+                    .Timestamp = NYT::NTransactionClient::TTimestamp(10ull << 30),
                     .Mode = ETableReplicaMode::Async,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -324,8 +410,7 @@ INSTANTIATE_TEST_SUITE_P(
     TReplicationCardComputeReplicasLagTest,
     ::testing::Values(
         TReplicationCardComputeReplicasLagTest::CreateTestDataNormal1(),
-        TReplicationCardComputeReplicasLagTest::CreateTestDataLaggingSyncReplica()
-));
+        TReplicationCardComputeReplicasLagTest::CreateTestDataLaggingSyncReplica()));
 
 ////////////////////////////////////////////////////////////////////////////////
 

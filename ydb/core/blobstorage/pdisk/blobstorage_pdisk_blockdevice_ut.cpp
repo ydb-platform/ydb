@@ -8,7 +8,7 @@
 #include "blobstorage_pdisk_ut_defs.h"
 #include "blobstorage_pdisk_ut_helpers.h"
 
-#include <ydb/core/control/immediate_control_board_wrapper.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/util/random.h>
 
 #include <library/cpp/deprecated/atomic/atomic.h>

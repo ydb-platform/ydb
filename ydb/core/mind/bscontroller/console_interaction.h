@@ -22,6 +22,7 @@ namespace NKikimr::NBsController {
         void Start();
         void OnConfigCommit();
         void Stop();
+        void ProcessDryRunResponse(bool success, TString errorReason = {});
 
         void Handle(TEvBlobStorage::TEvControllerProposeConfigResponse::TPtr& ev);
         void Handle(TEvBlobStorage::TEvControllerConsoleCommitResponse::TPtr& ev);
@@ -33,6 +34,8 @@ namespace NKikimr::NBsController {
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& /*ev*/);
         void Handle(TEvBlobStorage::TEvGetBlockResult::TPtr& ev);
 
+        bool RequestIsBeingProcessed() const { return static_cast<bool>(ClientId); }
+
     private:
         TBlobStorageController& Self;
         TActorId ConsolePipe;
@@ -42,19 +45,31 @@ namespace NKikimr::NBsController {
         ui64 ExpectedValidationTimeoutCookie = 0;
         TBackoffTimer GetBlockBackoff{1, 1000};
         ui32 BlockedGeneration = 0;
-        bool NeedRetrySession = false;
         bool Working = false;
         bool CommitInProgress = false;
+        std::optional<bool> SwitchEnableConfigV2;
+        TEvBlobStorage::TEvControllerReplaceConfigRequest::TPtr PendingReplaceRequest;
+        std::optional<TAuditLogInfo> AuditLogInfo;
 
         std::optional<TString> PendingYamlConfig;
+        bool AllowUnknownFields = false;
+        bool IsDryRun = false;
         std::optional<std::optional<TString>> PendingStorageYamlConfig;
+        std::optional<ui64> ExpectedYamlConfigVersion;
+
+        struct TPendingCommitState {
+            std::optional<TYamlConfig> YamlConfig;
+            std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
+            std::optional<ui64> ExpectedStorageYamlConfigVersion;
+        };
+        std::optional<TPendingCommitState> PendingCommitState;
 
         void MakeCommitToConsole(TString& config, ui32 configVersion);
         void MakeGetBlock();
-        void MakeRetrySession();
+        void MaybeDisableConfigV2();
 
+        void CommitConfig();
         void IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus status,
-            std::optional<TString> errorReason = std::nullopt);
+            std::optional<TString> errorReason = std::nullopt, bool disabledConfigV2 = false);
     };
-
 }

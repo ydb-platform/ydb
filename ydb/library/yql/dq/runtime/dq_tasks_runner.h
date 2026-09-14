@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dq_tasks_counters.h"
+#include "dq_channel_service.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
@@ -12,13 +13,13 @@
 #include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling_counters.h>
+#include <ydb/library/yql/dq/runtime/streaming/dq_watermark_generator_tracker.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_node.h>
-#include <yql/essentials/minikql/mkql_watermark.h>
 
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
@@ -31,8 +32,16 @@ namespace NActors {
     class TActorSystem;
 };
 
+namespace NKikimr::NMiniKQL {
+struct TWatermark;
+} // namespace NKikimr::NMiniKQL
+
 namespace NYql::NDq {
 
+class TDqComputeActorWatermarks;
+
+// TBD: Add Running status and return PendingInput iff no data was consumed from inputs
+//      CA and KQP relies on PendingInput and require careful modifications
 enum class ERunStatus : ui32 {
     Finished,
     PendingInput,
@@ -44,15 +53,20 @@ struct TMkqlStat {
     i64 Value = 0;
 };
 
-struct TTaskRunnerStatsBase {
+struct TDqTaskRunnerStats {
     // basic stats
     TDuration BuildCpuTime;
-    TInstant FinishTs;
+    TInstant CreateTs;
     TInstant StartTs;
+    TInstant FinishTs;
 
     TDuration ComputeCpuTime;
+    TDuration WaitStartTime;
     TDuration WaitInputTime;
     TDuration WaitOutputTime;
+
+    TInstant CurrentWaitInputStartTime;
+    TInstant CurrentWaitOutputStartTime;
 
     ui64 SpillingComputeWriteBytes;
     ui64 SpillingChannelWriteBytes;
@@ -61,6 +75,13 @@ struct TTaskRunnerStatsBase {
     TDuration SpillingComputeWriteTime;
     TDuration SpillingChannelReadTime;
     TDuration SpillingChannelWriteTime;
+
+    ui64 InputWaitCount;
+    ui64 OutputWaitCount;
+    ui64 TotalInputsConsumed;
+    ui64 TotalOutputsProduced;
+
+    std::deque<std::pair<TInstant, TString>> ComputationLogBuffer;
 
     // profile stats
     NMonitoring::IHistogramCollectorPtr ComputeCpuTimeByRun; // in millis
@@ -72,23 +93,20 @@ struct TTaskRunnerStatsBase {
     TVector<TMkqlStat> MkqlStats;
     TVector<TOperatorStat> OperatorStat;
 
-    TTaskRunnerStatsBase() = default;
-    TTaskRunnerStatsBase(TTaskRunnerStatsBase&&) = default;
-    TTaskRunnerStatsBase& operator=(TTaskRunnerStatsBase&&) = default;
+    TDqTaskRunnerStats() = default;
+    TDqTaskRunnerStats(TDqTaskRunnerStats&&) = default;
+    TDqTaskRunnerStats& operator=(TDqTaskRunnerStats&&) = default;
 
-    virtual ~TTaskRunnerStatsBase() = default;
+    virtual ~TDqTaskRunnerStats() = default;
 };
 
-struct TDqTaskRunnerStats : public TTaskRunnerStatsBase {
-};
-
-// Provides read access to TTaskRunnerStatsBase
+// Provides read access to TDqTaskRunnerStats
 // May or may not own the underlying object
 class TDqTaskRunnerStatsView {
 public:
     TDqTaskRunnerStatsView() : IsDefined(false) {}
 
-    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats)   // used in TLocalTaskRunnerActor, cause it holds this stats, and does not modify it asyncronously from TDqAsyncComputeActor
+    TDqTaskRunnerStatsView(const TDqTaskRunnerStats* stats)   // used in TLocalTaskRunnerActor, cause it holds this stats, and does not modify it asynchronously from TDqAsyncComputeActor
         : StatsPtr(stats)
         , IsDefined(true) {
     }
@@ -102,7 +120,7 @@ public:
         , ActorElapsedTicks(actorElapsedTicks) {
     }
 
-    const TTaskRunnerStatsBase* Get() {
+    const TDqTaskRunnerStats* Get() {
         if (!IsDefined) {
             return nullptr;
         }
@@ -143,6 +161,7 @@ struct TDqTaskRunnerContext {
     NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> PatternCache;
+    std::shared_ptr<IDqChannelService> ChannelService;
 };
 
 class IDqTaskRunnerExecutionContext {
@@ -215,10 +234,20 @@ struct TDqTaskRunnerMemoryLimits {
     ui32 ChannelBufferSize = 0;
     ui32 OutputChunkMaxSize = 0;
     ui32 ChunkSizeLimit = 48_MB;
+    TMaybe<ui8> ArrayBufferMinFillPercentage;
+    TMaybe<size_t> BufferPageAllocSize;
+    IMemoryQuotaManager::TPtr ChannelQuotaManager;
 };
 
-NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
-    TVector<IDqInputChannel::TPtr>&& channels, const NKikimr::NMiniKQL::THolderFactory& holderFactory, NUdf::IPgBuilder* pgBuilder);
+NUdf::TUnboxedValue DqBuildInputValue(
+    const NDqProto::TTaskInput& inputDesc,
+    const NKikimr::NMiniKQL::TType* type,
+    TVector<IDqInputChannel::TPtr>&& channels,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    NUdf::IPgBuilder* pgBuilder,
+    NKikimr::NMiniKQL::TWatermark* watermark = nullptr,
+    TDqComputeActorWatermarks* watermarksTracker = nullptr
+);
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NKikimr::NMiniKQL::TType* type,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
@@ -261,7 +290,8 @@ public:
             Task_ = HeapTask_.get();
             Y_ABORT_UNLESS(!task.Arena);
         } else {
-            Y_ABORT("not allowed to copy dq settings for arena allocated messages.");
+            Task_ = task.GetTask();
+            Arena = const_cast<TIntrusivePtr<NActors::TProtoArenaHolder>&>(task.GetArena());
         }
     }
 
@@ -277,6 +307,12 @@ public:
         Y_ABORT_UNLESS(!ParamProvider, "GetSerialized isn't supported if external ParamProvider callback is specified!");
         return *Task_;
     }
+
+    NDqProto::TDqTask* GetTask() const {
+        Y_ABORT_UNLESS(Arena);
+        return Task_;
+    }
+
 
     const ::NYql::NDqProto::TTaskInput& GetInputs(size_t index) const {
         return Task_->GetInputs(index);
@@ -319,7 +355,7 @@ public:
     }
 
     bool EnableMetering() const {
-        return Task_->GetEnableMetering();
+        return !Task_->GetDisableMetering();
     }
 
     ui64 GetStageId() const {
@@ -332,6 +368,10 @@ public:
 
     const TProtoStringType & GetRateLimiterResource() const {
         return Task_->GetRateLimiterResource();
+    }
+
+    const TProtoStringType& GetRateLimiterDatabase() const {
+        return Task_->GetRateLimiterDatabase();
     }
 
     const TProtoStringType& GetRateLimiter() const {
@@ -394,6 +434,14 @@ public:
         return Task_->HasEnableSpilling() && Task_->GetEnableSpilling();
     }
 
+    NYql::NDqProto::EValuePackerVersion GetValuePackerVersion() const {
+        return Task_->GetValuePackerVersion();
+    }
+
+    ui32 GetDqChannelVersion() const {
+        return Task_->GetDqChannelVersion();
+    }
+
 private:
 
     // external callback to retrieve parameter value.
@@ -411,7 +459,10 @@ public:
     virtual ui64 GetTaskId() const = 0;
 
     virtual void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx) = 0;
+        const IDqTaskRunnerExecutionContext& execCtx,
+        TDqComputeActorWatermarks* watermarksTracker = nullptr,
+        TDqWatermarkGeneratorTracker* sourceWatermarksTracker = nullptr
+    ) = 0;
     virtual ERunStatus Run() = 0;
 
     virtual bool HasEffects() const = 0;
@@ -421,6 +472,7 @@ public:
     virtual IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
     virtual IDqAsyncOutputBuffer::TPtr GetSink(ui64 outputIndex) = 0;
     virtual std::optional<std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr>> GetInputTransform(ui64 inputIndex) = 0;
+    virtual TDqComputeActorWatermarks *GetInputTransformWatermarksTracker(ui64 inputId) = 0;
     virtual std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 outputIndex) = 0;
 
     virtual IRandomProvider* GetRandomProvider() const = 0;
@@ -449,6 +501,10 @@ public:
     virtual const NKikimr::NMiniKQL::TWatermark& GetWatermark() const = 0;
 
     virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
+    virtual TString GetOutputDebugString() = 0;
+    TInstant LastFetchTime;
+    ERunStatus LastFetchStatus = ERunStatus::PendingInput;
+
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
@@ -461,8 +517,8 @@ TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(
 } // namespace NYql::NDq
 
 template <>
-inline void Out<NYql::NDq::TTaskRunnerStatsBase>(IOutputStream& os, TTypeTraits<NYql::NDq::TTaskRunnerStatsBase>::TFuncParam stats) {
-    os << "TTaskRunnerStatsBase:" << Endl
+inline void Out<NYql::NDq::TDqTaskRunnerStats>(IOutputStream& os, TTypeTraits<NYql::NDq::TDqTaskRunnerStats>::TFuncParam stats) {
+    os << "TDqTaskRunnerStats:" << Endl
        << "\tBuildCpuTime: " << stats.BuildCpuTime << Endl
        << "\tStartTs: " << stats.StartTs << Endl
        << "\tFinishTs: " << stats.FinishTs << Endl

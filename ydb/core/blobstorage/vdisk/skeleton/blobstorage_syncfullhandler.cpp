@@ -4,6 +4,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCJOB
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -12,141 +14,267 @@ namespace NKikimr {
     // TVSyncFullHandler -- this actor starts on handling TEvVSyncFull requst.
     // It receives last lsn from sync log to make a snapshot of hull database.
     // This actor must be run on the same mailbox as TSkeleton
+    // This actor creates THullSyncFull actor to be run on a different mailbox
     ////////////////////////////////////////////////////////////////////////////
     class TVSyncFullHandler : public TActorBootstrapped<TVSyncFullHandler> {
         TIntrusivePtr<TDb> Db;
         TIntrusivePtr<THullCtx> HullCtx;
-        const TVDiskID SelfVDiskId;
+        TVDiskID SelfVDiskId;
         const TActorId ParentId;
+        const TActorId SyncLogActorId;
         std::shared_ptr<THull> Hull;
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
-        TEvBlobStorage::TEvVSyncFull::TPtr Ev;
-        const NKikimrBlobStorage::TEvVSyncFull &Record;
-        const TVDiskID SourceVDisk;
-        const TVDiskID TargetVDisk;
-        const TInstant Now;
+        std::shared_ptr<NMonGroup::TFullSyncGroup> FullSyncGroup;
         const ui64 DbBirthLsn;
-        const ui64 ConfirmedLsn;
-        TActiveActors ActiveActors;
 
-        // FIXME: rewrite TVSyncFullHandler, use single snapshot for this task,
-        //        generate multiple messages per request
-        // NOTE:  multiple snapshots can lead to case when we
-        //        1. synced blob B with snaphsot Lsn=X
-        //        2. synced barriers database with snaphot Lsn=Y, it contained GC command
-        //           with Lsn=Z, so that X < Z < Y. GC command also had Keep flag for B
-        //        => we deleted B, because it can be collected
+        using TSessionKey = std::pair<TVDiskID, TVDiskID>; // { SourceVDisk, TargetVDisk }
+        THashMap<TSessionKey, TActorId> UnorderedDataFullSyncSessions;
+        THashMap<TActorId, TSessionKey> UnorderedDataFullSyncSessionLookup;
 
         friend class TActorBootstrapped<TVSyncFullHandler>;
 
-        void Bootstrap(const TActorContext &ctx) {
-            IFaceMonGroup->SyncFullMsgs()++;
+        struct TEventInfo {
+            TEventInfo(TEvBlobStorage::TEvVSyncFull::TPtr& ev, bool enablePhantomFlagStorage)
+                : Event(ev)
+                , Record(ev->Get()->Record)
+                , SourceVDisk(VDiskIDFromVDiskID(Record.GetSourceVDiskID()))
+                , TargetVDisk(VDiskIDFromVDiskID(Record.GetTargetVDiskID()))
+                , SessionKey(SourceVDisk, TargetVDisk)
+                , ClientSyncState(SyncStateFromSyncState(Record.GetSyncState()))
+                , Protocol(enablePhantomFlagStorage
+                        ? ev->Get()->GetProtocol()
+                        : NKikimrBlobStorage::EFullSyncProtocol::Legacy)
+                , Now(TActivationContext::Now())
+            {}
 
-            TActorId recipient = Ev->Sender;
-            const ui64 cookie = Ev->Cookie;
-            TSyncState clientSyncState(SyncStateFromSyncState(Record.GetSyncState()));
+            TEvBlobStorage::TEvVSyncFull::TPtr& Event;
+            const NKikimrBlobStorage::TEvVSyncFull& Record;
+            const TVDiskID SourceVDisk;
+            const TVDiskID TargetVDisk;
+            TSessionKey SessionKey;
+            TSyncState ClientSyncState;
 
-            LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
-                    << "TVSyncFullHandler: Bootstrap: fromVDisk# "
-                    << VDiskIDFromVDiskID(Record.GetSourceVDiskID())
-                    << " fromSyncState# " << clientSyncState.ToString()
-                    << " Marker# BSVSFH01");
+            NKikimrBlobStorage::EFullSyncProtocol Protocol;
 
+            TInstant Now;
+        };
 
+        void RespondWithErroneousStatus(const TEventInfo& evInfo, TSyncState syncState,
+                    NKikimrProto::EReplyStatus status) {
+            auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(status, SelfVDiskId,
+                    syncState, evInfo.Record.GetCookie(), evInfo.Now,
+                    IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, evInfo.Event->GetChannel(),
+                    evInfo.Protocol);
+            SendVDiskResponse(TActivationContext::AsActorContext(), evInfo.Event->Sender, result.release(),
+                    evInfo.Event->Cookie, HullCtx->VCtx, {});
+        }
+
+        bool CheckEvent(const TEventInfo& evInfo) {
             // check that the disk is from this group
-            if (!SelfVDiskId.SameGroupAndGeneration(SourceVDisk) ||
-                !SelfVDiskId.SameDisk(TargetVDisk)) {
-                auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::ERROR, SelfVDiskId,
-                    Record.GetCookie(), Now, IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, Ev->GetChannel());
-                SendVDiskResponse(ctx, recipient, result.release(), cookie, HullCtx->VCtx);
-                Die(ctx);
-                return;
+            if (!SelfVDiskId.SameGroupAndGeneration(evInfo.SourceVDisk) ||
+                    !SelfVDiskId.SameDisk(evInfo.TargetVDisk)) {
+                YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler: Invalid VDisk ids",
+                    {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                    {"selfVDiskId", SelfVDiskId},
+                    {"sorceVDiskId", evInfo.SourceVDisk},
+                    {"targetVDiskId", evInfo.TargetVDisk},
+                    {"marker", "BSVSFH07"});
+                RespondWithErroneousStatus(evInfo, {}, NKikimrProto::ERROR);
+                return false;
             }
 
             // check disk guid and start from the beginning if it has changed
-            if (Db->GetVDiskIncarnationGuid() != clientSyncState.Guid) {
-                LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
-                        << "TVSyncFullHandler: GUID CHANGED;"
-                        << " SourceVDisk# " << SourceVDisk
-                        << " DbBirthLsn# " << DbBirthLsn
-                        << " Marker# BSVSFH02");
-                auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::NODATA, SelfVDiskId,
-                    TSyncState(Db->GetVDiskIncarnationGuid(), DbBirthLsn), Record.GetCookie(), Now,
-                    IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, Ev->GetChannel());
-                SendVDiskResponse(ctx, recipient, result.release(), cookie, HullCtx->VCtx);
-                Die(ctx);
+            TVDiskIncarnationGuid incarnationGuid = Db->GetVDiskIncarnationGuid();
+            if (incarnationGuid != evInfo.ClientSyncState.Guid) {
+                YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler: GUID CHANGED;",
+                    {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                    {"sourceVDisk", evInfo.SourceVDisk},
+                    {"dbBirthLsn", DbBirthLsn},
+                    {"VDiskIncarnationGuid", incarnationGuid},
+                    {"clientGuid", evInfo.ClientSyncState.Guid},
+                    {"marker", "BSVSFH02"});
+                RespondWithErroneousStatus(evInfo, TSyncState(incarnationGuid, DbBirthLsn), NKikimrProto::NODATA);
+                return false;
+            }
+
+            Y_VERIFY_DEBUG_S(evInfo.SourceVDisk != SelfVDiskId, HullCtx->VCtx->VDiskLogPrefix);
+
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler",
+                {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                {"syncedLsn", evInfo.ClientSyncState.SyncedLsn},
+                {"sourceVDisk", evInfo.SourceVDisk},
+                {"targetVDisk", evInfo.TargetVDisk},
+                {"marker", "BSVSFH90"});
+            return true;
+        }
+
+        void Bootstrap() {
+            Become(&TThis::StateFunc);
+
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler: Bootstrap",
+                {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                {"selfVDiskId", SelfVDiskId},
+                {"marker", "BSVSFH01"});
+        }
+
+        void CreateActorForLegacyProtocol(const TEventInfo& evInfo, TSyncState syncState) {
+            // parse stage and keys
+            const NKikimrBlobStorage::ESyncFullStage stage = evInfo.Record.GetStage();
+            const TLogoBlobID logoBlobFrom = LogoBlobIDFromLogoBlobID(evInfo.Record.GetLogoBlobFrom());
+            const ui64 blockTabletFrom = evInfo.Record.GetBlockTabletFrom();
+            const TKeyBarrier barrierFrom(evInfo.Record.GetBarrierFrom());
+
+            Register(CreateHullSyncFullActorLegacyProtocol(
+                    Db->Config,
+                    HullCtx,
+                    SelfId(),
+                    Hull->GetIndexSnapshot(),
+                    syncState,
+                    SelfVDiskId,
+                    IFaceMonGroup,
+                    FullSyncGroup,
+                    evInfo.Event,
+                    TKeyLogoBlob(logoBlobFrom),
+                    TKeyBlock(blockTabletFrom),
+                    barrierFrom,
+                    stage));
+        }
+
+        void HandleInitialEventLegacyProtocol(const TEventInfo& evInfo) {
+            // this is the first message, so after full sync source node
+            // will be synced by lsn obtained from SyncLog
+            TSyncState newSyncState(Db->GetVDiskIncarnationGuid(),
+                    Db->LsnMngr->GetConfirmedLsnForSyncLog());
+            CreateActorForLegacyProtocol(evInfo, newSyncState);
+        }
+
+        void HandleConsequentEventLegacyProtocol(const TEventInfo& evInfo) {
+            TSyncState clientSyncState(SyncStateFromSyncState(evInfo.Record.GetSyncState()));
+            CreateActorForLegacyProtocol(evInfo, clientSyncState);
+        }
+
+        void HandleInitialEventUnorderedDataProtocol(const TEventInfo& evInfo) {
+            TSyncState newSyncState(Db->GetVDiskIncarnationGuid(),
+                    Db->LsnMngr->GetConfirmedLsnForSyncLog());
+
+            DeleteUnorderedDataSession(evInfo.SessionKey);
+
+            TActorId actorId = Register(CreateHullSyncFullActorUnorderedDataProtocol(
+                    Db->Config,
+                    HullCtx,
+                    SelfId(),
+                    SyncLogActorId,
+                    Hull->GetIndexSnapshot(),
+                    newSyncState,
+                    SelfVDiskId,
+                    IFaceMonGroup,
+                    FullSyncGroup,
+                    evInfo.Event));
+
+            UnorderedDataFullSyncSessions[evInfo.SessionKey] = actorId;
+            UnorderedDataFullSyncSessionLookup[actorId] = evInfo.SessionKey;
+        }
+
+        void HandleConsequentEventUnorderedDataProtocol(const TEventInfo& evInfo) {
+            auto it = UnorderedDataFullSyncSessions.find(evInfo.SessionKey);
+            if (it == UnorderedDataFullSyncSessions.end()) {
+                // no session found
+                // either protocol violation, or race on generation change
+                RespondWithErroneousStatus(evInfo, {}, NKikimrProto::ERROR);
+            } else {
+                Send(evInfo.Event->Forward(it->second));
+            }
+        }
+
+        void DeleteUnorderedDataSession(const TSessionKey& sessionKey) {
+            auto it1 = UnorderedDataFullSyncSessions.find(sessionKey);
+            if (it1 != UnorderedDataFullSyncSessions.end()) {
+                // Recipient demanded fullsync restart, kill existing actor
+                TActorId actorId = it1->second;
+                Send(actorId, new TEvents::TEvPoisonPill);
+                UnorderedDataFullSyncSessions.erase(it1);
+                bool erased = UnorderedDataFullSyncSessionLookup.erase(actorId);
+                Y_VERIFY(erased);
+            }
+        }
+
+        void Handle(TEvents::TEvGone::TPtr& ev) {
+            auto it1 = UnorderedDataFullSyncSessionLookup.find(ev->Sender);
+            if (it1 != UnorderedDataFullSyncSessionLookup.end()) {
+                TSessionKey sessionKey = it1->second;
+                bool erased = UnorderedDataFullSyncSessions.erase(sessionKey);
+                Y_VERIFY(erased);
+                UnorderedDataFullSyncSessionLookup.erase(it1);
+            }
+        }
+
+        void TerminateAllUnorderedDataSessions() {
+            for (const auto& [_, actorId] : UnorderedDataFullSyncSessions) {
+                Send(actorId, new TEvents::TEvPoisonPill);
+            }
+            UnorderedDataFullSyncSessionLookup.clear();
+            UnorderedDataFullSyncSessions.clear();
+        }
+
+        void HandlePoison() {
+            TerminateAllUnorderedDataSessions();
+            PassAway();
+        }
+
+        void Handle(TEvBlobStorage::TEvVSyncFull::TPtr& ev) {
+            TEventInfo evInfo(ev, HullCtx->VCfg->EnablePhantomFlagStorage);
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler: Handle TEvVSyncFull, From",
+                {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                {"ev", ev->ToString()},
+                {"syncState", evInfo.ClientSyncState},
+                {"marker", "BSVSFH04"});
+
+            IFaceMonGroup->SyncFullMsgs()++;
+
+            if (!CheckEvent(evInfo)) {
+                YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "TVSyncFullHandler: TEvVSyncFull event discarded,",
+                    {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
+                    {"marker", "BSVSFH05"});
                 return;
             }
 
-            Y_DEBUG_ABORT_UNLESS(SourceVDisk != SelfVDiskId);
+            switch (evInfo.Protocol) {
+                case NKikimrBlobStorage::EFullSyncProtocol::Legacy: {
+                    if (ev->Get()->IsInitial()) {
+                        HandleInitialEventLegacyProtocol(evInfo);
+                    } else {
+                        HandleConsequentEventLegacyProtocol(evInfo);
+                    }
+                    break;
 
-            Run(ctx, clientSyncState);
-        }
+                }
+                case NKikimrBlobStorage::EFullSyncProtocol::UnorderedData:
+                    if (ev->Get()->IsInitial()) {
+                        HandleInitialEventUnorderedDataProtocol(evInfo);
+                    } else {
+                        HandleConsequentEventUnorderedDataProtocol(evInfo);
+                    }
+                    break;
+                default:
+                    // unknown protocol, respond with erroneous status
+                    RespondWithErroneousStatus(evInfo, {}, NKikimrProto::ERROR);
 
-        // ask Hull to create a snapshot and to run a job
-        void Run(const TActorContext &ctx, const TSyncState &clientSyncState) {
-            ui64 syncedLsn = 0;
-            if (Ev->Get()->IsInitial()) {
-                // this is the first message, so after full sync source node
-                // will be synced by lsn obtained from SyncLog
-                syncedLsn = Db->LsnMngr->GetConfirmedLsnForSyncLog();
-            } else {
-                // use old lsn from previous messages
-                syncedLsn = clientSyncState.SyncedLsn;
             }
-
-            // parse stage and keys
-            TActorId recipient = Ev->Sender;
-            const NKikimrBlobStorage::ESyncFullStage stage = Record.GetStage();
-            const TLogoBlobID logoBlobFrom = LogoBlobIDFromLogoBlobID(Record.GetLogoBlobFrom());
-            const ui64 blockTabletFrom = Record.GetBlockTabletFrom();
-            const TKeyBarrier barrierFrom(Record.GetBarrierFrom());
-
-            TSyncState newSyncState(Db->GetVDiskIncarnationGuid(), syncedLsn);
-            auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::OK, SelfVDiskId,
-                newSyncState, Record.GetCookie(), Now, IFaceMonGroup->SyncFullResMsgsPtr(), nullptr,
-                Ev->GetChannel());
-
-            // snapshotLsn is _always_ the last confirmed lsn
-            THullDsSnap fullSnap = Hull->GetIndexSnapshot();
-            LOG_DEBUG_S(ctx, BS_SYNCJOB, Db->VCtx->VDiskLogPrefix
-                    << "TVSyncFullHandler: ourConfirmedLsn# " << ConfirmedLsn
-                    << " syncedLsn# " << syncedLsn
-                    << " SourceVDisk# " << SourceVDisk
-                    << " Marker# BSVSFH03");
-
-            IActor *actor = CreateHullSyncFullActor(
-                Db->Config,
-                HullCtx,
-                ctx.SelfID,
-                SourceVDisk,
-                recipient,
-                std::move(fullSnap),
-                TKeyLogoBlob(logoBlobFrom),
-                TKeyBlock(blockTabletFrom),
-                barrierFrom,
-                stage,
-                std::move(result));
-            auto aid = ctx.Register(actor);
-            ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
-            Become(&TThis::StateFunc);
         }
 
-        void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
-            ActiveActors.Erase(ev->Sender);
-            ctx.Send(ParentId, new TEvents::TEvActorDied);
-            Die(ctx);
+
+        void Handle(const TEvVGenerationChange::TPtr& ev) {
+            SelfVDiskId = ev->Get()->NewVDiskId;
+            // We must restart all fullsync sessions when VDisk generation changes
+            TerminateAllUnorderedDataSessions();
         }
 
-        void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            ActiveActors.KillAndClear(ctx);
-            Die(ctx);
-        }
 
         STRICT_STFUNC(StateFunc,
-            HFunc(TEvents::TEvActorDied, Handle)
-            HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            hFunc(TEvents::TEvGone, Handle)
+            cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
+            hFunc(TEvVGenerationChange, Handle)
+            hFunc(TEvBlobStorage::TEvVSyncFull, Handle)
         )
 
     public:
@@ -158,28 +286,24 @@ namespace NKikimr {
                           const TIntrusivePtr<THullCtx> &hullCtx,
                           const TVDiskID &selfVDiskId,
                           const TActorId &parentId,
+                          const TActorId& syncLogActorId,
                           const std::shared_ptr<THull> &hull,
                           const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
-                          TEvBlobStorage::TEvVSyncFull::TPtr &ev,
-                          const TInstant &now,
-                          ui64 dbBirthLsn,
-                          ui64 confirmedLsn)
+                          const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
+                          ui64 dbBirthLsn)
             : TActorBootstrapped<TVSyncFullHandler>()
             , Db(db)
             , HullCtx(hullCtx)
             , SelfVDiskId(selfVDiskId)
             , ParentId(parentId)
+            , SyncLogActorId(syncLogActorId)
             , Hull(hull)
             , IFaceMonGroup(ifaceMonGroup)
-            , Ev(ev)
-            , Record(Ev->Get()->Record)
-            , SourceVDisk(VDiskIDFromVDiskID(Record.GetSourceVDiskID()))
-            , TargetVDisk(VDiskIDFromVDiskID(Record.GetTargetVDiskID()))
-            , Now(now)
+            , FullSyncGroup(fullSyncGroup)
             , DbBirthLsn(dbBirthLsn)
-            , ConfirmedLsn(confirmedLsn)
         {}
     };
+
 
     ////////////////////////////////////////////////////////////////////////////
     // CreateHullSyncFullHandler
@@ -190,14 +314,13 @@ namespace NKikimr {
                                       const TIntrusivePtr<THullCtx> &hullCtx,
                                       const TVDiskID &selfVDiskId,
                                       const TActorId &parentId,
+                                      const TActorId& syncLogActorId,
                                       const std::shared_ptr<THull> &hull,
                                       const std::shared_ptr<NMonGroup::TVDiskIFaceGroup> &ifaceMonGroup,
-                                      TEvBlobStorage::TEvVSyncFull::TPtr &ev,
-                                      const TInstant &now,
-                                      ui64 dbBirthLsn,
-                                      ui64 confirmedLsn) {
-        return new TVSyncFullHandler(db, hullCtx, selfVDiskId, parentId, hull, ifaceMonGroup, ev, now, dbBirthLsn,
-                confirmedLsn);
+                                      const std::shared_ptr<NMonGroup::TFullSyncGroup>& fullSyncGroup,
+                                      ui64 dbBirthLsn) {
+        return new TVSyncFullHandler(db, hullCtx, selfVDiskId, parentId, syncLogActorId, hull,
+                    ifaceMonGroup, fullSyncGroup, dbBirthLsn);
     }
 
 

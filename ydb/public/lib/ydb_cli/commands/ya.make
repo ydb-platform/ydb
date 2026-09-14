@@ -10,13 +10,18 @@ SRCS(
     topic_read_scenario.cpp
     topic_write_scenario.cpp
     topic_readwrite_scenario.cpp
-    query_workload.cpp
     ydb_admin.cpp
     ydb_benchmark.cpp
+    ydb_bridge.cpp
     ydb_cluster.cpp
+    ydb_database_attribute.cpp
+    ydb_config.cpp
     ydb_debug.cpp
+    ydb_diagnostics.cpp
+    ydb_diagnostics.h
     ydb_dynamic_config.cpp
     ydb_latency.cpp
+    ydb_node_config.cpp
     ydb_ping.cpp
     ydb_profile.cpp
     ydb_root_common.cpp
@@ -31,40 +36,45 @@ SRCS(
     ydb_service_table.cpp
     ydb_sql.cpp
     ydb_storage_config.cpp
+    ydb_tools_infer.cpp
     ydb_tools.cpp
     ydb_workload.cpp
     ydb_workload_import.cpp
+    ydb_workload_testshard.cpp
+    ydb_workload_tpcc.cpp
     ydb_yql.cpp
 )
 
 PEERDIR(
     contrib/libs/fmt
+    contrib/restricted/patched/replxx
     library/cpp/histogram/hdr
     library/cpp/protobuf/json
     library/cpp/regex/pcre
     library/cpp/threading/local_executor
+    ydb/library/arrow_inference
     ydb/library/backup
     ydb/library/formats/arrow/csv/table
     ydb/library/workload
     ydb/library/yaml_config/public
-    yql/essentials/public/decimal
-    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/library/yverify_stream
     ydb/public/lib/stat_visualization
-    ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/commands/command_base
     ydb/public/lib/ydb_cli/commands/interactive
+    ydb/public/lib/ydb_cli/commands/sdk_core_access
     ydb/public/lib/ydb_cli/commands/topic_workload
     ydb/public/lib/ydb_cli/commands/transfer_workload
     ydb/public/lib/ydb_cli/commands/ydb_discovery
-    ydb/public/lib/ydb_cli/commands/sdk_core_access
+    ydb/public/lib/ydb_cli/common
     ydb/public/lib/ydb_cli/dump
     ydb/public/lib/ydb_cli/dump/files
     ydb/public/lib/ydb_cli/import
     ydb/public/lib/ydb_cli/topic
-    ydb/public/sdk/cpp/src/client/draft
-    ydb/public/sdk/cpp/src/client/bsconfig
+    ydb/public/sdk/cpp/src/client/cms
+    ydb/public/sdk/cpp/src/client/config
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/debug
+    ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/export
     ydb/public/sdk/cpp/src/client/import
     ydb/public/sdk/cpp/src/client/monitoring
@@ -73,11 +83,21 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/test_shard
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types/credentials/login
+    ydb/public/sdk/cpp/src/library/operation_id
+    yql/essentials/public/decimal
 )
 
-GENERATE_ENUM_SERIALIZATION(ydb_benchmark.h)
+IF (NOT OS_WINDOWS)
+PEERDIR(
+    ydb/core/base
+    ydb/public/lib/ydb_cli/commands/sqs_workload
+)
+ENDIF()
+
+GENERATE_ENUM_SERIALIZATION(tx_mode.h)
 GENERATE_ENUM_SERIALIZATION(ydb_ping.h)
 GENERATE_ENUM_SERIALIZATION(ydb_latency.h)
 
@@ -90,4 +110,14 @@ RECURSE(
     topic_workload
     transfer_workload
     ydb_discovery
+)
+
+IF (NOT OS_WINDOWS)
+RECURSE(
+    sqs_workload
+)
+ENDIF()
+
+RECURSE_FOR_TESTS(
+    ut
 )

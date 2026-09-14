@@ -72,7 +72,7 @@ NPY_NO_EXPORT int NPY_NUMUSERTYPES = 0;
  **                    INCLUDE GENERATED CODE                               **
  *****************************************************************************
  */
-#include "funcs.inc"
+#include "contrib/python/numpy/py2/numpy/core/src/umath/funcs.inc"
 #include "umathmodule.h"
 
 NPY_NO_EXPORT int initscalarmath(PyObject *);
@@ -4272,7 +4272,7 @@ static struct PyMethodDef array_module_methods[] = {
     {NULL, NULL, 0, NULL}                /* sentinel */
 };
 
-#include "__multiarray_api.c"
+#include "contrib/python/numpy/py2/numpy/core/include/numpy/__multiarray_api.c"
 
 /* Establish scalar-type hierarchy
  *

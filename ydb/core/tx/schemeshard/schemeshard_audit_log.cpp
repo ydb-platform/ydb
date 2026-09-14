@@ -1,22 +1,22 @@
-#include <util/string/vector.h>
+#include "schemeshard_audit_log.h"
+
+#include "schemeshard_audit_log_fragment.h"
+#include "schemeshard_impl.h"
+#include "schemeshard_path.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#include <ydb/core/audit/audit_log.h>
+#include <ydb/core/protos/export.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/import.pb.h>
+#include <ydb/core/util/address_classifier.h>
+
 #include <ydb/library/actors/http/http.h>
 
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/core/protos/export.pb.h>
-#include <ydb/core/protos/import.pb.h>
-
-#include <ydb/core/util/address_classifier.h>
-#include <ydb/core/audit/audit_log.h>
-
-#include "schemeshard_path.h"
-#include "schemeshard_impl.h"
-#include "schemeshard_xxport__helpers.h"
-#include "schemeshard_audit_log_fragment.h"
-#include "schemeshard_audit_log.h"
+#include <util/string/vector.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -48,6 +48,21 @@ TString RenderList(const TVector<TString>& list) {
     return result;
 }
 
+TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) {
+    auto databasePath = TPath::Resolve(opWorkingDir, SS);
+    if (!databasePath.IsResolved()) {
+        databasePath.RiseUntilFirstResolvedParent();
+    }
+    //NOTE: operation working dir is usually set to a path of some database/subdomain,
+    // so the next lines is only a safety measure
+    if (!databasePath.IsEmpty() && !databasePath->IsDomainRoot()) {
+        databasePath = TPath::Init(databasePath.GetPathIdForDomain(), SS);
+    }
+    return databasePath;
+}
+
+} // anonymous namespace
+
 std::tuple<TString, TString, TString> GetDatabaseCloudIds(const TPath &databasePath) {
     if (databasePath.IsEmpty()) {
         return {};
@@ -66,20 +81,25 @@ std::tuple<TString, TString, TString> GetDatabaseCloudIds(const TPath &databaseP
     );
 }
 
-TPath DatabasePathFromWorkingDir(TSchemeShard* SS, const TString &opWorkingDir) {
-    auto databasePath = TPath::Resolve(opWorkingDir, SS);
-    if (!databasePath.IsResolved()) {
-        databasePath.RiseUntilFirstResolvedParent();
+TPath DatabasePathFromModifySchemeOperation(TSchemeShard* SS, const NKikimrSchemeOp::TModifyScheme& operation) {
+    if (operation.GetWorkingDir().empty()) {
+        // Moving operations does not have working directory. It is valid to take src or dst as directory for database
+        if (operation.HasMoveTable()) {
+            return DatabasePathFromWorkingDir(SS, operation.GetMoveTable().GetSrcPath());
+        }
+        if (operation.HasMoveSequence()) {
+            return DatabasePathFromWorkingDir(SS, operation.GetMoveSequence().GetSrcPath());
+        }
+        if (operation.HasMoveIndex()) {
+            return DatabasePathFromWorkingDir(SS, operation.GetMoveIndex().GetTablePath());
+        }
+        if (operation.HasMoveTableIndex()) {
+            return DatabasePathFromWorkingDir(SS, operation.GetMoveTableIndex().GetSrcPath());
+        }
     }
-    //NOTE: operation working dir is usually set to a path of some database/subdomain,
-    // so the next lines is only a safety measure
-    if (!databasePath.IsEmpty() && !databasePath->IsDomainRoot()) {
-        databasePath = TPath::Init(databasePath.GetPathIdForDomain(), SS);
-    }
-    return databasePath;
-}
 
-}  // anonymous namespace
+    return DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
+}
 
 void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operation,
                                    NKikimrScheme::EStatus status, const TString& reason, TSchemeShard* SS,
@@ -87,7 +107,7 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
                                    ui64 txId, const TParts& additionalParts) {
     auto logEntry = MakeAuditLogFragment(operation);
 
-    TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
+    TPath databasePath = DatabasePathFromModifySchemeOperation(SS, operation);
     auto [cloud_id, folder_id, database_id] = GetDatabaseCloudIds(databasePath);
     auto address = NKikimr::NAddressClassifier::ExtractAddress(peerName);
 
@@ -108,9 +128,9 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
             AUDIT_PART(name, (!value.empty() ? value : EmptyValue))
         }
 
-        AUDIT_PART("cloud_id", cloud_id, !cloud_id.empty());
-        AUDIT_PART("folder_id", folder_id, !folder_id.empty());
-        AUDIT_PART("resource_id", database_id, !database_id.empty());
+        AUDIT_PART("cloud_id", cloud_id, !cloud_id.empty())
+        AUDIT_PART("folder_id", folder_id, !folder_id.empty())
+        AUDIT_PART("resource_id", database_id, !database_id.empty())
 
         // Additionally:
 
@@ -120,27 +140,29 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
         // 1. explicit operation ESchemeOpModifyACL -- to modify ACL on a path
         // 2. ESchemeOpMkDir or ESchemeOpCreate* operations -- to set rights to newly created paths/entities
         // 3. ESchemeOpCopyTable -- to be checked against acl size limit, not to be applied in any way
-        AUDIT_PART("new_owner", logEntry.NewOwner, !logEntry.NewOwner.empty());
-        AUDIT_PART("acl_add", RenderList(logEntry.ACLAdd), !logEntry.ACLAdd.empty());
-        AUDIT_PART("acl_remove", RenderList(logEntry.ACLRemove), !logEntry.ACLRemove.empty());
+        AUDIT_PART("new_owner", logEntry.NewOwner, !logEntry.NewOwner.empty())
+        AUDIT_PART("acl_add", RenderList(logEntry.ACLAdd), !logEntry.ACLAdd.empty())
+        AUDIT_PART("acl_remove", RenderList(logEntry.ACLRemove), !logEntry.ACLRemove.empty())
 
         // AlterUserAttributes.
         // 1. explicit operation ESchemeOpAlterUserAttributes -- to modify user attributes on a path
         // 2. ESchemeOpMkDir or some ESchemeOpCreate* operations -- to set user attributes for newly created paths/entities
-        AUDIT_PART("user_attrs_add", RenderList(logEntry.UserAttrsAdd), !logEntry.UserAttrsAdd.empty());
-        AUDIT_PART("user_attrs_remove", RenderList(logEntry.UserAttrsRemove), !logEntry.UserAttrsRemove.empty());
+        AUDIT_PART("user_attrs_add", RenderList(logEntry.UserAttrsAdd), !logEntry.UserAttrsAdd.empty())
+        AUDIT_PART("user_attrs_remove", RenderList(logEntry.UserAttrsRemove), !logEntry.UserAttrsRemove.empty())
 
         // AlterLogin.
         // explicit operation ESchemeOpAlterLogin -- to modify user and groups
-        AUDIT_PART("login_user", logEntry.LoginUser);
-        AUDIT_PART("login_group", logEntry.LoginGroup);
-        AUDIT_PART("login_member", logEntry.LoginMember);
+        AUDIT_PART("login_user", logEntry.LoginUser)
+        AUDIT_PART("login_group", logEntry.LoginGroup)
+        AUDIT_PART("login_member", logEntry.LoginMember)
+
+        AUDIT_PART("login_user_change", RenderList(logEntry.LoginUserChange), logEntry.LoginUserChange)
     );
 }
 
 void AuditLogModifySchemeTransaction(const NKikimrScheme::TEvModifySchemeTransaction& request,
                                      const NKikimrScheme::TEvModifySchemeTransactionResult& response, TSchemeShard* SS,
-                                     const TString& peerName, const TString& userSID, const TString& sanitizedToken) { 
+                                     const TString& peerName, const TString& userSID, const TString& sanitizedToken) {
     // Each TEvModifySchemeTransaction.Transaction is a self sufficient operation and should be logged independently
     // (even if it was packed into a single TxProxy transaction with some other operations).
     const auto txId = request.GetTxId();
@@ -163,7 +185,7 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
     for (const auto& operation : request.GetTransaction()) {
         auto logEntry = MakeAuditLogFragment(operation);
 
-        TPath databasePath = DatabasePathFromWorkingDir(SS, operation.GetWorkingDir());
+        TPath databasePath = DatabasePathFromModifySchemeOperation(SS, operation);
         auto peerName = request.GetPeerName();
 
         auto entry = TStringBuilder();
@@ -262,6 +284,8 @@ TParts ExportKindSpecificParts(const Proto& proto) {
             return ExportKindSpecificParts(proto.GetExportToYtSettings());
         case Proto::kExportToS3Settings:
             return ExportKindSpecificParts(proto.GetExportToS3Settings());
+        case Proto::kExportToFsSettings:
+            return ExportKindSpecificParts(proto.GetExportToFsSettings());
         case Proto::SETTINGS_NOT_SET:
             return {};
     }
@@ -283,6 +307,13 @@ template <> TParts ExportKindSpecificParts(const Ydb::Export::ExportToS3Settings
         {"export_s3_prefix", ((proto.items().size() > 0) ? proto.items(0).destination_prefix() : "")},
     };
 }
+template <> TParts ExportKindSpecificParts(const Ydb::Export::ExportToFsSettings& proto) {
+    return {
+        {"export_type", "fs"},
+        {"export_item_count", ToString(proto.items().size())},
+        {"export_fs_base_path", proto.base_path()},
+    };
+}
 
 template <class Proto>
 TParts ImportKindSpecificParts(const Proto& proto) {
@@ -291,6 +322,8 @@ TParts ImportKindSpecificParts(const Proto& proto) {
     switch  (proto.GetSettingsCase()) {
         case Proto::kImportFromS3Settings:
             return ImportKindSpecificParts(proto.GetImportFromS3Settings());
+        case Proto::kImportFromFsSettings:
+            return ImportKindSpecificParts(proto.GetImportFromFsSettings());
         case Proto::SETTINGS_NOT_SET:
             return {};
     }
@@ -304,6 +337,23 @@ template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromS3Settin
         // (each item has its own source_prefix, but in practice they are all the same)
         {"import_s3_prefix", ((proto.items().size() > 0) ? proto.items(0).source_prefix() : "")},
     };
+}
+template <> TParts ImportKindSpecificParts(const Ydb::Import::ImportFromFsSettings& proto) {
+    return {
+        {"import_type", "fs"},
+        {"import_item_count", ToString(proto.items().size())},
+        {"import_fs_base_path", proto.base_path()},
+    };
+}
+
+TParts ImportKindSpecificParts(const TImportInfo& info) {
+    switch (info.Kind) {
+    case TImportInfo::EKind::S3:
+        return ImportKindSpecificParts(info.GetS3Settings());
+    case TImportInfo::EKind::FS:
+        return ImportKindSpecificParts(info.GetFsSettings());
+    }
+    return {};
 }
 
 }  // anonymous namespace
@@ -367,6 +417,7 @@ void _AuditLogXxportEnd(const Info& info, const TString& operationName, TParts&&
         .Uid = info.Uid,
         .RemoteAddress = peerName,
         .UserSID = userSID,
+        .SanitizedToken = info.SanitizedToken,
         .DatabasePath = databasePath.PathString(),
         .Status = status,
         .DetailedStatus = detailedStatus,
@@ -396,11 +447,14 @@ void AuditLogExportEnd(const TExportInfo& info, TSchemeShard* SS) {
             proto.MutableExportToS3Settings()->clear_access_key();
             proto.MutableExportToS3Settings()->clear_secret_key();
             break;
+        case TExportInfo::EKind::FS:
+            Y_ABORT_UNLESS(proto.MutableExportToFsSettings()->ParseFromString(info.Settings));
+            break;
     }
     _AuditLogXxportEnd(info, "EXPORT END", ExportKindSpecificParts(proto), SS);
 }
 void AuditLogImportEnd(const TImportInfo& info, TSchemeShard* SS) {
-    _AuditLogXxportEnd(info, "IMPORT END", ImportKindSpecificParts(info.Settings), SS);
+    _AuditLogXxportEnd(info, "IMPORT END", ImportKindSpecificParts(info), SS);
 }
 
 }

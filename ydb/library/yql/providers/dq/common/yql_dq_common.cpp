@@ -1,6 +1,6 @@
 #include "yql_dq_common.h"
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -55,32 +55,6 @@ TString GetSerializedResultType(const TString& program) {
     auto programResultItemType = static_cast<const TStreamType*>(programResultType->GetReturnType())->GetItemType();
 
     return SerializeNode(programResultItemType, typeEnv);
-}
-
-TMaybe<TString> SqlToSExpr(const TString& query) {
-    NSQLTranslation::TTranslationSettings settings;
-    settings.SyntaxVersion = 1;
-    settings.Mode = NSQLTranslation::ESqlMode::QUERY;
-    settings.DefaultCluster = "undefined";
-    settings.ClusterMapping[settings.DefaultCluster] = "undefined";
-    settings.ClusterMapping["csv"] = "csv";
-    settings.ClusterMapping["memory"] = "memory";
-    settings.ClusterMapping["ydb"] = "ydb";
-    settings.EnableGenericUdfs = true;
-    settings.File = "generated.sql";
-
-    auto astRes = NSQLTranslation::SqlToYql(query, settings);
-    if (!astRes.Issues.Empty()) {
-        Cerr << astRes.Issues.ToString() << Endl;
-    }
-
-    if (!astRes.Root) {
-        return {};
-    }
-
-    TStringStream sexpr;
-    astRes.Root->PrintTo(sexpr);
-    return sexpr.Str();
 }
 
 bool ParseCounterName(TString* prefix, std::map<TString, TString>* labels, TString* name, const TString& counterName) {

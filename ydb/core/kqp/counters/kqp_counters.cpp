@@ -10,7 +10,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <util/generic/size_literals.h>
 
-#include <yql/essentials/core/issue/protos/issue_id.pb.h>
+#include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 namespace NKikimr {
@@ -82,7 +82,6 @@ void TKqpCountersBase::Init() {
     ParametersBytes = KqpGroup->GetCounter("Requests/ParametersBytes", true);
     YdbParametersBytes = YdbGroup->GetNamedCounter("name", "table.query.request.parameters_bytes", true);
 
-    SqlV0Translations = KqpGroup->GetCounter("Requests/Sql/V0", true);
     SqlV1Translations = KqpGroup->GetCounter("Requests/Sql/V1", true);
     SqlUnknownTranslations = KqpGroup->GetCounter("Requests/Sql/Unknown", true);
 
@@ -116,7 +115,7 @@ void TKqpCountersBase::Init() {
     QueriesWithFullScan = KqpGroup->GetCounter("Query/WithFullScan", true);
 
     QueryAffectedShardsCount = KqpGroup->GetHistogram("Query/AffectedShards",
-        NMonitoring::ExplicitHistogram({1, 9, 49, 99, 499, 999}));
+        NMonitoring::ExplicitHistogram({1, 2, 4, 8, 16, 64, 512, 1024}));
     QueryReadSetsCount = KqpGroup->GetHistogram("Query/ReadSets",
         NMonitoring::ExplicitHistogram({99, 999, 9999, 99999}));
     QueryReadBytes = KqpGroup->GetHistogram("Query/ReadBytes",
@@ -222,6 +221,8 @@ void TKqpCountersBase::Init() {
     TxAborted = KqpGroup->GetCounter("Transactions/Aborted", true);
     TxCommited = KqpGroup->GetCounter("Transactions/Commited", true);
     TxEvicted = KqpGroup->GetCounter("Transactions/Evicted", true);
+    OnlineRORequests = KqpGroup->GetCounter("Isolation/OnlineRO/Requests", true);
+    OnlineROWithInconsistentReadsRequests = KqpGroup->GetCounter("Isolation/OnlineROWithInconsistentReads/Requests", true);
 
     TxActivePerSession = KqpGroup->GetHistogram(
         "Transactions/TxActivePerSession", NMonitoring::ExponentialHistogram(16, 2, 1));
@@ -247,6 +248,8 @@ void TKqpCountersBase::Init() {
     CompileQueryCacheMisses = YdbGroup->GetNamedCounter("name", "table.query.compilation.cache_misses", true);
 
     CompileTotal = YdbGroup->GetNamedCounter("name", "table.query.compilation.count", true);
+    CompileNewRBOSuccess = KqpGroup->GetCounter("Compilation/NewRBO/Success", true);
+    CompileNewRBOFailed = KqpGroup->GetCounter("Compilation/NewRBO/Failed", true);
     CompileErrors = YdbGroup->GetNamedCounter("name", "table.query.compilation.error_count", true);
     CompileActive = YdbGroup->GetNamedCounter("name", "table.query.compilation.active_count", false);
 
@@ -325,27 +328,27 @@ void TKqpCountersBase::ReportQueryWithFullScan() {
 }
 
 void TKqpCountersBase::ReportQueryAffectedShards(ui64 shardsCount) {
-    QueryAffectedShardsCount->Collect(shardsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(shardsCount));
+    QueryAffectedShardsCount->Collect(shardsCount);
 }
 
 void TKqpCountersBase::ReportQueryReadSets(ui64 readSetsCount) {
-    QueryReadSetsCount->Collect(readSetsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(readSetsCount));
+    QueryReadSetsCount->Collect(readSetsCount);
 }
 
 void TKqpCountersBase::ReportQueryReadBytes(ui64 bytesCount) {
-    QueryReadBytes->Collect(bytesCount > Max<i64>() ? Max<i64>() : static_cast<i64>(bytesCount));
+    QueryReadBytes->Collect(bytesCount);
 }
 
 void TKqpCountersBase::ReportQueryReadRows(ui64 rowsCount) {
-    QueryReadRows->Collect(rowsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(rowsCount));
+    QueryReadRows->Collect(rowsCount);
 }
 
 void TKqpCountersBase::ReportQueryMaxShardReplySize(ui64 replySize) {
-    QueryMaxShardReplySize->Collect(replySize > Max<i64>() ? Max<i64>() : static_cast<i64>(replySize));
+    QueryMaxShardReplySize->Collect(replySize);
 }
 
 void TKqpCountersBase::ReportQueryMaxShardProgramSize(ui64 programSize) {
-    QueryMaxShardProgramSize->Collect(programSize > Max<i64>() ? Max<i64>() : static_cast<i64>(programSize));
+    QueryMaxShardProgramSize->Collect(programSize);
 }
 
 void TKqpCountersBase::ReportResponseStatus(ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus) {
@@ -440,9 +443,6 @@ void TKqpCountersBase::ReportTransaction(const TKqpTransactionInfo& txInfo) {
 
 void TKqpCountersBase::ReportSqlVersion(ui16 sqlVersion) {
     switch (sqlVersion) {
-        case 0:
-            SqlV0Translations->Inc();
-            break;
         case 1:
             SqlV1Translations->Inc();
             break;
@@ -538,6 +538,14 @@ void TKqpCountersBase::ReportTxAborted(ui32 abortedCount) {
     TxAborted->Add(abortedCount);
 }
 
+void TKqpCountersBase::ReportOnlineRO() {
+    OnlineRORequests->Inc();
+}
+
+void TKqpCountersBase::ReportOnlineROWithInconsistentReads() {
+    OnlineROWithInconsistentReadsRequests->Inc();
+}
+
 void TKqpCountersBase::ReportQueryCacheHit(bool hit) {
     if (hit) {
         CompileQueryCacheHits->Inc();
@@ -588,6 +596,13 @@ void TKqpCountersBase::ReportRecompileRequestGet() {
     CompileRequestsRecompile->Inc();
 }
 
+void TKqpCountersBase::ReportCompileNewRBOSuccess() {
+    CompileNewRBOSuccess->Inc();
+}
+
+void TKqpCountersBase::ReportCompileNewRBOFailed() {
+    CompileNewRBOFailed->Inc();
+}
 
 TKqpDbCounters::TKqpDbCounters() {
     Counters = new ::NMonitoring::TDynamicCounters();
@@ -733,6 +748,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     YdbGroup = GetServiceCounters(counters, "ydb");
     QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay");
     WorkloadManagerGroup = KqpGroup->GetSubgroup("subsystem", "workload_manager");
+    ChannelGroup = KqpGroup->GetSubgroup("subsystem", "compute_channels");
+    TxProxyMon = MakeIntrusive<NTxProxy::TTxProxyMon>(counters);
 
     Init();
 
@@ -762,12 +779,27 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     CompileQueryCacheSize = YdbGroup->GetNamedCounter("name", "table.query.compilation.cached_query_count", false);
     CompileQueryCacheBytes = YdbGroup->GetNamedCounter("name", "table.query.compilation.cache_size_bytes", false);
     CompileQueryCacheEvicted = YdbGroup->GetNamedCounter("name", "table.query.compilation.cache_evictions", true);
+    CompileQueueWaitTime = KqpGroup->GetHistogram(
+        "Compilation/QueueWaitTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     CompileQueueSize = KqpGroup->GetCounter("Compilation/QueueSize", false);
 
     /* Compile computation pattern service */
     CompiledComputationPatterns = KqpGroup->GetCounter("ComputationPatternCompilation/CompiledComputationPatterns");
     CompileComputationPatternsQueueSize = KqpGroup->GetCounter("ComputationPatternCompilation/CompileComputationPatternsQueueSize");
+
+    /* Warmup */
+    WarmupQueriesFetched = KqpGroup->GetCounter("Warmup/QueriesFetched", false);
+    WarmupQueriesCompiled = KqpGroup->GetCounter("Warmup/QueriesCompiled", false);
+    WarmupQueriesTruncated = KqpGroup->GetCounter("Warmup/QueriesTruncated", false);
+    WarmupQueriesEmptyQueryType = KqpGroup->GetCounter("Warmup/QueriesEmptyQueryType", false);
+
+    /* Compile cache view (federated .sys/compile_cache_queries) */
+    CompileCacheViewPeerScanWarnings = KqpGroup->GetCounter("CompileCacheView/PeerScanWarnings", true);
+
+    WarmupHitsInWindow = KqpGroup->GetCounter("Warmup/HitsInWindow", true);
+    WarmupMissesInWindow = KqpGroup->GetCounter("Warmup/MissesInWindow", true);
+    WarmupSavedCompileMs = KqpGroup->GetCounter("Warmup/SavedCompileMs", true);
 
     /* Resource Manager */
     RmComputeActors = KqpGroup->GetCounter("RM/ComputeActors", false);
@@ -813,6 +845,16 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     DataShardIteratorFails = KqpGroup->GetCounter("IteratorReads/DatashardFails", true);
     DataShardIteratorMessages = KqpGroup->GetCounter("IteratorReads/DatashardMessages", true);
     IteratorDeliveryProblems = KqpGroup->GetCounter("IteratorReads/DeliveryProblems", true);
+    StreamLookupIteratorTotalQuotaBytesInFlight = KqpGroup->GetCounter("IteratorReads/StreamLookupIteratorTotalQuotaBytesInFlight", false);
+    StreamLookupIteratorTotalQuotaBytesExceeded = KqpGroup->GetCounter("IteratorReads/StreamLookupIteratorTotalQuotaBytesExceeded", true);
+    
+    SentLocks = KqpGroup->GetCounter("PessimisticLocks/SentLocks", true);
+    LockLatencyHistogram = KqpGroup->GetHistogram("PessimisticLocks/LockLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    ModifiedRowsCount = KqpGroup->GetCounter("PessimisticLocks/ModifiedRowsCount", true);
+    LockedRowsCount = KqpGroup->GetCounter("PessimisticLocks/LockedRowsCount", true);
+    MaxInFlightLockTimeOnExit = KqpGroup->GetHistogram("PessimisticLocks/MaxInFlightLockTimeOnExitMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    StreamLookupLockTotalQuotaBytesInFlight = KqpGroup->GetCounter("PessimisticLocks/StreamLookupLockTotalQuotaBytesInFlight", false);
+    StreamLookupLockTotalQuotaBytesExceeded = KqpGroup->GetCounter("PessimisticLocks/StreamLookupLockTotalQuotaBytesExceeded", true);
 
     /* sink writes */
     WriteActorsShardResolve = KqpGroup->GetCounter("SinkWrites/WriteActorShardResolve", true);
@@ -823,6 +865,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     WriteActorImmediateWrites = KqpGroup->GetCounter("SinkWrites/WriteActorImmediateWrites", true);
     WriteActorImmediateWritesRetries = KqpGroup->GetCounter("SinkWrites/WriteActorImmediateWritesRetries", true);
     WriteActorPrepareWrites = KqpGroup->GetCounter("SinkWrites/WriteActorPrepareWrites", true);
+
+    WriteActorWriteOnlyOperations = KqpGroup->GetCounter("SinkWrites/WriteActorWriteOnlyOperations", true);
+    WriteActorReadWriteOperations = KqpGroup->GetCounter("SinkWrites/WriteActorReadWriteOperations", true);
 
     BufferActorFlushes = KqpGroup->GetCounter("SinkWrites/BufferActorFlushes", true);
     BufferActorImmediateCommits = KqpGroup->GetCounter("SinkWrites/BufferActorImmediateCommits", true);
@@ -842,7 +887,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
         KqpGroup->GetHistogram("SinkWrites/BufferActorCommitLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
     BufferActorFlushLatencyHistogram =
         KqpGroup->GetHistogram("SinkWrites/BufferActorFlushLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
-    
+    BufferActorRollbackLatencyHistogram =
+        KqpGroup->GetHistogram("SinkWrites/BufferActorRollbackLatencyUs", NMonitoring::ExponentialHistogram(28, 2, 1));
+
     ForwardActorWritesSizeHistogram =
         KqpGroup->GetHistogram("SinkWrites/ForwardActorWritesSize", NMonitoring::ExponentialHistogram(28, 2, 1));
     ForwardActorWritesLatencyHistogram =
@@ -873,9 +920,30 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     SchedulerDelays = KqpGroup->GetHistogram("NodeScheduler/Delay", NMonitoring::ExponentialHistogram(20, 2, 1));
 
     RowsDuplicationsFound = KqpGroup->GetCounter("RowsDuplicationFound", true);
+    ForcedImmediateEffectsExecution = KqpGroup->GetCounter("ForcedImmediateEffectsExecution", true);
 
     TotalSingleNodeReqCount = KqpGroup->GetCounter("TotalSingleNodeReqCount", true);
     NonLocalSingleNodeReqCount = KqpGroup->GetCounter("NonLocalSingleNodeReqCount", true);
+
+    /* Statistics performance */
+    QueryStatCpuCollectUs = KqpGroup->GetCounter("Query/Stat/CpuCollectUs", true);
+    QueryStatCpuFinishUs = KqpGroup->GetCounter("Query/Stat/CpuFinishUs", true);
+    QueryStatCpuConvertUs = KqpGroup->GetCounter("Query/Stat/CpuConvertUs", true);
+
+    QueryStatMemCollectInflightBytes = KqpGroup->GetCounter("Query/Stat/MemCollectInflightBytes", false);
+    QueryStatMemFinishInflightBytes = KqpGroup->GetCounter("Query/Stat/MemFinishInflightBytes", false);
+
+    QueryStatMemFinishBytes = KqpGroup->GetCounter("Query/Stat/MemFinishBytes", true);
+    QueryStatMemConvertBytes = KqpGroup->GetCounter("Query/Stat/MemConvertBytes", true);
+
+    /* Statistics batch operations */
+    BatchOperationUpdateRows = KqpGroup->GetCounter("BatchOperation/Update/Rows", true);
+    BatchOperationDeleteRows = KqpGroup->GetCounter("BatchOperation/Delete/Rows", true);
+    BatchOperationRetries = KqpGroup->GetCounter("BatchOperation/Retries", true);
+}
+
+::NMonitoring::TDynamicCounterPtr TKqpCounters::GetRootCounters() const {
+    return Counters;
 }
 
 ::NMonitoring::TDynamicCounterPtr TKqpCounters::GetKqpCounters() const {
@@ -890,6 +958,9 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     return WorkloadManagerGroup;
 }
 
+::NMonitoring::TDynamicCounterPtr TKqpCounters::GetChannelCounters() const {
+    return ChannelGroup;
+}
 
 void TKqpCounters::ReportProxyForwardedRequest(TKqpDbCountersPtr dbCounters) {
     TKqpCountersBase::ReportProxyForwardedRequest();
@@ -1063,6 +1134,10 @@ void TKqpCounters::ReportTransaction(TKqpDbCountersPtr dbCounters, const TKqpTra
     }
 }
 
+void TKqpCounters::ReportCompileQueueWaitTime(const TDuration& duration) {
+    CompileQueueWaitTime->Collect(duration.MilliSeconds());
+}
+
 void TKqpCounters::ReportLeaseUpdateLatency(const TDuration& duration) {
     LeaseUpdateLatency->Collect(duration.MilliSeconds());
 }
@@ -1199,6 +1274,20 @@ void TKqpCounters::ReportTxAborted(TKqpDbCountersPtr dbCounters, ui32 abortedCou
     }
 }
 
+void TKqpCounters::ReportOnlineRO(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportOnlineRO();
+    if (dbCounters) {
+        dbCounters->ReportOnlineRO();
+    }
+}
+
+void TKqpCounters::ReportOnlineROWithInconsistentReads(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportOnlineROWithInconsistentReads();
+    if (dbCounters) {
+        dbCounters->ReportOnlineROWithInconsistentReads();
+    }
+}
+
 void TKqpCounters::ReportQueryCacheHit(TKqpDbCountersPtr dbCounters, bool hit) {
     TKqpCountersBase::ReportQueryCacheHit(hit);
     if (dbCounters) {
@@ -1259,6 +1348,20 @@ void TKqpCounters::ReportCompileRequestTimeout(TKqpDbCountersPtr dbCounters) {
     TKqpCountersBase::ReportCompileRequestTimeout();
     if (dbCounters) {
         dbCounters->ReportCompileRequestTimeout();
+    }
+}
+
+void TKqpCounters::ReportCompileNewRBOSuccess(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportCompileNewRBOSuccess();
+    if (dbCounters) {
+        dbCounters->ReportCompileNewRBOSuccess();
+    }
+}
+
+void TKqpCounters::ReportCompileNewRBOFailed(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportCompileNewRBOFailed();
+    if (dbCounters) {
+        dbCounters->ReportCompileNewRBOFailed();
     }
 }
 

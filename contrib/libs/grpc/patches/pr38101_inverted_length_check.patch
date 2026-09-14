@@ -1,0 +1,17 @@
+commit 35597cf0f897a4e3a41ded9a25955ce4103c156e (HEAD -> fix-grpc)
+author: reshilkin
+date: 2025-05-22T17:04:11+03:00
+
+    DEVTOOLSSUPPORT-63262 Fix assert in grpc
+
+--- contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_windows.cc	(ce30871a97c577260d19661a2c9dca4fd0ec6095)
++++ contrib/libs/grpc/src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_windows.cc	(35597cf0f897a4e3a41ded9a25955ce4103c156e)
+@@ -286,7 +286,7 @@ class GrpcPolledFdWindows {
+     // c-ares overloads this recv_from virtual socket function to receive
+     // data on both UDP and TCP sockets, and from is nullptr for TCP.
+     if (from != nullptr) {
+-      GPR_ASSERT(*from_len <= recv_from_source_addr_len_);
++      GPR_ASSERT(*from_len >= recv_from_source_addr_len_);
+       memcpy(from, &recv_from_source_addr_, recv_from_source_addr_len_);
+       *from_len = recv_from_source_addr_len_;
+     }

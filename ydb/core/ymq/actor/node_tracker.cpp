@@ -1,7 +1,7 @@
 #include "node_tracker.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/ymq/actor/cfg.h>
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include <ydb/core/ymq/actor/serviceid.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 
@@ -84,9 +84,9 @@ namespace NKikimr::NSQS {
         navigateRequest->ResultSet.resize(2);
         navigateRequest->ResultSet.front().Path = TablePathSTD;
         navigateRequest->ResultSet.back().Path = TablePathFIFO;
-        ctx.ExecutorThread.ActorSystem->Schedule(
+        ctx.Schedule(
             runAfter,
-            new IEventHandle(
+            std::make_unique<IEventHandle>(
                 SchemeCacheActor,
                 SelfId(),
                 new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release())

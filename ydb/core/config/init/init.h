@@ -5,6 +5,7 @@
 #include <ydb/core/util/source_location.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/yaml_config/yaml_config.h>
 
 #include <library/cpp/getopt/small/last_getopt_opts.h>
 
@@ -12,6 +13,9 @@
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
+
+#include <functional>
+#include <memory>
 
 namespace NKikimr::NConfig {
 
@@ -23,6 +27,7 @@ struct TConfigItemInfo {
         ReplaceConfigWithConsoleYaml,
         ReplaceConfigWithConsoleProto,
         ReplaceConfigWithBase,
+        ReplaceConfigWithSeedNodes,
         LoadYamlConfigFromFile,
         SetExplicitly,
         UpdateExplicitly,
@@ -59,7 +64,7 @@ class IErrorCollector {
 public:
     virtual ~IErrorCollector() {}
     // TODO(Enjection): CFG-UX-0 replace regular throw with just collecting
-    virtual void Fatal(TString error) = 0;
+    virtual void Fatal(TString error, TStringBuf errorCode = {}) = 0;
 };
 
 class IProtoConfigFileProvider {
@@ -156,9 +161,10 @@ class IConfigurationResult {
 public:
     virtual ~IConfigurationResult() {}
     virtual const NKikimrConfig::TAppConfig& GetConfig() const = 0;
-    virtual bool HasYamlConfig() const = 0;
-    virtual const TString& GetYamlConfig() const = 0;
+    virtual const std::optional<TString>& GetMainYamlConfig() const = 0;
     virtual TMap<ui64, TString> GetVolatileYamlConfigs() const = 0;
+    virtual bool HasDatabaseYamlConfig() const = 0;
+    virtual const TString& GetDatabaseYamlConfig() const = 0;
 };
 
 class IDynConfigClient {
@@ -174,6 +180,34 @@ public:
 
 // ===
 
+class IStorageConfigResult {
+public:
+    virtual ~IStorageConfigResult() {}
+    virtual bool IsSuccess() const = 0;
+    virtual bool IsTransportError() const = 0;
+    virtual const TString& GetEndpoint() const = 0;
+    virtual const TString& GetPrimaryIssueMessage() const = 0;
+    virtual const TString& GetIssuesText() const = 0;
+    virtual const std::optional<TString>& GetMainYamlConfig() const = 0;
+    virtual const std::optional<TString>& GetStorageYamlConfig() const = 0;
+    virtual const TString& GetSourceAddress() const = 0;
+    virtual bool IsTransient() const = 0;
+};
+
+class IConfigClient {
+public:
+    virtual ~IConfigClient() {}
+    virtual std::shared_ptr<IStorageConfigResult> FetchConfig(
+        const TGrpcSslSettings& grpcSettings,
+        const TVector<TString>& addrs,
+        const IEnv& env,
+        IInitLogger& logger,
+        const std::vector<TString>& hostOptions,
+        int interconnectPort) const = 0;
+};
+
+// ===
+
 struct TInitialConfiguratorDependencies {
     NConfig::IErrorCollector& ErrorCollector;
     NConfig::IProtoConfigFileProvider& ProtoConfigFileProvider;
@@ -181,6 +215,7 @@ struct TInitialConfiguratorDependencies {
     NConfig::IMemLogInitializer& MemLogInit;
     NConfig::INodeBrokerClient& NodeBrokerClient;
     NConfig::IDynConfigClient& DynConfigClient;
+    NConfig::IConfigClient& ConfigClient;
     NConfig::IEnv& Env;
     NConfig::IInitLogger& Logger;
 };
@@ -194,6 +229,7 @@ struct TRecordedInitialConfiguratorDeps {
             *MemLogInit,
             *NodeBrokerClient,
             *DynConfigClient,
+            *ConfigClient,
             *Env,
             *Logger
         };
@@ -205,6 +241,7 @@ struct TRecordedInitialConfiguratorDeps {
     std::unique_ptr<NConfig::IMemLogInitializer> MemLogInit;
     std::unique_ptr<NConfig::INodeBrokerClient> NodeBrokerClient;
     std::unique_ptr<NConfig::IDynConfigClient> DynConfigClient;
+    std::unique_ptr<NConfig::IConfigClient> ConfigClient;
     std::unique_ptr<NConfig::IEnv> Env;
     std::unique_ptr<NConfig::IInitLogger> Logger;
 };
@@ -224,13 +261,32 @@ struct TDebugInfo {
     THashMap<ui32, TConfigItemInfo> InitInfo;
 };
 
+// Opaque dynamic YAML config parser.
+// Parses YAML config section marked with NMarkers.OpaqueConfig in TAppConfig
+// into a message whose schema the configs dispatcher itself does not have.
+// Provided by the end node, so the configs dispatcher stays schema-agnostic.
+// The parsed message is attached to the node-local config notification
+// (see TEvConfigNotificationRequest).
+//
+// Thrown exceptions are catched and processed by configs dispatcher.
+//
+// @param opaqueYamlConfig - string content of opaque config section in YAML config
+// @return the parsed message, or nullptr to attach nothing.
+using TOpaqueConfigParser = std::function<std::shared_ptr<const ::google::protobuf::Message>(const TString& opaqueYamlConfig)>;
+
 struct TConfigsDispatcherInitInfo {
     NKikimrConfig::TAppConfig InitialConfig;
+    TString StartupConfigYaml;
+    TString StartupStorageYaml;
     TMap<TString, TString> Labels;
     std::variant<std::monostate, TDenyList, TAllowList> ItemsServeRules;
     std::optional<TDebugInfo> DebugInfo;
     std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps = nullptr;
     std::vector<TString> Args;
+    // Per-kind parsers for opaque config sections (kind == TAppConfig field
+    // number). Node-local; empty by default. When set, the dispatcher parses the
+    // section and attaches the result to the notification for that kind.
+    THashMap<ui32, TOpaqueConfigParser> OpaqueConfigParsers;
 };
 
 class IInitialConfigurator {
@@ -238,13 +294,14 @@ public:
     virtual ~IInitialConfigurator() {};
     virtual void RegisterCliOptions(NLastGetopt::TOpts& opts) = 0;
     virtual void ValidateOptions(const NLastGetopt::TOpts& opts, const NLastGetopt::TOptsParseResult& parseResult) = 0;
-    virtual void Parse(const TVector<TString>& freeArgs) = 0;
+    virtual void Parse(const TVector<TString>& freeArgs, NYamlConfig::IConfigSwissKnife* csk) = 0;
     virtual void Apply(
         NKikimrConfig::TAppConfig& appConfig,
         ui32& nodeId,
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
+        bool& tinyMode,
         TString& clusterName,
         NConfig::TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const = 0;
 };
@@ -256,11 +313,13 @@ std::unique_ptr<IErrorCollector> MakeDefaultErrorCollector();
 std::unique_ptr<IMemLogInitializer> MakeDefaultMemLogInitializer();
 std::unique_ptr<INodeBrokerClient> MakeDefaultNodeBrokerClient();
 std::unique_ptr<IDynConfigClient> MakeDefaultDynConfigClient();
+std::unique_ptr<IConfigClient> MakeDefaultConfigClient();
 std::unique_ptr<IInitLogger> MakeDefaultInitLogger();
 
 std::unique_ptr<IMemLogInitializer> MakeNoopMemLogInitializer();
 std::unique_ptr<INodeBrokerClient> MakeNoopNodeBrokerClient();
 std::unique_ptr<IDynConfigClient> MakeNoopDynConfigClient();
+std::unique_ptr<IConfigClient> MakeNoopConfigClient();
 std::unique_ptr<IInitLogger> MakeNoopInitLogger();
 
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);
@@ -292,8 +351,8 @@ public:
         Impl->ValidateOptions(opts, parseResult);
     }
 
-    void Parse(const TVector<TString>& freeArgs) {
-        Impl->Parse(freeArgs);
+    void Parse(const TVector<TString>& freeArgs, NYamlConfig::IConfigSwissKnife* csk) {
+        Impl->Parse(freeArgs, csk);
     }
 
     void Apply(
@@ -302,6 +361,7 @@ public:
         TKikimrScopeId& scopeId,
         TString& tenantName,
         TBasicKikimrServicesMask& servicesMask,
+        bool& tinyMode,
         TString& clusterName,
         TConfigsDispatcherInitInfo& configsDispatcherInitInfo) const
     {
@@ -311,6 +371,7 @@ public:
             scopeId,
             tenantName,
             servicesMask,
+            tinyMode,
             clusterName,
             configsDispatcherInitInfo);
     }

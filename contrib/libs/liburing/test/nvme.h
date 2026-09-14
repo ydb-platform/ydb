@@ -59,6 +59,7 @@ enum nvme_io_opcode {
 
 static int nsid;
 static __u32 lba_shift;
+static __u32 meta_size;
 
 struct nvme_lbaf {
 	__le16			ms;
@@ -157,6 +158,7 @@ static int nvme_get_info(const char *file)
 
 	lba_size = 1 << ns.lbaf[(ns.flbas & 0x0f)].ds;
 	lba_shift = ilog2(lba_size);
+	meta_size = ns.lbaf[(ns.flbas & 0x0f)].ms;
 
 	close(fd);
 	return 0;

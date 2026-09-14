@@ -1,5 +1,4 @@
 import os.path
-import os.path as P
 import shutil
 
 from devtools.yamaker.arcpath import ArcPath
@@ -9,9 +8,12 @@ from devtools.yamaker.project import CMakeNinjaNixProject
 
 
 def post_build(self):
+    def _ignore_paths(p):
+        return 'impl/status.h' not in p
+
     # Change std::string to TString
-    re_sub_dir(self.dstdir, r"\bstd::string\b", "TString")
-    re_sub_dir(self.dstdir, r"\bstd::to_string\b", "::ToString")
+    re_sub_dir(self.dstdir, r"\bstd::string\b", "TString", test=_ignore_paths)
+    re_sub_dir(self.dstdir, r"\bstd::to_string\b", "::ToString", test=_ignore_paths)
     re_sub_dir(
         self.dstdir,
         "#include <string>",
@@ -19,6 +21,7 @@ def post_build(self):
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 """.strip(),
+        test=_ignore_paths,
     )
     # Change absl to y_absl
     re_sub_dir(self.dstdir, r"\babsl\b", "y_absl")
@@ -26,40 +29,13 @@ def post_build(self):
 
 
 def post_install(self):
-    def fix_protos(m):
-        srcs = getattr(m, "SRCS", None)
-        if not srcs:
-            return
-
-        protos = set()
-        for s in srcs:
-            if s.endswith(".proto"):
-                protos.add(s)
-                m.PEERDIR.add(P.join("contrib/libs/grpc/src", P.dirname(s)))
-
-        srcs -= protos
-
     def fix_ssl_certificates():
         with self.yamakes["."] as m:
             m.SRCS.add("src/core/lib/security/security_connector/add_arcadia_root_certs.cpp")
             m.PEERDIR |= {"certs", "library/cpp/resource"}
 
-    # in the name of selective checkout
-    # https://st.yandex-team.ru/DTCC-615
-    def fix_selective_checkout():
-        self.yamakes["."].PEERDIR |= {
-            "contrib/restricted/abseil-cpp-tstring/y_absl/algorithm",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/functional",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/memory",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/meta",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/hash",
-            "contrib/restricted/abseil-cpp-tstring/y_absl/utility",
-        }
-
     for name, m in self.yamakes.items():
         with m:
-            fix_protos(m)
-
             if hasattr(m, "CFLAGS"):
                 m.before(
                     "SRCS",
@@ -78,40 +54,52 @@ def post_install(self):
                 m.NO_UTIL = False
 
     fix_ssl_certificates()
-    fix_selective_checkout()
 
-    # remove unnecessary folder with protos duplicates
+    # remove proto sources as we use contrib/proto/grpc instead
     shutil.rmtree(f"{self.dstdir}/protos")
 
     # Let grpc++_reflection register itself (r6449480).
     with self.yamakes["grpc++_reflection"] as m:
+        # Mark proto_server_reflection_plugin.cc as GLOBAL
         m.SRCS.remove("src/cpp/ext/proto_server_reflection_plugin.cc")
         m.SRCS.add(GLOBAL("src/cpp/ext/proto_server_reflection_plugin.cc"))
-
-    # fix path for protos
-    with self.yamakes["grpc++_reflection"] as m:
-        m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/reflection/v1alpha")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/reflection/v1alpha")
+        # Use protos from contrib/proto/grpc
+        m.SRCS.remove("protos/src/proto/grpc/reflection/v1alpha/reflection.proto")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/reflection/v1alpha")
+        m.SRCS.remove("protos/src/proto/grpc/reflection/v1/reflection.proto")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/reflection/v1")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     with self.yamakes["grpcpp_channelz"] as m:
-        m.PEERDIR.remove("contrib/libs/grpc/src/protos/src/proto/grpc/channelz")
-        m.PEERDIR.add("contrib/libs/grpc/src/proto/grpc/channelz")
+        m.SRCS.remove("protos/src/proto/grpc/channelz/channelz.proto")
+        m.PEERDIR.add("contrib/proto/grpc/grpc/channelz/v1")
         m.ADDINCL.remove("contrib/libs/grpc/protos")
 
     # fix induced deps
     for name, module in self.yamakes.items():
+        if "-DPROTOBUF_USE_DLLS" in module.CFLAGS:
+            module.CFLAGS.remove("-DPROTOBUF_USE_DLLS")
         addincls = getattr(module, "ADDINCL", None)
         source_addincl = ArcPath("contrib/libs/grpc", build=False)
         build_addincl = ArcPath("contrib/libs/grpc", build=True)
         if addincls and source_addincl in addincls:
             addincls.add(build_addincl)
 
-    xxhash = os.path.join(self.dstdir, "third_party/xxhash")
-    if os.path.exists(xxhash) and os.path.isdir(xxhash):
-        shutil.rmtree(xxhash, ignore_errors=True)
+    # unbundle third_party/utf_range manually merged into upb library
+    with self.yamakes["third_party/upb"] as upb:
+        # fmt: off
+        upb.SRCS = [
+            src
+            for src in upb.SRCS
+            if "utf8_range" not in src
+        ]
+        # fmt: on
+        upb.PEERDIR.add("contrib/restricted/google/utf8_range")
+        upb.ADDINCL.add("contrib/restricted/google/utf8_range")
 
     with self.yamakes["."] as m:
+        m.PEERDIR.add("contrib/libs/zstd")
+        m.ADDINCL.add("contrib/libs/zstd/include")
         # fmt: off
         m.RECURSE += [
             os.path.dirname(path)
@@ -127,13 +115,8 @@ grpc = CMakeNinjaNixProject(
     nixattr="grpc",
     license="Apache-2.0",
     keep_paths=[
+        "README_YANDEX.md",
         "src/core/lib/security/security_connector/add_arcadia_root_certs.*",
-        # Keep original ya.make for now
-        "src/proto/grpc/core/ya.make",
-        "src/proto/grpc/channelz/ya.make",
-        "src/proto/grpc/health/v1/ya.make",
-        "src/proto/grpc/reflection/v1alpha/ya.make",
-        "src/proto/grpc/status/ya.make",
     ],
     ignore_targets=[
         "check_epollexclusive",
@@ -155,6 +138,9 @@ grpc = CMakeNinjaNixProject(
         # third_party libraries
         "address_sorting",
         "upb",
+        "upb_json_lib",
+        "upb_textformat_lib",
+        "utf8_range_lib",
     ],
     put={
         "grpc": ".",
@@ -165,12 +151,17 @@ grpc = CMakeNinjaNixProject(
         # third_party libraries
         "address_sorting": "third_party/address_sorting",
         "upb": "third_party/upb",
+        "utf8_range_lib": "third_party/utf8_range",
     },
     put_with={
         "grpc": ["grpc++", "gpr"],
+        "upb": ["upb_json_lib", "upb_textformat_lib"],
     },
     unbundle_from={
         "xxhash": "third_party/xxhash",
+        "utf8_validity": "third_party/upb/third_party/utf8_range",
+        "utf8_range": "third_party/utf8_range",
+        "utf8_range_lib": "third_party/utf8_range",
     },
     copy_sources=[
         "include/**/*.h",
@@ -184,6 +175,9 @@ grpc = CMakeNinjaNixProject(
         "src/core/lib/iomgr/resolve_address_windows.h",
         "src/core/lib/iomgr/socket_windows.h",
         "src/core/lib/iomgr/tcp_windows.h",
+        "src/core/lib/event_engine/cf_engine/*.h",
+        "src/core/lib/event_engine/nameser.h",
+        "src/core/lib/event_engine/windows/grpc_polled_fd_windows.h",
         "src/core/lib/event_engine/windows/windows_endpoint.h",
         "src/core/lib/event_engine/windows/windows_engine.h",
         "src/core/lib/event_engine/windows/windows_listener.h",
@@ -191,21 +185,10 @@ grpc = CMakeNinjaNixProject(
         "src/core/lib/event_engine/windows/iocp.h",
         "src/core/lib/event_engine/socket_notifier.h",
         "src/core/lib/event_engine/poller.h",
-        # Copy all .proto files except for grpc/testing
-        "src/proto/grpc/channelz/**/*.proto",
-        "src/proto/grpc/core/**/*.proto",
-        "src/proto/grpc/gcp/**/*.proto",
-        "src/proto/grpc/health/**/*.proto",
-        "src/proto/grpc/lb/**/*.proto",
-        "src/proto/grpc/lookup/**/*.proto",
-        "src/proto/grpc/reflection/**/*.proto",
-        "src/proto/grpc/status/**/*.proto",
-    ],
-    copy_sources_except=[
-        # Proto library with testing services
-        "src/proto/grpc/testing/",
     ],
     disable_includes=[
+        # if OPENSSL_VERSION_NUMBER >= 0x30000000L
+        "openssl/param_build.h",
         "src/core/lib/profiling/stap_probes.h",
         # ifdef GRPC_UV
         "uv.h",

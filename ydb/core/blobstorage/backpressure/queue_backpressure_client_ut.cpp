@@ -38,17 +38,17 @@ public:
 
     template<typename TPtr>
     void HandleFw(TPtr& ev, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(new IEventHandle(VDiskId, ctx.SelfID, ev->Release().Release(), 0, ev->Cookie));
+        ctx.Send(new IEventHandle(VDiskId, ctx.SelfID, ev->Release().Release(), 0, ev->Cookie));
     }
 
     template<typename TPtr>
     void HandleBw(TPtr& ev, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(ev->Forward(QueueId));
+        ctx.Send(ev->Forward(QueueId));
     }
 
     template<typename TPtr>
     void HandleForward(TPtr& ev, const TActorContext& ctx) {
-        ctx.ExecutorThread.Send(ev->Forward(VDiskId));
+        ctx.Send(ev->Forward(VDiskId));
     }
 
     STFUNC(StateFunc) {
@@ -94,7 +94,7 @@ public:
                 Counters, bsCtx, NBackpressure::TQueueClientId(), "PutTabletLog", 0, false, TDuration::Minutes(1),
                 flowRecord, NMonitoring::TCountableBase::EVisibility::Public));
 
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(QueueActorId, actorId);
+        ctx.ActorSystem()->RegisterLocalService(QueueActorId, actorId);
     }
 
     void Handle(TEvProxyQueueState::TPtr& ev, const TActorContext& /*ctx*/) {
@@ -162,8 +162,11 @@ public:
         PDiskGuid = 1;
         PDiskKey = 1;
         MainKey = NPDisk::TMainKey{ .Keys = { 1 } };
-        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.Keys.back(), "queue_test",
-                false, false, SectorMap, false);
+        TFormatOptions options;
+        options.SectorMap = SectorMap;
+        options.EnableSmallDiskOptimization = false;
+        FormatPDisk(Path, DiskSize, 4096, ChunkSize, PDiskGuid, PDiskKey, PDiskKey, PDiskKey, MainKey.Keys.back(),
+                "queue_test", options);
 
         PDiskId = MakeBlobStoragePDiskID(1, 1);
         ui64 pDiskCategory = 0;
@@ -171,7 +174,7 @@ public:
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->SectorMap = SectorMap;
-        pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
+        pDiskConfig->FeatureFlags.SetEnablePDiskDataEncryption(!pDiskConfig->SectorMap);
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(), MainKey, Counters), TMailboxType::Revolving, 0);
         setup->LocalServices.emplace_back(PDiskId, std::move(pDiskSetup));
 

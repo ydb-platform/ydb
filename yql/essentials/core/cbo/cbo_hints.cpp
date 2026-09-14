@@ -1,5 +1,6 @@
 #include "cbo_optimizer_new.h"
 
+#include <yql/essentials/utils/yql_panic.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
 #include <library/cpp/iterator/zip.h>
@@ -7,7 +8,7 @@
 using namespace NYql;
 
 TString ToLower(TString s) {
-    for (char& c: s) {
+    for (char& c : s) {
         c = std::tolower(c);
     }
     return s;
@@ -15,29 +16,32 @@ TString ToLower(TString s) {
 
 class TOptimizerHintsParser {
 public:
-    TOptimizerHintsParser(const TString& text)
-        : Pos(-1)
-        , Size(static_cast<i32>(text.size()) - 1)
-        , Text(text)
-    {}
+    explicit TOptimizerHintsParser(const TString& text)
+        : Pos_(-1)
+        , Size_(static_cast<i32>(text.size()) - 1)
+        , Text_(text)
+    {
+    }
 
     TOptimizerHints Parse() {
         Start();
-        return Hints;
+        return Hints_;
     }
 
 private:
     void Start() {
-        while (Pos < Size) {
-            auto hintType = Keyword({"JoinOrder", "Leading", "JoinType", "Rows"});
+        while (Pos_ < Size_) {
+            auto hintType = Keyword({"JoinOrder", "Leading", "JoinType", "Rows", "Bytes"});
             if (hintType == "JoinOrder" || hintType == "Leading") {
                 JoinOrder(hintType == "Leading");
             } else if (hintType == "JoinType") {
                 JoinType();
-            } else if (hintType == "Rows"){
-                Rows();
+            } else if (hintType == "Rows") {
+                CardinalityOrBytes(true);
+            } else if (hintType == "Bytes") {
+                CardinalityOrBytes(false);
             } else {
-                ParseError(Sprintf("Undefined hints type: %s", hintType.c_str()), Pos - hintType.size());
+                ParseError(Sprintf("Undefined hints type: %s", hintType.c_str()), Pos_ - hintType.size());
             }
 
             SkipWhiteSpaces();
@@ -53,11 +57,11 @@ private:
     }
 
     void JoinType() {
-        i32 beginPos = Pos + 1;
+        i32 beginPos = Pos_ + 1;
 
         Keyword({"("});
 
-        i32 labelsBeginPos = Pos + 1;
+        i32 labelsBeginPos = Pos_ + 1;
         TVector<TString> labels = CollectLabels();
         if (labels.size() <= 1) {
             ParseError(Sprintf("Bad labels for JoinType hint: %s, example of the format: JoinType(t1 t2 Shuffle)", JoinSeq(", ", labels).c_str()), labelsBeginPos);
@@ -70,28 +74,27 @@ private:
         TVector<EJoinAlgoType> joinAlgos = {EJoinAlgoType::GraceJoin, EJoinAlgoType::LookupJoin, EJoinAlgoType::MapJoin};
         TVector<TString> joinAlgosStr = {"shuffle", "lookup", "broadcast"};
 
-        for (const auto& [JoinType, joinAlgoStr]: Zip(joinAlgos, joinAlgosStr)) {
+        for (const auto& [JoinType, joinAlgoStr] : Zip(joinAlgos, joinAlgosStr)) {
             if (ToLower(reqJoinAlgoStr) == joinAlgoStr) {
-                Hints.JoinAlgoHints->PushBack(std::move(labels), JoinType, "JoinType" + Text.substr(beginPos, Pos - beginPos + 1));
+                Hints_.JoinAlgoHints->PushBack(std::move(labels), JoinType, "JoinType" + Text_.substr(beginPos, Pos_ - beginPos + 1));
                 return;
             }
         }
 
-        ParseError(Sprintf("Unknown JoinType: '%s', supported algos: [%s]", reqJoinAlgoStr.c_str(), JoinSeq(", ", joinAlgosStr).c_str()), Pos - reqJoinAlgoStr.size());
-        Y_UNREACHABLE();
+        ParseError(Sprintf("Unknown JoinType: '%s', supported algos: [%s]", reqJoinAlgoStr.c_str(), JoinSeq(", ", joinAlgosStr).c_str()), Pos_ - reqJoinAlgoStr.size());
+        YQL_ENSURE(false, "Unreachable");
     }
 
     void JoinOrder(bool leading /* is keyword "Leading" or "JoinOrder" */) {
-        i32 beginPos = Pos + 1;
+        i32 beginPos = Pos_ + 1;
 
         Keyword({"("});
         auto joinOrderHintTree = JoinOrderLabels();
         Keyword({")"});
 
-        Hints.JoinOrderHints->PushBack(
+        Hints_.JoinOrderHints->PushBack(
             std::move(joinOrderHintTree),
-            leading? "Leading" : "JoinOrder" + Text.substr(beginPos, Pos - beginPos + 1)
-        );
+            leading ? "Leading" : "JoinOrder" + Text_.substr(beginPos, Pos_ - beginPos + 1));
     }
 
     std::shared_ptr<TJoinOrderHints::ITreeNode> JoinOrderLabels() {
@@ -109,12 +112,12 @@ private:
             return join;
         }
 
-        ParseError(Sprintf("JoinOrder args must be either a relation, either a join, example of the format: JoinOrder(t1 (t2 t3))"), Pos);
-        Y_UNREACHABLE();
+        ParseError(Sprintf("JoinOrder args must be either a relation, either a join, example of the format: JoinOrder(t1 (t2 t3))"), Pos_);
+        YQL_ENSURE(false, "Unreachable");
     }
 
-    void Rows() {
-        i32 beginPos = Pos + 1;
+    void CardinalityOrBytes(bool isRows) {
+        i32 beginPos = Pos_ + 1;
 
         Keyword({"("});
 
@@ -126,18 +129,39 @@ private:
 
         TCardinalityHints::ECardOperation op;
         switch (sign) {
-            case '+': { op = TCardinalityHints::ECardOperation::Add; break; }
-            case '-': { op = TCardinalityHints::ECardOperation::Subtract; break; }
-            case '/': { op = TCardinalityHints::ECardOperation::Divide; break; }
-            case '*': { op = TCardinalityHints::ECardOperation::Multiply; break; }
-            case '#': { op = TCardinalityHints::ECardOperation::Replace; break; }
-            default: {ParseError(Sprintf("Unknown operation: '%c'", sign), Pos - 1); Y_UNREACHABLE();}
+            case '+': {
+                op = TCardinalityHints::ECardOperation::Add;
+                break;
+            }
+            case '-': {
+                op = TCardinalityHints::ECardOperation::Subtract;
+                break;
+            }
+            case '/': {
+                op = TCardinalityHints::ECardOperation::Divide;
+                break;
+            }
+            case '*': {
+                op = TCardinalityHints::ECardOperation::Multiply;
+                break;
+            }
+            case '#': {
+                op = TCardinalityHints::ECardOperation::Replace;
+                break;
+            }
+            default: {
+                ParseError(Sprintf("Unknown operation: '%c'", sign), Pos_ - 1);
+                YQL_ENSURE(false, "Unreachable");
+            }
         }
 
-        Hints.CardinalityHints->PushBack(std::move(labels), op, value, "Rows" + Text.substr(beginPos, Pos - beginPos + 1));
+        if (isRows) {
+            Hints_.CardinalityHints->PushBack(std::move(labels), op, value, "Rows" + Text_.substr(beginPos, Pos_ - beginPos + 1));
+        } else {
+            Hints_.BytesHints->PushBack(std::move(labels), op, value, "Bytes" + Text_.substr(beginPos, Pos_ - beginPos + 1));
+        }
     }
 
-private:
     // Expressions
     void ParseError(const TString& err, i32 pos) {
         auto [line, linePos] = GetLineAndLinePosFromTextPos(pos);
@@ -158,10 +182,10 @@ private:
 
     TString Term(const std::bitset<256>& allowedSym = {}) {
         SkipWhiteSpaces();
-        Y_ENSURE(Pos < Size, "Expected <string>, but got end of the string.");
+        Y_ENSURE(Pos_ < Size_, "Expected <string>, but got end of the string.");
 
         TString term;
-        while (Pos < Size) {
+        while (Pos_ < Size_) {
             try {
                 term.push_back(Char(allowedSym));
             } catch (...) {
@@ -170,74 +194,74 @@ private:
         }
 
         if (term.empty()) {
-            ParseError("Expected a term!", Pos);
+            ParseError("Expected a term!", Pos_);
         }
         return term;
     }
 
     char Char(unsigned char c) {
         std::bitset<256> allowed;
-        allowed[c] = 1;
+        allowed[c] = true;
         return Char(allowed);
     }
 
     char Char(unsigned char intervalBegin, unsigned char intervalEnd) {
         std::bitset<256> allowed;
         for (size_t i = intervalBegin; i <= intervalEnd; ++i) {
-            allowed[i] = 1;
+            allowed[i] = true;
         }
         return Char(allowed);
     }
 
     char Char(const std::bitset<256>& allowedSymbols = {}) {
-        Y_ENSURE(Pos < Size, Sprintf("Expected [%s], but got end of the string.", ""));
+        Y_ENSURE(Pos_ < Size_, Sprintf("Expected [%s], but got end of the string.", ""));
 
-        char nextSym = Text[Pos + 1];
+        char nextSym = Text_[Pos_ + 1];
         if (allowedSymbols.count() == 0) {
-            ++Pos;
+            ++Pos_;
             return nextSym;
         }
 
         for (size_t i = 0; i < allowedSymbols.size(); ++i) {
             if (allowedSymbols[i] && tolower(i) == tolower(nextSym)) {
-                ++Pos;
+                ++Pos_;
                 return nextSym;
             }
         }
 
-        ParseError(Sprintf("Expected [%s], but got [%c]", "", nextSym), Pos);
-        Y_UNREACHABLE();
+        ParseError(Sprintf("Expected [%s], but got [%c]", "", nextSym), Pos_);
+        YQL_ENSURE(false, "Unreachable");
     }
 
     std::optional<TString> MaybeKeyword(const TVector<TString>& keywords) {
         try {
             return Keyword(keywords);
-        } catch(...) {
+        } catch (...) {
             return std::nullopt;
         }
     }
 
     TString Keyword(const TVector<TString>& keywords) {
         SkipWhiteSpaces();
-        Y_ENSURE(Pos < Size, Sprintf("Expected [%s], but got end of the string.", JoinSeq(", ", keywords).c_str()));
+        Y_ENSURE(Pos_ < Size_, Sprintf("Expected [%s], but got end of the string.", JoinSeq(", ", keywords).c_str()));
 
-        for (const auto& keyword: keywords) {
-            size_t lowInclude = Pos + 1;
+        for (const auto& keyword : keywords) {
+            size_t lowInclude = Pos_ + 1;
             size_t highExclude = lowInclude + keyword.size();
 
-            if (Text.substr(lowInclude, highExclude - lowInclude).equal(keyword)) {
-                Pos += keyword.size();
+            if (Text_.substr(lowInclude, highExclude - lowInclude).equal(keyword)) {
+                Pos_ += keyword.size();
                 return keyword;
             }
         }
 
-        ParseError(Sprintf("Expected [%s], but got [%c]", JoinSeq(", ", keywords).c_str(), Text[Pos + 1]), Pos);
-        Y_UNREACHABLE();
+        ParseError(Sprintf("Expected [%s], but got [%c]", JoinSeq(", ", keywords).c_str(), Text_[Pos_ + 1]), Pos_);
+        YQL_ENSURE(false, "Unreachable");
     }
 
     double Number() {
         SkipWhiteSpaces();
-        Y_ENSURE(Pos < Size, Sprintf("Expected number, but got end of the string."));
+        Y_ENSURE(Pos_ < Size_, Sprintf("Expected number, but got end of the string."));
 
         TString number;
         if (auto maybeSign = MaybeKeyword({"+", "-"})) {
@@ -248,18 +272,17 @@ private:
         try {
             return std::stod(term);
         } catch (...) {
-            ParseError(Sprintf("Expected a number, got [%s]", term.c_str()), Pos - term.size());
+            ParseError(Sprintf("Expected a number, got [%s]", term.c_str()), Pos_ - term.size());
         }
-        Y_UNREACHABLE();
+        YQL_ENSURE(false, "Unreachable");
     }
 
-private:
     // Helpers
     constexpr std::bitset<256> Chars(const TString& s) {
         std::bitset<256> res;
 
-        for (char c: s) {
-            res[c] = 1;
+        for (char c : s) {
+            res[c] = true;
         }
 
         return res;
@@ -269,10 +292,10 @@ private:
         std::bitset<256> res;
 
         for (unsigned char i = 'a'; i <= 'z'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
         for (unsigned char i = 'A'; i <= 'Z'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
 
         return res;
@@ -282,7 +305,7 @@ private:
         std::bitset<256> res;
 
         for (unsigned char i = '0'; i <= '9'; ++i) {
-            res[i] = 1;
+            res[i] = true;
         }
 
         return res;
@@ -290,12 +313,12 @@ private:
 
     constexpr std::bitset<256> LabelAllowedSymbols() {
         auto labelSymbols = Digits() | Letters();
-        labelSymbols['_'] = 1;
+        labelSymbols['_'] = true;
         return labelSymbols;
     }
 
     void SkipWhiteSpaces() {
-        for (; Pos < Size && isspace(Text[Pos + 1]); ++Pos) {
+        for (; Pos_ < Size_ && isspace(Text_[Pos_ + 1]); ++Pos_) {
         }
     }
 
@@ -303,8 +326,8 @@ private:
         i32 Line = 0;
         i32 LinePos = 0;
 
-        for (i32 i = 0; i <= pos && i < static_cast<i32>(Text.size()); ++i) {
-            if (Text[i] == '\n') {
+        for (i32 i = 0; i <= pos && i < static_cast<i32>(Text_.size()); ++i) {
+            if (Text_[i] == '\n') {
                 LinePos = 0;
                 ++Line;
             } else {
@@ -315,13 +338,11 @@ private:
         return {Line, LinePos};
     }
 
-private:
-    i32 Pos;
-    const i32 Size;
-    const TString& Text;
+    i32 Pos_;
+    const i32 Size_;
+    const TString& Text_;
 
-private:
-    TOptimizerHints Hints;
+    TOptimizerHints Hints_;
 };
 
 TOptimizerHints TOptimizerHints::Parse(const TString& text) {

@@ -1,5 +1,5 @@
-#include "schemeshard_impl.h"
 #include "schemeshard__stats_impl.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
@@ -22,12 +22,12 @@ public:
     void Complete(const TActorContext& ) override;
 
     // returns true to continue batching
-    bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats>::TItem& item, TTransactionContext& txc, const TActorContext& ctx) override;
+    bool PersistSingleStats(const TPathId& pathId, const TStatsQueue<TEvPersQueue::TEvPeriodicTopicStats>::TItem& item, TInstant now, TTransactionContext& txc, const TActorContext& ctx) override;
     void ScheduleNextBatch(const TActorContext& ctx) override;
 };
 
 
-bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQueueItem<TEvPersQueue::TEvPeriodicTopicStats>& item, TTransactionContext& txc, const TActorContext& ctx) {
+bool TTxStoreTopicStats::PersistSingleStats(const TPathId& pathId, const TStatsQueueItem<TEvPersQueue::TEvPeriodicTopicStats>& item, TInstant /*now*/, TTransactionContext& txc, const TActorContext& ctx) {
     const auto& rec = item.Ev->Get()->Record;
 
     TTopicStats newStats;
@@ -115,7 +115,7 @@ void TSchemeShard::Handle(TEvPersQueue::TEvPeriodicTopicStats::TPtr& ev, const T
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvPersistTopicStats::TPtr&, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
            "Started TEvPersistStats at tablet " << TabletID() << ", queue size# " << TopicStatsQueue.Size());
 
     TopicStatsBatchScheduled = false;

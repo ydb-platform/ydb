@@ -159,7 +159,7 @@ static int test_mshot(struct io_uring *ring, struct data *d)
 
 	d->fd = fd[1];
 
-	if (posix_memalign((void *) &buf, 16384, BUF_SIZE * NREQS))
+	if (posix_memalign((void **) &buf, 16384, BUF_SIZE * NREQS))
 		return T_EXIT_FAIL;
 
 	br = io_uring_setup_buf_ring(ring, NREQS, 1, 0, &ret);
@@ -221,6 +221,18 @@ static int test_mshot(struct io_uring *ring, struct data *d)
 		if (i > NREQS) {
 			fprintf(stderr, "Got too many requests?\n");
 			return T_EXIT_FAIL;
+		}
+		/*
+		 * We're using unix sockets, and later kernels got support added
+		 * for msg_inq querying. On those kernels, we cannot rely on
+		 * the multishot terminating on a zero receive, as io_uring
+		 * will not do that retry as it KNOWS there's zero bytes
+		 * pending. Hence we need to actively quiet at that point. Inc
+		 * 'i' as well as we don't get the non-MORE CQE posted.
+		 */
+		if (i == NREQS) {
+			i++;
+			break;
 		}
 	} while (1);
 

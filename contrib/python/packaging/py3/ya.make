@@ -2,24 +2,31 @@
 
 PY3_LIBRARY()
 
-VERSION(21.3)
+VERSION(26.3)
 
 LICENSE(BSD-2-Clause AND Apache-2.0)
-
-PEERDIR(
-    contrib/python/pyparsing
-)
 
 NO_LINT()
 
 PY_SRCS(
     TOP_LEVEL
-    packaging/__about__.py
     packaging/__init__.py
+    packaging/_elffile.py
     packaging/_manylinux.py
     packaging/_musllinux.py
+    packaging/_parser.py
+    packaging/_ranges.py
     packaging/_structures.py
+    packaging/_tokenizer.py
+    packaging/dependency_groups.py
+    packaging/direct_url.py
+    packaging/errors.py
+    packaging/licenses/__init__.py
+    packaging/licenses/_spdx.py
     packaging/markers.py
+    packaging/metadata.py
+    packaging/pylock.py
+    packaging/ranges.py
     packaging/requirements.py
     packaging/specifiers.py
     packaging/tags.py

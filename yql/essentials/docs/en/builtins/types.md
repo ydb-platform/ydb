@@ -8,7 +8,7 @@ Serializing a type or a handle type to a human-readable string. This helps at de
 
 Building a type from a string with description. [Documentation for its format](../types/type_string.md).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(ParseType("List<Int32>"));  -- List<int32>
@@ -18,7 +18,7 @@ SELECT FormatType(ParseType("List<Int32>"));  -- List<int32>
 
 Getting the type of value passed to the argument.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(TypeOf("foo"));  -- String
@@ -34,7 +34,7 @@ Returns an instance of the specified type that can only be used to get the type 
 
 If this instance remains in the computation graph by the end of optimization, the operation fails.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(TypeOf(
@@ -47,7 +47,7 @@ SELECT FormatType(TypeOf(
 
 Returns a type for [primitive data types](../types/primitive.md) based on type name.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(DataType("Bool")); -- Bool
@@ -58,17 +58,28 @@ SELECT FormatType(DataType("Decimal","5","1")); -- Decimal(5,1)
 
 Adds the option to assign `NULL` to the passed type.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(OptionalType(DataType("Bool"))); -- Bool?
+```
+
+## AsOptionalType {#asoptionaltype}
+
+Available since version [2026.01](../changelog/2026.01.md). Idempotently adds the ability to contain `NULL` to the passed type. If the type is already optional, PostgreSQL type or `NULL`, it returns the type unchanged. Unlike [OptionalType](#optionaltype), it does not add an additional level of nesting for already optional types.
+
+#### Examples
+
+```yql
+SELECT FormatType(AsOptionalType(DataType("Bool"))); -- Bool?
+SELECT FormatType(AsOptionalType(ParseType("Bool?"))); -- Bool?
 ```
 
 ## ListType and StreamType {#listtype}
 
 Builds a list type or stream type based on the passed element type.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(ListType(DataType("Bool"))); -- List<Bool>
@@ -78,7 +89,7 @@ SELECT FormatType(ListType(DataType("Bool"))); -- List<Bool>
 
 Builds a dictionary type based on the passed key types (first argument) and value types (second argument).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(DictType(
@@ -91,7 +102,7 @@ SELECT FormatType(DictType(
 
 Builds the tuple type from the passed element types.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(TupleType(
@@ -105,7 +116,7 @@ SELECT FormatType(TupleType(
 
 Builds the structure type based on the passed element types. The standard syntax of named arguments is used to specify the element names.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(StructType(
@@ -118,7 +129,7 @@ SELECT FormatType(StructType(
 
 Returns the type of a variant based on the underlying type (structure or tuple).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(VariantType(
@@ -130,7 +141,7 @@ SELECT FormatType(VariantType(
 
 Returns the type of the [resource](../types/special.md) based on the passed string label.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(ResourceType("Foo")); -- Resource<'Foo'>
@@ -144,7 +155,7 @@ Constructs the type of the called value using the following arguments:
 2. Result type.
 3. All the next arguments of CallableType are treated as types of arguments of the callable value, but with a shift for two required arguments (for example, the third argument of the CallableType describes the type of the first argument in the callable value).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(CallableType(
@@ -155,14 +166,32 @@ SELECT FormatType(CallableType(
 )); -- Callable<(String,[Int64?])->Double>
 ```
 
-## GenericType, UnitType, and VoidType {#generictype}
+## GenericType, UnitType, VoidType, NullType, EmptyListType, EmptyDictType {#generictype}
 
 Return the same-name [special data types](../types/special.md). They have no arguments because they are not parameterized.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(VoidType()); -- Void
+```
+
+## LinearType, DynamicLinearType {#lineartype}
+
+#### Signature
+
+```yql
+LinearType(Type) -> linear type parameterized by the given type
+```
+
+Functions available since version [2025.04](../changelog/2025.04.md).
+Returns the [linear](../types/linear.md) type.
+
+#### Examples
+
+```yql
+SELECT FormatType(LinearType(ResourceType("Foo"))); -- Linear<Resource<'Foo'>>
+SELECT FormatType(DynamicLinearType(ResourceType("Foo"))); -- DynamicLinear<Resource<'Foo'>>
 ```
 
 ## OptionalItemType, ListItemType and StreamItemType {#optionalitemtype}
@@ -171,7 +200,7 @@ If a type is passed to these functions, then they perform the action reverse to 
 
 If a type handle is passed to these functions, then they perform the action reverse to [OptionalTypeHandle](#optionaltypehandle), [ListTypeHandle](#list-stream-typehandle), and [StreamTypeHandle](#list-stream-typehandle): they return the handle of the element type based on the type handle of its container.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(ListItemType(
@@ -185,11 +214,39 @@ SELECT FormatType(ListItemType(
 )); -- Int32
 ```
 
+## LinearItemType {#linearitemtype}
+
+#### Signature
+
+```yql
+LinearItemType(LinearType)->linear type parameter
+LinearItemType(DynamicLinearType)->linear type parameter
+```
+
+These functions are available starting with version [2025.04](../changelog/2025.04.md).
+If these functions are passed a type, they perform the inverse of [LinearType](#lineartype) or [DynamicLinearType](#lineartype) — they return the type of the linear type parameter.
+
+If these functions are passed a type handle, they perform the inverse of [LinearTypeHandle](#lineartypehandle) or [DynamicLinearTypeHandle](#lineartypehandle)—they return the handle of the parameter type based on the linear type handle.
+
+#### Examples
+
+```yql
+SELECT FormatType(LinearItemType(
+    ParseType("Linear<Int32>")
+)); -- Int32
+```
+
+```yql
+SELECT FormatType(LinearItemType(
+    ParseTypeHandle("Linear<Int32>")
+)); -- Int32
+```
+
 ## DictKeyType and DictPayloadType {#dictkeytype}
 
 Returns the type of the key or value based on the dictionary type.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(DictKeyType(
@@ -201,7 +258,7 @@ SELECT FormatType(DictKeyType(
 
 Returns the tuple's element type based on the tuple type and the element index (index starts from zero).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(TupleElementType(
@@ -213,7 +270,7 @@ SELECT FormatType(TupleElementType(
 
 Returns the type of the structure element based on the structure type and element name.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(StructMemberType(
@@ -225,7 +282,7 @@ SELECT FormatType(StructMemberType(
 
 `CallableResultType` returns the result type based on the type of the called value. `CallableArgumentType` returns the argument type based on the called value type and its index (index starts from zero).
 
-### Examples
+#### Examples
 
 ```yql
 $callable_type = ParseType("(String,Bool)->Double");
@@ -244,7 +301,7 @@ If a type is passed to this function, then it performs an action reverse to [Var
 
 If a type handle is passed to this function, it performs the action reverse to [VariantTypeHandle](#varianttypehandle): returns the handle of the underlying type based on the handle of the variant type.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT FormatType(VariantUnderlyingType(
@@ -380,7 +437,7 @@ SELECT FormatType(ListTypeHandle(
 )); -- List<Bool>
 ```
 
-### EmptyListTypeHandle and EmptyDictTypeHandle
+### EmptyListTypeHandle and EmptyDictTypeHandle {#empty-list-dict-type-handle}
 
 Constructs a handle for an empty list or dictionary.
 
@@ -546,7 +603,7 @@ SELECT FormatType(VariantTypeHandle(
 )); -- Variant<Int32, String>
 ```
 
-### VoidTypeHandle and NullTypeHandle
+### VoidTypeHandle and NullTypeHandle {#void-null-type-handle}
 
 Constructing a handle for Void and Null types, respectively.
 
@@ -634,4 +691,24 @@ Getting the number of arguments in a lambda function.
 ```yql
 SELECT LambdaArgumentsCount(($x, $y)->($x+$y))
 ; -- 2
+```
+
+### LinearTypeHandle and DynamicLinearTypeHandle {#lineartypehandle}
+
+#### Signature
+
+```yql
+LinearTypeHandle(TypeHandle)->handle of a static linear type
+DynamicLinearTypeHandle(TypeHandle)->handle of a dynamic linear type
+```
+
+Functions available starting with version [2025.04](../changelog/2025.04.md).
+These functions construct a handle of a static or dynamic linear type based on the passed handle of the parameter type.
+
+#### Examples
+
+```yql
+SELECT FormatType(LinearTypeHandle(
+    TypeHandle(DataType("Bool"))
+)); -- Linear<Bool>
 ```

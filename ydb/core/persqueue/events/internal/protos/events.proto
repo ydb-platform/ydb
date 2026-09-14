@@ -1,0 +1,232 @@
+import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/pqdata_mlp.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+package NKikimrPQ;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TEvSubDomainStatus {
+    required bool SubDomainOutOfSpace = 1;
+};
+
+message TEvCheckPartitionStatusRequest {
+    optional uint32 Partition = 1;
+    optional string SourceId = 2;
+};
+
+message TEvCheckPartitionStatusResponse {
+    optional ETopicPartitionStatus Status = 1;
+    optional uint64 SeqNo = 2;
+};
+
+// The consumer's reading of the partition is finished  (from the partition)
+message TEvReadingPartitionStatusRequest {
+    optional string Consumer = 1;
+    optional uint32 PartitionId = 2;
+    optional uint32 Generation = 3;
+    optional uint32 Cookie = 4;
+    optional uint64 MessageCount = 5;
+    optional uint64 LockedMessageCount = 6;
+    optional uint64 DelayedMessageCount = 7;
+};
+
+message TEvPartitionScaleStatusChanged {
+    required uint32 PartitionId = 1;
+    required EScaleStatus ScaleStatus = 2;
+    optional TPartitionScaleParticipants ParticipatingPartitions = 3;
+    optional string SplitBoundary = 4;
+};
+
+message TBroadcastPartitionError {
+    message TMessageGroup {
+        repeated TStatusResponse.TErrorMessage Errors = 1;
+    }
+    repeated TMessageGroup MessageGroups = 1;
+};
+
+message TEvMLPGetPartitionRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    // SQS FIFO receive-request-attempt-id. When set, repeated requests with the same
+    // attempt id are routed to the same partition to keep replay semantics stable.
+    optional string ReceiveAttemptId = 3;
+}
+
+// From PQRB
+message TEvMLPGetPartitionResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    optional uint32 PartitionId = 2;
+    optional uint64 TabletId = 3;
+}
+
+// From PQTablet
+message TEvMLPErrorResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    optional string ErrorMessage = 2;
+    optional uint32 PartitionId = 3;
+}
+
+// To PQTablet
+message TEvMLPReadRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    optional uint64 WaitDeadlineMilliseconds = 4;
+    optional uint64 ProcessingTimeoutMilliseconds = 5;
+    // The maximum number of messages to return.
+    optional uint32 MaxNumberOfMessages = 6;
+    repeated string SkipMessageGroup = 7;
+    // SQS FIFO receive-request-attempt-id replay. When set, repeated reads with the
+    // same attempt id within the configured period return the same messages.
+    optional string ReceiveAttemptId = 8;
+}
+
+// From PQTablet
+message TEvMLPReadResponse {
+    repeated TMLPMessage Message = 1;
+}
+
+// To PQTablet
+// Подтверждает что сообщение было обработано
+message TEvMLPCommitRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    repeated uint64 Offset = 4;
+}
+
+enum EMLPOperationResult {
+    Success = 0;
+    NotFound = 1;
+    NotInFlight = 2;
+    Failed = 3;
+}
+
+// From PQTablet
+message TEvMLPCommitResponse {
+    map<uint64, EMLPOperationResult> OffsetResults = 1;
+}
+
+// To PQTablet
+// освобождает сообщение до истечения таймаута. Может быть полезно для протоколов, которые держат постоянное соединение с клиентом, и могут обрабатывать обрыв соединения
+message TEvMLPUnlockRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    repeated uint64 Offset = 4;
+}
+
+// From PQTablet
+message TEvMLPUnlockResponse {
+    map<uint64, EMLPOperationResult> OffsetResults = 1;
+}
+
+// To PQTablet
+// Изменяет дедлайн сообщения
+message TEvMLPChangeMessageDeadlineRequest {
+    message TOffsetWithDeadline {
+        optional uint64 Offset = 1;
+        optional uint64 DeadlineTimestampSeconds = 2;
+    }
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    repeated TOffsetWithDeadline Message = 6;
+}
+
+// From PQTablet
+message TEvMLPChangeMessageDeadlineResponse {
+    map<uint64, EMLPOperationResult> OffsetResults = 1;
+}
+
+// To PQTablet
+message TEvMLPPurgeRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+}
+
+// From PQTablet
+message TEvMLPPurgeResponse {
+    optional uint32 PartitionId = 1;
+}
+
+// To PQRB
+message TEvMLPGetRuntimeAttributesRequest {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+}
+
+// From PQRB
+message TEvMLPGetRuntimeAttributesResponse {
+    optional uint64 ApproximateMessageCount = 1;
+    optional uint64 ApproximateDelayedMessageCount = 2;
+    optional uint64 ApproximateLockedMessageCount = 3;
+}
+
+message TEvMLPConsumerStatus {
+    optional string Topic = 1; // PathId? Нужен для возможности в одной таблетке хранить несколько топиков
+    optional string Consumer = 2;
+    optional uint32 PartitionId = 3;
+    optional bool UseForReading = 6;
+    optional uint32 Generation = 7;
+    optional uint64 Cookie = 8;
+    optional uint64 MessageCount = 9;
+    optional uint64 LockedMessageCount = 10;
+    optional uint64 DelayedMessageCount = 11;
+}
+
+message TEvMLPUpdateExternalLockedMessageGroupsId {
+    optional uint32 PartitionId = 1; /* child partitionId */
+    optional string Consumer = 2;
+    optional TExternalLockedMessageGroupsId Update = 3;
+}
+
+// To PQRB from YMQ topic-path action actors.
+message TEvTopicSqsActionMetrics {
+    message TTopicSqsProxyActionMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+    }
+
+    message TTopicSqsSendMessageMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+        optional uint64 SendMessageCount = 3;
+        optional uint64 BytesWritten = 4;
+        optional uint64 DeduplicationCount = 5;
+    }
+
+    message TTopicSqsDeleteMessageMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+        optional uint64 DeleteMessageCount = 3;
+    }
+
+    message TTopicSqsReceiveMessageMetrics {
+        optional uint32 ErrorsCount = 1;
+        optional uint64 DurationMs = 2;
+        optional uint64 WorkingDurationMs = 3;
+        optional uint64 ReceiveMessageCount = 4;
+        optional uint64 ReceiveMessageBytesRead = 5;
+        optional uint64 ReceiveMessageEmptyCount = 6;
+    }
+
+    oneof Action {
+        TTopicSqsProxyActionMetrics ChangeMessageVisibility = 1;
+        TTopicSqsProxyActionMetrics ChangeMessageVisibilityBatch = 2;
+        TTopicSqsDeleteMessageMetrics DeleteMessage = 3;
+        TTopicSqsDeleteMessageMetrics DeleteMessageBatch = 4;
+        TTopicSqsProxyActionMetrics GetQueueAttributes = 5;
+        TTopicSqsProxyActionMetrics PurgeQueue = 6;
+        TTopicSqsReceiveMessageMetrics ReceiveMessage = 7;
+        TTopicSqsSendMessageMetrics SendMessage = 8;
+        TTopicSqsSendMessageMetrics SendMessageBatch = 9;
+        TTopicSqsProxyActionMetrics SetQueueAttributes = 10;
+        TTopicSqsProxyActionMetrics ListDeadLetterSourceQueues = 11;
+        TTopicSqsProxyActionMetrics ListQueueTags = 12;
+        TTopicSqsProxyActionMetrics TagQueue = 13;
+        TTopicSqsProxyActionMetrics UntagQueue = 14;
+        TTopicSqsProxyActionMetrics GetQueueUrl = 15;
+    }
+}

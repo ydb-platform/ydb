@@ -1,8 +1,8 @@
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 const Ydb::TableStats::QueryStats& TProtoAccessor::GetProto(const NTable::TQueryStats& queryStats) {
     return queryStats.GetProto();
@@ -10,6 +10,18 @@ const Ydb::TableStats::QueryStats& TProtoAccessor::GetProto(const NTable::TQuery
 
 const Ydb::Table::DescribeTableResult& TProtoAccessor::GetProto(const NTable::TTableDescription& tableDescription) {
     return tableDescription.GetProto();
+}
+
+const Ydb::Table::DescribeExternalDataSourceResult& TProtoAccessor::GetProto(const NTable::TExternalDataSourceDescription& description) {
+    return description.GetProto();
+}
+
+const Ydb::Table::DescribeExternalTableResult& TProtoAccessor::GetProto(const NTable::TExternalTableDescription& description) {
+    return description.GetProto();
+}
+
+const Ydb::Table::DescribeSystemViewResult& TProtoAccessor::GetProto(const NTable::TSystemViewDescription& description) {
+    return description.GetProto();
 }
 
 NTable::TQueryStats TProtoAccessor::FromProto(const Ydb::TableStats::QueryStats& queryStats) {
@@ -26,6 +38,14 @@ NTable::TIndexDescription TProtoAccessor::FromProto(const Ydb::Table::TableIndex
 
 NTable::TIndexDescription TProtoAccessor::FromProto(const Ydb::Table::TableIndexDescription& tableIndexDesc) {
     return NTable::TIndexDescription(tableIndexDesc);
+}
+
+NTable::TMultiColumnStatisticsDescription TProtoAccessor::FromProto(const Ydb::Table::TableMultiColumnStatistics& tableMultiColumnStatistics) {
+    return NTable::TMultiColumnStatisticsDescription(tableMultiColumnStatistics);
+}
+
+NTable::TMultiColumnStatisticsDescription TProtoAccessor::FromProto(const Ydb::Table::TableMultiColumnStatisticsDescription& tableMultiColumnStatisticsDesc) {
+    return NTable::TMultiColumnStatisticsDescription(tableMultiColumnStatisticsDesc);
 }
 
 NTable::TChangefeedDescription TProtoAccessor::FromProto(const Ydb::Table::Changefeed& changefeed) {

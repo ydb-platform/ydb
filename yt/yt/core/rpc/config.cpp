@@ -1,5 +1,9 @@
 #include "config.h"
 
+#include "backend.h"
+
+#include <yt/yt/core/misc/collection_helpers.h>
+
 namespace NYT::NRpc {
 
 using namespace NBus;
@@ -100,6 +104,14 @@ void TServiceConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TMethodTestingConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("random_delay", &TThis::RandomDelay)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TMethodConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("heavy", &TThis::Heavy)
@@ -118,6 +130,8 @@ void TMethodConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("log_level", &TThis::LogLevel)
         .Optional();
+    registrar.Parameter("error_log_level", &TThis::ErrorLogLevel)
+        .Optional();
     registrar.Parameter("request_bytes_throttler", &TThis::RequestBytesThrottler)
         .Default();
     registrar.Parameter("request_weight_throttler", &TThis::RequestWeightThrottler)
@@ -130,6 +144,8 @@ void TMethodConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("pooled", &TThis::Pooled)
         .Optional();
+    registrar.Parameter("testing", &TThis::Testing)
+        .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -172,14 +188,12 @@ void TViablePeerRegistryConfig::Register(TRegistrar registrar)
     registrar.Parameter("hashes_per_peer", &TThis::HashesPerPeer)
         .GreaterThan(0)
         .Default(10);
-    registrar.Parameter("peer_priority_strategy", &TThis::PeerPriorityStrategy)
-        .Default(EPeerPriorityStrategy::None);
     registrar.Parameter("min_peer_count_for_priority_awareness", &TThis::MinPeerCountForPriorityAwareness)
         .GreaterThanOrEqual(0)
         .Default(0);
 
     registrar.Parameter("enable_power_of_two_choices_strategy", &TThis::EnablePowerOfTwoChoicesStrategy)
-        .Default(false);
+        .Default(true);
 
     registrar.Postprocessor([] (TThis* config) {
         if (config->MinPeerCountForPriorityAwareness > config->MaxPeerCount) {
@@ -207,6 +221,8 @@ void TDynamicChannelPoolConfig::Register(TRegistrar registrar)
         .Default(TDuration::Seconds(10));
     registrar.Parameter("peer_polling_request_timeout", &TThis::PeerPollingRequestTimeout)
         .Default(TDuration::Seconds(15));
+    registrar.Parameter("peer_priority_strategy", &TThis::PeerPriorityStrategy)
+        .Default(EPeerPriorityStrategy::None);
 
     registrar.Parameter("discovery_session_timeout", &TThis::DiscoverySessionTimeout)
         .Default(TDuration::Minutes(5))
@@ -330,7 +346,11 @@ void TDispatcherConfig::Register(TRegistrar registrar)
         .GreaterThan(0);
     registrar.Parameter("heavy_pool_polling_period", &TThis::HeavyPoolPollingPeriod)
         .Default(TDuration::MilliSeconds(10));
+    registrar.Parameter("default_request_timeout", &TThis::DefaultRequestTimeout)
+        .Default(TDuration::Hours(24));
     registrar.Parameter("alert_on_missing_request_info", &TThis::AlertOnMissingRequestInfo)
+        .Default(false);
+    registrar.Parameter("alert_on_unset_request_timeout", &TThis::AlertOnUnsetRequestTimeout)
         .Default(false);
     registrar.Parameter("send_tracing_baggage", &TThis::SendTracingBaggage)
         .Default(true);
@@ -342,7 +362,9 @@ TDispatcherConfigPtr TDispatcherConfig::ApplyDynamic(const TDispatcherDynamicCon
     UpdateYsonStructField(mergedConfig->HeavyPoolSize, dynamicConfig->HeavyPoolSize);
     UpdateYsonStructField(mergedConfig->CompressionPoolSize, dynamicConfig->CompressionPoolSize);
     UpdateYsonStructField(mergedConfig->HeavyPoolPollingPeriod, dynamicConfig->HeavyPoolPollingPeriod);
+    UpdateYsonStructField(mergedConfig->DefaultRequestTimeout, dynamicConfig->DefaultRequestTimeout);
     UpdateYsonStructField(mergedConfig->AlertOnMissingRequestInfo, dynamicConfig->AlertOnMissingRequestInfo);
+    UpdateYsonStructField(mergedConfig->AlertOnUnsetRequestTimeout, dynamicConfig->AlertOnUnsetRequestTimeout);
     UpdateYsonStructField(mergedConfig->SendTracingBaggage, dynamicConfig->SendTracingBaggage);
     mergedConfig->Postprocess();
     return mergedConfig;
@@ -364,6 +386,119 @@ void TDispatcherDynamicConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("send_tracing_baggage", &TThis::SendTracingBaggage)
         .Optional();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadTrackedServiceMethod::Register(TRegistrar registrar)
+{
+    registrar.Parameter("service", &TThis::Service)
+        .Default();
+    registrar.Parameter("method", &TThis::Method)
+        .Default();
+    registrar.Parameter("max_window", &TThis::MaxWindow)
+        .Default(1'024);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadTrackedServiceMethodConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("service", &TThis::Service)
+        .Default();
+    registrar.Parameter("method", &TThis::Method)
+        .Default();
+    registrar.Parameter("max_window", &TThis::MaxWindow)
+        .Default(1'024);
+    registrar.Parameter("waiting_timeout_fraction", &TThis::WaitingTimeoutFraction)
+        .Default(0.5);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadTrackerConfigBase::Register(TRegistrar registrar)
+{
+    registrar.Parameter("methods_to_throttle", &TThis::MethodsToThrottle)
+        .Default();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadTrackerMeanWaitTimeConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("mean_wait_time_threshold", &TThis::MeanWaitTimeThreshold)
+        .Default(TDuration::MilliSeconds(20));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadTrackerBacklogQueueFillFractionConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("backlog_queue_fill_fraction_threshold", &TThis::BacklogQueueFillFractionThreshold)
+        .Default(0.9);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TOverloadControllerConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("enabled", &TThis::Enabled)
+        .Default(false);
+    registrar.Parameter("trackers", &TThis::Trackers)
+        .Default();
+    registrar.Parameter("methods", &TThis::Methods)
+        .Default();
+    registrar.Parameter("load_adjusting_period", &TThis::LoadAdjustingPeriod)
+        .Default(TDuration::MilliSeconds(100));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::vector<std::string> TProtocolMapConfigBase::GetConfiguredProtocols() const
+{
+    std::vector<std::string> result;
+    for (const auto& [protocol, entry] : ProtocolToEntry_) {
+        if (!entry.IsNull(entry.CurrentConfig)) {
+            result.push_back(protocol);
+        }
+    }
+    return result;
+}
+
+std::any TProtocolMapConfigBase::GetUntypedConfig(TStringBuf protocol)
+{
+    return GetOrCrash(ProtocolToEntry_, protocol).CurrentConfig;
+}
+
+std::any TProtocolMapConfigBase::FindUntypedConfig(TStringBuf protocol)
+{
+    auto it = ProtocolToEntry_.find(protocol);
+    if (it == ProtocolToEntry_.end()) {
+        return {};
+    }
+    const auto& entry = it->second;
+    if (entry.IsNull(entry.CurrentConfig)) {
+        return {};
+    }
+    return entry.CurrentConfig;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TMultiProtocolClientConfig::Register(TRegistrar registrar)
+{
+    for (auto* backend : TBackendRegistry::GetBackends()) {
+        backend->RegisterClientConfigField(registrar);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TMultiProtocolServerConfig::Register(TRegistrar registrar)
+{
+    for (auto* backend : TBackendRegistry::GetBackends()) {
+        backend->RegisterServerConfigField(registrar);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

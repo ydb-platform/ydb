@@ -26,7 +26,7 @@ bool TDataShard::TTxGetS3Upload::Execute(TTransactionContext& txc, const TActorC
 }
 
 void TDataShard::TTxGetS3Upload::Complete(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(Reply);
+    Y_ENSURE(Reply);
     ctx.Send(Ev->Get()->ReplyTo, Reply.Release(), 0, Ev->Cookie);
 }
 
@@ -49,7 +49,7 @@ bool TDataShard::TTxStoreS3UploadId::Execute(TTransactionContext& txc, const TAc
 }
 
 void TDataShard::TTxStoreS3UploadId::Complete(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(Reply);
+    Y_ENSURE(Reply);
     ctx.Send(Ev->Get()->ReplyTo, Reply.Release(), 0, Ev->Cookie);
 }
 
@@ -72,7 +72,7 @@ bool TDataShard::TTxChangeS3UploadStatus::Execute(TTransactionContext& txc, cons
 }
 
 void TDataShard::TTxChangeS3UploadStatus::Complete(const TActorContext& ctx) {
-    Y_ABORT_UNLESS(Reply);
+    Y_ENSURE(Reply);
     ctx.Send(Ev->Get()->ReplyTo, Reply.Release(), 0, Ev->Cookie);
 }
 

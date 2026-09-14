@@ -4,12 +4,13 @@ UNITTEST_FOR(ydb/library/yql/providers/s3/compressors)
 
 SRCS(
     decompressor_ut.cpp
+    output_queue_ut.cpp
 )
 
 PEERDIR(
     library/cpp/scheme
-    yql/essentials/public/udf/service/stub
     ydb/library/yql/udfs/common/clickhouse/client
+    yql/essentials/public/udf/service/stub
 )
 
 ADDINCL(

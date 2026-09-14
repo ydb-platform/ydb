@@ -8,7 +8,6 @@ from devtools.yamaker import boost
 from devtools.yamaker.fileutil import re_sub_dir, re_sub_file
 from devtools.yamaker.project import CMakeNinjaNixProject
 
-
 RUNTIMES = {
     "core2": [
         # intentionally empty
@@ -133,12 +132,7 @@ def post_install(self):
 
 
 hyperscan = CMakeNinjaNixProject(
-    owners=[
-        "galtsev",
-        "g:antiinfra",
-        "g:cpp-contrib",
-        "g:yql",
-    ],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/hyperscan",
     nixattr="hyperscan",
     install_targets=[

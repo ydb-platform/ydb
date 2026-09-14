@@ -1,3 +1,4 @@
 RECURSE(
+    executor
     issue
 )

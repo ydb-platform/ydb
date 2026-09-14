@@ -9,6 +9,8 @@
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -68,7 +70,7 @@ namespace NKikimr {
         STRICT_STFUNC(WaitForCandidatesStateFunc,
                       HFunc(TEvAnubisCandidates, Handle)
                       HFunc(NMon::TEvHttpInfo, Handle)
-                      HFunc(TEvents::TEvActorDied, Handle)
+                      HFunc(TEvents::TEvGone, Handle)
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
                       )
 
@@ -88,7 +90,7 @@ namespace NKikimr {
         }
 
         void CommunicateWithPeers(const TActorContext &ctx) {
-            Y_ABORT_UNLESS(MessagesSentToPeers == 0);
+            Y_VERIFY_S(MessagesSentToPeers == 0, HullCtx->VCtx->VDiskLogPrefix);
             for (const auto &x : HullCtx->VCtx->Top->GetVDisks()) {
                 if (HullCtx->VCtx->ShortSelfVDisk != x.VDiskIdShort) {
                     // not self
@@ -99,7 +101,7 @@ namespace NKikimr {
                     if (!checkIds.empty()) {
                         // send a check message to proxy if have something to check
                         auto it = QueueActorMapPtr->find(x.VDiskIdShort);
-                        Y_ABORT_UNLESS(it != QueueActorMapPtr->end());
+                        Y_VERIFY_S(it != QueueActorMapPtr->end(), HullCtx->VCtx->VDiskLogPrefix);
                         ctx.Send(it->second, new TEvAnubisVGet(std::move(checkIds)));
                         ++MessagesSentToPeers;
                     }
@@ -107,7 +109,7 @@ namespace NKikimr {
             }
 
             // must send several messages or what we are checking?
-            Y_ABORT_UNLESS(MessagesSentToPeers != 0);
+            Y_VERIFY_S(MessagesSentToPeers != 0, HullCtx->VCtx->VDiskLogPrefix);
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -116,12 +118,12 @@ namespace NKikimr {
         STRICT_STFUNC(WaitPeersReply,
                       HFunc(TEvAnubisVGetResult, Handle)
                       HFunc(NMon::TEvHttpInfo, Handle)
-                      HFunc(TEvents::TEvActorDied, Handle)
+                      HFunc(TEvents::TEvGone, Handle)
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
                       )
 
         void Handle(TEvAnubisVGetResult::TPtr &ev, const TActorContext &ctx) {
-            Y_ABORT_UNLESS(MessagesSentToPeers > 0);
+            Y_VERIFY_S(MessagesSentToPeers > 0, HullCtx->VCtx->VDiskLogPrefix);
             --MessagesSentToPeers;
 
             // mark ids with NODATA
@@ -151,12 +153,12 @@ namespace NKikimr {
         STRICT_STFUNC(WaitWriteCompletion,
                       HFunc(TEvAnubisOsirisPutResult, Handle)
                       HFunc(NMon::TEvHttpInfo, Handle)
-                      HFunc(TEvents::TEvActorDied, Handle)
+                      HFunc(TEvents::TEvGone, Handle)
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
                       )
 
         void RemoveBlobs(const TActorContext &ctx, TVector<TLogoBlobID> &&forRemoval) {
-            Y_ABORT_UNLESS(!forRemoval.empty());
+            Y_VERIFY_S(!forRemoval.empty(), HullCtx->VCtx->VDiskLogPrefix);
 
             Become(&TThis::WaitWriteCompletion);
             BlobsToRemove = TBlobsToRemove(std::move(forRemoval));
@@ -167,10 +169,8 @@ namespace NKikimr {
             // send up to MaxInFly
             while (BlobsToRemove.Valid() && InFly < MaxInFly) {
                 const TLogoBlobID &id = BlobsToRemove.Get();
-                Y_ABORT_UNLESS(id.PartId() == 0);
-                LOG_ERROR(ctx, BS_SYNCER,
-                          VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "TAnubisQuantumActor: DELETE: id# %s", id.ToString().data()));
+                Y_VERIFY_S(id.PartId() == 0, HullCtx->VCtx->VDiskLogPrefix);
+                YDB_LOG_ERROR_CTX(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TAnubisQuantumActor: DELETE: id# %s", id.ToString().data()));
                 ctx.Send(SkeletonId, new TEvAnubisOsirisPut(id));
                 ++InFly;
 
@@ -182,10 +182,7 @@ namespace NKikimr {
             // check reply and notify about error
             if (ev->Get()->Status != NKikimrProto::OK) {
                 Result.Issues.LocalWriteErrors = true;
-                LOG_ERROR(ctx, BS_SYNCER,
-                          VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                                "TAnubisQuantumActor: local write failed: Status# %s",
-                                NKikimrProto::EReplyStatus_Name(ev->Get()->Status).data()));
+                YDB_LOG_ERROR_CTX(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TAnubisQuantumActor: local write failed: Status# %s", NKikimrProto::EReplyStatus_Name(ev->Get()->Status).data()));
             }
 
             --InFly;
@@ -213,7 +210,7 @@ namespace NKikimr {
         // COMMON
         ////////////////////////////////////////////////////////////////////////
         // This handler is called when TAnubisHttpInfoActor is finished
-        void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
         }
@@ -228,7 +225,7 @@ namespace NKikimr {
         // Handle TEvHttpInfo
         ////////////////////////////////////////////////////////////////////////
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_VERIFY_S(ev->Get()->SubRequestId == TDbMon::SyncerInfoId, HullCtx->VCtx->VDiskLogPrefix);
             TStringStream str;
             HTML(str) {
                 str << "Pos: " << Pos << "<br>";

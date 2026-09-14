@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 namespace NBoot {
 
-void TStages::FinalizeLeaderLogics(TResult &result, TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory) noexcept
+void TStages::FinalizeLeaderLogics(TResult &result, TSteppedCookieAllocatorFactory &steppedCookieAllocatorFactory)
 {
     using EIdx = TCookie::EIdx;
 

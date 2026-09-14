@@ -1,5 +1,8 @@
 #include "cell_maker.h"
 
+#include <ydb/core/io_formats/json/json.h>
+
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/types/uuid/uuid.h>
@@ -19,6 +22,7 @@
 #include <util/datetime/base.h>
 #include <util/string/cast.h>
 
+#include <limits>
 #include <typeinfo>
 
 namespace NKikimr::NFormats {
@@ -267,20 +271,84 @@ namespace {
         }
     };
 
-    NJson::TJsonWriterConfig DefaultJsonConfig() {
-        NJson::TJsonWriterConfig jsonConfig;
-        jsonConfig.ValidateUtf8 = false;
-        jsonConfig.WriteNanAsString = true;
-        return jsonConfig;
-    }
-
     TString WriteJson(const NJson::TJsonValue& json) {
         TStringStream str;
-        NJson::WriteJson(&str, &json, DefaultJsonConfig());
+        NJson::WriteJson(&str, &json, DefaultJsonWriterConfig());
         return str.Str();
     }
 
+    double GetDoubleSafeWithNanInf(const NJson::TJsonValue& value) {
+        if (value.IsString()) {
+            const auto& s = value.GetStringSafe();
+            if (s == "inf") {
+                return std::numeric_limits<double>::infinity();
+            } else if (s == "-inf") {
+                return -std::numeric_limits<double>::infinity();
+            } else if (s == "nan") {
+                return std::numeric_limits<double>::quiet_NaN();
+            }
+        }
+        return value.GetDoubleSafe();
+    }
+
 } // anonymous
+
+void AddTwoCells(TCell& result, const TCell& cell1, const TCell& cell2, const NScheme::TTypeId& typeId) {
+
+    Y_ENSURE(cell1.Size() == NScheme::GetFixedSize(typeId));
+    Y_ENSURE(cell2.Size() == NScheme::GetFixedSize(typeId));
+
+    switch (typeId) {
+    case NScheme::NTypeIds::Int8:
+        result = TCell::Make(i8(cell1.AsValue<i8>() + cell2.AsValue<i8>()));
+        break;
+    case NScheme::NTypeIds::Uint8:
+        result = TCell::Make(ui8(cell1.AsValue<ui8>() + cell2.AsValue<ui8>()));
+        break;
+    case NScheme::NTypeIds::Int16:
+        result = TCell::Make(i16(cell1.AsValue<i16>() + cell2.AsValue<i16>()));
+        break;
+    case NScheme::NTypeIds::Uint16:
+        result = TCell::Make(ui16(cell1.AsValue<ui16>() + cell2.AsValue<ui16>()));
+        break;
+    case NScheme::NTypeIds::Int32:
+        result = TCell::Make(i32(cell1.AsValue<i32>() + cell2.AsValue<i32>()));
+        break;
+    case NScheme::NTypeIds::Uint32:
+        result = TCell::Make(ui32(cell1.AsValue<ui32>() + cell2.AsValue<ui32>()));
+        break;
+    case NScheme::NTypeIds::Int64:
+        result = TCell::Make(i64(cell1.AsValue<i64>() + cell2.AsValue<i64>()));
+        break;
+    case NScheme::NTypeIds::Uint64:
+        result = TCell::Make(ui64(cell1.AsValue<ui64>() + cell2.AsValue<ui64>()));
+        break;
+    case NScheme::NTypeIds::Float:
+    case NScheme::NTypeIds::Double:
+    case NScheme::NTypeIds::Date:
+    case NScheme::NTypeIds::Datetime:
+    case NScheme::NTypeIds::Timestamp:
+    case NScheme::NTypeIds::Interval:
+    case NScheme::NTypeIds::Date32:
+    case NScheme::NTypeIds::Datetime64:
+    case NScheme::NTypeIds::Timestamp64:
+    case NScheme::NTypeIds::Interval64:
+    case NScheme::NTypeIds::String:
+    case NScheme::NTypeIds::String4k:
+    case NScheme::NTypeIds::String2m:
+    case NScheme::NTypeIds::Utf8:
+    case NScheme::NTypeIds::Yson:
+    case NScheme::NTypeIds::Json:
+    case NScheme::NTypeIds::JsonDocument:
+    case NScheme::NTypeIds::DyNumber:
+    case NScheme::NTypeIds::Decimal:
+    case NScheme::NTypeIds::Pg:
+    case NScheme::NTypeIds::Uuid:
+        Y_ENSURE(false);
+    default:
+        Y_ENSURE(false);
+    }
+}
 
 bool MakeCell(TCell& cell, TStringBuf value, const NScheme::TTypeInfo& typeInfo, TMemoryPool& pool, TString& err) {
     if (value == "null") {
@@ -372,9 +440,9 @@ bool MakeCell(TCell& cell, const NJson::TJsonValue& value, const NScheme::TTypeI
         case NScheme::NTypeIds::Uint64:
             return TCellMaker<ui64>::MakeDirect(cell, value.GetUIntegerSafe(), pool, err);
         case NScheme::NTypeIds::Float:
-            return TCellMaker<float>::MakeDirect(cell, value.GetDoubleSafe(), pool, err);
+            return TCellMaker<float>::MakeDirect(cell, GetDoubleSafeWithNanInf(value), pool, err);
         case NScheme::NTypeIds::Double:
-            return TCellMaker<double>::MakeDirect(cell, value.GetDoubleSafe(), pool, err);
+            return TCellMaker<double>::MakeDirect(cell, GetDoubleSafeWithNanInf(value), pool, err);
         case NScheme::NTypeIds::Date:
             return TCellMaker<TInstant, ui16>::Make(cell, value.GetStringSafe(), pool, err, &Days);
         case NScheme::NTypeIds::Datetime:
@@ -460,13 +528,13 @@ bool CheckCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo) {
     case NScheme::NTypeIds::Interval:
         return (ui64)std::abs(cell.AsValue<i64>()) < NUdf::MAX_TIMESTAMP;
     case NScheme::NTypeIds::Date32:
-        return cell.AsValue<i32>() < NUdf::MAX_DATE32;
+        return cell.AsValue<i32>() >= NUdf::MIN_DATE32 && cell.AsValue<i32>() <= NUdf::MAX_DATE32;
     case NScheme::NTypeIds::Datetime64:
-        return cell.AsValue<i64>() < NUdf::MAX_DATETIME64;
+        return cell.AsValue<i64>() >= NUdf::MIN_DATETIME64 && cell.AsValue<i64>() <= NUdf::MAX_DATETIME64;
     case NScheme::NTypeIds::Timestamp64:
-        return cell.AsValue<i64>() < NUdf::MAX_TIMESTAMP64;
+        return cell.AsValue<i64>() >= NUdf::MIN_TIMESTAMP64 && cell.AsValue<i64>() <= NUdf::MAX_TIMESTAMP64;
     case NScheme::NTypeIds::Interval64:
-        return std::abs(cell.AsValue<i64>()) < NUdf::MAX_INTERVAL64;
+        return std::abs(cell.AsValue<i64>()) <= NUdf::MAX_INTERVAL64;
     case NScheme::NTypeIds::Utf8:
         return NYql::IsUtf8(cell.AsBuf());
     case NScheme::NTypeIds::Yson:

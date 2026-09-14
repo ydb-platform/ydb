@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "event.h"
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <atomic>
 #include <mutex>
 
@@ -129,13 +129,13 @@ namespace NActors {
          * EMailboxPush::Free the mailbox is currently locked by a free list
          * and the event cannot be delivered.
          */
-        EMailboxPush Push(TAutoPtr<IEventHandle>& ev) noexcept;
+        EMailboxPush Push(std::unique_ptr<IEventHandle>& ev) noexcept;
 
         /**
          * Removes the next event from the mailbox. Returns nullptr for an
          * empty mailbox, which stays locked.
          */
-        TAutoPtr<IEventHandle> Pop() noexcept;
+        std::unique_ptr<IEventHandle> Pop() noexcept;
 
         /**
          * Counts the number of events for the given localActorId
@@ -161,7 +161,7 @@ namespace NActors {
          * is useful when an event needs to be injected at the front of the
          * queue.
          */
-        void PushFront(TAutoPtr<IEventHandle>& ev) noexcept;
+        void PushFront(std::unique_ptr<IEventHandle>&& ev) noexcept;
 
         /**
          * Returns true for free mailboxes
@@ -186,17 +186,26 @@ namespace NActors {
          */
         void Unlock(IExecutorPool* pool, NHPTimer::STime now, ui64& revolvingCounter);
 
+        /**
+         * Returns true when a free mailbox can be reclaimed
+         */
+        bool CanReclaim() const {
+            Y_DEBUG_ABORT_UNLESS(IsFree());
+            return !EventHead;
+        }
+
     private:
         void EnsureActorMap();
         void OnPreProcessed(IEventHandle* head, IEventHandle* tail) noexcept;
         void AppendPreProcessed(IEventHandle* head, IEventHandle* tail) noexcept;
         void PrependPreProcessed(IEventHandle* head, IEventHandle* tail) noexcept;
         IEventHandle* PreProcessEvents() noexcept;
+        void CleanupActor(IActor* actor) noexcept;
 
     public:
         ui32 Hint = 0;
 
-        EActorPack ActorPack = EActorPack::Empty;
+        std::atomic<EActorPack> ActorPack{ EActorPack::Empty };
 
         static constexpr TMailboxType::EType Type = TMailboxType::LockFreeIntrusive;
 

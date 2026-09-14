@@ -7,6 +7,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/base/hive.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
@@ -114,6 +115,8 @@ private:
             FFunc(TEvConsole::EvDropConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveAllConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvFetchStartupConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvGetConfigurationVersionRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetNodeConfigItemsRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetNodeConfigRequest, ForwardToConfigsManager);
@@ -133,14 +136,15 @@ private:
             FFunc(TEvBlobStorage::EvControllerConsoleCommitRequest, ForwardFromPipe);
             FFunc(TEvBlobStorage::EvControllerValidateConfigRequest, ForwardFromPipe);
             FFunc(TEvConsole::EvUpdateTenantPoolConfig, ForwardToTenantsManager);
+            FFunc(TEvHive::EvShrinkStoragePoolDone, ForwardToTenantsManager);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::CMS,
-                           "TConsole::StateWork unexpected event type: " << ev->GetTypeRewrite()
-                           << " event: " << ev->ToString());
+                YDB_LOG_CRIT_COMP(NKikimrServices::CMS, "TConsole::StateWork unexpected event",
+                    {"type", ev->GetTypeRewrite()},
+                    {"ev", ev->ToString()});
             }
         }
     }
@@ -179,6 +183,10 @@ public:
         return Config;
     }
 
+    bool HasTenant(const TString& path) const;
+
+    TString GetDomainName() const;
+
 private:
     TDeque<TAutoPtr<IEventHandle>> InitQueue;
     NKikimrConsole::TConfig Config;
@@ -191,8 +199,7 @@ private:
     TActorId NetClassifierUpdaterId;
 
     // For handshake with BSController/distconf
-    TActorId CurrentSenderId;
-    TActorId CurrentPipeServerId;
+    std::array<std::tuple<TActorId, TActorId>, 2> ConfigClients; // distconf -> SenderId, PipeServerId
 };
 
 } // namespace NKikimr::NConsole

@@ -1,16 +1,23 @@
 #pragma once
 
+#include "blobstorage_pdisk_device_overestimation.h"
+
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
+#include <ydb/core/base/blobstorage_write_source.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
 #include <ydb/core/protos/node_whiteboard.pb.h>
 #include <ydb/core/util/light.h>
+#include <ydb/core/util/max_tracker.h>
 
 #include <library/cpp/bucket_quoter/bucket_quoter.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/dynamic_counters/percentile/percentile_lg.h>
+#include <util/generic/vector.h>
+#include <memory>
+
 
 namespace NKikimr {
 
@@ -27,7 +34,7 @@ public:
 
     void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters,
                     const TString& group, const TString& subgroup, const TString& name,
-                    const TVector<float> &thresholds, 
+                    const TVector<float> &thresholds,
                     NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public) {
         Tracker.Initialize(counters, group, subgroup, name, thresholds, visibility);
     }
@@ -43,23 +50,44 @@ public:
     }
 };
 
-class THistogram {
-private:
+class TBaseHistogram {
+protected:
     NMonitoring::THistogramPtr Histo;
 
 public:
+    virtual ~TBaseHistogram() = default;
+
+    virtual void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+                           const TString &name, NPDisk::EDeviceType deviceType) = 0;
+
+    void Increment(double value) {
+        if (Histo) {
+            Histo->Collect(value);
+        }
+    }
+};
+
+class TTimesHistogram : public TBaseHistogram {
+public:
     void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
-            const TString &name, NPDisk::EDeviceType deviceType) {
+            const TString &name, NPDisk::EDeviceType deviceType) override {
         TString histName = name + "Ms";
-        // Histogram backets in milliseconds
+        // Histogram buckets in milliseconds
         auto h = NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(deviceType));
         Histo = counters->GetNamedHistogram("sensor", histName, std::move(h));
     }
+};
 
-    void Increment(double timeMs) {
-        if (Histo) {
-            Histo->Collect(timeMs);
-        }
+class TBytesHistogram : public TBaseHistogram {
+public:
+    void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+            const TString &name, NPDisk::EDeviceType deviceType) override {
+        Y_UNUSED(deviceType);
+        TString histName = name + "KB";
+        // Histogram buckets in KB
+        TVector<double> bounds = {1_KB, 2_KB,4_KB, 8_KB, 16_KB, 32_KB, 64_KB};
+        auto h = NMonitoring::ExplicitHistogram(bounds);
+        Histo = counters->GetNamedHistogram("sensor", histName, std::move(h));
     }
 };
 
@@ -83,7 +111,7 @@ struct TPDiskMon {
             BootingCommonLogRead,
             BootingFormatMagicChecking,
             BootingDeviceFormattingAndTrimming,
-            ErrorInitialFormatRead,
+            ErrorInitialFormatRead, // deprecated; kept for backward compatibility, replaced with two following states
             ErrorInitialFormatReadDueToGuid,
             ErrorInitialFormatReadIncompleteFormat,
             ErrorDiskCannotBeFormated,
@@ -122,7 +150,7 @@ struct TPDiskMon {
         static const char *DetailedStateToStr(i64 val) {
             switch (val) {
                 case EverythingIsOk: return "EverythingIsOk";
-                case BootingFormatRead: return "BootingSysLogRead";
+                case BootingFormatRead: return "BootingFormatRead";
                 case BootingSysLogRead: return "BootingSysLogRead";
                 case BootingCommonLogRead: return "BootingCommonLogRead";
                 case BootingFormatMagicChecking: return "BootingFormatMagicChecking";
@@ -243,13 +271,23 @@ struct TPDiskMon {
     // statistics subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> StatsGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr FreeSpacePerMile;
-    ::NMonitoring::TDynamicCounters::TCounterPtr UsedSpacePerMile;
+    ::NMonitoring::TDynamicCounters::TCounterPtr UsedSpacePerMile; // reflects PDiskUsage
     ::NMonitoring::TDynamicCounters::TCounterPtr SplicedLogChunks;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr TotalSpaceBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr FreeSpaceBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr UsedSpaceBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr SectorMapAllocatedBytes;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr NumActiveSlots;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ExpectedSlotCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SlotSizeInUnits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SlotSizeBytes;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedWriteErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedReadErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedSilentWriteFails;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedReadReplays;
 
     // states subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> StateGroup;
@@ -278,7 +316,9 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceInFlightBytesRead;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceInFlightBytesWrite;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceInFlightReads;
+    TMaxTracker MaxDeviceInFlightReads;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceInFlightWrites;
+    TMaxTracker MaxDeviceInFlightWrites;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceTakeoffs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceLandings;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceHaltDetected;
@@ -295,11 +335,31 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceActualCostNs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceOverestimationRatio;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceNonperformanceMs;
+
+    // Merged device overestimation: combines samples from PDisk's own block
+    // device thread together with samples from the shared TUringRouter I/O
+    // thread (DDisk / PersistentBuffer I/O on the same physical device),
+    // via TDeviceOverestimationAggregator. See blobstorage_pdisk_device_overestimation.h.
+    std::shared_ptr<NPDisk::TDeviceOverestimationAggregator> DeviceOverestimationMerged =
+        std::make_shared<NPDisk::TDeviceOverestimationAggregator>();
+    ::NMonitoring::TDynamicCounters::TCounterPtr DeviceOverestimationRatioMerged;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DeviceNonperformanceMsMerged;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DeviceOverestimationDroppedSamples;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceInterruptedSystemCalls;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceSubmitThreadBusyTimeNs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceCompletionThreadBusyTimeNs;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceIoErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceWaitTimeMs;
+
+    // Set once when the shared UringRouter is first created (or creation fails).
+    ::NMonitoring::TDynamicCounters::TCounterPtr RegularUringCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr FallbackUringCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr FallbackPDiskCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr UringCompletionThreadCPU;
+    ::NMonitoring::TDynamicCounters::TCounterPtr UringCompletionThreadBusyTimeNs;
+
+    TBytesHistogram DeviceWritesSizes;
 
     // queue subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> QueueGroup;
@@ -310,10 +370,10 @@ struct TPDiskMon {
     TUpdateDurationTracker UpdateDurationTracker;
 
     // Device times
-    THistogram DeviceReadDuration;
-    THistogram DeviceWriteDuration;
-    THistogram DeviceTrimDuration;
-    THistogram DeviceFlushDuration;
+    TTimesHistogram DeviceReadDuration;
+    TTimesHistogram DeviceWriteDuration;
+    TTimesHistogram DeviceTrimDuration;
+    TTimesHistogram DeviceFlushDuration;
 
     // <BASE_BITS, EXP_BITS, FRAME_COUNT>
     using TDurationTracker = NMonitoring::TPercentileTrackerLg<5, 4, 15>;
@@ -329,7 +389,8 @@ struct TPDiskMon {
     // write queue duration
     TDurationTracker WriteQueueSyncLog;
     TDurationTracker WriteQueueHullFresh;
-    TDurationTracker WriteQueueHullHuge;
+    TDurationTracker WriteQueueHullHugeAsync;
+    TDurationTracker WriteQueueHullHugeUser;
     TDurationTracker WriteQueueHullComp;
 
     // incoming flow burstiness
@@ -358,23 +419,25 @@ struct TPDiskMon {
 
     TSizeTracker WriteSyncLogSizeBytes;
     TSizeTracker WriteHullFreshSizeBytes;
-    TSizeTracker WriteHullHugeSizeBytes;
+    TSizeTracker WriteHullHugeAsyncSizeBytes;
+    TSizeTracker WriteHullHugeUserSizeBytes;
     TSizeTracker WriteHullCompSizeBytes;
 
     // log response time
-    THistogram LogResponseTime;
+    TTimesHistogram LogResponseTime;
     // get response time
-    THistogram GetResponseSyncLog;
-    THistogram GetResponseHullComp;
-    THistogram GetResponseHullOnlineRt;
-    THistogram GetResponseHullOnlineOther;
-    THistogram GetResponseHullLoad;
-    THistogram GetResponseHullLow;
+    TTimesHistogram GetResponseSyncLog;
+    TTimesHistogram GetResponseHullComp;
+    TTimesHistogram GetResponseHullOnlineRt;
+    TTimesHistogram GetResponseHullOnlineOther;
+    TTimesHistogram GetResponseHullLoad;
+    TTimesHistogram GetResponseHullLow;
     // write response time
-    THistogram WriteResponseSyncLog;
-    THistogram WriteResponseHullFresh;
-    THistogram WriteResponseHullHuge;
-    THistogram WriteResponseHullComp;
+    TTimesHistogram WriteResponseSyncLog;
+    TTimesHistogram WriteResponseHullFresh;
+    TTimesHistogram WriteResponseHullHugeAsync;
+    TTimesHistogram WriteResponseHullHugeUser;
+    TTimesHistogram WriteResponseHullComp;
 
     // scheduler subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> SchedulerGroup;
@@ -403,6 +466,8 @@ struct TPDiskMon {
 
     ::NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkReadPayload;
     ::NMonitoring::TDynamicCounters::TCounterPtr BandwidthPChunkReadSectorFooter;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteBufferCompactedBytes;
 
     struct TIoCounters {
         ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
@@ -458,6 +523,23 @@ struct TPDiskMon {
         }
     };
 
+    struct TOpCounters {
+        ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Bytes;
+
+        void Setup(TString metricPrefix, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& group, TString opName,
+                NMonitoring::TCountableBase::EVisibility vis) {
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> subgroup = group->GetSubgroup("op", opName);
+            Requests = subgroup->GetCounter(metricPrefix + "RequestsByOp", true, vis);
+            Bytes = subgroup->GetCounter(metricPrefix + "BytesByOp", true, vis);
+        }
+
+        void CountRequest(ui32 size) {
+            Requests->Inc();
+            *Bytes += size;
+        }
+    };
+
     // yard subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> PDiskGroup;
     TReqCounters YardInit;
@@ -468,6 +550,8 @@ struct TPDiskMon {
     TReqCounters Harakiri;
     TReqCounters YardSlay;
     TReqCounters YardControl;
+    TReqCounters YardResize;
+    TReqCounters ChangeExpectedSlotCount;
 
     TReqCounters ShredPDisk;
     TReqCounters PreShredCompactVDisk;
@@ -476,10 +560,11 @@ struct TPDiskMon {
 
     TIoCounters WriteSyncLog;
     TIoCounters WriteFresh;
-    TIoCounters WriteHuge;
+    TIoCounters WriteHugeAsync;
+    TIoCounters WriteHugeUser;
     TIoCounters WriteComp;
     TIoCounters Trim;
-
+    TIoCounters ChunkShred;
     TIoCounters ReadSyncLog;
     TIoCounters ReadComp;
     TIoCounters ReadOnlineRt;
@@ -492,8 +577,10 @@ struct TPDiskMon {
     TIoCounters WriteLog;
     TReqCounters WriteHugeLog;
     TIoCounters LogRead;
+    TVector<TOpCounters> LogWriteOpCounters;
+    TVector<TOpCounters> ChunkWriteOpCounters;
 
-
+public:
     // Halter
     i64 LastHaltDeviceTakeoffs = 0;
     i64 LastHaltDeviceLandings = 0;
@@ -507,6 +594,10 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr TrimThreadCPU;
     ::NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadCPU;
 
+    // counter subgroup
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CounterGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PDiskCount;
+
     TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui32 pdiskId, TPDiskConfig *cfg);
 
     ::NMonitoring::TDynamicCounters::TCounterPtr GetBusyPeriod(const TString& owner, const TString& queue);
@@ -516,9 +607,10 @@ struct TPDiskMon {
     void UpdateLights();
     bool UpdateDeviceHaltCounters();
     void UpdateStats();
+    void CountLogWriteOpRequest(const TWriteSource& source, ui32 size);
+    void CountChunkWriteOpRequest(const TWriteSource& source, ui32 size);
     TIoCounters *GetWriteCounter(ui8 priority);
     TIoCounters *GetReadCounter(ui8 priority);
 };
 
 } // NKikimr
-

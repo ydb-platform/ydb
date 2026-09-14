@@ -10,6 +10,7 @@ SRCS(
     fake_scheme_shard.h
     minikql_compile.h
     mock_pq_metacache.h
+    storage_helpers.cpp
     tablet_flat_dummy.cpp
     tablet_helpers.cpp
     tablet_helpers.h
@@ -23,6 +24,7 @@ SRCS(
 
 PEERDIR(
     ydb/apps/version
+    ydb/core/audit/audit_config
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/public/sdk/cpp/src/library/grpc/client
@@ -51,8 +53,12 @@ PEERDIR(
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
+    ydb/core/blob_depot
+    ydb/core/test_tablet
     ydb/core/kqp
     ydb/core/kqp/federated_query
+    ydb/services/scheme_secret
+    ydb/services/workload_manager/service
     ydb/core/kqp/finalize_script_service
     ydb/core/kqp/proxy_service
     ydb/core/metering
@@ -62,9 +68,11 @@ PEERDIR(
     ydb/core/mind/hive
     ydb/core/node_whiteboard
     ydb/core/persqueue
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/security
     ydb/core/security/ldap_auth_provider
+    ydb/core/security/token_manager
     ydb/core/statistics/aggregator
     ydb/core/sys_view/processor
     ydb/core/sys_view/service
@@ -84,15 +92,20 @@ PEERDIR(
     ydb/library/mkql_proto/protos
     ydb/library/persqueue/topic_parser
     ydb/library/security
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
+    ydb/library/yql/providers/common/token_accessor/client
+    ydb/library/yql/providers/pq/gateway/dummy
     ydb/library/yql/providers/s3/actors_factory
     yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm14
+    yt/yql/providers/yt/comp_nodes/llvm16
+    yt/yql/providers/yt/comp_nodes/dq/llvm16
     yql/essentials/public/udf/service/exception_policy
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/persqueue_public
+    ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/topic/codecs
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/table
@@ -100,10 +113,13 @@ PEERDIR(
     ydb/services/cms
     ydb/services/datastreams
     ydb/services/discovery
-    ydb/services/ext_index/service
     ydb/services/ymq
     ydb/core/tx/conveyor/service
+    ydb/core/tx/conveyor/usage
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/priorities/service
+    ydb/core/tx/priorities/usage
     ydb/core/tx/limiter/grouped_memory/usage
     ydb/services/fq
     ydb/services/kesus
@@ -133,5 +149,6 @@ RECURSE(
     actors
     basics
     default
+    grpc_request
     pg
 )

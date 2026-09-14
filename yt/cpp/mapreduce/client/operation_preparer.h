@@ -24,7 +24,9 @@ public:
 
     const TString& GetPreparationId() const;
 
-    void LockFiles(TVector<TRichYPath>* paths);
+    TRichYPath LockFile(const TRichYPath& path);
+
+    void LockCacheDirectory(const TYPath& path);
 
     TOperationId StartOperation(
         TOperation* operation,
@@ -80,6 +82,23 @@ public:
     bool ShouldMountSandbox() const;
     ui64 GetTotalFileSize() const;
     bool ShouldRedirectStdoutToStderr() const;
+    bool ShouldEnableDebugCommandLineArguments() const;
+
+private:
+    // NB(achains): Used as workaround to avoid ttl race in master
+    // Consider to return to batch locking after YT-26261
+    class TEagerLockingFileCache
+    {
+    public:
+        explicit TEagerLockingFileCache(TOperationPreparer& operationPreparer);
+
+        const TVector<TRichYPath>& GetFiles() const;
+
+        void InsertFile(const TRichYPath& path);
+    private:
+        TOperationPreparer& OperationPreparer_;
+        TVector<TRichYPath> LockedFiles_;
+    };
 
 private:
     const IRawClientPtr RawClient_;
@@ -89,7 +108,7 @@ private:
     TOperationOptions Options_;
 
     TVector<TRichYPath> CypressFiles_;
-    TVector<TRichYPath> CachedFiles_;
+    TEagerLockingFileCache LockedFilesCache_;
 
     TVector<TYPath> Layers_;
 
@@ -105,7 +124,9 @@ private:
 
     bool IsLocalMode() const;
     int GetFileCacheReplicationFactor() const;
+    TFileWriterOptions GetFileCacheWriterOptions() const;
 
+    bool ShouldLockFileStorage() const;
     void CreateStorage() const;
 
     void CreateFileInCypress(const TString& path) const;

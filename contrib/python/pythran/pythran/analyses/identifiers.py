@@ -7,9 +7,7 @@ from pythran.passmanager import NodeAnalysis
 
 class Identifiers(NodeAnalysis):
     """Gather all identifiers used throughout a node."""
-    def __init__(self):
-        self.result = set()
-        super(Identifiers, self).__init__()
+    ResultType = set
 
     def visit_Name(self, node):
         self.result.add(node.id)

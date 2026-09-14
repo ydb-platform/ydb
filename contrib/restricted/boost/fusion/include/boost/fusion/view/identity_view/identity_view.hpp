@@ -4,12 +4,12 @@
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 
-#if !defined(BOOST_FUSION_IDENTITY_VIEW_HPP_INCLUDED)
+#ifndef BOOST_FUSION_IDENTITY_VIEW_HPP_INCLUDED
 #define BOOST_FUSION_IDENTITY_VIEW_HPP_INCLUDED
 
 #include <boost/fusion/support/config.hpp>
 #include <boost/fusion/view/transform_view.hpp>
-#include <boost/functional/identity.hpp>
+#include <boost/core/identity.hpp>
 #include <boost/utility/result_of.hpp>
 
 namespace boost { namespace fusion {

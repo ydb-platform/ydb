@@ -12,6 +12,7 @@ Main resources:
   - [Row-oriented tables](primary-key/row-oriented.md)
   - [Column-oriented tables](primary-key/column-oriented.md)
 
+- [{#T}](tables/index.md)
 - [{#T}](secondary-indexes.md)
 - [{#T}](batch-upload.md)
 - [{#T}](paging.md)
@@ -24,7 +25,6 @@ Main resources:
   - [{#T}](../yql/reference/index.md)
   - [{#T}](../reference/ydb-sdk/index.md)
   - [{#T}](../reference/ydb-cli/index.md)
-  - [{#T}](../postgresql/intro.md)
   - [{#T}](../reference/kafka-api/index.md)
 
 If you're interested in developing {{ ydb-short-name }} core or satellite projects, refer to the [documentation for contributors](../contributor/index.md).

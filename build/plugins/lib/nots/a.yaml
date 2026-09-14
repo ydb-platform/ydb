@@ -19,11 +19,11 @@ arcanum:
             ship: 1
             ignore_self_ship: false
           - name: fbp_team
-            assign: 5
+            assign: 999
             ship: 0
       # Если изменения от кого-то стороннего, то ревью на FBP
       - authors: "!ya_make:developer"
         reviewers:
           name: fbp_team
-          assign: 5
+          assign: 999
           ship: 1

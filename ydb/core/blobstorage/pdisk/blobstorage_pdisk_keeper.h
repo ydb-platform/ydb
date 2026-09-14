@@ -26,6 +26,8 @@ protected:
     TFreeChunks TrimmedFreeChunks; // Trimmed free chunk list for fast allocation
 
     TChunkTracker ChunkTracker;
+
+    friend class TPDisk;
 public:
 
     TKeeper(TPDiskMon &mon, TIntrusivePtr<TPDiskConfig> cfg)
@@ -52,12 +54,21 @@ public:
         TrimmedFreeChunks.Push(chunkIdx);
     }
 
+    void SetFreeChunksSortingEnabled(bool enabled) {
+        UntrimmedFreeChunks.SetSortingEnabled(enabled);
+        TrimmedFreeChunks.SetSortingEnabled(enabled);
+    }
+
     //
     // Add/remove owner
     //
 
-    void AddOwner(TOwner owner, TVDiskID vdiskId) {
-        ChunkTracker.AddOwner(owner, vdiskId);
+    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight) {
+        ChunkTracker.AddOwner(owner, vdiskId, weight);
+    }
+
+    void SetOwnerWeight(TOwner owner, ui32 weight) {
+        ChunkTracker.SetOwnerWeight(owner, weight);
     }
 
     void RemoveOwner(TOwner owner) {
@@ -79,16 +90,28 @@ public:
         return ChunkTracker.GetOwnerHardLimit(owner);
     }
 
-    i64 GetOwnerFree(TOwner owner) const {
-        return ChunkTracker.GetOwnerFree(owner);
+    i64 GetOwnerFree(TOwner owner, bool personal) const {
+        return ChunkTracker.GetOwnerFree(owner, personal);
     }
 
     i64 GetOwnerUsed(TOwner owner) const {
         return ChunkTracker.GetOwnerUsed(owner);
     }
 
+    ui32 GetOwnerWeight(TOwner owner) {
+        return ChunkTracker.GetOwnerWeight(owner);
+    }
+
     i64 GetLogChunkCount() const {
         return ChunkTracker.GetLogChunkCount();
+    }
+
+    ui32 GetNumActiveSlots() const {
+        return ChunkTracker.GetNumActiveSlots();
+    }
+
+    i64 GetUserChunkPoolSize() const {
+      return ChunkTracker.GetTotalHardLimit();
     }
 
     TChunkIdx PopOwnerFreeChunk(TOwner owner, TString &outErrorReason) {
@@ -123,7 +146,7 @@ public:
     }
 
     void PushFreeOwnerChunk(TOwner owner, TChunkIdx chunkIdx) {
-        Y_ABORT_UNLESS(chunkIdx != 0);
+        Y_VERIFY(chunkIdx != 0);
         UntrimmedFreeChunks.Push(chunkIdx);
         ChunkTracker.Release(owner, 1);
     }
@@ -134,6 +157,28 @@ public:
 
     NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize, double *occupancy) const {
         return ChunkTracker.EstimateSpaceColor(owner, allocationSize, occupancy);
+    }
+
+    double GetPDiskUsage() const {
+        i64 totalUsed = ChunkTracker.GetTotalUsed();
+        i64 totalHardLimit = ChunkTracker.GetTotalHardLimit();
+        return 100.0 * (totalHardLimit ? (double)totalUsed / totalHardLimit : 1.0);
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetPDiskCapacityAlert() const {
+        return ChunkTracker.GetPDiskCapacityAlert();
+    }
+
+    double GetVDiskSlotUsage(TOwner owner) const {
+        i64 used = ChunkTracker.GetOwnerUsed(owner);
+        ui32 lightYellowLimit = ChunkTracker.ColorFlagLimit(owner, NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_YELLOW);
+        return 100.0 * (lightYellowLimit ? (double)used / lightYellowLimit : 1.0);
+    }
+
+    double GetVDiskRawUsage(TOwner owner) const {
+        i64 used = ChunkTracker.GetOwnerUsed(owner);
+        i64 hardLimit = ChunkTracker.GetOwnerHardLimit(owner);
+        return 100.0 * (hardLimit ? (double)used / hardLimit : 1.0);
     }
 
     //
@@ -160,6 +205,30 @@ public:
 
     ui32 ColorFlagLimit(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
         return ChunkTracker.ColorFlagLimit(owner, color);
+    }
+
+    //
+    // Runtime (re)configuration
+    //
+
+    void SetExpectedOwnerCount(size_t newOwnerCount) {
+        ChunkTracker.SetExpectedOwnerCount(newOwnerCount);
+    }
+
+    void SetExpectedOwnerSize(i64 newOwnerSize) {
+        ChunkTracker.SetExpectedOwnerSize(newOwnerSize);
+    }
+
+    void SetExpectedOwnerSettings(size_t newOwnerCount, i64 newOwnerSize) {
+        ChunkTracker.SetExpectedOwnerSettings(newOwnerCount, newOwnerSize);
+    }
+
+    void SetColorBorder(NKikimrBlobStorage::TPDiskSpaceColor::E colorBorder) {
+        ChunkTracker.SetColorBorder(colorBorder);
+    }
+
+    void SetStaticGroupChunkReservePerMille(ui32 perMille) {
+        ChunkTracker.SetStaticGroupChunkReservePerMille(perMille);
     }
 
     //

@@ -5,6 +5,8 @@
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 TDowntime::TDowntime(TDuration ignoredDowntimeGap)
@@ -50,10 +52,10 @@ void TDowntime::AddDowntime(const TLockableItem &item, TInstant now) {
     if (item.State != NKikimrCms::UP)
         AddDowntime(item.Timestamp, now, "known downtime");
 
-    if (item.Lock.Defined()) {
-        auto end = Min(now + TDuration::MicroSeconds(item.Lock->Action.GetDuration()),
-                       item.Lock->ActionDeadline);
-        AddDowntime(now, end, item.Lock->PermissionId);
+    for (auto &lock : item.Locks) {
+        auto end = Min(now + TDuration::MicroSeconds(lock.Action.GetDuration()),
+                       lock.ActionDeadline);
+        AddDowntime(now, end, lock.PermissionId);
     }
 
     for (auto &lock : item.ExternalLocks) {
@@ -223,17 +225,17 @@ void TDowntimes::DbStoreState(TTransactionContext &txc, const TActorContext &ctx
         if (pr.second.Empty()) {
             db.Table<Schema::NodeDowntimes>().Key(pr.first).Delete();
 
-            LOG_TRACE_S(ctx, NKikimrServices::CMS,
-                        "Removed downtime for node " << pr.first << " from local DB");
+            YDB_LOG_TRACE_CTX(ctx, "Removed downtime for node from local DB",
+                {"node", pr.first});
         } else {
             NKikimrCms::TAvailabilityStats rec;
             pr.second.Serialize(&rec);
             db.Table<Schema::NodeDowntimes>().Key(pr.first)
                 .Update<Schema::NodeDowntimes::Downtime>(rec);
 
-            LOG_TRACE_S(ctx, NKikimrServices::CMS,
-                        "Updated downtime for node " << pr.first
-                        << " in local DB downtime=" << pr.second);
+            YDB_LOG_TRACE_CTX(ctx, "Updated downtime for node in local DB",
+                {"node", pr.first},
+                {"downtime", pr.second});
         }
     }
 
@@ -242,17 +244,17 @@ void TDowntimes::DbStoreState(TTransactionContext &txc, const TActorContext &ctx
             db.Table<Schema::PDiskDowntimes>().Key(pr.first.NodeId, pr.first.DiskId)
                 .Delete();
 
-            LOG_TRACE_S(ctx, NKikimrServices::CMS,                        "Removed downtime for pdisk " << pr.first.ToString()
-                        << " from local DB");
+            YDB_LOG_TRACE_CTX(ctx, "Removed downtime for pdisk from local DB",
+                {"pdisk", pr.first});
         } else {
             NKikimrCms::TAvailabilityStats rec;
             pr.second.Serialize(&rec);
             db.Table<Schema::PDiskDowntimes>().Key(pr.first.NodeId, pr.first.DiskId)
                 .Update<Schema::PDiskDowntimes::Downtime>(rec);
 
-            LOG_TRACE_S(ctx, NKikimrServices::CMS,
-                        "Updated downtime for pdisk " << pr.first.ToString()
-                        << " in local DB downtime=" << pr.second);
+            YDB_LOG_TRACE_CTX(ctx, "Updated downtime for pdisk in local DB",
+                {"pdisk", pr.first},
+                {"downtime", pr.second});
         }
     }
 }

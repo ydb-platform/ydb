@@ -13,6 +13,6 @@ enum class EWriteMode {
     Consistent,
 };
 
-IActor* CreateLocalTableWriter(const TPathId& tablePathId, EWriteMode mode = EWriteMode::Simple);
+IActor* CreateLocalTableWriter(const TString& database, const TPathId& tablePathId, EWriteMode mode = EWriteMode::Simple);
 
 }

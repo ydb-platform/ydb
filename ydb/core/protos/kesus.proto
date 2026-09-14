@@ -299,6 +299,9 @@ message TAccountingConfig {
         string SourceId = 9;
         map<string, string> Tags = 10;
         map<string, string> Labels = 11;
+
+        // Used for user-friendly metrics
+        string Database = 12;
     }
 
     // Consumption within provisioned limit.

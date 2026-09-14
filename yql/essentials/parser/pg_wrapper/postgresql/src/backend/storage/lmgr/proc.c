@@ -385,7 +385,7 @@ InitProcess(void)
 	MyProc->databaseId = InvalidOid;
 	MyProc->roleId = InvalidOid;
 	MyProc->tempNamespaceId = InvalidOid;
-	MyProc->isBackgroundWorker = IsBackgroundWorker;
+	MyProc->isBackgroundWorker = !AmRegularBackendProcess();
 	MyProc->delayChkptFlags = 0;
 	MyProc->statusFlags = 0;
 	/* NB -- autovac launcher intentionally does not set IS_AUTOVACUUM */
@@ -570,7 +570,7 @@ InitAuxiliaryProcess(void)
 	MyProc->databaseId = InvalidOid;
 	MyProc->roleId = InvalidOid;
 	MyProc->tempNamespaceId = InvalidOid;
-	MyProc->isBackgroundWorker = IsBackgroundWorker;
+	MyProc->isBackgroundWorker = true;
 	MyProc->delayChkptFlags = 0;
 	MyProc->statusFlags = 0;
 	MyProc->lwWaiting = LW_WS_NOT_WAITING;
@@ -1630,7 +1630,7 @@ ProcWakeup(PGPROC *proc, ProcWaitStatus waitStatus)
 	proc->waitLock = NULL;
 	proc->waitProcLock = NULL;
 	proc->waitStatus = waitStatus;
-	pg_atomic_write_u64(&MyProc->waitStart, 0);
+	pg_atomic_write_u64(&proc->waitStart, 0);
 
 	/* And awaken it */
 	SetLatch(&proc->procLatch);

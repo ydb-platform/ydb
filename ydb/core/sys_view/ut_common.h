@@ -1,14 +1,19 @@
 #pragma once
 
 #include <ydb/core/testlib/test_client.h>
-#include <ydb-cpp-sdk/client/result/result.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 namespace NSysView {
+
+NKikimrSchemeOp::TPathDescription DescribePath(TTestActorRuntime& runtime, TString&& path);
+
+NYdb::NQuery::TExecuteQueryResult ExecuteQuery(NYdb::NQuery::TSession& session, const std::string& query);
 
 NKikimrSubDomains::TSubDomainSettings GetSubDomainDeclareSettings(
     const TString &name, const TStoragePools &pools = {});
@@ -21,6 +26,21 @@ struct TTestEnvSettings {
     ui32 PqTabletsN = 0;
     bool EnableSVP = false;
     bool EnableForceFollowers = false;
+    bool ShowCreateTable = false;
+    bool AlterObjectEnabled = false;
+    bool EnableSparsedColumns = false;
+    bool EnableOlapCompression = false;
+    bool EnableTableCacheModes = false;
+    bool EnableFulltextIndex = false;
+    bool EnableSuperLemmer = false;
+    bool EnableCsDictionaryEncoding = false;
+    bool EnableLocalBloomFilterIndex = false;
+    bool EnableLocalBloomNgramFilterIndex = false;
+    bool EnableLocalIndexAsSchemeObject = false;
+    bool EnableLocalMinMaxIndex = false;
+    NKikimrProto::TAuthConfig AuthConfig = {};
+    TMaybe<ui32> DataShardStatsReportIntervalSeconds;
+    NKikimrConfig::TTableServiceConfig TableServiceConfig;
 };
 
 class TTestEnv {
@@ -30,6 +50,10 @@ public:
 
 public:
     TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, const TTestEnvSettings& settings = {});
+
+    TTestEnv(const TTestEnvSettings& settings) : TTestEnv(1, 4, settings)
+    {
+    }
 
     ~TTestEnv();
 
@@ -78,6 +102,12 @@ private:
     THolder<NYdb::TDriver> Driver;
     TVector<ui64> PqTabletIds;
 };
+
+void CreateTenant(TTestEnv& env, const TString& tenantName, bool extSchemeShard = true, ui64 nodesCount = 2);
+
+void CreateTenants(TTestEnv& env, bool extSchemeShard = true);
+
+void CreateTenantsAndTables(TTestEnv& env, bool extSchemeShard = true, ui64 partitionCount = 1);
 
 } // NSysView
 } // NKikimr

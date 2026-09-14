@@ -6,13 +6,11 @@ from pythran.passmanager import ModuleAnalysis
 from pythran.tables import MODULES
 
 
-class ParallelMaps(ModuleAnalysis):
+class ParallelMaps(ModuleAnalysis[PureExpressions, Aliases]):
 
     """Yields the est of maps that could be parallel."""
 
-    def __init__(self):
-        self.result = set()
-        super(ParallelMaps, self).__init__(PureExpressions, Aliases)
+    ResultType = set
 
     def visit_Call(self, node):
         if all(alias == MODULES['builtins']['map']

@@ -8,13 +8,13 @@ using namespace NYql;
 using namespace NYql::NPureCalc;
 
 TLoggingOptions::TLoggingOptions()
-    : LogLevel_(ELogPriority::TLOG_ERR)
+    : LogLevel(ELogPriority::TLOG_ERR)
     , LogDestination(&Clog)
 {
 }
 
 TLoggingOptions& TLoggingOptions::SetLogLevel(ELogPriority logLevel) {
-    LogLevel_ = logLevel;
+    LogLevel = logLevel;
     return *this;
 }
 
@@ -24,8 +24,8 @@ TLoggingOptions& TLoggingOptions::SetLogDestination(IOutputStream* logDestinatio
 }
 
 TProgramFactoryOptions::TProgramFactoryOptions()
-    : UdfsDir_("")
-    , UserData_()
+    : UdfsDir("")
+    , UserData()
     , LLVMSettings("OFF")
     , BlockEngineSettings("disable")
     , ExprOutputStream(nullptr)
@@ -33,43 +33,50 @@ TProgramFactoryOptions::TProgramFactoryOptions()
     , NativeYtTypeFlags(0)
     , UseSystemColumns(false)
     , UseWorkerPool(true)
+    , LangVer(MinLangVersion)
+    , RemoveUnsupportedPragmas(false)
 {
 }
 
+TProgramFactoryOptions& TProgramFactoryOptions::SetLanguageVersion(TLangVersion langver) {
+    LangVer = langver;
+    return *this;
+}
+
 TProgramFactoryOptions& TProgramFactoryOptions::SetUDFsDir(TStringBuf dir) {
-    UdfsDir_ = dir;
+    UdfsDir = dir;
     return *this;
 }
 
 TProgramFactoryOptions& TProgramFactoryOptions::AddLibrary(NUserData::EDisposition disposition, TStringBuf name, TStringBuf content) {
-    auto& ref = UserData_.emplace_back();
+    auto& ref = UserData.emplace_back();
 
-    ref.Type_ = NUserData::EType::LIBRARY;
-    ref.Disposition_ = disposition;
-    ref.Name_ = name;
-    ref.Content_ = content;
+    ref.Type = NUserData::EType::LIBRARY;
+    ref.Disposition = disposition;
+    ref.Name = name;
+    ref.Content = content;
 
     return *this;
 }
 
 TProgramFactoryOptions& TProgramFactoryOptions::AddFile(NUserData::EDisposition disposition, TStringBuf name, TStringBuf content) {
-    auto& ref = UserData_.emplace_back();
+    auto& ref = UserData.emplace_back();
 
-    ref.Type_ = NUserData::EType::FILE;
-    ref.Disposition_ = disposition;
-    ref.Name_ = name;
-    ref.Content_ = content;
+    ref.Type = NUserData::EType::FILE;
+    ref.Disposition = disposition;
+    ref.Name = name;
+    ref.Content = content;
 
     return *this;
 }
 
 TProgramFactoryOptions& TProgramFactoryOptions::AddUDF(NUserData::EDisposition disposition, TStringBuf name, TStringBuf content) {
-    auto& ref = UserData_.emplace_back();
+    auto& ref = UserData.emplace_back();
 
-    ref.Type_ = NUserData::EType::UDF;
-    ref.Disposition_ = disposition;
-    ref.Name_ = name;
-    ref.Content_ = content;
+    ref.Type = NUserData::EType::UDF;
+    ref.Disposition = disposition;
+    ref.Name = name;
+    ref.Content = content;
 
     return *this;
 }
@@ -116,6 +123,21 @@ TProgramFactoryOptions& TProgramFactoryOptions::SetUseSystemColumns(bool useSyst
 
 TProgramFactoryOptions& TProgramFactoryOptions::SetUseWorkerPool(bool useWorkerPool) {
     UseWorkerPool = useWorkerPool;
+    return *this;
+}
+
+TProgramFactoryOptions& TProgramFactoryOptions::SetInternalSettings(const TInternalProgramSettings& settings) {
+    InternalSettings = settings;
+    return *this;
+}
+
+TProgramFactoryOptions& TProgramFactoryOptions::SetIssueReportTarget(const TString& reportTarget) {
+    IssueReportTarget = reportTarget;
+    return *this;
+}
+
+TProgramFactoryOptions& TProgramFactoryOptions::SetRemoveUnsupportedPragmas(bool removeUnsupportedPragmas) {
+    RemoveUnsupportedPragmas = removeUnsupportedPragmas;
     return *this;
 }
 

@@ -102,6 +102,7 @@ namespace NWilson {
                 return result;
             }
         public:
+            TMutex SpansMutex;
             std::unordered_map<TString, Span> Spans;
 
             Span Root{"Root", "", 0};
@@ -113,7 +114,10 @@ namespace NWilson {
         }
 
         void Handle(NWilson::TEvWilson::TPtr ev) {
-            auto& span = ev->Get()->Span;
+            TOtelSpan& span = ev->Get()->Span;
+            TOtelSpan spanCopy;
+            spanCopy.CopyFrom(span);
+            Spans.push_back(std::move(spanCopy));
             const TString &traceId = span.trace_id();
             const TString &spanId = span.span_id();
             const TString &parentSpanId = span.parent_span_id();
@@ -121,6 +125,7 @@ namespace NWilson {
             ui64 startTime = span.start_time_unix_nano();
 
             Trace &trace = Traces[traceId];
+            TGuard lock(trace.SpansMutex);
 
             trace.Spans.try_emplace(spanId, spanName, parentSpanId, startTime);
         }
@@ -129,6 +134,7 @@ namespace NWilson {
             for (auto& tracePair : Traces) {
                 Trace& trace = tracePair.second;
 
+                TGuard lock(trace.SpansMutex);
                 for (auto& spanPair : trace.Spans) {
                     Span& span = spanPair.second;
 
@@ -158,7 +164,18 @@ namespace NWilson {
         );
 
     public:
+        using TOtelSpan = opentelemetry::proto::trace::v1::Span;
+
         std::unordered_map<TString, Trace> Traces;
+        std::vector<TOtelSpan> Spans;
+
+        TString PrintTraces() const {
+            TStringStream str;
+            for (const auto& [_, trace] : Traces) {
+                str << "{ " << trace.ToString() << " } ";
+            }
+            return str.Str();
+        }
     };
 
 } // NWilson

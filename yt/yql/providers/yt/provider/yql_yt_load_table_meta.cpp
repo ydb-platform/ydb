@@ -5,12 +5,14 @@
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
 #include <yt/yql/providers/yt/lib/row_spec/yql_row_spec.h>
-#include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yt/yql/providers/yt/lib/schema/schema.h>
 
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/threading/future/async.h>
 #include <library/cpp/yson/node/node_io.h>
@@ -27,6 +29,45 @@ namespace NYql {
 namespace {
 
 using namespace NNodes;
+
+const NSQLTranslation::TSqlFlags& UncoditionallyAllowedViewCompilationSqlFlags() {
+    static const NSQLTranslation::TSqlFlags flags = {
+        "WindowNewPipeline",
+        "DisableWindowNewPipeline"};
+    return flags;
+}
+
+NSQLTranslation::TSqlFlags FilterAllowedFlags(const NSQLTranslation::TSqlFlags& sqlFlags) {
+    NSQLTranslation::TSqlFlags result;
+    for (const auto& flag : sqlFlags) {
+        if (UncoditionallyAllowedViewCompilationSqlFlags().contains(flag)) {
+            result.insert(flag);
+        }
+    }
+    return result;
+}
+
+// Extract SQL flags used for view compilation from the main query.
+// We must ensure that every SQL VIEW is compiled with the same translator flags as the main query.
+// However, for now, we allow omitting SQL flags since not all clients have been migrated yet.
+NSQLTranslation::TSqlFlags ExtractViewCompilationSqlFlags(TYtState::TPtr ytState) {
+// TODO(YQL-20958): Enable this check when removing TRANSLATOR_FLAGS_IN_MIGRATION_MODE.
+#if !defined(TRANSLATOR_FLAGS_IN_MIGRATION_MODE)
+    YQL_ENSURE(ytState->Types->SqlFlags.Defined(), "SqlFlags must be defined. "
+                                                   "This at least ensures that every SQL VIEW"
+                                                   " is compiled with the same flags as the main query.");
+#else  // !defined(TRANSLATOR_FLAGS_IN_MIGRATION_MODE)
+    if (!ytState->Types->SqlFlags.Defined()) {
+        return NSQLTranslation::TSqlFlags();
+    }
+#endif // !defined(TRANSLATOR_FLAGS_IN_MIGRATION_MODE)
+
+    const auto& sqlFlags = *ytState->Types->SqlFlags;
+    if (!ytState->Configuration->PassSqlFlagsForViewTranslation.Get().GetOrElse(DEFAULT_PASS_SQL_FLAGS_FOR_VIEW_TRANSLATION)) {
+        return FilterAllowedFlags(sqlFlags);
+    }
+    return sqlFlags;
+}
 
 class TYtLoadTableMetadataTransformer : public TGraphTransformerBase {
 private:
@@ -105,7 +146,8 @@ public:
                             clusterAndTable.first, clusterAndTable.second, State_->Types->QContext, ctx,
                             State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
                             State_->Configuration->ViewIsolation.Get().GetOrElse(false),
-                            State_->Types->UdfResolver
+                            State_->Types->UdfResolver,
+                            ExtractViewCompilationSqlFlags(State_)
                         )) {
                             return TStatus::Error;
                         }
@@ -136,8 +178,16 @@ public:
             return TStatus::Ok;
         }
 
+        if (State_->Configuration->TmpSecurity.Get().GetOrElse(DEFAULT_TMP_FOLDER_SECURITY) == ETmpSecurityMode::Force
+            && !State_->Types->OperationOptions.ProjectSlug)
+        {
+            State_->UseSecureTmp->store(true);
+        }
+
         auto config = loadEpoch ? State_->Configuration->GetSettingsVer(settingsVer) : State_->Configuration->Snapshot();
-        opts.Config(config).ReadOnly(State_->Types->IsReadOnly).Epoch(loadEpoch);
+        opts.Config(config)
+            .ReadOnly(State_->Types->IsReadOnly || State_->Types->EngineType == EEngineType::Ytflow)
+            .Epoch(loadEpoch);
 
         auto future = State_->Gateway->GetTableInfo(std::move(opts));
         auto loadCtx = LoadCtx;
@@ -167,9 +217,11 @@ public:
             return TStatus::Error;
         }
 
-        ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+        ctx.Step
+            .Repeat(TExprStep::ExpandApplyForLambdas)
+            .Repeat(TExprStep::ExpandSeq);
         THashMap<std::pair<TString, TString>, TYtTableDescription*> tableDescrs;
-        for (size_t i = 0 ; i < LoadCtx->Result.Data.size(); ++i) {
+        for (size_t i = 0; i < LoadCtx->Result.Data.size(); ++i) {
             tableDescrs.emplace(LoadCtx->Tables[i]);
 
             TString cluster = LoadCtx->Tables[i].first.first;
@@ -189,12 +241,34 @@ public:
                 const auto schemaAttrs = std::initializer_list<TStringBuf>{YqlRowSpecAttribute, SCHEMA_ATTR_NAME, READ_SCHEMA_ATTR_NAME, INFER_SCHEMA_ATTR_NAME};
                 if (AnyOf(schemaAttrs, [&tableDesc](TStringBuf attr) { return tableDesc.Meta->Attrs.contains(attr); })) {
                     auto rowSpec = MakeIntrusive<TYqlRowSpecInfo>();
-                    if (!rowSpec->Parse(tableDesc.Meta->Attrs, ctx)) {
+                    auto parseExpressionColumns = State_->Configuration->_ParseExpressionColumns.Get().GetOrElse(DEFAULT_PARSE_EXPRESSION_COLUMNS);
+                    if (!rowSpec->Parse(tableDesc.Meta->Attrs, parseExpressionColumns, ctx)) {
                         return TStatus::Error;
                     }
                     if (!State_->Configuration->UseNativeDescSort.Get().GetOrElse(false) && rowSpec->ClearNativeDescendingSort(ctx)) {
                         if (!ctx.AddWarning(YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_NATIVE_DESC_SORT_IGNORED, "Native descending sort is ignored"))) {
                             return TStatus::Error;
+                        }
+                    }
+                    if (State_->Configuration->UseColumnGroupsFromInputTables.Get().GetOrElse(DEFAULT_USE_COLUMN_GROUPS_FROM_INPUT_TABLE)) {
+                        if (auto pSchema = tableDesc.Meta->Attrs.FindPtr(SCHEMA_ATTR_NAME)) {
+                            TString colGroupSpec;
+                            try {
+                                colGroupSpec = GetColumnGroupSpecFromSchema(NYT::NodeFromYsonString(*pSchema));
+                            } catch (...) {
+                                YQL_CLOG(ERROR, ProviderYt) << "Error parsing column groups for " << tableName << ", schema: " << *pSchema;
+                                auto issue = TIssue(TStringBuilder() << "Error parsing column groups from schema: " << CurrentExceptionMessage());
+                                issue.SetCode(UNEXPECTED_ERROR, ESeverity::TSeverityIds_ESeverityId_S_FATAL);
+                                ctx.AddError(issue);
+                                return TStatus::Error;
+                            }
+                            if (colGroupSpec) {
+                                YQL_CLOG(TRACE, ProviderYt) << "Loaded column group from schema for " << tableName << " (epoch=" << LoadCtx->Epoch << "): " << colGroupSpec;
+                                if (LoadCtx->Epoch == 0) {
+                                    tableDesc.ColumnGroupSpec = colGroupSpec;
+                                    tableDesc.ColumnGroupSpecAlts.insert(colGroupSpec);
+                                }
+                            }
                         }
                     }
                     // Some sanity checks
@@ -234,7 +308,8 @@ public:
                         cluster, tableName, State_->Types->QContext, ctx,
                         State_->Types->Modules.get(), State_->Types->UrlListerManager.Get(), *State_->Types->RandomProvider,
                         State_->Configuration->ViewIsolation.Get().GetOrElse(false),
-                        State_->Types->UdfResolver
+                        State_->Types->UdfResolver,
+                        ExtractViewCompilationSqlFlags(State_)
                     )) {
                         return TStatus::Error;
                     }
@@ -245,19 +320,28 @@ public:
                 tableDesc.Stat = stat;
                 if (HasReadIntents(tableDesc.Intents)) {
                     const auto& securityTagsSet = tableDesc.Stat->SecurityTags;
-                    const TString tmpFolder = GetTablesTmpFolder(*State_->Configuration);
+                    const TString tmpFolder = GetUserTablesTmpFolder(*State_->Configuration, cluster);
                     if (!securityTagsSet.empty() && tmpFolder.empty()) {
-                        TStringBuilder msg;
-                        msg << "Table " << cluster << "." << tableName
-                            << " contains sensitive data, but is used with the default tmp folder."
-                            << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
-                        auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
-                        if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(false)) {
-                            ctx.AddError(issue);
-                            return TStatus::Error;
-                        } else {
-                            if (!ctx.AddWarning(issue)) {
+                        const auto tmpSecurity = State_->Configuration->TmpSecurity.Get().GetOrElse(DEFAULT_TMP_FOLDER_SECURITY);
+                        if (tmpSecurity != ETmpSecurityMode::Disable && !State_->Types->OperationOptions.ProjectSlug) {
+                            State_->UseSecureTmp->store(true);
+                        }
+
+                        if (!State_->UseSecureTmp->load() || !State_->Configuration->_SecureTmpRoot.Get(cluster)) {
+                            TStringBuilder msg;
+                            msg << "Table " << cluster << "." << tableName
+                                << " contains sensitive data, but is used with the default tmp folder."
+                                << " This may lead to sensitive data being leaked, consider using a protected tmp folder with the TmpFolder pragma.";
+                            auto issue = YqlIssue(TPosition(), EYqlIssueCode::TIssuesIds_EIssueCode_YT_SECURE_DATA_IN_COMMON_TMP, msg);
+                            if (State_->Configuration->ForceTmpSecurity.Get().GetOrElse(tmpSecurity == ETmpSecurityMode::Force)) {
+                                // treat this warning as error in force mode
+                                issue.SetCode(issue.GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR);
+                                ctx.AddError(issue);
                                 return TStatus::Error;
+                            } else {
+                                if (!ctx.AddWarning(issue)) {
+                                    return TStatus::Error;
+                                }
                             }
                         }
                     }

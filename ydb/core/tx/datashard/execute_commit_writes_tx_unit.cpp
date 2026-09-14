@@ -25,16 +25,16 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsCommitWritesTx());
+        Y_ENSURE(op->IsCommitWritesTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         TDataShardLocksDb locksDb(DataShard, txc);
         TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
         const auto& commitTx = tx->GetCommitWritesTx()->GetBody();
-        const auto versions = DataShard.GetReadWriteVersions(op.Get());
+        const auto mvccVersion = DataShard.GetMvccVersion(op.Get());
 
         const auto& tableId = commitTx.GetTableId();
         const auto& tableInfo = *DataShard.GetUserTables().at(tableId.GetTableId());
@@ -44,7 +44,7 @@ public:
 
         // FIXME: temporary break all locks, but we want to be smarter about which locks we break
         DataShard.SysLocksTable().BreakAllLocks(fullTableId);
-        txc.DB.CommitTx(tableInfo.LocalTid, writeTxId, versions.WriteVersion);
+        txc.DB.CommitTx(tableInfo.LocalTid, writeTxId, mvccVersion);
         DataShard.GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(writeTxId, txc.DB);
 
         if (Pipeline.AddLockDependencies(op, guardLocks)) {

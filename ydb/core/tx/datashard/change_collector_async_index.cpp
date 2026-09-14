@@ -3,6 +3,7 @@
 #include "datashard_user_db.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -35,8 +36,8 @@ public:
             }
         }
 
-        Y_ABORT_UNLESS(!tags.empty());
-        Y_ABORT_UNLESS(!IndexTags.empty());
+        Y_ENSURE(!tags.empty());
+        Y_ENSURE(!IndexTags.empty());
 
         return TCachedTags(std::move(tags), std::make_pair(0, IndexTags.size() - 1));
     }
@@ -68,12 +69,14 @@ bool TAsyncIndexChangeCollector::NeedToReadKeys() const {
 }
 
 bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
-        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
+        TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates,
+        TIntrusivePtr<NACLib::TUserContext> userCtx)
 {
-    Y_VERIFY_S(Self->IsUserTable(tableId), "Unknown table: " << tableId);
+    Y_ENSURE(Self->IsUserTable(tableId), "Unknown table: " << tableId);
+    Y_UNUSED(userCtx);
 
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
-    Y_VERIFY_S(key.size() == userTable->KeyColumnIds.size(), "Count doesn't match"
+    Y_ENSURE(key.size() == userTable->KeyColumnIds.size(), "Count doesn't match"
         << ": key# " << key.size()
         << ", tags# " << userTable->KeyColumnIds.size());
 
@@ -83,7 +86,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     case ERowOp::Reset:
         break;
     default:
-        Y_FAIL_S("Unsupported row op: " << static_cast<ui8>(rop));
+        Y_ENSURE(false, "Unsupported row op: " << static_cast<ui8>(rop));
     }
 
     const auto tagsToSelect = GetTagsToSelect(tableId, rop);
@@ -114,8 +117,8 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     needDeletion = true;
                 }
 
-                Y_ABORT_UNLESS(tagToPos.contains(tag));
-                Y_ABORT_UNLESS(userTable->Columns.contains(tag));
+                Y_ENSURE(tagToPos.contains(tag));
+                Y_ENSURE(userTable->Columns.contains(tag));
                 AddCellValue(KeyVals, tag, row.Get(tagToPos.at(tag)), userTable->Columns.at(tag).Type);
                 KeyTagsSeen.insert(tag);
             }
@@ -143,14 +146,14 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     AddValue(KeyVals, updates.at(updatedTagToPos.at(tag)));
                     KeyTagsSeen.insert(tag);
                 } else {
-                    Y_ABORT_UNLESS(userTable->Columns.contains(tag));
+                    Y_ENSURE(userTable->Columns.contains(tag));
                     const auto& column = userTable->Columns.at(tag);
 
                     if (rop == ERowOp::Reset && !column.IsKey) {
                         AddNullValue(KeyVals, tag, column.Type);
                         KeyTagsSeen.insert(tag);
                     } else {
-                        Y_ABORT_UNLESS(tagToPos.contains(tag));
+                        Y_ENSURE(tagToPos.contains(tag));
                         AddCellValue(KeyVals, tag, row.Get(tagToPos.at(tag)), column.Type);
                         KeyTagsSeen.insert(tag);
                     }
@@ -164,18 +167,27 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                 }
             }
 
+            ui64 sizeOfKey = 0;
+            for (auto x : KeyVals) {
+                sizeOfKey += x.Value.Size();
+            }
+
+            if (sizeOfKey > NLimits::MaxWriteKeySize) {
+                throw TKeySizeConstraintException();
+            }
+
             for (const auto tag : index.DataColumnIds) {
                 if (updatedTagToPos.contains(tag)) {
                     needUpdate = true;
                     AddValue(DataVals, updates.at(updatedTagToPos.at(tag)));
                 } else {
-                    Y_ABORT_UNLESS(userTable->Columns.contains(tag));
+                    Y_ENSURE(userTable->Columns.contains(tag));
                     const auto& column = userTable->Columns.at(tag);
 
                     if (rop == ERowOp::Reset && !column.IsKey) {
                         AddNullValue(DataVals, tag, column.Type);
                     } else {
-                        Y_ABORT_UNLESS(tagToPos.contains(tag));
+                        Y_ENSURE(tagToPos.contains(tag));
                         AddCellValue(DataVals, tag, row.Get(tagToPos.at(tag)), column.Type);
                     }
                 }
@@ -193,7 +205,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
 }
 
 auto TAsyncIndexChangeCollector::CacheTags(const TTableId& tableId) const {
-    Y_ABORT_UNLESS(Self->GetUserTables().contains(tableId.PathId.LocalPathId));
+    Y_ENSURE(Self->GetUserTables().contains(tableId.PathId.LocalPathId));
     auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
 
     TCachedTagsBuilder builder;
@@ -219,12 +231,12 @@ TArrayRef<TTag> TAsyncIndexChangeCollector::GetTagsToSelect(const TTableId& tabl
     case ERowOp::Reset:
         return it->second.IndexColumns;
     default:
-        Y_ABORT("unreachable");
+        Y_ENSURE(false, "unreachable");
     }
 }
 
 void TAsyncIndexChangeCollector::AddValue(TVector<TUpdateOp>& out, const TUpdateOp& update) {
-    Y_VERIFY_S(update.Op == ECellOp::Set, "Unexpected op: " << update.Op.Raw());
+    Y_ENSURE(update.Op == ECellOp::Set, "Unexpected op: " << update.Op.Raw());
     out.push_back(update);
 }
 
@@ -258,7 +270,8 @@ void TAsyncIndexChangeCollector::Persist(const TTableId& tableId, const TPathId&
 {
     NKikimrChangeExchange::TDataChange body;
     Serialize(body, rop, key, keyTags, updates);
-    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body);
+    Sink.AddChange(tableId, pathId, TChangeRecord::EKind::AsyncIndex, body,
+        NACLib::TUserContextBuilder().WithUserSID(BUILTIN_ACL_CDC_WITHOUT_USER_SID).Build());
 }
 
 void TAsyncIndexChangeCollector::Clear() {

@@ -60,9 +60,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FlatMap(TExprBase node,
         return node;
     }
 
-    auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), syncList, cluster, false)) {
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(input, selectionMode);
+    if (!cluster || !IsYtCompleteIsolatedLambda(flatMap.Lambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
 
@@ -96,7 +98,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FlatMap(TExprBase node,
 
     bool sortedOutput = false;
     TVector<TYtOutTable> outTables = ConvertOutTablesWithSortAware(mapper, sortedOutput, flatMap.Pos(),
-        outItemType, ctx, State_, flatMap.Ref().GetConstraintSet());
+        outItemType, *cluster, ctx, State_, flatMap.Ref().GetConstraintSet());
 
     auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, flatMap.Pos());
     if (TCoOrderedFlatMap::Match(flatMap.Raw()) || sortedOutput) {
@@ -118,7 +120,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FlatMap(TExprBase node,
 
     auto ytMap = Build<TYtMap>(ctx, node.Pos())
         .World(ApplySyncListToWorld(GetWorld(input, {}, ctx).Ptr(), syncList, ctx))
-        .DataSink(GetDataSink(input, ctx))
+        .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
         .Input(ConvertInputTable(input, ctx))
         .Output()
             .Add(outTables)
@@ -154,9 +156,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LMap(TExprBase node, TE
         return {};
     }
 
-    auto cluster = TString{GetClusterName(lmap.Input())};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(lmap.Lambda().Ref(), syncList, cluster, false)) {
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(lmap.Input(), selectionMode);
+    if (!cluster || !IsYtCompleteIsolatedLambda(lmap.Lambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
 
@@ -168,7 +172,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LMap(TExprBase node, TE
     auto mapper = cleanup.Cast().Ptr();
     bool sortedOutput = false;
     TVector<TYtOutTable> outTables = NPrivate::ConvertOutTablesWithSortAware(mapper, sortedOutput, lmap.Pos(),
-        outItemType, ctx, State_, lmap.Ref().GetConstraintSet());
+        outItemType, *cluster, ctx, State_, lmap.Ref().GetConstraintSet());
 
     const bool useFlow = State_->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW);
 
@@ -193,7 +197,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LMap(TExprBase node, TE
 
     auto map = Build<TYtMap>(ctx, lmap.Pos())
         .World(ApplySyncListToWorld(NPrivate::GetWorld(lmap.Input(), {}, ctx).Ptr(), syncList, ctx))
-        .DataSink(NPrivate::GetDataSink(lmap.Input(), ctx))
+        .DataSink(MakeDataSink(lmap.Pos(), *cluster, ctx))
         .Input(NPrivate::ConvertInputTable(lmap.Input(), ctx))
         .Output()
             .Add(outTables)
@@ -235,21 +239,26 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
         return {};
     }
 
-    auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(combineByKey.PreMapLambda().Ref(), syncList, cluster, false)) {
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(input, selectionMode);
+    if (!cluster) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.KeySelectorLambda().Ref(), syncList, cluster, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.PreMapLambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.InitHandlerLambda().Ref(), syncList, cluster, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.KeySelectorLambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.UpdateHandlerLambda().Ref(), syncList, cluster, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.InitHandlerLambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
-    if (!IsYtCompleteIsolatedLambda(combineByKey.FinishHandlerLambda().Ref(), syncList, cluster, false)) {
+    if (!IsYtCompleteIsolatedLambda(combineByKey.UpdateHandlerLambda().Ref(), syncList, *cluster, false, selectionMode)) {
+        return node;
+    }
+    if (!IsYtCompleteIsolatedLambda(combineByKey.FinishHandlerLambda().Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
 
@@ -383,12 +392,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
             .Done();
     }
 
-    TYtOutTableInfo combineOut(outItemType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+    TYtOutTableInfo combineOut(outItemType, GetNativeYtTypeCompatibility(*cluster, *State_->Configuration));
 
     return Build<TYtOutput>(ctx, combineByKey.Pos())
         .Operation<TYtMap>()
             .World(ApplySyncListToWorld(GetWorld(input, {}, ctx).Ptr(), syncList, ctx))
-            .DataSink(GetDataSink(input, ctx))
+            .DataSink(MakeDataSink(combineByKey.Pos(), *cluster, ctx))
             .Input(ConvertInputTable(input, ctx))
             .Output()
                 .Add(combineOut.ToExprNode(ctx, combineByKey.Pos()).Cast<TYtOutTable>())
@@ -400,4 +409,115 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
         .Done();
 }
 
-}  // namespace NYql
+TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExprBase node, TExprContext& ctx) const {
+    const auto ytMap = node.Cast<TYtMap>();
+    auto ytMapInput = ytMap.Mapper().Args().Arg(0).Ptr();
+
+    {
+        static const char optName[] = "KeepPruneKeysOnInputTables";
+        if (!IsOptimizerEnabled<optName>(*State_->Types) || IsOptimizerDisabled<optName>(*State_->Types)) {
+            // Try remove PruneKeys over Input table
+            const auto pruneKeys = ytMap.Mapper().Body().Maybe<TCoPruneKeysBase>();
+
+            if (pruneKeys) {
+                bool skipPruneKeys = true;
+                if (pruneKeys.Cast().Input().Ptr() != ytMapInput) {
+                    skipPruneKeys = false;
+                } else if (auto maybePruneAdjacentKeys = pruneKeys.Cast().Maybe<TCoPruneAdjacentKeys>(); maybePruneAdjacentKeys) {
+                    auto pruneAdjacentKeys = maybePruneAdjacentKeys.Cast();
+                    // We cannot remove added unique\distinct constraints added for pruneAdjacentKeys, so we cannot remove pruneAdjacentKeys
+                    if (pruneAdjacentKeys.Input().Ptr()->GetConstraintSet() != pruneAdjacentKeys.Ptr()->GetConstraintSet()) {
+                        skipPruneKeys = false;
+                    }
+                }
+
+                if (skipPruneKeys) {
+                    auto identityLambda = MakeIdentityLambda(node.Pos(), ctx);
+                    return Build<TYtMap>(ctx, node.Pos())
+                        .InitFrom(ytMap)
+                        .Mapper(identityLambda)
+                    .Done();
+                }
+            }
+        }
+    }
+
+    const auto flatMap = ytMap.Mapper().Body().Maybe<TCoFlatMapBase>();
+    if (!flatMap) {
+        return node;
+    }
+
+    auto flatMapInput = flatMap.Cast().Input().Ptr();
+
+    auto maybePruneKeys = flatMap.Cast().Input().Maybe<TCoPruneKeysBase>();
+    if (maybePruneKeys) {
+        flatMapInput = maybePruneKeys.Cast().Input().Ptr();
+    }
+
+    if (flatMapInput != ytMapInput) {
+        return node;
+    }
+
+    auto flatMapLambda = flatMap.Cast().Lambda();
+    if (!IsFilterFlatMap(flatMapLambda)) {
+        return node;
+    }
+
+    auto row = flatMapLambda.Args().Arg(0).Ptr();
+    auto predicate = flatMapLambda.Body().Ref().ChildPtr(TCoConditionalValueBase::idx_Predicate);
+
+    TNodeSet banned;
+    VisitExpr(predicate, [&](const TExprNode::TPtr& node) {
+        if (TYtOutput::Match(node.Get())) {
+            // Prevent ReplaceUnessentials to go deeper than current operation
+            banned.insert(node.Get());
+            return false;
+        }
+        return true;
+    });
+
+    auto newPredicate = ReplaceUnessentials(predicate, row, banned, ctx);
+    if (newPredicate == predicate) {
+        return node;
+    }
+
+    auto newFilter = ctx.ChangeChild(flatMapLambda.Body().Ref(), TCoConditionalValueBase::idx_Predicate, std::move(newPredicate));
+    auto newFlatMapLambda = ctx.ChangeChild(flatMapLambda.Ref(), TCoLambda::idx_Body, std::move(newFilter));
+
+    auto newInputLambda = MakeIdentityLambda(node.Pos(), ctx);
+    if (maybePruneKeys) {
+        auto pruneKeys = maybePruneKeys.Cast();
+        newInputLambda = ctx.Builder(node.Pos())
+            .Lambda()
+                .Param({"stream"})
+                .Callable(TCoPruneAdjacentKeys::Match(pruneKeys.Raw()) ? "PruneAdjacentKeys" : "PruneKeys")
+                    .Arg(0, "stream")
+                    .Add(1, pruneKeys.Extractor().Ptr())
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    return Build<TYtMap>(ctx, node.Pos())
+        .InitFrom(ytMap)
+        .Mapper<TCoLambda>()
+            .Args({"stream"})
+            .Body<TCoFlatMapBase>()
+                .CallableName(flatMap.Ref().Content())
+                .Input<TExprApplier>()
+                    .Apply(TCoLambda(newInputLambda))
+                    .With(0, "stream")
+                .Build()
+                .Lambda<TCoLambda>()
+                    .Args({"item"})
+                    .Body<TExprApplier>()
+                        .Apply(TCoLambda(newFlatMapLambda))
+                        .With(0, "item")
+                    .Build()
+                .Build()
+            .Build()
+        .Build()
+        .Done();
+}
+
+} // namespace NYql

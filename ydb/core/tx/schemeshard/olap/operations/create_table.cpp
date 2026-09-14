@@ -1,3 +1,7 @@
+#include <ydb/core/scheme/protos/type_info.pb.h>
+#include <ydb/core/tx/schemeshard/olap/operations/checks.h>
+#include <ydb/core/tx/schemeshard/olap/statistics/schema.h>
+#include <ydb/core/tx/schemeshard/olap/statistics/update.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -99,7 +103,7 @@ private:
 
 class TOlapPresetConstructor : public TTableConstructorBase {
     ui32 PresetId = 0;
-    TString PresetName = "default";
+    TString PresetName = TOlapStoreInfo::DefaultPresetName;
     const TOlapStoreInfo& StoreInfo;
     mutable bool NeedUpdateObject = false;
 public:
@@ -118,27 +122,16 @@ public:
             return false;
         }
 
-        if (description.HasSchemaPresetId()) {
-            PresetId = description.GetSchemaPresetId();
-            if (!StoreInfo.SchemaPresets.contains(PresetId)) {
-                errors.AddError(Sprintf("Specified schema preset %" PRIu32 " does not exist in tablestore", PresetId));
-                return false;
-            }
-            PresetName = StoreInfo.SchemaPresets.at(PresetId).GetName();
-        } else {
-            if (description.HasSchemaPresetName()) {
-                PresetName = description.GetSchemaPresetName();
-            }
-            if (!StoreInfo.SchemaPresetByName.contains(PresetName)) {
-                errors.AddError(Sprintf("Specified schema preset '%s' does not exist in tablestore", PresetName.c_str()));
-                return false;
-            }
-            PresetId = StoreInfo.SchemaPresetByName.at(PresetName);
-            Y_ABORT_UNLESS(StoreInfo.SchemaPresets.contains(PresetId));
+        auto* preset = StoreInfo.GetPresetOptional(description);
+        if (!preset) {
+            errors.AddError("preset not found in tables store");
+            return false;
         }
+        PresetId = preset->GetId();
+        PresetName = preset->GetName();
 
         if (description.HasSchema()) {
-            if (!GetSchema().Validate(description.GetSchema(), errors)) {
+            if (!GetSchema().ValidateForStore(description.GetSchema(), errors)) {
                 return false;
             }
         }
@@ -175,6 +168,7 @@ private:
 
 class TOlapTableConstructor : public TTableConstructorBase {
     TOlapSchema TableSchema;
+    TOlapMultiColumnStatisticsDescription TableMultiColumnStatistics;
     ui32 ChannelsCount = 64;
 private:
     bool DoDeserialize(const NKikimrSchemeOp::TColumnTableDescription& description, IErrorCollector& errors) override {
@@ -192,15 +186,15 @@ private:
             ChannelsCount = description.GetStorageConfig().GetDataChannelCount();
         }
 
-        TOlapSchemaUpdate schemaDiff;
-        if (!schemaDiff.Parse(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
+        if (!TableSchema.ParseFromProto(description.GetSchema(), errors, AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK())) {
             return false;
         }
 
-        if (!TableSchema.Update(schemaDiff, errors)) {
+        TOlapMultiColumnStatisticsUpdate statisticsUpdate;
+        if (!statisticsUpdate.Parse(description, errors)) {
             return false;
         }
-        return true;
+        return TableMultiColumnStatistics.ApplyUpdate(TableSchema, statisticsUpdate, errors);
     }
 
 private:
@@ -208,6 +202,7 @@ private:
         auto& description = table->Description;
         description.MutableStorageConfig()->SetDataChannelCount(ChannelsCount);
         TableSchema.Serialize(*description.MutableSchema());
+        TableMultiColumnStatistics.Serialize(description);
         return TConclusionStatus::Success();
     }
 
@@ -311,14 +306,16 @@ public:
             TTabletId tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
             if (shard.TabletType == ETabletType::ColumnShard) {
+                const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
                 auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
                     NKikimrTxColumnShard::TX_KIND_SCHEMA,
                     context.SS->TabletID(),
                     context.Ctx.SelfID,
                     ui64(OperationId.GetTxId()),
                     columnShardTxBody, seqNo,
-                    context.SS->SelectProcessingParams(txState->TargetPathId));
-
+                    context.SS->SelectProcessingParams(txState->TargetPathId),
+                    0,
+                    subDomainPathId);
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {
                 LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " unexpected tablet type");
@@ -504,7 +501,7 @@ public:
             event->Record.SetTxId(ui64(OperationId.GetTxId()));
             event->Record.SetTxPartId(OperationId.GetSubTxId());
             TPathId pathId = txState->TargetPathId;
-            auto hiveToRequest = context.SS->ResolveHive(pathId, context.Ctx);
+            auto hiveToRequest = context.SS->ResolveHive(pathId);
             context.OnComplete.BindMsgToPipe(OperationId, hiveToRequest, pathId, event.release());
         }
 
@@ -559,27 +556,6 @@ class TCreateColumnTable: public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    void AddDefaultFamilyIfNotExists(NKikimrSchemeOp::TColumnTableDescription& createDescription) {
-        auto schema = createDescription.GetSchema();
-        for (const auto& family : schema.GetColumnFamilies()) {
-            if (family.GetName() == "default") {
-                return;
-            }
-        }
-
-        auto mutableSchema = createDescription.MutableSchema();
-        auto defaultFamily = mutableSchema->AddColumnFamilies();
-        defaultFamily->SetName("default");
-        defaultFamily->SetId(0);
-
-        for (ui32 i = 0; i < schema.ColumnsSize(); i++) {
-            if (!schema.GetColumns(i).HasColumnFamilyName() || !schema.GetColumns(i).HasColumnFamilyId()) {
-                mutableSchema->MutableColumns(i)->SetColumnFamilyName("default");
-                mutableSchema->MutableColumns(i)->SetColumnFamilyId(0);
-            }
-        }
-    }
-
     THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -614,6 +590,13 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Incoming tx message has initialized shard ids");
             return result;
+        }
+
+        if (createDescription.HasSchema()) {
+            if (auto checkResult = NOlap::CheckColumns(createDescription.GetSchema().GetColumns(), AppData()); !checkResult) {
+                result->SetError(NKikimrScheme::StatusSchemeError, checkResult.error());
+                return result;
+            }
         }
 
         TOlapStoreInfo::TPtr storeInfo;
@@ -674,7 +657,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .ShardsLimit(storeInfo ? 0 : shardsCount)
@@ -720,7 +703,6 @@ public:
                 result->SetError(NKikimrScheme::StatusSchemeError, errStr);
                 return result;
             }
-            AddDefaultFamilyIfNotExists(createDescription);
             TOlapTableConstructor tableConstructor;
             tableInfo = tableConstructor.BuildTableInfo(createDescription, context, errors);
         }
@@ -769,7 +751,7 @@ public:
             storeInfo->ColumnTablesUnderOperation.insert(pathId);
             context.SS->PersistColumnTable(db, pathId, *pending);
             context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
-            context.SS->IncrementPathDbRefCount(pathId);
+            context.SS->AcquireOwnDbRef(pathId, "type info record");
 
             if (parentPath.Base()->HasActiveChanges()) {
                 TTxId parentTxId = parentPath.Base()->PlannedToCreate()
@@ -823,7 +805,7 @@ public:
 
             context.SS->PersistColumnTable(db, pathId, *pending);
             context.SS->PersistColumnTableAlter(db, pathId, *tableInfo);
-            context.SS->IncrementPathDbRefCount(pathId);
+            context.SS->AcquireOwnDbRef(pathId, "type info record");
 
             if (parentPath.Base()->HasActiveChanges()) {
                 TTxId parentTxId = parentPath.Base()->PlannedToCreate()

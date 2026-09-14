@@ -28,8 +28,8 @@
 | `Datetime64` | `timestamp` |`pgtimestamp` |
 | `Timestamp64` | `timestamp` |`pgtimestamp` |
 | `Interval64`| `interval` |`pginterval` |
-| `TzDate32` | `text` |  |`pgtext` |
-| `TzDatetime64` | `text` |  |`pgtext` |
-| `TzTimestamp64` | `text` |  |`pgtext` |
+| `TzDate32` | `text` | `pgtext` |
+| `TzDatetime64` | `text` | `pgtext` |
+| `TzTimestamp64` | `text` | `pgtext` |
 | `Decimal` | `numeric` |`pgnumeric` |
 | `DyNumber` | `numeric` |`pgnumeric` |

@@ -2,15 +2,17 @@
 #include <library/cpp/string_utils/quote/quote.h>
 #include <util/generic/yexception.h>
 
+#include <utility>
+
 namespace NYql {
 
-TUrlBuilder::TUrlBuilder(const TString& uri)
-    : MainUri(uri)
+TUrlBuilder::TUrlBuilder(TString uri)
+    : MainUri_(std::move(uri))
 {
 }
 
 TUrlBuilder& TUrlBuilder::AddUrlParam(const TString& name, const TString& value) {
-    Params.emplace_back(TParam {name, value});
+    Params_.emplace_back(TParam{.Name = name, .Value = value});
     return *this;
 }
 
@@ -19,25 +21,25 @@ TUrlBuilder& TUrlBuilder::AddPathComponent(const TString& value) {
         throw yexception() << "Empty path component is not allowed";
     }
     TStringBuilder res;
-    res << MainUri;
-    if (!MainUri.EndsWith('/')) {
+    res << MainUri_;
+    if (!MainUri_.EndsWith('/')) {
         res << '/';
     }
-    res << UrlEscapeRet(value, true);
+    res << UrlEscapeRet(value, /*forceEscape=*/true);
 
-    MainUri = std::move(res);
+    MainUri_ = std::move(res);
     return *this;
 }
 
 TString TUrlBuilder::Build() const {
-    if (Params.empty()) {
-        return MainUri;
+    if (Params_.empty()) {
+        return MainUri_;
     }
 
     TStringBuilder res;
-    res << MainUri << "?";
+    res << MainUri_ << "?";
     TStringBuf separator = ""sv;
-    for (const auto& p : Params) {
+    for (const auto& p : Params_) {
         res << separator << p.Name;
         if (p.Value) {
             res << "=" << CGIEscapeRet(p.Value);
@@ -47,4 +49,4 @@ TString TUrlBuilder::Build() const {
     return std::move(res);
 }
 
-} // NYql
+} // namespace NYql

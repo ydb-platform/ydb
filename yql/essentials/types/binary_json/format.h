@@ -60,7 +60,7 @@ enum class EEntryType {
 struct TEntry {
     TEntry() = default;
 
-    TEntry(EEntryType type, ui32 value = 0)
+    explicit TEntry(EEntryType type, ui32 value = 0)
         : Type(type)
         , Value(value)
     {
@@ -139,4 +139,4 @@ static_assert(sizeof(TMeta) == sizeof(ui32));
  */
 using TBinaryJson = TBuffer;
 
-}
+} // namespace NKikimr::NBinaryJson

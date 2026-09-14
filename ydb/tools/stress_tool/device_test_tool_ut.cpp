@@ -8,8 +8,10 @@
 
 #include "device_test_tool.h"
 #include "device_test_tool_aio_test.h"
+#include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_driveestimator.h"
 #include "device_test_tool_pdisk_test.h"
+#include "device_test_tool_pb_test.h"
 #include "device_test_tool_trim_test.h"
 
 namespace NKikimr {
@@ -22,6 +24,8 @@ constexpr i64 FileSize = 64ull << 30ull; // GiB
 constexpr ui32 TestChunkSize = 32 << 20; // 32 MiB
 
 using TPDiskTest32 = NKikimr::TPDiskTest<TestChunkSize>;
+using TDDiskTest32 = NKikimr::TDDiskTest<TestChunkSize>;
+using TPersistentBufferTest32 = NKikimr::TPersistentBufferTest<TestChunkSize>;
 
 struct TPrinterStub : NKikimr::IResultPrinter {
     TVector<std::pair<TString, TString>> Results;
@@ -38,6 +42,15 @@ struct TPrinterStub : NKikimr::IResultPrinter {
     void AddGlobalParam(const TString&, const TString&) override {
     }
 
+    void AddSpeedAndIops(const NKikimr::TSpeedAndIops&) override {
+    }
+
+    void SetTestType(const TString&) override {
+    }
+
+    void SetInFlight(ui32) override {
+    }
+
     void PrintResults() override {
     }
 
@@ -49,26 +62,37 @@ struct TPrinterStub : NKikimr::IResultPrinter {
 Y_UNIT_TEST_SUITE(TDeviceTestTool) {
 
 template<typename P, typename T>
-void ProbeTest(const TString &testDescription, bool expectResults, TMaybe<NKikimr::TResultPrinter::EOutputFormat> format = {}) {
+void ProbeTest(const TString &testDescription, bool expectResults,
+        TMaybe<NKikimr::TResultPrinter::EOutputFormat> format = {},
+        bool disableDDiskChecksums = false,
+        bool forcePDiskFallback = false,
+        TVector<std::pair<TString, TString>>* outResults = nullptr) {
     UNIT_ASSERT(!(expectResults && format));
     TTempFileHandle file;
     file.Resize(FileSize);
-    NKikimr::TPerfTestConfig config(file.Name(), "name", "ROT", "json", "", true);
+    NKikimr::TPerfTestConfig config(file.Name(), "name", "ROT", "json", "", true,
+        "1", "0", "0", false, disableDDiskChecksums, forcePDiskFallback);
+    config.PersistentBufferChunks = 10;
 
     P testProto;
     NProtoBuf::TextFormat::ParseFromString(testDescription, &testProto);
 
     THolder<NKikimr::TPerfTest> test(new T(config, testProto));
     TIntrusivePtr<NKikimr::IResultPrinter> printer;
+    TPrinterStub* stub = nullptr;
     if (format) {
         printer = new NKikimr::TResultPrinter(*format);
     } else {
-        printer = new TPrinterStub(expectResults);
+        stub = new TPrinterStub(expectResults);
+        printer = stub;
     }
 
     test->SetPrinter(printer);
     test->RunTest();
     printer->EndTest();
+    if (outResults && stub) {
+        *outResults = stub->Results;
+    }
 }
 
 Y_UNIT_TEST(AioTestRead) {
@@ -224,6 +248,162 @@ Y_UNIT_TEST(PDiskTestWrite) {
     )___";
 
     ProbeTest<NDevicePerfTest::TPDiskTest, TPDiskTest32>(perfCfg.Str(), true);
+}
+
+void ProbeDDiskWrite(bool disableDDiskChecksums) {
+    TStringStream perfCfg;
+    perfCfg << R"___(
+        DDiskTestList: {
+            DDiskLoad: {
+                Tag: 4
+                DDiskId: {
+                    NodeId: 1
+                    PDiskId: 1
+                    DDiskSlotId: 1
+                }
+                Areas: { AreaSize: 10485760 Sequential: false }
+                DurationSeconds: )___" << TestDurationSec << R"___(
+                InFlight: 64
+                IntervalMsMin: 0
+                IntervalMsMax: 0
+                IoSizeBytes: 4096
+                ExpectedChunkSize: 10485760
+            }
+        }
+    )___";
+
+    ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(
+        perfCfg.Str(), true, {}, disableDDiskChecksums);
+}
+
+Y_UNIT_TEST(DDiskTestWrite) {
+    ProbeDDiskWrite(false);
+}
+
+Y_UNIT_TEST(DDiskTestWriteChecksumsDisabled) {
+    ProbeDDiskWrite(true);
+}
+
+void ProbeDDiskRead(bool disableDDiskChecksums, float backgroundWriteRatio = 0,
+        ui32 backgroundWriteSizeKiB = 0, TVector<std::pair<TString, TString>>* outResults = nullptr) {
+    TStringStream perfCfg;
+    perfCfg << R"___(
+        DDiskTestList: {
+            DDiskLoad: {
+                Tag: 5
+                DDiskId: {
+                    NodeId: 1
+                    PDiskId: 1
+                    DDiskSlotId: 1
+                }
+                Areas: { AreaSize: 10485760 Sequential: false }
+                DurationSeconds: )___" << TestDurationSec << R"___(
+                InFlight: 64
+                IntervalMsMin: 0
+                IntervalMsMax: 0
+                IoSizeBytes: 4096
+                ExpectedChunkSize: 10485760
+                IsReadLoad: true
+    )___";
+    if (backgroundWriteRatio > 0) {
+        perfCfg << "BackgroundWriteRatio: " << backgroundWriteRatio << Endl;
+        if (backgroundWriteSizeKiB) {
+            perfCfg << "BackgroundWriteSizeKiB: " << backgroundWriteSizeKiB << Endl;
+        }
+    }
+    perfCfg << R"___(
+            }
+        }
+    )___";
+
+    ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(
+        perfCfg.Str(), true, {}, disableDDiskChecksums, false, outResults);
+}
+
+Y_UNIT_TEST(DDiskTestRead) {
+    ProbeDDiskRead(false);
+}
+
+Y_UNIT_TEST(DDiskTestReadChecksumsDisabled) {
+    ProbeDDiskRead(true);
+}
+
+Y_UNIT_TEST(DDiskTestReadWithBackgroundWrites) {
+    TVector<std::pair<TString, TString>> results;
+    ProbeDDiskRead(false, 0.5, 8, &results);
+
+    ui64 measuredReads = 0;
+    ui64 backgroundWrites = 0;
+    for (const auto& [name, value] : results) {
+        if (name == "MeasuredReads") {
+            measuredReads = FromString<ui64>(value);
+        } else if (name == "BackgroundWrites") {
+            backgroundWrites = FromString<ui64>(value);
+        }
+    }
+    UNIT_ASSERT_C(measuredReads > 0, "expected measured reads with background writes enabled");
+    UNIT_ASSERT_C(backgroundWrites > 0, "expected unmeasured background writes to be issued");
+    const double observedRatio = static_cast<double>(backgroundWrites) / static_cast<double>(measuredReads);
+    UNIT_ASSERT_C(observedRatio > 0.4 && observedRatio < 0.6,
+        TStringBuilder() << "background write ratio " << observedRatio
+            << " from " << backgroundWrites << " writes / " << measuredReads
+            << " reads, expected ~0.5");
+}
+
+Y_UNIT_TEST(DDiskTestWriteLargeIo) {
+    TStringStream perfCfg;
+    perfCfg << R"___(
+        DDiskTestList: {
+            DDiskLoad: {
+                Tag: 6
+                DDiskId: {
+                    NodeId: 1
+                    PDiskId: 1
+                    DDiskSlotId: 1
+                }
+                Areas: { AreaSize: 10485760 Sequential: false }
+                DurationSeconds: )___" << TestDurationSec << R"___(
+                InFlight: 64
+                IntervalMsMin: 0
+                IntervalMsMax: 0
+                IoSizeBytes: 65536
+                ExpectedChunkSize: 10485760
+            }
+        }
+    )___";
+
+    ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
+}
+
+void ProbePersistentBufferWrite(bool disableDDiskChecksums, bool forcePDiskFallback = false) {
+    TStringStream perfCfg;
+    perfCfg << R"___(
+        PersistentBufferTestList: {
+            PersistentBufferWriteLoad: {
+                Tag: 4
+                DDiskId: {
+                    NodeId: 1
+                    PDiskId: 1
+                    DDiskSlotId: 1
+                }
+                WriteInfos: { Size: 4096 Weight: 1 }
+                DurationSeconds: )___" << TestDurationSec << R"___(
+                InFlightWrites: 64
+                FillRatio: 10
+            }
+        }
+    )___";
+
+    ProbeTest<NDevicePerfTest::TPersistentBufferTest, TPersistentBufferTest32>(
+        perfCfg.Str(), true, {}, disableDDiskChecksums, forcePDiskFallback);
+}
+
+Y_UNIT_TEST(PersistentBufferTestWrite) {
+    ProbePersistentBufferWrite(false);
+}
+
+Y_UNIT_TEST(PersistentBufferTestWriteChecksumsDisabled) {
+    ProbePersistentBufferWrite(true, true);
 }
 
 Y_UNIT_TEST(PDiskTestLogWrite) {

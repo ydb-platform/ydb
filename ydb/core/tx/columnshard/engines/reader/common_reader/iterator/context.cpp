@@ -1,16 +1,21 @@
 #include "context.h"
 
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
-#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : CommonContext(commonContext) {
+    : CommonContext(commonContext)
+    , GroupedMemoryLimiterOperator(commonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>()->GetGroupedMemoryLimiterOperator())
+{
     ReadMetadata = CommonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>();
-    Y_ABORT_UNLESS(ReadMetadata->SelectInfo);
 
     double kffAccessors = 0.01;
     double kffFilter = 0.45;
@@ -31,23 +36,25 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
         kffAccessors = 0.01;
     }
 
+    auto scanMemoryLimit = TGlobalLimits::ScanMemoryLimit;
+
+    if (HasAppData()) {
+        if (AppData()->ColumnShardConfig.HasScanMemoryLimit()) {
+            scanMemoryLimit = AppData()->ColumnShardConfig.GetScanMemoryLimit();
+        }
+    }
+
     std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> stages = {
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
-            stagePrefix + "::ACCESSORS", kffAccessors * TGlobalLimits::ScanMemoryLimit),
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
-            stagePrefix + "::FILTER", kffFilter * TGlobalLimits::ScanMemoryLimit),
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(
-            stagePrefix + "::FETCHING", kffFetching * TGlobalLimits::ScanMemoryLimit),
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(stagePrefix + "::MERGE", kffMerge * TGlobalLimits::ScanMemoryLimit)
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::ACCESSORS", kffAccessors * scanMemoryLimit),
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::FILTER", kffFilter * scanMemoryLimit),
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::FETCHING", kffFetching * scanMemoryLimit),
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::MERGE", kffMerge * scanMemoryLimit)
     };
-    ProcessMemoryGuard =
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(ReadMetadata->GetTxId(), stages);
-    ProcessScopeGuard =
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildScopeGuard(ReadMetadata->GetTxId(), GetCommonContext()->GetScanId());
+    ProcessMemoryGuard = BuildScanProcessGuard(GroupedMemoryLimiterOperator, ReadMetadata->GetTxId(), stages);
+    ProcessScopeGuard = ProcessMemoryGuard->BuildScopeGuard(GetCommonContext()->GetScanId());
 
     auto readSchema = ReadMetadata->GetResultSchema();
     SpecColumns = std::make_shared<TColumnsSet>(TIndexInfo::GetSnapshotColumnIdsSet(), readSchema);
-    IndexChecker = ReadMetadata->GetProgram().GetIndexChecker();
     {
         auto predicateColumns = ReadMetadata->GetPKRangesFilter().GetColumnIds(ReadMetadata->GetIndexInfo());
         if (predicateColumns.size()) {
@@ -76,14 +83,16 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
             EFColumns = std::make_shared<TColumnsSet>();
         }
     }
-    if (ReadMetadata->HasProcessingColumnIds()) {
+    if (ReadMetadata->HasProcessingColumnIds() && ReadMetadata->GetProcessingColumnIds().size()) {
         FFColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetProcessingColumnIds(), readSchema);
         if (SpecColumns->Contains(*FFColumns) && !EFColumns->IsEmpty()) {
             FFColumns = std::make_shared<TColumnsSet>(*EFColumns + *SpecColumns);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("ff_modified", FFColumns->DebugString());
+            YDB_LOG_DEBUG("",
+                {"ffModified", FFColumns->DebugString()});
         } else {
-            AFL_VERIFY(!FFColumns->Contains(*SpecColumns))("info", FFColumns->DebugString());
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("ff_first", FFColumns->DebugString());
+            //            AFL_VERIFY(!FFColumns->Contains(*SpecColumns))("info", FFColumns->DebugString());
+            YDB_LOG_DEBUG("",
+                {"ffFirst", FFColumns->DebugString()});
         }
     } else {
         FFColumns = EFColumns;
@@ -98,7 +107,8 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     PKColumns = std::make_shared<TColumnsSet>(ReadMetadata->GetPKColumnIds(), readSchema);
     MergeColumns = std::make_shared<TColumnsSet>(*PKColumns + *SpecColumns);
 
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns_context_info", DebugString());
+    YDB_LOG_DEBUG("",
+        {"columnsContextInfo", DebugString()});
 }
 
 TString TSpecialReadContext::DebugString() const {

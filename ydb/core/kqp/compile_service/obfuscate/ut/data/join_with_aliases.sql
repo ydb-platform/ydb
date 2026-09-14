@@ -1,0 +1,1 @@
+SELECT o.id, o.amount, c.name FROM orders AS o JOIN customers AS c ON o.customer_id = c.id WHERE o.status = 'active'

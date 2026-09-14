@@ -3,6 +3,7 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/security/util.h>
 
@@ -57,8 +58,9 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                   Schema::LoginSids::SidHash,
-                                                                   Schema::LoginSids::CreatedAt>(sid.Type, sid.PasswordHash, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                   Schema::LoginSids::PasswordHashes,
+                                                                   Schema::LoginSids::CreatedAt>(
+                                                                    sid.Type, sid.PasswordHashes, ToMicroSeconds(sid.CreatedAt));
                 if (owner.empty()) {
                     owner = defaultUser.GetName();
                 }
@@ -69,7 +71,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             auto response = Self->LoginProvider.CreateGroup({
                 .Group = defaultGroup.GetName(),
                 .Options = {
-                    .CheckName = false
+                    .StrongCheckName = false
                 }
             });
             if (response.Error) {
@@ -81,7 +83,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultGroup.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                   Schema::LoginSids::CreatedAt>(sid.Type, ToInstant(sid.CreatedAt).MilliSeconds());
+                                                                   Schema::LoginSids::CreatedAt>(sid.Type, ToMicroSeconds(sid.CreatedAt));
                 for (const auto& member : defaultGroup.GetMembers()) {
                     auto response = Self->LoginProvider.AddGroupMembership({
                         .Group = defaultGroup.GetName(),
@@ -119,7 +121,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
         TSubDomainInfo::TPtr newDomain = new TSubDomainInfo(0, Self->RootPathId());
         newDomain->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
-        Self->SubDomains[Self->RootPathId()] = newDomain;
+        Self->SubDomains.Set(Self->RootPathId(), newDomain);
 
         NACLib::TDiffACL diffAcl;
         for (const auto& defaultAccess : securityConfig.GetDefaultAccess()) {
@@ -144,7 +146,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Self->PersistUpdateNextPathId(db);
         Self->PersistUpdateNextShardIdx(db);
         Self->PersistStoragePools(db, Self->RootPathId(), *newDomain);
-        Self->PersistSchemeLimit(db, Self->RootPathId(), *newDomain);
+        Self->PersistSchemeLimits(db, Self->RootPathId(), *newDomain);
         Self->PersistACL(db, newPath);
 
         Self->InitState = TTenantInitState::Done;
@@ -374,7 +376,8 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Self->ParentDomainEffectiveACLVersion = effectiveACLVersion;
         Self->ParentDomainCachedEffectiveACL.Init(Self->ParentDomainEffectiveACL);
 
-        newPath->CachedEffectiveACL.Update(Self->ParentDomainCachedEffectiveACL, newPath->ACL, newPath->IsContainer());
+        newPath->CachedEffectiveACL.Update(Self->ParentDomainCachedEffectiveACL, newPath->ACL,
+            newPath->IsContainer(), /*isTenantRoot*/ true);
 
         TPathId resourcesDomainId = Self->ParentDomainId;
         if (record.HasResourcesDomainOwnerId() && record.HasResourcesDomainPathId()) {
@@ -412,6 +415,10 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             subdomain->SetServerlessComputeResourcesMode(record.GetServerlessComputeResourcesMode());
         }
 
+        if (record.HasTablesMetricsLevel()) {
+            subdomain->SetTablesMetricsLevel(record.GetTablesMetricsLevel());
+        }
+
         RegisterShard(db, subdomain, processingParams.GetCoordinators(), TTabletTypes::Coordinator);
         RegisterShard(db, subdomain, processingParams.GetMediators(), TTabletTypes::Mediator);
         RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetSchemeShard()}, TTabletTypes::SchemeShard);
@@ -440,13 +447,13 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Self->ApplyAndPersistUserAttrs(db, newPath->PathId);
 
         Self->PersistSubDomain(db, Self->RootPathId(), *subdomain);
-        Self->PersistSchemeLimit(db, Self->RootPathId(), *subdomain);
+        Self->PersistSchemeLimits(db, Self->RootPathId(), *subdomain);
         Self->PersistSubDomainSchemeQuotas(db, Self->RootPathId(), *subdomain);
 
         Self->PersistUpdateNextPathId(db);
         Self->PersistUpdateNextShardIdx(db);
 
-        Self->SubDomains[Self->RootPathId()] = subdomain;
+        Self->SubDomains.Set(Self->RootPathId(), subdomain);
 
         Self->InitState = initiateMigration ? TTenantInitState::Inprogress : TTenantInitState::Done;
         Self->PersistInitState(db);
@@ -722,7 +729,8 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                     NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(ETableColumnDefaultKind(colDescr.GetDefaultKind())),
                     NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(colDescr.GetDefaultValue()),
                     NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(colDescr.GetNotNull()),
-                    NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(colDescr.GetIsBuildInProgress()));
+                    NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(colDescr.GetIsBuildInProgress()),
+                    NIceDb::TUpdate<Schema::MigratedColumns::SetNotNullInProgress>(colDescr.GetSetNotNullInProgress()));
             }
 
             for (const NKikimrScheme::TMigratePartition& partDescr: tableDescr.GetPartitions()) {

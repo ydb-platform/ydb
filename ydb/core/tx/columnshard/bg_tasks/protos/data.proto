@@ -1,7 +1,5 @@
 package NKikimrTxBackgroundProto;
 
-import "ydb/services/bg_tasks/protos/container.proto";
-
 message TSessionLogicControlContainer {
     optional string ClassName = 1;
     optional string SessionClassName = 2;

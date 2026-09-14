@@ -1,0 +1,69 @@
+{
+  "channels": {
+    "main": "1234567890/1",
+    "secondary": "1234567890/5"
+  },
+  "teams": {
+    "engineering": {
+      "channel": "secondary",
+      "responsible": ["@engineering-lead"]
+    },
+    "appteam": {
+      "channel": "secondary",
+      "responsible": ["@appteam-lead"]
+    },
+    "system-infra": {
+      "channel": "secondary",
+      "responsible": ["@system-infra-lead"]
+    },
+    "qp": {
+      "channel": "secondary",
+      "responsible": ["@qp-lead1", "@qp-lead2"]
+    },
+    "datashard": {
+      "channel": "secondary",
+      "responsible": ["@datashard-lead"]
+    },
+    "cs": {
+      "channel": "secondary",
+      "responsible": ["@cs-lead"]
+    },
+    "blobstorage": {
+      "channel": "secondary",
+      "responsible": ["@blobstorage-lead"]
+    },
+    "core": {
+      "channel": "secondary",
+      "responsible": ["@core-lead"]
+    },
+    "Topics": {
+      "channel": "secondary",
+      "responsible": ["@topics-lead"]
+    },
+    "fq": {
+      "channel": "main",
+      "responsible": ["@fq-lead"]
+    },
+    "ui-backend": {
+      "channel": "secondary",
+      "responsible": ["@ui-backend-lead"]
+    },
+    "docs": {
+      "channel": "main",
+      "responsible": ["@docs-lead"]
+    },
+    "yql": {
+      "channel": "main",
+      "responsible": ["@yql-lead"]
+    },
+    "postgres-compatibility": {
+      "channel": "main",
+      "responsible": ["@postgres-lead"]
+    },
+    "duty": {
+      "channel": "main",
+      "responsible": ["@duty-lead1", "@duty-lead2", "@duty-lead3"]
+    }
+  },
+  "default_channel": "main"
+}

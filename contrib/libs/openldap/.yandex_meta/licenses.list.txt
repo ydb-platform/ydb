@@ -90,89 +90,89 @@ without express or implied warranty.
 
 
 ====================COPYRIGHT====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Copyright 2006 Hans Leidekker
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Portions Copyright 1998 A. Hartgers.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Portions Copyright 1999 Lars Uffmann.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Portions Copyright 2007 Pierangelo Masarati.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Portions Copyright 2008 Pierangelo Masarati.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Portions Copyright 2018 Howard Chu.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 1999-2024 The OpenLDAP Foundation.
+ * Copyright 1999-2026 The OpenLDAP Foundation.
  * Portions Copyright 1999-2003 Kurt D. Zeilenga.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 2001-2024 The OpenLDAP Foundation.
+ * Copyright 2001-2026 The OpenLDAP Foundation.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 2003-2024 The OpenLDAP Foundation.
+ * Copyright 2003-2026 The OpenLDAP Foundation.
  * Portions Copyright 2003 IBM Corporation.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 2004-2024 The OpenLDAP Foundation.
+ * Copyright 2004-2026 The OpenLDAP Foundation.
  * Portions Copyright 2004 Hewlett-Packard Company.
  * Portions Copyright 2004 Howard Chu, Symas Corp.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 2005-2024 The OpenLDAP Foundation.
+ * Copyright 2005-2026 The OpenLDAP Foundation.
  * Portions Copyright (c) 2005 by Howard Chu, Symas Corp.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 2005-2024 The OpenLDAP Foundation.
+ * Copyright 2005-2026 The OpenLDAP Foundation.
  * Portions Copyright 2005-2006 SysNet s.n.c.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 2006-2024 The OpenLDAP Foundation.
+ * Copyright 2006-2026 The OpenLDAP Foundation.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 2008-2024 The OpenLDAP Foundation.
+ * Copyright 2008-2026 The OpenLDAP Foundation.
  * All rights reserved.
 
 
 ====================COPYRIGHT====================
- * Copyright 2019-2024 The OpenLDAP Foundation.
+ * Copyright 2019-2026 The OpenLDAP Foundation.
  * All rights reserved.
 
 
@@ -236,7 +236,7 @@ without express or implied warranty.
 
 
 ====================COPYRIGHT====================
-Copyright 1998-2024 The OpenLDAP Foundation
+Copyright 1998-2026 The OpenLDAP Foundation
 All rights reserved.
 
 
@@ -244,7 +244,7 @@ All rights reserved.
 Copyright 1999-2003 The OpenLDAP Foundation, Redwood City, California, USA.
 
 ====================COPYRIGHT====================
-Copyright 1999-2024 The OpenLDAP Foundation, Redwood City, California, USA.
+Copyright 1999-2026 The OpenLDAP Foundation, Redwood City, California, USA.
 
 ====================COPYRIGHT====================
 Portions Copyright (c) 1992-1996 Regents of the University of Michigan.
@@ -436,7 +436,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 1998-2024 The OpenLDAP Foundation
+ * Copyright 1998-2026 The OpenLDAP Foundation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -449,7 +449,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -462,7 +462,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -475,7 +475,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Copyright 2006 Hans Leidekker
  * All rights reserved.
  *
@@ -489,7 +489,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Portions Copyright 1998 A. Hartgers.
  * All rights reserved.
  *
@@ -503,7 +503,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Portions Copyright 1999 Lars Uffmann.
  * All rights reserved.
  *
@@ -517,7 +517,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Portions Copyright 2007 Pierangelo Masarati.
  * All rights reserved.
  *
@@ -531,7 +531,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Portions Copyright 2008 Pierangelo Masarati.
  * All rights reserved.
  *
@@ -545,7 +545,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 1998-2024 The OpenLDAP Foundation.
+ * Copyright 1998-2026 The OpenLDAP Foundation.
  * Portions Copyright 2018 Howard Chu.
  * All rights reserved.
  *
@@ -559,7 +559,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 1999-2024 The OpenLDAP Foundation.
+ * Copyright 1999-2026 The OpenLDAP Foundation.
  * Portions Copyright 1999-2003 Kurt D. Zeilenga.
  * All rights reserved.
  *
@@ -573,7 +573,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 2001-2024 The OpenLDAP Foundation.
+ * Copyright 2001-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -586,7 +586,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 2003-2024 The OpenLDAP Foundation.
+ * Copyright 2003-2026 The OpenLDAP Foundation.
  * Portions Copyright 2003 IBM Corporation.
  * All rights reserved.
  *
@@ -600,7 +600,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 2004-2024 The OpenLDAP Foundation.
+ * Copyright 2004-2026 The OpenLDAP Foundation.
  * Portions Copyright 2004 Hewlett-Packard Company.
  * Portions Copyright 2004 Howard Chu, Symas Corp.
  * All rights reserved.
@@ -615,7 +615,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 2005-2024 The OpenLDAP Foundation.
+ * Copyright 2005-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -628,7 +628,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 2005-2024 The OpenLDAP Foundation.
+ * Copyright 2005-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -641,7 +641,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 2005-2024 The OpenLDAP Foundation.
+ * Copyright 2005-2026 The OpenLDAP Foundation.
  * Portions Copyright (c) 2005 by Howard Chu, Symas Corp.
  * All rights reserved.
  *
@@ -655,7 +655,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 2005-2024 The OpenLDAP Foundation.
+ * Copyright 2005-2026 The OpenLDAP Foundation.
  * Portions Copyright 2005-2006 SysNet s.n.c.
  * All rights reserved.
  *
@@ -669,7 +669,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 2006-2024 The OpenLDAP Foundation.
+ * Copyright 2006-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -682,7 +682,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 2008-2024 The OpenLDAP Foundation.
+ * Copyright 2008-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -695,7 +695,7 @@ distribute verbatim copies of this document is granted.
 
 
 ====================OLDAP-2.8====================
- * Copyright 2019-2024 The OpenLDAP Foundation.
+ * Copyright 2019-2026 The OpenLDAP Foundation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

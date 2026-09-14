@@ -5,6 +5,7 @@ SRCS(
     yql_yt_block_io_filter.cpp
     yql_yt_block_io_utils.cpp
     yql_yt_block_output.cpp
+    yql_yt_cbo_helpers.cpp
     yql_yt_datasink_constraints.cpp
     yql_yt_datasink_exec.cpp
     yql_yt_datasink_finalize.cpp
@@ -22,12 +23,14 @@ SRCS(
     yql_yt_helpers.cpp
     yql_yt_intent_determination.cpp
     yql_yt_io_discovery.cpp
+    yql_yt_io_discovery_partitions.cpp
     yql_yt_io_discovery_walk_folders.cpp
     yql_yt_join_impl.cpp
     yql_yt_join_reorder.cpp
     yql_yt_key.cpp
     yql_yt_load_table_meta.cpp
     yql_yt_load_columnar_stats.cpp
+    yql_yt_layers_integration.cpp
     yql_yt_logical_optimize.cpp
     yql_yt_mkql_compiler.cpp
     yql_yt_op_hash.cpp
@@ -47,9 +50,12 @@ SRCS(
     yql_yt_dq_optimize.cpp
     yql_yt_dq_hybrid.cpp
     yql_yt_wide_flow.cpp
+    yql_yt_ytflow_integration.cpp
+    yql_yt_ytflow_optimize.cpp
 
     phy_opt/yql_yt_phy_opt.cpp
     phy_opt/yql_yt_phy_opt_content.cpp
+    phy_opt/yql_yt_phy_opt_create.cpp
     phy_opt/yql_yt_phy_opt_fuse.cpp
     phy_opt/yql_yt_phy_opt_helper.h
     phy_opt/yql_yt_phy_opt_lambda.cpp
@@ -69,15 +75,27 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/re2
     library/cpp/yson/node
+    library/cpp/json/writer
+    library/cpp/json
     library/cpp/disjoint_sets
+    library/cpp/type_info/tz
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface
     yql/essentials/ast
     yql/essentials/core/extract_predicate
+    yql/essentials/core/langver
+    yql/essentials/public/langver
     yql/essentials/public/udf
-    yql/essentials/public/udf/tz
     yql/essentials/sql
+    yql/essentials/sql/settings/flags
+    yql/essentials/sql/v1/translation
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
+    yql/essentials/sql/v1/proto_parser/antlr4
+    yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/parser/pg_wrapper/interface
     yql/essentials/utils
     yql/essentials/utils/log
     yql/essentials/core
@@ -85,7 +103,8 @@ PEERDIR(
     yql/essentials/core/dqs_expr_nodes
     yql/essentials/core/expr_nodes
     yql/essentials/core/issue
-    yql/essentials/core/issue/protos
+    yql/essentials/core/langver
+    yql/essentials/public/issue/protos
     yql/essentials/core/peephole_opt
     yql/essentials/core/type_ann
     yql/essentials/core/file_storage
@@ -94,6 +113,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/providers/common/codec
     yql/essentials/providers/common/config
+    yql/essentials/providers/common/config/transformer
     yql/essentials/providers/common/dq
     yql/essentials/providers/common/mkql
     yql/essentials/providers/common/proto
@@ -107,6 +127,7 @@ PEERDIR(
     yt/yql/providers/yt/common
     yt/yql/providers/yt/expr_nodes
     yt/yql/providers/yt/lib/expr_traits
+    yt/yql/providers/yt/lib/full_capture
     yt/yql/providers/yt/lib/graph_reorder
     yt/yql/providers/yt/lib/hash
     yt/yql/providers/yt/lib/key_filter
@@ -115,15 +136,35 @@ PEERDIR(
     yt/yql/providers/yt/lib/row_spec
     yt/yql/providers/yt/lib/schema
     yt/yql/providers/yt/lib/skiff
+    yt/yql/providers/yt/lib/temp_files
     yt/yql/providers/yt/lib/yson_helpers
+    yt/yql/providers/yt/lib/yt_token_resolver
     yt/yql/providers/yt/opt
     yt/yql/providers/yt/gateway/qplayer
     yt/yql/providers/yt/proto
+    yt/yql/providers/ytflow/expr_nodes
+    yt/yql/providers/ytflow/integration/interface
+    yt/yql/providers/ytflow/integration/proto
 )
 
 YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(yql_yt_op_settings.h)
+
+RUN_PROGRAM(
+    tools/enum_parser/enum_parser
+        --output
+        ${BINDIR}/yql_yt_op_settings.unused.cpp
+        --json-output
+        ${BINDIR}/yql_yt_op_settings.json
+        yql_yt_op_settings.h
+    IN yql_yt_op_settings.h
+    OUT_NOAUTO ${BINDIR}/yql_yt_op_settings.json
+)
+
+RESOURCE(
+    ${BINDIR}/yql_yt_op_settings.json /yql_yt_op_settings.json
+)
 
 END()
 

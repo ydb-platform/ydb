@@ -1,7 +1,8 @@
 #include "output.h"
 
 #include <util/string/cast.h>
-#include "format.h"
+#include <util/stream/format.h>
+#include <util/stream/null.h>
 #include <util/memory/tempbuf.h>
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
@@ -17,9 +18,11 @@
 
 #include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <string_view>
 #include <optional>
+#include <complex>
 
 #if defined(_win_)
     #include <io.h>
@@ -251,6 +254,24 @@ void Out<void*>(IOutputStream& o, void* t) {
     Out<const void*>(o, t);
 }
 
+namespace {
+    template <typename T>
+    void ComplexOutImpl(IOutputStream& o, const T& t) {
+        // similar to operator<<(std::basic_ostream<...>&, const std::complex<...>&)
+        o << "(" << t.real() << "," << t.imag() << ")";
+    }
+} // namespace
+
+template <>
+void Out<std::complex<float>>(IOutputStream& o, const std::complex<float>& t) {
+    ComplexOutImpl(o, t);
+}
+
+template <>
+void Out<std::complex<double>>(IOutputStream& o, const std::complex<double>& t) {
+    ComplexOutImpl(o, t);
+}
+
 using TNullPtr = decltype(nullptr);
 
 template <>
@@ -274,6 +295,9 @@ DEF_OPTIONAL(ui64);
 DEF_OPTIONAL(std::string);
 DEF_OPTIONAL(TString);
 DEF_OPTIONAL(TStringBuf);
+#if defined(_darwin_) and defined(_arm64_)
+DEF_OPTIONAL(std::int64_t);
+#endif
 
 #if defined(_android_)
 namespace {
@@ -457,4 +481,44 @@ void RedirectStdioToAndroidLog(bool redirect) {
 #else
     Y_UNUSED(redirect);
 #endif
+}
+void TDebugOutput::DoWrite(const void* buf, size_t len) {
+    if (len != fwrite(buf, 1, len, stderr)) {
+        ythrow yexception() << "write failed(" << LastSystemErrorText() << ")";
+    }
+}
+
+namespace {
+    struct TDbgSelector {
+        inline TDbgSelector() {
+            char* dbg = getenv("DBGOUT");
+            if (dbg) {
+                Out = &Cerr;
+                try {
+                    Level = FromString(dbg);
+                } catch (const yexception&) {
+                    Level = 0;
+                }
+            } else {
+                Out = &Cnull;
+                Level = 0;
+            }
+        }
+
+        IOutputStream* Out;
+        int Level;
+    };
+} // namespace
+
+template <>
+struct TSingletonTraits<TDbgSelector> {
+    static constexpr size_t Priority = 8;
+};
+
+IOutputStream& NPrivate::StdDbgStream() noexcept {
+    return *(Singleton<TDbgSelector>()->Out);
+}
+
+int StdDbgLevel() noexcept {
+    return Singleton<TDbgSelector>()->Level;
 }

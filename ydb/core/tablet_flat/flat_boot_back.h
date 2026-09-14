@@ -43,7 +43,7 @@ namespace NBoot {
     };
 
     struct TBody {
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Body{ " << NFmt::Do(LargeGlobId)
@@ -68,7 +68,7 @@ namespace NBoot {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << (Follower ? "Follower" : "Leader")
@@ -80,7 +80,7 @@ namespace NBoot {
             const ui64 stamp = TTxStamp(edge.GetGeneration(), edge.GetStep());
             const NTable::TEpoch epoch(edge.HasHead() ? edge.GetHead() : 0);
 
-            Y_ABORT_UNLESS(stamp != Max<ui64>(), "Undefined TxStamp of snapshot");
+            Y_ENSURE(stamp != Max<ui64>(), "Undefined TxStamp of snapshot");
 
             auto &last = Edges[edge.GetTable()];
 
@@ -107,7 +107,7 @@ namespace NBoot {
         TDeque<TBody> TurnsLog;
         TDeque<TSwitch> Switches;
         THashMap<ui32, NTable::TSnapEdge> Edges;
-        THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
+        THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
         THashMap<TLogoBlobID, TSharedData> TxStatusCaches;
     };
 

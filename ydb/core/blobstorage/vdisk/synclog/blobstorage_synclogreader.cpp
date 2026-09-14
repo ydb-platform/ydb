@@ -9,6 +9,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCLOG
+
 using namespace NKikimrServices;
 using namespace NKikimr::NSyncLog;
 
@@ -29,7 +31,8 @@ namespace NKikimr {
             }
         }
 
-        TWhatsNextOutcome WhatsNext(ui64 syncedLsn,
+        TWhatsNextOutcome WhatsNext(const TString& logPrefix,
+                                    ui64 syncedLsn,
                                     ui64 dbBirthLsn,
                                     const NSyncLog::TLogEssence *e,
                                     std::function<TString()> reportInternals) {
@@ -61,17 +64,19 @@ namespace NKikimr {
                     ui64 firstLogLsn = 0;
 
                     if (!e->MemLogEmpty && !e->DiskLogEmpty) {
-                        Y_ABORT_UNLESS(e->FirstDiskLsn <= e->FirstMemLsn, "%s", reportInternals().data());
-                        firstLogLsn = e->FirstDiskLsn;
+                        // In some weird cases DiskRecLog may be a subset of MemRecLog, so when
+                        // deciding first known lsn, take minimum of two
+                        firstLogLsn = std::min(e->FirstDiskLsn, e->FirstMemLsn);
                     } else if (e->MemLogEmpty) {
                         firstLogLsn = e->FirstDiskLsn;
                     } else if (e->DiskLogEmpty) {
                         firstLogLsn = e->FirstMemLsn;
                     }
 
-                    Y_ABORT_UNLESS(lastLogLsn != 0 && firstLogLsn <= lastLogLsn,
-                             " firstLogLsn# %" PRIu64 " lastLogLsn# %" PRIu64 " %s",
-                             firstLogLsn, lastLogLsn, reportInternals().data());
+                    Y_VERIFY_S(lastLogLsn != 0 && firstLogLsn <= lastLogLsn, logPrefix
+                             << " firstLogLsn# " << firstLogLsn
+                             << " lastLogLsn# " << lastLogLsn
+                             << " " << reportInternals());
 
                     if (!(syncedLsn + 1 >= logStartLsn)) {
                         return TWhatsNextOutcome::Error(2);
@@ -124,7 +129,7 @@ namespace NKikimr {
 
             bool Check(const TRecordHdr *rec) const {
                 return (rec->RecType != TRecordHdr::RecLogoBlob)
-                    || TLogoBlobFilter::Check(TLogoBlobID(rec->GetLogoBlob()->Raw));
+                    || TLogoBlobFilter::Check(rec->GetLogoBlob()->LogoBlobID());
             }
         };
 
@@ -160,10 +165,7 @@ namespace NKikimr {
                         NKikimrProto::EReplyStatus status,
                         ui64 lsn,
                         bool finished) {
-                LOG_DEBUG(ctx, BS_SYNCLOG,
-                          VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                "SYNCLOG REPLY: SourceVDisk# %s guid# %" PRIu64 " lsn# %" PRIu64,
-                                SourceVDisk.ToString().data(), static_cast<ui64>(VDiskIncarnationGuid), lsn));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "SYNCLOG REPLY: SourceVDisk# %s guid# %" PRIu64 " lsn# %" PRIu64, SourceVDisk.ToString().data(), static_cast<ui64>(VDiskIncarnationGuid), lsn));
 
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId,
                     TSyncState(VDiskIncarnationGuid, lsn), finished, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(),
@@ -177,7 +179,7 @@ namespace NKikimr {
                     FragmentWriter.Finish(result->Record.MutableData());
                 }
 
-                SendVDiskResponse(ctx, Ev->Sender, result.release(), Ev->Cookie, SlCtx->VCtx);
+                SendVDiskResponse(ctx, Ev->Sender, result.release(), Ev->Cookie, SlCtx->VCtx, {});
                 ctx.Send(ParentId, new TEvSyncLogReadFinished(SourceVDisk));
                 Die(ctx);
             }
@@ -208,7 +210,7 @@ namespace NKikimr {
                     TStringStream str;
                     str << "SYNCLOG LOGIC ERROR: " << wno.Explanation
                         << " " << InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn);
-                    LOG_ERROR(ctx, BS_SYNCLOG,  str.Str());
+                    YDB_LOG_ERROR_CTX(ctx, str.Str());
                     // Y_ABORT("%s", str.Str().data()); // TODO(alexvru): fix logic
                 }
                 Finish(ctx, NKikimrProto::ERROR, 0, true);
@@ -216,10 +218,7 @@ namespace NKikimr {
 
             void ProcessFullSyncOutcome(const TActorContext &ctx, const TWhatsNextOutcome &wno) {
                 Y_UNUSED(wno);
-                LOG_WARN(ctx, BS_SYNCLOG,
-                         VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                "Handle(TEvSyncLogRead): FULL_RECOVER(no data); %s",
-                                InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn).data()));
+                YDB_LOG_WARN_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): FULL_RECOVER(no data); %s", InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn).data()));
                 ++SlCtx->CountersMonGroup.FullRecovery();
                 Finish(ctx, NKikimrProto::NODATA, DbBirthLsn, true);
             }
@@ -228,11 +227,7 @@ namespace NKikimr {
                                     const TWhatsNextOutcome &wno,
                                     ui64 syncedLsn) {
                 ++SlCtx->CountersMonGroup.NormalSync();
-                LOG_DEBUG(ctx, BS_SYNCLOG,
-                          VDISKP(SlCtx->VCtx->VDiskLogPrefix,
-                                "Handle(TEvSyncLogRead): OK; whatsNext# %s %s",
-                                Name2Str(wno.WhatsNext),
-                                InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn).data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): OK; whatsNext# %s %s", Name2Str(wno.WhatsNext), InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn).data()));
 
                 switch (wno.WhatsNext) {
                     case EWnDiskSynced:
@@ -262,7 +257,7 @@ namespace NKikimr {
                 TLogEssence e {};
                 SnapPtr->FillInLogEssence(&e);
                 auto ri = std::bind(InternalsToString, Ev->Get(), SnapPtr.Get(), DbBirthLsn);
-                TWhatsNextOutcome wno = WhatsNext(syncedLsn, DbBirthLsn, &e, ri);
+                TWhatsNextOutcome wno = WhatsNext(SlCtx->VCtx->VDiskLogPrefix, syncedLsn, DbBirthLsn, &e, ri);
 
                 // process outcome
                 if (wno.WhatsNext == EWnError) {
@@ -339,21 +334,20 @@ namespace NKikimr {
                 // FIXME: optimize, batch reads; use Db->RecommendedReadSize
                 CHECK_PDISK_RESPONSE_READABLE(SlCtx->VCtx, ev, ctx);
 
-                Y_ABORT_UNLESS(DiskIt.Valid());
+                Y_VERIFY_S(DiskIt.Valid(), SlCtx->VCtx->VDiskLogPrefix);
                 std::pair<ui32, const TDiskIndexRecord *> p = DiskIt.Get();
                 ui32 chunkIdx = p.first;
                 const TDiskIndexRecord *idxRec = p.second;
                 auto msg = ev->Get();
                 const TBufferWithGaps &readData = ev->Get()->Data;
-                Y_ABORT_UNLESS(chunkIdx == msg->ChunkIdx &&
+                Y_VERIFY_S(chunkIdx == msg->ChunkIdx &&
                          idxRec->OffsetInPages * SnapPtr->AppendBlockSize == msg->Offset &&
                          idxRec->PagesNum * SnapPtr->AppendBlockSize == readData.Size(),
-                         "SyncLog read command failed: chunkIdx# %" PRIu32
-                         " msgChunkIdx# %" PRIu32 " OffsetInPages# %" PRIu32
-                         " appendBlockSize# %" PRIu32 " msgOffset# %" PRIu32
-                         " PagesNum# %" PRIu32 " readDataSize# %" PRIu32,
-                         chunkIdx, msg->ChunkIdx, idxRec->OffsetInPages, SnapPtr->AppendBlockSize,
-                         msg->Offset, idxRec->PagesNum, ui32(readData.Size()));
+                    SlCtx->VCtx->VDiskLogPrefix
+                    << "SyncLog read command failed: chunkIdx# " << chunkIdx
+                    <<" msgChunkIdx# " << msg->ChunkIdx << " OffsetInPages# " << idxRec->OffsetInPages
+                    << " appendBlockSize# " << SnapPtr->AppendBlockSize << " msgOffset# " << msg->Offset
+                    << " PagesNum# " << idxRec->PagesNum << " readDataSize# " << ui32(readData.Size()));
 
                 // process all pages
                 for (ui32 pi = 0; pi < idxRec->PagesNum; pi++) {
@@ -455,4 +449,3 @@ namespace NKikimr {
 
     } // NSyncLog
 } // NKikimr
-

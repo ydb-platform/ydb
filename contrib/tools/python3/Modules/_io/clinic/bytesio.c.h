@@ -3,10 +3,11 @@ preserve
 [clinic start generated code]*/
 
 #if defined(Py_BUILD_CORE) && !defined(Py_BUILD_CORE_MODULE)
-#  include "pycore_gc.h"            // PyGC_Head
-#  include "pycore_runtime.h"       // _Py_ID()
+#  include "pycore_gc.h"          // PyGC_Head
+#  include "pycore_runtime.h"     // _Py_ID()
 #endif
-
+#include "pycore_abstract.h"      // _Py_convert_optional_to_ssize_t()
+#include "pycore_modsupport.h"    // _PyArg_CheckPositional()
 
 PyDoc_STRVAR(_io_BytesIO_readable__doc__,
 "readable($self, /)\n"
@@ -201,8 +202,8 @@ PyDoc_STRVAR(_io_BytesIO_read1__doc__,
 "\n"
 "Read at most size bytes, returned as a bytes object.\n"
 "\n"
-"If the size argument is negative or omitted, read until EOF is reached.\n"
-"Return an empty bytes object at EOF.");
+"If the size argument is negative or omitted, read until EOF is\n"
+"reached.  Return an empty bytes object at EOF.");
 
 #define _IO_BYTESIO_READ1_METHODDEF    \
     {"read1", _PyCFunction_CAST(_io_BytesIO_read1), METH_FASTCALL, _io_BytesIO_read1__doc__},
@@ -328,12 +329,7 @@ _io_BytesIO_readinto(bytesio *self, PyObject *arg)
     Py_buffer buffer = {NULL, NULL};
 
     if (PyObject_GetBuffer(arg, &buffer, PyBUF_WRITABLE) < 0) {
-        PyErr_Clear();
         _PyArg_BadArgument("readinto", "argument", "read-write bytes-like object", arg);
-        goto exit;
-    }
-    if (!PyBuffer_IsContiguous(&buffer, 'C')) {
-        _PyArg_BadArgument("readinto", "argument", "contiguous buffer", arg);
         goto exit;
     }
     return_value = _io_BytesIO_readinto_impl(self, &buffer);
@@ -427,7 +423,7 @@ _io_BytesIO_seek(bytesio *self, PyObject *const *args, Py_ssize_t nargs)
     if (nargs < 2) {
         goto skip_optional;
     }
-    whence = _PyLong_AsInt(args[1]);
+    whence = PyLong_AsInt(args[1]);
     if (whence == -1 && PyErr_Occurred()) {
         goto exit;
     }
@@ -456,8 +452,8 @@ PyDoc_STRVAR(_io_BytesIO_writelines__doc__,
 "Write lines to the file.\n"
 "\n"
 "Note that newlines are not added.  lines can be any iterable object\n"
-"producing bytes-like objects. This is equivalent to calling write() for\n"
-"each element.");
+"producing bytes-like objects.  This is equivalent to calling write()\n"
+"for each element.");
 
 #define _IO_BYTESIO_WRITELINES_METHODDEF    \
     {"writelines", (PyCFunction)_io_BytesIO_writelines, METH_O, _io_BytesIO_writelines__doc__},
@@ -538,4 +534,4 @@ skip_optional_pos:
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=1c540b54a10919d7 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=502699cd403dd3a0 input=a9049054013a1b77]*/

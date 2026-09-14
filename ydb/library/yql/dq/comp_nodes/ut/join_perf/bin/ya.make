@@ -1,0 +1,28 @@
+PROGRAM(join_perf)
+
+# Benchmark tool, intended for manual runs only.
+TAG(ya:manual)
+
+YQL_LAST_ABI_VERSION()
+
+IF (MKQL_RUNTIME_VERSION)
+    CFLAGS(
+        -DMKQL_RUNTIME_VERSION=$MKQL_RUNTIME_VERSION
+    )
+ENDIF()
+
+PEERDIR(
+    ydb/library/yql/dq/comp_nodes/ut/join_perf
+    library/cpp/lfalloc/alloc_profiler
+    library/cpp/dwarf_backtrace
+    library/cpp/dwarf_backtrace/registry
+    library/cpp/getopt
+    library/cpp/getopt/small
+    library/cpp/json
+)
+
+SRCS(
+    main.cpp
+)
+
+END()

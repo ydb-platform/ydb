@@ -2,7 +2,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/retro_tracing_impl/spans/lazy_retro_span.h>
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -16,7 +17,7 @@ namespace NKikimr {
         struct TItem {
             std::unique_ptr<IEventHandle> Ev;
             ui64 Size = 0;
-            NWilson::TSpan Span;
+            TLazyRetroSpan Span;
 
             TItem() = default;
 
@@ -39,8 +40,6 @@ namespace NKikimr {
         TVPatchStartHandler VPatchStartHandler;
         TVPutHandler VPutHandler;
         TVMultiPutHandler VMultiPutHandler;
-        TLocalSyncDataHandler LocalSyncDataHandler;
-        TAnubisOsirisPutHandler AnubisOsirisPutHandler;
 
     public:
         TEmergencyQueue(
@@ -48,22 +47,15 @@ namespace NKikimr {
                 TVMovedPatchHandler &&vMovedPatch,
                 TVPatchStartHandler &&vPatchStart,
                 TVPutHandler &&vput,
-                TVMultiPutHandler &&vMultiPut,
-                TLocalSyncDataHandler &&loc,
-                TAnubisOsirisPutHandler &&aoput)
+                TVMultiPutHandler &&vMultiPut)
             : Mon(mon)
             , VMovedPatchHandler(std::move(vMovedPatch))
             , VPatchStartHandler(std::move(vPatchStart))
             , VPutHandler(std::move(vput))
             , VMultiPutHandler(std::move(vMultiPut))
-            , LocalSyncDataHandler(std::move(loc))
-            , AnubisOsirisPutHandler(std::move(aoput))
         {}
 
         ~TEmergencyQueue() {
-            while (Queue.Head()) {
-                Queue.Pop();
-            }
         }
 
         void Push(TEvBlobStorage::TEvVMovedPatch::TPtr ev) {
@@ -91,20 +83,6 @@ namespace NKikimr {
             ++Mon.EmergencyMultiPutQueueItems();
             auto size = ev->GetSize();
             Mon.EmergencyMultiPutQueueBytes() += size;
-            Queue.Push(TItem(ev, size));
-        }
-
-        void Push(TEvLocalSyncData::TPtr ev) {
-            ++Mon.EmergencyLocalSyncDataQueueItems();
-            auto size = ev->Get()->ByteSize();
-            Mon.EmergencyLocalSyncDataQueueBytes() += size;
-            Queue.Push(TItem(ev, size));
-        }
-
-        void Push(TEvAnubisOsirisPut::TPtr ev) {
-            ++Mon.EmergencyAnubisOsirisPutQueueItems();
-            auto size = ev->Get()->ByteSize();
-            Mon.EmergencyAnubisOsirisPutQueueBytes() += size;
             Queue.Push(TItem(ev, size));
         }
 
@@ -153,20 +131,6 @@ namespace NKikimr {
                     VMultiPutHandler(ctx, *evMultiPut);
                     break;
                 }
-                case TEvBlobStorage::EvLocalSyncData: {
-                    auto *evLocalSyncData = reinterpret_cast<TEvLocalSyncData::TPtr*>(&ev);
-                    --Mon.EmergencyLocalSyncDataQueueItems();
-                    Mon.EmergencyLocalSyncDataQueueBytes() -= size;
-                    LocalSyncDataHandler(ctx,*evLocalSyncData);
-                    break;
-                }
-                case TEvBlobStorage::EvAnubisOsirisPut: {
-                    auto *evAnubisOsirisPut = reinterpret_cast<TEvAnubisOsirisPut::TPtr*>(&ev);
-                    --Mon.EmergencyAnubisOsirisPutQueueItems();
-                    Mon.EmergencyAnubisOsirisPutQueueBytes() -= size;
-                    AnubisOsirisPutHandler(ctx, *evAnubisOsirisPut);
-                    break;
-                }
                 default:
                     Y_ABORT("unexpected event type in emergency queue(%" PRIu64 ")", (ui64)ev->GetTypeRewrite());
             }
@@ -183,6 +147,8 @@ namespace NKikimr {
         NMonGroup::TSkeletonOverloadGroup& Mon;
         TIntrusivePtr<TVDiskConfig> VCfg;
         TPDiskCtxPtr PDiskCtx;
+
+        ui64 WriteSpeedBps = 100'000'000;
 
         TControlWrapper ThrottlingMinInplacedSize;
         TControlWrapper ThrottlingMaxInplacedSize;
@@ -211,35 +177,31 @@ namespace NKikimr {
         }
 
         ui64 CalcSstCountSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
-            ui64 maxSstCount = (ui64)VCfg->ThrottlingMaxSstCount;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinLevel0SstCount;
+            ui64 maxSstCount = (ui64)VCfg->ThrottlingMaxLevel0SstCount;
 
-            return LinearInterpolation(CurrentSstCount, minSstCount, maxSstCount, deviceSpeed);
+            return LinearInterpolation(CurrentSstCount, minSstCount, maxSstCount, WriteSpeedBps);
         }
 
         ui64 CalcInplacedSizeSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
             ui64 minInplacedSize = (ui64)ThrottlingMinInplacedSize;
             ui64 maxInplacedSize = (ui64)ThrottlingMaxInplacedSize;
 
-            return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, deviceSpeed);
+            return LinearInterpolation(CurrentInplacedSize, minInplacedSize, maxInplacedSize, WriteSpeedBps);
         }
 
         ui64 CalcOccupancySpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
             ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
             ui64 maxOccupancy = (ui64)VCfg->ThrottlingMaxOccupancyPerMille * 1000;
 
-            return LinearInterpolation(CurrentOccupancy, minOccupancy, maxOccupancy, deviceSpeed);
+            return LinearInterpolation(CurrentOccupancy, minOccupancy, maxOccupancy, WriteSpeedBps);
         }
 
         ui64 CalcLogChunkCountSpeedLimit() const {
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
             ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
             ui64 maxLogChunkCount = (ui64)VCfg->ThrottlingMaxLogChunkCount;
 
-            return LinearInterpolation(CurrentLogChunkCount, minLogChunkCount, maxLogChunkCount, deviceSpeed);
+            return LinearInterpolation(CurrentLogChunkCount, minLogChunkCount, maxLogChunkCount, WriteSpeedBps);
         }
 
         ui64 CalcSpeedLimit() const {
@@ -267,6 +229,7 @@ namespace NKikimr {
             NPDisk::EDeviceType mediaType = NPDisk::DEVICE_TYPE_UNKNOWN;
             if (PDiskCtx && PDiskCtx->Dsk) {
                 mediaType = PDiskCtx->Dsk->TrueMediaType;
+                WriteSpeedBps = PDiskCtx->Dsk->WriteSpeedBps;
             }
             if (mediaType == NPDisk::DEVICE_TYPE_UNKNOWN) {
                 mediaType = VCfg->BaseInfo.DeviceType;
@@ -285,7 +248,7 @@ namespace NKikimr {
         }
 
         bool IsActive() const {
-            ui64 minSstCount = (ui64)VCfg->ThrottlingMinSstCount;
+            ui64 minSstCount = (ui64)VCfg->ThrottlingMinLevel0SstCount;
             ui64 minInplacedSize = (ui64)ThrottlingMinInplacedSize;
             ui64 minOccupancy = (ui64)VCfg->ThrottlingMinOccupancyPerMille * 1000;
             ui64 minLogChunkCount = (ui64)VCfg->ThrottlingMinLogChunkCount;
@@ -304,8 +267,7 @@ namespace NKikimr {
             if (!IsActive()) {
                 return 1000;
             }
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            double rate = (double)CurrentSpeedLimit / deviceSpeed;
+            double rate = (double)CurrentSpeedLimit / WriteSpeedBps;
             return rate * 1000;
         }
 
@@ -335,7 +297,7 @@ namespace NKikimr {
             Mon.ThrottlingLevel0SstCount() = sstCount;
 
             CurrentInplacedSize = inplacedSize;
-            Mon.ThrottlingAllLevelsInplacedSize() = inplacedSize;
+            Mon.ThrottlingInplacedSize() = inplacedSize;
 
             CurrentOccupancy = occupancy * 1'000'000;
             Mon.ThrottlingOccupancyPerMille() = occupancy * 1000;
@@ -344,11 +306,23 @@ namespace NKikimr {
             Mon.ThrottlingLogChunkCount() = logChunkCount;
 
             Mon.ThrottlingIsActive() = (ui64)IsActive();
+            Mon.ThrottlingDryRun() = VCfg->ThrottlingDryRun;
+
+            Mon.ThrottlingMinLevel0SstCount() = VCfg->ThrottlingMinLevel0SstCount;
+            Mon.ThrottlingMaxLevel0SstCount() = VCfg->ThrottlingMaxLevel0SstCount;
+            Mon.ThrottlingMinInplacedSizeHDD() = VCfg->ThrottlingMinInplacedSizeHDD;
+            Mon.ThrottlingMaxInplacedSizeHDD() = VCfg->ThrottlingMaxInplacedSizeHDD;
+            Mon.ThrottlingMinInplacedSizeSSD() = VCfg->ThrottlingMinInplacedSizeSSD;
+            Mon.ThrottlingMaxInplacedSizeSSD() = VCfg->ThrottlingMaxInplacedSizeSSD;
+            Mon.ThrottlingMinOccupancyPerMille() = VCfg->ThrottlingMinOccupancyPerMille;
+            Mon.ThrottlingMaxOccupancyPerMille() = VCfg->ThrottlingMaxOccupancyPerMille;
+            Mon.ThrottlingMinLogChunkCount() = VCfg->ThrottlingMinLogChunkCount;
+            Mon.ThrottlingMaxLogChunkCount() = VCfg->ThrottlingMaxLogChunkCount;
 
             if (!IsActive()) {
                 CurrentTime = {};
                 AvailableBytes = 0;
-                CurrentSpeedLimit = (ui64)VCfg->ThrottlingDeviceSpeed;
+                CurrentSpeedLimit = WriteSpeedBps;
             } else {
                 if (!prevActive) {
                     CurrentTime = now;
@@ -366,9 +340,70 @@ namespace NKikimr {
             }
             auto us = (now - CurrentTime).MicroSeconds();
             AvailableBytes += CurrentSpeedLimit * us / 1000000;
-            ui64 deviceSpeed = (ui64)VCfg->ThrottlingDeviceSpeed;
-            AvailableBytes = std::min(AvailableBytes, deviceSpeed);
+            AvailableBytes = std::min(AvailableBytes, WriteSpeedBps);
             CurrentTime = now;
+        }
+
+        void RenderHtml(IOutputStream &str) {
+            HTML(str) {
+                TABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { str << "Throttling"; }
+                            TABLEH() {}
+                        }
+                    }
+                    TABLEBODY() {
+                        TABLER() {
+                            TABLED() { str << "Is dry run enabled"; }
+                            TABLED() { str << (ui64)VCfg->ThrottlingDryRun; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Is active"; }
+                            TABLED() { str << (ui64)IsActive(); }
+                        }
+                    }
+                }
+                TABLE_CLASS ("table table-condensed") {
+                    TABLEHEAD() {
+                        TABLER() {
+                            TABLEH() { str << "Property"; }
+                            TABLEH() { str << "Current"; }
+                            TABLEH() { str << "Activation range"; }
+                        }
+                    }
+                    TABLEBODY() {
+                        TABLER() {
+                            TABLED() { str << "Level 0 SST count"; }
+                            TABLED() { str << CurrentSstCount; }
+                            TABLED() { str << "[ "
+                                << (ui64)VCfg->ThrottlingMinLevel0SstCount << "; "
+                                << (ui64)VCfg->ThrottlingMaxLevel0SstCount << " ]"; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Inplaced size"; }
+                            TABLED() { str << CurrentInplacedSize; }
+                            TABLED() { str << "[ "
+                                << (ui64)ThrottlingMinInplacedSize << "; "
+                                << (ui64)ThrottlingMaxInplacedSize << " ]"; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Occupancy"; }
+                            TABLED() { str << CurrentOccupancy / 1000 << " / 1000"; }
+                            TABLED() { str << "[ "
+                                << (ui64)VCfg->ThrottlingMinOccupancyPerMille << "; "
+                                << (ui64)VCfg->ThrottlingMaxOccupancyPerMille << " ]"; }
+                        }
+                        TABLER() {
+                            TABLED() { str << "Log chunk count"; }
+                            TABLED() { str << CurrentLogChunkCount; }
+                            TABLED() { str << "[ "
+                                << (ui64)VCfg->ThrottlingMinLogChunkCount << "; "
+                                << (ui64)VCfg->ThrottlingMaxLogChunkCount << " ]"; }
+                        }
+                    }
+                }
+            }
         }
     };
 
@@ -384,14 +419,12 @@ namespace NKikimr {
             TVMovedPatchHandler &&vMovedPatch,
             TVPatchStartHandler &&vPatchStart,
             TVPutHandler &&vput,
-            TVMultiPutHandler &&vMultiPut,
-            TLocalSyncDataHandler &&loc,
-            TAnubisOsirisPutHandler &&aoput)
+            TVMultiPutHandler &&vMultiPut)
         : VCtx(vctx)
         , Hull(std::move(hull))
         , Mon(std::move(mon))
         , EmergencyQueue(new TEmergencyQueue(Mon, std::move(vMovedPatch), std::move(vPatchStart), std::move(vput),
-                std::move(vMultiPut), std::move(loc), std::move(aoput)))
+                std::move(vMultiPut)))
         , DynamicPDiskWeightsManager(std::make_shared<TDynamicPDiskWeightsManager>(vctx, pdiskCtx))
         , ThrottlingController(new TThrottlingController(vcfg, Mon, pdiskCtx))
     {}
@@ -510,6 +543,7 @@ namespace NKikimr {
 
     void TOverloadHandler::RenderHtml(IOutputStream &str) {
         DynamicPDiskWeightsManager->RenderHtml(str);
+        ThrottlingController->RenderHtml(str);
     }
 
     void TOverloadHandler::OnKickEmergencyPutQueue() {
@@ -545,7 +579,5 @@ namespace NKikimr {
     template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPatchStart::TPtr &ev);
     template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPut::TPtr &ev);
     template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVMultiPut::TPtr &ev);
-    template bool TOverloadHandler::PostponeEvent(TEvLocalSyncData::TPtr &ev);
-    template bool TOverloadHandler::PostponeEvent(TEvAnubisOsirisPut::TPtr &ev);
 
 } // NKikimr

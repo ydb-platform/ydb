@@ -16,7 +16,7 @@ class TThreadPoolBase
 public:
     static constexpr int MaxThreadCount = 64;
 
-    explicit TThreadPoolBase(TString threadNamePrefix);
+    explicit TThreadPoolBase(std::string threadNamePrefix);
 
     void SetThreadCount(int threadCount);
     void Shutdown();
@@ -25,7 +25,7 @@ public:
     int GetThreadCount();
 
 protected:
-    const TString ThreadNamePrefix_;
+    const std::string ThreadNamePrefix_;
 
     const TShutdownCookie ShutdownCookie_;
 
@@ -38,7 +38,7 @@ protected:
 
     void Resize();
 
-    TString MakeThreadName(int index);
+    std::string MakeThreadName(int index);
 
     virtual void DoStart();
     virtual void DoShutdown();

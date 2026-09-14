@@ -137,9 +137,10 @@ enum t_setup_ret t_create_ring_params(int depth, struct io_uring *ring,
 		fprintf(stdout, "SQPOLL skipped for regular user\n");
 		return T_SETUP_SKIP;
 	}
+	if (ret == -EINVAL)
+		return T_SETUP_SKIP;
 
-	if (ret != -EINVAL)
-		fprintf(stderr, "queue_init: %s\n", strerror(-ret));
+	fprintf(stderr, "queue_init: %s\n", strerror(-ret));
 	return ret;
 }
 
@@ -363,4 +364,221 @@ unsigned long long utime_since_now(struct timeval *tv)
 
 	gettimeofday(&end, NULL);
 	return utime_since(tv, &end);
+}
+
+void *t_aligned_alloc(size_t alignment, size_t size)
+{
+	void *ret;
+
+	if (posix_memalign(&ret, alignment, size))
+		return NULL;
+
+	return ret;
+}
+
+int t_create_socketpair_ip(struct sockaddr_storage *addr,
+				int *sock_client, int *sock_server,
+				bool ipv6, bool client_connect,
+				bool msg_zc, bool tcp, const char *name)
+{
+	socklen_t addr_size;
+	int family, sock, listen_sock = -1;
+	int ret;
+
+	memset(addr, 0, sizeof(*addr));
+	if (ipv6) {
+		struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
+
+		family = AF_INET6;
+		saddr->sin6_family = family;
+		saddr->sin6_port = htons(0);
+		addr_size = sizeof(*saddr);
+	} else {
+		struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
+
+		family = AF_INET;
+		saddr->sin_family = family;
+		saddr->sin_port = htons(0);
+		saddr->sin_addr.s_addr = htonl(INADDR_ANY);
+		addr_size = sizeof(*saddr);
+	}
+
+	/* server sock setup */
+	if (tcp) {
+		sock = listen_sock = socket(family, SOCK_STREAM, IPPROTO_TCP);
+	} else {
+		sock = *sock_server = socket(family, SOCK_DGRAM, 0);
+	}
+	if (sock < 0) {
+		perror("socket");
+		return 1;
+	}
+
+	ret = bind(sock, (struct sockaddr *)addr, addr_size);
+	if (ret < 0) {
+		perror("bind");
+		return 1;
+	}
+
+	ret = getsockname(sock, (struct sockaddr *)addr, &addr_size);
+	if (ret < 0) {
+		fprintf(stderr, "getsockname failed %i\n", errno);
+		return 1;
+	}
+
+	if (tcp) {
+		ret = listen(sock, 128);
+		assert(ret != -1);
+	}
+
+	if (ipv6) {
+		struct sockaddr_in6 *saddr = (struct sockaddr_in6 *)addr;
+
+		inet_pton(AF_INET6, name, &(saddr->sin6_addr));
+	} else {
+		struct sockaddr_in *saddr = (struct sockaddr_in *)addr;
+
+		inet_pton(AF_INET, name, &saddr->sin_addr);
+	}
+
+	/* client sock setup */
+	if (tcp) {
+		*sock_client = socket(family, SOCK_STREAM, IPPROTO_TCP);
+		assert(client_connect);
+	} else {
+		*sock_client = socket(family, SOCK_DGRAM, 0);
+	}
+	if (*sock_client < 0) {
+		perror("socket");
+		return 1;
+	}
+	if (client_connect) {
+		ret = connect(*sock_client, (struct sockaddr *)addr, addr_size);
+		if (ret < 0) {
+			perror("connect");
+			return 1;
+		}
+	}
+	if (msg_zc) {
+#ifdef SO_ZEROCOPY
+		int val = 1;
+
+		/*
+		 * NOTE: apps must not set SO_ZEROCOPY when using io_uring zc.
+		 * It's only here to test interactions with MSG_ZEROCOPY.
+		 */
+		if (setsockopt(*sock_client, SOL_SOCKET, SO_ZEROCOPY, &val, sizeof(val))) {
+			perror("setsockopt zc");
+			return 1;
+		}
+#else
+		fprintf(stderr, "no SO_ZEROCOPY\n");
+		return 1;
+#endif
+	}
+	if (tcp) {
+		*sock_server = accept(listen_sock, NULL, NULL);
+		if (!*sock_server) {
+			fprintf(stderr, "can't accept\n");
+			return 1;
+		}
+		close(listen_sock);
+	}
+	return 0;
+}
+
+static void __t_toggle_nonblock(int fd, int set)
+{
+	int flags;
+
+	flags = fcntl(fd, F_GETFL, 0);
+	if (flags < 0)
+		t_error(1, errno, "fcntl F_GETFL");
+	if (set)
+		flags |= O_NONBLOCK;
+	else
+		flags &= ~O_NONBLOCK;
+	if (fcntl(fd, F_SETFL, flags) < 0)
+		t_error(1, errno, "fcntl F_SETFL");
+}
+
+void t_set_nonblock(int fd)
+{
+	__t_toggle_nonblock(fd, 1);
+}
+
+void t_clear_nonblock(int fd)
+{
+	__t_toggle_nonblock(fd, 0);
+}
+
+int t_submit_and_wait_single(struct io_uring *ring, struct io_uring_cqe **cqe)
+{
+	int ret;
+
+	ret = io_uring_submit(ring);
+	if (ret <= 0) {
+		fprintf(stderr, "sqe submit failed: %d\n", ret);
+		return -1;
+	}
+	ret = io_uring_wait_cqe(ring, cqe);
+	if (ret < 0) {
+		fprintf(stderr, "wait completion %d\n", ret);
+		return ret;
+	}
+	return 0;
+}
+
+size_t t_iovec_data_length(struct iovec *iov, unsigned iov_len)
+{
+	size_t sz = 0;
+	int i;
+
+	for (i = 0; i < iov_len; i++)
+		sz += iov[i].iov_len;
+	return sz;
+}
+
+#define t_min(a, b) ((a) < (b) ? (a) : (b))
+
+unsigned long t_compare_data_iovec(struct iovec *iov_src, unsigned nr_src,
+				   struct iovec *iov_dst, unsigned nr_dst)
+{
+	size_t src_len = t_iovec_data_length(iov_src, nr_src);
+	size_t dst_len = t_iovec_data_length(iov_dst, nr_dst);
+	size_t len_left = t_min(src_len, dst_len);
+	unsigned long src_off = 0, dst_off = 0;
+	unsigned long offset = 0;
+
+	while (offset != len_left) {
+		size_t len = len_left - offset;
+		unsigned long i;
+
+		len = t_min(len, iov_src->iov_len - src_off);
+		len = t_min(len, iov_dst->iov_len - dst_off);
+
+		for (i = 0; i < len; i++) {
+			char csrc = ((char *)iov_src->iov_base)[src_off + i];
+			char cdst = ((char *)iov_dst->iov_base)[dst_off + i];
+
+			if (csrc != cdst) {
+				fprintf(stderr, "data mismatch, %i vs %i\n",
+					csrc, cdst);
+				return -EINVAL;
+			}
+		}
+
+		src_off += len;
+		dst_off += len;
+		if (src_off == iov_src->iov_len) {
+			src_off = 0;
+			iov_src++;
+		}
+		if (dst_off == iov_dst->iov_len) {
+			dst_off = 0;
+			iov_dst++;
+		}
+		offset += len;
+	}
+	return 0;
 }

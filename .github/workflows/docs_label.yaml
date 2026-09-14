@@ -1,0 +1,29 @@
+name: Label documentation PR
+
+# SECURITY: this workflow runs in the privileged `pull_request_target` context
+# but does NOT check out PR-controlled code. It only adds the `documentation`
+# label using the GITHUB_TOKEN. The actual documentation build is intentionally
+# split out into `docs_build.yaml`, which runs in the fork-isolated
+# `pull_request` context.
+
+on:
+  pull_request_target:
+    paths:
+      - 'ydb/docs/**'
+
+jobs:
+  add-label:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Add documentation label
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ['documentation']
+            });

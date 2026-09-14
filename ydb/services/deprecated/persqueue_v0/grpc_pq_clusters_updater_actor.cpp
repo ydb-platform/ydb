@@ -1,9 +1,11 @@
 #include "grpc_pq_clusters_updater_actor.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/persqueue/pq_database.h>
+#include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_WRITE_PROXY
 
 namespace NKikimr {
 namespace NGRpcProxy {
@@ -11,8 +13,9 @@ namespace NGRpcProxy {
 static const int CLUSTERS_UPDATER_TIMEOUT_ON_ERROR = 1;
 
 
-TClustersUpdater::TClustersUpdater(IPQClustersUpdaterCallback* callback)
+TClustersUpdater::TClustersUpdater(IPQClustersUpdaterCallback* callback, TStatus::TPtr& status)
     : Callback(callback)
+    , Status(status)
     {};
 
 void TClustersUpdater::Bootstrap(const NActors::TActorContext& ctx) {
@@ -34,15 +37,21 @@ void TClustersUpdater::Handle(TEvPQClustersUpdater::TEvUpdateClusters::TPtr&, co
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), req.Release());
 }
 
-void TClustersUpdater::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext&) {
+void TClustersUpdater::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx) {
+    TGuard<TSpinLock> guard(Status->Lock);
+    if (!Status->Running) {
+        return Die(ctx);
+    }
 
     Callback->NetClassifierUpdated(ev->Get()->Classifier);
 }
 
-
-
-
 void TClustersUpdater::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx) {
+    TGuard<TSpinLock> guard(Status->Lock);
+    if (!Status->Running) {
+        return Die(ctx);
+    }
+
     auto& record = ev->Get()->Record;
 
     if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
@@ -71,7 +80,8 @@ void TClustersUpdater::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TA
         }
         ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetClustersUpdateTimeoutSec()), new TEvPQClustersUpdater::TEvUpdateClusters());
     } else {
-        LOG_ERROR_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "can't update clusters " << record);
+        YDB_LOG_ERROR_CTX(ctx, "Can't update clusters",
+            {"record", record});
         ctx.Schedule(TDuration::Seconds(CLUSTERS_UPDATER_TIMEOUT_ON_ERROR), new TEvPQClustersUpdater::TEvUpdateClusters());
     }
 }

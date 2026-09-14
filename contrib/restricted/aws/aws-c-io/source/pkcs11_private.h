@@ -7,13 +7,6 @@
  */
 #include <aws/io/tls_channel_handler.h>
 
-/* These defines must exist before the official PKCS#11 headers are included */
-#define CK_PTR *
-#define NULL_PTR 0
-#define CK_DEFINE_FUNCTION(returnType, name) returnType name
-#define CK_DECLARE_FUNCTION(returnType, name) returnType name
-#define CK_DECLARE_FUNCTION_POINTER(returnType, name) returnType(CK_PTR name)
-#define CK_CALLBACK_FUNCTION(returnType, name) returnType(CK_PTR name)
 #include "pkcs11/v2.40/pkcs11.h"
 
 /**

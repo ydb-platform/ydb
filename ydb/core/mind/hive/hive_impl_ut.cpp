@@ -1,3 +1,4 @@
+#include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>
@@ -6,6 +7,7 @@
 #include <util/system/compiler.h>
 #include "hive_impl.h"
 #include "balancer.h"
+#include "ut_common.h"
 
 #ifdef NDEBUG
 #define Ctest Cnull
@@ -43,7 +45,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
             TLeaderTabletInfo& tablet = tablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
             tablet.Weight = RandomNumber<double>();
-            bootQueue.EmplaceToBootQueue(tablet);
+            bootQueue.AddToBootQueue(tablet, 0UL);
         }
 
         double passed = timer.Get().SecondsFloat();
@@ -58,14 +60,29 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         timer.Reset();
 
         double maxP = 100;
+        std::vector<TBootQueue::TBootQueueRecord> records;
+        records.reserve(NUM_TABLETS);
+        unsigned i = 0;
 
-        while (!bootQueue.BootQueue.empty()) {
+        while (!bootQueue.Empty()) {
             auto record = bootQueue.PopFromBootQueue();
             UNIT_ASSERT(record.Priority <= maxP);
             maxP = record.Priority;
-            auto itTablet = tablets.find(record.TabletId);
-            if (itTablet != tablets.end()) {
-                bootQueue.AddToWaitQueue(itTablet->second);
+            UNIT_ASSERT(tablets.contains(record.TabletId));
+            records.push_back(record);
+            if (++i == NUM_TABLETS / 2) {
+                // to test both modes
+                bootQueue.IncludeWaitQueue();
+            }
+        }
+        bootQueue.ExcludeWaitQueue();
+
+        i = 0;
+        for (auto& record : records) {
+            if (++i % 3 == 0) {
+                bootQueue.AddToBootQueue(record);
+            } else {
+                bootQueue.AddToWaitQueue(record);
             }
         }
 
@@ -81,7 +98,11 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         timer.Reset();
 
-        bootQueue.MoveFromWaitQueueToBootQueue();
+        bootQueue.IncludeWaitQueue();
+        while (!bootQueue.Empty()) {
+            bootQueue.PopFromBootQueue();
+        }
+        bootQueue.ExcludeWaitQueue();
 
         passed = timer.Get().SecondsFloat();
         Ctest << "Move = " << passed << Endl;
@@ -169,7 +190,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
             TLeaderTabletInfo& tablet = allTablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
-            tablet.GetMutableResourceValues().SetMemory(RandomNumber<double>());
+            tablet.GetMutableResourceValues().Memory = RandomNumber<double>();
         }
 
         Ctest << "HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST" << Endl;
@@ -208,19 +229,109 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(expectedStDev, stDev1, 1e-6);
         UNIT_ASSERT_VALUES_EQUAL(stDev1, stDev2);
     }
+
+    Y_UNIT_TEST(BootQueueConfigurePriorities) {
+        auto hiveStorage = MakeIntrusive<TTabletStorageInfo>();
+        hiveStorage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(hiveStorage.Get(), TActorId());
+
+        // Emulate initial BuildCurrentConfig call
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig&){});
+
+        TFollowerGroup followerGroup(hive);
+
+        // Part 1: Test default priorities with empty configuration
+        {
+            TLeaderTabletInfo ssTablet(1UL, hive);
+            ssTablet.SetType(TTabletTypes::SchemeShard);
+            hive.AddToBootQueue(&ssTablet);
+
+            TLeaderTabletInfo dummyTablet(2UL, hive);
+            dummyTablet.SetType(TTabletTypes::Dummy);
+            hive.AddToBootQueue(&dummyTablet);
+
+            TFollowerTabletInfo dummyFollowerTablet(dummyTablet, 3UL, followerGroup);
+            hive.AddToBootQueue(&dummyFollowerTablet);
+
+            auto& bootQueue = hive.GetBootQueue();
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
+
+            // Priorities should follow defaults
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 3.0); // SchemeShard default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 1.0); // Leader default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default
+
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
+        }
+
+        // Part 2: Configure custom priorities for known and unknown types
+        {
+            constexpr double SS_BOOT_PRIORITY = 2.5;
+            constexpr double DUMMY_BOOT_PRIORITY = 0.5;
+
+            hive.UpdateConfig([&](NKikimrConfig::THiveConfig& config) {
+                auto* ssItem = config.AddTabletTypeToBootPriority();
+                ssItem->SetTabletType(TTabletTypes::SchemeShard);
+                ssItem->SetPriority(SS_BOOT_PRIORITY);
+
+                auto* dummyItem = config.AddTabletTypeToBootPriority();
+                dummyItem->SetTabletType(TTabletTypes::Dummy);
+                dummyItem->SetPriority(DUMMY_BOOT_PRIORITY);
+            });
+
+            TLeaderTabletInfo configuredSsTablet(4UL, hive);
+            configuredSsTablet.SetType(TTabletTypes::SchemeShard);
+            hive.AddToBootQueue(&configuredSsTablet);
+
+            TLeaderTabletInfo configuredDummyTablet(5UL, hive);
+            configuredDummyTablet.SetType(TTabletTypes::Dummy);
+            hive.AddToBootQueue(&configuredDummyTablet);
+
+            TFollowerTabletInfo configuredDummyFollowerTablet(configuredDummyTablet, 6UL, followerGroup);
+            hive.AddToBootQueue(&configuredDummyFollowerTablet);
+
+            auto& bootQueue = hive.GetBootQueue();
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
+
+            // Priorities should use configured values
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, SS_BOOT_PRIORITY); // Configured SchemeShard
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, DUMMY_BOOT_PRIORITY); // Configured Dummy
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default (should not change)
+
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
+        }
+
+        // Part 3: Clear configuration and verify defaults again
+        {
+            hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+                config.ClearTabletTypeToBootPriority();
+            });
+
+            TLeaderTabletInfo ssTabletAfterClear(7UL, hive);
+            ssTabletAfterClear.SetType(TTabletTypes::SchemeShard);
+            hive.AddToBootQueue(&ssTabletAfterClear);
+
+            TLeaderTabletInfo dummyTabletAfterClear(8UL, hive);
+            dummyTabletAfterClear.SetType(TTabletTypes::Dummy);
+            hive.AddToBootQueue(&dummyTabletAfterClear);
+
+            TFollowerTabletInfo dummyFollowerTabletAfterClear(dummyTabletAfterClear, 9UL, followerGroup);
+            hive.AddToBootQueue(&dummyFollowerTabletAfterClear);
+
+            auto& bootQueue = hive.GetBootQueue();
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 3);
+
+            // Priorities should revert to defaults
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 3.0); // SchemeShard default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 1.0); // Leader default
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.PopFromBootQueue().Priority, 0.0); // Follower default
+
+            UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(TCutHistoryRestrictions) {
-    class TTestHive : public THive {
-    public:
-        TTestHive(TTabletStorageInfo *info, const TActorId &tablet) : THive(info, tablet) {}
-
-        template<typename F>
-        void UpdateConfig(F func) {
-            func(ClusterConfig);
-            BuildCurrentConfig();
-        }
-    };
 
     Y_UNIT_TEST(BasicTest) {
         TIntrusivePtr<TTabletStorageInfo> hiveStorage = new TTabletStorageInfo;
@@ -282,5 +393,75 @@ Y_UNIT_TEST_SUITE(TCutHistoryRestrictions) {
             config.SetCutHistoryDenyList("");
         });
         UNIT_ASSERT(hive.IsCutHistoryAllowed(TTabletTypes::DataShard));
+    }
+}
+
+Y_UNIT_TEST_SUITE(THiveScatterThresholdStatsTest) {
+    Y_UNIT_TEST(ScatterThresholdResourceMinimumUsesPerResourceFloor) {
+        TActorSystemStub actorSystem;
+        auto storage = MakeIntrusive<TTabletStorageInfo>();
+        storage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(storage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetMinNodeUsageToBalance(0.1);
+            config.SetMaxResourceCounter(100);
+        });
+        hive.MakeNodes(2);
+        hive.Node(1).ResourceMaximumValues = {100, 100, 100, 100};
+        hive.Node(2).ResourceMaximumValues = {100, 100, 100, 100};
+        auto& first = hive.Node(1).ResourceValues;
+        auto& second = hive.Node(2).ResourceValues;
+        std::get<NMetrics::EResource::Counter>(first) = 1;
+        std::get<NMetrics::EResource::Counter>(second) = 9;
+        std::get<NMetrics::EResource::CPU>(first) = 5;
+        std::get<NMetrics::EResource::CPU>(second) = 20;
+        std::get<NMetrics::EResource::Memory>(first) = 40;
+        std::get<NMetrics::EResource::Memory>(second) = 50;
+        std::get<NMetrics::EResource::Network>(first) = 2;
+        std::get<NMetrics::EResource::Network>(second) = 3;
+
+        const auto stats = hive.GetStats();
+        // No tablet eligibility is involved in computing these statistics.
+        UNIT_ASSERT_VALUES_EQUAL(stats.Values.size(), 2);
+        UNIT_ASSERT_DOUBLES_EQUAL(std::get<NMetrics::EResource::Counter>(stats.MinResourceNormValues), 0.01, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(std::get<NMetrics::EResource::CPU>(stats.MinResourceNormValues), 0.1, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(std::get<NMetrics::EResource::Memory>(stats.MinResourceNormValues), 0.4, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(std::get<NMetrics::EResource::Network>(stats.MinResourceNormValues), 0.1, 1e-12);
+    }
+
+    Y_UNIT_TEST(ScatterThresholdResourceMinimumExcludesDownAndDeadNodes) {
+        TActorSystemStub actorSystem;
+        auto storage = MakeIntrusive<TTabletStorageInfo>();
+        storage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(storage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig& config) {
+            config.SetMinNodeUsageToBalance(0.1);
+        });
+        hive.MakeNodes(4);
+        for (TNodeId nodeId = 1; nodeId <= 4; ++nodeId) {
+            auto& node = hive.Node(nodeId);
+            node.ResourceMaximumValues = {100, 100, 100, 100};
+            std::get<NMetrics::EResource::CPU>(node.ResourceValues) = nodeId * 10;
+        }
+        hive.Node(1).Down = true;
+        hive.Node(2).Local = TActorId();
+
+        const auto stats = hive.GetStats();
+        UNIT_ASSERT_VALUES_EQUAL(stats.Values.size(), 2);
+        for (const auto& node : stats.Values) {
+            UNIT_ASSERT_C(node.NodeId == 3 || node.NodeId == 4, node.NodeId);
+        }
+        UNIT_ASSERT_DOUBLES_EQUAL(std::get<NMetrics::EResource::CPU>(stats.MinResourceNormValues), 0.3, 1e-12);
+    }
+
+    Y_UNIT_TEST(ScatterThresholdResourceMinimumForEmptyStats) {
+        TActorSystemStub actorSystem;
+        auto storage = MakeIntrusive<TTabletStorageInfo>();
+        storage->TabletType = TTabletTypes::Hive;
+        TTestHive hive(storage.Get(), TActorId());
+        hive.UpdateConfig([](NKikimrConfig::THiveConfig&) {});
+        const auto stats = hive.GetStats();
+        UNIT_ASSERT(stats.Values.empty());
+        UNIT_ASSERT_VALUES_EQUAL(max(stats.MinResourceNormValues), 0);
     }
 }

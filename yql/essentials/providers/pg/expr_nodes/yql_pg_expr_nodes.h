@@ -4,8 +4,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.gen.h>
 
-namespace NYql {
-namespace NNodes {
+namespace NYql::NNodes {
 
 #include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.decl.inl.h>
 
@@ -36,5 +35,4 @@ public:
 
 #include <yql/essentials/providers/pg/expr_nodes/yql_pg_expr_nodes.defs.inl.h>
 
-} // namespace NNodes
-} // namespace NYql
+} // namespace NYql::NNodes

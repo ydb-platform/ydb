@@ -9,6 +9,7 @@
 #include <aws/common/condition_variable.h>
 #include <aws/common/mutex.h>
 #include <aws/common/string.h>
+#include <aws/common/uuid.h>
 
 #include <aws/io/event_loop.h>
 #include <aws/io/logging.h>
@@ -339,18 +340,7 @@ static int s_update_local_endpoint(struct aws_socket *socket) {
     } else if (address.ss_family == AF_VSOCK) {
         struct sockaddr_vm *s = (struct sockaddr_vm *)&address;
 
-        /* VSOCK port is 32bit, but aws_socket_endpoint.port is only 16bit.
-         * Hopefully this isn't an issue, since users can only pass in 16bit values.
-         * But if it becomes an issue, we'll need to make aws_socket_endpoint more flexible */
-        if (s->svm_port > UINT16_MAX) {
-            AWS_LOGF_ERROR(
-                AWS_LS_IO_SOCKET,
-                "id=%p fd=%d: aws_socket_endpoint can't deal with VSOCK port > UINT16_MAX",
-                (void *)socket,
-                socket->io_handle.data.fd);
-            return aws_raise_error(AWS_IO_SOCKET_INVALID_ADDRESS);
-        }
-        tmp_endpoint.port = (uint16_t)s->svm_port;
+        tmp_endpoint.port = s->svm_port;
 
         snprintf(tmp_endpoint.address, sizeof(tmp_endpoint.address), "%" PRIu32, s->svm_cid);
         return AWS_OP_SUCCESS;
@@ -383,7 +373,7 @@ static int s_on_connection_success(struct aws_socket *socket) {
 
     if (getsockopt(socket->io_handle.data.fd, SOL_SOCKET, SO_ERROR, &connect_result, &result_length) < 0) {
         int errno_value = errno; /* Always cache errno before potential side-effect */
-        AWS_LOGF_ERROR(
+        AWS_LOGF_DEBUG(
             AWS_LS_IO_SOCKET,
             "id=%p fd=%d: failed to determine connection error %d",
             (void *)socket,
@@ -396,7 +386,7 @@ static int s_on_connection_success(struct aws_socket *socket) {
     }
 
     if (connect_result) {
-        AWS_LOGF_ERROR(
+        AWS_LOGF_DEBUG(
             AWS_LS_IO_SOCKET,
             "id=%p fd=%d: connection error %d",
             (void *)socket,
@@ -436,7 +426,7 @@ static int s_on_connection_success(struct aws_socket *socket) {
 
 static void s_on_connection_error(struct aws_socket *socket, int error) {
     socket->state = ERROR;
-    AWS_LOGF_ERROR(AWS_LS_IO_SOCKET, "id=%p fd=%d: connection failure", (void *)socket, socket->io_handle.data.fd);
+    AWS_LOGF_DEBUG(AWS_LS_IO_SOCKET, "id=%p fd=%d: connection failure", (void *)socket, socket->io_handle.data.fd);
     if (socket->connection_result_fn) {
         socket->connection_result_fn(socket, error, socket->connect_accept_user_data);
     } else if (socket->accept_result_fn) {
@@ -641,18 +631,22 @@ int aws_socket_connect(
         return AWS_OP_ERR;
     }
 
+    if (aws_socket_validate_port_for_connect(remote_endpoint->port, socket->options.domain)) {
+        return AWS_OP_ERR;
+    }
+
     struct socket_address address;
     AWS_ZERO_STRUCT(address);
     socklen_t sock_size = 0;
     int pton_err = 1;
     if (socket->options.domain == AWS_SOCKET_IPV4) {
         pton_err = inet_pton(AF_INET, remote_endpoint->address, &address.sock_addr_types.addr_in.sin_addr);
-        address.sock_addr_types.addr_in.sin_port = htons(remote_endpoint->port);
+        address.sock_addr_types.addr_in.sin_port = htons((uint16_t)remote_endpoint->port);
         address.sock_addr_types.addr_in.sin_family = AF_INET;
         sock_size = sizeof(address.sock_addr_types.addr_in);
     } else if (socket->options.domain == AWS_SOCKET_IPV6) {
         pton_err = inet_pton(AF_INET6, remote_endpoint->address, &address.sock_addr_types.addr_in6.sin6_addr);
-        address.sock_addr_types.addr_in6.sin6_port = htons(remote_endpoint->port);
+        address.sock_addr_types.addr_in6.sin6_port = htons((uint16_t)remote_endpoint->port);
         address.sock_addr_types.addr_in6.sin6_family = AF_INET6;
         sock_size = sizeof(address.sock_addr_types.addr_in6);
     } else if (socket->options.domain == AWS_SOCKET_LOCAL) {
@@ -663,7 +657,7 @@ int aws_socket_connect(
     } else if (socket->options.domain == AWS_SOCKET_VSOCK) {
         pton_err = parse_cid(remote_endpoint->address, &address.sock_addr_types.vm_addr.svm_cid);
         address.sock_addr_types.vm_addr.svm_family = AF_VSOCK;
-        address.sock_addr_types.vm_addr.svm_port = (unsigned int)remote_endpoint->port;
+        address.sock_addr_types.vm_addr.svm_port = remote_endpoint->port;
         sock_size = sizeof(address.sock_addr_types.vm_addr);
 #endif
     } else {
@@ -673,23 +667,23 @@ int aws_socket_connect(
 
     if (pton_err != 1) {
         int errno_value = errno; /* Always cache errno before potential side-effect */
-        AWS_LOGF_ERROR(
+        AWS_LOGF_DEBUG(
             AWS_LS_IO_SOCKET,
-            "id=%p fd=%d: failed to parse address %s:%d.",
+            "id=%p fd=%d: failed to parse address %s:%u.",
             (void *)socket,
             socket->io_handle.data.fd,
             remote_endpoint->address,
-            (int)remote_endpoint->port);
+            remote_endpoint->port);
         return aws_raise_error(s_convert_pton_error(pton_err, errno_value));
     }
 
     AWS_LOGF_DEBUG(
         AWS_LS_IO_SOCKET,
-        "id=%p fd=%d: connecting to endpoint %s:%d.",
+        "id=%p fd=%d: connecting to endpoint %s:%u.",
         (void *)socket,
         socket->io_handle.data.fd,
         remote_endpoint->address,
-        (int)remote_endpoint->port);
+        remote_endpoint->port);
 
     socket->state = CONNECTING;
     socket->remote_endpoint = *remote_endpoint;
@@ -769,7 +763,7 @@ int aws_socket_connect(
                 (unsigned long long)timeout);
             aws_event_loop_schedule_task_future(event_loop, timeout_task, timeout);
         } else {
-            AWS_LOGF_ERROR(
+            AWS_LOGF_DEBUG(
                 AWS_LS_IO_SOCKET,
                 "id=%p fd=%d: connect failed with error code %d.",
                 (void *)socket,
@@ -805,13 +799,17 @@ int aws_socket_bind(struct aws_socket *socket, const struct aws_socket_endpoint 
         return AWS_OP_ERR;
     }
 
+    if (aws_socket_validate_port_for_bind(local_endpoint->port, socket->options.domain)) {
+        return AWS_OP_ERR;
+    }
+
     AWS_LOGF_INFO(
         AWS_LS_IO_SOCKET,
-        "id=%p fd=%d: binding to %s:%d.",
+        "id=%p fd=%d: binding to %s:%u.",
         (void *)socket,
         socket->io_handle.data.fd,
         local_endpoint->address,
-        (int)local_endpoint->port);
+        local_endpoint->port);
 
     struct socket_address address;
     AWS_ZERO_STRUCT(address);
@@ -819,12 +817,12 @@ int aws_socket_bind(struct aws_socket *socket, const struct aws_socket_endpoint 
     int pton_err = 1;
     if (socket->options.domain == AWS_SOCKET_IPV4) {
         pton_err = inet_pton(AF_INET, local_endpoint->address, &address.sock_addr_types.addr_in.sin_addr);
-        address.sock_addr_types.addr_in.sin_port = htons(local_endpoint->port);
+        address.sock_addr_types.addr_in.sin_port = htons((uint16_t)local_endpoint->port);
         address.sock_addr_types.addr_in.sin_family = AF_INET;
         sock_size = sizeof(address.sock_addr_types.addr_in);
     } else if (socket->options.domain == AWS_SOCKET_IPV6) {
         pton_err = inet_pton(AF_INET6, local_endpoint->address, &address.sock_addr_types.addr_in6.sin6_addr);
-        address.sock_addr_types.addr_in6.sin6_port = htons(local_endpoint->port);
+        address.sock_addr_types.addr_in6.sin6_port = htons((uint16_t)local_endpoint->port);
         address.sock_addr_types.addr_in6.sin6_family = AF_INET6;
         sock_size = sizeof(address.sock_addr_types.addr_in6);
     } else if (socket->options.domain == AWS_SOCKET_LOCAL) {
@@ -835,7 +833,7 @@ int aws_socket_bind(struct aws_socket *socket, const struct aws_socket_endpoint 
     } else if (socket->options.domain == AWS_SOCKET_VSOCK) {
         pton_err = parse_cid(local_endpoint->address, &address.sock_addr_types.vm_addr.svm_cid);
         address.sock_addr_types.vm_addr.svm_family = AF_VSOCK;
-        address.sock_addr_types.vm_addr.svm_port = (unsigned int)local_endpoint->port;
+        address.sock_addr_types.vm_addr.svm_port = local_endpoint->port;
         sock_size = sizeof(address.sock_addr_types.vm_addr);
 #endif
     } else {
@@ -847,11 +845,11 @@ int aws_socket_bind(struct aws_socket *socket, const struct aws_socket_endpoint 
         int errno_value = errno; /* Always cache errno before potential side-effect */
         AWS_LOGF_ERROR(
             AWS_LS_IO_SOCKET,
-            "id=%p fd=%d: failed to parse address %s:%d.",
+            "id=%p fd=%d: failed to parse address %s:%u.",
             (void *)socket,
             socket->io_handle.data.fd,
             local_endpoint->address,
-            (int)local_endpoint->port);
+            local_endpoint->port);
         return aws_raise_error(s_convert_pton_error(pton_err, errno_value));
     }
 
@@ -881,7 +879,7 @@ int aws_socket_bind(struct aws_socket *socket, const struct aws_socket_endpoint 
 
     AWS_LOGF_DEBUG(
         AWS_LS_IO_SOCKET,
-        "id=%p fd=%d: successfully bound to %s:%d",
+        "id=%p fd=%d: successfully bound to %s:%u",
         (void *)socket,
         socket->io_handle.data.fd,
         socket->local_endpoint.address,
@@ -995,7 +993,7 @@ static void s_socket_accept_event(
 
             new_sock->local_endpoint = socket->local_endpoint;
             new_sock->state = CONNECTED_READ | CONNECTED_WRITE;
-            uint16_t port = 0;
+            uint32_t port = 0;
 
             /* get the info on the incoming socket's address */
             if (in_addr.ss_family == AF_INET) {
@@ -1894,7 +1892,7 @@ int aws_socket_get_error(struct aws_socket *socket) {
     socklen_t result_length = sizeof(connect_result);
 
     if (getsockopt(socket->io_handle.data.fd, SOL_SOCKET, SO_ERROR, &connect_result, &result_length) < 0) {
-        return AWS_OP_ERR;
+        return s_determine_socket_error(errno);
     }
 
     if (connect_result) {
@@ -1906,4 +1904,13 @@ int aws_socket_get_error(struct aws_socket *socket) {
 
 bool aws_socket_is_open(struct aws_socket *socket) {
     return socket->io_handle.data.fd >= 0;
+}
+
+void aws_socket_endpoint_init_local_address_for_test(struct aws_socket_endpoint *endpoint) {
+    struct aws_uuid uuid;
+    AWS_FATAL_ASSERT(aws_uuid_init(&uuid) == AWS_OP_SUCCESS);
+    char uuid_str[AWS_UUID_STR_LEN] = {0};
+    struct aws_byte_buf uuid_buf = aws_byte_buf_from_empty_array(uuid_str, sizeof(uuid_str));
+    AWS_FATAL_ASSERT(aws_uuid_to_str(&uuid, &uuid_buf) == AWS_OP_SUCCESS);
+    snprintf(endpoint->address, sizeof(endpoint->address), "testsock" PRInSTR ".sock", AWS_BYTE_BUF_PRI(uuid_buf));
 }

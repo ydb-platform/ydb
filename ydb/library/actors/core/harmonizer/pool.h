@@ -9,54 +9,53 @@
 
 namespace NActors {
 
-class ISharedExecutorPool;
+class ISharedPool;
 class TBasicExecutorPool;
 class IExecutorPool;
 template <typename T>
 struct TWaitingStats;
 
 struct TThreadInfo {
-    TValueHistory<8> UsedCpu;
+    static constexpr ui8 CpuHistorySize = 32;
+
+    TValueHistory<CpuHistorySize> UsedCpu;
     TValueHistory<8> ElapsedCpu;
 }; // struct TThreadInfo
 
 struct TPoolInfo {
     std::vector<TThreadInfo> ThreadInfo;
     std::vector<TThreadInfo> SharedInfo;
-    ISharedExecutorPool* Shared = nullptr;
+    ISharedPool* Shared = nullptr;
     IExecutorPool* Pool = nullptr;
     TBasicExecutorPool* BasicPool = nullptr;
+    bool IsSharedOnly = false;
 
     i16 DefaultFullThreadCount = 0;
     i16 MinFullThreadCount = 0;
     i16 MaxFullThreadCount = 0;
 
+    float ThreadQuota = 0;
     float DefaultThreadCount = 0;
     float MinThreadCount = 0;
     float MaxThreadCount = 0;
 
     i16 Priority = 0;
+    ui8 NeedyCpuWindowSeconds = 1;
     NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounter;
     NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounterWithSmallWindow;
     ui32 MaxAvgPingUs = 0;
     ui64 LastUpdateTs = 0;
     ui64 NotEnoughCpuExecutions = 0;
     ui64 NewNotEnoughCpuExecutions = 0;
-    ui16 LocalQueueSize;
 
+    std::atomic<float> SharedCpuQuota = 0;
     std::atomic<i64> LastFlags = 0; // 0 - isNeedy; 1 - isStarved; 2 - isHoggish
     std::atomic<ui64> IncreasingThreadsByNeedyState = 0;
     std::atomic<ui64> IncreasingThreadsByExchange = 0;
     std::atomic<ui64> DecreasingThreadsByStarvedState = 0;
     std::atomic<ui64> DecreasingThreadsByHoggishState = 0;
     std::atomic<ui64> DecreasingThreadsByExchange = 0;
-    std::atomic<i16> PotentialMaxThreadCount = 0;
-    std::atomic<ui64> ReceivedHalfThreadByNeedyState = 0;
-    std::atomic<ui64> GivenHalfThreadByOtherStarvedState = 0;
-    std::atomic<ui64> GivenHalfThreadByHoggishState = 0;
-    std::atomic<ui64> GivenHalfThreadByOtherNeedyState = 0;
-    std::atomic<ui64> ReturnedHalfThreadByStarvedState = 0;
-    std::atomic<ui64> ReturnedHalfThreadByOtherHoggishState = 0;
+    std::atomic<float> PotentialMaxThreadCount = 0;
 
     TValueHistory<16> UsedCpu;
     TValueHistory<16> ElapsedCpu;
@@ -74,11 +73,13 @@ struct TPoolInfo {
     TPoolInfo();
 
     double GetCpu(i16 threadIdx) const;
+    double GetCpuForLastSeconds(i16 threadIdx, ui8 seconds) const;
     double GetElapsed(i16 threadIdx) const;
     double GetLastSecondCpu(i16 threadIdx) const;
     double GetLastSecondElapsed(i16 threadIdx) const;
 
     double GetSharedCpu(i16 sharedThreadIdx) const;
+    double GetSharedCpuForLastSeconds(i16 sharedThreadIdx, ui8 seconds) const;
     double GetSharedElapsed(i16 sharedThreadIdx) const;
     double GetLastSecondSharedCpu(i16 sharedThreadIdx) const;
     double GetLastSecondSharedElapsed(i16 sharedThreadIdx) const;

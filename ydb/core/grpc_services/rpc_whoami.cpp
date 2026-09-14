@@ -3,6 +3,8 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/security/ticket_parser.h>
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
 namespace NKikimr {
@@ -22,62 +24,39 @@ public:
     {}
 
     void Bootstrap() {
-        //TODO: Do we realy realy need to make call to the ticket parser here???
-        //we have done it already in grpc_request_proxy
-        auto req = dynamic_cast<TEvWhoAmIRequest*>(Request.get());
-        Y_ABORT_UNLESS(req, "Unexpected request type for TWhoAmIRPC");
-        TString ticket;
-        if (TMaybe<TString> authToken = req->GetYdbToken()) {
-            ticket = authToken.GetRef();
-        } else if (TVector<TStringBuf> clientCert = Request->FindClientCert(); !clientCert.empty()) {
-            ticket = TString(clientCert.front());
-        } else {
-            ReplyError("No token provided");
-            PassAway();
-            return;
-        }
-
-        TMaybe<TString> database = Request->GetDatabaseName();
-        Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-            .Database = database ? database.GetRef() : TString(),
-            .Ticket = ticket,
-            .PeerName = Request->GetPeerName()
-        }));
-        Become(&TThis::StateWaitForTicket);
-    }
-
-    STFUNC(StateWaitForTicket) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
-            hFunc(TEvents::TEvUndelivered, Handle);
-        }
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken = Request->GetInternalToken();
+        ReplyResult(userToken.Get());
+        PassAway();
     }
 
 private:
-    void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
-        const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
-        auto *response = TEvWhoAmIRequest::AllocateResult<Ydb::Discovery::WhoAmIResult>(Request);
-        if (!result.Error) {
-            if (result.Token != nullptr) {
-                response->set_user(result.Token->GetUserSID());
-                if (TEvWhoAmIRequest::GetProtoRequest(Request)->include_groups()) {
-                    for (const auto& group : result.Token->GetGroupSIDs()) {
-                        response->add_groups(group);
-                    }
+    void ReplyResult(const NACLib::TUserToken* userToken) {
+        auto* response = TEvWhoAmIRequest::AllocateResult<Ydb::Discovery::WhoAmIResult>(Request);
+        if (userToken) {
+            response->set_user(userToken->GetUserSID());
+            if (TEvWhoAmIRequest::GetProtoRequest(Request)->include_groups()) {
+                for (const auto& group : userToken->GetGroupSIDs()) {
+                    response->add_groups(group);
                 }
-                Request->SendResult(*response, Ydb::StatusIds::SUCCESS);
-            } else {
-                ReplyError("Empty token in Staff response");
             }
-        } else {
-            ReplyError(TString{result.Error.Message});
         }
-        PassAway();
-    }
 
-    void Handle(TEvents::TEvUndelivered::TPtr&) {
-        ReplyError("Error parsing token");
-        PassAway();
+        // Add permission information (always returned)
+        const auto* appData = AppData();
+        bool isAdministrationAllowed = IsAdministrator(appData, userToken);
+        bool isMonitoringAllowed = isAdministrationAllowed || IsTokenAllowed(userToken, appData->DomainsConfig.GetSecurityConfig().GetMonitoringAllowedSIDs());
+        bool isViewerAllowed = isMonitoringAllowed || IsTokenAllowed(userToken, appData->DomainsConfig.GetSecurityConfig().GetViewerAllowedSIDs());
+        bool isDatabaseAllowed = isViewerAllowed || IsTokenAllowed(userToken, appData->DomainsConfig.GetSecurityConfig().GetDatabaseAllowedSIDs());
+        bool isRegisterNodeAllowed = IsTokenAllowed(userToken, appData->RegisterDynamicNodeAllowedSIDs);
+        bool isBootstrapAllowed = IsTokenAllowed(userToken, appData->BootstrapAllowedSIDs);
+        response->set_is_administration_allowed(isAdministrationAllowed);
+        response->set_is_monitoring_allowed(isMonitoringAllowed);
+        response->set_is_viewer_allowed(isViewerAllowed);
+        response->set_is_database_allowed(isDatabaseAllowed);
+        response->set_is_register_node_allowed(isRegisterNodeAllowed);
+        response->set_is_bootstrap_allowed(isBootstrapAllowed);
+
+        Request->SendResult(*response, Ydb::StatusIds::SUCCESS);
     }
 
     void ReplyError(const TString& error) {

@@ -18,11 +18,16 @@ struct TExponentialBackoffOptions
     static constexpr double DefaultBackoffMultiplier = 1.5;
     static constexpr double DefaultBackoffJitter = 0.1;
 
+    /*!
+     * \note Can be up to std::numeric_limits<int>::max() inclusive.
+    */
     int InvocationCount = DefaultInvocationCount;
     TDuration MinBackoff = DefaultMinBackoff;
     TDuration MaxBackoff = DefaultMaxBackoff;
     double BackoffMultiplier = DefaultBackoffMultiplier;
     double BackoffJitter = DefaultBackoffJitter;
+
+    bool operator==(const TExponentialBackoffOptions& other) const = default;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,10 +49,9 @@ struct TConstantBackoffOptions
 
 //! TODO(arkady-e1ppa): Make configs below pairs of POD-structs and TExternalizedYsonStruct.
 
-class TLogDigestConfig
+struct TLogDigestConfig
     : public NYTree::TYsonStruct
 {
-public:
     // We will round each sample x to the range from [(1 - RelativePrecision)*x, (1 + RelativePrecision)*x].
     // This parameter affects the memory usage of the digest, it is proportional to
     // log(UpperBound / LowerBound) / log(1 + RelativePrecision).
@@ -69,10 +73,23 @@ DEFINE_REFCOUNTED_TYPE(TLogDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THistogramDigestConfig
+struct TFairShareHierarchicalSchedulerDynamicConfig
     : public NYTree::TYsonStruct
 {
-public:
+    TDuration WindowSize;
+
+    REGISTER_YSON_STRUCT(TFairShareHierarchicalSchedulerDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TFairShareHierarchicalSchedulerDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct THistogramDigestConfig
+    : public NYTree::TYsonStruct
+{
     // We will round each sample x to a value from [x - AbsolutePrecision / 2, x + AbsolutePrecision / 2].
     // More precisely, size of each bucket in the histogram will be equal to AbsolutePrecision.
     // This parameter affects the memory usage of the digest, it is proportional to ((UpperBound - LowerBound) / AbsolutePrecision).
@@ -94,14 +111,15 @@ DEFINE_REFCOUNTED_TYPE(THistogramDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TAdaptiveHedgingManagerConfig
+struct TAdaptiveHedgingManagerConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
+    // COMPAT(akozhikhov): Drop with old hedging manager.
     //! Percentage of primary requests that should have a hedging counterpart.
     //! Null is for disabled hedging.
     std::optional<double> MaxBackupRequestRatio;
 
+    // COMPAT(akozhikhov): Drop with old hedging manager.
     //! Period for hedging delay tuning and profiling.
     TDuration TickPeriod;
 
@@ -109,6 +127,14 @@ public:
     double HedgingDelayTuneFactor;
     TDuration MinHedgingDelay;
     TDuration MaxHedgingDelay;
+
+    //! These two parameters below limit ratio of secondary to primary requests.
+    //! Hedging manager will accumulate up to |MaxTokenCount| amount of tokens.
+    //! Each secondary request consumes one token, and each primary request adds up |SecondaryRequestRatio|,
+    //! i.e. |SecondaryRequestRatio| value of 0.1 will allow 10 percent of total requests to be hedged.
+    //! If |SecondaryRequestRatio| is null hedging is disabled.
+    int MaxTokenCount;
+    std::optional<double> SecondaryRequestRatio;
 
     REGISTER_YSON_STRUCT(TAdaptiveHedgingManagerConfig);
 
@@ -121,10 +147,9 @@ DEFINE_REFCOUNTED_TYPE(TAdaptiveHedgingManagerConfig)
 
 namespace NDetail {
 
-class TExponentialBackoffOptionsSerializer
+struct TExponentialBackoffOptionsSerializer
     : public virtual NYTree::TExternalizedYsonStruct
 {
-public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TExponentialBackoffOptions, TExponentialBackoffOptionsSerializer);
 
     static void Register(TRegistrar registrar);
@@ -132,10 +157,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TConstantBackoffOptionsSerializer
+struct TConstantBackoffOptionsSerializer
     : public NYTree::TExternalizedYsonStruct
 {
-public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TConstantBackoffOptions, TConstantBackoffOptionsSerializer);
 
     static void Register(TRegistrar registrar);

@@ -546,7 +546,7 @@ typedef struct opj_cparameters {
 } opj_cparameters_t;
 
 #define OPJ_DPARAMETERS_IGNORE_PCLR_CMAP_CDEF_FLAG  0x0001
-#define OPJ_DPARAMETERS_DUMP_FLAG 0x0002
+#define OPJ_DPARAMETERS_DUMP_FLAG                   0x0002
 
 /**
  * Decompression parameters
@@ -635,6 +635,8 @@ typedef void * opj_codec_t;
 
 /*
  * Callback function prototype for read function
+ * @return returns The number of bytes delivered into
+ * \a p_buffer. -1 signals end of stream.
  */
 typedef OPJ_SIZE_T(* opj_stream_read_fn)(void * p_buffer, OPJ_SIZE_T p_nb_bytes,
         void * p_user_data) ;
@@ -772,7 +774,7 @@ typedef struct opj_packet_info {
     OPJ_OFF_T end_ph_pos;
     /** packet end position */
     OPJ_OFF_T end_pos;
-    /** packet distorsion */
+    /** packet distortion */
     double disto;
 } opj_packet_info_t;
 
@@ -1239,7 +1241,6 @@ OPJ_API void OPJ_CALLCONV opj_stream_set_user_data(opj_stream_t* p_stream,
 
 /**
  * Sets the length of the user data for the stream.
- *
  * @param p_stream    the stream to modify
  * @param data_length length of the user_data.
 */
@@ -1348,9 +1349,13 @@ OPJ_API OPJ_BOOL OPJ_CALLCONV opj_setup_decoder(opj_codec_t *p_codec,
         opj_dparameters_t *parameters);
 
 /**
- * Set strict decoding parameter for this decoder.  If strict decoding is enabled, partial bit
- * streams will fail to decode.  If strict decoding is disabled, the decoder will decode partial
- * bitstreams as much as possible without erroring
+ * Set strict decoding parameter for this decoder.
+ * If strict decoding is enabled, partial bit streams will fail to decode, and
+ * the check for invalid TPSOT values added in https://github.com/uclouvain/openjpeg/pull/514
+ * will be disabled.
+ * If strict decoding is disabled, the decoder will decode partial
+ * bitstreams as much as possible without erroring, and the TPSOT fixing logic
+ * will be enabled.
  *
  * @param p_codec       decompressor handler
  * @param strict        OPJ_TRUE to enable strict decoding, OPJ_FALSE to disable
@@ -1432,6 +1437,8 @@ OPJ_API OPJ_BOOL OPJ_CALLCONV opj_set_decoded_components(opj_codec_t *p_codec,
  * The coordinates passed to this function should be expressed in the reference grid,
  * that is to say at the highest resolution level, even if requesting the image at lower
  * resolution levels.
+ *
+ * Note: If p_start_x, p_start_y, p_end_x, p_end_y are all 0, then the whole image is decoded.
  *
  * Generally opj_set_decode_area() should be followed by opj_decode(), and the
  * codec cannot be re-used.

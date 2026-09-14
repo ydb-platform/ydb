@@ -2,6 +2,27 @@
 #include "actorsystem.h"
 
 namespace NActors {
+    namespace {
+        std::unique_ptr<IEventHandle> CreateActorLivenessResponse(
+                std::unique_ptr<IEventHandle> ev,
+                ui32 responseType) {
+            static_assert(
+                TEvents::TEvCheckActorLiveness::RequestFlags ==
+                (IEventHandle::FlagTrackDelivery |
+                    IEventHandle::FlagSystemMessage));
+
+            return std::make_unique<IEventHandle>(
+                responseType,
+                0,
+                ev->Sender,
+                ev->Recipient,
+                nullptr,
+                ev->Cookie,
+                nullptr,
+                std::move(ev->TraceId));
+        }
+    }
+
     TString TEvents::TEvUndelivered::ToStringHeader() const {
         return "TSystem::Undelivered";
     }
@@ -29,9 +50,9 @@ namespace NActors {
         return true;
     }
 
-    IEventBase* TEvents::TEvUndelivered::Load(TEventSerializedData* bufs) {
+    TEvents::TEvUndelivered* TEvents::TEvUndelivered::Load(const TEventSerializedData* bufs) {
         TString str = bufs->GetString();
-        Y_ABORT_UNLESS(str.size() == (sizeof(ui32) + sizeof(ui32)));
+        Y_ENSURE(str.size() == (sizeof(ui32) + sizeof(ui32)));
         const char* p = str.data();
         const ui64 sourceType = ReadUnaligned<ui32>(p + 0);
         const ui64 reason = ReadUnaligned<ui32>(p + 4);
@@ -50,7 +71,18 @@ namespace NActors {
         }
 
         if (ev->Flags & FlagTrackDelivery) {
-            const ui32 updatedFlags = ev->Flags & ~(FlagTrackDelivery | FlagSubscribeOnSession | FlagGenerateUnsureUndelivered);
+            if (ev->Type == TEvents::TSystem::CheckActorLiveness) {
+                const ui32 responseType = reason == TEvents::TEvUndelivered::ReasonActorUnknown
+                    ? TEvents::TSystem::ActorDead
+                    : TEvents::TSystem::ActorLivenessUnsure;
+                return CreateActorLivenessResponse(std::move(ev), responseType);
+            }
+
+            const ui32 updatedFlags = ev->Flags & ~(
+                FlagTrackDelivery |
+                FlagSubscribeOnSession |
+                FlagGenerateUnsureUndelivered |
+                FlagSystemMessage);
             return std::unique_ptr<IEventHandle>(new IEventHandle(ev->Sender, ev->Recipient, new TEvents::TEvUndelivered(ev->Type, reason, unsure), updatedFlags,
                 ev->Cookie, nullptr, std::move(ev->TraceId)));
         }

@@ -15,4 +15,4 @@ double DoubleFromString(TStringBuf buf);
 bool TryFloatFromString(TStringBuf buf, float& value);
 bool TryDoubleFromString(TStringBuf buf, double& value);
 
-}
+} // namespace NYql

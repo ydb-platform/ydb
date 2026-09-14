@@ -40,6 +40,13 @@ public:
     }
 
     /**
+     * Returns the number of touches
+     */
+    ui32 GetFrequency() const noexcept {
+        return Frequency.load(std::memory_order_relaxed);
+    }
+
+    /**
      * Returns the number of currently active uses (no synchronization)
      */
     size_t UseCount() const noexcept {
@@ -96,6 +103,18 @@ public:
         }
 
         return false;
+    }
+
+    void IncrementFrequency() noexcept {
+        ui32 value = Frequency.load(std::memory_order_relaxed);
+        if (value < 3) { // S3FIFO frequency is capped to 3
+            Frequency.compare_exchange_weak(value, value + 1,
+                std::memory_order_acq_rel, std::memory_order_relaxed);
+        }
+    }
+
+    void SetFrequency(ui32 frequency) noexcept {
+        Frequency.store(frequency, std::memory_order_relaxed);
     }
 
     /**
@@ -240,6 +259,7 @@ private:
 
 private:
     TFlags Flags{ FlagsUninitialized };
+    std::atomic<ui32> Frequency;
     TSharedData Data[2];
     TSharedPageHandle* GCNext = nullptr;
 };
@@ -316,13 +336,13 @@ public:
         Drop();
     }
 
-    TSharedPageRef(const TSharedPageRef& ref) noexcept
+    TSharedPageRef(const TSharedPageRef& ref)
         : Handle(ref.Handle)
         , GCList(ref.GCList)
         , Used(false)
     {
         if (ref.Used) {
-            Y_ABORT_UNLESS(Use());
+            Y_ENSURE(Use());
         }
     }
 
@@ -332,13 +352,13 @@ public:
         , Used(std::exchange(ref.Used, false))
     { }
 
-    TSharedPageRef& operator=(const TSharedPageRef& ref) noexcept {
+    TSharedPageRef& operator=(const TSharedPageRef& ref) {
         if (this != &ref) {
             Drop();
             Handle = ref.Handle;
             GCList = ref.GCList;
             if (ref.Used) {
-                Y_ABORT_UNLESS(Use());
+                Y_ENSURE(Use());
             }
         }
 
@@ -409,6 +429,12 @@ public:
         return false;
     }
 
+    void IncrementFrequency() noexcept {
+        Y_DEBUG_ABORT_UNLESS(Handle);
+        Y_DEBUG_ABORT_UNLESS(Used);
+        Handle->IncrementFrequency();
+    }
+
     void Drop() {
         UnUse();
         GCList.Drop();
@@ -446,8 +472,8 @@ public:
         : Data_(std::move(data))
     { }
 
-    explicit TPinnedPageRef(const TSharedPageRef& ref) noexcept {
-        Y_ABORT_UNLESS(ref.IsUsed(), "Cannot pin pages not marked as used");
+    explicit TPinnedPageRef(const TSharedPageRef& ref) {
+        Y_ENSURE(ref.IsUsed(), "Cannot pin pages not marked as used");
         Data_ = ref.GetHandle()->Pin();
         Handle_ = ref.GetHandle();
     }

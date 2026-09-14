@@ -5,7 +5,7 @@
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 #ifndef BOOST_PP_IS_ITERATING
-#if !defined(FUSION_VECTOR_N_CHOOSER_07072005_1248)
+#ifndef FUSION_VECTOR_N_CHOOSER_07072005_1248
 #define FUSION_VECTOR_N_CHOOSER_07072005_1248
 
 #include <boost/fusion/container/vector/detail/cpp03/limits.hpp>

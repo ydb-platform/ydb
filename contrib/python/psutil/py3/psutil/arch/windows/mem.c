@@ -9,7 +9,7 @@
 #include <Psapi.h>
 #include <pdh.h>
 
-#include "../../_psutil_common.h"
+#include "../../arch/all/init.h"
 
 
 PyObject *
@@ -25,8 +25,8 @@ psutil_virtual_mem(PyObject *self, PyObject *args) {
     unsigned long long totalPhys, availPhys, totalSys, availSys, pageSize;
     PERFORMANCE_INFORMATION perfInfo;
 
-    if (! GetPerformanceInfo(&perfInfo, sizeof(PERFORMANCE_INFORMATION))) {
-        PyErr_SetFromWindowsErr(0);
+    if (!GetPerformanceInfo(&perfInfo, sizeof(PERFORMANCE_INFORMATION))) {
+        psutil_oserror();
         return NULL;
     }
     // values are size_t, widen (if needed) to long long
@@ -35,12 +35,7 @@ psutil_virtual_mem(PyObject *self, PyObject *args) {
     availPhys = perfInfo.PhysicalAvailable * pageSize;
     totalSys = perfInfo.CommitLimit * pageSize;
     availSys = totalSys - perfInfo.CommitTotal * pageSize;
-    return Py_BuildValue(
-        "(LLLL)",
-        totalPhys,
-        availPhys,
-        totalSys,
-        availSys);
+    return Py_BuildValue("(LLLL)", totalPhys, availPhys, totalSys, availSys);
 }
 
 
@@ -56,16 +51,16 @@ psutil_swap_percent(PyObject *self, PyObject *args) {
     double percentUsage;
 
     if ((PdhOpenQueryW(NULL, 0, &hQuery)) != ERROR_SUCCESS) {
-        PyErr_Format(PyExc_RuntimeError, "PdhOpenQueryW failed");
+        psutil_runtime_error("PdhOpenQueryW failed");
         return NULL;
     }
 
     s = PdhAddEnglishCounterW(hQuery, szCounterPath, 0, &hCounter);
     if (s != ERROR_SUCCESS) {
         PdhCloseQuery(hQuery);
-        PyErr_Format(
-            PyExc_RuntimeError,
-            "PdhAddEnglishCounterW failed. Performance counters may be disabled."
+        psutil_runtime_error(
+            "PdhAddEnglishCounterW failed. Performance counters may be "
+            "disabled."
         );
         return NULL;
     }
@@ -78,11 +73,11 @@ psutil_swap_percent(PyObject *self, PyObject *args) {
     }
     else {
         s = PdhGetFormattedCounterValue(
-            (PDH_HCOUNTER)hCounter, PDH_FMT_DOUBLE, 0, &counterValue);
+            (PDH_HCOUNTER)hCounter, PDH_FMT_DOUBLE, 0, &counterValue
+        );
         if (s != ERROR_SUCCESS) {
             PdhCloseQuery(hQuery);
-            PyErr_Format(
-                PyExc_RuntimeError, "PdhGetFormattedCounterValue failed");
+            psutil_runtime_error("PdhGetFormattedCounterValue failed");
             return NULL;
         }
         percentUsage = counterValue.doubleValue;

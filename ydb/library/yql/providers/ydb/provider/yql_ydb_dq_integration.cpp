@@ -17,6 +17,8 @@ using namespace NNodes;
 namespace {
 
 class TYdbDqIntegration: public TDqIntegrationBase {
+    static constexpr ui64 DefaultMaxPartitions = 1000;
+
 public:
     TYdbDqIntegration(TYdbState::TPtr state)
         : State_(state)
@@ -37,7 +39,7 @@ public:
         meta.ReadAsync = settings.EnableComputeActor.GetOrElse(false); // TODO: Use special method for get settings.
         auto parts = meta.Partitions;
 
-        auto maxPartitions = settings.MaxPartitions;
+        auto maxPartitions = settings.MaxPartitions ? settings.MaxPartitions : DefaultMaxPartitions;
         if (maxPartitions && parts.size() > maxPartitions) {
             if (const auto extraParts = parts.size() - maxPartitions; extraParts > maxPartitions) {
                 const auto dropsPerTask = (parts.size() - 1ULL) / maxPartitions;

@@ -1,5 +1,8 @@
 #include "node_warden.h"
 #include "node_warden_impl.h"
+#include <util/system/sysstat.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -41,36 +44,48 @@ void TNodeWarden::EnqueueSyncOp(std::function<std::function<void()>(const TActor
 }
 
 std::function<std::function<void()>(const TActorContext&)> TNodeWarden::WrapCacheOp(TWrappedCacheOp operation) {
-    return [cfg = Cfg, op = std::move(operation), instanceId = InstanceId, availDomainId = AvailDomainId](const TActorContext&) {
+    return [cfg = Cfg, op = std::move(operation), instanceId = InstanceId, availDomainId = AvailDomainId,
+            writeError = CacheFileWriteError](const TActorContext&) {
         std::function<void()> res;
         try {
-            cfg->CacheAccessor->Update([&](TString data) {
-                // TODO(alexvru): special handling needed when data is empty -- this means cache file was deleted due to
-                // some error and needs to be rebuilt from scratch; unlikely case
+            if (instanceId) {
+                cfg->CacheAccessor->Update([&](TString data) {
+                    // TODO(alexvru): special handling needed when data is empty -- this means cache file was deleted due to
+                    // some error and needs to be rebuilt from scratch; unlikely case
 
-                NKikimrBlobStorage::TNodeWardenCache proto;
-                if (!google::protobuf::TextFormat::ParseFromString(data, &proto)) {
-                    proto.Clear();
+                    NKikimrBlobStorage::TNodeWardenCache proto;
+                    if (!google::protobuf::TextFormat::ParseFromString(data, &proto)) {
+                        proto.Clear();
+                    }
+
+                    // find matching availability domain in cache protobuf; create new, if not found
+                    if (!proto.HasAvailDomain() || proto.GetAvailDomain() != availDomainId ||
+                            !proto.HasInstanceId() || proto.GetInstanceId() != instanceId) {
+                        proto.Clear();
+                        proto.SetAvailDomain(availDomainId);
+                        proto.SetInstanceId(*instanceId);
+                    }
+
+                    // execute operation over the service set
+                    res = op(proto.MutableServiceSet());
+
+                    // format updated cache
+                    data.clear();
+                    google::protobuf::TextFormat::PrintToString(proto, &data);
+                    return data;
+                });
+
+                if (writeError) {
+                    writeError->Set(0);
                 }
-
-                // find matching availability domain in cache protobuf; create new, if not found
-                if (!proto.HasAvailDomain() || proto.GetAvailDomain() != availDomainId ||
-                        !proto.HasInstanceId() || proto.GetInstanceId() != instanceId) {
-                    proto.Clear();
-                    proto.SetAvailDomain(availDomainId);
-                    proto.SetInstanceId(*instanceId);
-                }
-
-                // execute operation over the service set
-                res = op(proto.MutableServiceSet());
-
-                // format updated cache
-                data.clear();
-                google::protobuf::TextFormat::PrintToString(proto, &data);
-                return data;
-            });
+            }
         } catch (...) {
-            STLOG(PRI_WARN, BS_NODE, NW06, "WrapCacheOp failed to update cache", (Error, CurrentExceptionMessage()));
+            YDB_LOG_WARN("WrapCacheOp failed to update cache",
+                {"marker", "NW06"},
+                {"error", CurrentExceptionMessage()});
+            if (writeError) {
+                writeError->Set(1);
+            }
         }
         if (!res) { // no processor was actually called due to error
             res = op(nullptr);
@@ -128,7 +143,7 @@ TNodeWarden::TWrappedCacheOp TNodeWarden::UpdateServiceSet(const NKikimrBlobStor
                             pred = item.GetGroupGeneration() <= it->second->GetGroupGeneration();
                         }
                         if (pred) {
-                            cache->Mutable(i)->CopyFrom(item);
+                            cache->Mutable(i)->CopyFrom(*it->second);
                         }
                     } else {
                         cache->DeleteSubrange(i--, 1);
@@ -164,8 +179,13 @@ TNodeWarden::TWrappedCacheOp TNodeWarden::UpdateServiceSet(const NKikimrBlobStor
             std::map<TVSlotId, const NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk*> vdisks;
             for (const auto& x : newServices.GetVDisks()) {
                 const TVSlotId key(x.GetVDiskLocation());
-                Y_ABORT_UNLESS(!pdisksToDestroy.count({key.NodeId, key.PDiskId}) || x.GetDoDestroy(), "inconsistent ServiceSet");
-                vdisks.emplace(key, pdisksToDestroy.count({key.NodeId, key.PDiskId}) ? nullptr : &x);
+                const bool pdiskDestroyed = pdisksToDestroy.count({key.NodeId, key.PDiskId});
+                const bool vdiskDestroyed = x.GetDoDestroy() ||
+                    (x.HasEntityStatus() && x.GetEntityStatus() == NKikimrBlobStorage::DESTROY);
+                Y_ABORT_UNLESS(!pdiskDestroyed || vdiskDestroyed, "inconsistent ServiceSet");
+                const bool destroy = pdiskDestroyed || vdiskDestroyed;
+                // applyDiff treats nullptr as a tombstone: it removes the matching VDisk from the cache and skips insertion.
+                vdisks.emplace(key, destroy ? nullptr : &x);
             }
             applyDiff(services->MutableVDisks(), vdisks);
         }
@@ -196,6 +216,10 @@ std::unique_ptr<ICacheAccessor> NKikimr::CreateFileCacheAccessor(const TString& 
 
         void Update(std::function<TString(TString)> processor) override {
             try {
+                if (const TFsPath parent = Path.Parent(); parent.IsDefined() && !parent.Exists()) {
+                    parent.MkDirs();
+                }
+
                 TString data;
                 std::optional<TFile> inFile;
                 inFile.emplace(Path, OpenAlways | RdWr | Sync);
@@ -219,6 +243,9 @@ std::unique_ptr<ICacheAccessor> NKikimr::CreateFileCacheAccessor(const TString& 
                     TFile outFile(temp, CreateNew | WrOnly);
                     outFile.Write(data.data(), data.size());
                     outFile.Close();
+                    if (Chmod(temp.GetPath().c_str(), S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH) != 0) {
+                        ythrow TSystemError() << "failed to set permissions for cache file " << temp.GetPath();
+                    }
                     temp.RenameTo(Path);
                 } catch (...) {
                     temp.DeleteIfExists();

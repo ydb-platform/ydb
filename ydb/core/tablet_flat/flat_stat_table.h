@@ -7,6 +7,8 @@
 #include <util/generic/hash_set.h>
 
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -20,7 +22,7 @@ public:
     {}
 
     void Add(THolder<TStatsScreenedPartIterator> iterator) {
-        Y_ABORT_UNLESS(iterator->IsValid());
+        Y_ENSURE(iterator->IsValid());
         Iterators.PushBack(std::move(iterator));
         TStatsScreenedPartIterator* iteratorPtr = Iterators.back();
         Heap.push(iteratorPtr);
@@ -69,12 +71,12 @@ public:
     }
 
     TDbTupleRef GetCurrentKey() const {
-        Y_ABORT_UNLESS(!Heap.empty());
+        Y_ENSURE(!Heap.empty());
         return Heap.top()->GetCurrentKey();
     }
 
 private:
-    int CompareKeys(const TDbTupleRef& a, const TDbTupleRef& b) const noexcept {
+    int CompareKeys(const TDbTupleRef& a, const TDbTupleRef& b) const {
         return ComparePartKeys(a.Cells(), b.Cells(), *KeyDefaults);
     }
 
@@ -123,6 +125,16 @@ struct TStats {
         RowCountHistogram.swap(other.RowCountHistogram);
         DataSizeHistogram.swap(other.DataSizeHistogram);
     }
+
+    TString ToString() const {
+        return TStringBuilder() 
+            << "RowCount: " << RowCount
+            << " DataSize: " << DataSize.Size
+            << " IndexSize: " << IndexSize.Size
+            << " ByKeyFilterSize: " << ByKeyFilterSize
+            << " RowCountHistogram: " << RowCountHistogram.size()
+            << " DataSizeHistogram: " << DataSizeHistogram.size();
+    }
 };
 
 class TKeyAccessSample {
@@ -162,7 +174,7 @@ public:
 
         TString old = Sample[idx].first;
         auto oit = KeyRefCount.find(old);
-        Y_ABORT_UNLESS(oit != KeyRefCount.end());
+        Y_ENSURE(oit != KeyRefCount.end());
         --oit->second;
 
         // Delete the key if this was the last reference
@@ -193,7 +205,27 @@ private:
 
 using TBuildStatsYieldHandler = std::function<void()>;
 
-bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, TBuildStatsYieldHandler yieldHandler);
+#ifndef NDEBUG
+#define LOG_BUILD_STATS(stream) \
+    do { \
+        if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
+            LOG_TRACE_S(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, logPrefix << stream); \
+        } else { \
+            Cerr << logPrefix << stream << Endl; \
+        } \
+    } while (0)
+#else
+#define LOG_BUILD_STATS(stream) \
+    do { \
+        if (auto actorContext = NActors::TlsActivationContext; actorContext) { \
+            LOG_TRACE_S(*actorContext, NKikimrServices::TABLET_STATS_BUILDER, logPrefix << stream); \
+        } \
+    } while (0)
+#endif
+
+bool BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, ui32 histogramBucketsCount, IPages* env, 
+    TBuildStatsYieldHandler yieldHandler, const TString& logPrefix = {});
+
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners);
 
 }}

@@ -8,6 +8,8 @@
 
 #include <util/generic/vector.h>
 
+#include <optional>
+
 namespace NYT::NClient::NHedging::NRpc {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -34,7 +36,15 @@ struct THedgingClientOptions
     std::vector<TIntrusivePtr<TConnectionWithPenaltyConfig>> Connections;
     TDuration BanPenalty;
     TDuration BanDuration;
-    THashMap<TString, TString> Tags;
+    TDuration RequestDurationHistogramMin;
+    TDuration RequestDurationHistogramMax;
+    std::optional<TDuration> RequestDurationHistogramGranularity;
+    THashMap<std::string, std::string> Tags;
+    size_t RatioCounterBucketCount = 0;
+    TDuration RatioCounterShiftPeriod = TDuration::Zero();
+    double HedgingRatioLimit = 1.0;
+    std::vector<TDuration> HedgingRequestDelays;
+    TDuration RemoteDataCenterPenalty = TDuration::Zero();
 
     REGISTER_YSON_STRUCT(THedgingClientOptions);
 
@@ -49,18 +59,15 @@ struct TReplicationLagPenaltyProviderOptions
     : public virtual NYTree::TYsonStruct
 {
     // Clusters that need checks for replication lag.
-    std::vector<TString> ReplicaClusters;
+    std::vector<std::string> ReplicaClusters;
 
     // Table that needs checks for replication lag.
-    TString TablePath;
+    NYPath::TYPath TablePath;
 
     // Same as BanPenalty in hedging client.
     TDuration LagPenalty;
-    // Tablet is considered "lagged" if CurrentTimestamp - TabletLastReplicationTimestamp >= MaxTabletLag.
-    TDuration MaxTabletLag;
-
-    // Real value from 0.0 to 1.0. Replica cluster receives LagPenalty if NumberOfTabletsWithLag >= MaxTabletsWithLagFraction * TotalNumberOfTablets.
-    double MaxTabletsWithLagFraction;
+    // Replica is considered "lagged" if CurrentTimestamp - LastReplicationTimestamp >= MaxReplicaLag.
+    TDuration MaxReplicaLag;
 
     // Replication lag check period.
     TDuration CheckPeriod;

@@ -20,6 +20,7 @@ private:
     google::protobuf::Arena Arena;
     TJsonSettings JsonSettings;
     TInstant DeadlineAt;
+    mutable TString MetaValueCache;
 
 public:
     TGrpcRequestContextWrapper(const THttpRequestContext& requestContext, std::unique_ptr<NProtoBuf::Message> request, TReplySender replySender);
@@ -49,7 +50,7 @@ public:
     virtual TString GetPeer() const;
     virtual bool SslServer() const { return false; }
     virtual bool IsStreamCall() const { return false; }
+    virtual TString GetRpcMethodName() const;
 };
 
 } // namespace NKikimr::NPublicHttp
-

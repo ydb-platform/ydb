@@ -1,10 +1,10 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/tx/sequenceshard/public/events.h>
-#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/tx/sequenceshard/public/events.h>
 
 namespace {
 
@@ -196,7 +196,7 @@ public:
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
 
-        context.SS->Sequences[pathId] = alterData;
+        context.SS->Sequences.Set(pathId, alterData);
         context.SS->PersistSequenceAlterRemove(db, pathId);
         context.SS->PersistSequence(db, pathId, *alterData);
 
@@ -813,18 +813,21 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
                 .NotAsyncReplicaTable();
 
             if (checks) {
-                if (srcParentPath->IsTable()) {
+                if (srcParentPath.Parent()->IsTableIndex()) {
+                    checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                } else if (srcParentPath->IsTable()) {
                     // allow immediately inside a normal table
+                    checks.IsCommonSensePath();
                     if (srcParentPath.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                     }
                 } else {
                     // otherwise don't allow unexpected object types
-                    checks.IsLikeDirectory();
+                    checks.IsCommonSensePath()
+                          .IsLikeDirectory();
                 }
             }
 
@@ -835,28 +838,6 @@ public:
         }
 
         TPath dstPath = TPath::Resolve(dstPathStr, context.SS);
-        TPath dstParentPath = dstPath.Parent();
-
-        {
-            TPath::TChecker checks = dstParentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved();
-
-            if (dstParentPath.IsUnderOperation()) {
-                checks
-                    .IsUnderTheSameOperation(OperationId.GetTxId());
-            } else {
-                checks
-                    .NotUnderOperation();
-            }
-
-            if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
-            }
-        }
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
@@ -891,10 +872,53 @@ public:
             if (checks) {
                 checks
                     .DepthLimit()
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
-                    .DirChildrenLimit()
                     .IsValidACL(acl);
+            }
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
+
+        // Parent is probably already modified and inactive, because it's either a regular table or an index
+        // implementation table which is in the process of moving. "Inactive" paths are only used in move
+        // operations and mean that the path isn't yet inserted into the child node map of its parent itself.
+        // Thus, dstParentPath checks are performed on the 'new' (inactive) version.
+
+        // Most checks on dstPath are performed on the 'old' path, but DirChildrenLimit requires dstParentPath
+        // to be resolved, so we perform it on the 'new' version of the path.
+
+        dstPath = TPath::ResolveWithInactive(OperationId, dstPathStr, context.SS);
+        TPath dstParentPath = dstPath.Parent();
+
+        {
+            TPath::TChecker checks = dstPath.Check();
+
+            checks
+                .DirChildrenLimit();
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
+
+        {
+            TPath::TChecker checks = dstParentPath.Check();
+
+            checks
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved();
+            if (dstParentPath.IsUnderOperation()) {
+                checks
+                    .IsUnderTheSameOperation(OperationId.GetTxId());
+            } else {
+                checks
+                    .NotUnderOperation();
             }
 
             if (!checks) {
@@ -976,9 +1000,8 @@ public:
             p->SetLocalId(ui64(sequenceShard.GetLocalId()));
         }
 
-        context.SS->Sequences[dstPath.Base()->PathId] = sequenceInfo;
+        context.SS->Sequences.Set(dstPath.Base()->PathId, sequenceInfo);
 
-        context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, srcPath, context.SS, context.OnComplete);

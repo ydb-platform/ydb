@@ -2,7 +2,6 @@ PY3TEST()
 
 PEERDIR(
     contrib/python/oauthlib
-    contrib/python/mock
     contrib/python/PyJWT
     contrib/python/blinker
 )
@@ -63,12 +62,19 @@ TEST_SRCS(
     oauth2/rfc8628/__init__.py
     oauth2/rfc8628/clients/__init__.py
     oauth2/rfc8628/clients/test_device.py
+    oauth2/rfc8628/endpoints/__init__.py
+    oauth2/rfc8628/endpoints/test_device_application_server.py
+    oauth2/rfc8628/endpoints/test_error_responses.py
+    oauth2/rfc8628/grant_types/__init__.py
+    oauth2/rfc8628/grant_types/test_device_code.py
+    oauth2/rfc8628/test_server.py
     openid/__init__.py
     openid/connect/__init__.py
     openid/connect/core/__init__.py
     openid/connect/core/endpoints/__init__.py
     openid/connect/core/endpoints/test_claims_handling.py
     openid/connect/core/endpoints/test_openid_connect_params_handling.py
+    openid/connect/core/endpoints/test_refresh_token.py
     openid/connect/core/endpoints/test_userinfo_endpoint.py
     openid/connect/core/grant_types/__init__.py
     openid/connect/core/grant_types/test_authorization_code.py
@@ -76,6 +82,7 @@ TEST_SRCS(
     openid/connect/core/grant_types/test_dispatchers.py
     openid/connect/core/grant_types/test_hybrid.py
     openid/connect/core/grant_types/test_implicit.py
+    openid/connect/core/grant_types/test_refresh_token.py
     openid/connect/core/test_request_validator.py
     openid/connect/core/test_server.py
     openid/connect/core/test_tokens.py

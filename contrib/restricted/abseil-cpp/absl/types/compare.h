@@ -91,10 +91,9 @@ class OnlyLiteralZero {
   // has type `int`. Literal `0` arguments will be implicitly converted to
   // `std::nullptr_t` and accepted by the above constructor, while other `int`
   // arguments will fail to be converted and cause compilation failure.
-  template <typename T, typename = typename std::enable_if<
-                            std::is_same<T, std::nullptr_t>::value ||
-                            (std::is_integral<T>::value &&
-                             !std::is_same<T, int>::value)>::type>
+  template <typename T, typename = std::enable_if_t<
+                            std::is_same_v<T, std::nullptr_t> ||
+                            (std::is_integral_v<T> && !std::is_same_v<T, int>)>>
   OnlyLiteralZero(T) {  // NOLINT
     static_assert(sizeof(T) < 0, "Only literal `0` is allowed.");
   }
@@ -120,8 +119,7 @@ enum class ncmp : value_type { unordered = -127 };
 // A no-op expansion that can be followed by a semicolon at class level.
 #define ABSL_COMPARE_INLINE_BASECLASS_DECL(name) static_assert(true, "")
 
-#define ABSL_COMPARE_INLINE_SUBCLASS_DECL(type, name) \
-  static const type name
+#define ABSL_COMPARE_INLINE_SUBCLASS_DECL(type, name) static const type name
 
 #define ABSL_COMPARE_INLINE_INIT(type, name, init) \
   inline constexpr type type::name(init)
@@ -190,28 +188,28 @@ class partial_ordering
   ABSL_COMPARE_INLINE_SUBCLASS_DECL(partial_ordering, unordered);
 
   // Comparisons
-  friend constexpr bool operator==(
-      partial_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator==(partial_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return v.is_ordered() && v.value_ == 0;
   }
-  friend constexpr bool operator!=(
-      partial_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator!=(partial_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return !v.is_ordered() || v.value_ != 0;
   }
-  friend constexpr bool operator<(
-      partial_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator<(partial_ordering v,
+                                  compare_internal::OnlyLiteralZero) noexcept {
     return v.is_ordered() && v.value_ < 0;
   }
-  friend constexpr bool operator<=(
-      partial_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator<=(partial_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return v.is_ordered() && v.value_ <= 0;
   }
-  friend constexpr bool operator>(
-      partial_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator>(partial_ordering v,
+                                  compare_internal::OnlyLiteralZero) noexcept {
     return v.is_ordered() && v.value_ > 0;
   }
-  friend constexpr bool operator>=(
-      partial_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator>=(partial_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return v.is_ordered() && v.value_ >= 0;
   }
   friend constexpr bool operator==(compare_internal::OnlyLiteralZero,
@@ -278,28 +276,28 @@ class weak_ordering
                                      : partial_ordering::greater);
   }
   // Comparisons
-  friend constexpr bool operator==(
-      weak_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator==(weak_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ == 0;
   }
-  friend constexpr bool operator!=(
-      weak_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator!=(weak_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ != 0;
   }
-  friend constexpr bool operator<(
-      weak_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator<(weak_ordering v,
+                                  compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ < 0;
   }
-  friend constexpr bool operator<=(
-      weak_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator<=(weak_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ <= 0;
   }
-  friend constexpr bool operator>(
-      weak_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator>(weak_ordering v,
+                                  compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ > 0;
   }
-  friend constexpr bool operator>=(
-      weak_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator>=(weak_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ >= 0;
   }
   friend constexpr bool operator==(compare_internal::OnlyLiteralZero,
@@ -370,28 +368,28 @@ class strong_ordering
                : (value_ < 0 ? weak_ordering::less : weak_ordering::greater);
   }
   // Comparisons
-  friend constexpr bool operator==(
-      strong_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator==(strong_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ == 0;
   }
-  friend constexpr bool operator!=(
-      strong_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator!=(strong_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ != 0;
   }
-  friend constexpr bool operator<(
-      strong_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator<(strong_ordering v,
+                                  compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ < 0;
   }
-  friend constexpr bool operator<=(
-      strong_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator<=(strong_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ <= 0;
   }
-  friend constexpr bool operator>(
-      strong_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator>(strong_ordering v,
+                                  compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ > 0;
   }
-  friend constexpr bool operator>=(
-      strong_ordering v, compare_internal::OnlyLiteralZero) noexcept {
+  friend constexpr bool operator>=(strong_ordering v,
+                                   compare_internal::OnlyLiteralZero) noexcept {
     return v.value_ >= 0;
   }
   friend constexpr bool operator==(compare_internal::OnlyLiteralZero,
@@ -450,27 +448,28 @@ namespace compare_internal {
 // or three-way comparator.
 // SFINAE prevents implicit conversions to bool (such as from int).
 template <typename BoolT,
-          absl::enable_if_t<std::is_same<bool, BoolT>::value, int> = 0>
-constexpr bool compare_result_as_less_than(const BoolT r) { return r; }
+          std::enable_if_t<std::is_same_v<bool, BoolT>, int> = 0>
+constexpr bool compare_result_as_less_than(const BoolT r) {
+  return r;
+}
 constexpr bool compare_result_as_less_than(const absl::weak_ordering r) {
   return r < 0;
 }
 
 template <typename Compare, typename K, typename LK>
-constexpr bool do_less_than_comparison(const Compare &compare, const K &x,
-                                       const LK &y) {
+constexpr bool do_less_than_comparison(const Compare& compare, const K& x,
+                                       const LK& y) {
   return compare_result_as_less_than(compare(x, y));
 }
 
 // Helper functions to do a three-way comparison of two keys given a boolean or
 // three-way comparator.
 // SFINAE prevents implicit conversions to int (such as from bool).
-template <typename Int,
-          absl::enable_if_t<std::is_same<int, Int>::value, int> = 0>
+template <typename Int, std::enable_if_t<std::is_same_v<int, Int>, int> = 0>
 constexpr absl::weak_ordering compare_result_as_ordering(const Int c) {
-  return c < 0 ? absl::weak_ordering::less
-               : c == 0 ? absl::weak_ordering::equivalent
-                        : absl::weak_ordering::greater;
+  return c < 0    ? absl::weak_ordering::less
+         : c == 0 ? absl::weak_ordering::equivalent
+                  : absl::weak_ordering::greater;
 }
 constexpr absl::weak_ordering compare_result_as_ordering(
     const absl::weak_ordering c) {
@@ -479,23 +478,23 @@ constexpr absl::weak_ordering compare_result_as_ordering(
 
 template <
     typename Compare, typename K, typename LK,
-    absl::enable_if_t<!std::is_same<bool, absl::result_of_t<Compare(
-                                              const K &, const LK &)>>::value,
-                      int> = 0>
-constexpr absl::weak_ordering do_three_way_comparison(const Compare &compare,
-                                                      const K &x, const LK &y) {
+    std::enable_if_t<
+        !std::is_same_v<bool, absl::result_of_t<Compare(const K&, const LK&)>>,
+        int> = 0>
+constexpr absl::weak_ordering do_three_way_comparison(const Compare& compare,
+                                                      const K& x, const LK& y) {
   return compare_result_as_ordering(compare(x, y));
 }
 template <
     typename Compare, typename K, typename LK,
-    absl::enable_if_t<std::is_same<bool, absl::result_of_t<Compare(
-                                             const K &, const LK &)>>::value,
-                      int> = 0>
-constexpr absl::weak_ordering do_three_way_comparison(const Compare &compare,
-                                                      const K &x, const LK &y) {
-  return compare(x, y) ? absl::weak_ordering::less
-                       : compare(y, x) ? absl::weak_ordering::greater
-                                       : absl::weak_ordering::equivalent;
+    std::enable_if_t<
+        std::is_same_v<bool, absl::result_of_t<Compare(const K&, const LK&)>>,
+        int> = 0>
+constexpr absl::weak_ordering do_three_way_comparison(const Compare& compare,
+                                                      const K& x, const LK& y) {
+  return compare(x, y)   ? absl::weak_ordering::less
+         : compare(y, x) ? absl::weak_ordering::greater
+                         : absl::weak_ordering::equivalent;
 }
 
 }  // namespace compare_internal

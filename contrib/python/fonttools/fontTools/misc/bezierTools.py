@@ -631,7 +631,14 @@ def splitCubicAtT(pt1, pt2, pt3, pt4, *ts):
         ((77.3438, 56.25), (85.9375, 43.75), (93.75, 25), (100, 0))
     """
     a, b, c, d = calcCubicParameters(pt1, pt2, pt3, pt4)
-    return _splitCubicAtT(a, b, c, d, *ts)
+    split = _splitCubicAtT(a, b, c, d, *ts)
+
+    # the split impl can introduce floating point errors; we know the first
+    # segment should always start at pt1 and the last segment should end at pt4,
+    # so we set those values directly before returning.
+    split[0] = (pt1, *split[0][1:])
+    split[-1] = (*split[-1][:-1], pt4)
+    return split
 
 
 @cython.locals(
@@ -1402,7 +1409,10 @@ def curveCurveIntersections(curve1, curve2):
             line2 = curve2[0], curve2[-1]
             return lineLineIntersections(*line1, *line2)
         else:
-            return curveLineIntersections(curve2, line1)
+            hits = curveLineIntersections(curve2, line1)
+            # curve is passed first to this fn but is the second segment, so
+            # we need to swap t1/t2 in the result
+            return [Intersection(pt=x.pt, t1=x.t2, t2=x.t1) for x in hits]
     elif _is_linelike(curve2):
         line2 = curve2[0], curve2[-1]
         return curveLineIntersections(curve1, line2)

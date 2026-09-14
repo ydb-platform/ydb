@@ -2,17 +2,65 @@
 
 #include "public.h"
 
+#include <yt/yt/core/actions/public.h>
+
 #include <yt/yt/core/net/public.h>
 
 #include <yt/yt/core/logging/public.h>
 
 #include <yt/yt/core/concurrency/public.h>
 
+#include <yt/yt/library/profiling/sensor.h>
+
+#include <openssl/ossl_typ.h>
+
 namespace NYT::NCrypto {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_STRUCT(TSslContextImpl)
+TError GetLastSslError(std::string message);
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TSslDeleter
+{
+    void operator()(BIO*) const noexcept;
+    void operator()(X509*) const noexcept;
+    void operator()(EVP_PKEY*) const noexcept;
+    void operator()(SSL_CTX*) const noexcept;
+    void operator()(SSL*) const noexcept;
+};
+
+using TBioPtr = std::unique_ptr<BIO, TSslDeleter>;
+using TX509Ptr = std::unique_ptr<X509, TSslDeleter>;
+using TEvpPKeyPtr = std::unique_ptr<EVP_PKEY, TSslDeleter>;
+using TSslCtxPtr = std::unique_ptr<SSL_CTX, TSslDeleter>;
+using TSslPtr = std::unique_ptr<SSL, TSslDeleter>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TCertProfiler
+{
+    //! Profiler to output certificate data.
+    NProfiling::TProfiler Profiler;
+    //! Invoker to read certificate data periodically.
+    IInvokerPtr Invoker;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::string GetFingerprintSHA256(const TX509Ptr& certificate);
+
+//! Reads the first X.509 certificate from a PEM blob config.
+TX509Ptr ReadCertFromPemBlob(const TPemBlobConfigPtr& pem);
+
+//! Returns the number of seconds until the certificate expires (negative if already expired).
+double GetCertTimeToExpiry(const TX509Ptr& cert);
+double GetCertTimeToExpiry(const TPemBlobConfigPtr& pem);
+
+////////////////////////////////////////////////////////////////////////////////
+
+DECLARE_REFCOUNTED_CLASS(TSslContextImpl)
 
 class TSslContext
     : public TRefCounted
@@ -24,17 +72,28 @@ public:
     void Commit(TInstant time = TInstant::Zero());
     TInstant GetCommitTime() const;
 
-    void UseBuiltinOpenSslX509Store();
+    void ApplyConfig(const TSslContextConfigPtr& config, TCertificatePathResolver pathResolver = nullptr);
 
-    void SetCipherList(const TString& list);
+    void UseDefaultOpenSslX509Store();
 
-    void AddCertificateFromFile(const TString& path);
-    void AddCertificateChainFromFile(const TString& path);
-    void AddPrivateKeyFromFile(const TString& path);
+    void SetCipherList(const std::string& list);
 
-    void AddCertificate(const TString& certificate);
-    void AddCertificateChain(const TString& certificateChain);
-    void AddPrivateKey(const TString& privateKey);
+    void AddCertificateAuthorityFromFile(const std::string& path);
+    void AddCertificateFromFile(const std::string& path);
+    void AddCertificateChainFromFile(const std::string& path);
+    void AddPrivateKeyFromFile(const std::string& path);
+
+    void AddCertificateAuthority(const std::string& ca);
+    void AddCertificate(const std::string& certificate);
+    void AddCertificateChain(const std::string& certificateChain);
+    void AddPrivateKey(const std::string& privateKey);
+
+    void AddCertificateAuthority(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver = nullptr);
+    void AddCertificate(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver = nullptr);
+    void AddCertificateChain(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver = nullptr);
+    void AddPrivateKey(const TPemBlobConfigPtr& pem, TCertificatePathResolver resolver = nullptr);
+
+    TSslPtr NewSsl();
 
     NNet::IDialerPtr CreateDialer(
         const NNet::TDialerConfigPtr& config,

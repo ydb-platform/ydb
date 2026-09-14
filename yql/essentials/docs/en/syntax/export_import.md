@@ -1,30 +1,33 @@
-# Putting part of the query into a separate file
+# EXPORT and IMPORT
 
-Here's the mechanism for putting part of the query into a separate attached file:
+A mechanism for putting part of the query into a separate attached file. To use the mechanism, you need to set the following pragma in the query:
 
-* [PRAGMA Library](pragma.md#library) marks the attached file as available for import.
+* [PRAGMA Library](pragma/file.md#library) &mdash; marks the attached file as available for import.
 
-## `Export`
+* Explicitly attached files with paths starting with `yql_libs/` are available for import without the `PRAGMA Library`.
 
-* `EXPORT $my_symbol1, $my_symbol2, ...;` lists the names of named expressions in the library that are available for import.
+## EXPORT
 
-## `Import`
+`EXPORT $my_symbol1, $my_symbol2, ...;` lists the names of named expressions in the library that are available for import.
 
-* `IMPORT my_library SYMBOLS $my_symbol1, $my_symbol2, ...;` makes the listed named expressions available for further use.
+## IMPORT
+
+`IMPORT my_library SYMBOLS $my_symbol1, $my_symbol2, ...;` makes the listed named expressions available for further use.
 
 {% note info %}
 
-You can use the library to include [lambdas](expressions.md#lambda), [actions](action.md), [named subqueries](subquery.md), constants and expressions, but **not subqueries or aggregate functions**.
+[Lambdas](expressions.md#lambda), [actions](action.md), [named subqueries](subquery.md), constant values, and expressions can be transferred to the library, but __subqueries or aggregate functions__ cannot be.
 
 {% endnote %}
 
 {% note warning %}
 
-The file linked by the [PRAGMA Library](pragma.md#library) must be attached to the query. **You can't use a [PRAGMA File](pragma.md#file) for this purpose**.
+The file linked by the [PRAGMA Library](pragma/file.md#library) must be attached to the query. __You can't use [PRAGMA File](pragma/file.md#file) for this purpose__.
 
 {% endnote %}
 
-### Examples
+
+## Example
 
 my_lib.sql:
 
@@ -32,8 +35,8 @@ my_lib.sql:
 $Square = ($x) -> { RETURN $x * $x; };
 $Sqrt = ($x) -> { RETURN Math::Sqrt($x); };
 
--- Aggregate functions created by
--- AggregationFactory, it makes sense to add it to the library
+-- Aggregation functions created using
+-- AggregationFactory, convenient to transfer to the library
 $Agg_sum = AggregationFactory("SUM");
 $Agg_max = AggregationFactory("MAX");
 
@@ -58,6 +61,3 @@ FROM (
   SELECT 3 AS x
 )
 ```
-
-
-

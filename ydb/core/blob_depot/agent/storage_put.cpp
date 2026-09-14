@@ -1,12 +1,17 @@
 #include "agent_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+
 namespace NKikimr::NBlobDepot {
 
     template<>
-    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPut>(std::unique_ptr<IEventHandle> ev) {
+    TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvPut>(std::unique_ptr<IEventHandle> ev,
+            TMonotonic received) {
         class TPutQuery : public TBlobStorageQuery<TEvBlobStorage::TEvPut> {
             const bool SuppressFooter = true;
             const bool IssueUncertainWrites = false;
+
+            enum : ui32 { MaxS3SlowDownRetries = 100 };
 
             ui32 PutsInFlight = 0;
             bool PutsIssued = false;
@@ -15,17 +20,50 @@ namespace NKikimr::NBlobDepot {
             bool WrittenBeyondBarrier = false;
             NKikimrBlobDepot::TEvCommitBlobSeq CommitBlobSeq;
             TBlobSeqId BlobSeqId;
+            std::optional<TS3Locator> LocatorInFlight;
+            TActorId WriterActorId;
+            ui64 ConnectionInstanceOnStart;
+            ui32 S3SlowDownRetries = 0;
+
+            NWilson::TSpan PrepareWriteS3Span;
+            NWilson::TSpan WriteS3Span;
+            NWilson::TSpan CommitBlobSeqSpan;
 
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
-            void OnDestroy(bool success) override {
+            // Send TEvDiscardSpoiledBlobSeq with currently spoiled BlobSeqId/LocatorInFlight (whichever is set),
+            // clear them, and optionally tag the message as caused by S3 SlowDown so the tablet arms its put throttle.
+            void SendDiscardSpoiled(bool s3SlowDown) {
+                if (!IsInFlight && !LocatorInFlight) {
+                    return;
+                }
                 if (IsInFlight) {
-                    Y_ABORT_UNLESS(!success);
                     RemoveBlobSeqFromInFlight();
-                    NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg;
+                }
+                NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg;
+                if (IsInFlight) {
                     BlobSeqId.ToProto(msg.AddItems());
-                    Agent.Issue(std::move(msg), this, nullptr);
+                }
+                if (LocatorInFlight) {
+                    LocatorInFlight->ToProto(msg.AddS3Locators());
+                    if (s3SlowDown) {
+                        msg.SetS3SlowDown(true);
+                    }
+                }
+                LocatorInFlight.reset();
+                Agent.Issue(std::move(msg), this, nullptr);
+            }
+
+            void OnDestroy(bool success) override {
+                if (IsInFlight || LocatorInFlight) {
+                    Y_ABORT_UNLESS(!success);
+                    SendDiscardSpoiled(false);
+                }
+
+                if (WriterActorId) {
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, WriterActorId, Agent.SelfId(),
+                        nullptr, 0));
                 }
 
                 TBlobStorageQuery::OnDestroy(success);
@@ -48,7 +86,7 @@ namespace NKikimr::NBlobDepot {
 
             void CheckBlocks() {
                 bool someBlocksMissing = false;
-                for (size_t i = 0; i <= Request.ExtraBlockChecks.size(); ++i) {
+                for (size_t i = Request.IgnoreBlock; i <= Request.ExtraBlockChecks.size(); ++i) {
                     const auto *blkp = i ? &Request.ExtraBlockChecks[i - 1] : nullptr;
                     const ui64 tabletId = blkp ? blkp->first : Request.Id.TabletID();
                     const ui32 generation = blkp ? blkp->second : Request.Id.Generation();
@@ -67,6 +105,30 @@ namespace NKikimr::NBlobDepot {
             void IssuePuts() {
                 Y_ABORT_UNLESS(!PutsIssued);
 
+                auto prepare = [&] {
+                    Y_ABORT_UNLESS(CommitBlobSeq.ItemsSize() == 0);
+                    auto *commitItem = CommitBlobSeq.AddItems();
+                    commitItem->SetKey(Request.Id.AsBinaryString());
+                    if (Request.IssueKeepFlag) {
+                        commitItem->SetIssueKeepFlag(true);
+                    }
+                    if (Request.IgnoreBlock) {
+                        commitItem->SetIgnoreBlock(true);
+                    }
+                    for (const auto& [tabletId, generation] : Request.ExtraBlockChecks) {
+                        auto *p = commitItem->AddExtraBlockChecks();
+                        p->SetTabletId(tabletId);
+                        p->SetGeneration(generation);
+                    }
+                    return commitItem;
+                };
+
+                if (const auto& s3 = Agent.S3BackendSettings; s3 && s3->HasSyncMode()) {
+                    auto *commitItem = prepare();
+                    commitItem->MutableS3Locator();
+                    return IssueS3Put();
+                }
+
                 const auto it = Agent.ChannelKinds.find(NKikimrBlobDepot::TChannelKind::Data);
                 if (it == Agent.ChannelKinds.end()) {
                     return EndWithError(NKikimrProto::ERROR, "no Data channels");
@@ -74,8 +136,12 @@ namespace NKikimr::NBlobDepot {
                 auto& kind = it->second;
 
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA21, "allocated BlobSeqId", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (BlobSeqId, blobSeqId), (BlobId, Request.Id));
+                YDB_LOG_DEBUG("Allocated BlobSeqId",
+                    {"marker", "BDA21"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"blobSeqId", blobSeqId},
+                    {"blobId", Request.Id});
                 if (!blobSeqId) {
                     return kind.EnqueueQueryWaitingForId(this);
                 }
@@ -87,12 +153,17 @@ namespace NKikimr::NBlobDepot {
                     IsInFlight = true;
                 }
 
-                BDEV_QUERY(BDEV09, "TEvPut_new", (U.BlobId, Request.Id), (U.BufferSize, Request.Buffer.size()),
-                    (U.HandleClass, Request.HandleClass));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_new",
+                    {"marker", "BDEV09"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"U.BlobId", Request.Id},
+                    {"U.BufferSize", Request.Buffer.size()},
+                    {"U.HandleClass", Request.HandleClass});
 
-                Y_ABORT_UNLESS(CommitBlobSeq.ItemsSize() == 0);
-                auto *commitItem = CommitBlobSeq.AddItems();
-                commitItem->SetKey(Request.Id.AsBinaryString());
+                auto *commitItem = prepare();
                 auto *locator = commitItem->MutableBlobLocator();
                 BlobSeqId.ToProto(locator->MutableBlobSeqId());
                 //locator->SetChecksum(Crc32c(Request.Buffer.data(), Request.Buffer.size()));
@@ -109,32 +180,48 @@ namespace NKikimr::NBlobDepot {
                     footer.StoredBlobId = Request.Id;
                 }
 
-                auto put = [&](EBlobType type, TRcBuf&& buffer) {
+                auto put = [&](EBlobType type, TRope&& buffer) {
                     const auto& [id, groupId] = kind.MakeBlobId(Agent, BlobSeqId, type, 0, buffer.size());
                     Y_ABORT_UNLESS(!locator->HasGroupId() || locator->GetGroupId() == groupId);
                     locator->SetGroupId(groupId);
-                    auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), Request.Deadline, Request.HandleClass, Request.Tactic);
+                    auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
+                        .BlobId = id,
+                        .Buffer = std::move(buffer),
+                        .Deadline = Request.Deadline,
+                        .HandleClass = Request.HandleClass,
+                        .Tactic = Request.Tactic,
+                        .WriteSource = Request.WriteSource,
+                        .DataKind = Request.DataKind,
+                    });
                     ev->ExtraBlockChecks = Request.ExtraBlockChecks;
                     ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
-                    BDEV_QUERY(BDEV10, "TEvPut_sendToProxy", (BlobSeqId, BlobSeqId), (GroupId, groupId), (BlobId, id));
-                    Agent.SendToProxy(groupId, std::move(ev), this, nullptr);
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_sendToProxy",
+                        {"marker", "BDEV10"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"blobSeqId", BlobSeqId},
+                        {"groupId", groupId},
+                        {"blobId", id});
+                    Agent.SendToProxy(groupId, std::move(ev), this, nullptr, Span.GetTraceId());
                     Agent.BytesWritten += id.BlobSize();
                     ++PutsInFlight;
                 };
 
                 if (SuppressFooter) {
                     // write the blob as is, we don't need footer for this kind
-                    put(EBlobType::VG_DATA_BLOB, TRcBuf(std::move(Request.Buffer)));
+                    put(EBlobType::VG_DATA_BLOB, std::move(Request.Buffer));
                 } else if (Request.Buffer.size() + sizeof(TVirtualGroupBlobFooter) <= MaxBlobSize) {
                     // write single blob with footer
                     TRope buffer = TRope(std::move(Request.Buffer));
                     buffer.Insert(buffer.End(), std::move(footerData));
                     buffer.Compact();
-                    put(EBlobType::VG_COMPOSITE_BLOB, TRcBuf(std::move(buffer)));
+                    put(EBlobType::VG_COMPOSITE_BLOB, std::move(buffer));
                 } else {
                     // write data blob and blob with footer
-                    put(EBlobType::VG_DATA_BLOB, TRcBuf(std::move(Request.Buffer)));
-                    put(EBlobType::VG_FOOTER_BLOB, TRcBuf(std::move(footerData)));
+                    put(EBlobType::VG_DATA_BLOB, std::move(Request.Buffer));
+                    put(EBlobType::VG_FOOTER_BLOB, TRope(std::move(footerData)));
                 }
 
                 if (IssueUncertainWrites) {
@@ -152,18 +239,27 @@ namespace NKikimr::NBlobDepot {
                     item->ClearUncertainWrite();
                 }
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA30, "IssueCommitBlobSeq", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (UncertainWrite, uncertainWrite), (Msg, CommitBlobSeq));
+                YDB_LOG_DEBUG("IssueCommitBlobSeq",
+                    {"marker", "BDA30"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"uncertainWrite", uncertainWrite},
+                    {"msg", CommitBlobSeq});
 
-                Agent.Issue(CommitBlobSeq, this, nullptr);
+                CommitBlobSeqSpan = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.CommitBlobSeq", NWilson::EFlags::AUTO_END);
+
+                Agent.Issue(CommitBlobSeq, this, nullptr, CommitBlobSeqSpan.GetTraceId());
 
                 Y_ABORT_UNLESS(!WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = true;
             }
 
             void RemoveBlobSeqFromInFlight() {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA32, "RemoveBlobSeqFromInFlight", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()));
+                YDB_LOG_DEBUG("RemoveBlobSeqFromInFlight",
+                    {"marker", "BDA32"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()});
 
                 Y_ABORT_UNLESS(IsInFlight);
                 IsInFlight = false;
@@ -192,23 +288,41 @@ namespace NKikimr::NBlobDepot {
             }
 
             void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
-                if (auto *p = std::get_if<TEvBlobStorage::TEvPutResult*>(&response)) {
-                    HandlePutResult(std::move(context), **p);
-                } else if (auto *p = std::get_if<TEvBlobDepot::TEvCommitBlobSeqResult*>(&response)) {
-                    HandleCommitBlobSeqResult(std::move(context), (*p)->Record);
-                } else if (std::holds_alternative<TTabletDisconnected>(response)) {
-                    EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
-                } else {
-                    Y_ABORT("unexpected response");
-                }
+                std::visit(TOverloaded{
+                    [&](TEvBlobStorage::TEvPutResult *ev) {
+                        HandlePutResult(std::move(context), *ev);
+                    },
+                    [&](TEvBlobDepot::TEvCommitBlobSeqResult *ev) {
+                        HandleCommitBlobSeqResult(std::move(context), ev->Record);
+                    },
+                    [&](TTabletDisconnected) {
+                        EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
+                    },
+                    [&](TEvBlobDepot::TEvPrepareWriteS3Result *ev) {
+                        HandlePrepareWriteS3Result(std::move(context), ev->Record);
+                    },
+                    [&](auto /*other*/) {
+                        Y_ABORT("unexpected response");
+                    }
+                }, response);
             }
 
             void HandlePutResult(TRequestContext::TPtr /*context*/, TEvBlobStorage::TEvPutResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA22, "TEvPutResult", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Msg, msg));
+                YDB_LOG_DEBUG("TEvPutResult",
+                    {"marker", "BDA22"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"msg", msg});
 
-                BDEV_QUERY(BDEV11, "TEvPut_resultFromProxy", (BlobId, msg.Id), (Status, msg.Status),
-                    (ErrorReason, msg.ErrorReason));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_resultFromProxy",
+                    {"marker", "BDEV11"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"blobId", msg.Id},
+                    {"status", msg.Status},
+                    {"errorReason", msg.ErrorReason});
 
                 if (msg.Status == NKikimrProto::OK && msg.WrittenBeyondBarrier) {
                     WrittenBeyondBarrier = true;
@@ -234,8 +348,11 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleCommitBlobSeqResult(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvCommitBlobSeqResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA31, "TEvCommitBlobSeqResult", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Msg, msg));
+                YDB_LOG_DEBUG("TEvCommitBlobSeqResult",
+                    {"marker", "BDA31"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"msg", msg});
 
                 Y_ABORT_UNLESS(WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = false;
@@ -243,8 +360,16 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 auto& item = msg.GetItems(0);
                 if (const auto status = item.GetStatus(); status != NKikimrProto::OK && status != NKikimrProto::RACE) {
+                    if (CommitBlobSeqSpan) {
+                        CommitBlobSeqSpan.EndError(item.GetErrorReason());
+                    }
+
                     EndWithError(item.GetStatus(), item.GetErrorReason());
                 } else {
+                    if (CommitBlobSeqSpan) {
+                        CommitBlobSeqSpan.EndOk();
+                    }
+
                     // it's okay to treat RACE as OK here since values are immutable in Virtual Group mode
                     CheckIfFinished();
                 }
@@ -258,14 +383,27 @@ namespace NKikimr::NBlobDepot {
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
                 if (BlobSeqId) {
-                    BDEV_QUERY(BDEV12, "TEvPut_end", (Status, status), (ErrorReason, errorReason));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_end",
+                        {"marker", "BDEV12"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"status", status},
+                        {"errorReason", errorReason});
                 }
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
 
             void EndWithSuccess() {
                 if (BlobSeqId) {
-                    BDEV_QUERY(BDEV13, "TEvPut_end", (Status, NKikimrProto::OK));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvPut_end",
+                        {"marker", "BDEV13"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"status", NKikimrProto::OK});
                 }
 
                 if (IssueUncertainWrites) { // send a notification
@@ -284,9 +422,158 @@ namespace NKikimr::NBlobDepot {
             ui64 GetTabletId() const override {
                 return Request.Id.TabletID();
             }
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // writing directly to S3
+
+            void IssueS3Put() {
+                NKikimrBlobDepot::TEvPrepareWriteS3 query;
+                auto *item = query.AddItems();
+                item->SetKey(Request.Id.AsBinaryString());
+                for (const auto& [tabletId, generation] : Request.ExtraBlockChecks) {
+                    auto *p = item->AddExtraBlockChecks();
+                    p->SetTabletId(tabletId);
+                    p->SetGeneration(generation);
+                }
+                item->SetLen(Request.Id.BlobSize());
+
+                PrepareWriteS3Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.PrepareWriteS3", NWilson::EFlags::AUTO_END);
+                if (PrepareWriteS3Span && S3SlowDownRetries) {
+                    PrepareWriteS3Span.Attribute("slow_down_retry", S3SlowDownRetries);
+                }
+
+                Agent.Issue(query, this, nullptr, PrepareWriteS3Span.GetTraceId());
+            }
+
+            void HandlePrepareWriteS3Result(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvPrepareWriteS3Result& msg) {
+#ifndef KIKIMR_DISABLE_S3_OPS
+                Y_ABORT_UNLESS(msg.ItemsSize() == 1);
+                const auto& item = msg.GetItems(0);
+                if (item.GetStatus() != NKikimrProto::OK) {
+                    if (PrepareWriteS3Span) {
+                        PrepareWriteS3Span.EndError(item.GetErrorReason());
+                    }
+
+                    return EndWithError(item.GetStatus(), item.GetErrorReason());
+                }
+                if (PrepareWriteS3Span) {
+                    PrepareWriteS3Span.EndOk();
+                }
+
+                auto *commitItem = CommitBlobSeq.MutableItems(0);
+                auto *locator = commitItem->MutableS3Locator();
+                locator->CopyFrom(item.GetS3Locator());
+
+                LocatorInFlight.emplace(TS3Locator::FromProto(*locator));
+
+                const TS3Locator temp = TS3Locator::FromProto(*locator);
+                TString key = temp.MakeObjectName(Agent.S3BasePath);
+
+                YDB_LOG_DEBUG("Starting WriteActor",
+                    {"marker", "BDA54"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"key", key});
+
+                WriteS3Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.WriteS3", NWilson::EFlags::AUTO_END);
+                if (WriteS3Span) {
+                    WriteS3Span.Attribute("size", static_cast<i64>(Request.Buffer.size()));
+                }
+
+                // Pass a copy so Request.Buffer remains intact for potential SlowDown-driven retries.
+                WriterActorId = IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
+
+                ConnectionInstanceOnStart = Agent.ConnectionInstance;
+#else
+                Y_UNUSED(msg);
+                Y_ABORT("S3 is not supported");
+#endif
+            }
+
+            void OnPutS3ObjectResponse(std::optional<TString>&& error, bool slowDown) override {
+                YDB_LOG_COMP(error ? PRI_WARN : PRI_DEBUG, BLOB_DEPOT_AGENT, "OnPutS3ObjectResponse",
+                    {"marker", "BDA53"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"error", error},
+                    {"slowDown", slowDown});
+
+                WriterActorId = {};
+
+                if (WriteS3Span) {
+                    if (error) {
+                        if (slowDown) {
+                            WriteS3Span.Attribute("slow_down", true);
+                        }
+
+                        WriteS3Span.EndError(*error);
+                    } else {
+                        WriteS3Span.EndOk();
+                    }
+                }
+
+                if (ConnectionInstanceOnStart != Agent.ConnectionInstance) {
+                    error = "BlobDepot tablet disconnected";
+                    slowDown = false;
+                    LocatorInFlight.reset(); // prevent discarding this locator
+                }
+
+                if (!error) {
+                    ++*Agent.S3PutsOk;
+                    *Agent.S3PutBytesOk += LocatorInFlight->Len;
+
+                    LocatorInFlight.reset();
+                    IssueCommitBlobSeq(false);
+                    return;
+                }
+
+                ++*Agent.S3PutsError;
+                if (slowDown) {
+                    ++*Agent.S3PutsSlowDown;
+                }
+
+                if (slowDown && !Request.FailOnSlowDown && S3SlowDownRetries < MaxS3SlowDownRetries) {
+                    // Transparent retry: report SlowDown to the tablet via the discard message, then immediately
+                    // re-issue TEvPrepareWriteS3. Pipe ordering guarantees the discard (which arms throttling) is
+                    // processed before the retry, so the retry will be parked by the tablet until backoff clears.
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_put_slow_down",
+                        {"marker", "BDEV41"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"locator", LocatorInFlight},
+                        {"retry", S3SlowDownRetries});
+                    ++S3SlowDownRetries;
+                    SendDiscardSpoiled(/*s3SlowDown=*/true);
+                    // Reset the per-attempt S3Locator from CommitBlobSeq so HandlePrepareWriteS3Result repopulates it.
+                    if (CommitBlobSeq.ItemsSize()) {
+                        CommitBlobSeq.MutableItems(0)->ClearS3Locator();
+                    }
+                    IssueS3Put();
+                    return;
+                }
+
+                if (slowDown) {
+                    // Either fail-fast was requested or we ran out of retries. Discard the spoiled locator with the
+                    // SlowDown flag so other agents still get throttled, then fail the query.
+                    SendDiscardSpoiled(/*s3SlowDown=*/true);
+                    const TString reason = Request.FailOnSlowDown
+                        ? TString("SlowDown")
+                        : TStringBuilder() << "too many S3 SlowDown retries: " << *error;
+                    EndWithError(NKikimrProto::ERROR, reason);
+                    return;
+                }
+
+                // Generic (non-SlowDown) error: LocatorInFlight is not reset here on purpose -- OnDestroy will
+                // generate a spoiled blob message to the tablet.
+                EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to put object to S3: " << *error);
+            }
         };
 
-        return new TPutQuery(*this, std::move(ev));
+        return new TPutQuery(*this, std::move(ev), received);
     }
 
 } // NKikimr::NBlobDepot

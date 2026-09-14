@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import re
 import typing as t
 import uuid
-
-from ..urls import _fast_url_quote
+import warnings
+from urllib.parse import quote
 
 if t.TYPE_CHECKING:
     from .map import Map
@@ -15,13 +17,25 @@ class ValidationError(ValueError):
 
 
 class BaseConverter:
-    """Base class for all converters."""
+    """Base class for all converters.
+
+    .. versionchanged:: 2.3
+        ``part_isolating`` defaults to ``False`` if ``regex`` contains a ``/``.
+    """
 
     regex = "[^/]+"
     weight = 100
     part_isolating = True
 
-    def __init__(self, map: "Map", *args: t.Any, **kwargs: t.Any) -> None:
+    def __init_subclass__(cls, **kwargs: t.Any) -> None:
+        super().__init_subclass__(**kwargs)
+
+        # If the converter isn't inheriting its regex, disable part_isolating by default
+        # if the regex contains a / character.
+        if "regex" in cls.__dict__ and "part_isolating" not in cls.__dict__:
+            cls.part_isolating = "/" not in cls.regex
+
+    def __init__(self, map: Map, *args: t.Any, **kwargs: t.Any) -> None:
         self.map = map
 
     def to_python(self, value: str) -> t.Any:
@@ -29,8 +43,16 @@ class BaseConverter:
 
     def to_url(self, value: t.Any) -> str:
         if isinstance(value, (bytes, bytearray)):
-            return _fast_url_quote(value)
-        return _fast_url_quote(str(value).encode(self.map.charset))
+            warnings.warn(
+                "Passing bytes as a URL value is deprecated and will not be supported"
+                " in Werkzeug 3.0.",
+                DeprecationWarning,
+                stacklevel=7,
+            )
+            return quote(value, safe="!$&'()*+,/:;=@")
+
+        # safe = https://url.spec.whatwg.org/#url-path-segment-string
+        return quote(str(value), encoding=self.map.charset, safe="!$&'()*+,/:;=@")
 
 
 class UnicodeConverter(BaseConverter):
@@ -51,14 +73,12 @@ class UnicodeConverter(BaseConverter):
     :param length: the exact length of the string.
     """
 
-    part_isolating = True
-
     def __init__(
         self,
-        map: "Map",
+        map: Map,
         minlength: int = 1,
-        maxlength: t.Optional[int] = None,
-        length: t.Optional[int] = None,
+        maxlength: int | None = None,
+        length: int | None = None,
     ) -> None:
         super().__init__(map)
         if length is not None:
@@ -86,9 +106,7 @@ class AnyConverter(BaseConverter):
         Value is validated when building a URL.
     """
 
-    part_isolating = True
-
-    def __init__(self, map: "Map", *items: str) -> None:
+    def __init__(self, map: Map, *items: str) -> None:
         super().__init__(map)
         self.items = set(items)
         self.regex = f"(?:{'|'.join([re.escape(x) for x in items])})"
@@ -113,7 +131,6 @@ class PathConverter(BaseConverter):
 
     regex = "[^/].*?"
     weight = 200
-    part_isolating = False
 
 
 class NumberConverter(BaseConverter):
@@ -124,14 +141,13 @@ class NumberConverter(BaseConverter):
 
     weight = 50
     num_convert: t.Callable = int
-    part_isolating = True
 
     def __init__(
         self,
-        map: "Map",
+        map: Map,
         fixed_digits: int = 0,
-        min: t.Optional[int] = None,
-        max: t.Optional[int] = None,
+        min: int | None = None,
+        max: int | None = None,
         signed: bool = False,
     ) -> None:
         if signed:
@@ -186,7 +202,6 @@ class IntegerConverter(NumberConverter):
     """
 
     regex = r"\d+"
-    part_isolating = True
 
 
 class FloatConverter(NumberConverter):
@@ -210,13 +225,12 @@ class FloatConverter(NumberConverter):
 
     regex = r"\d+\.\d+"
     num_convert = float
-    part_isolating = True
 
     def __init__(
         self,
-        map: "Map",
-        min: t.Optional[float] = None,
-        max: t.Optional[float] = None,
+        map: Map,
+        min: float | None = None,
+        max: float | None = None,
         signed: bool = False,
     ) -> None:
         super().__init__(map, min=min, max=max, signed=signed)  # type: ignore
@@ -236,7 +250,6 @@ class UUIDConverter(BaseConverter):
         r"[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-"
         r"[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}"
     )
-    part_isolating = True
 
     def to_python(self, value: str) -> uuid.UUID:
         return uuid.UUID(value)
@@ -246,7 +259,7 @@ class UUIDConverter(BaseConverter):
 
 
 #: the default converter mapping for the map.
-DEFAULT_CONVERTERS: t.Mapping[str, t.Type[BaseConverter]] = {
+DEFAULT_CONVERTERS: t.Mapping[str, type[BaseConverter]] = {
     "default": UnicodeConverter,
     "string": UnicodeConverter,
     "any": AnyConverter,

@@ -1,13 +1,13 @@
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
-#include <ydb-cpp-sdk/client/types/status/status.h>
-#include <ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
 #include <util/stream/str.h>
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 
 class TOperation::TImpl {
@@ -23,6 +23,7 @@ public:
         , Ready_(operation.ready())
         , CreateTime_(ProtoTimestampToInstant(operation.create_time()))
         , EndTime_(ProtoTimestampToInstant(operation.end_time()))
+        , CreatedBy_(operation.created_by())
         , Operation_(std::move(operation))
     {
     }

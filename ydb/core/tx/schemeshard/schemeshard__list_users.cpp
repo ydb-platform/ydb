@@ -1,7 +1,8 @@
-#include <ydb/library/security/util.h>
+#include "schemeshard_impl.h"
+
 #include <ydb/core/protos/auth.pb.h>
 
-#include "schemeshard_impl.h"
+#include <ydb/library/security/util.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -24,19 +25,29 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
                     "TTxListUsers Execute"
                     << " at schemeshard: " << Self->TabletID());
 
+        const auto& requestUser = Request->Get()->Record.GetUser();
         for (const auto& [_, sid] : Self->LoginProvider.Sids) {
             if (sid.Type != NLoginProto::ESidType::USER) {
                 continue;
             }
+
+            if (requestUser && sid.Name != requestUser) {
+                continue;
+            }
+
             auto user = Result->Record.AddUsers();
             user->SetName(sid.Name);
             user->SetIsEnabled(sid.IsEnabled);
             user->SetIsLockedOut(Self->LoginProvider.IsLockedOut(sid));
-            user->SetCreatedAt(ToInstant(sid.CreatedAt).MilliSeconds());
-            user->SetLastSuccessfulAttemptAt(ToInstant(sid.LastSuccessfulLogin).MilliSeconds());
-            user->SetLastFailedAttemptAt(ToInstant(sid.LastFailedLogin).MilliSeconds());
+            user->SetCreatedAt(ToMicroSeconds(sid.CreatedAt));
+            if (sid.LastSuccessfulLogin != std::chrono::system_clock::time_point()) {
+                user->SetLastSuccessfulAttemptAt(ToMicroSeconds(sid.LastSuccessfulLogin));
+            }
+            if (sid.LastFailedLogin != std::chrono::system_clock::time_point()) {
+                user->SetLastFailedAttemptAt(ToMicroSeconds(sid.LastFailedLogin));
+            }
             user->SetFailedAttemptCount(sid.FailedLoginAttemptCount);
-            user->SetPasswordHash(sid.PasswordHash);
+            user->SetPasswordHashes(sid.PasswordHashes);
         }
 
         return true;

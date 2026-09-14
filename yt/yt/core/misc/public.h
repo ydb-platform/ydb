@@ -21,6 +21,12 @@ class RepeatedPtrField;
 
 class Timestamp;
 
+template <class TProtobufEnum>
+const EnumDescriptor* GetEnumDescriptor();
+
+template <class TEnum>
+struct is_proto_enum;
+
 namespace io {
 
 class ZeroCopyInputStream;
@@ -87,8 +93,7 @@ DEFINE_ENUM(ESerializationDumpMode,
     (Checksum)
 );
 
-template <class TKey, class TComparer>
-class TSkipList;
+using TSerializationDumpScopeFilter = std::optional<THashSet<std::string>>;
 
 class TBlobOutput;
 
@@ -98,19 +103,23 @@ class TStringBuilder;
 DECLARE_REFCOUNTED_STRUCT(IDigest)
 DECLARE_REFCOUNTED_STRUCT(IPersistentDigest)
 
-DECLARE_REFCOUNTED_CLASS(TSlruCacheDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TSlruCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TSlruCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TSlruCacheConfig)
 
-DECLARE_REFCOUNTED_CLASS(TAsyncExpiringCacheDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TAsyncExpiringCacheConfig)
+template <class TKey, class TValue, class THash = THash<TKey>>
+class TSimpleLruCache;
 
-DECLARE_REFCOUNTED_CLASS(TLogDigestConfig)
-DECLARE_REFCOUNTED_CLASS(THistogramDigestConfig)
+DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TAsyncExpiringCacheConfig)
 
-DECLARE_REFCOUNTED_CLASS(TSingletonsConfig)
-DECLARE_REFCOUNTED_CLASS(TSingletonsDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TLogDigestConfig)
+DECLARE_REFCOUNTED_STRUCT(THistogramDigestConfig)
 
-class TSignalRegistry;
+DECLARE_REFCOUNTED_STRUCT(TSingletonsConfig)
+DECLARE_REFCOUNTED_STRUCT(TSingletonsDynamicConfig)
+
+DECLARE_REFCOUNTED_STRUCT(TFairShareHierarchicalSchedulerDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(IFairShareHierarchicalSlotQueueResource)
 
 class TBloomFilterBuilder;
 class TBloomFilter;
@@ -128,7 +137,7 @@ class TRefCountedProto;
 DECLARE_REFCOUNTED_CLASS(TProcessBase)
 
 const ui32 YTCoreNoteType = 0x5f59545f; // = hex("_YT_") ;)
-extern const TString YTCoreNoteName;
+extern const std::string YTCoreNoteName;
 
 template <class T>
 class TInternRegistry;
@@ -159,11 +168,37 @@ class TSummary;
 template <class TTask>
 struct IFairScheduler;
 
+using TFairShareSlotId = TGuid;
+
 template <class TTask>
 using IFairSchedulerPtr = TIntrusivePtr<IFairScheduler<TTask>>;
 
-DECLARE_REFCOUNTED_CLASS(TAdaptiveHedgingManagerConfig)
-DECLARE_REFCOUNTED_STRUCT(IHedgingManager)
+template <typename TTag>
+class TFairShareHierarchicalSlotQueueSlot;
+
+template <typename TTag>
+using TFairShareHierarchicalSlotQueueSlotPtr = TIntrusivePtr<TFairShareHierarchicalSlotQueueSlot<TTag>>;
+
+template <typename TTag>
+class TFairShareHierarchicalSchedulerLog;
+
+template <typename TTag>
+using TFairShareHierarchicalSchedulerLogPtr = TIntrusivePtr<TFairShareHierarchicalSchedulerLog<TTag>>;
+
+template <typename TTag>
+class TFairShareHierarchicalScheduler;
+
+template <typename TTag>
+using TFairShareHierarchicalSchedulerPtr = TIntrusivePtr<TFairShareHierarchicalScheduler<TTag>>;
+
+template <typename TTag>
+class TFairShareHierarchicalSlotQueue;
+
+template <typename TTag>
+using TFairShareHierarchicalSlotQueuePtr = TIntrusivePtr<TFairShareHierarchicalSlotQueue<TTag>>;
+
+DECLARE_REFCOUNTED_STRUCT(IAdaptiveHedgingManager)
+DECLARE_REFCOUNTED_STRUCT(TAdaptiveHedgingManagerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -178,6 +213,7 @@ DEFINE_ENUM(EProcessErrorCode,
 
 DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
 DECLARE_REFCOUNTED_STRUCT(IReservingMemoryUsageTracker)
+DECLARE_REFCOUNTED_STRUCT(IScopedMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 

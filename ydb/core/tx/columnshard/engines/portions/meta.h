@@ -1,8 +1,11 @@
 #pragma once
 #include <ydb/core/formats/arrow/special_keys.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/engines/portions/column_record.h>
+#include <ydb/core/tx/columnshard/engines/portions/index_chunk.h>
 #include <ydb/core/tx/columnshard/engines/protos/portion_info.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -17,54 +20,45 @@ struct TIndexInfo;
 class TPortionMetaBase {
 protected:
     std::vector<TUnifiedBlobId> BlobIds;
+
+    void FullValidation() const;
+
+    std::optional<TBlobRangeLink16::TLinkId> GetBlobIdxOptional(const TUnifiedBlobId& blobId) const;
+
+    TBlobRangeLink16::TLinkId GetBlobIdxVerified(const TUnifiedBlobId& blobId) const;
+
+    static std::vector<ui32> DoCalcSliceBorderOffsets(const std::vector<TColumnRecord>& records, const std::vector<TIndexChunk>& indexes);
+
 public:
-    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
-        return BlobIds;
-    }
+    TPortionMetaBase() = default;
 
-    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        AFL_VERIFY(linkId < GetBlobIds().size());
-        return BlobIds[linkId];
-    }
+    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const;
+    const std::vector<TUnifiedBlobId>& GetBlobIds() const;
 
-    ui32 GetBlobIdsCount() const {
-        return BlobIds.size();
-    }
+    ui32 GetBlobIdsCount() const;
 
-    void FullValidation() const {
-        for (auto&& i : BlobIds) {
-            AFL_VERIFY(i.BlobSize());
-        }
-        AFL_VERIFY(BlobIds.size());
-    }
+    TPortionMetaBase(std::vector<TUnifiedBlobId>&& blobIds);
 
-    std::optional<TBlobRangeLink16::TLinkId> GetBlobIdxOptional(const TUnifiedBlobId& blobId) const {
-        AFL_VERIFY(blobId.IsValid());
-        TBlobRangeLink16::TLinkId idx = 0;
-        for (auto&& i : BlobIds) {
-            if (i == blobId) {
-                return idx;
-            }
-            ++idx;
-        }
-        return std::nullopt;
-    }
+    TPortionMetaBase(const std::vector<TUnifiedBlobId>& blobIds);
 
-    ui64 GetMetadataMemorySize() const {
-        return GetBlobIds().size() * sizeof(TUnifiedBlobId);
-    }
+    std::vector<TUnifiedBlobId> ExtractBlobIds();
 
-    TBlobRangeLink16::TLinkId GetBlobIdxVerified(const TUnifiedBlobId& blobId) const {
-        auto result = GetBlobIdxOptional(blobId);
-        AFL_VERIFY(result);
-        return *result;
-    }
+    TBlobRangeLink16::TLinkId GetBlobIdxVerifiedPrivate(const TUnifiedBlobId& blobId) const;
+
+    const std::vector<TUnifiedBlobId>& GetBlobIdsPrivate() const;
+
+    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const;
+
+    ui64 GetMetadataMemorySize() const;
+
+    ui64 GetMetadataDataSize() const;
 };
 
-class TPortionMeta: public TPortionMetaBase {
+class TPortionMeta {
 private:
-    using TBase = TPortionMetaBase;
-    NArrow::TFirstLastSpecialKeys ReplaceKeyEdges;   // first and last PK rows
+    std::shared_ptr<arrow::Schema> PKSchema;
+    NArrow::TSimpleRowContent FirstPKRow;
+    NArrow::TSimpleRowContent LastPKRow;
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
     YDB_READONLY(ui32, CompactionLevel, 0);
@@ -73,85 +67,63 @@ private:
     YDB_READONLY(ui32, ColumnBlobBytes, 0);
     YDB_READONLY(ui32, IndexRawBytes, 0);
     YDB_READONLY(ui32, IndexBlobBytes, 0);
+    YDB_READONLY(ui32, NumSlices, 1);
+    YDB_READONLY_DEF(std::optional<ui32>, BsIndexBlobBytes);
 
     friend class TPortionMetaConstructor;
     friend class TPortionInfo;
-    TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
-        : ReplaceKeyEdges(pk)
-        , RecordSnapshotMin(min)
-        , RecordSnapshotMax(max)
-        , IndexKeyStart(pk.GetFirst())
-        , IndexKeyEnd(pk.GetLast()) {
-        AFL_VERIFY(IndexKeyStart <= IndexKeyEnd)("start", IndexKeyStart.DebugString())("end", IndexKeyEnd.DebugString());
-    }
+    friend class TCompactedPortionInfo;
+    TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max);
     TSnapshot RecordSnapshotMin;
     TSnapshot RecordSnapshotMax;
 
-    void FullValidation() const {
-        TBase::FullValidation();
-        AFL_VERIFY(RecordsCount);
-        AFL_VERIFY(ColumnRawBytes);
-        AFL_VERIFY(ColumnBlobBytes);
-    }
-
 public:
-    const NArrow::TFirstLastSpecialKeys& GetFirstLastPK() const {
-        return ReplaceKeyEdges;
-    }
+    void FullValidation() const;
 
-    void ResetCompactionLevel(const ui32 level) {
-        CompactionLevel = level;
-    }
+    NArrow::TSimpleRow IndexKeyStart() const;
 
-    using EProduced = NPortion::EProduced;
+    NArrow::TSimpleRow IndexKeyEnd() const;
 
-    NArrow::TReplaceKey IndexKeyStart;
-    NArrow::TReplaceKey IndexKeyEnd;
+    NArrow::TSimpleRowViewV0 IndexKeyViewStart() const;
+    NArrow::TSimpleRowViewV0 IndexKeyViewEnd() const;
+    const std::shared_ptr<arrow::Schema>& GetPkSchema() const;
 
-    EProduced Produced = EProduced::UNSPECIFIED;
+    void ResetCompactionLevel(const ui32 level);
 
     std::optional<TString> GetTierNameOptional() const;
 
-    ui64 GetMetadataMemorySize() const {
-        return sizeof(TPortionMeta) + ReplaceKeyEdges.GetMemorySize() + TBase::GetMetadataMemorySize();
-    }
+    ui64 GetMetadataMemorySize() const;
 
-    NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto() const;
+    ui64 GetMemorySize() const;
 
-    EProduced GetProduced() const {
-        return Produced;
-    }
+    ui64 GetDataSize() const;
+
+    NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto(
+        const std::vector<TUnifiedBlobId>& blobIds, const NPortion::EProduced produced) const;
 
     TString DebugString() const;
 };
 
 class TPortionAddress {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY(ui64, PortionId, 0);
 
 public:
-    TPortionAddress(const ui64 pathId, const ui64 portionId)
-        : PathId(pathId)
-        , PortionId(portionId) {
-    }
+    TPortionAddress(const TInternalPathId pathId, const ui64 portionId);
 
     TString DebugString() const;
 
-    bool operator<(const TPortionAddress& item) const {
-        return std::tie(PathId, PortionId) < std::tie(item.PathId, item.PortionId);
-    }
+    bool operator<(const TPortionAddress& item) const;
 
-    bool operator==(const TPortionAddress& item) const {
-        return std::tie(PathId, PortionId) == std::tie(item.PathId, item.PortionId);
-    }
+    bool operator==(const TPortionAddress& item) const;
+
+    const TString Debug() const;
 };
 
 }   // namespace NKikimr::NOlap
 
 template <>
 struct THash<NKikimr::NOlap::TPortionAddress> {
-    inline ui64 operator()(const NKikimr::NOlap::TPortionAddress& x) const noexcept {
-        return CombineHashes(x.GetPortionId(), x.GetPathId());
-    }
+    ui64 operator()(const NKikimr::NOlap::TPortionAddress& x) const noexcept;
 };

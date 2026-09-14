@@ -8,7 +8,8 @@ import asyncio
 import contextvars
 import socket
 from asyncio import get_running_loop
-from typing import Any, Callable, Coroutine, TextIO, cast
+from collections.abc import Callable, Coroutine
+from typing import Any, TextIO, cast
 
 from prompt_toolkit.application.current import create_app_session, get_app
 from prompt_toolkit.application.run_in_terminal import run_in_terminal
@@ -244,7 +245,7 @@ class TelnetConnection:
         # Make sure that when an application was active for this connection,
         # that we print the text above the application.
         if self.context:
-            self.context.run(run_in_terminal, func)  # type: ignore
+            self.context.run(run_in_terminal, func)
         else:
             raise RuntimeError("Called _run_in_terminal outside `run_application`.")
 

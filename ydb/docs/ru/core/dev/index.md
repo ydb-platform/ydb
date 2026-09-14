@@ -10,6 +10,7 @@
 - Выбор первичного ключа для:
   - [Строчных таблиц](primary-key/row-oriented.md)
   - [Колоночных таблиц](primary-key/column-oriented.md)
+- [{#T}](tables/index.md)
 - [{#T}](secondary-indexes.md)
 - [{#T}](batch-upload.md)
 - [{#T}](paging.md)
@@ -23,7 +24,6 @@
   - [{#T}](../yql/reference/index.md)
   - [{#T}](../reference/ydb-sdk/index.md)
   - [{#T}](../reference/ydb-cli/index.md)
-  - [{#T}](../postgresql/intro.md)
   - [{#T}](../reference/kafka-api/index.md)
 
 

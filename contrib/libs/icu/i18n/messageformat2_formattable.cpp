@@ -3,12 +3,16 @@
 
 #include "unicode/utypes.h"
 
+#if !UCONFIG_NO_NORMALIZATION
+
 #if !UCONFIG_NO_FORMATTING
 
 #if !UCONFIG_NO_MF2
 
 #include "unicode/messageformat2_formattable.h"
 #include "unicode/smpdtfmt.h"
+#include "messageformat2_allocation.h"
+#include "messageformat2_function_registry_internal.h"
 #include "messageformat2_macros.h"
 
 #include "limits.h"
@@ -35,7 +39,6 @@ namespace message2 {
 
     Formattable::Formattable(const Formattable& other) {
         contents = other.contents;
-        holdsDate = other.holdsDate;
     }
 
     Formattable Formattable::forDecimal(std::string_view number, UErrorCode &status) {
@@ -53,7 +56,7 @@ namespace message2 {
 
     UFormattableType Formattable::getType() const {
         if (std::holds_alternative<double>(contents)) {
-            return holdsDate ? UFMT_DATE : UFMT_DOUBLE;
+            return UFMT_DOUBLE;
         }
         if (std::holds_alternative<int64_t>(contents)) {
             return UFMT_INT64;
@@ -73,6 +76,9 @@ namespace message2 {
                 return UFMT_INT64;
             }
             }
+        }
+        if (isDate()) {
+            return UFMT_DATE;
         }
         if (std::holds_alternative<const FormattableObject*>(contents)) {
             return UFMT_OBJECT;
@@ -223,14 +229,6 @@ namespace message2 {
         return df.orphan();
     }
 
-    void formatDateWithDefaults(const Locale& locale, UDate date, UnicodeString& result, UErrorCode& errorCode) {
-        CHECK_ERROR(errorCode);
-
-        LocalPointer<DateFormat> df(defaultDateTimeInstance(locale, errorCode));
-        CHECK_ERROR(errorCode);
-        df->format(date, result, 0, errorCode);
-    }
-
     // Called when output is required and the contents are an unevaluated `Formattable`;
     // formats the source `Formattable` to a string with defaults, if it can be
     // formatted with a default formatter
@@ -259,9 +257,9 @@ namespace message2 {
         switch (type) {
         case UFMT_DATE: {
             UnicodeString result;
-            UDate d = toFormat.getDate(status);
+            const DateInfo* dateInfo = toFormat.getDate(status);
             U_ASSERT(U_SUCCESS(status));
-            formatDateWithDefaults(locale, d, result, status);
+            formatDateWithDefaults(locale, *dateInfo, result, status);
             return FormattedPlaceholder(input, FormattedValue(std::move(result)));
         }
         case UFMT_DOUBLE: {
@@ -336,3 +334,5 @@ U_NAMESPACE_END
 #endif /* #if !UCONFIG_NO_MF2 */
 
 #endif /* #if !UCONFIG_NO_FORMATTING */
+
+#endif /* #if !UCONFIG_NO_NORMALIZATION */

@@ -1,16 +1,16 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
-#include <util/system/hp_timer.h>
-#include "mvp_log.h"
 #include "appdata.h"
+#include "mvp_log.h"
+#include "mvp_security_printer.h"
+
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+
+#include <util/system/hp_timer.h>
+
+#include <memory>
 
 namespace NMVP {
-
-template<typename TProto>
-TString SecureShortDebugString(const TProto& request) {
-    return request.ShortDebugString();
-}
 
 template <typename TGRpcService>
 class TLoggedGrpcServiceConnection {

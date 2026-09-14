@@ -10,7 +10,7 @@ service TableService {
     // Create new session. Implicit session creation is forbidden,
     // so user must create new session before execute any query,
     // otherwise BAD_SESSION status will be returned.
-    // Simultaneous execution of requests are forbiden.
+    // Simultaneous execution of requests are forbidden.
     // Sessions are volatile, can be invalidated by server, for example in case
     // of fatal errors. All requests with this session will fail with BAD_SESSION status.
     // So, client must be able to handle BAD_SESSION status.
@@ -85,4 +85,13 @@ service TableService {
 
     // Executes scan query with streaming result.
     rpc StreamExecuteScanQuery(Table.ExecuteScanQueryRequest) returns (stream Table.ExecuteScanQueryPartialResponse);
+
+    // Returns information about a given external data source.
+    rpc DescribeExternalDataSource(Table.DescribeExternalDataSourceRequest) returns (Table.DescribeExternalDataSourceResponse);
+
+    // Returns information about a given external table.
+    rpc DescribeExternalTable(Table.DescribeExternalTableRequest) returns (Table.DescribeExternalTableResponse);
+
+    // Returns information about a given system view table.
+    rpc DescribeSystemView(Table.DescribeSystemViewRequest) returns (Table.DescribeSystemViewResponse);
 }

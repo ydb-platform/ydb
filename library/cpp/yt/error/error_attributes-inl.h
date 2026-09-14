@@ -55,8 +55,7 @@ template <class T>
     requires CConvertibleFromAttributeValue<T>
 T TErrorAttributes::GetAndRemove(const TKey& key, const T& defaultValue)
 {
-    auto value = Find<T>(key);
-    if (value) {
+    if (auto value = Find<T>(key)) {
         Remove(key);
         return *value;
     } else {
@@ -87,7 +86,7 @@ void TErrorAttributes::MergeFrom(const TDictionary& dict)
 
 namespace NMergeableRangeImpl {
 
-inline TMergeableRange TagInvoke(TTagInvokeTag<AsMergeableRange>, const TErrorAttributes& attributes)
+inline TMergeableRange TagInvoke(NMpl::TTagInvokeTag<AsMergeableRange>, const TErrorAttributes& attributes)
 {
     return attributes.ListPairs();
 }

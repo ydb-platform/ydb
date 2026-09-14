@@ -4,20 +4,25 @@
 #include <util/generic/vector.h>
 #include <util/system/unaligned_mem.h>
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TInputBuffer {
 public:
-    TInputBuffer(TStringBuf buf)
+    explicit TInputBuffer(TStringBuf buf)
         : Buf_(buf)
-    {}
+    {
+    }
 
     char PopChar() {
         Ensure(1);
         char c = Buf_.data()[Pos_];
         ++Pos_;
         return c;
+    }
+
+    template <typename T>
+    void PopNumber(T& result) {
+        result = PopNumber<T>();
     }
 
     template <typename T>
@@ -41,7 +46,6 @@ private:
         Y_ENSURE(Pos_ + delta <= Buf_.size(), "Unexpected end of buffer");
     }
 
-private:
     size_t Pos_ = 0;
     TStringBuf Buf_;
 };
@@ -63,7 +67,7 @@ public:
 
     void PushString(std::string_view data) {
         Ensure(sizeof(ui32) + data.size());
-        *(ui32*)&Vec_[Pos_] = data.size();
+        WriteUnaligned<ui32>(&Vec_[Pos_], data.size());
         Pos_ += sizeof(ui32);
         std::memcpy(Vec_.data() + Pos_, data.data(), data.size());
         Pos_ += data.size();
@@ -84,6 +88,10 @@ public:
         return TStringBuf(Vec_.data(), Vec_.data() + Pos_);
     }
 
+    char* Data() {
+        return Vec_.data();
+    }
+
 private:
     void Ensure(size_t delta) {
         if (Pos_ + delta > Vec_.size()) {
@@ -95,12 +103,8 @@ private:
         }
     }
 
-private:
     size_t Pos_ = 0;
     TVector<char> Vec_;
 };
 
-
-
-}
-}
+} // namespace NYql::NUdf

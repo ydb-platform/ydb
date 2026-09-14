@@ -44,7 +44,7 @@ class install_egg_info(Command):
     def run(self):
         target = self.target
         if os.path.isdir(target) and not os.path.islink(target):
-            dir_util.remove_tree(target, dry_run=self.dry_run)
+            dir_util.remove_tree(target)
         elif os.path.exists(target):
             self.execute(os.unlink, (self.target,), "Removing " + target)
         elif not os.path.isdir(self.install_dir):
@@ -52,9 +52,8 @@ class install_egg_info(Command):
                 os.makedirs, (self.install_dir,), "Creating " + self.install_dir
             )
         log.info("Writing %s", target)
-        if not self.dry_run:
-            with open(target, 'w', encoding='UTF-8') as f:
-                self.distribution.metadata.write_pkg_file(f)
+        with open(target, 'w', encoding='UTF-8') as f:
+            self.distribution.metadata.write_pkg_file(f)
 
     def get_outputs(self):
         return self.outputs

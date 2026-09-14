@@ -20,11 +20,12 @@ public:
 
     TSchemaVersionId(const ui64 presetId, const ui64 version)
         : PresetId(presetId)
-        , Version(version) {
+        , Version(version)
+    {
     }
 };
 
-}
+}   // namespace NKikimr::NOlap
 
 template <>
 struct THash<NKikimr::NOlap::TSchemaVersionId> {

@@ -3,8 +3,15 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/yql_parser/yql_parser.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/async.h>
+
+#if defined(_unix_)
+#include <sys/select.h>
+#include <unistd.h>
+#endif
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -23,7 +30,7 @@ namespace {
 
 void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config, const TString& clarification) {
     TStringStream descr;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     descr << "Query parameter[s].";
     if (clarification) {
         descr << ' ' << clarification;
@@ -32,22 +39,22 @@ void TCommandWithParameters::AddParametersOption(TClientCommand::TConfig& config
         << "Several parameter options can be specified. "
         << "To change binary strings encoding use --input-binary-strings option. "
         << "Escaping depends on operating system.";
-    if (config.HelpCommandVerbosiltyLevel <= 1) {
+    if (config.HelpCommandVerbosityLevel <= 1) {
         descr << Endl << "Use -hh option to see usage examples and all other options to work with parameters.";
     }
     descr << Endl << "More information and examples in the documentation:" << Endl
-        << "  https://ydb.tech/docs/en/reference/ydb-cli/parameterized-queries-cli";
+        << "  " << HttpsLink("ydb.tech/docs/en/reference/ydb-cli/parameterized-queries-cli", colors);
     config.Opts->AddLongOption('p', "param", descr.Str())
         .RequiredArgument("STRING").AppendTo(&ParameterOptions);
 
     TStringStream inputFileDescr;
     inputFileDescr << "File name with input parameter names and values. Format is configured with --input-format option.";
-    if (config.HelpCommandVerbosiltyLevel <= 1) {
+    if (config.HelpCommandVerbosityLevel <= 1) {
         inputFileDescr << Endl << "Use -hh option to see all options to work with parameters.";
     }
     AddInputFileOption(config, false, inputFileDescr.Str());
 
-    if (config.HelpCommandVerbosiltyLevel > 1) {
+    if (config.HelpCommandVerbosityLevel > 1) {
         AddOptionExamples(
             "param",
             TExampleSetBuilder()
@@ -107,7 +114,7 @@ void TCommandWithParameters::AddLegacyStdinFormats(TClientCommand::TConfig& conf
 
 void TCommandWithParameters::AddBatchParametersOptions(TClientCommand::TConfig& config, const TString& requestString) {
     TStringStream descr;
-    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
     descr << "Batching mode for input parameters processing. Available options:\n  "
         << colors.BoldColor() << "iterative" << colors.OldColor()
         << "\n    Executes " << requestString << " for each parameter set (exactly one execution "
@@ -129,12 +136,13 @@ void TCommandWithParameters::AddBatchParametersOptions(TClientCommand::TConfig& 
             "Number of CSV/TSV header rows to skip in the input data (not including the row of column names, if any). "
             "Relevant when passing parameters in CSV/TSV format only.")
             .RequiredArgument("NUM").StoreResult(&SkipRows).DefaultValue(0);
-    auto& inputBatch = config.Opts->AddLongOption("input-batch", descr.Str()).RequiredArgument("STRING").StoreResult(&BatchMode);
+    auto& inputBatch = config.Opts->AddLongOption("input-batch", descr.Str()).RequiredArgument("STRING").StoreResult(&BatchMode)
+        .ChoicesWithCompletion({{"iterative", "Execute for each parameter set"}, {"full", "Execute once with all parameters"}, {"adaptive", "Execute in adaptive batches"}});
     auto& inputBatchMaxRows = config.Opts->AddLongOption("input-batch-max-rows", "Maximum size of list for input adaptive batching mode")
         .RequiredArgument("INT").StoreResult(&BatchLimit).DefaultValue(DEFAULT_BATCH_LIMIT);
     auto& inputBatchMaxDelay = config.Opts->AddLongOption("input-batch-max-delay", "Maximum delay to process first item in the list for adaptive batching mode")
             .RequiredArgument("VAL").StoreResult(&BatchMaxDelay).DefaultValue(DEFAULT_BATCH_MAX_DELAY);
-    if (config.HelpCommandVerbosiltyLevel <= 1) {
+    if (config.HelpCommandVerbosityLevel <= 1) {
         inputParamName.Hidden();
         inputColumns.Hidden();
         inputSkipRows.Hidden();
@@ -191,6 +199,57 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
     }
 }
 
+namespace {
+    bool IsStdinEmpty(bool verbose) {
+#if !defined(_unix_)
+        // Too complex case for non-Unix systems (Windows, etc.)
+        return false;
+#else
+        // Check if stdin is available through select with no timeout
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET(STDIN_FILENO, &read_fds);
+
+        struct timeval timeout;
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 0; // No timeout, instant check
+
+        int selectResult = select(STDIN_FILENO + 1, &read_fds, NULL, NULL, &timeout);
+
+        if (selectResult == 0) {
+            // Stream not available - this is a pipe (slow or empty)
+            // Don't wait for data, just indicate it's not a detached job
+            if (verbose) {
+                Cerr << "stdin is a pipe, not empty" << Endl;
+            }
+            return false;
+        }
+
+        if (selectResult > 0) {
+            // Stream is available - read 1 symbol from stdin to check if it has data
+            char buffer[1];
+            ssize_t result = read(fileno(stdin), buffer, sizeof(buffer));
+            if (result > 0) {
+                // Data available
+                if (verbose) {
+                    Cerr << "stdin has data, returning first symbol '" << buffer[0] << "' back..." << Endl;
+                }
+                ungetc(buffer[0], stdin);
+                return false;
+            } else if (result == 0) {
+                // EOF - this is detached job
+                if (verbose) {
+                    Cerr << "stdin is empty (EOF)" << Endl;
+                }
+                return true;
+            }
+        }
+
+        return true;
+#endif
+    }
+}
+
 void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
     // Deprecated options with defaults:
     if (!DeprecatedSkipRows.empty()) {
@@ -232,7 +291,7 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
         Parameters[paramName] = parameterOption.substr(equalPos + 1);
         ParameterSources[paramName] = "\'--param\' option";
     }
-    
+
     if (!ParameterFiles.empty() && !InputFiles.empty()) {
         throw TMisuseException() << "Can't use both \"--input-file\" and \"--param-file\" options";
     }
@@ -252,10 +311,12 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
         }
     }
 
+    bool verbose = config.IsVerbose();
+
     if (InputFiles.empty()) {
-        if (!IsStdinInteractive() && !ReadingSomethingFromStdin) {
+        if (!IsStdinInteractive() && !ReadingSomethingFromStdin && !IsStdinEmpty(verbose)) {
             // By default reading params from stdin
-            SetParamsInputFromStdin();
+            SetParamsInputFromStdin(verbose);
         }
     } else {
         auto& file = InputFiles[0];
@@ -264,10 +325,10 @@ void TCommandWithParameters::ParseParameters(TClientCommand::TConfig& config) {
                 throw TMisuseException() << "Path to input file is \"-\", meaning that parameter value[s] should be read "
                     "from stdin. This is only available in non-interactive mode";
             }
-            SetParamsInputFromStdin();
+            SetParamsInputFromStdin(verbose);
         } else {
             if (IsStdinInteractive() || ReadingSomethingFromStdin) {
-                SetParamsInputFromFile(file);
+                SetParamsInputFromFile(file, verbose);
             } else {
                 throw TMisuseException() << "Path to input file is \"" << file << "\", meaning that parameter value[s]"
                     " should be read from file. This is only available in interactive mode. Can't read parameters both"
@@ -319,40 +380,65 @@ void TCommandWithParameters::SetParamsInput(IInputStream* input) {
     }
 }
 
-void TCommandWithParameters::SetParamsInputFromStdin() {
+void TCommandWithParameters::SetParamsInputFromStdin(bool verbose) {
     if (ReadingSomethingFromStdin) {
         throw TMisuseException() << "Can't read both parameters and query text from stdinput";
     }
     ReadingSomethingFromStdin = true;
     SetParamsInput(&Cin);
+    if (verbose) {
+        Cerr << "Reading parameters from stdin" << Endl;
+    }
 }
 
-void TCommandWithParameters::SetParamsInputFromFile(TString& file) {
+void TCommandWithParameters::SetParamsInputFromFile(TString& file, bool verbose) {
     TFsPath fsPath = GetExistingFsPath(file, "input file");
     InputFileHolder = MakeHolder<TFileInput>(fsPath);
     SetParamsInput(InputFileHolder.Get());
+    if (verbose) {
+        Cerr << "Reading parameters from file \"" << file << '\"' << Endl;
+    }
 }
 
-void TCommandWithParameters::GetParamTypes(const TDriver& driver, const TString& queryText) {
-    NScripting::TScriptingClient client(driver);
+void TCommandWithParameters::InitParamTypes(const TDriver& driver, const TString& queryText, bool verbose) {
+    if (SyntaxType == NQuery::ESyntax::Pg) {
+        ParamTypes.clear();
+        return;
+    }
 
-    NScripting::TExplainYqlRequestSettings explainSettings;
-    explainSettings.Mode(NScripting::ExplainYqlRequestMode::Validate);
+    auto types = TYqlParamParser::GetParamTypes(queryText);
+    if (types.has_value()) {
+        ParamTypes = *types;
+        if (verbose) {
+            Cerr << "Successfully retrieved parameter types from query text locally" << Endl;
+        }
+        return;
+    }
+
+    if (verbose) {
+        Cerr << "Failed to retrieve parameter types from query text locally. Executing ExplainYqlScript..." << Endl;
+    }
+    // Fallback to ExplainYql
+    NScripting::TScriptingClient client(driver);
+    auto explainSettings = NScripting::TExplainYqlRequestSettings()
+        .Mode(NScripting::ExplainYqlRequestMode::Validate);
 
     auto result = client.ExplainYqlScript(
         queryText,
         explainSettings
     ).GetValueSync();
+
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     ParamTypes = result.GetParameterTypes();
 }
 
 bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString& queryText,
-        THolder<TParamsBuilder>& paramBuilder) {
+        THolder<TParamsBuilder>& paramBuilder, bool verbose) {
     paramBuilder = MakeHolder<TParamsBuilder>();
     if (IsFirstEncounter) {
         IsFirstEncounter = false;
-        GetParamTypes(driver, queryText);
+        InitParamTypes(driver, queryText, verbose);
+
         if (!InputParamStream) {
             AddParams(*paramBuilder);
             return true;

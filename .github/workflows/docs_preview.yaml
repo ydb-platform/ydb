@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows:
       - Build documentation
+      - Rebuild documentation
     types:
       - completed
 
@@ -11,7 +12,7 @@ jobs:
   post-build:
     permissions: write-all
     concurrency:
-      group: preview-documentation-${{ github.ref }}
+      group: preview-documentation-${{ github.event.workflow_run.id }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
@@ -25,6 +26,7 @@ jobs:
           storage-bucket: ${{ vars.DIPLODOC_STORAGE_BUCKET }}
           storage-access-key-id: ${{ secrets.DOCS_AWS_KEY_ID }}
           storage-secret-access-key: ${{ secrets.DOCS_AWS_SECRET_ACCESS_KEY }}
+          cli-version: stable
 
       - name: Comment message
         uses: diplodoc-platform/docs-message-action@v1

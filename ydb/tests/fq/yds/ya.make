@@ -13,10 +13,6 @@ PEERDIR(
     ydb/tests/tools/fq_runner
 )
 
-DEPENDS(
-    ydb/tests/tools/pq_read
-)
-
 PY_SRCS(
     conftest.py
     test_base.py
@@ -28,8 +24,8 @@ TEST_SRCS(
     test_bad_syntax.py
     test_big_state.py
     test_continue_mode.py
-    test_cpu_quota.py
     test_delete_read_rules_after_abort_by_system.py
+    test_disposition.py
     test_eval.py
     test_invalid_consumer.py
     test_kill_pq_bill.py
@@ -55,7 +51,7 @@ TEST_SRCS(
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

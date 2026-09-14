@@ -1,0 +1,29 @@
+(
+(let world (Configure! world (DataSource 'config) 'BlockEngine 'force))
+(let wconf (DataSink 'result))
+
+(let x1 (AsStruct '('"x" (Uint64 '"1"))))
+(let x2 (AsStruct '('"x" (Uint64 '"2"))))
+(let x3 (AsStruct '('"x" (Uint64 '"3"))))
+(let x4 (AsStruct '('"x" (Uint64 '"4"))))
+
+(let list (AsList x1 x2 x3 x4))
+
+(let expandLambda (lambda '(item) (Member item '"x")))
+(let wideStream (FromFlow (ExpandMap (ToFlow list) expandLambda)))
+(let wideBlockStream (WideToBlocks wideStream))
+(let wideBlockScalar (WideMap  wideBlockStream (lambda '($x, $blockSize) (AsScalar (Uint64 '"123")) $blockSize)))
+
+(let sortParams '('('0 (Bool 'true))))
+
+(let replicateParams '('"0"))
+
+(let nopFromBlocksToBlocks (WideFromBlocks (WideSortBlocks (ReplicateScalars wideBlockScalar replicateParams) sortParams)))
+
+(let narrowLambda (lambda '(x) (AsStruct '('"x" x))))
+(let scalarList (ForwardList (NarrowMap (ToFlow nopFromBlocksToBlocks) narrowLambda)))
+
+(let world (Write! world wconf (Key) scalarList '('('type))))
+(let world (Commit! world wconf))
+(return world)
+)

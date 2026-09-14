@@ -194,11 +194,19 @@ void aws_unregister_error_info(const struct aws_error_info_list *error_info) {
 }
 
 int aws_translate_and_raise_io_error(int error_no) {
+    return aws_translate_and_raise_io_error_or(error_no, AWS_ERROR_SYS_CALL_FAILURE);
+}
+
+int aws_translate_and_raise_io_error_or(int error_no, int fallback_aws_error_code) {
     switch (error_no) {
         case EINVAL:
-            return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-        case ESPIPE:
-            return aws_raise_error(AWS_ERROR_STREAM_UNSEEKABLE);
+            /* If useful fallback code provided, raise that instead of AWS_ERROR_INVALID_ARGUMENT,
+             * which isn't very useful when it bubbles out from deep within some complex system. */
+            if (fallback_aws_error_code != AWS_ERROR_SYS_CALL_FAILURE) {
+                return aws_raise_error(fallback_aws_error_code);
+            } else {
+                return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+            }
         case EPERM:
         case EACCES:
             return aws_raise_error(AWS_ERROR_NO_PERMISSION);
@@ -217,6 +225,6 @@ int aws_translate_and_raise_io_error(int error_no) {
         case ENOTEMPTY:
             return aws_raise_error(AWS_ERROR_DIRECTORY_NOT_EMPTY);
         default:
-            return aws_raise_error(AWS_ERROR_SYS_CALL_FAILURE);
+            return aws_raise_error(fallback_aws_error_code);
     }
 }

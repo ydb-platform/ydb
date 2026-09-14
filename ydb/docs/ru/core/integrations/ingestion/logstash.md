@@ -7,8 +7,8 @@
 [Logstash](https://www.elastic.co/logstash) – инструмент сбора, фильтрации и нормализации логов. Данный продукт позволяет динамически получать, фильтровать и доставлять данные независимо от их формата и сложности. Конфигурация системы производиться с помощью плагинов различных типов - input, output и filter. Набор Logstash плагинов для работы с {{ ydb-short-name }} располагается в репозитории [ydb-logstash-plugins](https://github.com/ydb-platform/ydb-logstash-plugins):
 
 * Storage Plugin для сохранения данных в [строчной](../../concepts/datamodel/table.md#strokovye-tablicy) или [колоночной](../../concepts/datamodel/table.md#column-tables) таблице {{ ydb-short-name }};
-* Input Topic Plugin для чтение данных из {{ ydb-short-name }} [топика](../../concepts/topic.md);
-* Output Topic Plugin для отправки данных в {{ ydb-short-name }} [топик](../../concepts/topic.md).
+* Input Topic Plugin для чтение данных из {{ ydb-short-name }} [топика](../../concepts/datamodel/topic.md);
+* Output Topic Plugin для отправки данных в {{ ydb-short-name }} [топик](../../concepts/datamodel/topic.md).
 
 Плагины можно [собрать](https://github.com/ydb-platform/ydb-logstash-plugins/blob/main/BUILD.md) самостоятельно из исходного кода, либо воспользоваться готовыми [сборками](https://github.com/ydb-platform/ydb-logstash-plugins/releases) под две последнии версии Logstash.
 
@@ -129,34 +129,34 @@ curl -H "content-type: application/json" -XPUT 'http://127.0.0.1:9876/http/ping'
 
 #### Проверка наличия записанных сообщений в {{ ydb-short-name }}
 
-Теперь можно убедиться что все отправленные сообщения записаны в таблице. Выполним запрос (не забывая что чтение из колоночной таблицы возможно только в [режиме ScanQuery](../../reference/ydb-cli/commands/scan-query.md)):
+Теперь можно убедиться, что все отправленные сообщения записаны в таблице. Выполним запрос через [{{ ydb-cli }} sql](../../reference/ydb-cli/sql.md) (команда `{{ ydb-cli }} table query execute -t scan` устарела):
 
-```yql
-SELECT * FROM `logstash_demo`;
+```bash
+{{ ydb-cli }} sql -s 'SELECT * FROM `logstash_demo`;'
 ```
 
 и получим список записанных событий:
 
 ```text
 ┌───────┬────────────────┬───────────────────────────────┬─────────────┬────────────────────────────────────────┐
-│ level │ message        │ ts                            │  user       │ uuid                                   │
+│ level │ message │ ts │ user │ uuid │
 ├───────┼────────────────┼───────────────────────────────┼─────────────┼────────────────────────────────────────┤
-│ -3    │ "error"        │ "2024-05-22T13:16:06.491000Z" │  null       │ "74cd4048-0b61-4fb9-9385-308714e21881" │
-│  1    │ null           │ "2024-05-22T13:15:56.591000Z" │ "test1"     │ "1df27d0a-9aa0-42c7-9ea2-ab69bc1f5d87" │
-│  4    │ "demo message" │ "2024-05-22T13:15:38.760000Z" │ "demo_user" │ "b7468cb1-e1e3-46fa-965d-83e604e80a31" │
+│ -3 │ "error" │ "2024-05-22T13:16:06.491000Z" │ null │ "74cd4048-0b61-4fb9-9385-308714e21881" │
+│ 1 │ null │ "2024-05-22T13:15:56.591000Z" │ "test1" │ "1df27d0a-9aa0-42c7-9ea2-ab69bc1f5d87" │
+│ 4 │ "demo message" │ "2024-05-22T13:15:38.760000Z" │ "demo_user" │ "b7468cb1-e1e3-46fa-965d-83e604e80a31" │
 └───────┴────────────────┴───────────────────────────────┴─────────────┴────────────────────────────────────────┘
 ```
 
 ## Плагин {{ ydb-short-name }} Topic Input
 
-Данный плагин позволяет читать из {{ ydb-short-name }} [топика](../../concepts/topic.md) и преобразовывать их в события `Logstash` для дальнейшей обработки.
+Данный плагин позволяет читать из {{ ydb-short-name }} [топика](../../concepts/datamodel/topic.md) и преобразовывать их в события `Logstash` для дальнейшей обработки.
 
 ### Конфигурация плагина
 
 Для настройки плагина мы должны добавить секцию `ydb_topic` в раздел `input` файла конфигурации [Logstash](https://www.elastic.co/guide/en/logstash/current/configuration.html). Плагин поддерживает стандартный набор опций для [подключения плагинов {{ ydb-short-name }}](#plugin-config), плюс несколько специфичных для него опций:
 
 * `topic_path` — обязательный параметр с полным путем топика для чтения;
-* `consumer_name` — обязательный параметр с именем [читателя](../../concepts/topic.md#consumer) топика;
+* `consumer_name` — обязательный параметр с именем [читателя](../../concepts/datamodel/topic.md#consumer) топика;
 * `schema` — необязательный параметр с вариантам обработки сообщений {{ ydb-short-name }}. По умолчанию плагин читает и отправляет сообщения топика в бинарном виде, но если указать режим `JSON`, то каждое сообщение из топика будет трактоваться как JSON объект.
 
 ### Пример использования
@@ -221,7 +221,7 @@ echo '{"user":123}' | ydb -e grpc://localhost:2136 -d /local topic write /local/
 
 ## Плагин {{ ydb-short-name }} Topic Output
 
-Данный плагин позволяет записывать события  `Logstash` в {{ ydb-short-name }} [топик](../../concepts/topic.md).
+Данный плагин позволяет записывать события  `Logstash` в {{ ydb-short-name }} [топик](../../concepts/datamodel/topic.md).
 
 ### Конфигурация плагина
 

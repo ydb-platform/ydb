@@ -2,7 +2,7 @@
 
 {% include [warning.md](_includes/warning.md) %}
 
-`ydbops` utility automates some operational tasks on {{ ydb-short-name }} clusters. It supports clusters deployed using [Ansible](../../devops/ansible/index.md), [Kubernetes](../../devops/kubernetes/index.md), or [manually](../../devops/manual/index.md).
+`ydbops` utility automates some operational tasks on {{ ydb-short-name }} clusters. It supports clusters deployed using [Ansible](../../devops/deployment-options/ansible/index.md), [Kubernetes](../../devops/deployment-options/kubernetes/index.md), or [manually](../../devops/deployment-options/manual/index.md).
 
 ## See also
 
@@ -12,7 +12,7 @@
 
 ## Currently supported scenarios
 
-See the list of currently supported scenarios [here](scenarios.md).
+See the list of currently supported scenarios [here](rolling-restart-scenario.md).
 
 ## Scenarios in development
 

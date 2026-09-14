@@ -5,6 +5,8 @@
 #include "flat_local_tx_read_columns.h"
 #include "flat_local_tx_scheme.h"
 
+#include <ydb/library/aclib/user_context.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -14,7 +16,10 @@ TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalMKQL::TPtr &ev)
 {
     TLocalMiniKQLProgram program(*ev->Get());
 
-    return new TFlatLocalMiniKQL(ev->Sender, program, this);
+    auto userCtx = NACLib::TUserContextBuilder()
+        .DeserializeFromEventHandle(*ev.Get())
+        .Build();
+    return new TFlatLocalMiniKQL(ev->Sender, program, this, userCtx);
 }
 
 TAutoPtr<ITransaction> TMiniKQLFactory::Make(TEvTablet::TEvLocalSchemeTx::TPtr &ev)

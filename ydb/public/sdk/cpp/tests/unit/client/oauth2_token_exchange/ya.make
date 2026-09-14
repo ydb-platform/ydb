@@ -11,6 +11,7 @@ PEERDIR(
     library/cpp/json
     library/cpp/string_utils/base64
     ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange
+    ydb/public/sdk/cpp/tests/unit/client/oauth2_token_exchange/helpers
 )
 
 END()

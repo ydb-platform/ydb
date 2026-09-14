@@ -1,13 +1,12 @@
 #pragma once
 
-#include "bt_exception.h"
 #include "strbuf.h"
 #include "string.h"
 #include "utility.h"
 #include "va_args.h"
-#include <utility>
 
 #include <util/stream/tempbuf.h>
+#include <util/system/backtrace.h>
 #include <util/system/compat.h>
 #include <util/system/compiler.h>
 #include <util/system/defaults.h>
@@ -16,10 +15,8 @@
 #include <util/system/platform.h>
 
 #include <exception>
-
+#include <utility>
 #include <cstdio>
-
-class TBackTrace;
 
 namespace NPrivateException {
     class TTempBufCuttingWrapperOutput: public IOutputStream {
@@ -138,11 +135,29 @@ struct TBadArgumentException: public virtual yexception {
 struct TBadCastException: public virtual TBadArgumentException {
 };
 
+template <class T>
+class TWithBackTrace: public T {
+public:
+    template <typename... Args>
+    inline TWithBackTrace(Args&&... args)
+        : T(std::forward<Args>(args)...)
+    {
+        BT_.Capture();
+    }
+
+    const TBackTrace* BackTrace() const noexcept override {
+        return &BT_;
+    }
+
+private:
+    TBackTrace BT_;
+};
+
 #define ythrow throw __LOCATION__ +
 
 namespace NPrivate {
-    /// Encapsulates data for one of the most common case in which
-    /// exception message consists of single constant string
+    /// Encapsulates data for the most common case when
+    /// an exception message consists of a single constant string
     struct TSimpleExceptionMessage {
         TSourceLocation Location;
         TStringBuf Message;
@@ -198,13 +213,13 @@ TString FormatExc(const std::exception& exception);
 /// @def Y_ENSURE_SIMPLE
 /// This macro works like the Y_ENSURE, but requires the second argument to be a constant string view.
 /// Should not be used directly.
-#define Y_ENSURE_SIMPLE(CONDITION, MESSAGE, THROW_FUNCTION)                                                                 \
-    do {                                                                                                                    \
-        if (Y_UNLIKELY(!(CONDITION))) {                                                                                     \
-            /* use variable to guarantee evaluation at compile time */                                                      \
-            static constexpr const ::NPrivate::TSimpleExceptionMessage __SIMPLE_EXCEPTION_MESSAGE{__LOCATION__, (MESSAGE)}; \
-            THROW_FUNCTION(__SIMPLE_EXCEPTION_MESSAGE);                                                                     \
-        }                                                                                                                   \
+#define Y_ENSURE_SIMPLE(CONDITION, MESSAGE, THROW_FUNCTION)                                                             \
+    do {                                                                                                                \
+        if (Y_UNLIKELY(!(CONDITION))) {                                                                                 \
+            /* use variable to guarantee evaluation at compile time */                                                  \
+            static constexpr const ::NPrivate::TSimpleExceptionMessage SimpleExceptionMessage{__LOCATION__, (MESSAGE)}; \
+            THROW_FUNCTION(SimpleExceptionMessage);                                                                     \
+        }                                                                                                               \
     } while (false)
 
 #define Y_ENSURE_IMPL_1(CONDITION) Y_ENSURE_SIMPLE(CONDITION, ::TStringBuf("Condition violated: `" Y_STRINGIZE(CONDITION) "'"), ::NPrivate::ThrowYException)

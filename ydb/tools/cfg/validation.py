@@ -87,8 +87,16 @@ EXECUTOR_SCHEMA = {
             "type": "integer",
             "min": 1,
         },
+        "harmonizer_needy_cpu_window_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32,
+        },
     },
 }
+
+IO_EXECUTOR_SCHEMA = copy.deepcopy(EXECUTOR_SCHEMA)
+IO_EXECUTOR_SCHEMA["not"] = {"required": ["harmonizer_needy_cpu_window_seconds"]}
 
 SYS_SCHEMA = {
     "type": "object",
@@ -103,7 +111,7 @@ SYS_SCHEMA = {
                 "system": copy.deepcopy(EXECUTOR_SCHEMA),
                 "batch": copy.deepcopy(EXECUTOR_SCHEMA),
                 "user": copy.deepcopy(EXECUTOR_SCHEMA),
-                "io": copy.deepcopy(EXECUTOR_SCHEMA),
+                "io": copy.deepcopy(IO_EXECUTOR_SCHEMA),
                 "ic": copy.deepcopy(EXECUTOR_SCHEMA),
             },
             "additionalProperties": False,
@@ -155,12 +163,15 @@ DRIVE_SCHEMA = {
         "path": dict(type="string", minLength=1),
         "shared_with_os": dict(type="boolean"),
         "expected_slot_count": dict(type="integer"),
+        "expected_slot_size": dict(type="integer"),
+        "max_slots": dict(type="integer"),
         "pdisk_config": {
             "type": "object",
             "additionalProperties": True,
             "properties": {},
         },
         "kind": dict(type="integer"),
+        "disk_scope": dict(type="string"),
     },
     "required": ["type", "path"],
     "additionalProperties": False,
@@ -177,6 +188,8 @@ HOST_SCHEMA = {
         },
         "node_id": {"type": "integer", "minLength": 1},
         "host": {"type": "string", "minLength": 1},
+        "dynamic_slots": {"type": "integer", "minimum": 0},
+        "storage": {"type": "boolean"},
     },
     "oneOf": [
         {
@@ -895,11 +908,20 @@ TEMPLATE_SCHEMA = {
                 "enforce_user_token_requirement": {
                     "type": "boolean",
                 },
+                "database_allowed_sids": {"type": "array", "items": {"type": "string"}},
+                "viewer_allowed_sids": {"type": "array", "items": {"type": "string"}},
                 "monitoring_allowed_sids": {"type": "array", "items": {"type": "string"}},
                 "administration_allowed_sids": {"type": "array", "items": {"type": "string"}},
+                "bootstrap_allowed_sids": {"type": "array", "items": {"type": "string"}},
+                "register_dynamic_node_allowed_sids": {"type": "array", "items": {"type": "string"}},
             },
         },
         "static_erasure": {
+            "type": "string",
+            "minLength": 1,
+            "enum": Erasure.all_erasure_type_names(),
+        },
+        "erasure": {
             "type": "string",
             "minLength": 1,
             "enum": Erasure.all_erasure_type_names(),
@@ -952,12 +974,20 @@ TEMPLATE_SCHEMA = {
         "yql_analytics": copy.deepcopy(YQL_SCHEMA),
         "yq": copy.deepcopy(YQ_SCHEMA),
     },
-    "required": ["static_erasure", "hosts"],
+    "anyOf": [
+        {"required": ["static_erasure", "hosts"]},
+        {"required": ["erasure", "hosts"]},
+    ],
 }
 
 
 def _host_and_ic_port(host):
-    return "%s:%s" % (host.get("name", host.get("host")), str(host.get("ic_port", 19001)))
+    port = 19001
+    if "ic_port" in host:
+        port = host["ic_port"]
+    if "port" in host:
+        port = host["port"]
+    return "%s:%s" % (host.get("name", host.get("host")), str(port))
 
 
 def checkNameServiceDuplicates(validator, allow_duplicates, instance, schema):

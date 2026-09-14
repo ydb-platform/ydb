@@ -1,32 +1,37 @@
 RECURSE(
-    bsconfig
-    draft
-    extensions
-    helpers
-    impl/ydb_endpoints
-    impl/ydb_internal/common
-    impl/ydb_internal/db_driver_state
-    impl/ydb_internal/grpc_connections
-    impl/ydb_internal/logger
-    impl/ydb_internal/make_request
-    impl/ydb_internal/plain_status
-    impl/ydb_internal/thread_pool
-    impl/ydb_internal/value_helpers
-    impl/ydb_stats
-    resources
     cms
     common_client
     common_client/impl
+    config
     coordination
     datastreams
     debug
     discovery
+    draft
     driver
     export
     extension_common
+    extensions
     federated_topic
     federated_topic/impl
+    helpers
+    impl/endpoints
+    impl/executor
+    impl/internal/common
+    impl/internal/db_driver_state
+    impl/internal/grpc_connections
+    impl/internal/logger
+    impl/internal/make_request
+    impl/internal/plain_status
+    impl/internal/sdk_runtime
+    impl/internal/scheme_helpers
+    impl/internal/thread_pool
+    impl/internal/value_helpers
+    impl/observability
+    impl/session
+    impl/stats
     import
+    metrics
     operation
     params
     persqueue_public
@@ -35,15 +40,21 @@ RECURSE(
     query
     query/impl
     rate_limiter
+    resources
     result
+    row_ranges
     scheme
+    secret
     table
     table/impl
     table/query_stats
+    test_shard
     topic
     topic/codecs
     topic/impl
+    trace
     types
+    types/core_facility
     types/credentials
     types/exceptions
     types/fatal_error_handlers

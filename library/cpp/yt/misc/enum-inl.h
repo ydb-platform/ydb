@@ -11,6 +11,7 @@
 #include <util/generic/cast.h>
 
 #include <algorithm>
+#include <bit>
 #include <numeric>
 #include <stdexcept>
 
@@ -68,6 +69,47 @@ constexpr bool CheckValuesUnique(const TValues& values)
     return true;
 }
 
+template <typename TValues>
+constexpr bool IsFirstOccurrence(const TValues& values, size_t index)
+{
+    auto prefixEnd = values.begin() + index;
+    return std::find(values.begin(), prefixEnd, values[index]) == prefixEnd;
+}
+
+template <typename TValues>
+constexpr int CountUniqueValues(const TValues& values)
+{
+    int result = 0;
+    for (size_t index = 0; index < std::size(values); ++index) {
+        if (IsFirstOccurrence(values, index)) {
+            ++result;
+        }
+    }
+    return result;
+}
+
+template <int UniqueValueCount, typename TValues>
+constexpr auto MakeUniqueValues(const TValues& values)
+{
+    using TValue = typename TValues::value_type;
+
+    std::array<TValue, UniqueValueCount> result{};
+    int resultIndex = 0;
+    for (size_t index = 0; index < std::size(values); ++index) {
+        if (IsFirstOccurrence(values, index)) {
+            result[resultIndex++] = values[index];
+        }
+    }
+    return result;
+}
+
+template <class T>
+struct TUniqueEnumDomain
+{
+    static constexpr int Size = CountUniqueValues(TEnumTraitsImpl<T>::GetDomainValues());
+    static constexpr auto Values = MakeUniqueValues<Size>(TEnumTraitsImpl<T>::GetDomainValues());
+};
+
 template <typename TNames>
 constexpr bool CheckDomainNames(const TNames& names)
 {
@@ -115,13 +157,14 @@ constexpr bool CheckDomainNames(const TNames& names)
         [[maybe_unused]] static constexpr bool IsMonotonic = \
             ::NYT::NDetail::CheckValuesMonotonic(Values); \
         \
-        static TStringBuf GetTypeName() \
+        static constexpr TStringBuf TypeName = PP_STRINGIZE(enumType); \
+        \
+        static constexpr TStringBuf GetTypeName() \
         { \
-            static constexpr TStringBuf Result = PP_STRINGIZE(enumType); \
-            return Result; \
+            return TypeName; \
         } \
         \
-        static const std::optional<TStringBuf> FindLiteralByValue(T value) \
+        static constexpr std::optional<TStringBuf> FindLiteralByValue(T value) \
         { \
             for (int i = 0; i < GetDomainSize(); ++i) { \
                 if (Values[i] == value) { \
@@ -131,7 +174,7 @@ constexpr bool CheckDomainNames(const TNames& names)
             return std::nullopt; \
         } \
         \
-        static std::optional<T> FindValueByLiteral(TStringBuf literal) \
+        static constexpr std::optional<T> FindValueByLiteral(TStringBuf literal) \
         { \
             for (int i = 0; i < GetDomainSize(); ++i) { \
                 if (Names[i] == literal) { \
@@ -226,7 +269,7 @@ constexpr bool CheckDomainNames(const TNames& names)
     } \
     \
     using ::ToString; \
-    [[maybe_unused]] inline TString ToString(enumType value) \
+    [[maybe_unused]] inline std::string ToString(enumType value) \
     { \
         return ::NYT::TEnumTraits<enumType>::ToString(value); \
     }
@@ -246,27 +289,49 @@ constexpr auto TEnumTraitsWithKnownDomain<T, true>::GetDomainNames() -> const st
 }
 
 template <class T>
+template <bool AllowAmbiguousValues>
 constexpr auto TEnumTraitsWithKnownDomain<T, true>::GetDomainValues() -> const std::array<T, GetDomainSize()>&
 {
-    return TEnumTraitsImpl<T>::GetDomainValues();
+    constexpr const auto& values = TEnumTraitsImpl<T>::GetDomainValues();
+    static_assert(
+        AllowAmbiguousValues || NDetail::CheckValuesUnique(values),
+        "GetDomainValues cannot be used with duplicate enumeration values unless AllowAmbiguousValues is true");
+    return values;
+}
+
+template <class T>
+constexpr const auto& TEnumTraitsWithKnownDomain<T, true>::GetUniqueDomainValues()
+{
+    constexpr const auto& values = TEnumTraitsImpl<T>::GetDomainValues();
+    if constexpr (NDetail::CheckValuesUnique(values)) {
+        return values;
+    } else {
+        return NDetail::TUniqueEnumDomain<T>::Values;
+    }
 }
 
 template <class T>
 constexpr T TEnumTraitsWithKnownDomain<T, true>::GetMinValue()
     requires (!TEnumTraitsImpl<T>::IsBitEnum)
 {
-    const auto& values = GetDomainValues();
-    static_assert(!values.empty()); \
-    return *std::min_element(std::begin(values), std::end(values));
+    // NB: GetDomainValues() is a static constexpr array, but a constexpr function called from
+    // a runtime context is not guaranteed to be constant-folded. Without binding the result to
+    // a constexpr local, clang (at -O2/-O3) emits a runtime std::min_element scan over the whole
+    // domain on every call -- which is hot, e.g. in TEnumIndexedArray::operator[] bounds checks.
+    constexpr const auto& values = GetDomainValues</*AllowAmbiguousValues*/ true>();
+    static_assert(!values.empty());
+    constexpr T result = *std::min_element(std::begin(values), std::end(values));
+    return result;
 }
 
 template <class T>
 constexpr T TEnumTraitsWithKnownDomain<T, true>::GetMaxValue()
     requires (!TEnumTraitsImpl<T>::IsBitEnum)
 {
-    const auto& values = GetDomainValues();
-    static_assert(!values.empty()); \
-    return *std::max_element(std::begin(values), std::end(values));
+    constexpr const auto& values = GetDomainValues</*AllowAmbiguousValues*/ true>();
+    static_assert(!values.empty());
+    constexpr T result = *std::max_element(std::begin(values), std::end(values));
+    return result;
 }
 
 template <class T>
@@ -281,7 +346,7 @@ std::vector<T> TEnumTraitsWithKnownDomain<T, true>::Decompose(T value)
     requires (TEnumTraitsImpl<T>::IsBitEnum)
 {
     std::vector<T> result;
-    for (auto domainValue : GetDomainValues()) {
+    for (auto domainValue : GetDomainValues</*AllowAmbiguousValues*/ true>()) {
         if (Any(value & domainValue)) {
             result.push_back(domainValue);
         }
@@ -292,7 +357,7 @@ std::vector<T> TEnumTraitsWithKnownDomain<T, true>::Decompose(T value)
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-TStringBuf TEnumTraits<T, true>::GetTypeName()
+constexpr TStringBuf TEnumTraits<T, true>::GetTypeName()
 {
     return TEnumTraitsImpl<T>::GetTypeName();
 }
@@ -305,13 +370,13 @@ constexpr std::optional<T> TEnumTraits<T, true>::TryGetUnknownValue()
 }
 
 template <class T>
-std::optional<T> TEnumTraits<T, true>::FindValueByLiteral(TStringBuf literal)
+constexpr std::optional<T> TEnumTraits<T, true>::FindValueByLiteral(TStringBuf literal)
 {
     return TEnumTraitsImpl<T>::FindValueByLiteral(literal);
 }
 
 template <class T>
-std::optional<TStringBuf> TEnumTraits<T, true>::FindLiteralByValue(T value)
+constexpr std::optional<TStringBuf> TEnumTraits<T, true>::FindLiteralByValue(T value)
 {
     return TEnumTraitsImpl<T>::FindLiteralByValue(value);
 }
@@ -334,13 +399,13 @@ constexpr bool TEnumTraits<T, true>::IsValidValue(T value)
 }
 
 template <class T>
-TString TEnumTraits<T, true>::ToString(T value)
+std::string TEnumTraits<T, true>::ToString(T value)
 {
     using ::ToString;
     if (auto optionalLiteral = TEnumTraits<T>::FindLiteralByValue(value)) {
         return ToString(*optionalLiteral);
     }
-    TString result;
+    std::string result;
     result = TEnumTraits<T>::GetTypeName();
     result += "(";
     result += ToString(ToUnderlying(value));
@@ -349,7 +414,7 @@ TString TEnumTraits<T, true>::ToString(T value)
 }
 
 template <class T>
-T TEnumTraits<T, true>::FromString(TStringBuf literal)
+constexpr T TEnumTraits<T, true>::FromString(TStringBuf literal)
 {
     auto optionalValue = FindValueByLiteral(literal);
     if (!optionalValue) {
@@ -424,6 +489,13 @@ template <typename E>
 constexpr bool None(E value) noexcept
 {
     return ToUnderlying(value) == 0;
+}
+
+template <typename E>
+    requires TEnumTraits<E>::IsBitEnum
+constexpr int PopCount(E value)
+{
+    return std::popcount(static_cast<std::underlying_type_t<E>>(value));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

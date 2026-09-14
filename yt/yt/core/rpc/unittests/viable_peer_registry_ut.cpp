@@ -3,12 +3,15 @@
 #include <yt/yt/core/bus/bus.h>
 #include <yt/yt/core/bus/server.h>
 
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
 #include <yt/yt/core/net/local_address.h>
 
 #include <yt/yt/core/rpc/channel.h>
 #include <yt/yt/core/rpc/config.h>
 #include <yt/yt/core/rpc/client.h>
 #include <yt/yt/core/rpc/public.h>
+#include <yt/yt/core/rpc/peer_priority_provider.h>
 #include <yt/yt/core/rpc/viable_peer_registry.h>
 #include <yt/yt/core/rpc/indexed_hash_map.h>
 
@@ -35,7 +38,7 @@ const NLogging::TLogger Logger{"ViablePeerRegistryUnitTest"};
 
 TEST(TIndexedHashMapTest, Simple)
 {
-    TIndexedHashMap<TString, int> test;
+    TIndexedHashMap<std::string, int> test;
 
     EXPECT_EQ(test.Size(), 0);
 
@@ -54,7 +57,7 @@ TEST(TIndexedHashMapTest, Simple)
     EXPECT_TRUE(test.Set("c", 42));
     EXPECT_EQ(test.Size(), 3);
 
-    TIndexedHashMap<TString, int>::TUnderlyingStorage data;
+    TIndexedHashMap<std::string, int>::TUnderlyingStorage data;
     for (int i = 0; i < test.Size(); ++i) {
         data.push_back(test[i]);
     }
@@ -164,11 +167,12 @@ private:
 };
 
 IViablePeerRegistryPtr CreateTestRegistry(
-    EPeerPriorityStrategy peerPriorityStrategy,
+    IPeerPriorityProviderPtr peerPriorityProvider,
     const IChannelFactoryPtr& channelFactory,
     int maxPeerCount,
     std::optional<int> hashesPerPeer = {},
-    std::optional<int> minPeerCountForPriorityAwareness = {})
+    std::optional<int> minPeerCountForPriorityAwareness = {},
+    std::optional<bool> enablePowerOfTwoChoicesStrategy = {})
 {
     auto config = New<TViablePeerRegistryConfig>();
     config->MaxPeerCount = maxPeerCount;
@@ -178,13 +182,34 @@ IViablePeerRegistryPtr CreateTestRegistry(
     if (minPeerCountForPriorityAwareness) {
         config->MinPeerCountForPriorityAwareness = *minPeerCountForPriorityAwareness;
     }
-
-    config->PeerPriorityStrategy = peerPriorityStrategy;
+    if (enablePowerOfTwoChoicesStrategy) {
+        config->EnablePowerOfTwoChoicesStrategy = *enablePowerOfTwoChoicesStrategy;
+    }
 
     return CreateViablePeerRegistry(
         config,
         BIND([=] (const std::string& address) { return channelFactory->CreateChannel(address); }),
+        peerPriorityProvider,
         Logger);
+}
+
+IViablePeerRegistryPtr CreateTestRegistry(
+    EPeerPriorityStrategy peerPriorityStrategy,
+    const IChannelFactoryPtr& channelFactory,
+    int maxPeerCount,
+    std::optional<int> hashesPerPeer = {},
+    std::optional<int> minPeerCountForPriorityAwareness = {},
+    std::optional<bool> enablePowerOfTwoChoicesStrategy = {})
+{
+    return CreateTestRegistry(
+        peerPriorityStrategy == EPeerPriorityStrategy::None
+            ? GetDummyPeerPriorityProvider()
+            : GetYPClusterMatchingPeerPriorityProvider(),
+        channelFactory,
+        maxPeerCount,
+        hashesPerPeer,
+        minPeerCountForPriorityAwareness,
+        enablePowerOfTwoChoicesStrategy);
 }
 
 std::vector<std::string> AddressesFromChannels(const std::vector<IChannelPtr>& channels)
@@ -303,6 +328,11 @@ public:
             TMethodDescriptor{"method"})
     { }
 
+    TFakeRequest(const TFakeRequest& other)
+        : TClientRequest(other)
+        , Hash_(other.Hash_)
+    { }
+
     TSharedRefArray SerializeHeaderless() const override
     {
         YT_UNIMPLEMENTED();
@@ -311,6 +341,11 @@ public:
     size_t GetHash() const override
     {
         return Hash_;
+    }
+
+    IClientRequestPtr Clone() const override
+    {
+        return New<TFakeRequest>(*this);
     }
 
 private:
@@ -325,6 +360,12 @@ IClientRequestPtr CreateRequest(bool enableStickiness = false)
     return request;
 }
 
+void SetRequestStickyGroupSize(IClientRequestPtr& request, int stickyGroupSize)
+{
+    auto* balancingHeaderExt = request->Header().MutableExtension(NRpc::NProto::TBalancingExt::balancing_ext);
+    balancingHeaderExt->set_sticky_group_size(stickyGroupSize);
+}
+
 TEST_P(TParametrizedViablePeerRegistryTest, GetChannelBasic)
 {
     auto channelFactory = New<TFakeChannelFactory>();
@@ -336,7 +377,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetChannelBasic)
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("d"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("e"));
 
-    TString retrievedPeer;
+    std::string retrievedPeer;
     {
         auto channel = viablePeerRegistry->PickRandomChannel(CreateRequest(), /*hedgingOptions*/ {});
         retrievedPeer = channel->GetEndpointDescription();
@@ -351,7 +392,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetChannelBasic)
         Not(Contains(retrievedPeer))));
 
     {
-        auto channel = viablePeerRegistry->PickRandomChannel(CreateRequest(), /*hedgingOptions*/ {});;
+        auto channel = viablePeerRegistry->PickRandomChannel(CreateRequest(), /*hedgingOptions*/ {});
         EXPECT_NE(channel->GetEndpointDescription(), retrievedPeer);
         EXPECT_THAT(channelFactory->GetChannelRegistry(), Contains(channel->GetEndpointDescription()));
     }
@@ -399,7 +440,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetStickyChannel)
 
     EXPECT_EQ(retrievedAddresses.size(), 1u);
 
-    THashMap<IClientRequestPtr, TString> requestToPeer;
+    THashMap<IClientRequestPtr, std::string> requestToPeer;
     for (int iter = 0; iter < 1000; ++iter) {
         auto request = CreateRequest(/*enableStickiness*/ true);
         auto channel = viablePeerRegistry->PickStickyChannel(request);
@@ -459,14 +500,14 @@ TEST_P(TParametrizedViablePeerRegistryTest, PeersAvailablePromise)
 
     viablePeerRegistry->SetError(TError("error"));
     EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().IsSet());
-    EXPECT_FALSE(viablePeerRegistry->GetPeersAvailable().Get().IsOK());
+    EXPECT_FALSE(WaitForFast(viablePeerRegistry->GetPeersAvailable()).IsOK());
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("f"));
     EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().IsSet());
-    EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().Get().IsOK());
+    EXPECT_TRUE(WaitForFast(viablePeerRegistry->GetPeersAvailable()).IsOK());
 
     viablePeerRegistry->SetError(TError("another error"));
-    EXPECT_TRUE(viablePeerRegistry->GetPeersAvailable().Get().IsOK());
+    EXPECT_TRUE(WaitForFast(viablePeerRegistry->GetPeersAvailable()).IsOK());
 
     EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("f"));
     EXPECT_FALSE(viablePeerRegistry->GetPeersAvailable().IsSet());
@@ -500,7 +541,13 @@ INSTANTIATE_TEST_SUITE_P(
 TEST(TPreferLocalViablePeerRegistryTest, Simple)
 {
     auto channelFactory = New<TFakeChannelFactory>();
-    auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
+    auto viablePeerRegistry = CreateTestRegistry(
+        EPeerPriorityStrategy::PreferLocal,
+        channelFactory,
+        3,
+        /*hashesPerPeer*/ {},
+        /*minPeerCountForPriorityAwareness*/ {},
+        /*enablePowerOfTwoChoicesStrategy*/ false);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
         NNet::SetLocalHostName(oldLocalHostName);
@@ -519,6 +566,7 @@ TEST(TPreferLocalViablePeerRegistryTest, Simple)
     auto req = CreateRequest();
     for (int iter = 0; iter < 100; ++iter) {
         auto channel = viablePeerRegistry->PickRandomChannel(req, /*hedgingOptions*/ {});
+
         EXPECT_EQ(channel->GetEndpointDescription(), "a.man.yp-c.yandex.net");
     }
 }
@@ -647,7 +695,13 @@ TEST(TPreferLocalViablePeerRegistryTest, FillFromBacklogRespectsPriority)
 TEST(TPreferLocalViablePeerRegistryTest, DoNotCrashIfNoLocalPeers)
 {
     auto channelFactory = New<TFakeChannelFactory>();
-    auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
+    auto viablePeerRegistry = CreateTestRegistry(
+        EPeerPriorityStrategy::PreferLocal,
+        channelFactory,
+        3,
+        /*hashesPerPeer*/ {},
+        /*minPeerCountForPriorityAwareness*/ {},
+        /*enablePowerOfTwoChoicesStrategy*/ false);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
         NNet::SetLocalHostName(oldLocalHostName);
@@ -664,6 +718,81 @@ TEST(TPreferLocalViablePeerRegistryTest, DoNotCrashIfNoLocalPeers)
     EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("a.man.yp-c.yandex.net"));
     auto otherChannel = viablePeerRegistry->PickRandomChannel(req, /*hedgingOptions*/ {});
     EXPECT_EQ(otherChannel->GetEndpointDescription(), "b.sas.yp-c.yandex.net");
+}
+
+TEST(TPreferLocalViablePeerRegistryTest, StickyGroupSize)
+{
+    auto channelFactory = New<TFakeChannelFactory>();
+    auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 4);
+
+    auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
+        NNet::SetLocalHostName(oldLocalHostName);
+    });
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
+
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("a.man.yp-c.yandex.net"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("c.man.yp-c.yandex.net"));
+
+    auto req = CreateRequest();
+    SetRequestStickyGroupSize(req, 1);
+
+    for (int i = 0; i < 10; ++i) {
+        auto localChannel = viablePeerRegistry->PickStickyChannel(req);
+        EXPECT_TRUE(
+            localChannel->GetEndpointDescription() == "a.man.yp-c.yandex.net" ||
+            localChannel->GetEndpointDescription() == "c.man.yp-c.yandex.net");
+    }
+
+    EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("a.man.yp-c.yandex.net"));
+    for (int i = 0; i < 10; ++i) {
+        auto localChannel = viablePeerRegistry->PickStickyChannel(req);
+        EXPECT_EQ(localChannel->GetEndpointDescription(), "c.man.yp-c.yandex.net");
+    }
+
+    EXPECT_TRUE(viablePeerRegistry->UnregisterPeer("c.man.yp-c.yandex.net"));
+    auto otherChannel = viablePeerRegistry->PickStickyChannel(req);
+    EXPECT_EQ(otherChannel->GetEndpointDescription(), "b.sas.yp-c.yandex.net");
+}
+
+TEST(TPreferLocalViablePeerRegistryTest, YpClusterOverride)
+{
+    auto channelFactory = New<TFakeChannelFactory>();
+    auto mapPeerPriorityProvider = CreateYPClusterMatchingPeerPriorityProviderWithOverrides();
+    auto viablePeerRegistry = CreateTestRegistry(
+        mapPeerPriorityProvider,
+        channelFactory,
+        4,
+        /*hashesPerPeer*/ {},
+        /*minPeerCountForPriorityAwareness*/ {},
+        /*enablePowerOfTwoChoicesStrategy*/ false);
+
+    auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
+        NNet::SetLocalHostName(oldLocalHostName);
+    });
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
+
+    auto addressToClusterMapping = THashMap<std::string, std::string>{
+        {"abc", "sas"},
+        {"def", "man"},
+        {"efg", "sas"},
+    };
+
+    mapPeerPriorityProvider->SetAddressToClusterOverride(addressToClusterMapping);
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("abc"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("cde"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("def"));
+    EXPECT_TRUE(viablePeerRegistry->RegisterPeer("efg"));
+
+    EXPECT_THAT(
+        channelFactory->GetChannelRegistry(),
+        UnorderedElementsAre("abc", "cde", "def", "efg"));
+
+    auto req = CreateRequest();
+    for (int iter = 0; iter < 100; ++iter) {
+        auto channel = viablePeerRegistry->PickRandomChannel(req, /*hedgingOptions*/ {});
+        EXPECT_EQ(channel->GetEndpointDescription(), "def");
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

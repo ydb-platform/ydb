@@ -183,9 +183,9 @@
     ],
     "test.test[InMem-Fold1MapOverUnboundedPreservedStream-default.txt-Debug]": [
         {
-            "checksum": "6a566125116e8d4f6e939bad14562313",
-            "size": 1381,
-            "uri": "https://{canondata_backend}/1936842/97e0ab044a6a521639a649b6b781407443c8c0f8/resource.tar.gz#test.test_InMem-Fold1MapOverUnboundedPreservedStream-default.txt-Debug_/opt.yql"
+            "checksum": "522a53311030cbeae2afe9a0aea454b1",
+            "size": 1460,
+            "uri": "https://{canondata_backend}/1031349/81408fe839ca3ca4bc2f92d058d0d8f2c1b6a0da/resource.tar.gz#test.test_InMem-Fold1MapOverUnboundedPreservedStream-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[InMem-Fold1MapOverUnboundedPreservedStream-default.txt-Results]": [
@@ -207,6 +207,20 @@
             "checksum": "3bf6b05a1e940d48a4fe473f1e0e3b3d",
             "size": 986,
             "uri": "https://{canondata_backend}/1936842/97e0ab044a6a521639a649b6b781407443c8c0f8/resource.tar.gz#test.test_InMem-Iterator-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[InMem-LPartitionsByKeysSorted-default.txt-Debug]": [
+        {
+            "checksum": "344f7eae976694446bf07e0a90cd6f07",
+            "size": 566,
+            "uri": "https://{canondata_backend}/1814674/2df5cbfd5d5a594d9f476819b99ebb23ca848426/resource.tar.gz#test.test_InMem-LPartitionsByKeysSorted-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[InMem-LPartitionsByKeysSorted-default.txt-Results]": [
+        {
+            "checksum": "20b62fca5b0e72f0ca2df54d7d61a5e2",
+            "size": 337,
+            "uri": "https://{canondata_backend}/1814674/2df5cbfd5d5a594d9f476819b99ebb23ca848426/resource.tar.gz#test.test_InMem-LPartitionsByKeysSorted-default.txt-Results_/results.txt"
         }
     ],
     "test.test[InMem-ReplaceMember-default.txt-Debug]": [
@@ -321,6 +335,20 @@
             "uri": "https://{canondata_backend}/1937367/e77ba21bdee3073d5ac816e83de0c7af4a7daf05/resource.tar.gz#test.test_Lib-Agg_List_Compare_By_Opts-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Optimizers-EmptyOverListWithComplexUniq-default.txt-Debug]": [
+        {
+            "checksum": "fc513f9ab77aa25c63bb1a43467fe29c",
+            "size": 396,
+            "uri": "https://{canondata_backend}/995452/07ee5aca68bd02fba1bfa8356eaea86f0e5a7870/resource.tar.gz#test.test_Optimizers-EmptyOverListWithComplexUniq-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-EmptyOverListWithComplexUniq-default.txt-Results]": [
+        {
+            "checksum": "8a557f375bf97e6adf4e8c1e40cd18c0",
+            "size": 2123,
+            "uri": "https://{canondata_backend}/995452/07ee5aca68bd02fba1bfa8356eaea86f0e5a7870/resource.tar.gz#test.test_Optimizers-EmptyOverListWithComplexUniq-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Optimizers-Fold1OneItemTuple-default.txt-Debug]": [
         {
             "checksum": "d92be86870a01fdf575d08165de8f8a0",
@@ -361,6 +389,34 @@
             "checksum": "82b25724231ea529e9fdba0527c6aec0",
             "size": 209,
             "uri": "https://{canondata_backend}/1031349/df47136f10b23be567e4d030aeee318bb1121eda/resource.tar.gz#test.test_Optimizers-IfOverNotPredicate-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[Optimizers-MoveExtractMembersOverSqlCombineMultiUsage-default.txt-Debug]": [
+        {
+            "checksum": "4998928a43880a5aabe31276dd4a7f17",
+            "size": 1056,
+            "uri": "https://{canondata_backend}/1599023/715e7fc569b42adf897f909272a61ad83afb45a5/resource.tar.gz#test.test_Optimizers-MoveExtractMembersOverSqlCombineMultiUsage-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-MoveExtractMembersOverSqlCombineMultiUsage-default.txt-Results]": [
+        {
+            "checksum": "1e275a72894636791af84944ae3b6822",
+            "size": 3175,
+            "uri": "https://{canondata_backend}/1599023/715e7fc569b42adf897f909272a61ad83afb45a5/resource.tar.gz#test.test_Optimizers-MoveExtractMembersOverSqlCombineMultiUsage-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[Optimizers-PruneUnusedColumnsOverSqlCombineInput-default.txt-Debug]": [
+        {
+            "checksum": "f4493e95efbfc5c12b4f562547400932",
+            "size": 820,
+            "uri": "https://{canondata_backend}/1130705/3fae9e798494f7ed8366006857ac5066304a1d93/resource.tar.gz#test.test_Optimizers-PruneUnusedColumnsOverSqlCombineInput-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-PruneUnusedColumnsOverSqlCombineInput-default.txt-Results]": [
+        {
+            "checksum": "e3647bd4ffe3af8f6709893b98f0b052",
+            "size": 2109,
+            "uri": "https://{canondata_backend}/1900335/b629a284190dccac1bfcf6cd4fb67b80cf2f7b50/resource.tar.gz#test.test_Optimizers-PruneUnusedColumnsOverSqlCombineInput-default.txt-Results_/results.txt"
         }
     ],
     "test.test[Optimizers-SkipWhileOverLiterals-default.txt-Debug]": [

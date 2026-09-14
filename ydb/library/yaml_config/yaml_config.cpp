@@ -5,8 +5,11 @@
 #include <ydb/core/base/appdata.h>
 
 #include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/protobuf/json/util.h>
 
+#include <ydb/core/config/protos/marker.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
+#include <ydb/core/config/validation/validators.h>
 
 namespace NKikimr::NYamlConfig {
 
@@ -27,50 +30,71 @@ NKikimrConfig::TAppConfig YamlToProto(
     NJson::ReadJsonTree(resolvedJsonConfig, &json);
 
     NKikimrConfig::TAppConfig yamlProtoConfig;
-    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(allowUnknown, std::move(unknownFieldsCollector)), yamlProtoConfig, preTransform, true);
+    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(allowUnknown, std::move(unknownFieldsCollector)), yamlProtoConfig, preTransform, /*phase=*/ nullptr, /*relaxed=*/ true);
 
     return yamlProtoConfig;
 }
 
 void ResolveAndParseYamlConfig(
-    const TString& yamlConfig,
+    const TString& mainYamlConfig,
     const TMap<ui64, TString>& volatileYamlConfigs,
     const TMap<TString, TString>& labels,
     NKikimrConfig::TAppConfig& appConfig,
+    std::optional<TString> databaseYamlConfig,
     TString* resolvedYamlConfig,
-    TString* resolvedJsonConfig)
+    TString* resolvedJsonConfig,
+    TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector)
 {
-    auto tree = NFyaml::TDocument::Parse(yamlConfig);
-
-    for (auto& [_, config] : volatileYamlConfigs) {
-        auto d = NFyaml::TDocument::Parse(config);
-        NYamlConfig::AppendVolatileConfigs(tree, d);
-    }
-
-    TSet<NYamlConfig::TNamedLabel> namedLabels;
-    for (auto& [name, label] : labels) {
-        namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
-    }
-
-    auto config = NYamlConfig::Resolve(tree, namedLabels);
-
-    if (resolvedYamlConfig) {
-        TStringStream resolvedYamlConfigStream;
-        resolvedYamlConfigStream << config.second;
-        *resolvedYamlConfig = resolvedYamlConfigStream.Str();
-    }
-
     TStringStream resolvedJsonConfigStream;
-    resolvedJsonConfigStream << NFyaml::TJsonEmitter(config.second);
+    bool hasMetadata = false;
+    if (mainYamlConfig) {
+        auto tree = NFyaml::TDocument::Parse(mainYamlConfig);
 
-    if (resolvedJsonConfig) {
-        *resolvedJsonConfig = resolvedJsonConfigStream.Str();
+        if (tree.Root().Map().Has("metadata")) {
+            hasMetadata = true;
+        }
+
+        TSet<NYamlConfig::TNamedLabel> namedLabels;
+        for (auto& [name, label] : labels) {
+            namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
+        }
+
+        if (databaseYamlConfig) {
+            auto d = NFyaml::TDocument::Parse(*databaseYamlConfig);
+            NYamlConfig::ResolveDatabaseConfig(d, namedLabels);
+            NYamlConfig::AppendDatabaseConfig(tree, d);
+        }
+
+        for (auto& [_, config] : volatileYamlConfigs) {
+            auto d = NFyaml::TDocument::Parse(config);
+            NYamlConfig::AppendVolatileConfigs(tree, d);
+        }
+
+        auto config = NYamlConfig::Resolve(tree, namedLabels);
+
+        if (resolvedYamlConfig) {
+            TStringStream resolvedYamlConfigStream;
+            resolvedYamlConfigStream << config.second;
+            *resolvedYamlConfig = resolvedYamlConfigStream.Str();
+        }
+
+        resolvedJsonConfigStream << NFyaml::TJsonEmitter(config.second);
+
+        if (resolvedJsonConfig) {
+            *resolvedJsonConfig = resolvedJsonConfigStream.Str();
+        }
+    } else {
+        resolvedJsonConfigStream << "{}";
     }
 
     NJson::TJsonValue json;
     Y_ABORT_UNLESS(NJson::ReadJsonTree(resolvedJsonConfigStream.Str(), &json), "Got invalid config from Console");
 
-    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true), appConfig, true, true);
+    if (hasMetadata) {
+        appConfig.SetYamlConfigEnabled(true);
+    }
+
+    NYaml::Parse(json, NYaml::GetJsonToProtoConfig(true, std::move(unknownFieldsCollector)), appConfig, true, /*phase=*/ nullptr, /*relaxed=*/ true);
 }
 
 void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig::TAppConfig& to) {
@@ -85,6 +109,68 @@ void ReplaceUnmanagedKinds(const NKikimrConfig::TAppConfig& from, NKikimrConfig:
     if (from.NamedConfigsSize()) {
         to.MutableNamedConfigs()->CopyFrom(from.GetNamedConfigs());
     }
+}
+
+class TLegacyValidators
+    : public IConfigValidator
+{
+public:
+    EValidationResult ValidateConfig(
+        const NKikimrConfig::TAppConfig& config,
+        std::vector<TString>& msg) const override
+    {
+        auto res = NKikimr::NConfig::ValidateConfig(config, msg);
+        switch (res) {
+            case NKikimr::NConfig::EValidationResult::Ok:
+                return EValidationResult::Ok;
+            case NKikimr::NConfig::EValidationResult::Warn:
+                return EValidationResult::Warn;
+            case NKikimr::NConfig::EValidationResult::Error:
+                return EValidationResult::Error;
+        }
+    }
+};
+
+class TDefaultConfigSwissKnife : public IConfigSwissKnife {
+public:
+    TDefaultConfigSwissKnife() {
+        Validators["LegacyValidators"] = MakeSimpleShared<TLegacyValidators>();
+    }
+
+    bool VerifyReplaceRequest(const Ydb::Config::ReplaceConfigRequest&, Ydb::StatusIds::StatusCode&, NYql::TIssues&) const override {
+        return true;
+    }
+
+    bool VerifyMainConfig(const TString&) const override {
+        return true;
+    };
+
+    bool VerifyStorageConfig(const TString&) const override {
+        return true;
+    }
+};
+
+
+std::unique_ptr<IConfigSwissKnife> CreateDefaultConfigSwissKnife() {
+    return std::make_unique<TDefaultConfigSwissKnife>();
+}
+
+EValidationResult IConfigSwissKnife::ValidateConfig(
+    const NKikimrConfig::TAppConfig& config,
+    std::vector<TString>& msg) const
+{
+    for (const auto& [name, validator] : GetValidators()) {
+        EValidationResult result = validator->ValidateConfig(config, msg);
+        if (result == EValidationResult::Error) {
+            return EValidationResult::Error;
+        }
+    }
+
+    if (msg.size() > 0) {
+        return EValidationResult::Warn;
+    }
+
+    return EValidationResult::Ok;
 }
 
 } // namespace NKikimr::NYamlConfig

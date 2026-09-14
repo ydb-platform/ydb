@@ -10,6 +10,8 @@
 
 #include <contrib/libs/grpc/include/grpc/grpc.h>
 
+#include <contrib/libs/grpc/src/core/lib/event_engine/thread_pool/thread_pool.h>
+
 #include <contrib/libs/grpc/src/core/lib/iomgr/executor.h>
 
 #include <atomic>
@@ -20,7 +22,7 @@ using namespace NConcurrency;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = GrpcLogger;
+constinit const auto Logger = GrpcLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -34,14 +36,14 @@ void* TCompletionQueueTag::GetTag(int cookie)
 
 TGrpcLibraryLock::TGrpcLibraryLock()
 {
-    YT_LOG_INFO("Initializing GRPC library");
+    YT_TLOG_INFO("Initializing GRPC library");
     grpc_init_openssl();
     grpc_init();
 }
 
 TGrpcLibraryLock::~TGrpcLibraryLock()
 {
-    YT_LOG_INFO("Shutting down GRPC library");
+    YT_TLOG_INFO("Shutting down GRPC library");
     grpc_shutdown();
 }
 
@@ -60,10 +62,28 @@ public:
         auto guard = Guard(ConfigLock_);
 
         if (IsInitialized()) {
+            if (AreNodesEqual(ConvertToNode(config), ConvertToNode(Config_))) {
+                return;
+            }
             THROW_ERROR_EXCEPTION("GRPC dispatcher is already initialized and cannot be reconfigured");
         }
 
         Config_ = config;
+        InternalMinLogLevel_.store(config->GrpcInternalMinLogLevel);
+    }
+
+    void Reconfigure(const TDispatcherConfigPtr& newConfig)
+    {
+        auto oldMinLogLevel = InternalMinLogLevel_.load();
+        auto newMinLogLevel = newConfig->GrpcInternalMinLogLevel;
+        if (oldMinLogLevel == newMinLogLevel) {
+            return;
+        }
+
+        InternalMinLogLevel_.store(newMinLogLevel);
+        YT_TLOG_INFO("GRPC dispatcher reconfigured")
+            .With("NewMinLogLevel", newMinLogLevel)
+            .With("OldMinLogLevel", oldMinLogLevel);
     }
 
     TGrpcLibraryLockPtr GetLibraryLock()
@@ -91,9 +111,7 @@ private:
                 {.ShutdownPriority = GrpcDispatcherThreadShutdownPriority})
             , LibraryLock_(std::move(libraryLock))
             , GuardedCompletionQueue_(TGrpcCompletionQueuePtr(grpc_completion_queue_create_for_next(nullptr)))
-        {
-            Start();
-        }
+        { }
 
         TGuardedGrpcCompletionQueue* GetGuardedCompletionQueue()
         {
@@ -117,7 +135,7 @@ private:
 
         void ThreadMain() override
         {
-            YT_LOG_DEBUG("Dispatcher thread started");
+            YT_TLOG_DEBUG("Dispatcher thread started");
 
             // Take raw completion queue for fetching tasks,
             // because `grpc_completion_queue_next` can be concurrent with other operations.
@@ -147,7 +165,7 @@ private:
                 }
             }
 
-            YT_LOG_DEBUG("Dispatcher thread stopped");
+            YT_TLOG_DEBUG("Dispatcher thread stopped");
         }
     };
 
@@ -174,18 +192,54 @@ private:
         YT_VERIFY(!IsInitialized());
 
         grpc_core::Executor::SetThreadsLimit(Config_->GrpcThreadCount);
+        grpc_event_engine::experimental::ThreadPool::SetThreadsLimit(Config_->GrpcEventEngineThreadCount);
+
+        gpr_set_log_verbosity(GPR_LOG_SEVERITY_DEBUG);
+        gpr_set_log_function(ProcessGrpcLogEvent);
 
         // Initialize grpc only after configuration is done.
         auto grpcLock = New<TGrpcLibraryLock>();
         for (int index = 0; index < Config_->DispatcherThreadCount; ++index) {
-            Threads_.push_back(New<TDispatcherThread>(grpcLock, index));
+            auto dispatcherThread = New<TDispatcherThread>(grpcLock, index);
+            dispatcherThread->Start();
+            Threads_.push_back(std::move(dispatcherThread));
         }
         LibraryLock_ = grpcLock;
         Initialized_.store(true);
     }
 
+    static void ProcessGrpcLogEvent(gpr_log_func_args* args)
+    {
+        auto& self = *Get()->Impl_;
+
+        NLogging::ELogLevel level;
+        switch (args->severity) {
+            case GPR_LOG_SEVERITY_DEBUG:
+                level = NLogging::ELogLevel::Debug;
+                break;
+            case GPR_LOG_SEVERITY_INFO:
+                level = NLogging::ELogLevel::Info;
+                break;
+            case GPR_LOG_SEVERITY_ERROR:
+                level = NLogging::ELogLevel::Error;
+                break;
+            default:
+                level = NLogging::ELogLevel::Debug;
+                break;
+        }
+
+        auto minLogLevel = self.InternalMinLogLevel_.load(std::memory_order::relaxed);
+        if (level < minLogLevel) {
+            return;
+        }
+
+        YT_TLOG_EVENT(GrpcInternalLogger, level, args->message)
+            .With("File", args->file)
+            .With("Line", args->line);
+    }
 
     std::atomic<bool> Initialized_ = false;
+    std::atomic<NLogging::ELogLevel> InternalMinLogLevel_ = NLogging::ELogLevel::Maximum;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, ConfigLock_);
     TDispatcherConfigPtr Config_ = New<TDispatcherConfig>();
@@ -210,6 +264,11 @@ TDispatcher* TDispatcher::Get()
 void TDispatcher::Configure(const TDispatcherConfigPtr& config)
 {
     Impl_->Configure(config);
+}
+
+void TDispatcher::Reconfigure(const TDispatcherConfigPtr& newConfig)
+{
+    Impl_->Reconfigure(newConfig);
 }
 
 bool TDispatcher::IsInitialized() const noexcept

@@ -13,16 +13,19 @@ namespace NYql::NDq {
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*>
     CreateGenericLookupActor(
         NConnector::IClient::TPtr connectorClient,
-        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         NActors::TActorId parentId,
         ::NMonitoring::TDynamicCounterPtr taskCounters,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
-        NYql::Generic::TLookupSource&& lookupSource,
+        Generic::TLookupSource&& lookupSource,
         const NKikimr::NMiniKQL::TStructType* keyType,
         const NKikimr::NMiniKQL::TStructType* payloadType,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const size_t maxKeysInRequest);
+        const size_t maxKeysInRequest,
+        const THashMap<TString, TString>& secureParams,
+        bool isMultiMatches = false
+    );
 
 } // namespace NYql::NDq

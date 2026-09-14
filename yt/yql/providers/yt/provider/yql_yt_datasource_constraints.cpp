@@ -22,11 +22,13 @@ public:
         : TVisitorTransformerBase(true)
         , State_(state)
     {
+        AddHandler({TStringBuf("Result"), TStringBuf("Pull")}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
         AddHandler({TYtTable::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleTable));
         AddHandler({TYtPath::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandlePath));
         AddHandler({TYtSection::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleSection));
         AddHandler({TYtReadTable::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleReadTable));
         AddHandler({TYtTableContent::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleTableContent));
+        AddHandler({TYtBlockTableContent::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleBlockTableContent));
 
         AddHandler({TYtIsKeySwitch::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
         AddHandler({TYqlRowSpec::CallableName()}, Hndl(&TYtDataSourceConstraintTransformer::HandleDefault));
@@ -184,6 +186,12 @@ public:
 
     TStatus HandleTableContent(TExprBase input, TExprContext& /*ctx*/) {
         TYtTableContent tableContent = input.Cast<TYtTableContent>();
+        input.Ptr()->CopyConstraints(tableContent.Input().Ref());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleBlockTableContent(TExprBase input, TExprContext& /*ctx*/) {
+        TYtBlockTableContent tableContent = input.Cast<TYtBlockTableContent>();
         input.Ptr()->CopyConstraints(tableContent.Input().Ref());
         return TStatus::Ok;
     }

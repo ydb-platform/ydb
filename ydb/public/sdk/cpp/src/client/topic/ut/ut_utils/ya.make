@@ -1,25 +1,27 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
-    managed_executor.cpp
-    managed_executor.h
     topic_sdk_test_setup.cpp
     topic_sdk_test_setup.h
-    trace.cpp
-    trace.h
+    txusage_fixture.cpp
+    txusage_fixture.h
 )
 
 PEERDIR(
-    ydb/library/grpc/server
-    library/cpp/testing/unittest
-    library/cpp/threading/chunk_queue
-    ydb/core/testlib/default
-    ydb/public/sdk/cpp/src/library/persqueue/topic_parser_public
+    ydb/library/testlib/common
+    ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/topic
+    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/table
+    ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/tests/integration/topic/utils
+
+    ydb/core/base
+    ydb/core/persqueue/ut/common
+    ydb/core/tx/schemeshard/ut_helpers
+
+    library/cpp/testing/unittest
 )
 
 YQL_LAST_ABI_VERSION()

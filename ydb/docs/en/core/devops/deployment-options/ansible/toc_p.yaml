@@ -1,0 +1,19 @@
+items:
+- name: Initial deployment
+  href: initial-deployment/index.md
+  include:
+    mode: link
+    path: initial-deployment/toc_p.yaml
+- name: Preparing VMs with Terraform
+  href: preparing-vms-with-terraform.md
+- name: Restart
+  href: restart.md
+- name: Update config
+  href: update-config.md
+- name: Update executable
+  href: update-executable.md
+- name: Observability
+  href: observability/index.md
+  include:
+    mode: link
+    path: observability/toc_p.yaml

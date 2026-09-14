@@ -523,6 +523,9 @@ struct TOperationSpecBase
     /// If operation doesn't finish in time it will be aborted.
     FLUENT_FIELD_OPTION(TDuration, TimeLimit);
 
+    /// @brief Alias for searching for an operation in the future.
+    FLUENT_FIELD_OPTION(TString, Alias);
+
     /// @brief Title to be shown in web interface.
     FLUENT_FIELD_OPTION(TString, Title);
 
@@ -542,6 +545,12 @@ struct TOperationSpecBase
 
     /// How many jobs can fail before operation is failed.
     FLUENT_FIELD_OPTION(ui64, MaxFailedJobCount);
+
+    // Arbitrary structured information related to the operation.
+    FLUENT_FIELD_OPTION(TNode, Annotations);
+
+    // Similar to Annotations, shown on the operation page. Recommends concise, human-readable entries to prevent clutter.
+    FLUENT_FIELD_OPTION(TNode, Description);
 };
 
 ///
@@ -881,6 +890,15 @@ struct TUserJobSpec
     ///
     /// @see https://ytsaurus.tech/docs/en/user-guide/data-processing/operations/operations-options#disk_request
     FLUENT_FIELD_OPTION(TDiskRequest, DiskRequest);
+
+    ///
+    /// @brief Activates the RPC proxy within the job proxy.
+    ///
+    /// By enabling this option, the environment variable YT_JOB_PROXY_SOCKET_PATH will be set.
+    /// You can use this variable to obtain the unix domain socket path and then construct a client for sending requests.
+    ///
+    /// @note Do not enable this option without prior discussion with the YTsaurus team.
+    FLUENT_FIELD_DEFAULT(bool, EnableRpcProxyInJobProxy, false);
 
 private:
     TVector<std::tuple<TLocalFilePath, TAddLocalFileOptions>> LocalFiles_;
@@ -1623,6 +1641,12 @@ struct TOperationOptions
     /// @note Default values for this option may differ depending on the row type.
     /// For protobuf it's currently `false` by default.
     FLUENT_FIELD_OPTION(bool, InferOutputSchema);
+
+    ///
+    /// @brief If job state size is less than specified value, job state will be passed via environment variable in spec
+    ///
+    /// @note Default value is 0, so job spec is passed via file
+    FLUENT_FIELD_DEFAULT(i64, MinJobStateSizeToPassViaFile, 0);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2341,6 +2365,7 @@ enum class EOperationAttribute : int
     Spec              /* "spec" */,
     FullSpec          /* "full_spec" */,
     UnrecognizedSpec  /* "unrecognized_spec" */,
+    Alerts            /* "alerts" */,
 };
 
 ///
@@ -2450,13 +2475,13 @@ struct TOperationProgress
 /// @brief Brief operation progress (numbers of jobs in these states).
 struct TOperationBriefProgress
 {
-    ui64 Aborted = 0;
-    ui64 Completed = 0;
-    ui64 Failed = 0;
-    ui64 Lost = 0;
-    ui64 Pending = 0;
-    ui64 Running = 0;
-    ui64 Total = 0;
+    i64 Aborted = 0;
+    i64 Completed = 0;
+    i64 Failed = 0;
+    i64 Lost = 0;
+    i64 Pending = 0;
+    i64 Running = 0;
+    i64 Total = 0;
 };
 
 ///
@@ -2743,6 +2768,10 @@ enum class EJobType : int
     RemoveChunk       /* "remove_chunk" */,
     RepairChunk       /* "repair_chunk" */,
     SealChunk         /* "seal_chunk" */,
+    ShallowMerge      /* "shallow_merge" */,
+    MergeChunks       /* "merge_chunks" */,
+    AutotomizeChunk   /* "autotomize_chunk" */,
+    ReincarnateChunk  /* "reincarnate_chunk" */,
 };
 
 ///
@@ -2836,6 +2865,45 @@ enum class EJobSortDirection : int
 };
 
 ///
+/// @brief Attributes to request for a job.
+enum class EJobAttribute : int
+{
+    Id                /* "id" */,
+    Type              /* "type" */,
+    State             /* "state" */,
+    Address           /* "address" */,
+    TaskName          /* "task_name" */,
+    StartTime         /* "start_time" */,
+    FinishTime        /* "finish_time" */,
+    Progress          /* "progress" */,
+    StderrSize        /* "stderr_size" */,
+    Error             /* "error" */,
+    Result            /* "result" */,
+    BriefStatistics   /* "brief_statistics" */,
+    InputPaths        /* "input_paths" */,
+    CoreInfos         /* "core_infos" */,
+};
+
+///
+/// @brief A class that specifies which attributes to request when using @ref NYT::IClient::GetJob or @ref NYT::IClient::ListJobs.
+struct TJobAttributeFilter
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TJobAttributeFilter;
+    /// @endcond
+
+    THashSet<EJobAttribute> Attributes_;
+
+    ///
+    /// @brief Add attribute to the filter. Calls are supposed to be chained.
+    TSelf& Add(EJobAttribute attribute)
+    {
+        Attributes_.insert(attribute);
+        return *this;
+    }
+};
+
+///
 /// @brief Options for @ref NYT::IClient::ListJobs.
 ///
 /// @see https://ytsaurus.tech/docs/en/api/commands.html#list_jobs
@@ -2880,8 +2948,16 @@ struct TListJobsOptions
     FLUENT_FIELD_OPTION(bool, WithMonitoringDescriptor);
 
     ///
+    /// @brief Return only jobs with interruption info.
+    FLUENT_FIELD_OPTION(bool, WithInterruptionInfo);
+
+    ///
     /// @brief Return only jobs with given operation incarnation.
     FLUENT_FIELD_OPTION(TString, OperationIncarnation);
+
+    ///
+    /// @brief Return only jobs with given monitoring descriptor.
+    FLUENT_FIELD_OPTION(TString, MonitoringDescriptor);
 
     ///
     /// @brief Search for jobs with start time >= `FromTime`.
@@ -2894,6 +2970,10 @@ struct TListJobsOptions
     ///
     /// @brief Search for jobs with filters encoded in token.
     FLUENT_FIELD_OPTION(TString, ContinuationToken);
+
+    ///
+    /// @brief Return only requested job attributes.
+    FLUENT_FIELD_OPTION(TJobAttributeFilter, AttributeFilter);
 
     /// @}
 
@@ -3007,6 +3087,14 @@ struct TJobAttributes
     ///
     /// @brief Infos for core dumps produced by job.
     TMaybe<TVector<TCoreInfo>> CoreInfos;
+
+    ///
+    /// @brief Job exec attributes.
+    TMaybe<TNode> ExecAttributes;
+
+    ///
+    /// @brief Job cookie.
+    TMaybe<ui64> Cookie;
 };
 
 ///
@@ -3039,6 +3127,10 @@ struct TGetJobOptions
     /// @cond Doxygen_Suppress
     using TSelf = TGetJobOptions;
     /// @endcond
+
+    ///
+    /// @brief Return only requested job attributes.
+    FLUENT_FIELD_OPTION(TJobAttributeFilter, AttributeFilter);
 };
 
 ///
@@ -3107,19 +3199,11 @@ struct TGetJobTraceOptions
 
     ///
     /// @brief Search for traces with time >= `FromTime`.
-    FLUENT_FIELD_OPTION(i64, FromTime);
+    FLUENT_FIELD_OPTION(TInstant, FromTime);
 
     ///
     /// @brief Search for traces with time <= `ToTime`.
-    FLUENT_FIELD_OPTION(i64, ToTime);
-
-    ///
-    /// @brief Search for traces with event index >= `FromEventIndex`.
-    FLUENT_FIELD_OPTION(i64, FromEventIndex);
-
-    ///
-    /// @brief Search for traces with event index >= `ToEventIndex`.
-    FLUENT_FIELD_OPTION(i64, ToEventIndex);
+    FLUENT_FIELD_OPTION(TInstant, ToTime);
 };
 
 ///
@@ -3140,11 +3224,11 @@ struct TJobTraceEvent
 
     ///
     /// @brief Index of the trace event.
-    i64 EventIndex;
+    i64 EventIndex = 0;
 
     ///
-    /// @brief Raw evenr in json format.
-    TString Event;
+    /// @brief Raw event in json format.
+    std::string Event;
 
     ///
     /// @brief Time of the event.
@@ -3158,7 +3242,7 @@ struct TJobTraceEvent
 struct IOperation
     : public TThrRefBase
 {
-    virtual ~IOperation() = default;
+    ~IOperation() override = default;
 
     ///
     /// @brief Get operation id.
@@ -3247,6 +3331,10 @@ struct IOperation
     ///
     /// @return `Nothing()` if operation has no running jobs yet, e.g. when it is in "materializing" or "pending" state.
     virtual TMaybe<TOperationBriefProgress> GetBriefProgress() = 0;
+
+    ///
+    /// Get operation alerts.
+    virtual TMaybe<THashMap<TString, TYtError>> GetAlerts() = 0;
 
     ///
     /// @brief Abort operation.

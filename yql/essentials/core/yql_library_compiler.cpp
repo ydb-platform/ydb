@@ -53,14 +53,15 @@ bool ReplaceNodes(TExprNode& node, const TNodeOnNodeOwnedMap& replaces, bool& ha
 TString Load(const TString& path)
 {
     TFile file(path, EOpenModeFlag::RdOnly);
-    if (file.GetLength() <= 0)
+    if (file.GetLength() <= 0) {
         return TString();
+    }
     std::vector<TString::value_type> buffer(file.GetLength());
     file.Load(buffer.data(), buffer.size());
     return TString(buffer.data(), buffer.size());
 }
 
-}
+} // namespace
 
 bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
     TExprNode::TListType tupleItems;
@@ -89,16 +90,20 @@ bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
     return true;
 }
 
-bool CompileLibrary(const TString& alias, const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize)
+bool CompileLibrary(const NSQLTranslation::TTranslators& translators, const TString& alias,
+                    const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize)
 {
     TAstParseResult res;
-    if (alias.EndsWith(".sql")) {
+    if (alias.EndsWith(".yqls")) {
+        res = ParseAst(script, /*externalPool=*/nullptr, alias);
+    } else if (alias.EndsWith(".sql") || alias.EndsWith(".yql")) {
         NSQLTranslation::TTranslationSettings translationSettings;
         translationSettings.SyntaxVersion = 1;
         translationSettings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
-        res = NSQLTranslation::SqlToYql(script, translationSettings);
+        res = NSQLTranslation::SqlToYql(translators, script, translationSettings);
     } else {
-        res = ParseAst(script, nullptr, alias);
+        ctx.AddError(TIssue({}, TStringBuilder() << "Can't infer syntax from alias: " << alias));
+        return false;
     }
     if (!res.IsOk()) {
         for (const auto& originalError : res.Issues) {
@@ -111,8 +116,9 @@ bool CompileLibrary(const TString& alias, const TString& script, TExprContext& c
         return false;
     }
 
-    if (!CompileExpr(*res.Root, cohesion, ctx))
+    if (!CompileExpr(*res.Root, cohesion, ctx)) {
         return false;
+    }
 
     if (!optimize) {
         return true;
@@ -135,7 +141,8 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
 bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx, TExprContext& ctxToClone, const std::function<const TExportTable*(const TString&)>& module2ExportTable)
 {
-    TNodeOnNodeOwnedMap clones, replaces;
+    TNodeOnNodeOwnedMap clones;
+    TNodeOnNodeOwnedMap replaces;
     for (const auto& lib : libs) {
         for (const auto& import : lib.second.Imports) {
             if (import.first->Dead()) {
@@ -144,7 +151,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
             if (import.second.first == lib.first) {
                 ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
-                    TStringBuilder() << "Library '" << lib.first << "' tries to import itself."));
+                                    TStringBuilder() << "Library '" << lib.first << "' tries to import itself."));
                 return false;
             }
 
@@ -159,15 +166,15 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
             if (!exportTable) {
                 ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
-                    TStringBuilder() << "Library '" << lib.first << "' has unresolved dependency from '" << import.second.first << "'."));
+                                    TStringBuilder() << "Library '" << lib.first << "' has unresolved dependency from '" << import.second.first << "'."));
                 return false;
             }
 
             if (const auto ex = exportTable->Symbols().find(import.second.second); exportTable->Symbols().cend() != ex) {
-                replaces[import.first] = externalModule ? ctxToClone.DeepCopy(*ex->second, exportTable->ExprCtx(), clones, true, false) : ex->second;
+                replaces[import.first] = externalModule ? ctxToClone.DeepCopy(*ex->second, exportTable->ExprCtx(), clones, /*internStrings=*/true, /*copyTypes=*/false) : ex->second;
             } else {
                 ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
-                    TStringBuilder() << "Library '" << lib.first << "' has unresolved symbol '" << import.second.second << "' from '" << import.second.first << "'."));
+                                    TStringBuilder() << "Library '" << lib.first << "' has unresolved symbol '" << import.second.second << "' from '" << import.second.first << "'."));
                 return false;
             }
         }
@@ -176,8 +183,9 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
     if (!replaces.empty()) {
         for (auto& lib : libs) {
             for (auto& expo : lib.second.Exports.Symbols(lib.second.Exports.ExprCtx())) {
-                if (const auto find = replaces.find(expo.second.Get()); replaces.cend() != find)
+                if (const auto find = replaces.find(expo.second.Get()); replaces.cend() != find) {
                     expo.second = find->second;
+                }
             }
         }
     }
@@ -188,7 +196,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
             for (const auto& expo : lib.second.Exports.Symbols()) {
                 if (!ReplaceNodes(*expo.second, replaces, hasChanges)) {
                     ctx.AddError(TIssue(ctxToClone.GetPosition(expo.second->Pos()),
-                        TStringBuilder() << "Cross reference detected under '" << expo.first << "' in '" << lib.first << "'."));
+                                        TStringBuilder() << "Cross reference detected under '" << expo.first << "' in '" << lib.first << "'."));
                     return false;
                 }
             }
@@ -198,7 +206,8 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
     return true;
 }
 
-bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModulesTable& modules, bool optimize)
+bool CompileLibraries(const NSQLTranslation::TTranslators& translators, const TUserDataTable& userData,
+                      TExprContext& ctx, TModulesTable& modules, bool optimize)
 {
     THashMap<TString, TLibraryCohesion> libs;
     for (const auto& data : userData) {
@@ -212,10 +221,11 @@ bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModule
             }
 
             if (!libraryData.empty()) {
-                if (CompileLibrary(alias, libraryData, ctx, libs[alias], optimize))
+                if (CompileLibrary(translators, alias, libraryData, ctx, libs[alias], optimize)) {
                     modules[TModuleResolver::NormalizeModuleName(alias)] = libs[alias].Exports;
-                else
+                } else {
                     return false;
+                }
             }
         }
     }
@@ -223,4 +233,4 @@ bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModule
     return LinkLibraries(libs, ctx, ctx);
 }
 
-}
+} // namespace NYql

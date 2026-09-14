@@ -51,6 +51,7 @@ namespace NFake {
         };
 
         THashMap<TTabletId, TGeneration> Blocks;
+        THashMap<TTabletId, ui32> BlockVersions;
         THashMap<std::pair<TTabletId, TChannel>, TBarrier> Barriers;
         THashMap<std::pair<TTabletId, TChannel>, TBarrier> HardBarriers;
         TMap<TLogoBlobID, TBlob> Blobs;
@@ -70,7 +71,7 @@ namespace NFake {
             Y_ABORT_UNLESS(id == id.FullID());
 
             // validate put against set blocks
-            if (IsBlocked(id.TabletID(), id.Generation())) {
+            if (!msg->IgnoreBlock && IsBlocked(id.TabletID(), id.Generation())) {
                 return new TEvBlobStorage::TEvPutResult(NKikimrProto::BLOCKED, id, GetStorageStatusFlags(), GroupId, 0.f);
             }
             for (const auto& [tabletId, generation] : msg->ExtraBlockChecks) {
@@ -80,7 +81,7 @@ namespace NFake {
             }
 
             // check if this blob is not being collected -- writing such blob is a violation of BS contract
-            Y_ABORT_UNLESS(!IsCollectedByBarrier(id), "Id# %s", id.ToString().data());
+            Y_ABORT_UNLESS(!IsCollectedByBarrier(id, msg->IssueKeepFlag), "Id# %s", id.ToString().data());
 
             // validate that there are no blobs with the same gen/step, channel, cookie, but with different size
             const TLogoBlobID base(id.TabletID(), id.Generation(), id.Step(), id.Channel(), 0, id.Cookie());
@@ -101,7 +102,10 @@ namespace NFake {
             }
 
             // put an entry into logo blobs database and reply with success
-            Blobs.emplace(id, std::move(msg->Buffer));
+            auto [it, inserted] = Blobs.emplace(id, std::move(msg->Buffer));
+            if (msg->IssueKeepFlag) {
+                it->second.Keep = true;
+            }
             return new TEvBlobStorage::TEvPutResult(NKikimrProto::OK, id, GetStorageStatusFlags(), GroupId, 0.f);
         }
 
@@ -114,7 +118,7 @@ namespace NFake {
             }
             if (const auto& blk = msg->ForceBlockTabletData; blk && blk->Generation) {
                 auto it = Blocks.find(blk->Id);
-                Y_VERIFY_S(it != Blocks.end() && it->second == blk->Generation, "incorrect ForceBlockTabletData"
+                Y_VERIFY_S(it != Blocks.end() && blk->Generation <= it->second, "incorrect ForceBlockTabletData"
                     << " expected Generation# " << blk->Generation
                     << " having Generation# " << (it != Blocks.end() ? ToString(it->second) : "none"));
             }
@@ -214,12 +218,46 @@ namespace NFake {
 
             // put an entry into logo blobs database and reply with success
             Blobs.emplace(id, TRope(buffer));
-    
+
             return new TEvBlobStorage::TEvPatchResult(NKikimrProto::OK, id, GetStorageStatusFlags(), GroupId, 0.f);
         }
 
         TEvBlobStorage::TEvBlockResult* Handle(TEvBlobStorage::TEvBlock *msg) {
             NKikimrProto::EReplyStatus status = NKikimrProto::OK;
+
+            if (msg->WriteSource == TWriteSource::SyncerMergeBlock && msg->TabletId >> 63) {
+                ui32& version = BlockVersions[~msg->TabletId];
+                if (msg->Generation <= version) {
+                    status = NKikimrProto::ALREADY;
+                } else {
+                    version = msg->Generation;
+                }
+                return new TEvBlobStorage::TEvBlockResult(status);
+            }
+
+            auto result = std::make_unique<TEvBlobStorage::TEvBlockResult>(status);
+            if (msg->WriteSource != TWriteSource::SyncerMergeBlock) {
+                if (!msg->TabletId || msg->TabletId >> 63) {
+                    result->Status = NKikimrProto::ERROR;
+                    return result.release();
+                }
+                ui32& version = BlockVersions[msg->TabletId];
+                if (msg->Version) {
+                    if (*msg->Version < version) {
+                        result->Status = NKikimrProto::ERROR;
+                        result->IsTabletStorageInfoVersionObsolete = true;
+                        return result.release();
+                    }
+                    if (*msg->Version > version) {
+                        if (const auto it = Blocks.find(msg->TabletId);
+                                it != Blocks.end() && msg->Generation <= it->second) {
+                            result->Status = NKikimrProto::ERROR;
+                            return result.release();
+                        }
+                        version = *msg->Version;
+                    }
+                }
+            }
 
             auto it = Blocks.find(msg->TabletId);
             if (it == Blocks.end()) {
@@ -230,7 +268,8 @@ namespace NFake {
                 it->second = msg->Generation;
             }
 
-            return new TEvBlobStorage::TEvBlockResult(status);
+            result->Status = status;
+            return result.release();
         }
 
         TEvBlobStorage::TEvGetBlockResult* Handle(TEvBlobStorage::TEvGetBlock *msg) {
@@ -289,7 +328,7 @@ namespace NFake {
 
             Y_ABORT_UNLESS(from.TabletID() == to.TabletID());
             Y_ABORT_UNLESS(from.Channel() == to.Channel());
-            Y_ABORT_UNLESS(from.TabletID() == msg->TabletId); 
+            Y_ABORT_UNLESS(from.TabletID() == msg->TabletId);
             auto result = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, from, to, GroupId);
 
             auto process = [&](const TLogoBlobID& id, const TString& buffer) {
@@ -317,7 +356,7 @@ namespace NFake {
         }
 
         TEvBlobStorage::TEvCollectGarbageResult* Handle(TEvBlobStorage::TEvCollectGarbage *msg) {
-            if (IsBlocked(msg->TabletId, msg->RecordGeneration) && (msg->CollectGeneration != Max<ui32>() ||
+            if (!msg->IgnoreBlock && IsBlocked(msg->TabletId, msg->RecordGeneration) && (msg->CollectGeneration != Max<ui32>() ||
                     msg->CollectStep != Max<ui32>() || Blocks.at(msg->TabletId) != Max<ui32>())) {
                 return new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::BLOCKED,
                         msg->TabletId, msg->RecordGeneration, msg->PerGenerationCounter, msg->Channel);
@@ -413,6 +452,14 @@ namespace NFake {
                     msg->RecordGeneration, msg->PerGenerationCounter, msg->Channel);
         }
 
+        TEvBlobStorage::TEvCheckIntegrityResult* Handle(TEvBlobStorage::TEvCheckIntegrity *msg) {
+            auto* result = new TEvBlobStorage::TEvCheckIntegrityResult(NKikimrProto::OK);
+            result->Id = msg->Id;
+            result->PlacementStatus = TEvBlobStorage::TEvCheckIntegrityResult::PS_UNKNOWN;
+            result->DataStatus = TEvBlobStorage::TEvCheckIntegrityResult::DS_UNKNOWN;
+            return result;
+        }
+
     public: // Non-event model interaction methods
         TStorageStatusFlags GetStorageStatusFlags() const noexcept {
             return StorageStatusFlags;
@@ -430,6 +477,20 @@ namespace NFake {
             return Blobs;
         }
 
+        TGroupId GetGroupId() const {
+            return GroupId;
+        }
+
+        void DeleteDoNotKeepBlobs() {
+            for (auto it = Blobs.begin(); it != Blobs.end(); ) {
+                if (it->second.DoNotKeep) {
+                    it = Blobs.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
     private:
         // check if provided generation is blocked for specific tablet
         bool IsBlocked(TTabletId tabletId, TGeneration generation) const noexcept {
@@ -438,11 +499,15 @@ namespace NFake {
         }
 
         // check if provided blob is under garbage collection by barriers
-        bool IsCollectedByBarrier(const TLogoBlobID& id) const noexcept {
+        bool IsCollectedByBarrier(const TLogoBlobID& id, bool issueKeepFlag = false) const noexcept {
             auto hardIt = HardBarriers.find(std::make_pair(id.TabletID(), id.Channel()));
             if (hardIt != HardBarriers.end() &&
                     std::make_pair(id.Generation(), id.Step()) <= hardIt->second.MakeCollectPair()) {
                 return true;
+            }
+
+            if (issueKeepFlag) {
+                return false;
             }
 
             auto it = Barriers.find(std::make_pair(id.TabletID(), id.Channel()));

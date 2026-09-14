@@ -46,7 +46,10 @@ class TYtPoller
     : public TThrRefBase
 {
 public:
-    TYtPoller(TClientContext context, const IClientRetryPolicyPtr& retryPolicy);
+    TYtPoller(
+        IRawClientPtr rawClient,
+        const TConfigPtr& config,
+        const IClientRetryPolicyPtr& retryPolicy);
     ~TYtPoller();
 
     void Watch(IYtPollerItemPtr item);
@@ -62,7 +65,8 @@ private:
 private:
     struct TItem;
 
-    const TClientContext Context_;
+    const IRawClientPtr RawClient_;
+    const TConfigPtr Config_;
     const IClientRetryPolicyPtr ClientRetryPolicy_;
 
 

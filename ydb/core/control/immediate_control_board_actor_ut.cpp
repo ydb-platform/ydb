@@ -1,6 +1,5 @@
 #include "defs.h"
 #include "immediate_control_board_actor.h"
-#include "immediate_control_board_wrapper.h"
 
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/core/mon/mon.h>
@@ -8,6 +7,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/tablet.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
+
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -61,11 +62,13 @@ static void SignalDoneEvent() {
 
 struct TTestConfig {
     TActorId IcbActorId;
-    TControlBoard *Icb;
+    TControlBoard* Icb;
+    TDynamicControlBoard *Dcb;
 
-    TTestConfig(TActorId icbActorId, TControlBoard *icb)
+    TTestConfig(TActorId icbActorId, TControlBoard *icb, TDynamicControlBoard *dcb)
         : IcbActorId(icbActorId)
         , Icb(icb)
+        , Dcb(dcb)
     {}
 };
 
@@ -100,11 +103,11 @@ static void Run(i64 instances = 1) {
 
         // ICB Actor creation
         TActorId IcbActorId = MakeIcbId(setup->NodeId);
-        TActorSetupCmd testSetup(CreateImmediateControlActor(appData.Icb, Counters), TMailboxType::Revolving, 0);
+        TActorSetupCmd testSetup(CreateImmediateControlActor(appData.Icb, appData.Dcb, Counters), TMailboxType::Revolving, 0);
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(IcbActorId, std::move(testSetup)));
 
 
-        THolder<TTestConfig> testConfig(new TTestConfig(IcbActorId, appData.Icb.Get()));
+        THolder<TTestConfig> testConfig(new TTestConfig(IcbActorId, appData.Icb.Get(), appData.Dcb.Get()));
         for (ui32 i = 0; i < instances; ++i) {
             testIds[i] = MakeBlobStorageProxyID(1 + i);
             TActorSetupCmd testSetup(new T(testConfig.Get()), TMailboxType::Revolving, 0);
@@ -204,6 +207,7 @@ protected:
 
     const TActorId IcbActor;
     TControlBoard *Icb;
+    TDynamicControlBoard* Dcb;
     int TestStep;
 
     virtual void TestFSM(const TActorContext &ctx) = 0;
@@ -235,6 +239,7 @@ public:
         : TActor(&TThis::StateRegister)
         , IcbActor(cfg->IcbActorId)
         , Icb(cfg->Icb)
+        , Dcb(cfg->Dcb)
         , TestStep(0)
     {}
 
@@ -343,12 +348,12 @@ class TTestHttpPostReaction : public TBaseTest {
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
-                Icb->GetValue("unexistentParameter", value, isControlExists);
+                Dcb->GetValue("unexistentParameter", value, isControlExists);
                 ASSERT_YTHROW(!isControlExists, "Parameter mustn't be created by POST request");
                 VERBOSE_COUT("Testing POST request with an existentParameter");
                 TControlWrapper control(10);
-                Icb->RegisterSharedControl(control, "existentParameter");
-                Icb->GetValue("existentParameter", value, isControlExists);
+                Dcb->RegisterSharedControl(control, "existentParameter");
+                Dcb->GetValue("existentParameter", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
                 HttpRequest->CgiParameters.clear();
@@ -362,7 +367,7 @@ class TTestHttpPostReaction : public TBaseTest {
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
-                Icb->GetValue("existentParameter", value, isControlExists);
+                Dcb->GetValue("existentParameter", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 15, "Parameter haven't changed by POST request");
                 VERBOSE_COUT("Test of restoreDefaults POST request");
@@ -377,18 +382,18 @@ class TTestHttpPostReaction : public TBaseTest {
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
-                Icb->GetValue("existentParameter", value, isControlExists);
+                Dcb->GetValue("existentParameter", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10,  "Parameter haven't restored default value");
                 VERBOSE_COUT("Test is bounds pulling wokrs");
                 TControlWrapper control1(10, 5, 15);
                 TControlWrapper control2(10, 5, 15);
-                Icb->RegisterSharedControl(control1, "existentParameterWithBoundsLower");
-                Icb->RegisterSharedControl(control2, "existentParameterWithBoundsUpper");
-                Icb->GetValue("existentParameterWithBoundsLower", value, isControlExists);
+                Dcb->RegisterSharedControl(control1, "existentParameterWithBoundsLower");
+                Dcb->RegisterSharedControl(control2, "existentParameterWithBoundsUpper");
+                Dcb->GetValue("existentParameterWithBoundsLower", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
-                Icb->GetValue("existentParameterWithBoundsUpper", value, isControlExists);
+                Dcb->GetValue("existentParameterWithBoundsUpper", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
                 HttpRequest->CgiParameters.clear();
@@ -404,11 +409,11 @@ class TTestHttpPostReaction : public TBaseTest {
                 bool isControlExists;
                 TAtomicBase value;
 
-                Icb->GetValue("existentParameterWithBoundsLower", value, isControlExists);
+                Dcb->GetValue("existentParameterWithBoundsLower", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 5, "Pulling value to bounds doesn't work");
 
-                Icb->GetValue("existentParameterWithBoundsUpper", value, isControlExists);
+                Dcb->GetValue("existentParameterWithBoundsUpper", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 15, "Pulling value to bounds doesn't work");
 

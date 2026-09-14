@@ -74,10 +74,13 @@ struct IJsonConsumer
     : public NYson::IFlushableYsonConsumer
 {
     virtual void SetAnnotateWithTypesParameter(bool value) = 0;
+    virtual void SetStringifyParameter(bool value) = 0;
 
     virtual void OnStringScalarWeightLimited(TStringBuf value, std::optional<i64> weightLimit) = 0;
     virtual void OnNodeWeightLimited(TStringBuf yson, std::optional<i64> weightLimit) = 0;
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 // If |type == ListFragment|, additionally call |underlying->StartNextValue| after each complete value.
 std::unique_ptr<IJsonConsumer> CreateJsonConsumer(
@@ -90,6 +93,13 @@ std::unique_ptr<IJsonConsumer> CreateJsonConsumer(
     IJsonWriter* underlying,
     NYson::EYsonType type = NYson::EYsonType::Node,
     TJsonFormatConfigPtr config = New<TJsonFormatConfig>());
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::unique_ptr<NJson::IJsonConsumer> CreateWebJsonConsumer(
+    IOutputStream* output,
+    NYson::EYsonType type = NYson::EYsonType::Node,
+    NJson::TWebJsonFormatConfigPtr config = New<NJson::TWebJsonFormatConfig>());
 
 ////////////////////////////////////////////////////////////////////////////////
 

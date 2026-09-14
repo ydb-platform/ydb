@@ -32,40 +32,47 @@ def add_stage_start_to_environ(stage_name):
 RETRIES = 5
 HASH_PREFIX = 10
 
+# Matches devtools/ya/core/error/__init__.py ExitCodes.INFRASTRUCTURE_ERROR
+YA_BIN_DOWNLOAD_ERROR_EXIT_CODE = 12
+
+
+class YaBinDownloadError(Exception):
+    """Network-related failure while downloading ya-bin (DNS, connection, timeout, HTTP error, corrupted transfer)."""
+
 REGISTRY_ENDPOINT = os.environ.get("YA_REGISTRY_ENDPOINT", "https://devtools-registry.s3.yandex.net")
 
 # Please do not change this dict, it is updated automatically
 # Start of mapping
 PLATFORM_MAP = {
     "data": {
-        "darwin": {
-            "md5": "8b254739a747d0d46397f71dba9bd2fc",
+        "win32": {
+            "md5": "254a6a90f62f1b29f8ab6cbdc116e867",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/7948692258"
+                f"{REGISTRY_ENDPOINT}/13582474590"
+            ]
+        },
+        "darwin": {
+            "md5": "d92d7a1dd89e306981ef66a8395acd94",
+            "urls": [
+                f"{REGISTRY_ENDPOINT}/13582468782"
             ]
         },
         "darwin-arm64": {
-            "md5": "ed5a23283cef3fc4c55eb1aa02a6f599",
+            "md5": "89c7af7b5e680f181173b5a9b180c7b9",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/7948691542"
+                f"{REGISTRY_ENDPOINT}/13582462242"
             ]
         },
         "linux-aarch64": {
-            "md5": "604297c6a525abfa0d6c1ce79861d73e",
+            "md5": "ae9d269f5963e1de77125e517d0479db",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/7948690723"
-            ]
-        },
-        "win32-clang-cl": {
-            "md5": "c40f8426c3e41250019a798ec4798b5a",
-            "urls": [
-                f"{REGISTRY_ENDPOINT}/7948692747"
+                f"{REGISTRY_ENDPOINT}/13582455610"
             ]
         },
         "linux": {
-            "md5": "0af2c4e6ad361b57f65b01205490dd4e",
+            "md5": "dc5ba194317f0748710c76a0ca5c34fd",
             "urls": [
-                f"{REGISTRY_ENDPOINT}/7948693197"
+                f"{REGISTRY_ENDPOINT}/13582480799"
             ]
         }
     }
@@ -180,13 +187,19 @@ def _fetch(url, into):
     md5 = hashlib.md5()
     sys.stderr.write('Downloading %s ' % url)
     sys.stderr.flush()
-    conn = urlopen(request, timeout=10)
+    try:
+        conn = urlopen(request, timeout=10)
+    except Exception as e:
+        raise YaBinDownloadError('Failed to connect to {}: {}'.format(url, e))
     sys.stderr.write('[')
     sys.stderr.flush()
     try:
         with open(into, 'wb') as f:
             while True:
-                block = conn.read(1024 * 1024)
+                try:
+                    block = conn.read(1024 * 1024)
+                except Exception as e:
+                    raise YaBinDownloadError('Failed to download {}: {}'.format(url, e))
                 sys.stderr.write('.')
                 sys.stderr.flush()
                 if block:
@@ -206,7 +219,8 @@ def _atomic_fetch(url, into, md5):
     try:
         real_md5 = _fetch(url, tmp_dest)
         if real_md5 != md5:
-            raise Exception('MD5 mismatched: %s differs from %s' % (real_md5, md5))
+            # Treat checksum mismatch as a network problem: it means the transfer was corrupted or truncated
+            raise YaBinDownloadError('MD5 mismatched: %s differs from %s' % (real_md5, md5))
         os.rename(tmp_dest, into)
         sys.stderr.write('OK\n')
     except Exception as e:
@@ -284,8 +298,8 @@ def _get_dir(urls, md5, ya_name):
             os.rename(tmp_dir, dest_dir)
         except OSError as e:
             import errno
-
-            if e.errno != errno.ENOTEMPTY:
+            # EEXIST - windows, ENOTEMPTY - linux, EEXIST is also permitted by POSIX
+            if e.errno not in (errno.ENOTEMPTY, errno.EEXIST):
                 raise
 
         return dest_dir
@@ -375,6 +389,9 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+    except YaBinDownloadError as e:
+        sys.stderr.write('ERROR: ' + str(e) + '\n')
+        sys.exit(YA_BIN_DOWNLOAD_ERROR_EXIT_CODE)
     except Exception as e:
         sys.stderr.write('ERROR: ' + str(e) + '\n')
         from traceback import format_exc

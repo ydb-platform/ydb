@@ -9,8 +9,12 @@
 !**/canondata/**
 # Allow docker files
 !Dockerfile
+!.github/docker/files/**
 
 /canonization_show_res.log
+
+*.un~
+*.swp
 
 # C libraries
 *.so
@@ -33,6 +37,7 @@ __pycache__/
 
 # MacOS specific
 .DS_Store
+*.dSYM
 
 # clangd cache
 /.cache
@@ -88,3 +93,30 @@ bin/config.json
 
 # handy for local junk, which is not intended to appear in the repo
 junk/
+
+# YDB CLI configuration file location is `~/ydb/config/config.yaml`
+config/config.yaml
+path.bash.inc
+
+# Clang format
+/.clang-format
+
+# Editor config
+/.editorconfig
+
+# Cursor ignore
+.cursor/
+.cursorignore
+.cursorindexingignore
+
+# Claude Code
+.claude/
+
+# Harness local cluster working directory
+.ydbd_working_dir/
+
+# Pyright config (local IDE settings)
+**/pyrightconfig.json
+
+# Local configuration for `ya`
+/local.ymake

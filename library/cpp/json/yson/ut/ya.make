@@ -2,7 +2,9 @@ UNITTEST_FOR(library/cpp/json/yson)
 
 ALLOCATOR(LF)
 
-DATA(sbr://363537653)
+DATA(
+    sbr://363537653
+)
 
 PEERDIR(
     library/cpp/blockcodecs
@@ -12,7 +14,9 @@ PEERDIR(
 
 SIZE(LARGE)
 
-TAG(ya:fat)
+TAG(
+    ya:fat
+)
 
 TIMEOUT(600)
 

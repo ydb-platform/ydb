@@ -4,6 +4,11 @@ namespace NYT::NConcurrency {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TAsyncBarrier::~TAsyncBarrier()
+{
+    Clear(TError(EErrorCode::Canceled, BarrierAbandonedError));
+}
+
 TAsyncBarrierCookie TAsyncBarrier::Insert()
 {
     auto guard = Guard(Lock_);
@@ -42,7 +47,7 @@ TFuture<void> TAsyncBarrier::GetBarrierFuture()
     auto guard = Guard(Lock_);
 
     if (SlotOccupied_.empty()) {
-        return VoidFuture;
+        return OKFuture;
     }
 
     auto barrierCookie = FirstSlotCookie_ + std::ssize(SlotOccupied_);
@@ -80,6 +85,13 @@ void TAsyncBarrier::Clear(const TError& error)
     for (const auto& promise : promises) {
         promise.Set(error);
     }
+}
+
+bool TAsyncBarrier::Empty() const
+{
+    auto guard = Guard(Lock_);
+
+    return SlotOccupied_.empty();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -3,7 +3,6 @@
 
 #include <ydb/library/services/services.pb.h>
 
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/core/log.h>
@@ -27,6 +26,8 @@
 #include <util/string/printf.h>
 
 #include <stdio.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::MEMORY_PROFILER
 
 namespace NActors {
     using TDynamicCountersPtr = TIntrusivePtr<::NMonitoring::TDynamicCounters>;
@@ -282,7 +283,7 @@ namespace NActors {
             TVector<TString> split;
             Split(out.Str(), "\n", split);
             for (const auto& line : split) {
-                LOG_WARN_S(ctx, NKikimrServices::MEMORY_PROFILER, line);
+                YDB_LOG_WARN_CTX(ctx, line);
             }
             return true;
         }

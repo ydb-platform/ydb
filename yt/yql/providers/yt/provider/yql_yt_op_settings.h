@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <library/cpp/json/writer/json.h>
 
 #include <util/generic/flags.h>
 #include <util/generic/strbuf.h>
@@ -16,11 +17,20 @@ namespace NYql {
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 enum class EYtWriteMode: ui32 {
-    Renew           /* "renew" */,
-    RenewKeepMeta   /* "renew_keep_meta" */,
-    Append          /* "append" */,
-    Drop            /* "drop" */,
-    Flush           /* "flush" */,
+    Renew                   /* "renew" */,
+    RenewKeepMeta           /* "renew_keep_meta" */,
+    Append                  /* "append" */,
+    Drop                    /* "drop" */,
+    DropIfExists            /* "drop_if_exists" */,
+    Flush                   /* "flush" */,
+    Create                  /* "create" */,
+    CreateIfNotExists       /* "create_if_not_exists" */,
+    Alter                   /* "alter" */,
+    Replace                 /* "replace" */,
+    CreateObject            /* "createObject" "create_object" */,
+    CreateObjectIfNotExists /* "createObjectIfNotExists" "create_object_if_not_exists" */,
+    DropObject              /* "dropObject" "drop_object" */,
+    DropObjectIfExists      /* "dropObjectIfExists" "drop_object_if_exists" */,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -35,18 +45,14 @@ struct TSampleParams {
     double Percentage;
     ui64 Repeat;
 
-    friend bool operator==(const TSampleParams& l, const TSampleParams& r) {
-        return l.Mode == r.Mode
-            && l.Percentage == r.Percentage
-            && l.Repeat == r.Repeat;
-    }
+    friend bool operator==(const TSampleParams& lhs, const TSampleParams& rhs) = default;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 enum class EYtSettingType: ui64 {
     // Table reads
-    Initial           /* "initial" */,
+    Initial                  /* "initial" */,
     InferScheme              /* "infer_scheme" "inferscheme" "infer_schema" "inferschema" */,
     ForceInferScheme         /* "force_infer_schema" "forceinferschema" */,
     DoNotFailOnInvalidSchema /* "do_not_fail_on_invalid_schema" */,
@@ -64,12 +70,14 @@ enum class EYtSettingType: ui64 {
     WarnNonExisting          /* "warn_non_existing" "warnnonexisting" */,
     XLock                    /* "xlock" */,
     Unordered                /* "unordered" */,
-    NonUnique                /* "nonUnique" */,
+    NonUnique                /* "non_unique" "nonUnique" */,
     UserSchema               /* "userschema" */,
     UserColumns              /* "usercolumns" */,
     StatColumns              /* "statcolumns" */,
     SysColumns               /* "syscolumns" */,
-    IgnoreTypeV3             /* "ignoretypev3" "ignore_type_v3" */,
+    IgnoreTypeV3             /* "ignore_type_v3" "ignoretypev3" */,
+    ExtraColumns             /* "extraColumns" */,
+    Pruned                   /* "pruned" */,
     // Table content
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,
@@ -91,6 +99,7 @@ enum class EYtSettingType: ui64 {
     WeakFields               /* "weakFields" */,
     Sharded                  /* "sharded" */,
     CombineChunks            /* "combineChunks" */,
+    ReplaceParentCache       /* "replaceParentCache" */,
     JobCount                 /* "jobCount" */,                 // hybrid supported
     JoinReduce               /* "joinReduce" */,               // hybrid supported
     FirstAsPrimary           /* "firstAsPrimary" */,           // hybrid supported
@@ -101,14 +110,15 @@ enum class EYtSettingType: ui64 {
     BlockInputApplied        /* "blockInputApplied" */,        // hybrid supported
     BlockOutputReady         /* "blockOutputReady" */,         // hybrid supported
     BlockOutputApplied       /* "blockOutputApplied" */,       // hybrid supported
-    QLFilter                 /* "qlFilter" */,
-    // Out tables
-    UniqueBy                 /* "uniqueBy" */,
-    OpHash                   /* "opHash" */,
-    // Operations
     MapOutputType            /* "mapOutputType" */,            // hybrid supported
     ReduceInputType          /* "reduceInputType" */,          // hybrid supported
     NoDq                     /* "noDq" */,
+    Transparent              /* "transparent" */,
+    PruneUnusedColumns       /* "prune_unused_columns" "pruneunusedcolumns" */,
+    ForceApplyMaxJobCount    /* "forceApplyMaxJobCount" */,    // hybrid supported
+    // Out tables
+    UniqueBy                 /* "uniqueBy" */,
+    OpHash                   /* "opHash" */,
     // Read
     Split                    /* "split" */,
     // Write hints
@@ -124,6 +134,11 @@ enum class EYtSettingType: ui64 {
     MutationId               /* "mutationid", "mutation_id" */,
     ColumnGroups             /* "column_groups", "columngroups" */,
     SecurityTags             /* "security_tags", "securitytags" */,
+    // Create, Alter
+    Columns                  /* "columns"*/,
+    Actions                  /* "actions"*/,
+    OrderBy                  /* "orderby","order_by" */,
+    Features                 /* "features"*/,
 
     LAST
 };
@@ -157,7 +172,7 @@ public:
 
     friend EYtSettingTypes operator&(EYtSettingTypes, const EYtSettingTypes&);
 
-    bool HasFlags(const EYtSettingTypes& other) {
+    bool HasFlags(const EYtSettingTypes& other) const {
         return *this & other;
     }
 
@@ -171,8 +186,10 @@ EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right);
 const auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;
 const auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
                                        EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
-                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputReady | EYtSettingType::BlockOutputApplied |
-                                       EYtSettingType::KeepSorted | EYtSettingType::KeySwitch | EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded | EYtSettingType::SoftTransform;
+                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied |
+                                       EYtSettingType::BlockOutputReady | EYtSettingType::BlockOutputApplied |
+                                       EYtSettingType::KeepSorted | EYtSettingType::KeySwitch | EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType |
+                                       EYtSettingType::Sharded | EYtSettingType::SoftTransform | EYtSettingType::ForceApplyMaxJobCount;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -190,6 +207,7 @@ TExprNode::TPtr ToAtomList(const TContainer& columns, TPositionHandle pos, TExpr
 
 bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowType, TExprContext& ctx);
 TString NormalizeColumnGroupSpec(const TStringBuf spec);
+bool ExpandDefaultColumnGroup(const TStringBuf colGroupSpec, const TStructExprType& rowType, TString& expandedSpec);
 const TString& GetSingleColumnGroupSpec();
 
 TExprNode::TPtr ToColumnPairList(const TVector<std::pair<TString, bool>>& columns, TPositionHandle pos, TExprContext& ctx);
@@ -227,6 +245,7 @@ TMaybe<ui64> GetMaxJobSizeForFirstAsPrimary(const TExprNode& settings);
 bool UseJoinReduceForSecondAsPrimary(const TExprNode& settings);
 
 ui32 GetMinChildrenForIndexedKeyFilter(EYtSettingType type);
+void YtWriteStmtContext(std::string_view ctxName, NJsonWriter::TBuf& json);
 
 } // NYql
 

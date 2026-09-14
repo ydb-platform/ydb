@@ -1,4 +1,5 @@
 #include "server.h"
+#include "config.h"
 #include "helpers.h"
 
 #include <yt/yt/core/net/address.h>
@@ -7,6 +8,8 @@
 #include <yt/yt/core/http/private.h>
 #include <yt/yt/core/http/helpers.h>
 #include <yt/yt/core/http/server.h>
+
+#include <yt/yt/core/https/server.h>
 
 #include <yt/yt/core/rpc/message.h>
 #include <yt/yt/core/rpc/service.h>
@@ -43,7 +46,7 @@ class THttpReplyBus
 public:
     THttpReplyBus(
         IResponseWriterPtr rsp,
-        TString endpointAddress,
+        std::string endpointAddress,
         IAttributeDictionaryPtr endpointAttributes,
         TNetworkAddress endpointNetworkAddress,
         const NLogging::TLogger& logger)
@@ -91,7 +94,7 @@ public:
 
     TFuture<void> GetReadyFuture() const override
     {
-        return VoidFuture;
+        return OKFuture;
     }
 
     TFuture<void> Send(TSharedRefArray message, const NBus::TSendOptions& /*options*/) override
@@ -150,7 +153,8 @@ public:
     TFuture<void> ReplySent(IServicePtr underlying, TRequestId requestId)
     {
         ReplySent_.OnCanceled(BIND([underlying, requestId, Logger = this->Logger] (const TError&) {
-            YT_LOG_INFO("Request cancelled (RequestId: %v)", requestId);
+            YT_TLOG_INFO("Request cancelled")
+                .With("RequestId", requestId);
             underlying->HandleRequestCancellation(requestId);
         }));
         return ReplySent_.ToFuture();
@@ -158,7 +162,7 @@ public:
 
 private:
     const IResponseWriterPtr Rsp_;
-    const TString EndpointAddress_;
+    const std::string EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const TNetworkAddress EndpointNetworkAddress_;
     const NLogging::TLogger Logger;
@@ -175,7 +179,7 @@ class THttpHandler
     : public IHttpHandler
 {
 public:
-    THttpHandler(IServicePtr underlying, const TString& baseUrl, const NLogging::TLogger& logger)
+    THttpHandler(IServicePtr underlying, const std::string& baseUrl, const NLogging::TLogger& logger)
         : Underlying_(std::move(underlying))
         , BaseUrl_(baseUrl)
         , Logger(logger)
@@ -225,9 +229,8 @@ public:
 
 private:
     const IServicePtr Underlying_;
-    const TString BaseUrl_;
+    const std::string BaseUrl_;
     const NLogging::TLogger Logger;
-
 
     TError TranslateRequest(const IRequestPtr& req, NRpc::NProto::TRequestHeader* rpcHeader, TRequestId* requestId)
     {
@@ -247,120 +250,126 @@ private:
 
         const auto& httpHeaders = req->GetHeaders();
 
-        auto contentTypeString = httpHeaders->Find(ContentTypeHeaderName);
-        if (contentTypeString) {
+        if (const auto* contentTypeString = httpHeaders->Find(ContentTypeHeaderName)) {
             auto decodedType = FromHttpContentType(*contentTypeString);
             if (!decodedType) {
                 return TError("Invalid \"Content-Type\" header value")
-                    << TErrorAttribute("value", *contentTypeString);
+                    .With("value", *contentTypeString);
             }
             rpcHeader->set_request_format(ToProto(*decodedType));
         }
 
-        auto requestFormatOptionsYson = httpHeaders->Find(RequestFormatOptionsHeaderName);
-        if (requestFormatOptionsYson) {
+        if (const auto* requestFormatOptionsYson = httpHeaders->Find(RequestFormatOptionsHeaderName)) {
             rpcHeader->set_request_format_options(*requestFormatOptionsYson);
         }
 
-        auto acceptString = httpHeaders->Find(AcceptHeaderName);
-        if (acceptString) {
+        if (const auto* acceptString = httpHeaders->Find(AcceptHeaderName)) {
             auto decodedType = FromHttpContentType(*acceptString);
             if (!decodedType) {
                 return TError("Invalid \"Accept\" header value")
-                    << TErrorAttribute("value", *acceptString);
+                    .With("value", *acceptString);
             }
             rpcHeader->set_response_format(ToProto(*decodedType));
         }
 
-        auto responseFormatOptionsYson = httpHeaders->Find(ResponseFormatOptionsHeaderName);
-        if (responseFormatOptionsYson) {
+        if (const auto* responseFormatOptionsYson = httpHeaders->Find(ResponseFormatOptionsHeaderName)) {
             rpcHeader->set_response_format_options(*responseFormatOptionsYson);
         }
 
-        auto requestIdString = httpHeaders->Find(RequestIdHeaderName);
-        if (requestIdString) {
+        if (const auto* requestIdString = httpHeaders->Find(RequestIdHeaderName)) {
             if (!TRequestId::FromString(*requestIdString, requestId)) {
                 return TError("Invalid %Qv header value", RequestIdHeaderName)
-                    << TErrorAttribute("value", *requestIdString);
+                    .With("value", *requestIdString);
             }
         } else {
             *requestId = TRequestId::Create();
         }
         ToProto(rpcHeader->mutable_request_id(), *requestId);
 
+        if (const auto* startTimeString = httpHeaders->Find(StartTimeHeaderName)) {
+            i64 startTime;
+            if (!TryFromString(*startTimeString, startTime)) {
+                return TError("Invalid %Qv header value", StartTimeHeaderName)
+                    .With("value", *startTimeString);
+            }
+            rpcHeader->set_start_time(startTime);
+        }
+
         auto getCredentialsExt = [&] {
             return rpcHeader->MutableExtension(NRpc::NProto::TCredentialsExt::credentials_ext);
         };
 
-        auto authorizationString = httpHeaders->Find(AuthorizationHeaderName);
-        if (authorizationString) {
+        if (const auto* authorizationString = httpHeaders->Find(AuthorizationHeaderName)) {
             const TStringBuf Prefix = "OAuth ";
-            if (!authorizationString->StartsWith(Prefix)) {
+            if (!authorizationString->starts_with(Prefix)) {
                 return TError("Invalid \"Authorization\" header value");
             }
             getCredentialsExt()->set_token(TrimLeadingWhitespaces(authorizationString->substr(Prefix.length())));
         }
 
-        auto userTicketString = httpHeaders->Find(UserTicketHeaderName);
-        if (userTicketString) {
+        if (const auto* userTicketString = httpHeaders->Find(UserTicketHeaderName)) {
             getCredentialsExt()->set_user_ticket(TrimLeadingWhitespaces(*userTicketString));
         }
 
-        auto cookieString = httpHeaders->Find(CookieHeaderName);
-        if (cookieString) {
+        if (const auto* serviceTicketString = httpHeaders->Find(ServiceTicketHeaderName)) {
+            getCredentialsExt()->set_service_ticket(TrimLeadingWhitespaces(*serviceTicketString));
+        }
+
+        if (const auto* cookieString = httpHeaders->Find(CookieHeaderName)) {
             auto cookieMap = ParseCookies(*cookieString);
 
-            static const TString SessionIdCookieName("Session_id");
+            static const std::string SessionIdCookieName("Session_id");
             auto sessionIdIt = cookieMap.find(SessionIdCookieName);
             if (sessionIdIt != cookieMap.end()) {
                 getCredentialsExt()->set_session_id(sessionIdIt->second);
             }
 
-            static const TString SessionId2CookieName("sessionid2");
+            static const std::string SessionId2CookieName("sessionid2");
             auto sslSessionIdIt = cookieMap.find(SessionId2CookieName);
             if (sslSessionIdIt != cookieMap.end()) {
                 getCredentialsExt()->set_ssl_session_id(sslSessionIdIt->second);
             }
+
+            static const std::string SessionGuardCookieName("sessguard");
+            auto sessionGuardIt = cookieMap.find(SessionGuardCookieName);
+            if (sessionGuardIt != cookieMap.end()) {
+                getCredentialsExt()->set_session_guard(sessionGuardIt->second);
+            }
         }
 
-        auto userAgent = httpHeaders->Find(UserAgentHeaderName);
-        if (userAgent) {
+        if (const auto* userAgent = httpHeaders->Find(UserAgentHeaderName)) {
             rpcHeader->set_user_agent(*userAgent);
         }
 
-        auto user = httpHeaders->Find(UserNameHeaderName);
-        if (user) {
+        if (const auto* user = httpHeaders->Find(UserNameHeaderName)) {
             rpcHeader->set_user(*user);
         }
 
-        auto userTag = httpHeaders->Find(UserTagHeaderName);
-        if (userTag) {
+        if (const auto* userTag = httpHeaders->Find(UserTagHeaderName)) {
             rpcHeader->set_user_tag(*userTag);
         }
 
-        if (auto requestTimeout = httpHeaders->Find(RequestTimeoutHeaderName)) {
+        if (const auto* requestTimeout = httpHeaders->Find(RequestTimeoutHeaderName)) {
             rpcHeader->set_timeout(ToProto(TDuration::Seconds(FromString<i64>(*requestTimeout))));
-        } else if (auto xRequestTimeout = httpHeaders->Find(XRequestTimeoutHeaderName)) {
+        } else if (const auto* xRequestTimeout = httpHeaders->Find(XRequestTimeoutHeaderName)) {
             rpcHeader->set_timeout(ToProto(TDuration::MilliSeconds(FromString<i64>(*xRequestTimeout))));
         }
 
-        auto protocolMajor = httpHeaders->Find(ProtocolVersionMajor);
-        if (protocolMajor) {
+        if (const auto* protocolMajor = httpHeaders->Find(ProtocolVersionMajor)) {
             rpcHeader->set_protocol_version_major(FromString<i64>(*protocolMajor));
         }
 
-        auto protocolMinor = httpHeaders->Find(ProtocolVersionMinor);
-        if (protocolMinor) {
+        if (const auto* protocolMinor = httpHeaders->Find(ProtocolVersionMinor)) {
             rpcHeader->set_protocol_version_minor(FromString<i64>(*protocolMinor));
         }
 
         NRpc::NProto::TCustomMetadataExt customMetadataExt;
         bool hasCustomHeaders = false;
         for (const auto& [header, value] : DumpUnknownHeaders(httpHeaders)) {
-            if (!header.StartsWith("X-") && !header.StartsWith("x-")) {
+            if (!header.starts_with("X-") && !header.starts_with("x-")) {
                 continue;
             }
-            TString key = header.substr(2);
+            auto key = header.substr(2);
             (*customMetadataExt.mutable_entries())[key] = value;
             hasCustomHeaders = true;
         }
@@ -389,7 +398,7 @@ class TServer
 {
 public:
     explicit TServer(NYT::NHttp::IServerPtr httpServer)
-        : TServerBase(HttpLogger().WithTag("ServerId: %v", TGuid::Create()))
+        : TServerBase(HttpLogger().WithTag("ServerId", TGuid::Create()))
         , HttpServer_(std::move(httpServer))
     { }
 
@@ -416,7 +425,7 @@ private:
 
         // COMPAT(babenko): remove this once fully migrated to new url scheme
         auto index = service->GetServiceId().ServiceName.find_last_of('.');
-        if (index != TString::npos) {
+        if (index != std::string::npos) {
             auto anotherBaseUrl = Format("/%v/", service->GetServiceId().ServiceName.substr(index + 1));
             HttpServer_->AddHandler(anotherBaseUrl, New<THttpHandler>(std::move(service), anotherBaseUrl, Logger));
         }
@@ -430,6 +439,14 @@ private:
 
 NRpc::IServerPtr CreateServer(NYT::NHttp::IServerPtr httpServer)
 {
+    return New<TServer>(std::move(httpServer));
+}
+
+NRpc::IServerPtr CreateServer(TServerConfigPtr config)
+{
+    auto httpServer = config->Credentials
+        ? NYT::NHttps::CreateServer(config, config->PollerThreadCount)
+        : NYT::NHttp::CreateServer(config, config->PollerThreadCount);
     return New<TServer>(std::move(httpServer));
 }
 

@@ -6,8 +6,11 @@
 #include <yt/yt/core/ypath/token.h>
 #include <yt/yt/core/ypath/tokenizer.h>
 
+#include <yt/yt/core/ytree/helpers.h>
+
 #include <yt/yt/core/yson/tokenizer.h>
 #include <yt/yt/core/yson/async_writer.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -18,6 +21,7 @@ using namespace NYPath;
 using namespace NYson;
 
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -65,7 +69,7 @@ void TNodeBase::GetSelf(
     writer.Finish()
         .Subscribe(BIND([=] (const TErrorOr<TYsonString>& resultOrError) {
             if (resultOrError.IsOK()) {
-                response->set_value(resultOrError.Value().ToString());
+                response->set_value(ToProto(resultOrError.Value()));
                 context->Reply();
             } else {
                 context->Reply(resultOrError);
@@ -87,7 +91,7 @@ void TNodeBase::GetKeySelf(
         THROW_ERROR_EXCEPTION("Node has no parent");
     }
 
-    TString key;
+    std::string key;
     switch (parent->GetType()) {
         case ENodeType::Map:
             key = parent->AsMap()->GetChildKeyOrThrow(this);
@@ -102,7 +106,7 @@ void TNodeBase::GetKeySelf(
     }
 
     context->SetResponseInfo("Key: %v", key);
-    response->set_value(ConvertToYsonString(key).ToString());
+    response->set_value(ToProto(ConvertToYsonString(key)));
 
     context->Reply();
 }
@@ -112,21 +116,28 @@ void TNodeBase::RemoveSelf(
     TRspRemove* /*response*/,
     const TCtxRemovePtr& context)
 {
-    context->SetRequestInfo("Recursive: %v, Force: %v", request->recursive(), request->force());
+    bool recursive = request->recursive();
+    bool force = request->force();
+
+    context->SetRequestInfo("Recursive: %v, Force: %v",
+        recursive,
+        force);
 
     ValidatePermission(
-        EPermissionCheckScope::This | EPermissionCheckScope::Descendants,
+        EPermissionCheckScope::Subtree,
         EPermission::Remove);
     ValidatePermission(
         EPermissionCheckScope::Parent,
         EPermission::Write | EPermission::ModifyChildren);
 
     bool isComposite = (GetType() == ENodeType::Map || GetType() == ENodeType::List);
-    if (!request->recursive() && isComposite && AsComposite()->GetChildCount() > 0) {
-        THROW_ERROR_EXCEPTION("Cannot remove non-empty composite node");
+    if (!recursive && isComposite && AsComposite()->GetChildCount() > 0) {
+        THROW_ERROR_EXCEPTION(
+            NYTree::EErrorCode::CannotRemoveNonemptyCompositeNode,
+            "Cannot remove non-empty composite node");
     }
 
-    DoRemoveSelf(request->recursive(), request->force());
+    DoRemoveSelf(recursive, force);
 
     context->Reply();
 }
@@ -154,14 +165,14 @@ IYPathService::TResolveResult TNodeBase::ResolveRecursive(
 
 TYPath TNodeBase::GetPath() const
 {
-    TCompactVector<TString, 64> tokens;
+    TCompactVector<std::string, 64> tokens;
     IConstNodePtr current(this);
     while (true) {
         auto parent = current->GetParent();
         if (!parent) {
             break;
         }
-        TString token;
+        std::string token;
         switch (parent->GetType()) {
             case ENodeType::List: {
                 auto index = parent->AsList()->GetChildIndexOrThrow(current);
@@ -199,8 +210,7 @@ void TCompositeNodeMixin::SetRecursive(
     ValidatePermission(EPermissionCheckScope::This, EPermission::Write);
 
     auto factory = CreateFactory();
-    auto child = ConvertToNode(TYsonString(request->value()), factory.get());
-    SetChild(factory.get(), "/" + path, child, request->recursive());
+    SetChildValue(factory.get(), "/" + path, TYsonString(request->value()), request->recursive());
     factory->Commit();
 
     context->Reply();
@@ -237,16 +247,9 @@ int TCompositeNodeMixin::GetMaxChildCount() const
     return std::numeric_limits<int>::max();
 }
 
-void TCompositeNodeMixin::ValidateChildCount(const TYPath& path, int childCount) const
+void TCompositeNodeMixin::ValidateChildCount(TYPathBuf path, int childCount) const
 {
-    int maxChildCount = GetMaxChildCount();
-    if (childCount >= maxChildCount) {
-        THROW_ERROR_EXCEPTION(
-            NYTree::EErrorCode::MaxChildCountViolation,
-            "Composite node %v is not allowed to contain more than %v items",
-            path,
-            maxChildCount);
-    }
+    NYTree::ValidateYTreeChildCount(path, childCount, GetMaxChildCount());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -308,13 +311,11 @@ void TMapNodeMixin::ListSelf(
     TRspList* response,
     const TCtxListPtr& context)
 {
-    ValidatePermission(EPermissionCheckScope::This, EPermission::Read);
-
     auto attributeFilter = request->has_attributes()
         ? FromProto<TAttributeFilter>(request->attributes())
         : TAttributeFilter();
 
-    auto limit = YT_PROTO_OPTIONAL(*request, limit);
+    auto limit = YT_OPTIONAL_FROM_PROTO(*request, limit);
 
     context->SetRequestInfo("Limit: %v, AttributeFilter: %v",
         limit,
@@ -322,8 +323,10 @@ void TMapNodeMixin::ListSelf(
 
     if (limit && limit < 0) {
         THROW_ERROR_EXCEPTION("Limit is negative")
-            << TErrorAttribute("limit", limit);
+            .With("limit", limit);
     }
+
+    ValidatePermission(EPermissionCheckScope::This, EPermission::Read);
 
     TAsyncYsonWriter writer;
 
@@ -351,7 +354,7 @@ void TMapNodeMixin::ListSelf(
     writer.Finish()
         .Subscribe(BIND([=] (const TErrorOr<TYsonString>& resultOrError) {
             if (resultOrError.IsOK()) {
-                response->set_value(resultOrError.Value().ToString());
+                response->set_value(ToProto(resultOrError.Value()));
                 context->Reply();
             } else {
                 context->Reply(resultOrError);
@@ -359,13 +362,17 @@ void TMapNodeMixin::ListSelf(
         }));
 }
 
-std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChild(
+std::pair<std::string, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
     INodeFactory* factory,
     const TYPath& path,
-    INodePtr child,
+    std::variant<INodePtr, NYson::TYsonString> childOrChildValue,
     bool recursive)
 {
-    YT_VERIFY(factory || !recursive);
+    if (std::holds_alternative<INodePtr>(childOrChildValue)) {
+        YT_VERIFY(factory || !recursive);
+    } else {
+        YT_VERIFY(factory);
+    }
 
     NYPath::TTokenizer tokenizer(path);
     if (tokenizer.Advance() == NYPath::ETokenType::EndOfStream) {
@@ -374,7 +381,7 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChild(
 
     IMapNodePtr rootNode = AsMap();
     INodePtr rootChild;
-    TString rootKey;
+    std::optional<std::string> rootKey;
 
     auto currentNode = rootNode;
     try {
@@ -385,13 +392,10 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChild(
             tokenizer.Advance();
             tokenizer.Expect(NYPath::ETokenType::Literal);
             auto key = tokenizer.GetLiteralValue();
-
             int maxKeyLength = GetMaxKeyLength();
-            if (std::ssize(key) > maxKeyLength) {
-                ThrowMaxKeyLengthViolated();
-            }
-
+            NYTree::ValidateYTreeKey(key, maxKeyLength);
             tokenizer.Advance();
+            tokenizer.Skip(NYPath::ETokenType::Ampersand);
 
             bool lastStep = (tokenizer.GetType() == NYPath::ETokenType::EndOfStream);
             if (!recursive && !lastStep) {
@@ -400,7 +404,15 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChild(
 
             ValidateChildCount(GetPath(), currentNode->GetChildCount());
 
-            auto newChild = lastStep ? child : factory->CreateMap();
+            auto newChild = lastStep
+                ? Visit(childOrChildValue,
+                    [] (const INodePtr& child) {
+                        return child;
+                    },
+                    [&] (const TYsonString& childValue) {
+                        return ConvertToNode(childValue, factory);
+                    })
+                : factory->CreateMap();
             if (currentNode != rootNode) {
                 YT_VERIFY(currentNode->AddChild(key, newChild));
             } else {
@@ -415,14 +427,23 @@ std::pair<TString, INodePtr> TMapNodeMixin::PrepareSetChild(
     } catch (const std::exception& ex) {
         if (recursive) {
             THROW_ERROR_EXCEPTION("Failed to set node recursively")
-                << ex;
+                .With(ex);
         } else {
             throw;
         }
     }
 
     YT_VERIFY(rootKey);
-    return {rootKey, rootChild};
+    return {std::move(*rootKey), std::move(rootChild)};
+}
+
+std::pair<std::string, INodePtr> TMapNodeMixin::PrepareSetChild(
+    INodeFactory* factory,
+    const TYPath& path,
+    INodePtr child,
+    bool recursive)
+{
+    return PrepareSetChildOrChildValue(factory, path, child, recursive);
 }
 
 void TMapNodeMixin::SetChild(
@@ -435,18 +456,19 @@ void TMapNodeMixin::SetChild(
     AddChild(rootKey, rootChild);
 }
 
+void TMapNodeMixin::SetChildValue(
+    INodeFactory* factory,
+    const TYPath& path,
+    NYson::TYsonString childValue,
+    bool recursive)
+{
+    const auto& [rootKey, rootChild] = PrepareSetChildOrChildValue(factory, path, childValue, recursive);
+    AddChild(rootKey, rootChild);
+}
+
 int TMapNodeMixin::GetMaxKeyLength() const
 {
     return std::numeric_limits<int>::max();
-}
-
-void TMapNodeMixin::ThrowMaxKeyLengthViolated() const
-{
-    THROW_ERROR_EXCEPTION(
-        NYTree::EErrorCode::MaxKeyLengthViolation,
-        "Map node %v is not allowed to contain items with keys longer than %v symbols",
-        GetPath(),
-        GetMaxKeyLength());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -511,12 +533,14 @@ IYPathService::TResolveResult TListNodeMixin::ResolveRecursive(
     }
 }
 
-void TListNodeMixin::SetChild(
-    INodeFactory* /*factory*/,
+void TListNodeMixin::SetChildOrChildValue(
+    INodeFactory* factory,
     const TYPath& path,
-    INodePtr child,
+    std::variant<INodePtr, TYsonString> childOrValue,
     bool recursive)
 {
+    YT_VERIFY(factory || std::holds_alternative<INodePtr>(childOrValue));
+
     if (recursive) {
         THROW_ERROR_EXCEPTION("List node %v does not support \"recursive\" option",
             GetPath());
@@ -555,7 +579,29 @@ void TListNodeMixin::SetChild(
 
     ValidateChildCount(GetPath(), GetChildCount());
 
-    AddChild(child, beforeIndex);
+    AddChild(
+        std::holds_alternative<INodePtr>(childOrValue)
+            ? std::get<INodePtr>(childOrValue)
+            : ConvertToNode(std::get<TYsonString>(childOrValue), factory),
+        beforeIndex);
+}
+
+void TListNodeMixin::SetChild(
+    INodeFactory* factory,
+    const TYPath& path,
+    INodePtr child,
+    bool recursive)
+{
+    SetChildOrChildValue(factory, path, child, recursive);
+}
+
+void TListNodeMixin::SetChildValue(
+    INodeFactory* factory,
+    const TYPath& path,
+    TYsonString childValue,
+    bool recursive)
+{
+    SetChildOrChildValue(factory, path, childValue, recursive);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -566,6 +612,7 @@ void TSupportsSetSelfMixin::SetSelf(
     const TCtxSetPtr& context)
 {
     bool force = request->force();
+
     context->SetRequestInfo("Force: %v", force);
 
     ValidateSetSelf(force);

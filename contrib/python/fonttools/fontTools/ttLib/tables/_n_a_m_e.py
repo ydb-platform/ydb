@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
+
 from fontTools.misc import sstruct
 from fontTools.misc.textTools import (
     bytechr,
@@ -48,6 +50,10 @@ class table__n_a_m_e(DefaultTable.DefaultTable):
 
     dependencies = ["ltag"]
 
+    def __init__(self, tag=None):
+        super().__init__(tag)
+        self.names = []
+
     def decompile(self, data, ttFont):
         format, n, stringOffset = struct.unpack(b">HHH", data[:6])
         expectedStringOffset = 6 + n * nameRecordSize
@@ -59,7 +65,7 @@ class table__n_a_m_e(DefaultTable.DefaultTable):
             )
         stringData = data[stringOffset:]
         data = data[6:]
-        self.names = []
+        self.names: list[NameRecord] = []
         for i in range(n):
             if len(data) < 12:
                 log.error("skipping malformed name record #%d", i)
@@ -78,10 +84,6 @@ class table__n_a_m_e(DefaultTable.DefaultTable):
             self.names.append(name)
 
     def compile(self, ttFont):
-        if not hasattr(self, "names"):
-            # only happens when there are NO name table entries read
-            # from the TTX file
-            self.names = []
         names = self.names
         names.sort()  # sort according to the spec; see NameRecord.__lt__()
         stringData = b""
@@ -108,13 +110,13 @@ class table__n_a_m_e(DefaultTable.DefaultTable):
     def fromXML(self, name, attrs, content, ttFont):
         if name != "namerecord":
             return  # ignore unknown tags
-        if not hasattr(self, "names"):
-            self.names = []
         name = NameRecord()
         self.names.append(name)
         name.fromXML(name, attrs, content, ttFont)
 
-    def getName(self, nameID, platformID, platEncID, langID=None):
+    def getName(
+        self, nameID: int, platformID: int, platEncID: int, langID: int | None = None
+    ) -> "NameRecord | None":
         for namerecord in self.names:
             if (
                 namerecord.nameID == nameID
@@ -125,8 +127,9 @@ class table__n_a_m_e(DefaultTable.DefaultTable):
                     return namerecord
         return None  # not found
 
-    def getDebugName(self, nameID):
-        englishName = someName = None
+    def getDebugName(self, nameID: int) -> str | None:
+        englishName: str | None = None
+        someName: str | None = None
         for name in self.names:
             if name.nameID != nameID:
                 continue
@@ -194,8 +197,6 @@ class table__n_a_m_e(DefaultTable.DefaultTable):
         identified by the (platformID, platEncID, langID) triplet. A warning is issued
         to prevent unexpected results.
         """
-        if not hasattr(self, "names"):
-            self.names = []
         if not isinstance(string, str):
             if isinstance(string, bytes):
                 log.warning(
@@ -262,7 +263,7 @@ class table__n_a_m_e(DefaultTable.DefaultTable):
         The nameID is assigned in the range between 'minNameID' and 32767 (inclusive),
         following the last nameID in the name table.
         """
-        names = getattr(self, "names", [])
+        names = self.names
         nameID = 1 + max([n.nameID for n in names] + [minNameID - 1])
         if nameID > 32767:
             raise ValueError("nameID must be less than 32768")
@@ -359,8 +360,6 @@ class table__n_a_m_e(DefaultTable.DefaultTable):
         If the 'nameID' argument is None, the created nameID will not
         be less than the 'minNameID' argument.
         """
-        if not hasattr(self, "names"):
-            self.names = []
         if nameID is None:
             # Reuse nameID if possible
             nameID = self.findMultilingualName(
@@ -404,8 +403,6 @@ class table__n_a_m_e(DefaultTable.DefaultTable):
         assert (
             len(platforms) > 0
         ), "'platforms' must contain at least one (platformID, platEncID, langID) tuple"
-        if not hasattr(self, "names"):
-            self.names = []
         if not isinstance(string, str):
             raise TypeError(
                 "expected str, found %s: %r" % (type(string).__name__, string)
@@ -521,7 +518,7 @@ class NameRecord(object):
             self.platformID == 3 and self.platEncID in [0, 1, 10]
         )
 
-    def toUnicode(self, errors="strict"):
+    def toUnicode(self, errors: str = "strict") -> str:
         """
         If self.string is a Unicode string, return it; otherwise try decoding the
         bytes in self.string to a Unicode string using the encoding of this
@@ -541,7 +538,7 @@ class NameRecord(object):
         and saving it back will not change them.
         """
 
-        def isascii(b):
+        def isascii(b: int) -> bool:
             return (b >= 0x20 and b <= 0x7E) or b in [0x09, 0x0A, 0x0D]
 
         encoding = self.getEncoding()

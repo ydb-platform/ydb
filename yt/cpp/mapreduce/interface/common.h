@@ -414,6 +414,13 @@ enum EValueType : int
 
     // Universally unique identifier according to RFC-4122.
     VT_UUID,
+
+    VT_TZ_DATE,
+    VT_TZ_DATETIME,
+    VT_TZ_TIMESTAMP,
+    VT_TZ_DATE32,
+    VT_TZ_DATETIME64,
+    VT_TZ_TIMESTAMP64,
 };
 
 ///
@@ -513,7 +520,7 @@ public:
     TNode ToNode() const;
 
     /// @brief Comparison is default and checks both name and sort order.
-    bool operator == (const TSortColumn& rhs) const = default;
+    bool operator==(const TSortColumn& rhs) const = default;
 
     ///
     /// @{
@@ -523,14 +530,14 @@ public:
     /// This is backward compatibility methods.
     ///
     /// @ref TSortOrder_backward_compatibility
-    TSortColumn& operator = (TStringBuf name);
-    TSortColumn& operator = (const TString& name);
-    TSortColumn& operator = (const char* name);
+    TSortColumn& operator=(TStringBuf name);
+    TSortColumn& operator=(const TString& name);
+    TSortColumn& operator=(const char* name);
     /// @}
 
-    bool operator == (const TStringBuf rhsName) const;
-    bool operator == (const TString& rhsName) const;
-    bool operator == (const char* rhsName) const;
+    bool operator==(const TStringBuf rhsName) const;
+    bool operator==(const TString& rhsName) const;
+    bool operator==(const char* rhsName) const;
 
     // Intentionally implicit conversions.
     operator TString() const;
@@ -672,9 +679,6 @@ public:
     // StableName for renamed and deleted columns.
     FLUENT_FIELD_OPTION_ENCAPSULATED(TString, StableName);
 
-    /// Deleted column
-    FLUENT_FIELD_OPTION_ENCAPSULATED(bool, Deleted);
-
     ///
     /// @brief Column requiredness.
     ///
@@ -711,6 +715,53 @@ private:
 bool operator==(const TColumnSchema& lhs, const TColumnSchema& rhs);
 
 ///
+/// @brief Single deleted description
+///
+/// Each field describing column has setter and getter.
+///
+/// Example reading field:
+/// ```
+///    ... columnSchema.StableName() ...
+/// ```
+///
+/// Example setting field:
+/// ```
+///    columnSchema.StableName("my-column") // set name
+/// ```
+///
+class TDeletedColumnSchema
+{
+public:
+    /// @cond Doxygen_Suppress
+    using TSelf = TDeletedColumnSchema;
+    /// @endcond
+
+    ///
+    /// @brief Construct empty removed column schemas
+    ///
+    /// @note
+    /// Such schema cannot be used in schema as it it doesn't have stable name.
+    TDeletedColumnSchema() = default;
+
+    ///
+    /// @{
+    ///
+    /// @brief Copy and move constructors are default.
+    TDeletedColumnSchema(const TDeletedColumnSchema&) = default;
+    TDeletedColumnSchema& operator=(const TDeletedColumnSchema&) = default;
+    /// @}
+
+    // StableName for renamed and deleted columns.
+    FLUENT_FIELD_OPTION_ENCAPSULATED(TString, StableName);
+
+private:
+    friend void Deserialize(TDeletedColumnSchema& columnSchema, const TNode& node);
+};
+
+/// Equality check checks all fields of column schema.
+bool operator==(const TDeletedColumnSchema& lhs, const TDeletedColumnSchema& rhs);
+
+///
 /// @brief Description of table schema
 ///
 /// @see https://ytsaurus.tech/docs/en/user-guide/storage/static-schema
@@ -738,6 +789,11 @@ public:
     /// This flag can be set only for schemas that have sorted columns.
     /// If flag is set table cannot have multiple rows with same key.
     FLUENT_FIELD_DEFAULT_ENCAPSULATED(bool, UniqueKeys, false);
+
+    ///
+    /// @brief Deleted column schema.
+    ///
+    FLUENT_VECTOR_FIELD_ENCAPSULATED(TDeletedColumnSchema, DeletedColumn);
 
     /// Get modifiable column list
     TVector<TColumnSchema>& MutableColumns();
@@ -880,6 +936,9 @@ struct TKeyBound
     /// @endcond
 };
 
+/// Equality check checks all fields of TKeyBound
+bool operator==(const TKeyBound& lhs, const TKeyBound& rhs) noexcept;
+
 ///
 /// @brief Description of the read limit.
 ///
@@ -923,6 +982,9 @@ struct TReadLimit
     FLUENT_FIELD_OPTION(i64, TabletIndex);
 };
 
+/// Equality check checks all fields of TReadLimit
+bool operator==(const TReadLimit& lhs, const TReadLimit& rhs) noexcept;
+
 ///
 /// @brief Range of a table or a file
 ///
@@ -962,6 +1024,9 @@ struct TReadRange
             .UpperLimit(TReadLimit().Key(upperKeyExclusive));
     }
 };
+
+/// Equality check checks all fields of TReadRange
+bool operator==(const TReadRange& lhs, const TReadRange& rhs) noexcept;
 
 ///
 /// @brief Path with additional attributes.
@@ -1139,6 +1204,9 @@ struct TRichYPath
     /// Specifies cluster for the YPath
     FLUENT_FIELD_OPTION(TString, Cluster);
 
+    /// Specifies input_query for the path.
+    FLUENT_FIELD_OPTION(TString, InputQuery);
+
     /// Create empty path with no attributes
     TRichYPath()
     { }
@@ -1239,6 +1307,9 @@ struct TMultiTablePartition
 
     /// Aggregate statistics of all the table ranges in the partition.
     TStatistics AggregateStatistics;
+
+    /// Partition cookie that can be passed to @ref NYT::IClientBase::CreatePartitionReader
+    TMaybe<TString> Cookie;
 };
 
 /// Table partitions from GetTablePartitions command.

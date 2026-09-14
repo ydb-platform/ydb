@@ -1,12 +1,18 @@
 #include "ydb_dynamic_config.h"
 
-#include <ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
-#include <ydb/library/yaml_config/public/yaml_config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
+#include <ydb/library/yaml_config/public/migration/config_migration.h>
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <openssl/sha.h>
 
 #include <util/folder/path.h>
 #include <util/string/hex.h>
+
+#include <algorithm>
+#include <optional>
 
 using namespace NKikimr;
 
@@ -22,107 +28,517 @@ TString WrapYaml(const TString& yaml) {
     return out.Str();
 }
 
-TCommandConfig::TCommandConfig()
+TString WrapStaticConfig(const TString& yaml) {
+    auto newDoc = NFyaml::TDocument::Parse("---\nmetadata: {}\nconfig: {}\n");
+    auto inputDoc = NFyaml::TDocument::Parse(yaml);
+
+    auto configNode = inputDoc.Root().Copy(newDoc);
+    newDoc.Root().Map().pair_at("config").SetValue(configNode.Ref());
+
+    auto metadataNode = newDoc.Root().Map().pair_at("metadata").Value().Map();
+    metadataNode.Append(newDoc.Buildf("kind"), newDoc.Buildf("MainConfig"));
+    metadataNode.Append(newDoc.Buildf("cluster"), newDoc.Buildf("\"\""));
+    metadataNode.Append(newDoc.Buildf("version"), newDoc.Buildf("0"));
+
+    return TString(newDoc.EmitToCharArray().get());
+}
+
+TCommandConfig::TCommandConfig(
+        bool useLegacyApi,
+        TCommandFlagsOverrides commandFlagsOverrides,
+        bool allowEmptyDatabase)
     : TClientCommandTree("config", {}, "Dynamic config")
+    , CommandFlagsOverrides(commandFlagsOverrides)
 {
-    AddCommand(std::make_unique<TCommandConfigFetch>());
-    AddCommand(std::make_unique<TCommandConfigReplace>());
+    AddCommand(std::make_unique<TCommandConfigFetch>(useLegacyApi, allowEmptyDatabase));
+    if (allowEmptyDatabase) {
+        AddHiddenCommand(std::make_unique<TCommandConfigMigration>());
+    }
+    AddCommand(std::make_unique<TCommandConfigReplace>(useLegacyApi, allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
+    AddCommand(std::make_unique<TCommandGenerateDynamicConfig>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandVersionDynamicConfig>(allowEmptyDatabase));
 }
 
-TCommandConfigFetch::TCommandConfigFetch()
-    : TYdbCommand("fetch", {"get", "dump"}, "Fetch main dynamic-config")
+TCommandConfig::TCommandConfig(
+    bool useLegacyApi,
+    bool allowEmptyDatabase)
+    : TCommandConfig(useLegacyApi, TCommandFlagsOverrides{}, allowEmptyDatabase)
+{}
+
+void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
+    TClientCommand::PropagateFlags(flags);
+
+    if (CommandFlagsOverrides.OnlyExplicitProfile) {
+        OnlyExplicitProfile = *CommandFlagsOverrides.OnlyExplicitProfile;
+    }
+
+    if (CommandFlagsOverrides.Dangerous) {
+        Dangerous = *CommandFlagsOverrides.Dangerous;
+    }
+
+    for (auto& [_, cmd] : SubCommands) {
+        cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
+    }
+}
+
+TCommandConfigMigration::TCommandConfigMigration()
+    : TClientCommandTree("migration", {}, "Offline configuration migration converters")
+{
+    AddCommand(std::make_unique<TCommandConfigMerge>());
+    AddCommand(std::make_unique<TCommandConfigToggleV2FeatureFlag>());
+    AddCommand(std::make_unique<TCommandConfigToggleSelfManagement>());
+    AddCommand(std::make_unique<TCommandConfigCleanupV2>());
+}
+
+static TString ReadMigrationConfig(const TString& path) {
+    return path == "-" ? Cin.ReadAll() : TFileInput(path).ReadAll();
+}
+
+static void WriteMigrationConfig(TStringBuf config, const TString& path) {
+    const auto write = [&](IOutputStream& output) {
+        output << config;
+        if (config.empty() || config.back() != '\n') {
+            output << Endl;
+        }
+    };
+
+    if (path.empty() || path == "-") {
+        write(Cout);
+    } else {
+        TFileOutput output(path);
+        write(output);
+    }
+}
+
+static void WriteMigrationConfig(const NFyaml::TDocument& config, const TString& path) {
+    const TString serialized(config.EmitToCharArray().get());
+    WriteMigrationConfig(serialized, path);
+}
+
+TCommandConfigMerge::TCommandConfigMerge()
+    : TYdbReadOnlyCommand(
+        "merge",
+        {},
+        "Merge static and dynamic V1 configs for migration")
 {
 }
 
-void TCommandConfigFetch::Config(TConfig& config) {
+void TCommandConfigMerge::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("all", "Fetch both main and volatile config")
-        .NoArgument().SetFlag(&All);
-    config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
-        .RequiredArgument("[directory]").StoreResult(&OutDir);
-    config.Opts->AddLongOption("strip-metadata", "Strip metadata from config")
-        .NoArgument().SetFlag(&StripMetadata);
+    config.Opts->AddLongOption("static-config", "Path to the static V1 config in simple format")
+        .Required()
+        .RequiredArgument("[config.yaml]")
+        .StoreResult(&StaticConfigPath);
+    config.Opts->AddLongOption("dynamic-config", "Path to the dynamic config in MainConfig format")
+        .Required()
+        .RequiredArgument("[config.yaml]")
+        .StoreResult(&DynamicConfigPath);
+    config.Opts->AddLongOption('o', "output", "Path for the merged config; stdout if omitted")
+        .RequiredArgument("[config.yaml]")
+        .StoreResult(&OutputPath);
     config.SetFreeArgsNum(0);
-
-    config.Opts->MutuallyExclusive("all", "strip-metadata");
-    config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
+    config.AllowEmptyDatabase = true;
+    config.NeedToConnect = false;
 }
 
-void TCommandConfigFetch::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
-}
+int TCommandConfigMerge::Run(TConfig&) {
+    if (StaticConfigPath == "-" && DynamicConfigPath == "-") {
+        ythrow yexception() << "Only one input config may be read from stdin";
+    }
 
-int TCommandConfigFetch::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
-    auto result = client.GetConfig().GetValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    const auto staticConfig = ReadMigrationConfig(StaticConfigPath);
+    const auto dynamicConfig = ReadMigrationConfig(DynamicConfigPath);
 
-    auto cfg = TString{result.GetConfig()};
-
-    ui64 version = 0;
-
-    if (cfg) {
-        auto metadata = NYamlConfig::GetMetadata(cfg);
-        version = metadata.Version.value();
-
-        if (StripMetadata) {
-            cfg = NYamlConfig::StripMetadata(cfg);
-        }
-    } else {
-        Cerr << "YAML config is absent on this cluster." << Endl;
+    const TStringBuf staticConfigName = StaticConfigPath == "-" ? TStringBuf("<stdin>") : TStringBuf(StaticConfigPath);
+    const TStringBuf dynamicConfigName = DynamicConfigPath == "-" ? TStringBuf("<stdin>") : TStringBuf(DynamicConfigPath);
+    auto result = NYamlConfig::MergeConfigsForMigration(staticConfig, dynamicConfig, staticConfigName, dynamicConfigName);
+    WriteMigrationConfig(result.Config, OutputPath);
+    if (result.HasConflicts) {
+        Cerr << Endl << "Merge produced conflicts. Resolve all conflict markers before running 'config replace'." << Endl;
         return EXIT_FAILURE;
-    }
-
-    if (!OutDir) {
-        Cout << WrapYaml(cfg);
-    } else {
-        TFsPath dir(OutDir);
-        dir.MkDirs();
-        auto filepath = (dir / "dynconfig.yaml");
-        TFileOutput out(filepath);
-        out << cfg;
-    }
-
-    if (All) {
-        for (auto [id, cfg] : result.GetVolatileConfigs()) {
-            if (StripMetadata) {
-                cfg = NYamlConfig::StripMetadata(TString{cfg});
-            }
-
-            if (!OutDir) {
-                Cout << WrapYaml(TString{cfg});
-            } else {
-                auto filename = TString("volatile_") + ToString(version) + "_" + ToString(id) + ".yaml";
-                auto filepath = (TFsPath(OutDir) / filename);
-                TFileOutput out(filepath);
-                out << cfg;
-            }
-        }
     }
 
     return EXIT_SUCCESS;
 }
 
-TCommandConfigReplace::TCommandConfigReplace()
+TCommandConfigTransform::TCommandConfigTransform(const TString& name, const TString& description)
+    : TYdbReadOnlyCommand(name, {}, description)
+{
+}
+
+void TCommandConfigTransform::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption('f', "input", "Path to a MainConfig; '-' for stdin")
+        .Required()
+        .RequiredArgument("[config.yaml]")
+        .StoreResult(&InputPath);
+    config.Opts->AddLongOption('o', "output", "Path for the resulting config; stdout if omitted")
+        .RequiredArgument("[config.yaml]")
+        .StoreResult(&OutputPath);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = true;
+    config.NeedToConnect = false;
+}
+
+TCommandConfigToggle::TCommandConfigToggle(const TString& name, const TString& description)
+    : TCommandConfigTransform(name, description)
+{
+}
+
+void TCommandConfigToggle::Config(TConfig& config) {
+    TCommandConfigTransform::Config(config);
+    config.Opts->AddLongOption("enable", "Set the value to true").StoreTrue(&Enable);
+    config.Opts->AddLongOption("disable", "Set the value to false").StoreTrue(&Disable);
+    config.Opts->MutuallyExclusive("enable", "disable");
+}
+
+void TCommandConfigToggle::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    if (!Enable && !Disable) {
+        throw TMisuseException() << "Exactly one of --enable or --disable must be specified";
+    }
+}
+
+bool TCommandConfigToggle::Enabled() const {
+    return Enable;
+}
+
+TCommandConfigToggleV2FeatureFlag::TCommandConfigToggleV2FeatureFlag()
+    : TCommandConfigToggle(
+        "toggle-config-v2-feature-flag",
+        "Enable or disable feature_flags.switch_to_config_v2")
+{
+}
+
+int TCommandConfigToggleV2FeatureFlag::Run(TConfig&) {
+    auto result = NYamlConfig::SetConfigV2FeatureFlag(ReadMigrationConfig(InputPath), Enabled());
+    WriteMigrationConfig(result, OutputPath);
+    return EXIT_SUCCESS;
+}
+
+TCommandConfigToggleSelfManagement::TCommandConfigToggleSelfManagement()
+    : TCommandConfigToggle(
+        "toggle-self-management",
+        "Enable or disable self_management_config.enabled, validating static groups when enabling")
+{
+}
+
+void TCommandConfigToggleSelfManagement::Config(TConfig& config) {
+    TCommandConfigToggle::Config(config);
+    config.Opts->AddLongOption(
+        "mirror-3-dc-3-nodes",
+        "Generate self-management config for mirror-3-dc (3 nodes)")
+        .StoreTrue(&UseMirror3dc3NodesLayout);
+    config.Opts->AddLongOption("force", "Proceed only after manually verifying the resulting static-group layout")
+        .StoreTrue(&Force);
+    config.Opts->MutuallyExclusive("mirror-3-dc-3-nodes", "force");
+}
+
+void TCommandConfigToggleSelfManagement::Parse(TConfig& config) {
+    TCommandConfigToggle::Parse(config);
+    if (!Enabled() && (UseMirror3dc3NodesLayout || Force)) {
+        throw TMisuseException() << "Static-group migration options can only be used with --enable";
+    }
+}
+
+int TCommandConfigToggleSelfManagement::Run(TConfig&) {
+    struct TLayoutIssue {
+        TStringBuf Error;
+        TStringBuf Warning;
+    };
+
+    const auto input = ReadMigrationConfig(InputPath);
+    const bool enableRequested = Enabled();
+    const bool transitioningToEnabled = enableRequested && !NYamlConfig::IsSelfManagementEnabled(input);
+    auto result = NYamlConfig::SetSelfManagement(input, enableRequested);
+    if (enableRequested && UseMirror3dc3NodesLayout) {
+        NYamlConfig::SetDiskFailDomainType(result);
+    }
+    const auto layout = enableRequested
+                        ? NYamlConfig::CheckStaticGroupLayout(result)
+                        : NYamlConfig::EStaticGroupLayoutCheckResult::NotApplicable;
+    const bool hasDiskFailDomainType = enableRequested && NYamlConfig::HasDiskFailDomainType(result);
+    std::optional<TLayoutIssue> layoutIssue;
+
+    if (enableRequested && UseMirror3dc3NodesLayout) {
+        if (layout != NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc3Nodes) {
+            Cerr << "--mirror-3-dc-3-nodes requires a consistent mirror-3-dc (3 nodes) layout in "
+                 << "storage-pool geometry and blob_storage_config; fix the configuration"
+                 << Endl;
+            return EXIT_FAILURE;
+        }
+    } else if (transitioningToEnabled && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc
+               && hasDiskFailDomainType) {
+        layoutIssue = TLayoutIssue{
+            .Error = "Configuration uses mirror-3-dc (9 nodes), but fail_domain_type: disk would make "
+                     "self-management generate mirror-3-dc (3 nodes). Remove fail_domain_type: disk or fix the "
+                     "configured static-group layout before continuing",
+            .Warning = "enabling self-management with fail_domain_type: disk although the configuration "
+                       "uses mirror-3-dc (9 nodes)",
+        };
+    } else if (transitioningToEnabled && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Block42
+               && hasDiskFailDomainType) {
+        layoutIssue = TLayoutIssue{
+            .Error = "Configuration uses block-4-2, but fail_domain_type: disk would make self-management "
+                     "generate a different layout. Make fail_domain_type consistent with the configured static "
+                     "group before continuing",
+            .Warning = "enabling self-management with fail_domain_type: disk although the configuration "
+                       "uses block-4-2",
+        };
+    } else if (transitioningToEnabled && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Mirror3dc3Nodes
+               && !hasDiskFailDomainType) {
+        layoutIssue = TLayoutIssue{
+            .Error = "Configuration uses mirror-3-dc (3 nodes). Rerun with --mirror-3-dc-3-nodes to preserve this "
+                     "layout in the generated config",
+            .Warning = "enabling self-management without preserving the configured mirror-3-dc (3 nodes) layout",
+        };
+    } else if (transitioningToEnabled && layout == NYamlConfig::EStaticGroupLayoutCheckResult::Incorrect) {
+        layoutIssue = TLayoutIssue{
+            .Error = "The static-group layout cannot be migrated automatically. Review and fix storage-pool "
+                     "geometry and static-group placement before enabling self-management",
+            .Warning = "enabling self-management although the static-group layout cannot be migrated "
+                       "automatically",
+        };
+    }
+
+    if (layoutIssue) {
+        if (!Force) {
+            Cerr << layoutIssue->Error << Endl;
+            return EXIT_FAILURE;
+        }
+        Cerr << "WARNING: " << layoutIssue->Warning << Endl;
+    }
+
+    WriteMigrationConfig(result, OutputPath);
+    return EXIT_SUCCESS;
+}
+
+TCommandConfigCleanupV2::TCommandConfigCleanupV2()
+    : TCommandConfigTransform(
+        "cleanup-v2",
+        "Remove legacy static-group and State Storage definitions after switching their management to V2")
+{
+}
+
+int TCommandConfigCleanupV2::Run(TConfig&) {
+    auto result = NYamlConfig::CleanupConfigV2Migration(ReadMigrationConfig(InputPath));
+    WriteMigrationConfig(result, OutputPath);
+    return EXIT_SUCCESS;
+}
+
+TCommandConfigFetch::TCommandConfigFetch(
+        bool useLegacyApi,
+        bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("fetch", {"get", "dump"}, "Fetch main dynamic-config")
+    , UseLegacyApi(useLegacyApi)
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandConfigFetch::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
+        .RequiredArgument("[directory]").StoreResult(&OutDir);
+    config.Opts->AddLongOption("strip-metadata", "Strip metadata from config")
+        .StoreTrue(&StripMetadata);
+    config.Opts->AddLongOption("dedicated-storage-section", "Fetch dedicated storage section")
+        .StoreTrue(&DedicatedStorageSection);
+    config.Opts->AddLongOption("dedicated-cluster-section", "Fetch dedicated cluster section")
+        .StoreTrue(&DedicatedClusterSection);
+    config.Opts->AddLongOption("v2-internal-state", "Fetch all managed internal sections in v1 format (in order to downgrade)")
+        .StoreTrue(&FetchInternalState);
+    config.Opts->AddLongOption("v2-explicit-sections", "Add explicit sections to control managed entities manually")
+        .StoreTrue(&FetchExplicitSections);
+    config.SetFreeArgsNum(0);
+
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
+}
+
+void TCommandConfigFetch::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+
+    if (FetchInternalState && FetchExplicitSections) {
+        ythrow yexception() << "Can't specify both --v2-internal-state and --v2-explicit-sections at the same time.";
+    } else if (UseLegacyApi && (FetchInternalState || FetchExplicitSections)) {
+        ythrow yexception() << "--v2-internal-state and --v2-explicit-sections can't be used with legacy API.";
+    }
+}
+
+int TCommandConfigFetch::Run(TConfig& config) {
+    if (AllowEmptyDatabase) {
+        // explicitly clear database to get cluster database
+        // in `ydb admin cluster config fetch` even if
+        // some database is set by mistake
+        config.Database.clear();
+    }
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NConfig::TConfigClient(driver);
+
+    NYdb::NConfig::TFetchConfigResult result(TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {}), {}, {});
+
+    if (!UseLegacyApi) {
+        NYdb::NConfig::TFetchAllConfigsSettings settings;
+        if (FetchInternalState) {
+            settings.Transform(NConfig::EFetchAllConfigsTransform::ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG);
+        } else if (FetchExplicitSections) {
+            settings.Transform(NConfig::EFetchAllConfigsTransform::ADD_EXPLICIT_SECTIONS);
+        }
+        result = client.FetchAllConfigs(settings).GetValueSync();
+    }
+
+    // if the new Config API is not supported, fallback to the old DynamicConfig API
+    if (result.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || result.GetStatus() == EStatus::UNSUPPORTED) {
+        Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
+
+        if (FetchInternalState || FetchExplicitSections) {
+            Cerr << "Error: --v2-internal-state and --v2-explicit-sections can't be used with legacy API." << Endl;
+            return EXIT_FAILURE;
+        }
+
+        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
+        auto result = client.GetConfig().GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+        auto cfg = TString{result.GetConfig()};
+
+        if (cfg) {
+            auto metadata = NYamlConfig::GetMainMetadata(cfg);
+
+            if (StripMetadata) {
+                cfg = NYamlConfig::StripMetadata(cfg);
+            }
+        } else {
+            Cerr << "YAML config is absent on this cluster." << Endl;
+            return EXIT_FAILURE;
+        }
+
+        if (!OutDir) {
+            Cout << cfg << Endl;
+        } else {
+            TFsPath dir(OutDir);
+            dir.MkDirs();
+            auto filepath = (dir / "dynconfig.yaml");
+            TFileOutput out(filepath);
+            out << cfg;
+        }
+        return EXIT_SUCCESS;
+    }
+
+    // if the new Config API is supported, continue with the new API
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    TString clusterConfig;
+    TString storageConfig;
+    TString databaseConfig;
+
+    for (const auto& entry : result.GetConfigs()) {
+        std::visit([&](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, NYdb::NConfig::TMainConfigIdentity>) {
+                if (DedicatedClusterSection || !DedicatedStorageSection) {
+                    clusterConfig = entry.Config;
+                }
+            } else if constexpr (std::is_same_v<T, NYdb::NConfig::TStorageConfigIdentity>) {
+                if (DedicatedStorageSection || !DedicatedClusterSection) {
+                    storageConfig = entry.Config;
+                }
+            } else if constexpr (std::is_same_v<T, NYdb::NConfig::TDatabaseConfigIdentity>) {
+                databaseConfig = entry.Config;
+            }
+        }, entry.Identity);
+    }
+
+
+    // TODO: rewrite it in proper way, without stdout and stderr confusion
+    if (!clusterConfig.empty()) {
+        try {
+            clusterConfig = NYamlConfig::UpgradeMainConfigVersion(clusterConfig);
+        } catch(...) {
+            // it is better to return at least something
+            // because for user it is the only way to get config
+            // user will be unable to reupload this config without manual interaction
+            // and will get attention that something went horribly wrong
+            Cerr << "Unable to bump main config version, returning as-is" << Endl;
+        }
+        if (!storageConfig.empty() || !databaseConfig.empty() ||
+            DedicatedStorageSection)
+        {
+            Cerr << "cluster config: " << Endl;
+        }
+        Cout << clusterConfig << Endl;
+    }
+
+    if (!storageConfig.empty()) {
+        try {
+            storageConfig = NYamlConfig::UpgradeStorageConfigVersion(storageConfig);
+        } catch(...) {
+            // it is better to return at least something
+            // because for user it is the only way to get config
+            // user will be unable to reupload this config without manual interaction
+            // and will get attention that something went horribly wrong
+            Cerr << "Unable to bump storage config version, returning as-is" << Endl;
+        }
+        if (!clusterConfig.empty() || !databaseConfig.empty() ||
+            DedicatedClusterSection)
+        {
+            Cerr << "storage config:" << Endl;
+        }
+        Cout << storageConfig << Endl;
+    }
+
+    if (!databaseConfig.empty()) {
+        // NOTE: there is no native new-API path for per-database YAML config fetch yet —
+        // the request is routed through Console via the legacy API (see
+        // TFetchStorageConfigRequest::Bootstrap() in rpc_config.cpp).
+        // Console's contract for per-database YAML config replace is
+        // wire metadata.version == stored version, so the CLI must return the fetched
+        // body as-is. Bumping metadata.version here would break the next
+        // fetch | edit | replace round-trip — the user would have to manually fix
+        // the version before re-submitting. Once a native new-API path lands,
+        // this branch can mirror the cluster/storage branches and call
+        // UpgradeDatabaseConfigVersion.
+
+        if (!clusterConfig.empty() || !storageConfig.empty() ||
+            DedicatedStorageSection || DedicatedClusterSection)
+        {
+            Cerr << "database config:" << Endl;
+        }
+        Cout << databaseConfig << Endl;
+    }
+
+    if (clusterConfig.empty() && storageConfig.empty() && databaseConfig.empty())
+    {
+        Cerr << "No config returned." << Endl;
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
+}
+
+TCommandConfigReplace::TCommandConfigReplace(
+        bool useLegacyApi,
+        bool allowEmptyDatabase)
     : TYdbCommand("replace", {}, "Replace dynamic config")
+    , UseLegacyApi(useLegacyApi)
     , IgnoreCheck(false)
+    , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
 
 void TCommandConfigReplace::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration")
+    config.Opts->AddLongOption('f', "filename", "Path to the file containing configuration")
         .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
-    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
-        .NoArgument().SetFlag(&IgnoreCheck);
-    config.Opts->AddLongOption("dry-run", "Check config applicability")
-        .NoArgument().SetFlag(&DryRun);
+    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config validation checks")
+        .StoreTrue(&IgnoreCheck);
+    config.Opts->AddLongOption("dry-run", "Validate the config without applying changes")
+        .StoreTrue(&DryRun);
     config.Opts->AddLongOption("allow-unknown-fields", "Allow fields not present in config")
-        .NoArgument().SetFlag(&AllowUnknownFields);
+        .StoreTrue(&AllowUnknownFields);
     config.Opts->AddLongOption("force", "Ignore metadata on config replacement")
-        .NoArgument().SetFlag(&Force);
+        .StoreTrue(&Force);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
 
@@ -133,29 +549,62 @@ void TCommandConfigReplace::Parse(TConfig& config) {
         ythrow yexception() << "Must specify non-empty -f (--filename)";
     }
 
-   const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
+    const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
 
     DynamicConfig = configStr;
 
     if (!IgnoreCheck) {
-        NYamlConfig::GetMetadata(configStr);
+        NYamlConfig::GetMainMetadata(configStr);
         auto tree = NFyaml::TDocument::Parse(configStr);
-        const auto resolved = NYamlConfig::ResolveAll(tree);
-        Y_UNUSED(resolved); // we can't check it better without ydbd
+
+        NYamlConfig::ResolveUniqueDocs(tree, [](NYamlConfig::TDocumentConfig&&) {});
     }
 }
 
 int TCommandConfigReplace::Run(TConfig& config) {
-    std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
-    auto exec = [&]() {
-        if (Force) {
-            return client.SetConfig(DynamicConfig, DryRun, AllowUnknownFields).GetValueSync();
-        }
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NConfig::TConfigClient(driver);
 
-        return client.ReplaceConfig(DynamicConfig, DryRun, AllowUnknownFields).GetValueSync();
-    };
-    auto status = exec();
+    NYdb::NConfig::TReplaceConfigSettings settings;
+
+    if (Force) {
+        settings.BypassChecks();
+    }
+
+    if (DryRun) {
+        settings.DryRun();
+    }
+
+    if (AllowUnknownFields) {
+        settings.AllowUnknownFields();
+    }
+
+    auto status = TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {});
+
+    if (!UseLegacyApi) {
+        status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
+    }
+
+    if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::UNSUPPORTED) {
+        Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
+
+        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
+
+        status = [&]() {
+            if (Force) {
+                return client.SetConfig(
+                    DynamicConfig,
+                    DryRun,
+                    AllowUnknownFields).GetValueSync();
+            }
+
+            return client.ReplaceConfig(
+                DynamicConfig,
+                DryRun,
+                AllowUnknownFields).GetValueSync();
+        }();
+    }
+
     NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
 
     if (!status.GetIssues()) {
@@ -166,17 +615,17 @@ int TCommandConfigReplace::Run(TConfig& config) {
 }
 
 TCommandConfigResolve::TCommandConfigResolve()
-    : TYdbCommand("resolve", {}, "Resolve config")
+    : TYdbReadOnlyCommand("resolve", {}, "Resolve config")
 {
 }
 
 void TCommandConfigResolve::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("all", "Resolve for all combinations")
-        .NoArgument().SetFlag(&All);
+        .StoreTrue(&All);
     config.Opts->AddLongOption("label", "Labels for this node")
         .Optional().RequiredArgument("[LABEL=VALUE]")
-        .KVHandler([this](TString key, TString val) {
+        .GetOpt().KVHandler([this](TString key, TString val) {
             Labels[key] = val;
         });
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration to resolve")
@@ -186,13 +635,13 @@ void TCommandConfigResolve::Config(TConfig& config) {
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
         .Optional().RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("from-cluster", "Fetch current config from cluster instead of the local file")
-        .NoArgument().SetFlag(&FromCluster);
+        .StoreTrue(&FromCluster);
     config.Opts->AddLongOption("remote-resolve", "Use resolver on cluster instead of built-in resolver")
-        .NoArgument().SetFlag(&RemoteResolve);
+        .StoreTrue(&RemoteResolve);
     config.Opts->AddLongOption("node-id", "Take labels from node with the specified id")
         .Optional().RequiredArgument("[node]").StoreResult(&NodeId);
     config.Opts->AddLongOption("skip-volatile", "Ignore volatile configs")
-        .NoArgument().SetFlag(&SkipVolatile);
+        .StoreTrue(&SkipVolatile);
     config.SetFreeArgsNum(0);
 }
 
@@ -239,8 +688,8 @@ TString ConfigHash(const NFyaml::TNodeRef& config) {
 }
 
 int TCommandConfigResolve::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
     if (NodeId) {
         auto result = client.GetNodeLabels(NodeId).GetValueSync();
@@ -447,12 +896,12 @@ TCommandConfigVolatileAdd::TCommandConfigVolatileAdd()
 
 void TCommandConfigVolatileAdd::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption('f', "filename", "filename to set")
+    config.Opts->AddLongOption('f', "filename", "Path to the file containing configuration")
         .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
-    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
-        .NoArgument().SetFlag(&IgnoreCheck);
-    config.Opts->AddLongOption("dry-run", "Check config applicability")
-        .NoArgument().SetFlag(&DryRun);
+    config.Opts->AddLongOption("ignore-local-validation", "Ignore local config validation checks")
+        .StoreTrue(&IgnoreCheck);
+    config.Opts->AddLongOption("dry-run", "Validate the config without applying changes")
+        .StoreTrue(&DryRun);
     config.SetFreeArgsNum(0);
 
 }
@@ -466,8 +915,8 @@ void TCommandConfigVolatileAdd::Parse(TConfig& config) {
 }
 
 int TCommandConfigVolatileAdd::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
     const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
 
@@ -511,7 +960,7 @@ void TCommandConfigVolatileDrop::Config(TConfig& config) {
         .Optional().RequiredArgument("[ui64]")
         .InsertTo(&Ids);
     config.Opts->AddLongOption("all", "Remove all volatile configs")
-        .NoArgument().SetFlag(&All);
+        .StoreTrue(&All);
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration to remove")
         .RequiredArgument("[String]").DefaultValue("").StoreResult(&Filename);
     config.Opts->AddLongOption("cluster", "Cluster name")
@@ -519,7 +968,7 @@ void TCommandConfigVolatileDrop::Config(TConfig& config) {
     config.Opts->AddLongOption("version", "Config version")
         .RequiredArgument("[ui64]").StoreResult(&Version);
     config.Opts->AddLongOption("force", "Ignore version and cluster check")
-        .NoArgument().SetFlag(&Force);
+        .StoreTrue(&Force);
     config.Opts->AddLongOption("directory", "Directory with volatile configs")
         .Optional().RequiredArgument("[directory]").StoreResult(&Dir);
 }
@@ -541,8 +990,8 @@ void TCommandConfigVolatileDrop::Parse(TConfig& config) {
 }
 
 int TCommandConfigVolatileDrop::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
 
     if (!Dir.empty()) {
         auto dir = TFsPath(Dir);
@@ -607,13 +1056,12 @@ void TCommandConfigVolatileFetch::Config(TConfig& config) {
     config.Opts->AddLongOption("id", "Volatile config id")
         .Optional().RequiredArgument("[ui64]").InsertTo(&Ids);
     config.Opts->AddLongOption("all", "Fetch all volatile configs")
-        .NoArgument().SetFlag(&All);
+        .StoreTrue(&All);
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
         .RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config(s)")
-        .NoArgument().SetFlag(&StripMetadata);
+        .StoreTrue(&StripMetadata);
     config.SetFreeArgsNum(0);
-
     config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }
 
@@ -622,8 +1070,8 @@ void TCommandConfigVolatileFetch::Parse(TConfig& config) {
 }
 
 int TCommandConfigVolatileFetch::Run(TConfig& config) {
-    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
     auto result = client.GetConfig().GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
@@ -655,5 +1103,141 @@ int TCommandConfigVolatileFetch::Run(TConfig& config) {
 
     return EXIT_SUCCESS;
 }
+
+TCommandGenerateDynamicConfig::TCommandGenerateDynamicConfig(bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("generate", {}, "Generate dynamic config from startup static config")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandGenerateDynamicConfig::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+}
+
+int TCommandGenerateDynamicConfig::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
+
+    auto result = client.FetchStartupConfig().GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    if (NYamlConfig::IsStaticConfig(TString{result.GetConfig()})) {
+        Cout << WrapStaticConfig(TString{result.GetConfig()});
+    } else {
+        Cout << "Startup config is already dynamic" << Endl;
+    }
+
+    return EXIT_SUCCESS;
+}
+
+TCommandVersionDynamicConfig::TCommandVersionDynamicConfig(bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("version", {}, "Show configuration version on nodes")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandVersionDynamicConfig::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption("list-nodes", "List nodes with different configuration versions")
+        .StoreTrue(&ListNodes);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::Json,
+        EDataFormat::Csv
+    });
+}
+
+void TCommandVersionDynamicConfig::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParseOutputFormats();
+}
+
+int TCommandVersionDynamicConfig::Run(TConfig& config) {
+    auto driver = CreateDriver(config);
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(driver);
+    auto result = client.GetConfigurationVersion(ListNodes).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    auto sortNodes = [&](const auto& list) {
+        std::vector<NYdb::NDynamicConfig::TGetConfigurationVersionResult::TNodeInfo> sortedNodes(list.begin(), list.end());
+        std::sort(sortedNodes.begin(), sortedNodes.end());
+        return sortedNodes;
+    };
+    if (OutputFormat == EDataFormat::Json) {
+        NJson::TJsonValue jsonOutput(NJson::JSON_MAP);
+        auto serializeNodesInfo = [&](const TString& key, const auto& listGetter) {
+            NJson::TJsonValue nodesArray(NJson::JSON_ARRAY);
+            for (const auto& node : sortNodes(listGetter())) {
+                NJson::TJsonValue nodeJson(NJson::JSON_MAP);
+                nodeJson.InsertValue("node_id", node.NodeId);
+                nodeJson.InsertValue("hostname", node.Hostname);
+                nodeJson.InsertValue("port", node.Port);
+                nodesArray.AppendValue(nodeJson);
+            }
+            jsonOutput.InsertValue(key, nodesArray);
+        };
+
+#define ADD_INFO_TO_JSON(type, key) \
+        jsonOutput.InsertValue(#key "_nodes_count", result.Get##type##Nodes()); \
+        if (ListNodes) { \
+            serializeNodesInfo(#key "_nodes_list", [&]() { return result.Get##type##NodesList(); }); \
+        }
+
+        ADD_INFO_TO_JSON(V1, v1)
+        ADD_INFO_TO_JSON(V2, v2)
+        ADD_INFO_TO_JSON(Unknown, unknown)
+
+        NJson::WriteJson(&Cout, &jsonOutput, true);
+        Cout << Endl;
+    } else if (OutputFormat == EDataFormat::Csv) {
+        if (ListNodes) {
+            Cout << "config_version,node_id,hostname,port" << Endl;
+            auto printNodesToCsv = [&](const TString& versionString, const auto& listGetter) {
+                for (const auto& node : sortNodes(listGetter())) {
+                    TStringBuilder row;
+                    row << versionString << "," << node.NodeId << ",\"" << node.Hostname << "\"," << node.Port;
+                    Cout << row << Endl;
+                }
+            };
+
+#define PRINT_NODES_TO_CSV(type, key) \
+        printNodesToCsv(#key, [&]() { return result.Get##type##NodesList(); }); \
+
+            PRINT_NODES_TO_CSV(V1, v1)
+            PRINT_NODES_TO_CSV(V2, v2)
+            PRINT_NODES_TO_CSV(Unknown, unknown)
+        } else {
+            Cout << "config_version,nodes_count" << Endl;
+            Cout << "v1," << result.GetV1Nodes() << Endl;
+            Cout << "v2," << result.GetV2Nodes() << Endl;
+            Cout << "unknown," << result.GetUnknownNodes() << Endl;
+        }
+    } else {
+        auto printNodeList = [&](const TString& header, const auto& listGetter) {
+            const auto& nodesVector = sortNodes(listGetter());
+            Cout << header;
+            for (const auto& node : nodesVector) {
+                Cout << "\n";
+                Cout << "  - " << node.Hostname << ":" << node.Port << " (node_id: " << node.NodeId << ")";
+            }
+            Cout << Endl;
+        };
+
+#define PRINT_NODE_VERSION_INFO(type) \
+    Cout << #type " nodes: " << result.Get##type##Nodes() << Endl; \
+    if (ListNodes) { \
+        printNodeList(#type " node list: ", [&]() { return result.Get##type##NodesList(); }); \
+    }
+
+        PRINT_NODE_VERSION_INFO(V1)
+        PRINT_NODE_VERSION_INFO(V2)
+        PRINT_NODE_VERSION_INFO(Unknown)
+    }
+
+    return EXIT_SUCCESS;
+}
+
 
 } // namespace NYdb::NConsoleClient::NDynamicConfig

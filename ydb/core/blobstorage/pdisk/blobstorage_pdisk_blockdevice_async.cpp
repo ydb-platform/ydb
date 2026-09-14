@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_log_cache.h"
 #include "blobstorage_pdisk_mon.h"
+#include "blobstorage_pdisk_thread.h"
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
 #include "blobstorage_pdisk_util_countedqueuemanyone.h"
 #include "blobstorage_pdisk_util_countedqueueoneone.h"
@@ -14,6 +15,7 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/spdk_state.h>
 #include <ydb/library/pdisk_io/wcache.h>
@@ -30,6 +32,11 @@
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PDISK
+
+#include <optional>
+#include <utility>
+
 namespace NKikimr {
 namespace NPDisk {
 
@@ -44,15 +51,16 @@ class TRealBlockDevice : public IBlockDevice {
     ////////////////////////////////////////////////////////
     // TCompletionThread
     ////////////////////////////////////////////////////////
-    class TCompletionThread : public ISimpleThread {
+    class TCompletionThread : public TPDiskSimpleThread {
     public:
         TCompletionThread(TRealBlockDevice &device, TString name)
-            : Device(device)
+            : TPDiskSimpleThread(device.ThreadAffinity)
+            , Device(device)
             , Name(name)
         {}
 
-        void *ThreadProc() override {
-            SetCurrentThreadName(Name.data());
+        void *DoThreadProc() override {
+            ::TThread::SetCurrentThreadName(Name.data());
             auto prevCycleEnd = HPNow();
             bool isWorking = true;
             bool stateError = false;
@@ -160,7 +168,7 @@ class TRealBlockDevice : public IBlockDevice {
                     continue;
                 }
 
-                Y_ABORT_UNLESS(min_it != Threads.end());
+                Y_VERIFY(min_it != Threads.end());
                 if (action->CanBeExecutedInAdditionalCompletionThread) {
                     (*min_it)->Schedule(action);
                 } else {
@@ -218,7 +226,7 @@ class TRealBlockDevice : public IBlockDevice {
         TAtomic SeqnoL7 = 0;
     };
 
-    class TSubmitThreadBase : public TThread {
+    class TSubmitThreadBase : public TPDiskSimpleThread {
     protected:
         TRealBlockDevice &Device;
         std::shared_ptr<TPDiskCtx> &PCtx;
@@ -232,11 +240,13 @@ class TRealBlockDevice : public IBlockDevice {
         TAtomic SubmitInFlightBytes = 0;
 
     public:
-        TSubmitThreadBase(TRealBlockDevice &device, TThread::TThreadProc threadProc, void *_this)
-            : TThread(threadProc, _this)
+        TSubmitThreadBase(TRealBlockDevice &device)
+            : TPDiskSimpleThread(device.ThreadAffinity)
             , Device(device)
             , PCtx(device.PCtx)
         {}
+
+        virtual ~TSubmitThreadBase() = default;
 
         // Schedule op execution
         // pass op = nullptr to quit
@@ -261,12 +271,13 @@ class TRealBlockDevice : public IBlockDevice {
                     if (SubmitCondVar.WaitT(SubmitMtx, TDuration::Seconds(1))) {
                         return;
                     } else {
-                        P_LOG(PRI_WARN, BPD01, "Exceed 1 second deadline in SubmitThreadQueue",
-                                    (PDiskId, Device.PCtx->PDiskId),
-                                    (Path, Device.Path),
-                                    (TotalTimeInWaitingSec, NHPTimer::GetSeconds(HPNow() - start)),
-                                    (SubmitInFlightBytes, AtomicGet(SubmitInFlightBytes)),
-                                    (SubmitInFlightBytesMax, SubmitInFlightBytesMax));
+                        YDB_LOG_P_LOG(PRI_WARN, "Exceed 1 second deadline in SubmitThreadQueue",
+                            {"marker", "BPD01"},
+                            {"PDiskId", Device.PCtx->PDiskId},
+                            {"path", Device.Path},
+                            {"totalTimeInWaitingSec", NHPTimer::GetSeconds(HPNow() - start)},
+                            {"submitInFlightBytes", AtomicGet(SubmitInFlightBytes)},
+                            {"submitInFlightBytesMax", SubmitInFlightBytesMax});
                     }
                 }
             }
@@ -279,15 +290,17 @@ class TRealBlockDevice : public IBlockDevice {
     class TSubmitThread : public TSubmitThreadBase {
     public:
         TSubmitThread(TRealBlockDevice &device)
-            : TSubmitThreadBase(device, &ThreadProc, this)
+            : TSubmitThreadBase(device)
         {}
 
-        static void* ThreadProc(void* _this) {
-            SetCurrentThreadName("PdSbmEv");
-            static_cast<TSubmitThread*>(_this)->Exec();
+    private:
+        void* DoThreadProc() override {
+            ::TThread::SetCurrentThreadName("PdSbmEv");
+            Exec();
             return nullptr;
         }
 
+    public:
         void ReleaseOp(IAsyncIoOperation *op) {
             Device.DecrementMonInFlight(op->GetType(), op->GetSize());
             Device.FreeOperation(op);
@@ -297,6 +310,7 @@ class TRealBlockDevice : public IBlockDevice {
 
         void Submit(IAsyncIoOperation *op) {
             TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
+            const ui64 opSize = op->GetSize();
 
             if (!Device.QuitCounter.Increment()) {
                 Device.FreeOperation(op);
@@ -304,18 +318,18 @@ class TRealBlockDevice : public IBlockDevice {
                 SubmitCondVar.Signal();
                 return;
             }
-            Device.IdleCounter.Increment();
-
-            Device.IncrementMonInFlight(op->GetType(), op->GetSize());
 
             double blockedMs = 0;
-            action->OperationIdx = Device.FlightControl.Schedule(blockedMs);
+            action->OperationIdx = Device.FlightControl.Schedule(blockedMs, opSize);
 
             *Device.Mon.DeviceWaitTimeMs += blockedMs;
 
             if (action->FlushAction) {
                 action->FlushAction->OperationIdx = action->OperationIdx;
             }
+
+            Device.IdleCounter.Increment();
+            Device.IncrementMonInFlight(op->GetType(), opSize);
 
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
@@ -371,29 +385,31 @@ class TRealBlockDevice : public IBlockDevice {
                 }
                 prevCycleEnd = cycleEnd;
             }
-            Y_ABORT_UNLESS(OperationsToBeSubmit.GetWaitingSize() == 0);
+            Y_VERIFY_S(OperationsToBeSubmit.GetWaitingSize() == 0, PCtx->PDiskLogPrefix);
         }
     };
 
     ////////////////////////////////////////////////////////
     // TGetThread
     ////////////////////////////////////////////////////////
-    class TGetThread : public TThread {
+    class TGetThread : public TPDiskSimpleThread {
     private:
         TRealBlockDevice &Device;
 
     public:
         TGetThread(TRealBlockDevice &device)
-            : TThread(&ThreadProc, this)
+            : TPDiskSimpleThread(device.ThreadAffinity)
             , Device(device)
         {}
 
-        static void* ThreadProc(void* _this) {
-            SetCurrentThreadName("PdGetEv");
-            static_cast<TGetThread*>(_this)->Exec();
+    private:
+        void* DoThreadProc() override {
+            ::TThread::SetCurrentThreadName("PdGetEv");
+            Exec();
             return nullptr;
         }
 
+    public:
         void Exec() {
             bool isOk = SetHighestThreadPriority();
             // TODO: ckeck isOk
@@ -421,6 +437,11 @@ class TRealBlockDevice : public IBlockDevice {
         ui64 PrevEstimatedCostNs = 0;
         ui64 PrevActualCostNs = 0;
 
+        // Per-window accumulators for the merged (cross-source) device
+        // overestimation ratio; reset every ~15s window (see Exec below).
+        ui64 MergedEstimatedNs = 0;
+        ui64 MergedActualNs = 0;
+
         TCompletionAction* WaitingNoops[MaxWaitingNoops] = {nullptr};
         TRealBlockDevice &Device;
         std::shared_ptr<TPDiskCtx> &PCtx;
@@ -430,6 +451,23 @@ class TRealBlockDevice : public IBlockDevice {
             : Device(device)
             , PCtx(device.PCtx)
         {}
+
+        // Whether the merged (cross-source) overestimation metric should be published
+        // via the legacy DeviceOverestimationRatio/DeviceNonperformanceMs sensors.
+        // Backed by an ICB control (default: enabled) so it can be toggled at runtime,
+        // without a cluster restart, in case the merged metric misbehaves.
+        bool UseDeviceOverestimationRatioMerged() const {
+            if (PCtx && PCtx->ActorSystem) {
+                if (auto *appData = PCtx->ActorSystem->AppData<TAppData>()) {
+                    if (appData->Icb) {
+                        if (auto control = appData->Icb->PDiskControls.UseDeviceOverestimationRatioMerged.AtomicLoad()) {
+                            return control->Get() != 0;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
 
         void FillCompletionAction(TCompletionAction *action, IAsyncIoOperation *op, EIoResult result) {
             action->TraceId = std::move(*op->GetTraceIdPtr());
@@ -441,7 +479,9 @@ class TRealBlockDevice : public IBlockDevice {
                         << " offset# " << op->GetOffset()
                         << " size# " << op->GetSize()
                         << " Result# " << result);
-                P_LOG(PRI_ERROR, BPD01, "IAsyncIoOperation error",  (Reason, action->ErrorReason));
+                YDB_LOG_P_LOG(PRI_ERROR, "IAsyncIoOperation error",
+                    {"marker", "BPD01"},
+                    {"reason", action->ErrorReason});
                 ++*Device.Mon.DeviceIoErrors;
             }
         }
@@ -461,31 +501,50 @@ class TRealBlockDevice : public IBlockDevice {
                 LWTRACK(PDiskDeviceGetFromDevice, completionAction->FlushAction->Orbit);
             }
 
+            const ui64 opSize = op->GetSize();
             Device.QuitCounter.Decrement();
             Device.IdleCounter.Decrement();
-            Device.FlightControl.MarkComplete(completionAction->OperationIdx);
+            Device.DecrementMonInFlight(op->GetType(), opSize);
+            Device.FlightControl.MarkComplete(completionAction->OperationIdx, opSize);
 
             NHPTimer::STime startCycle = Max(completionAction->SubmitTime, (i64)PrevEventGotAtCycle);
             NHPTimer::STime durationCycles = (eventGotAtCycle > startCycle) ? eventGotAtCycle - startCycle : 0;
             NHPTimer::STime totalExecutionCycles = durationCycles;
             NHPTimer::STime totalCostNs = completionAction->CostNs;
 
-            bool isSeekExpected = (completionAction->SubmitTime + (NHPTimer::STime)Device.SeekCostNs / 25ll >= PrevEventGotAtCycle);
+            bool isSeekExpected = (completionAction->SubmitTime
+                + (NHPTimer::STime)Device.SeekCostNs / (NHPTimer::STime)SeekCostNsToCyclesApproxDivisor
+                >= PrevEventGotAtCycle);
 
-            const ui64 opSize = op->GetSize();
-            Device.DecrementMonInFlight(op->GetType(), opSize);
             if (opSize == 0) { // Special case for flush operation, which is a read operation with 0 bytes size
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
-                    Y_ABORT_UNLESS(WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] == nullptr);
+                    Y_VERIFY_S(WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] == nullptr,
+                        PCtx->PDiskLogPrefix);
                     WaitingNoops[completionAction->OperationIdx % MaxWaitingNoops] = completionAction;
                 } else {
-                    Y_DEBUG_ABORT("Threre must not be writes of size 0 in TRealBlockDevice");
+                    Y_DEBUG_ABORT_S(PCtx->PDiskLogPrefix << "Threre must not be writes of size 0 in TRealBlockDevice");
                 }
             } else {
                 if ((ui64)op->GetOffset() != EndOffset) {
                     isSeekExpected = true;
                 }
                 EndOffset = op->GetOffset() + opSize;
+
+                // Feed the merged (cross-source) device overestimation aggregator with
+                // a raw sample. BaseCostNs intentionally excludes any seek cost: the
+                // aggregator recomputes seek-expected based on its own merged,
+                // completion-ordered stream (which may include samples from IO_URING
+                // sources sharing the same physical device).
+                {
+                    TDeviceIoSample sample;
+                    sample.SubmitCycles = (ui64)completionAction->SubmitTime;
+                    sample.CompleteCycles = (ui64)eventGotAtCycle;
+                    sample.Offset = (ui64)op->GetOffset();
+                    sample.Size = opSize;
+                    sample.IsWrite = (op->GetType() != IAsyncIoOperation::EType::PRead);
+                    sample.BaseCostNs = completionAction->CostNs;
+                    Device.Mon.DeviceOverestimationMerged->Push(sample);
+                }
 
                 double duration = HPMilliSecondsFloat(HPNow() - completionAction->SubmitTime);
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
@@ -497,11 +556,15 @@ class TRealBlockDevice : public IBlockDevice {
                     Device.Mon.DeviceWriteDuration.Increment(duration);
                     LWPROBE(PDiskDeviceWriteDuration, Device.GetPDiskId(), duration, opSize);
                 }
-                P_LOG(PRI_TRACE, BPD01, "iop is done", (Type, op->GetType()), (Duration, duration),
-                    (Offset, op->GetOffset()), (Size, opSize));
+                YDB_LOG_P_LOG(PRI_TRACE, "Iop is done",
+                    {"marker", "BPD01"},
+                    {"type", op->GetType()},
+                    {"duration", duration},
+                    {"offset", op->GetOffset()},
+                    {"size", opSize});
                 if (completionAction->FlushAction) {
                     ui64 idx = completionAction->FlushAction->OperationIdx;
-                    Y_ABORT_UNLESS(WaitingNoops[idx % MaxWaitingNoops] == nullptr);
+                    Y_VERIFY_S(WaitingNoops[idx % MaxWaitingNoops] == nullptr, PCtx->PDiskLogPrefix);
                     WaitingNoops[idx % MaxWaitingNoops] = completionAction->FlushAction;
                     completionAction->FlushAction = nullptr;
                 }
@@ -534,29 +597,46 @@ class TRealBlockDevice : public IBlockDevice {
             if (PrevEstimationAtCycle > eventGotAtCycle) {
                 PrevEstimationAtCycle = eventGotAtCycle;
             }
-            if (HPMilliSeconds(eventGotAtCycle - PrevEstimationAtCycle) >= 15000) {
+            if (HPMilliSeconds(eventGotAtCycle - PrevEstimationAtCycle) >= OverestimationWindowMs) {
                 ui64 estimated = (*Device.Mon.DeviceEstimatedCostNs - PrevEstimatedCostNs);
-                ui64 actual = (*Device.Mon.DeviceActualCostNs - PrevActualCostNs + 30000000ull);
-                if (estimated != 0) {
-                    *Device.Mon.DeviceOverestimationRatio = 1000ull * actual / (estimated + 30000000ull);
-                    if (actual > estimated) {
-                        if (actual - estimated < 15000000000ull) {
-                            *Device.Mon.DeviceNonperformanceMs = (actual - estimated) / 15000000ull;
-                        } else {
-                            *Device.Mon.DeviceNonperformanceMs = 1000;
-                        }
-                    } else {
-                        *Device.Mon.DeviceNonperformanceMs = 0;
-                    }
-                } else {
-                    *Device.Mon.DeviceOverestimationRatio = 1000ull;
-                    *Device.Mon.DeviceNonperformanceMs = 0ull;
-                }
+                ui64 actual = (*Device.Mon.DeviceActualCostNs - PrevActualCostNs + OverestimationActualCostBiasNs);
+                const TOverestimationRatioResult ratioResult = ComputeOverestimationRatio(estimated, actual);
 
                 PrevEstimatedCostNs = *Device.Mon.DeviceEstimatedCostNs;
                 PrevActualCostNs = *Device.Mon.DeviceActualCostNs;
                 PrevEstimationAtCycle = eventGotAtCycle;
                 *Device.Mon.GetThreadCPU = ThreadCPUTime();
+
+                // Merge this window's samples (this PDisk block device thread plus
+                // any samples received from IO_URING sources sharing this physical
+                // device) and derive the same overestimation ratio for the merged
+                // stream. See blobstorage_pdisk_device_overestimation.h.
+                auto windowResult = Device.Mon.DeviceOverestimationMerged->ComputeAndReset(Device.SeekCostNs);
+                MergedEstimatedNs += windowResult.EstimatedNs;
+                MergedActualNs += windowResult.ActualNs + OverestimationActualCostBiasNs;
+                const TOverestimationRatioResult mergedRatioResult =
+                    ComputeOverestimationRatio(MergedEstimatedNs, MergedActualNs);
+                *Device.Mon.DeviceOverestimationRatioMerged = mergedRatioResult.OverestimationRatio;
+                *Device.Mon.DeviceNonperformanceMsMerged = mergedRatioResult.NonperformanceMs;
+                *Device.Mon.DeviceOverestimationDroppedSamples = Device.Mon.DeviceOverestimationMerged->GetDroppedSamples();
+                // Reset accumulators each window (unlike the legacy PDisk-only
+                // counters above, which are cumulative device-lifetime counters we
+                // diff against Prev*): this makes MergedEstimatedNs/MergedActualNs
+                // pure per-window sums, matching windowResult's own semantics.
+                MergedEstimatedNs = 0;
+                MergedActualNs = 0;
+
+                // The DeviceOverestimationRatio/DeviceNonperformanceMs sensors are the
+                // ones referenced by dashboards/alerts. By default (ICB control enabled)
+                // we publish the merged (cross-source) metric there instead of the
+                // legacy PDisk-only computation, since it accounts for IO_URING sources
+                // (DDisk / PersistentBuffer) sharing the same physical device. Disabling
+                // the control (no cluster restart required) reverts to the old behavior
+                // in case the new metric misbehaves.
+                const TOverestimationRatioResult& publishedResult = SelectPublishedOverestimationResult(
+                        UseDeviceOverestimationRatioMerged(), ratioResult, mergedRatioResult);
+                *Device.Mon.DeviceOverestimationRatio = publishedResult.OverestimationRatio;
+                *Device.Mon.DeviceNonperformanceMs = publishedResult.NonperformanceMs;
             }
 
             PrevEventGotAtCycle = eventGotAtCycle;
@@ -582,20 +662,31 @@ class TRealBlockDevice : public IBlockDevice {
 
     public:
         TSubmitGetThread(TRealBlockDevice &device)
-            : TSubmitThreadBase(device, &ThreadProc, this)
+            : TSubmitThreadBase(device)
         {}
 
         static int ThreadProcSpdk(void* _this) {
-            SetCurrentThreadName("PdSbmGet");
-            static_cast<TSubmitGetThread*>(_this)->Exec();
+            auto *thread = static_cast<TSubmitGetThread*>(_this);
+            TAffinityGuard affinityGuard;
+            if (thread->Device.ThreadAffinity) {
+                affinityGuard.SetCpuMask(*thread->Device.ThreadAffinity);
+            }
+            thread->Run();
             return 0;
         }
 
-        static void* ThreadProc(void* _this) {
-            ThreadProcSpdk(_this);
+    private:
+        void* DoThreadProc() override {
+            Run();
             return nullptr;
         }
 
+        void Run() {
+            ::TThread::SetCurrentThreadName("PdSbmGet");
+            Exec();
+        }
+
+    public:
         void ReleaseOp(IAsyncIoOperation *op) {
             Device.DecrementMonInFlight(op->GetType(), op->GetSize());
             Device.FreeOperation(op);
@@ -605,8 +696,9 @@ class TRealBlockDevice : public IBlockDevice {
 
         bool Submit(IAsyncIoOperation *op, i64 *inFlight) {
             TCompletionAction *action = static_cast<TCompletionAction*>(op->GetCookie());
+            const ui64 opSize = op->GetSize();
 
-            action->OperationIdx = Device.FlightControl.TrySchedule();
+            action->OperationIdx = Device.FlightControl.TrySchedule(opSize);
             if (action->OperationIdx == 0) {
                 if (OpScheduleFailedTime == 0) {
                     // If failed to schedule, remember the time to use it when scheduling succeeds.
@@ -635,7 +727,7 @@ class TRealBlockDevice : public IBlockDevice {
                 action->FlushAction->OperationIdx = action->OperationIdx;
             }
 
-            if (op->GetSize() == 0) {
+            if (opSize == 0) {
                 TAsyncIoOperationResult result;
                 result.Operation = op;
                 result.Result = EIoResult::Ok;
@@ -644,7 +736,7 @@ class TRealBlockDevice : public IBlockDevice {
                 return true;
             }
 
-            Device.IncrementMonInFlight(op->GetType(), op->GetSize());
+            Device.IncrementMonInFlight(op->GetType(), opSize);
 
             EIoResult ret = EIoResult::TryAgain;
             while (ret == EIoResult::TryAgain) {
@@ -719,35 +811,37 @@ class TRealBlockDevice : public IBlockDevice {
                                 << (EIoResult)-ret);
                     }
                     inFlight -= ret;
-                    Y_VERIFY_S(inFlight >= 0, "Error in inFlight# " << inFlight);
+                    Y_VERIFY_S(inFlight >= 0, PCtx->PDiskLogPrefix << "Error in inFlight# " << inFlight);
                 } while (inFlight == (i64)Device.DeviceInFlight || isExiting && inFlight > 0);
             }
 
-            Y_ABORT_UNLESS(OperationsToBeSubmit.GetWaitingSize() == 0);
+            Y_VERIFY_S(OperationsToBeSubmit.GetWaitingSize() == 0, PCtx->PDiskLogPrefix);
         }
     };
 
     ////////////////////////////////////////////////////////
     // TTrimThread
     ////////////////////////////////////////////////////////
-    class TTrimThread : public TThread {
+    class TTrimThread : public TPDiskSimpleThread {
         TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> TrimOperations;
         TRealBlockDevice &Device;
         std::shared_ptr<TPDiskCtx> &PCtx;
 
     public:
         TTrimThread(TRealBlockDevice &device)
-            : TThread(&ThreadProc, this)
+            : TPDiskSimpleThread(device.ThreadAffinity)
             , Device(device)
             , PCtx(device.PCtx)
         {}
 
-        static void* ThreadProc(void* _this) {
-            SetCurrentThreadName("PdTrim");
-            static_cast<TTrimThread*>(_this)->Exec();
+    private:
+        void* DoThreadProc() override {
+            ::TThread::SetCurrentThreadName("PdTrim");
+            Exec();
             return nullptr;
         }
 
+    public:
         void Exec() {
             while(true) {
                 TAtomicBase actionCount = TrimOperations.GetWaitingSize();
@@ -757,7 +851,7 @@ class TRealBlockDevice : public IBlockDevice {
                         if (op == nullptr) {
                             return;
                         }
-                        Y_ABORT_UNLESS(op->GetType() == IAsyncIoOperation::EType::PTrim);
+                        Y_VERIFY_S(op->GetType() == IAsyncIoOperation::EType::PTrim, PCtx->PDiskLogPrefix);
                         auto *completion = static_cast<TCompletionAction*>(op->GetCookie());
                         if (Device.IsTrimEnabled) {
                             Device.IdleCounter.Increment();
@@ -769,12 +863,13 @@ class TRealBlockDevice : public IBlockDevice {
                             Device.Mon.DeviceTrimDuration.Increment(duration);
                             *Device.Mon.DeviceEstimatedCostNs += completion->CostNs;
                             if (Device.PCtx->ActorSystem && Device.IsTrimEnabled) {
-                                P_LOG(PRI_DEBUG, BPD01, "trim is done",
-                                        (ReqId, op->GetReqId()),
-                                        (TrimDurationMs, HPMilliSeconds(endTime - startTime)),
-                                        (Path, Device.Path),
-                                        (Offset, op->GetOffset()),
-                                        (Size, op->GetSize()));
+                                YDB_LOG_P_LOG(PRI_DEBUG, "Trim is done",
+                                    {"marker", "BPD01"},
+                                    {"reqId", op->GetReqId()},
+                                    {"trimDurationMs", HPMilliSeconds(endTime - startTime)},
+                                    {"path", Device.Path},
+                                    {"offset", op->GetOffset()},
+                                    {"size", op->GetSize()});
                             }
                             LWPROBE(PDiskDeviceTrimDuration, Device.GetPDiskId(), duration, op->GetOffset());
                         }
@@ -801,8 +896,6 @@ protected:
     std::shared_ptr<TPDiskCtx> PCtx;
     TPDiskMon &Mon;
     TString Path;
-
-    TPDiskConfig cfg{0, 0, 0};
 
 private:
     THolder<TCompletionThreads> CompletionThreads;
@@ -832,10 +925,12 @@ private:
     static constexpr int MaxEvents = 32;
 
     ui64 DeviceInFlight;
-    TFlightControl FlightControl;
+    ui64 PDiskBufferSize;
+    TFlightControlFace FlightControl;
     TAtomicBlockCounter QuitCounter;
     TString LastWarning;
     bool ReadOnly;
+    const std::optional<TCpuMask> ThreadAffinity;
     TDeque<IAsyncIoOperation*> Trash;
     TMutex TrashMutex;
 
@@ -844,7 +939,9 @@ private:
 public:
     TRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, bool readOnly)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, ui64 pDiskBufferSize, bool readOnly,
+            bool useBytesFlightControl,
+            std::optional<TCpuMask> threadAffinity)
         : Mon(mon)
         , Path(path)
         , CompletionThreads(nullptr)
@@ -863,10 +960,13 @@ public:
         , Flags(flags)
         , SectorMap(sectorMap)
         , DeviceInFlight(FastClp2(deviceInFlight))
-        , FlightControl(CountTrailingZeroBits(DeviceInFlight))
+        , PDiskBufferSize(pDiskBufferSize)
+        , FlightControl(DeviceInFlight, useBytesFlightControl, 2ull * PDiskBufferSize)
         , LastWarning(IsPowerOf2(deviceInFlight) ? "" : "Device inflight must be a power of 2")
         , ReadOnly(readOnly)
+        , ThreadAffinity(std::move(threadAffinity))
     {
+        Y_VERIFY(PDiskBufferSize > 0);
         if (sectorMap) {
             DriveData = TDriveData();
             DriveData->Path = path;
@@ -879,15 +979,16 @@ public:
 protected:
     void Initialize(std::shared_ptr<TPDiskCtx> pCtx) override {
         PCtx = std::move(pCtx);
-        Y_ABORT_UNLESS(PCtx);
+        Y_VERIFY(PCtx);
+        FlightControl.Initialize(PCtx->PDiskLogPrefix);
 
         TString errStr = TDeviceMode::Validate(Flags);
         if (errStr) {
             Y_FAIL_S(IoContext->GetPDiskInfo() << " Error in device flags: " << errStr);
         }
 
-        Y_ABORT_UNLESS(PCtx->ActorSystem->AppData<TAppData>());
-        Y_ABORT_UNLESS(PCtx->ActorSystem->AppData<TAppData>()->IoContextFactory);
+        Y_VERIFY_S(PCtx->ActorSystem->AppData<TAppData>(), PCtx->PDiskLogPrefix);
+        Y_VERIFY_S(PCtx->ActorSystem->AppData<TAppData>()->IoContextFactory, PCtx->PDiskLogPrefix);
         auto *factory = PCtx->ActorSystem->AppData<TAppData>()->IoContextFactory;
         IoContext = factory->CreateAsyncIoContext(Path, PCtx->PDiskId, Flags, SectorMap);
         if (Flags & TDeviceMode::UseSpdk) {
@@ -917,7 +1018,8 @@ protected:
         IoContext->InitializeMonitoring(Mon);
         //IoContext->InitializeMonitoring(Mon.DeviceOperationPoolTotalAllocations, Mon.DeviceOperationPoolFreeObjectsMin);
         if (!LastWarning.empty() && PCtx->ActorSystem) {
-            P_LOG(PRI_WARN, BPD01, "", (Warning, LastWarning));
+            YDB_LOG_P_LOG(PRI_WARN, LastWarning,
+                {"marker", "BPD01"});
         }
         if (IsFileOpened) {
             IoContext->SetActorSystem(PCtx->ActorSystem);
@@ -966,10 +1068,12 @@ protected:
             case IAsyncIoOperation::EType::PWrite:
                 (*Mon.DeviceInFlightBytesWrite) += size;
                 Mon.DeviceInFlightWrites->Inc();
+                Mon.MaxDeviceInFlightWrites.Collect(*Mon.DeviceInFlightWrites);
                 break;
             case IAsyncIoOperation::EType::PRead:
                 (*Mon.DeviceInFlightBytesRead) += size;
                 Mon.DeviceInFlightReads->Inc();
+                Mon.MaxDeviceInFlightReads.Collect(*Mon.DeviceInFlightReads);
                 break;
             default:
                 break;
@@ -984,6 +1088,7 @@ protected:
                 Mon.DeviceInFlightWrites->Dec();
                 (*Mon.DeviceBytesWritten) += size;
                 Mon.DeviceWrites->Inc();
+                Mon.DeviceWritesSizes.Increment(size);
                 break;
             case IAsyncIoOperation::EType::PRead:
                 (*Mon.DeviceInFlightBytesRead) -= size;
@@ -1039,8 +1144,8 @@ protected:
         doneEvent.WaitI();
     }
 
-    void TrimSync(ui32 size, ui64 offset) override {
-        Y_ABORT_UNLESS(!ReadOnly);
+    void TrimSync(ui64 size, ui64 offset) override {
+        Y_VERIFY_S(!ReadOnly, PCtx->PDiskLogPrefix);
         IAsyncIoOperation* op = IoContext->CreateAsyncIoOperation(nullptr, {}, nullptr);
         IoContext->PreparePTrim(op, size, offset);
         IsTrimEnabled = IoContext->DoTrim(op);
@@ -1049,13 +1154,13 @@ protected:
 
     void PreadAsync(void *data, ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId,
             NWilson::TTraceId *traceId) override {
-        Y_ABORT_UNLESS(completionAction);
+        Y_VERIFY_S(completionAction, PCtx->PDiskLogPrefix);
         if (!IsInitialized) {
             completionAction->Release(PCtx->ActorSystem);
             return;
         }
         if (data && size) {
-            Y_ABORT_UNLESS(intptr_t(data) % 512 == 0);
+            Y_VERIFY_S(intptr_t(data) % 512 == 0, PCtx->PDiskLogPrefix);
             REQUEST_VALGRIND_CHECK_MEM_IS_ADDRESSABLE(data, size);
         }
 
@@ -1066,14 +1171,14 @@ protected:
 
     void PwriteAsync(const void *data, ui64 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId,
             NWilson::TTraceId *traceId) override {
-        Y_ABORT_UNLESS(completionAction);
-        Y_ABORT_UNLESS(!ReadOnly);
+        Y_VERIFY_S(completionAction, PCtx->PDiskLogPrefix);
+        Y_VERIFY_S(!ReadOnly, PCtx->PDiskLogPrefix);
         if (!IsInitialized) {
             completionAction->Release(PCtx->ActorSystem);
             return;
         }
         if (data && size) {
-            Y_ABORT_UNLESS(intptr_t(data) % 512 == 0);
+            Y_VERIFY_S(intptr_t(data) % 512 == 0, PCtx->PDiskLogPrefix);
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(data, size);
         }
 
@@ -1083,8 +1188,8 @@ protected:
     }
 
     void FlushAsync(TCompletionAction *completionAction, TReqId reqId) override {
-        Y_ABORT_UNLESS(completionAction);
-        Y_ABORT_UNLESS(!ReadOnly);
+        Y_VERIFY_S(completionAction, PCtx->PDiskLogPrefix);
+        Y_VERIFY_S(!ReadOnly, PCtx->PDiskLogPrefix);
         if (!IsInitialized) {
             completionAction->Release(PCtx->ActorSystem);
             return;
@@ -1096,7 +1201,7 @@ protected:
     }
 
     void NoopAsync(TCompletionAction *completionAction, TReqId /*reqId*/) override {
-        Y_ABORT_UNLESS(completionAction);
+        Y_VERIFY_S(completionAction, PCtx->PDiskLogPrefix);
         if (!IsInitialized) {
             completionAction->Release(PCtx->ActorSystem);
             return;
@@ -1111,7 +1216,7 @@ protected:
     }
 
     void NoopAsyncHackForLogReader(TCompletionAction *completionAction, TReqId /*reqId*/) override {
-        Y_ABORT_UNLESS(completionAction);
+        Y_VERIFY_S(completionAction, PCtx->PDiskLogPrefix);
         if (!IsInitialized) {
             completionAction->Release(PCtx->ActorSystem);
             return;
@@ -1125,8 +1230,8 @@ protected:
         CompletionThreads->ScheduleHackForLogReader(completionAction);
     }
 
-    void TrimAsync(ui32 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) override {
-        Y_ABORT_UNLESS(completionAction);
+    void TrimAsync(ui64 size, ui64 offset, TCompletionAction *completionAction, TReqId reqId) override {
+        Y_VERIFY_S(completionAction, PCtx->PDiskLogPrefix);
         if (!IsInitialized || QuitCounter.IsBlocked()) {
             return;
         }
@@ -1144,10 +1249,14 @@ protected:
         if (!DriveData) {
             TStringStream details;
             if (DriveData = ::NKikimr::NPDisk::GetDriveData(Path, &details)) {
-                P_LOG(PRI_NOTICE, BPD01, "Gathered DriveData", (Data, DriveData->ToString(false)),
-                    (Details, details.Str()));
+                YDB_LOG_P_LOG(PRI_NOTICE, "Gathered DriveData",
+                    {"marker", "BPD01"},
+                    {"data", DriveData->ToString(false)},
+                    {"details", details.Str()});
             } else {
-                P_LOG(PRI_WARN, BPD01, "Error on gathering DriveData", (Details, details.Str()));
+                YDB_LOG_P_LOG(PRI_WARN, "Error on gathering DriveData",
+                    {"marker", "BPD01"},
+                    {"details", details.Str()});
             }
         }
         return DriveData.value_or(TDriveData());
@@ -1158,13 +1267,23 @@ protected:
             TStringStream details;
             EWriteCacheResult res = NKikimr::NPDisk::SetWriteCache(*handle, Path, isEnable, &details);
             if (res != WriteCacheResultOk) {
-                P_LOG(PRI_WARN, BPD01, "Error on setting write cache", (Details, details.Str()));
+                YDB_LOG_P_LOG(PRI_WARN, "Error on setting write cache",
+                    {"marker", "BPD01"},
+                    {"details", details.Str()});
             }
         }
     }
 
     ui32 GetPDiskId() override {
         return PCtx->PDiskId;
+    }
+
+    TFileHandle DuplicateFd() override {
+        TFileHandle *handle = IoContext->GetFileHandle();
+        if (!handle) {
+            return {};
+        }
+        return TFileHandle(handle->Duplicate());
     }
 
     virtual ~TRealBlockDevice() {
@@ -1192,20 +1311,20 @@ protected:
         QuitCounter.BlockA(res);
         if (res.PrevA ^ res.A) { // res.ToggledA()
             if (IsInitialized) {
-                Y_ABORT_UNLESS(TrimThread);
-                Y_ABORT_UNLESS(CompletionThreads);
+                Y_VERIFY_S(TrimThread, PCtx->PDiskLogPrefix);
+                Y_VERIFY_S(CompletionThreads, PCtx->PDiskLogPrefix);
                 TrimThread->Schedule(nullptr); // Stop the Trim thread
                 if (Flags & TDeviceMode::UseSpdk) {
-                    Y_ABORT_UNLESS(SpdkSubmitGetThread);
+                    Y_VERIFY_S(SpdkSubmitGetThread, PCtx->PDiskLogPrefix);
                     SpdkSubmitGetThread->Schedule(nullptr); // Stop the SpdkSubmitGetEvents thread
                     SpdkState->WaitAllThreads();
                 } else {
-                    Y_ABORT_UNLESS(SubmitThread);
+                    Y_VERIFY_S(SubmitThread, PCtx->PDiskLogPrefix);
                     SubmitThread->Schedule(nullptr); // Stop the SubminEvents thread
                     SubmitThread->Join();
 
                     if (!(Flags & TDeviceMode::UseSubmitGetThread)) {
-                        Y_ABORT_UNLESS(GetEventsThread);
+                        Y_VERIFY_S(GetEventsThread, PCtx->PDiskLogPrefix);
                         GetEventsThread->Join();
                     }
                 }
@@ -1214,10 +1333,10 @@ protected:
                 CompletionThreads->Join();
                 IsInitialized = false;
             } else {
-                Y_ABORT_UNLESS(SubmitThread.Get() == nullptr);
-                Y_ABORT_UNLESS(GetEventsThread.Get() == nullptr);
-                Y_ABORT_UNLESS(TrimThread.Get() == nullptr);
-                Y_ABORT_UNLESS(CompletionThreads.Get() == nullptr);
+                Y_VERIFY_S(SubmitThread.Get() == nullptr, PCtx->PDiskLogPrefix);
+                Y_VERIFY_S(GetEventsThread.Get() == nullptr, PCtx->PDiskLogPrefix);
+                Y_VERIFY_S(TrimThread.Get() == nullptr, PCtx->PDiskLogPrefix);
+                Y_VERIFY_S(CompletionThreads.Get() == nullptr, PCtx->PDiskLogPrefix);
             }
             if (IsFileOpened) {
                 EIoResult ret = IoContext->Destroy();
@@ -1269,14 +1388,20 @@ class TCachedBlockDevice : public TRealBlockDevice {
 
         void Exec(TActorSystem *actorSystem) override {
             if (actorSystem) {
-                STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "Exec TCachedReadCompletion", (ReqId, ReqId), (Offset, Offset));
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Exec TCachedReadCompletion",
+                    {"marker", "BPD01"},
+                    {"reqId", ReqId},
+                    {"offset", Offset});
             }
             CachedBlockDevice.ExecRead(this, actorSystem);
         }
 
         void Release(TActorSystem *actorSystem) override {
             if (actorSystem) {
-                STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "Release TCachedReadCompletion", (ReqId, ReqId), (Offset, Offset));
+                YDB_LOG_DEBUG_CTX(*actorSystem, "Release TCachedReadCompletion",
+                    {"marker", "BPD01"},
+                    {"reqId", ReqId},
+                    {"offset", Offset});
             }
             CachedBlockDevice.ReleaseRead(this, actorSystem);
         }
@@ -1322,7 +1447,7 @@ class TCachedBlockDevice : public TRealBlockDevice {
                 if (read.Size <= cached->Data.Size()) {
                     memcpy(read.Data, cached->Data.GetData(), read.Size);
                     Mon.DeviceReadCacheHits->Inc();
-                    Y_ABORT_UNLESS(read.CompletionAction);
+                    Y_VERIFY_S(read.CompletionAction, PCtx->PDiskLogPrefix);
                     for (size_t i = 0; i < cached->BadOffsets.size(); ++i) {
                         read.CompletionAction->RegisterBadOffset(cached->BadOffsets[i]);
                     }
@@ -1353,9 +1478,13 @@ class TCachedBlockDevice : public TRealBlockDevice {
 public:
     TCachedBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
             ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly)
+            ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, ui64 pDiskBufferSize,
+            TPDisk * const pdisk, bool readOnly, bool useBytesFlightControl,
+            std::optional<TCpuMask> threadAffinity = std::nullopt)
         : TRealBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-                maxQueuedCompletionActions, completionThreadsCount, sectorMap, readOnly)
+                maxQueuedCompletionActions, completionThreadsCount, sectorMap, pDiskBufferSize, readOnly,
+                useBytesFlightControl,
+                std::move(threadAffinity))
         , ReadsInFly(0)
         , PDisk(pdisk)
     {}
@@ -1367,15 +1496,16 @@ public:
             TGuard<TMutex> guard(CacheMutex);
             ui64 offset = completion->GetOffset();
             auto currentReadIt = CurrentReads.find(offset);
-            Y_ABORT_UNLESS(currentReadIt != CurrentReads.end());
+            Y_VERIFY_S(currentReadIt != CurrentReads.end(), PCtx->PDiskLogPrefix);
             auto range = ReadsForOffset.equal_range(offset);
 
             ui64 chunkIdx = offset / PDisk->Format.ChunkSize;
-            Y_ABORT_UNLESS(chunkIdx < PDisk->ChunkState.size());
+            Y_VERIFY_S(chunkIdx < PDisk->ChunkState.size(), PCtx->PDiskLogPrefix);
             if (TChunkState::DATA_COMMITTED == PDisk->ChunkState[chunkIdx].CommitState) {
                 if ((offset % PDisk->Format.ChunkSize) + completion->GetSize() > PDisk->Format.ChunkSize) {
                     // TODO: split buffer if crossing chunk boundary instead of completely discarding it
-                    P_LOG(PRI_INFO, BPD01, "Skip caching log read due to chunk boundary crossing");
+                    YDB_LOG_P_LOG(PRI_INFO, "Skip caching log read due to chunk boundary crossing",
+                        {"marker", "BPD01"});
                 } else {
                     if (Cache.Size() >= MaxCount) {
                         Cache.Pop();
@@ -1400,7 +1530,7 @@ public:
                     } else {
                         Mon.DeviceReadCacheMisses->Inc();
                     }
-                    Y_ABORT_UNLESS(read.CompletionAction);
+                    Y_VERIFY_S(read.CompletionAction, PCtx->PDiskLogPrefix);
                     for (ui64 badOffset : completion->GetBadOffsets()) {
                         read.CompletionAction->RegisterBadOffset(badOffset);
                     }
@@ -1438,7 +1568,7 @@ public:
             for (auto it = range.first; it != range.second; ++it) {
                 TRead &read = it->second;
 
-                Y_ABORT_UNLESS(read.CompletionAction);
+                Y_VERIFY_S(read.CompletionAction, PCtx->PDiskLogPrefix);
 
                 read.CompletionAction->SetResult(completion->Result);
                 read.CompletionAction->SetErrorReason(completion->ErrorReason);
@@ -1446,7 +1576,7 @@ public:
         }
 
         auto it = CurrentReads.find(completion->GetOffset());
-        Y_ABORT_UNLESS(it != CurrentReads.end());
+        Y_VERIFY_S(it != CurrentReads.end(), PCtx->PDiskLogPrefix);
         CurrentReads.erase(it);
         ReadsInFly--;
     }
@@ -1491,14 +1621,21 @@ public:
 
 IBlockDevice* CreateRealBlockDevice(const TString &path, TPDiskMon &mon, ui64 reorderingCycles,
         ui64 seekCostNs, ui64 deviceInFlight, TDeviceMode::TFlags flags, ui32 maxQueuedCompletionActions,
-        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, TPDisk * const pdisk, bool readOnly) {
+        ui32 completionThreadsCount, TIntrusivePtr<TSectorMap> sectorMap, ui64 pDiskBufferSize,
+        TPDisk * const pdisk, bool readOnly, bool useBytesFlightControl,
+        std::optional<TCpuMask> threadAffinity) {
     return new TCachedBlockDevice(path, mon, reorderingCycles, seekCostNs, deviceInFlight, flags,
-            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pdisk, readOnly);
+            maxQueuedCompletionActions, completionThreadsCount, sectorMap, pDiskBufferSize, pdisk, readOnly,
+            useBytesFlightControl,
+            std::move(threadAffinity));
 }
 
 IBlockDevice* CreateRealBlockDeviceWithDefaults(const TString &path, TPDiskMon &mon, TDeviceMode::TFlags flags,
-        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem, TPDisk * const pdisk, bool readOnly) {
-    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, pdisk, readOnly);
+        TIntrusivePtr<TSectorMap> sectorMap, TActorSystem *actorSystem,
+        TPDisk * const pdisk, bool readOnly, bool useBytesFlightControl,
+        std::optional<TCpuMask> threadAffinity) {
+    IBlockDevice *device = CreateRealBlockDevice(path, mon, 0, 0, 4, flags, 8, 1, sectorMap, 512ull << 10,
+            pdisk, readOnly, useBytesFlightControl, std::move(threadAffinity));
     device->Initialize(std::make_shared<TPDiskCtx>(actorSystem));
     return device;
 }

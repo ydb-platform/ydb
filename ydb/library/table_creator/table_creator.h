@@ -49,6 +49,8 @@ protected:
 
     static NKikimrSchemeOp::TTTLSettings TtlCol(const TString& columnName, TDuration expireAfter, TDuration runInterval);
 
+    static NKikimrSchemeOp::TPartitioningPolicy AutoPartitioningByLoadPolicy();
+
 private:
     void Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) override;
 
@@ -79,6 +81,9 @@ NActors::IActor* CreateTableCreator(
     TMaybe<NKikimrSchemeOp::TTTLSettings> ttlSettings = Nothing(),
     const TString& database = {},
     bool isSystemUser = false,
-    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing());
+    TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing(),
+    TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing(),
+    TVector<NKikimrSchemeOp::TIndexDescription> tableIndexes = {},
+    TVector<NKikimrSchemeOp::TSequenceDescription> tableSequences = {});
 
 } // namespace NKikimr

@@ -43,7 +43,7 @@ namespace NKikimr {
                 std::shared_ptr<TRopeArena> arena)
             : HullCtx(s.HullCtx)
             , TimeProvider(tp)
-            , CompThreshold(s.CompThreshold)
+            , CompThreshold(Max<ui64>(HullCtx->ChunkSize, s.CompThreshold))
             , Cur(new TFreshSegment(HullCtx, s.CompThreshold, tp->Now(), arena))
             , UseDreg(s.FreshUseDreg)
             , Arena(std::move(arena))
@@ -51,11 +51,14 @@ namespace NKikimr {
 
         // Puts
         void Put(ui64 lsn, const TKey &key, const TMemRec &memRec);
-        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer);
+        void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer,
+            std::optional<ui64> checksum);
         void PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn);
 
         // Compaction
         bool NeedsCompaction(ui64 yardFreeUpToLsn, bool force) const;
+        ui64 GetFreeInPlaceSizeApproximation() const;
+
         TIntrusivePtr<TFreshSegment> FindSegmentForCompaction();
         void CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment);
         void CompactionFinished();
@@ -67,6 +70,14 @@ namespace NKikimr {
 
         // you can't read from TFreshData directly, take a snapshot instead
         TFreshDataSnapshot GetSnapshot();
+        template <class TCallback>
+        void ForEachHugeBlob(TCallback&& callback) const {
+            if (Old)
+                Old->ForEachHugeBlob(callback);
+            if (Dreg)
+                Dreg->ForEachHugeBlob(callback);
+            Cur->ForEachHugeBlob(callback);
+        }
         void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
         ui64 GetFirstLsnToKeep() const;
         ui64 GetFirstLsn() const;
@@ -93,14 +104,9 @@ namespace NKikimr {
     }
 
     template <class TKey, class TMemRec>
-    void TFreshData<TKey, TMemRec>::PutLogoBlobWithData(
-            ui64 lsn,
-            const TKey &key,
-            ui8 partId,
-            const TIngress &ingress,
-            TRope buffer)
-    {
-        Cur->PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer));
+    void TFreshData<TKey, TMemRec>::PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress,
+            TRope buffer, std::optional<ui64> checksum) {
+        Cur->PutLogoBlobWithData(lsn, key, partId, ingress, std::move(buffer), checksum);
         SwapWithDregIfRequired();
     }
 
@@ -126,8 +132,21 @@ namespace NKikimr {
     }
 
     template <class TKey, class TMemRec>
+    ui64 TFreshData<TKey, TMemRec>::GetFreeInPlaceSizeApproximation() const {
+        auto threshold = CompThreshold / 32 * 40;
+        if (UseDreg && !Dreg) {
+            return threshold;
+        }
+        if (Cur) {
+            auto size = Cur->InPlaceSizeApproximation();
+            return size >= threshold ? 0 : threshold - size;
+        }
+        return threshold;
+    }
+
+    template <class TKey, class TMemRec>
     TIntrusivePtr<TFreshSegment<TKey, TMemRec>> TFreshData<TKey, TMemRec>::FindSegmentForCompaction() {
-        Y_ABORT_UNLESS(!CompactionInProgress());
+        Y_VERIFY_S(!CompactionInProgress(), HullCtx->VCtx->VDiskLogPrefix);
         if (Dreg) {
             Old.Swap(Dreg);
             Dreg.Swap(Cur);
@@ -143,7 +162,7 @@ namespace NKikimr {
     template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment) {
         // FIXME ref count = 2?
-        Y_ABORT_UNLESS(Old && Old.Get() == freshSegment.Get());
+        Y_VERIFY_S(Old && Old.Get() == freshSegment.Get(), HullCtx->VCtx->VDiskLogPrefix);
         freshSegment.Drop();
         Old.Drop();
         WaitForCommit = true;
@@ -151,7 +170,7 @@ namespace NKikimr {
 
     template <class TKey, class TMemRec>
     void TFreshData<TKey, TMemRec>::CompactionFinished() {
-        Y_ABORT_UNLESS(!Old && WaitForCommit);
+        Y_VERIFY_S(!Old && WaitForCommit, HullCtx->VCtx->VDiskLogPrefix);
         WaitForCommit = false;
         OldSegLastKeepLsn = ui64(-1);
     }
@@ -251,4 +270,3 @@ namespace NKikimr {
     extern template class TFreshData<TKeyBlock, TMemRecBlock>;
 
 } // NKikimr
-

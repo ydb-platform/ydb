@@ -36,7 +36,7 @@ namespace NTabletFlatExecutor {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Commit{" << Step << " orig " << ui32(Type)
@@ -46,8 +46,8 @@ namespace NTabletFlatExecutor {
                     << " -" << GcDelta.Deleted.size() << ")}";
         }
 
-        void PushTx(TSeat *seat) noexcept;
-        TSeat* PopTx() noexcept;
+        void PushTx(TSeat *seat);
+        TSeat* PopTx();
 
         const ui32 Step = Max<ui32>();
         const ECommit Type = ECommit::Misc;

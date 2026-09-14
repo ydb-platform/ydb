@@ -11,7 +11,7 @@ from copy import deepcopy
 import gast as ast
 
 
-class InlineBuiltins(Transformation):
+class InlineBuiltins(Transformation[Aliases]):
 
     """
     Replace some builtins by their bodies.
@@ -33,9 +33,6 @@ class InlineBuiltins(Transformation):
     def bar(b):
         return [bar(1), bar(2)]
     """
-
-    def __init__(self):
-        Transformation.__init__(self, Aliases)
 
     def inlineBuiltinsXMap(self, node):
         self.update = True

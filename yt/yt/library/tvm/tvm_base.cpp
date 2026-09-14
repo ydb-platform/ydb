@@ -4,11 +4,11 @@ namespace NYT::NAuth {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TServiceTicketFixedAuth::TServiceTicketFixedAuth(TString ticket)
+TServiceTicketFixedAuth::TServiceTicketFixedAuth(std::string ticket)
     : Ticket_(std::move(ticket))
 { }
 
-TString TServiceTicketFixedAuth::IssueServiceTicket()
+std::string TServiceTicketFixedAuth::IssueServiceTicket()
 {
     return Ticket_;
 }

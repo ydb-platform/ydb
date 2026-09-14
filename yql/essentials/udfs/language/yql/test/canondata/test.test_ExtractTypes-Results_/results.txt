@@ -1,0 +1,104 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "q";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "ListType";
+                                        [
+                                            "TupleType";
+                                            [
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ];
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ];
+                                                [
+                                                    "DataType";
+                                                    "Uint64"
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "select cast(1 as Int32)";
+                        [
+                            [
+                                [
+                                    "TYPE";
+                                    "Int32";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "select formattype(List<String>)";
+                        [
+                            [
+                                [
+                                    "TYPE";
+                                    "String";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "select formattype(Struct<a:String, b:Int32>)";
+                        [
+                            [
+                                [
+                                    "TYPE";
+                                    "Int32";
+                                    "1"
+                                ];
+                                [
+                                    "TYPE";
+                                    "String";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "select listcreate(String)";
+                        [
+                            [
+                                [
+                                    "TYPE";
+                                    "String";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

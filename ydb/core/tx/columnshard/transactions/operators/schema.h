@@ -3,6 +3,7 @@
 #include "propose_tx.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/transactions/transactions/tx_add_sharding_info.h>
 
 namespace NKikimr::NColumnShard {
@@ -16,32 +17,41 @@ private:
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddSharding;
     NKikimrTxColumnShard::TSchemaTxBody SchemaTxBody;
     THashSet<TActorId> NotifySubscribers;
-    THashSet<ui64> WaitPathIdsToErase;
+    std::shared_ptr<NSubscriber::ISubscriber> WaitOnPropose;
 
     virtual void DoOnTabletInit(TColumnShard& owner) override;
 
     template <class TInfoProto>
-    THashSet<ui64> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
-        THashSet<ui64> result;
+    THashSet<TInternalPathId> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
+        THashSet<TInternalPathId> result;
         for (auto&& i : tables) {
-            if (owner.TablesManager.HasTable(i.GetPathId(), true)) {
-                result.emplace(i.GetPathId());
+            const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(i);
+            if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
+                if (owner.TablesManager.HasTable(*internalPathId, true)) {
+                    result.emplace(*internalPathId);
+                }
             }
         }
         if (result.size()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "async_schema")("reason", JoinSeq(",", result));
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "async_schema"},
+                {"reason", JoinSeq(",", result)});
         } else {
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "sync_schema");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "sync_schema"});
         }
         return result;
     }
 
     virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
     virtual void DoStartProposeOnComplete(TColumnShard& owner, const TActorContext& /*ctx*/) override;
+
     virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
     }
+
     virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
     }
+
     virtual TString DoGetOpType() const override {
         switch (SchemaTxBody.TxBody_case()) {
             case NKikimrTxColumnShard::TSchemaTxBody::kInitShard:
@@ -54,13 +64,19 @@ private:
                 return "Scheme:AlterStore";
             case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
                 return "Scheme:DropTable";
+            case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
+                return "Scheme:MoveTable";
+            case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
+                return "Scheme:CopyTable";
             case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET:
                 return "Scheme:TXBODY_NOT_SET";
         }
     }
+
     virtual bool DoIsAsync() const override {
-        return WaitPathIdsToErase.size();
+        return !!WaitOnPropose;
     }
+
     virtual bool DoParse(TColumnShard& owner, const TString& data) override {
         if (!SchemaTxBody.ParseFromString(data)) {
             return false;
@@ -68,17 +84,29 @@ private:
         if (SchemaTxBody.HasGranuleShardingInfo()) {
             NSharding::TGranuleShardingLogicContainer infoContainer;
             if (!infoContainer.DeserializeFromProto(SchemaTxBody.GetGranuleShardingInfo().GetContainer())) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "cannot parse incoming tx message");
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                    {"problem", "cannot parse incoming tx message"});
                 return false;
             }
-            TxAddSharding = owner.TablesManager.CreateAddShardingInfoTx(
-                owner, SchemaTxBody.GetGranuleShardingInfo().GetPathId(), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
+            TxAddSharding =
+                owner.TablesManager.CreateAddShardingInfoTx(owner, TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetGranuleShardingInfo()),
+                    SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
         }
         return true;
     }
 
 public:
     using TBase::TBase;
+
+    void OnPlanStep(TColumnShard& owner, const ui64 planStep, NTabletFlatExecutor::TTransactionContext& txc) override {
+        if (SchemaTxBody.TxBody_case() != NKikimrTxColumnShard::TSchemaTxBody::kCopyTable) {
+            return;
+        }
+        NIceDb::TNiceDb db(txc.DB);
+        const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetSrcPathId());
+        const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
+        owner.TablesManager.CopyTablePlanStep(db, NOlap::TSnapshot(planStep, GetTxId()), srcSchemeShardLocalPathId, dstSchemeShardLocalPathId);
+    }
 
     virtual bool ProgressOnExecute(
         TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override {
@@ -104,15 +132,13 @@ public:
             ctx.Send(subscriber, event.Release(), 0, 0);
         }
 
-        auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), TxInfo.TxKind, TxInfo.TxId, NKikimrTxColumnShard::SUCCESS);
-        result->Record.SetStep(TxInfo.PlanStep);
-        ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
         return true;
     }
 
     virtual bool ExecuteOnAbort(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override {
         return true;
     }
+
     virtual bool CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override {
         return true;
     }
@@ -132,6 +158,7 @@ private:
         }
         return ValidateTableSchema(preset.GetSchema());
     }
+
     virtual TString DoDebugString() const override {
         return "SCHEME:" + SchemaTxBody.DebugString();
     }

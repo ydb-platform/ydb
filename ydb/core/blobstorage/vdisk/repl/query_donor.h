@@ -10,12 +10,12 @@ namespace NKikimr {
         const ui64 Cookie;
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> Result;
         TActorId ParentId;
-        std::deque<std::pair<TVDiskID, TActorId>> Donors;
+        std::deque<std::pair<TVDiskID, TDonorQueueActors>> Donors;
         TDynBitMap UnresolvedItems;
         TIntrusivePtr<TVDiskContext> VCtx;
 
     public:
-        TDonorQueryActor(TEvBlobStorage::TEvEnrichNotYet& msg, std::deque<std::pair<TVDiskID, TActorId>> donors, const TIntrusivePtr<TVDiskContext>& vCtx)
+        TDonorQueryActor(TEvBlobStorage::TEvEnrichNotYet& msg, std::deque<std::pair<TVDiskID, TDonorQueueActors>> donors, const TIntrusivePtr<TVDiskContext>& vCtx)
             : Query(msg.Query->Release().Release())
             , Sender(msg.Query->Sender)
             , Cookie(msg.Query->Cookie)
@@ -29,7 +29,8 @@ namespace NKikimr {
         void Bootstrap(const TActorId& parentId) {
             ParentId = parentId;
             Become(&TThis::StateFunc);
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " starting Donor-mode query");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BS_VDISK_GET, "Starting Donor-mode query",
+                {"selfId", SelfId()});
 
             const auto& result = Result->Record;
             UnresolvedItems.Reserve(result.ResultSize());
@@ -45,7 +46,7 @@ namespace NKikimr {
                 return PassAway();
             }
 
-            auto [vdiskId, actorId] = Donors.back();
+            auto [vdiskId, actors] = Donors.back();
             Donors.pop_back();
 
             // we use AsyncRead priority as we are going to use the replication queue for the VDisk; also this doesn't
@@ -57,7 +58,13 @@ namespace NKikimr {
             const auto flags = record.GetShowInternals()
                 ? TEvBlobStorage::TEvVGet::EFlags::ShowInternals
                 : TEvBlobStorage::TEvVGet::EFlags::None;
-            auto query = fun(vdiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {}, std::nullopt);
+            const auto handleClass = record.GetHandleClass() == NKikimrBlobStorage::EGetHandleClass::FastRead
+                ? NKikimrBlobStorage::EGetHandleClass::FastRead
+                : NKikimrBlobStorage::EGetHandleClass::AsyncRead;
+            const auto queueActorId = record.GetHandleClass() == NKikimrBlobStorage::EGetHandleClass::FastRead
+                ? actors.FastReadQueueActorId
+                : actors.AsyncReadQueueActorId;
+            auto query = fun(vdiskId, TInstant::Max(), handleClass, flags, {}, {}, std::nullopt);
 
             bool action = false;
             Y_FOR_EACH_BIT(i, UnresolvedItems) {
@@ -68,16 +75,20 @@ namespace NKikimr {
             }
 
             if (action) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " sending " << query->ToString()
-                    << " to " << actorId);
-                Send(actorId, query.release(), IEventHandle::FlagTrackDelivery);
+                YDB_LOG_DEBUG_COMP(NKikimrServices::BS_VDISK_GET, "Sending",
+                    {"selfId", SelfId()},
+                    {"query", query->ToString()},
+                    {"queueActorId", queueActorId});
+                Send(queueActorId, query.release(), IEventHandle::FlagTrackDelivery);
             } else {
                 PassAway();
             }
         }
 
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " received " << ev->Get()->ToString());
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BS_VDISK_GET, "Received",
+                {"selfId", SelfId()},
+                {"event", ev->Get()->ToString()});
             auto& result = Result->Record;
             for (const auto& item : ev->Get()->Record.GetResult()) {
                 const ui64 index = item.GetCookie();
@@ -107,9 +118,10 @@ namespace NKikimr {
         }
 
         void PassAway() override {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " finished query");
-            Send(ParentId, new TEvents::TEvActorDied);
-            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie, VCtx);
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BS_VDISK_GET, "Finished query",
+                {"selfId", SelfId()});
+            Send(ParentId, new TEvents::TEvGone);
+            SendVDiskResponse(TActivationContext::AsActorContext(), Sender, Result.release(), Cookie, VCtx, Query->Record.GetHandleClass());
             TActorBootstrapped::PassAway();
         }
 

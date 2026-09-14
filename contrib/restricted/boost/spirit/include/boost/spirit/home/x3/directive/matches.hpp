@@ -1,6 +1,8 @@
 /*=============================================================================
     Copyright (c) 2015 Mario Lang
     Copyright (c) 2001-2011 Hartmut Kaiser
+    Copyright (c) 2017 wanghan02
+    Copyright (c) 2024 Nana Sakisaka
 
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -10,6 +12,7 @@
 
 #include <boost/spirit/home/x3/core/parser.hpp>
 #include <boost/spirit/home/x3/support/traits/move_to.hpp>
+#include <boost/spirit/home/x3/support/expectation.hpp>
 #include <boost/spirit/home/x3/support/unused.hpp>
 
 namespace boost { namespace spirit { namespace x3
@@ -30,6 +33,11 @@ namespace boost { namespace spirit { namespace x3
         {
             bool const result = this->subject.parse(
                     first, last, context, rcontext, unused);
+
+        #if !BOOST_SPIRIT_X3_THROW_EXPECTATION_FAILURE
+            if (has_expectation_failure(context)) return false;
+        #endif
+
             traits::move_to(result, attr);
             return true;
         }

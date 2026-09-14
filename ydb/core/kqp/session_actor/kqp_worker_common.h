@@ -2,6 +2,7 @@
 
 #include "kqp_session_actor.h"
 
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
@@ -63,19 +64,6 @@ inline bool IsExecuteAction(const NKikimrKqp::EQueryAction& action) {
     }
 }
 
-inline bool IsQueryAllowedToLog(const TString& text) {
-    static const TString user = "user";
-    static const TString password = "password";
-    auto itUser = std::search(text.begin(), text.end(), user.begin(), user.end(),
-        [](const char a, const char b) -> bool { return std::tolower(a) == b; });
-    if (itUser == text.end()) {
-        return true;
-    }
-    auto itPassword = std::search(itUser, text.end(), password.begin(), password.end(),
-        [](const char a, const char b) -> bool { return std::tolower(a) == b; });
-    return itPassword == text.end();
-}
-
 inline TIntrusivePtr<NYql::TKikimrConfiguration> CreateConfig(const TKqpSettings::TConstPtr& kqpSettings,
     const TKqpWorkerSettings& workerSettings)
 {
@@ -87,7 +75,7 @@ inline TIntrusivePtr<NYql::TKikimrConfiguration> CreateConfig(const TKqpSettings
         cfg->_KqpTablePathPrefix = workerSettings.Database;
     }
 
-    ApplyServiceConfig(*cfg, workerSettings.TableService);
+    cfg->ApplyServiceConfig(workerSettings.TableService);
 
     cfg->FreezeDefaults();
     return cfg;
@@ -135,6 +123,10 @@ NYql::TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings);
 
 inline bool IsDocumentApiRestricted(const TString& requestType) {
     return requestType != NDocApi::RequestType;
+}
+
+inline bool IsAnalyzeRequest(const TString& requestType) {
+    return requestType == NRequestTypes::Analyze;
 }
 
 TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const NYql::TIssue& issue);

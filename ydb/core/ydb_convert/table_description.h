@@ -4,9 +4,15 @@
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/forced_compaction.pb.h>
+#include <ydb/core/protos/set_column_constraint.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+
+namespace NYql{
+    struct TKikimrTableMetadata;
+}
 
 namespace NKikimr {
 
@@ -25,6 +31,12 @@ enum class EAlterOperationKind {
     DropChangefeed,
     // rename index
     RenameIndex,
+    // compact table, possibly with indices
+    Compact,
+    // set column constraint (not null)
+    SetColumnConstraint,
+    // rebuild index
+    RebuildIndex,
 };
 
 struct TPathId;
@@ -38,9 +50,9 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
     const TTableProfiles& profiles, const TPathId& resolvedPathId,
     Ydb::StatusIds::StatusCode& status, TString& error);
 bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
-    NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error);
-bool BuildAlterColumnTableModifyScheme(
-    const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error);
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, const TIntrusivePtr<NYql::TKikimrTableMetadata>& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterColumnTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+     const TIntrusivePtr<NYql::TKikimrTableMetadata>& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error);
 
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::AlterTableRequest& in, const TTableProfiles& profiles,
@@ -50,12 +62,28 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
     ui64 flags,
     Ydb::StatusIds::StatusCode& status, TString& error);
 
+bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest* req,
+    NKikimrSchemeOp::TModifyScheme* modifyScheme,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+
+bool BuildAlterTableSetColumnConstraintRequest(const Ydb::Table::AlterTableRequest* req, NKikimrSetColumnConstraint::TSetColumnConstraintSettings* settings,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,
+    Ydb::StatusIds::StatusCode& status, TString& error);
+
 // out
+void FillColumnDescription(Ydb::Table::ColumnMeta& out, const NKikimrSchemeOp::TColumnDescription& in);
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
     NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in);
+void FillColumnDescription(Ydb::Table::DescribeSystemViewResult& out, const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
     NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out, const NKikimrSchemeOp::TColumnTableDescription& in);
+void FillColumnDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in);
+void FillColumnTableIndexDescription(Ydb::Table::CreateTableRequest& out, const NKikimrSchemeOp::TColumnTableDescription& in);
 // in
 bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error);
@@ -79,7 +107,17 @@ void FillIndexDescription(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
 // in
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
-    const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
+    const Ydb::Table::CreateTableRequest& in, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error);
+
+// out
+void FillMultiColumnStatisticsDescription(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+void FillMultiColumnStatisticsDescription(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+
+// in
+void FillMultiColumnStatistics(NKikimrSchemeOp::TMultiColumnStatisticsDescription& out,
+    const Ydb::Table::TableMultiColumnStatistics& in);
 
 // out
 void FillChangefeedDescription(Ydb::Table::ChangefeedDescription& out,
@@ -89,6 +127,8 @@ void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
 // in
 bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
     const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error);
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+    const Ydb::Table::ChangefeedDescription& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
@@ -105,9 +145,15 @@ void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
+void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TColumnTableDescription& in);
+void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TColumnTableDescription& in);
 
 // out
 void FillAttributes(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TPathDescription& in);
+void FillAttributes(Ydb::Table::DescribeSystemViewResult& out,
     const NKikimrSchemeOp::TPathDescription& in);
 void FillAttributes(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TPathDescription& in);
@@ -117,6 +163,8 @@ void FillPartitioningSettings(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillPartitioningSettings(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
+void FillPartitioningSettings(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TColumnTableDescription& in);
 
 // in
 bool CopyExplicitPartitions(NKikimrSchemeOp::TTableDescription& out,
@@ -133,11 +181,15 @@ void FillReadReplicasSettings(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
+void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
+    const NKikimrSchemeOp::TTableDescription& in);
 
 // in
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
     Ydb::StatusIds::StatusCode& status, TString& error, bool indexedTable = false);
+bool FillColumnTableDescription(NKikimrSchemeOp::TModifyScheme& out,
+    const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 
 // out
@@ -147,7 +199,11 @@ bool FillSequenceDescription(Ydb::Table::CreateTableRequest& out, const NKikimrS
 
 // in
 bool FillSequenceDescription(
-    NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in, 
+    NKikimrSchemeOp::TSequenceDescription& out, const Ydb::Table::SequenceDescription& in,
     Ydb::StatusIds::StatusCode& status, TString& error);
+
+// out
+bool FillSysViewDescription(Ydb::Table::DescribeSystemViewResult& out, const NKikimrSchemeOp::TPathDescription& in,
+    Ydb::StatusIds_StatusCode& status, TString& error);
 
 } // namespace NKikimr

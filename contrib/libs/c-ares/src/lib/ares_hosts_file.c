@@ -41,6 +41,11 @@
 #endif
 #include <time.h>
 
+#ifdef USE_WINSOCK
+#  define DATABASEPATH         "DatabasePath"
+#  define WIN_PATH_HOSTS       "\\hosts"
+#endif
+
 /* HOSTS FILE PROCESSING OVERVIEW
  * ==============================
  * The hosts file on the system contains static entries to be processed locally
@@ -669,6 +674,9 @@ static ares_status_t ares_hosts_path(const ares_channel_t *channel,
                      &dwLength);
     ExpandEnvironmentStringsA(tmp, PATH_HOSTS, MAX_PATH);
     RegCloseKey(hkeyHosts);
+    if (strlen(PATH_HOSTS)+strlen(WIN_PATH_HOSTS) >= MAX_PATH) {
+      return ARES_ENOTFOUND;
+    }
     strcat(PATH_HOSTS, WIN_PATH_HOSTS);
 #elif defined(WATT32)
     const char *PATH_HOSTS = _w32_GetHostsFile();
@@ -845,7 +853,7 @@ ares_status_t ares_hosts_entry_to_addrinfo(const ares_hosts_entry_t *entry,
                                            ares_bool_t           want_cnames,
                                            struct ares_addrinfo *ai)
 {
-  ares_status_t               status;
+  ares_status_t               status  = ARES_ENOTFOUND;
   struct ares_addrinfo_cname *cnames  = NULL;
   struct ares_addrinfo_node  *ainodes = NULL;
   ares_llist_node_t          *node;
@@ -860,6 +868,7 @@ ares_status_t ares_hosts_entry_to_addrinfo(const ares_hosts_entry_t *entry,
   }
 
   if (name != NULL) {
+    ares_free(ai->name);
     ai->name = ares_strdup(name);
     if (ai->name == NULL) {
       status = ARES_ENOMEM; /* LCOV_EXCL_LINE: OutOfMemory */
@@ -886,6 +895,11 @@ ares_status_t ares_hosts_entry_to_addrinfo(const ares_hosts_entry_t *entry,
     if (status != ARES_SUCCESS) {
       goto done; /* LCOV_EXCL_LINE: DefensiveCoding */
     }
+  }
+
+  /* Might be ARES_ENOTFOUND here if no ips matched requested address family */
+  if (status != ARES_SUCCESS) {
+    goto done;
   }
 
   if (want_cnames) {

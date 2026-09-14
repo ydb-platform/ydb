@@ -1,12 +1,11 @@
-#include "mkql_builtins_impl.h"  // Y_IGNORE
+#include "mkql_builtins_impl.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-template<typename TInput, typename TOutput>
-struct TBitNot : public TSimpleArithmeticUnary<TInput, TOutput, TBitNot<TInput, TOutput>> {
+template <typename TInput, typename TOutput>
+struct TBitNot: public TSimpleArithmeticUnary<TInput, TOutput, TBitNot<TInput, TOutput>> {
     static TOutput Do(TInput val)
     {
         return ~val;
@@ -20,11 +19,10 @@ struct TBitNot : public TSimpleArithmeticUnary<TInput, TOutput, TBitNot<TInput, 
 #endif
 };
 
-}
+} // namespace
 
 void RegisterBitNot(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryUnsignedFunctionOpt<TBitNot, TUnaryArgsOpt>(registry, "BitNot");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

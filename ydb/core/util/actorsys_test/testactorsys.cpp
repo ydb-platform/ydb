@@ -4,9 +4,10 @@
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_resolver.h>
+#include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/time_provider/time_provider.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/nameservice.h>
@@ -64,13 +65,17 @@ public:
         , NodeId(nodeId)
     {}
 
-    TMailbox* GetReadyActivation(TWorkerContext& /*wctx*/, ui64 /*revolvingCounter*/) override {
+    TMailbox* GetReadyActivation(ui64 /*revolvingCounter*/) override {
         Y_ABORT();
     }
 
     TMailbox* ResolveMailbox(ui32 hint) override {
         const auto it = Context->Mailboxes.find({NodeId, PoolId, hint});
         return it != Context->Mailboxes.end() ? &it->second : nullptr;
+    }
+
+    TMailboxTable* GetMailboxTable() const override {
+        return Context->PerNodeInfo[NodeId].MailboxTable.get();
     }
 
     void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, NActors::TWorkerId /*workerId*/) override {
@@ -85,7 +90,7 @@ public:
         Context->Schedule(delta, ev, cookie, NodeId);
     }
 
-    bool Send(TAutoPtr<IEventHandle>& ev) override {
+    bool Send(std::unique_ptr<IEventHandle>& ev) override {
         if (TlsActivationContext) {
             const TActorContext& ctx = TActivationContext::AsActorContext();
             IActor* sender = Context->GetActor(ctx.SelfID);
@@ -94,10 +99,10 @@ public:
                 ev = nullptr;
             }
         }
-        return Context->Send(ev, NodeId);
+        return Context->Send(std::move(ev), NodeId);
     }
 
-    bool SpecificSend(TAutoPtr<IEventHandle>& ev) override {
+    bool SpecificSend(std::unique_ptr<IEventHandle>& ev) override {
         return Send(ev);
     }
 
@@ -147,6 +152,14 @@ public:
 
     bool Cleanup() override {
         return true;
+    }
+
+    ui64 TimePerMailboxTs() const override {
+        return TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat() * NHPTimer::GetClockRate();
+    }
+
+    ui32 EventsPerMailbox() const override {
+        return TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
     }
 
     TAffinity* Affinity() const override {
@@ -234,18 +247,16 @@ void TTestActorSystem::SetupTabletRuntime(const std::function<TNodeLocation(ui32
 
 void TTestActorSystem::SetupStateStorage(ui32 nodeId, ui32 stateStorageNodeId) {
     if (const auto& domain = GetDomainsInfo()->Domain) {
-        ui32 numReplicas = 3;
 
         auto process = [&](auto&& generateId, auto&& createReplica) {
-            auto info = MakeIntrusive<TStateStorageInfo>();
-            info->NToSelect = numReplicas;
-            info->Rings.resize(numReplicas);
-            for (ui32 i = 0; i < numReplicas; ++i) {
-                info->Rings[i].Replicas.push_back(generateId(stateStorageNodeId, i));
-            }
+            auto info = StateStorageInfoGenerator(generateId, stateStorageNodeId);
             if (nodeId == stateStorageNodeId) {
-                for (ui32 i = 0; i < numReplicas; ++i) {
-                    RegisterService(generateId(stateStorageNodeId, i), Register(createReplica(info.Get(), i), nodeId));
+                for (auto& rg : info->RingGroups) {
+                    for (auto& ring : rg.Rings) {
+                        for (ui32 i = 0; i < ring.Replicas.size(); ++i) {
+                            RegisterService(ring.Replicas[i], Register(createReplica(info.Get(), i), nodeId));
+                        }
+                    }
                 }
             }
             return info;

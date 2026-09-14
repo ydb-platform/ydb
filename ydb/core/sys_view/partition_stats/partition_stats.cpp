@@ -2,13 +2,15 @@
 
 #include <ydb/core/sys_view/common/common.h>
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/base/tablet_pipecache.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 namespace NKikimr {
 namespace NSysView {
@@ -29,10 +31,12 @@ public:
     {}
 
     void Bootstrap() {
-        SVLOG_D("NSysView::TPartitionStatsCollector bootstrapped");
+        YDB_LOG_DEBUG("NSysView::TPartitionStatsCollector::Bootstrap",
+            {"domainKey", DomainKey});
 
         if (AppData()->UsePartitionStatsCollectorForTests) {
-            OverloadedPartitionBound = 0.0;
+            OverloadedByCpuPartitionBound = 0.0;
+            OverloadedByTliPartitionBound = 0;
             ProcessOverloadedInterval = TDuration::Seconds(1);
         }
 
@@ -54,7 +58,8 @@ public:
             IgnoreFunc(TEvPipeCache::TEvDeliveryProblem);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                SVLOG_CRIT("NSysView::TPartitionStatsCollector: unexpected event " << ev->GetTypeRewrite());
+                YDB_LOG_CRIT("NSysView::TPartitionStatsCollector: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -76,10 +81,11 @@ private:
         const auto& domainKey = ev->Get()->DomainKey;
         const auto& pathId = ev->Get()->PathId;
 
-        SVLOG_T("TEvSysView::TEvSetPartitioning: domainKey " << domainKey
-            << " pathId " << pathId
-            << " path " << ev->Get()->Path
-            << " ShardIndices size " << ev->Get()->ShardIndices.size());
+        YDB_LOG_TRACE("Handle TEvSysView::TEvSetPartitioning: received table partitioning",
+            {"domainKey", domainKey},
+            {"pathId", pathId},
+            {"path", ev->Get()->Path},
+            {"shardIndexCount", ev->Get()->ShardIndices.size()});
 
         auto& tables = DomainTables[domainKey];
         auto tableFound = tables.Stats.find(pathId);
@@ -88,7 +94,7 @@ private:
 
             auto& oldPartitions = table.Partitions;
             std::unordered_map<TShardIdx, TPartitionStats> newPartitions;
-            std::set<TOverloadedFollower> overloaded;
+            std::set<TFollowerStats> overloadedByCpu, overloadedByTli;
 
             for (auto shardIdx : ev->Get()->ShardIndices) {
                 auto old = oldPartitions.find(shardIdx);
@@ -96,16 +102,23 @@ private:
                     newPartitions[shardIdx] = old->second;
 
                     for (const auto& followerStat: old->second.FollowerStats) {
-                        if (IsPartitionOverloaded(followerStat.second))
-                            overloaded.insert({shardIdx, followerStat.first});
+                        if (IsPartitionOverloadedByCpu(followerStat.second))
+                            overloadedByCpu.insert({shardIdx, followerStat.first});
+                        if (IsPartitionOverloadedByTli(followerStat.second))
+                            overloadedByTli.insert({shardIdx, followerStat.first});
                     }
                 }
             }
 
-            if (!overloaded.empty()) {
-                tables.Overloaded[pathId].swap(overloaded);
+            if (!overloadedByCpu.empty()) {
+                tables.OverloadedByCpu[pathId].swap(overloadedByCpu);
             } else {
-                tables.Overloaded.erase(pathId);
+                tables.OverloadedByCpu.erase(pathId);
+            }
+            if (!overloadedByTli.empty()) {
+                tables.OverloadedByTli[pathId].swap(overloadedByTli);
+            } else {
+                tables.OverloadedByTli.erase(pathId);
             }
 
             oldPartitions.swap(newPartitions);
@@ -125,7 +138,8 @@ private:
 
         auto& tables = DomainTables[domainKey];
         tables.Stats.erase(pathId);
-        tables.Overloaded.erase(pathId);
+        tables.OverloadedByCpu.erase(pathId);
+        tables.OverloadedByTli.erase(pathId);
     }
 
     void Handle(TEvSysView::TEvSendPartitionStats::TPtr& ev) {
@@ -136,11 +150,13 @@ private:
         auto& newStats = ev->Get()->Stats;
         const ui32 followerId = newStats.GetFollowerId();
 
-        SVLOG_T("TEvSysView::TEvSendPartitionStats: domainKey " << domainKey
-            << " pathId " << pathId
-            << " shardIdx " << shardIdx.first << " " << shardIdx.second
-            << " followerId " << followerId
-            << " stats " << newStats.ShortDebugString());
+        YDB_LOG_TRACE("Handle TEvSysView::TEvSendPartitionStats: received partition stats",
+            {"domainKey", domainKey},
+            {"pathId", pathId},
+            {"shardIndexFirst", shardIdx.first},
+            {"shardIndexSecond", shardIdx.second},
+            {"followerId", followerId},
+            {"stats", newStats.ShortDebugString()});
 
         auto& tables = DomainTables[domainKey];
         auto tableFound = tables.Stats.find(pathId);
@@ -153,15 +169,26 @@ private:
 
         auto& followerStats = partitionStats.FollowerStats[followerId];
 
-        TOverloadedFollower overloadedFollower = {shardIdx, followerId};
-        if (IsPartitionOverloaded(newStats)) {
-            tables.Overloaded[pathId].insert(overloadedFollower);
+        TFollowerStats overloadedFollower = {shardIdx, followerId};
+        if (IsPartitionOverloadedByCpu(newStats)) {
+            tables.OverloadedByCpu[pathId].insert(overloadedFollower);
         } else {
-            auto overloadedFound = tables.Overloaded.find(pathId);
-            if (overloadedFound != tables.Overloaded.end()) {
+            auto overloadedFound = tables.OverloadedByCpu.find(pathId);
+            if (overloadedFound != tables.OverloadedByCpu.end()) {
                 overloadedFound->second.erase(overloadedFollower);
                 if (overloadedFound->second.empty()) {
-                    tables.Overloaded.erase(pathId);
+                    tables.OverloadedByCpu.erase(pathId);
+                }
+            }
+        }
+        if (IsPartitionOverloadedByTli(newStats)) {
+            tables.OverloadedByTli[pathId].insert(overloadedFollower);
+        } else {
+            auto overloadedFound = tables.OverloadedByTli.find(pathId);
+            if (overloadedFound != tables.OverloadedByTli.end()) {
+                overloadedFound->second.erase(overloadedFollower);
+                if (overloadedFound->second.empty()) {
+                    tables.OverloadedByTli.erase(pathId);
                 }
             }
         }
@@ -197,7 +224,7 @@ private:
         if (PendingRequests.size() >= PendingRequestsLimit) {
             auto result = MakeHolder<TEvSysView::TEvGetPartitionStatsResult>();
             result->Record.SetOverloaded(true);
-            Send(ev->Sender, std::move(result));
+            Send(ev->Sender, std::move(result), 0, ev->Cookie);
             return;
         }
 
@@ -230,14 +257,14 @@ private:
         result->Record.SetLastBatch(true);
 
         if (!record.HasDomainKeyOwnerId() || !record.HasDomainKeyPathId()) {
-            Send(request->Sender, std::move(result));
+            Send(request->Sender, std::move(result), 0, request->Cookie);
             return;
         }
 
         auto domainKey = TPathId(record.GetDomainKeyOwnerId(), record.GetDomainKeyPathId());
         auto itTables = DomainTables.find(domainKey);
         if (itTables == DomainTables.end()) {
-            Send(request->Sender, std::move(result));
+            Send(request->Sender, std::move(result), 0, request->Cookie);
             return;
         }
         auto& tables = itTables->second.Stats;
@@ -309,6 +336,27 @@ private:
         }
 
         bool includePathColumn = !record.HasIncludePathColumn() || record.GetIncludePathColumn();
+        bool hasFilter = record.HasFilter();
+        auto matchesFilter = [&](const NKikimrSysView::TPartitionStats& stats) {
+            const auto& filter = record.GetFilter();
+            if (filter.HasNotLess()) {
+                if (filter.GetNotLess().HasCPUCores() && stats.GetCPUCores() < filter.GetNotLess().GetCPUCores()) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        auto addStats = [&](const auto& pathId, const auto& tableStats, ui64 partIdx) {
+            auto stats = result->Record.AddStats();
+            auto* key = stats->MutableKey();
+            key->SetOwnerId(pathId.OwnerId);
+            key->SetPathId(pathId.LocalPathId);
+            key->SetPartIdx(partIdx);
+            if (includePathColumn) {
+                stats->SetPath(tableStats.Path);
+            }
+            return stats;
+        };
 
         for (size_t count = 0; count < BatchSize && it != itEnd && it != tables.end(); ++it) {
             auto& pathId = it->first;
@@ -322,26 +370,25 @@ private:
             bool batchFinished = false;
 
             for (ui64 partIdx = startPartIdx; partIdx < end; ++partIdx) {
-                auto* stats = result->Record.AddStats();
-                auto* key = stats->MutableKey();
-
-                key->SetOwnerId(pathId.OwnerId);
-                key->SetPathId(pathId.LocalPathId);
-                key->SetPartIdx(partIdx);
-
-                if (includePathColumn) {
-                    stats->SetPath(tableStats.Path);
+                NKikimrSysView::TPartitionStatsResult* stats = nullptr;
+                if (!hasFilter) {
+                    stats = addStats(pathId, tableStats, partIdx);
                 }
-
                 auto shardIdx = tableStats.ShardIndices[partIdx];
                 auto part = tableStats.Partitions.find(shardIdx);
                 if (part != tableStats.Partitions.end()) {
                     for (const auto& followerStat : part->second.FollowerStats) {
+                        if (hasFilter && !matchesFilter(followerStat.second)) {
+                            continue;
+                        }
+                        if (!stats) {
+                            stats = addStats(pathId, tableStats, partIdx);
+                        }
                         *stats->AddStats() = followerStat.second;
                     }
                 }
 
-                if (++count == BatchSize) {
+                if (stats && ++count == BatchSize) {
                     auto* next = result->Record.MutableNext();
                     next->SetOwnerId(pathId.OwnerId);
                     next->SetPathId(pathId.LocalPathId);
@@ -359,7 +406,7 @@ private:
             startPartIdx = 0;
         }
 
-        Send(request->Sender, std::move(result));
+        Send(request->Sender, std::move(result), 0, request->Cookie);
     }
 
     void Handle(TEvPrivate::TEvProcessOverloaded::TPtr&) {
@@ -371,42 +418,60 @@ private:
 
         auto domainFound = DomainTables.find(DomainKey);
         if (domainFound == DomainTables.end()) {
-            SVLOG_D("NSysView::TPartitionStatsCollector: TEvProcessOverloaded: no tables");
+            YDB_LOG_DEBUG("NSysView::TPartitionStatsCollector::HandleProcessOverloaded: no tables in domain",
+                {"domainKey", DomainKey});
             return;
         }
         auto& domainTables = domainFound->second;
 
-        struct TPartition {
+        struct TPartitionByCpu {
             TPathId PathId;
             TShardIdx ShardIdx;
             ui32 FollowerId;
             double CPUCores;
         };
-        std::vector<TPartition> sorted;
+        std::vector<TPartitionByCpu> sortedByCpu;
 
-        for (const auto& [pathId, overloadedFollowers] : domainTables.Overloaded) {
-            for (const TOverloadedFollower& overloadedFollower : overloadedFollowers) {
+        struct TPartitionByTli {
+            TPathId PathId;
+            TShardIdx ShardIdx;
+            ui32 FollowerId;
+            ui64 LocksBroken;
+        };
+        std::vector<TPartitionByTli> sortedByTli;
+
+        for (const auto& [pathId, overloadedFollowers] : domainTables.OverloadedByCpu) {
+            for (const TFollowerStats& overloadedFollower : overloadedFollowers) {
                 const auto& table = domainTables.Stats[pathId];
                 const auto& partition = table.Partitions.at(overloadedFollower.ShardIdx).FollowerStats.at(overloadedFollower.FollowerId);
-                sorted.emplace_back(TPartition{pathId, overloadedFollower.ShardIdx, overloadedFollower.FollowerId, partition.GetCPUCores()});
+                sortedByCpu.emplace_back(TPartitionByCpu{pathId, overloadedFollower.ShardIdx, overloadedFollower.FollowerId, partition.GetCPUCores()});
+            }
+        }
+        for (const auto& [pathId, overloadedFollowers] : domainTables.OverloadedByTli) {
+            for (const TFollowerStats& overloadedFollower : overloadedFollowers) {
+                const auto& table = domainTables.Stats[pathId];
+                const auto& partition = table.Partitions.at(overloadedFollower.ShardIdx).FollowerStats.at(overloadedFollower.FollowerId);
+                sortedByTli.emplace_back(TPartitionByTli{pathId, overloadedFollower.ShardIdx, overloadedFollower.FollowerId, partition.GetLocksBroken()});
             }
         }
 
-        std::sort(sorted.begin(), sorted.end(),
+        std::sort(sortedByCpu.begin(), sortedByCpu.end(),
             [] (const auto& l, const auto& r) { return l.CPUCores > r.CPUCores; });
+        std::sort(sortedByTli.begin(), sortedByTli.end(),
+            [] (const auto& l, const auto& r) { return l.LocksBroken > r.LocksBroken; });
 
         auto now = TActivationContext::Now();
         auto nowUs = now.MicroSeconds();
 
         size_t count = 0;
         auto sendEvent = MakeHolder<TEvSysView::TEvSendTopPartitions>();
-        for (const auto& entry : sorted) {
+        for (const auto& entry : sortedByCpu) {
             const auto& table = domainTables.Stats[entry.PathId];
             const auto& followerStats = table.Partitions.at(entry.ShardIdx).FollowerStats;
             const auto& partition = followerStats.at(entry.FollowerId);
             const auto& leaderPartition = followerStats.at(0);
 
-            auto* result = sendEvent->Record.AddPartitions();
+            auto* result = sendEvent->Record.AddPartitionsByCpu();
             result->SetTabletId(partition.GetTabletId());
             result->SetPath(table.Path);
             result->SetPeakTimeUs(nowUs);
@@ -422,12 +487,35 @@ private:
                 break;
             }
         }
+        for (const auto& entry : sortedByTli) {
+            const auto& table = domainTables.Stats[entry.PathId];
+            const auto& followerStats = table.Partitions.at(entry.ShardIdx).FollowerStats;
+            const auto& partition = followerStats.at(entry.FollowerId);
+            const auto& leaderPartition = followerStats.at(0);
+
+            auto* result = sendEvent->Record.AddPartitionsByTli();
+            result->SetTabletId(partition.GetTabletId());
+            result->SetPath(table.Path);
+            result->SetLocksAcquired(partition.GetLocksAcquired());
+            result->SetLocksWholeShard(partition.GetLocksWholeShard());
+            result->SetLocksBroken(partition.GetLocksBroken());
+            result->SetNodeId(partition.GetNodeId());
+            result->SetDataSize(leaderPartition.GetDataSize());
+            result->SetRowCount(leaderPartition.GetRowCount());
+            result->SetIndexSize(leaderPartition.GetIndexSize());
+            result->SetFollowerId(partition.GetFollowerId());
+
+            if (++count == TOP_PARTITIONS_COUNT) {
+                break;
+            }
+        }
 
         sendEvent->Record.SetTimeUs(nowUs);
 
-        SVLOG_D("NSysView::TPartitionStatsCollector: TEvProcessOverloaded "
-            << "top size# " << sorted.size()
-            << ", time# " << now);
+        YDB_LOG_DEBUG("NSysView::TPartitionStatsCollector::HandleProcessOverloaded: sending top overloaded partitions",
+            {"topByCpuCount", sortedByCpu.size()},
+            {"topByTliCount", sortedByTli.size()},
+            {"timestamp", now});
 
         Send(MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(sendEvent.Release(), SysViewProcessorId, true));
@@ -437,9 +525,9 @@ private:
         DomainKey = ev->Get()->DomainKey;
         SysViewProcessorId = ev->Get()->SysViewProcessorId;
 
-        SVLOG_I("NSysView::TPartitionStatsCollector initialized: "
-            << "domain key# " << DomainKey
-            << ", sysview processor id# " << SysViewProcessorId);
+        YDB_LOG_INFO("NSysView::TPartitionStatsCollector::HandleConfigure: initialized for domain",
+            {"domainKey", DomainKey},
+            {"sysViewProcessorId", SysViewProcessorId});
     }
 
     void PassAway() override {
@@ -447,8 +535,11 @@ private:
         TBase::PassAway();
     }
 
-    bool IsPartitionOverloaded(const NKikimrSysView::TPartitionStats& stats) const {
-        return stats.GetCPUCores() >= OverloadedPartitionBound;
+    bool IsPartitionOverloadedByCpu(const NKikimrSysView::TPartitionStats& stats) const {
+        return stats.GetCPUCores() >= OverloadedByCpuPartitionBound;
+    }
+    bool IsPartitionOverloadedByTli(const NKikimrSysView::TPartitionStats& stats) const {
+        return stats.GetLocksBroken() >= OverloadedByTliPartitionBound;
     }
 
 private:
@@ -458,7 +549,8 @@ private:
     TPathId DomainKey;
     ui64 SysViewProcessorId = 0;
 
-    double OverloadedPartitionBound = 0.7;
+    double OverloadedByCpuPartitionBound = 0.7;
+    ui64 OverloadedByTliPartitionBound = 1;
     TDuration ProcessOverloadedInterval = TDuration::Seconds(15);
 
     typedef ui32 TFollowerId;
@@ -473,22 +565,23 @@ private:
         TString Path;
     };
 
-    struct TOverloadedFollower {
+    struct TFollowerStats {
         TShardIdx ShardIdx;
         TFollowerId FollowerId;
 
-        bool operator<(const TOverloadedFollower &other) const {
+        bool operator<(const TFollowerStats &other) const {
             return std::tie(ShardIdx, FollowerId) < std::tie(other.ShardIdx, other.FollowerId);
         }
 
-        bool operator==(const TOverloadedFollower &other) const {
+        bool operator==(const TFollowerStats &other) const {
             return std::tie(ShardIdx, FollowerId) == std::tie(other.ShardIdx, other.FollowerId);
         }
     };
 
     struct TDomainTables {
         std::map<TPathId, TTableStats> Stats;
-        std::unordered_map<TPathId, std::set<TOverloadedFollower>> Overloaded;
+        std::unordered_map<TPathId, std::set<TFollowerStats>> OverloadedByCpu;
+        std::unordered_map<TPathId, std::set<TFollowerStats>> OverloadedByTli;
     };
     std::unordered_map<TPathId, TDomainTables> DomainTables;
 
@@ -510,9 +603,10 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TPartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TPartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TBase(ownerId, scanId, tableId, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
     {
         auto extractKey = [] (NKikimrSysView::TPartitionStatsKey& key, const TConstArrayRef<TCell>& cells) {
             if (cells.size() > 0 && !cells[0].IsNull()) {
@@ -549,8 +643,8 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TPartitionStatsScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TPartitionStatsScan: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -682,6 +776,9 @@ private:
                 insert({TSchema::TxRejectedByOutOfStorage::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
                     return TCell::Make<ui64>(stats.GetTxRejectedBySpace());
                 }});
+                insert({TSchema::TxCompleteLag::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<i64>(stats.GetTxCompleteLagMsec() * 1000);
+                }});
                 insert({TSchema::LastTtlRunTime::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
                     return stats.HasTtlStats() ? TCell::Make<ui64>(stats.GetTtlStats().GetLastRunTime() * 1000) : TCell();
                 }});
@@ -693,7 +790,16 @@ private:
                 }});
                 insert({TSchema::FollowerId::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
                     return TCell::Make<ui32>(stats.GetFollowerId());
-                }});                
+                }});
+                insert({TSchema::LocksAcquired::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetLocksAcquired());
+                }});
+                insert({TSchema::LocksWholeShard::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetLocksWholeShard());
+                }});
+                insert({TSchema::LocksBroken::ColumnId, [] (const TPartitionStatsResult&, const TPartitionStats&, const TPartitionStats& stats) {
+                    return TCell::Make<ui64>(stats.GetLocksBroken());
+                }});
             }
         };
         static TExtractorsMap extractors;
@@ -724,7 +830,7 @@ private:
                 return stats.GetFollowerId() == 0;
             });
 
-            const TPartitionStats& leaderStats = leaderStatsIter != partitionStats.end() 
+            const TPartitionStats& leaderStats = leaderStatsIter != partitionStats.end()
                 ? *leaderStatsIter
                 : TPartitionStats{};   // Only at the very beginning, when there is no statistics from the leader
 
@@ -766,10 +872,11 @@ private:
     bool IncludePathColumn = false;
 };
 
-THolder<NActors::IActor> CreatePartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreatePartitionStatsScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TPartitionStatsScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TPartitionStatsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NSysView

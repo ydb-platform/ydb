@@ -100,6 +100,7 @@ struct TCompactionLogicState {
 
         // monotonically growing, i.e. edge-like
         ui64 CurrentForcedMemCompactionId = 0;
+        ui64 LastStartedFullCompactionId = 0;
 
         bool ChangesRequested = false;
 
@@ -183,6 +184,7 @@ class TCompactionLogic {
 
     void StopTable(TCompactionLogicState::TTableInfo &table);
     void StrategyChanging(TCompactionLogicState::TTableInfo &table);
+    void ResubmitCompactions(TCompactionLogicState::TTableInfo &table);
 
     TCompactionLogicState::TTableInfo* HandleCompaction(
         ui64 compactionId,

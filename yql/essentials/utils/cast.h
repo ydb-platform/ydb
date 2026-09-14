@@ -3,7 +3,7 @@
 
 namespace NYql {
 
-template<class T, class F>
+template <class T, class F>
 [[nodiscard]]
 inline T EnsureDynamicCast(F from) {
     YQL_ENSURE(from, "source should not be null");

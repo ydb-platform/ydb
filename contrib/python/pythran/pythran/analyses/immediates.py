@@ -11,10 +11,8 @@ from pythran.utils import pythran_builtin, isnum, ispowi
 _make_shape = pythran_builtin('make_shape')
 
 
-class Immediates(NodeAnalysis):
-    def __init__(self):
-        self.result = set()
-        super(Immediates, self).__init__(Aliases)
+class Immediates(NodeAnalysis[Aliases]):
+    ResultType = set
 
     def visit_BinOp(self, node):
         self.generic_visit(node)

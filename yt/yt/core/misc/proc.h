@@ -8,6 +8,11 @@
 
 #include <util/system/file.h>
 
+#include <yt/yt/core/misc/fs.h>
+
+#include <optional>
+#include <vector>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -23,6 +28,30 @@ bool IsSystemError(const TError& error);
 #else
     using TFileDescriptor = int;
 #endif
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TFileDescriptorGuard
+{
+public:
+    explicit TFileDescriptorGuard(TFileDescriptor fd = -1) noexcept;
+
+    ~TFileDescriptorGuard();
+
+    TFileDescriptorGuard(const TFileDescriptorGuard&) = delete;
+    TFileDescriptorGuard& operator=(const TFileDescriptorGuard&) = delete;
+
+    TFileDescriptorGuard(TFileDescriptorGuard&& other) noexcept;
+    TFileDescriptorGuard& operator=(TFileDescriptorGuard&& other) noexcept;
+
+    TFileDescriptor Get() const noexcept;
+
+    TFileDescriptor Release() noexcept;
+    void Reset() noexcept;
+
+private:
+    TFileDescriptor FD_ = -1;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -47,9 +76,9 @@ TMemoryUsage GetProcessMemoryUsage(int pid = -1);
 struct TProcessCgroup
 {
     int HierarchyId;
-    TString ControllersName;
-    std::vector<TString> Controllers;
-    TString Path;
+    std::string ControllersName;
+    std::vector<std::string> Controllers;
+    std::string Path;
 };
 
 std::vector<TProcessCgroup> GetProcessCgroups(int pid = -1);
@@ -63,9 +92,9 @@ struct TCgroupCpuStat
 };
 
 TCgroupCpuStat GetCgroupCpuStat(
-    const TString& controllerName,
-    const TString& cgroupPath,
-    const TString& cgroupMountPoint = "/sys/fs/cgroup");
+    const std::string& controllerName,
+    const std::string& cgroupPath,
+    const std::string& cgroupMountPoint = "/sys/fs/cgroup");
 
 struct TCgroupMemoryStat
 {
@@ -80,36 +109,37 @@ struct TCgroupMemoryStat
 };
 
 TCgroupMemoryStat GetCgroupMemoryStat(
-    const TString& cgroupPath,
-    const TString& cgroupMountPoint = "/sys/fs/cgroup");
+    const std::string& cgroupPath,
+    const std::string& cgroupMountPoint = "/sys/fs/cgroup");
 
 
 std::optional<i64> GetCgroupAnonymousMemoryLimit(
-    const TString& cgroupPath,
-    const TString& cgroupMountPoint = "/sys/fs/cgroup");
+    const std::string& cgroupPath,
+    const std::string& cgroupMountPoint = "/sys/fs/cgroup");
 
-THashMap<TString, i64> GetVmstat();
+THashMap<std::string, i64> GetVmstat();
 
 ui64 GetProcessCumulativeMajorPageFaults(int pid = -1);
-size_t GetCurrentProcessId();
-size_t GetCurrentThreadId();
 std::vector<size_t> GetCurrentProcessThreadIds();
 bool IsUserspaceThread(size_t tid);
 
+std::string GetCurrentProcessName();
+std::string GetCurrentProcessCommandLine();
+
 void ChownChmodDirectory(
-    const TString& path,
+    const std::string& path,
     const std::optional<uid_t>& userId,
     const std::optional<int>& permissions);
 
 void ChownChmodDirectoriesRecursively(
-    const TString& path,
+    const std::string& path,
     const std::optional<uid_t>& userId,
     const std::optional<int>& permissions);
 
 void SetThreadPriority(int tid, int priority);
 
-TString GetProcessName(int pid);
-std::vector<TString> GetProcessCommandLine(int pid);
+std::string GetProcessName(int pid);
+std::vector<std::string> GetProcessCommandLine(int pid);
 
 TError StatusToError(int status);
 
@@ -127,7 +157,7 @@ void SafeSetCloexec(TFileDescriptor fd);
 
 bool TryExecve(const char* path, const char* const* argv, const char* const* env);
 
-void SafeCreateStderrFile(TString fileName);
+void SafeCreateStderrFile(std::string fileName);
 
 //! Returns a pipe with CLOSE_EXEC flag.
 void SafePipe(TFileDescriptor fd[2]);
@@ -151,13 +181,17 @@ void SafeEnableEmptyPipeEpollEvent(TFileDescriptor fd);
 bool TrySetUid(int uid);
 void SafeSetUid(int uid);
 
-TString SafeGetUsernameByUid(int uid);
+std::string SafeGetUsernameByUid(int uid);
 
 void SetUid(int uid);
 
-void CloseAllDescriptors(const std::vector<int>& exceptFor = std::vector<int>());
+std::vector<int> CloseAllDescriptors(const std::vector<int>& exceptFor = std::vector<int>());
 
 int GetFileDescriptorCount();
+
+//! Return the soft RLIMIT_NOFILE value of the current process.
+//! Return null when the limit is infinite, when getrlimit fails, or on non-UNIX platforms.
+std::optional<i64> GetFileDescriptorLimit();
 
 //! Return true iff ytserver was started with root permissions (e.g. via sudo or with suid bit).
 bool HasRootPermissions();
@@ -191,13 +225,13 @@ struct TNetworkInterfaceStatistics
     TTransmitStatistics Tx;
 };
 
-using TNetworkInterfaceStatisticsMap = THashMap<TString, TNetworkInterfaceStatistics>;
+using TNetworkInterfaceStatisticsMap = THashMap<std::string, TNetworkInterfaceStatistics>;
 //! Returns a mapping from interface name to network statistics.
 TNetworkInterfaceStatisticsMap GetNetworkInterfaceStatistics();
 
-void SendSignal(const std::vector<int>& pids, const TString& signalName);
-std::optional<int> FindSignalIdBySignalName(const TString& signalName);
-void ValidateSignalName(const TString& signalName);
+void SendSignal(const std::vector<int>& pids, const std::string& signalName);
+std::optional<int> FindSignalIdBySignalName(const std::string& signalName);
+void ValidateSignalName(const std::string& signalName);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -280,11 +314,11 @@ struct TMemoryMapping
 
     ui64 Offset = 0;
 
-    std::optional<int> DeviceId;
+    std::optional<NFS::TDeviceId> DeviceId;
 
     std::optional<ui64> INode;
 
-    std::optional<TString> Path;
+    std::optional<std::string> Path;
 
     TMemoryMappingStatistics Statistics;
 
@@ -295,40 +329,10 @@ struct TMemoryMapping
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::vector<TMemoryMapping> ParseMemoryMappings(const TString& rawSMaps);
+std::vector<TMemoryMapping> ParseMemoryMappings(const std::string& rawSMaps);
 std::vector<TMemoryMapping> GetProcessMemoryMappings(int pid);
 
 ////////////////////////////////////////////////////////////////////////////////
-
-// See https://www.kernel.org/doc/Documentation/ABI/testing/procfs-diskstats
-// for fields info.
-struct TDiskStat
-{
-    i32 MajorNumber = 0;
-    i32 MinorNumber = 0;
-    TString DeviceName;
-
-    i64 ReadsCompleted = 0;
-    i64 ReadsMerged = 0;
-    i64 SectorsRead = 0;
-    TDuration TimeSpentReading;
-
-    i64 WritesCompleted = 0;
-    i64 WritesMerged = 0;
-    i64 SectorsWritten = 0;
-    TDuration TimeSpentWriting;
-
-    i64 IOCurrentlyInProgress = 0;
-    TDuration TimeSpentDoingIO;
-    TDuration WeightedTimeSpentDoingIO;
-
-    i64 DiscardsCompleted = 0;
-    i64 DiscardsMerged = 0;
-    i64 SectorsDiscarded = 0;
-    TDuration TimeSpentDiscarding;
-};
-
-TDiskStat ParseDiskStat(const TString& statLine);
 
 // See https://docs.kernel.org/block/stat.html for more info.
 struct TBlockDeviceStat
@@ -356,12 +360,14 @@ struct TBlockDeviceStat
     TDuration TimeSpentFlushing;
 };
 
-TBlockDeviceStat ParseBlockDeviceStat(const TString& statLine);
+TBlockDeviceStat ParseBlockDeviceStat(const std::string& statLine);
 
-//! DeviceName to stat info
-THashMap<TString, TDiskStat> GetDiskStats();
-std::optional<TBlockDeviceStat> GetBlockDeviceStat(const TString& deviceName);
-std::vector<TString> ListDisks();
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(const std::string& deviceName);
+std::optional<TBlockDeviceStat> GetBlockDeviceStat(NFS::TDeviceId deviceId);
+
+NFS::TDeviceId GetBlockDeviceId(const std::string& deviceName);
+std::string GetBlockDeviceName(NFS::TDeviceId deviceId);
+std::vector<std::string> ListDisks();
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -375,13 +381,17 @@ TTaskDiskStatistics GetSelfThreadTaskDiskStatistics();
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFile MemfdCreate(const TString& name);
+TFile MemfdCreate(const std::string& name);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& GetLinuxKernelVersion();
+const std::string& GetLinuxKernelVersion();
+std::vector<int> ParseLinuxKernelVersion();
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool IsUringEnabled();
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

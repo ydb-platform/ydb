@@ -1,10 +1,27 @@
 #pragma once
 
+#include <ydb/public/lib/ydb_cli/common/build_info.h>
 #include <ydb/public/lib/ydb_cli/common/profile_manager.h>
 #include <ydb/public/lib/ydb_cli/common/root.h>
+#include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 
-namespace NYdb {
-namespace NConsoleClient {
+#include <functional>
+#include <optional>
+#include <vector>
+
+namespace NYdb::NConsoleClient {
+
+struct TAiPresetSetting {
+    TString Name;
+    TString ApiType;
+    TString ApiEndpoint;
+    TString ModelName;
+};
+
+struct TAiTokenReq {
+    TString Token;
+    bool WasUpdated = false;
+};
 
 struct TClientSettings {
     // Whether to use secure connection or not
@@ -23,36 +40,57 @@ struct TClientSettings {
     TMaybe<bool> UseExportToYt;
     // Whether to mention user account in --help command or not
     TMaybe<bool> MentionUserAccount;
+    // A storage url to get latest YDB CLI version and to update from
+    // If not set, than no updates nor latest version checks will be available
+    std::optional<std::string> StorageUrl = std::nullopt;
     // Name of a directory in user home directory to save profile config
     TString YdbDir;
+    // AI Mode Settings
+    std::optional<bool> EnableAiInteractive = true;
+    // Interactive transactions (BEGIN/COMMIT/ROLLBACK) in REPL
+    std::optional<bool> EnableInteractiveTransactions;
+
+    // Called lazily on first driver creation to get distribution name and version.
+    std::function<TYdbCliBuildInfo()> BuildInfoProvider;
 };
 
 class TClientCommandRootCommon : public TClientCommandRootBase {
 public:
     TClientCommandRootCommon(const TString& name, const TClientSettings& settings);
+    int Process(TConfig& config) override;
     void Config(TConfig& config) override;
+    void ExtractParams(TConfig& config) override;
     void Parse(TConfig& config) override;
-    void ParseAddress(TConfig& config) override;
     void ParseCredentials(TConfig& config) override;
     void Validate(TConfig& config) override;
     int Run(TConfig& config) override;
+
+    void SetSchemeCompletionContext(TSchemeCompletionContext ctx);
+
 protected:
     virtual void FillConfig(TConfig& config);
     virtual void SetCredentialsGetter(TConfig& config);
 
 private:
+    TString GetUsageInfo(const std::vector<TString>& commands, TConfig config);
     void ValidateSettings();
-    bool GetCredentialsFromProfile(std::shared_ptr<IProfile> profile, TConfig& config, bool explicitOption);
 
     void ParseProfile();
-    void ParseDatabase(TConfig& config);
+    void ParseAddress(TConfig&) override {}
     void ParseIamEndpoint(TConfig& config);
     void ParseCaCerts(TConfig& config) override;
-    void GetAddressFromString(TConfig& config, TString* result = nullptr);
-    bool ParseProtocolNoConfig(TString& message);
-    void GetCaCerts(TConfig& config);
-    bool TryGetParamFromProfile(const TString& name, std::shared_ptr<IProfile> profile, bool explicitOption,
+    void ParseClientCert(TConfig& config) override;
+    void ParseStaticCredentials(TConfig& config);
+    static TString GetAddressFromString(const TString& address, bool* enableSsl = nullptr, std::vector<TString>* errors = nullptr);
+    static bool ParseProtocolNoConfig(TString& address, bool* enableSsl, TString& message);
+    bool TryGetParamFromProfile(const TString& name, const std::shared_ptr<IProfile>& profile, bool explicitOption,
                                 std::function<bool(const TString&, const TString&, bool)> callback);
+
+    // Gets more than one params from one profile source.
+    // Returns true if at least one of the params are found in profile.
+    bool TryGetParamsPackFromProfile(const std::shared_ptr<IProfile>& profile, bool explicitOption,
+                                     std::function<bool(const TString& /*source*/, bool /*explicit*/, const std::vector<TString>& /*values*/)> callback,
+                                     const std::initializer_list<TString>& names);
 
     TString Database;
 
@@ -68,24 +106,13 @@ private:
 
     TString UserName;
     TString PasswordFile;
-    bool DoNotAskForPassword = false;
+    std::optional<TString> Password;
+    bool PassEmptyPassword = false;
+    bool Initialized = false;
 
-    bool UseMetadataCredentials = false;
-    TString YCToken;
-    TString YCTokenFile;
-    TString SaKeyFile;
-    TString IamEndpoint;
     const TClientSettings& Settings;
     TVector<TString> MisuseErrors;
-
-    TString Oauth2KeyFile;
-
-    bool IsAddressSet = false;
-    bool IsDatabaseSet = false;
-    bool IsIamEndpointSet = false;
-    bool IsCaCertsFileSet = false;
-    bool IsAuthSet = false;
+    std::optional<TSchemeCompletionContext> SchemeCompletionContext_;
 };
 
-}
-}
+} // namespace NYdb::NConsoleClient

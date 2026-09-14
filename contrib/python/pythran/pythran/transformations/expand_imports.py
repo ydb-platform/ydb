@@ -9,7 +9,7 @@ from pythran.analyses import Ancestors
 import gast as ast
 
 
-class ExpandImports(Transformation):
+class ExpandImports(Transformation[Ancestors]):
 
     """
     Expands all imports into full paths.
@@ -39,7 +39,7 @@ class ExpandImports(Transformation):
     """
 
     def __init__(self):
-        super(ExpandImports, self).__init__(Ancestors)
+        super().__init__()
         self.imports = set()
         self.symbols = dict()
 

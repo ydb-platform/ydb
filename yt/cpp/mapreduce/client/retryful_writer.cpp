@@ -1,6 +1,6 @@
 #include "retryful_writer.h"
 
-#include "retry_heavy_write_request.h"
+#include <yt/cpp/mapreduce/common/trace_context.h>
 
 #include <yt/cpp/mapreduce/http/requests.h>
 
@@ -8,8 +8,6 @@
 #include <yt/cpp/mapreduce/interface/finish_or_die.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-
-#include <yt/cpp/mapreduce/http_client/raw_client.h>
 
 #include <util/generic/size_literals.h>
 
@@ -20,6 +18,10 @@ namespace NYT {
 TRetryfulWriter::~TRetryfulWriter()
 {
     NDetail::FinishOrDie(this, AutoFinish_, "TRetryfulWriter");
+    if (WriterState_ == Ok) {
+        Y_ABORT_IF(AutoFinish_); // if AutoFinish_, FinishOrDie would have called Finish
+        Abort();
+    }
 }
 
 void TRetryfulWriter::CheckWriterState()
@@ -71,6 +73,26 @@ void TRetryfulWriter::DoFinish()
     WriterState_ = Completed;
 }
 
+void TRetryfulWriter::CreateTransaction()
+{
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
+    WriteTransaction_.ConstructInPlace(
+        RawClient_,
+        ClientRetryPolicy_,
+        Context_,
+        ParentTransactionId_,
+        TransactionPinger_->GetChildTxPinger(),
+        TStartTransactionOptions());
+    auto append = Path_.Append_.GetOrElse(false);
+    auto lockMode = (append ? LM_SHARED : LM_EXCLUSIVE);
+    NDetail::RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+        [this, &lockMode] (TMutationId& mutationId) {
+            RawClient_->Lock(mutationId, WriteTransaction_->GetId(), this->Path_.Path_, lockMode);
+        });
+}
+
 void TRetryfulWriter::FlushBuffer(bool lastBlock)
 {
     if (!Started_) {
@@ -99,18 +121,37 @@ void TRetryfulWriter::FlushBuffer(bool lastBlock)
 
 void TRetryfulWriter::Send(const TBuffer& buffer)
 {
-    THttpHeader header("PUT", Command_);
-    header.SetInputFormat(Format_);
-    header.MergeParameters(Parameters_);
-
-    auto streamMaker = [&buffer] () {
-        return std::make_unique<TBufferInput>(buffer);
-    };
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
 
     auto transactionId = (WriteTransaction_ ? WriteTransaction_->GetId() : ParentTransactionId_);
-    RetryHeavyWriteRequest(RawClient_, ClientRetryPolicy_, TransactionPinger_, Context_, transactionId, header, streamMaker);
 
-    Parameters_ = SecondaryParameters_; // all blocks except the first one are appended
+    NDetail::RequestWithRetry<void>(
+        CreateDefaultRequestRetryPolicy(Context_.Config),
+        [&](TMutationId&) {
+            TPingableTransaction attemptTx(
+                RawClient_, ClientRetryPolicy_, Context_,
+                transactionId, TransactionPinger_->GetChildTxPinger(), TStartTransactionOptions());
+
+            std::unique_ptr<IOutputStream> stream;
+            std::visit([this, &attemptTx, &stream] (const auto& options) -> void {
+                using TType = std::decay_t<decltype(options)>;
+                if constexpr (std::is_same_v<TType, TFileWriterOptions>) {
+                    stream = RawClient_->WriteFile(attemptTx.GetId(), Path_, options);
+                } else if constexpr (std::is_same_v<TType, TTableWriterOptions>) {
+                    stream = RawClient_->WriteTable(attemptTx.GetId(), Path_, Format_, options);
+                } else {
+                    static_assert(TDependentFalse<TType>);
+                }
+            }, Options_);
+
+            auto input = std::make_unique<TBufferInput>(buffer);
+            TransferData(input.get(), stream.get());
+            stream->Finish();
+
+            attemptTx.Commit();
+        });
+
+    Path_ = SecondaryPath_; // all blocks except the first one are appended
 }
 
 void TRetryfulWriter::SendThread()
@@ -137,6 +178,8 @@ void* TRetryfulWriter::SendThread(void* opaque)
 
 void TRetryfulWriter::Abort()
 {
+    NTracing::TCurrentTraceContextGuard guard(TraceContext_->Ptr);
+
     if (Started_) {
         FilledBuffers_.Stop();
         Thread_.Join();

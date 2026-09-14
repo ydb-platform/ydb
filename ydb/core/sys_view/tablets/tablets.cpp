@@ -1,7 +1,7 @@
 #include "tablets.h"
 
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/mind/hive/hive.h>
@@ -10,6 +10,8 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <ydb/library/actors/core/hfunc.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 namespace NKikimr::NSysView {
 
@@ -23,9 +25,10 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TTabletsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TTabletsScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TBase(ownerId, scanId, tableId, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
     {
     }
 
@@ -39,8 +42,8 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TTabletsScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TTabletsScan: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -164,6 +167,12 @@ private:
     }
 
     void RequestTabletIds() {
+        if (TabletIdsRequested) {
+            return;
+        }
+
+        TabletIdsRequested = true;
+
         auto request = MakeHolder<TEvSysView::TEvGetTabletIdsRequest>();
 
         if (!CalculateRangeFrom() || !CalculateRangeTo()) {
@@ -349,13 +358,15 @@ private:
     TVector<ui64> TabletIds;
     TVector<ui64>::const_iterator FromIterator;
 
+    bool TabletIdsRequested = false;
     bool BatchRequested = false;
 };
 
-THolder<NActors::IActor> CreateTabletsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateTabletsScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TTabletsScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TTabletsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

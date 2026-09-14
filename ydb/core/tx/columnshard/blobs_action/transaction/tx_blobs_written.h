@@ -1,14 +1,17 @@
 #pragma once
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/operations/events.h>
+#include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
+#include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
 namespace NKikimr::NColumnShard {
+
+LWTRACE_USING(YDB_CS);
 
 class TColumnShard;
 
@@ -18,6 +21,8 @@ private:
     TInsertedPortions Pack;
     const std::shared_ptr<NOlap::IBlobsWritingAction> WritingActions;
     std::optional<NOlap::TSnapshot> CommitSnapshot;
+    TInstant StartTime;
+    TDuration TransactionTime;
 
     class TReplyInfo {
     private:
@@ -29,7 +34,8 @@ private:
         TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie)
             : Event(std::move(ev))
             , DestinationForReply(destinationForReply)
-            , Cookie(cookie) {
+            , Cookie(cookie)
+        {
         }
 
         void DoSendReply(const TActorContext& ctx) {
@@ -47,6 +53,7 @@ public:
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return TXTYPE_WRITE_PORTIONS_FINISHED;
     }
@@ -55,7 +62,6 @@ public:
 class TTxBlobsWritingFailed: public TExtendedTransactionBase {
 private:
     using TBase = TExtendedTransactionBase;
-    const NKikimrProto::EReplyStatus PutBlobResult;
     TInsertedPortions Pack;
 
     class TReplyInfo {
@@ -68,7 +74,8 @@ private:
         TReplyInfo(std::unique_ptr<NActors::IEventBase>&& ev, const TActorId& destinationForReply, const ui64 cookie)
             : Event(std::move(ev))
             , DestinationForReply(destinationForReply)
-            , Cookie(cookie) {
+            , Cookie(cookie)
+        {
         }
 
         void DoSendReply(const TActorContext& ctx) {
@@ -79,14 +86,15 @@ private:
     std::vector<TReplyInfo> Results;
 
 public:
-    TTxBlobsWritingFailed(TColumnShard* self, const NKikimrProto::EReplyStatus writeStatus, TInsertedPortions&& pack)
-        : TBase(self)
-        , PutBlobResult(writeStatus)
-        , Pack(std::move(pack)) {
+    TTxBlobsWritingFailed(TColumnShard* self, TInsertedPortions&& pack)
+        : TBase(self, "blobs_writing_failed")
+        , Pack(std::move(pack))
+    {
     }
 
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override;
     virtual void DoComplete(const TActorContext& ctx) override;
+
     TTxType GetTxType() const override {
         return TXTYPE_WRITE_PORTIONS_FAILED;
     }

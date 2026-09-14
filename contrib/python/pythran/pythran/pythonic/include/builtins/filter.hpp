@@ -14,10 +14,8 @@ namespace builtins
   {
 
     template <typename Operator, typename List0>
-    struct filter_iterator
-        : std::iterator<std::forward_iterator_tag, typename List0::value_type> {
-      using sequence_type = typename std::remove_cv<
-          typename std::remove_reference<List0>::type>::type;
+    struct filter_iterator : std::iterator<std::forward_iterator_tag, typename List0::value_type> {
+      using sequence_type = std::remove_cv_t<std::remove_reference_t<List0>>;
 
       Operator op;
       typename List0::iterator iter;
@@ -47,10 +45,9 @@ namespace builtins
     // and avoid a dangling reference
     // FIXME: It would be better to have a copy only if needed but Pythran
     // typing is not good enough for this as arguments have
-    // remove_cv/remove_ref
+    // remove_cv_t/remove_ref_t
     template <typename Operator, typename List0>
-    struct filter : utils::iterator_reminder<false, List0>,
-                    filter_iterator<Operator, List0> {
+    struct filter : utils::iterator_reminder<false, List0>, filter_iterator<Operator, List0> {
 
       using value_type = typename List0::value_type;
       using iterator = filter_iterator<Operator, List0>;
@@ -67,10 +64,8 @@ namespace builtins
   } // namespace details
 
   template <typename Operator, typename List0>
-  details::filter<typename std::remove_cv<
-                      typename std::remove_reference<Operator>::type>::type,
-                  typename std::remove_cv<
-                      typename std::remove_reference<List0>::type>::type>
+  details::filter<std::remove_cv_t<std::remove_reference_t<Operator>>,
+                  std::remove_cv_t<std::remove_reference_t<List0>>>
   filter(Operator &&_op, List0 &&_seq);
 
   DEFINE_FUNCTOR(pythonic::builtins, filter);
@@ -82,9 +77,8 @@ PYTHONIC_NS_END
 
 template <class E, class Op, class T>
 struct __combined<E, pythonic::builtins::details::filter<Op, T>> {
-  using type =
-      typename __combined<E, container<typename pythonic::builtins::details::
-                                           filter<Op, T>::value_type>>::type;
+  using type = typename __combined<
+      E, container<typename pythonic::builtins::details::filter<Op, T>::value_type>>::type;
 };
 /* } */
 

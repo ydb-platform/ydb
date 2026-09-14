@@ -1,11 +1,11 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common_subdomain.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_subdomain.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/config/config.h>
+#include <ydb/core/persqueue/public/config.h>
 
 namespace {
 
@@ -145,7 +145,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit() //check capacity on root Domain
                     .DirChildrenLimit()
@@ -245,6 +245,13 @@ public:
             return result;
         }
 
+        if (settings.HasTablesMetricsLevel()
+            && !CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), /* isRootDomain */ false, errStr)
+        ) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            return result;
+        }
+
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
@@ -309,8 +316,12 @@ public:
             alter->SetAuditSettings(settings.GetAuditSettings());
         }
 
+        if (settings.HasTablesMetricsLevel()) {
+            alter->SetTablesMetricsLevel(settings.GetTablesMetricsLevel());
+        }
+
         Y_ABORT_UNLESS(!context.SS->SubDomains.contains(newNode->PathId));
-        auto& subDomainInfo = context.SS->SubDomains[newNode->PathId];
+        auto& subDomainInfo = context.SS->SubDomains.Emplace(newNode->PathId);
         subDomainInfo = new TSubDomainInfo();
         subDomainInfo->SetAlter(alter);
 
@@ -318,7 +329,6 @@ public:
         context.SS->PersistUpdateNextShardIdx(db);
         context.SS->PersistSubDomain(db, newNode->PathId, *subDomainInfo);
         context.SS->PersistSubDomainAlter(db, newNode->PathId, *alter);
-        context.SS->IncrementPathDbRefCount(newNode->PathId);
 
         if (parentPath.Base()->HasActiveChanges()) {
             TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;

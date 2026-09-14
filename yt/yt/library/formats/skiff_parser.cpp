@@ -3,13 +3,16 @@
 
 #include "helpers.h"
 
-#include <yt/yt/client/formats/parser.h>
-
 #include "yson_map_to_unversioned_value.h"
 
 #include <yt/yt/library/decimal/decimal.h>
+
 #include <yt/yt/library/skiff_ext/schema_match.h>
 #include <yt/yt/library/skiff_ext/parser.h>
+
+#include <yt/yt/library/tz_types/tz_types.h>
+
+#include <yt/yt/client/formats/parser.h>
 
 #include <yt/yt/client/table_client/logical_type.h>
 #include <yt/yt/client/table_client/name_table.h>
@@ -47,7 +50,7 @@ public:
         , Function_(function)
     { }
 
-    void operator() (TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
+    void operator()(TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
     {
         if constexpr (IsNullable) {
             ui8 tag = parser->ParseVariant8Tag();
@@ -104,7 +107,7 @@ TPrimitiveTypeConverter<IsNullable, TFunction> CreatePrimitiveTypeConverter(ui32
     return TPrimitiveTypeConverter<IsNullable, TFunction>(columnId, function);
 }
 
-template<bool isNullable>
+template <bool isNullable>
 class TYson32TypeConverterImpl
 {
 public:
@@ -186,13 +189,70 @@ TSkiffToUnversionedValueConverter CreatePrimitiveTypeConverter(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TSkiffToUnversionedValueConverter CreateTzTypeConverter(
+    const std::shared_ptr<NSkiff::TSkiffSchema>& skiffSchema,
+    bool required,
+    ui16 columnId,
+    TYsonToUnversionedValueConverter* ysonConverter)
+{
+    // Schema is already validated to match tz-time format.
+    auto wireType = skiffSchema->GetWireType();
+
+    switch (wireType) {
+        case EWireType::String32:
+            if (required) {
+                return TPrimitiveTypeConverter<false, TSimpleSkiffParser<EWireType::String32>>(columnId);
+            } else {
+                return TPrimitiveTypeConverter<true, TSimpleSkiffParser<EWireType::String32>>(columnId);
+            }
+        case EWireType::Tuple:
+        {
+            const auto& children = skiffSchema->GetChildren();
+            YT_VERIFY(children.size() == 2);
+            const auto innerWireType = children[0]->GetWireType();
+            YT_VERIFY(children[1]->GetWireType() == EWireType::Uint16);
+            switch (innerWireType) {
+        #define CASE(x) \
+                case ((x)): \
+                    do { \
+                        if (required) { \
+                            return TPrimitiveTypeConverter<false, TTzSkiffParser<(x)>>(columnId); \
+                        } else { \
+                            return TPrimitiveTypeConverter<true, TTzSkiffParser<(x)>>(columnId); \
+                        } \
+                    } while (0)
+                CASE(EWireType::Int32);
+                CASE(EWireType::Int64);
+                CASE(EWireType::Uint16);
+                CASE(EWireType::Uint32);
+                CASE(EWireType::Uint64);
+        #undef CASE
+                default:
+                    break;
+            }
+            YT_ABORT();
+        }
+        case EWireType::Yson32:
+            if (required) {
+                return TYson32TypeConverterImpl<false>(columnId, ysonConverter);
+            } else {
+                return TYson32TypeConverterImpl<true>(columnId, ysonConverter);
+            }
+        default:
+            YT_ABORT();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TSkiffToUnversionedValueConverter CreateSimpleValueConverter(
     ESimpleLogicalValueType columnType,
     const TFieldDescription& fieldDescription,
     ui16 columnId,
     TYsonToUnversionedValueConverter* ysonConverter)
 {
-    EWireType wireType = fieldDescription.ValidatedSimplify();
+    const auto& skiffSchema = DeoptionalizeSchema(fieldDescription.Schema()).first;
+    auto wireType = fieldDescription.ValidatedGetDeoptionalizeType(/*simplify*/ false);
     bool required = fieldDescription.IsRequired();
     switch (columnType) {
         case ESimpleLogicalValueType::Int8:
@@ -223,6 +283,14 @@ TSkiffToUnversionedValueConverter CreateSimpleValueConverter(
                 wireType,
                 {EWireType::Uint8, EWireType::Uint16, EWireType::Uint32, EWireType::Uint64, EWireType::Yson32});
             return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+            CheckTzType(skiffSchema, columnType);
+            return CreateTzTypeConverter(skiffSchema, required, columnId, ysonConverter);
 
         case ESimpleLogicalValueType::String:
         case ESimpleLogicalValueType::Json:
@@ -257,7 +325,7 @@ TSkiffToUnversionedValueConverter CreateSimpleValueConverter(
                     EWireType::Boolean,
                     EWireType::String32,
                     EWireType::Nothing,
-                    EWireType::Yson32
+                    EWireType::Yson32,
                 });
             return CreatePrimitiveTypeConverter(wireType, required, columnId, ysonConverter);
 
@@ -285,8 +353,8 @@ TSkiffToUnversionedValueConverter CreateDecimalValueConverter(
     const TDecimalLogicalType& denullifiedType,
     TYsonToUnversionedValueConverter* ysonConverter)
 {
-const auto precision = denullifiedType.GetPrecision();
-    const auto wireType = fieldDescription.ValidatedSimplify();
+    const auto precision = denullifiedType.GetPrecision();
+    const auto wireType = fieldDescription.ValidatedGetDeoptionalizeType(/*simplify*/ false);
     switch (wireType) {
 #define CASE(x) \
         case x: \
@@ -318,7 +386,7 @@ public:
         , ColumnId_(columnId)
     { }
 
-    void operator() (TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
+    void operator()(TCheckedInDebugSkiffParser* parser, IValueConsumer* valueConsumer)
     {
         Buffer_.Clear();
         {
@@ -358,7 +426,6 @@ TSkiffToUnversionedValueConverter CreateComplexValueConverter(
 
 class TSkiffParserImpl
 {
-
 public:
     TSkiffParserImpl(
         std::shared_ptr<TSkiffSchema> skiffSchema,
@@ -369,7 +436,7 @@ public:
         , YsonToUnversionedValueConverter_(TYsonConverterConfig(), ValueConsumer_)
         , OtherColumnsConsumer_(TYsonConverterConfig(), ValueConsumer_)
     {
-        THashMap<TString, const TColumnSchema*> columnSchemas;
+        THashMap<std::string, const TColumnSchema*> columnSchemas;
         for (const auto& column : tableSchema->Columns()) {
             columnSchemas[column.Name()] = &column;
         }
@@ -398,8 +465,8 @@ public:
                     }
                     THROW_ERROR_EXCEPTION("Cannot create Skiff parser for table #%v",
                         tableIndex)
-                        << TErrorAttribute("logical_type", logicalType)
-                        << ex;
+                        .With("logical_type", logicalType)
+                        .With(ex);
                 }
                 parserTableDescription.DenseFieldConverters.emplace_back(converter);
             }
@@ -417,7 +484,7 @@ public:
                 } catch (const std::exception& ex) {
                     THROW_ERROR_EXCEPTION("Cannot create Skiff parser for table #%v",
                         tableIndex)
-                        << ex;
+                        .With(ex);
                 }
                 parserTableDescription.SparseFieldConverters.emplace_back(converter);
             }
@@ -512,14 +579,15 @@ private:
                         columnId,
                         /*sparseColumn*/ sparseColumn);
                 case ELogicalMetatype::Tagged:
-                    // denullified type should not contain tagged type
+                case ELogicalMetatype::AggregateState:
+                    // Denullified type should not contain tagged types.
                     break;
             }
             YT_ABORT();
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Cannot create Skiff parser for column %Qv",
                 skiffField.Name())
-                << ex;
+                .With(ex);
         }
     }
 
@@ -581,7 +649,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace // anonymous
+} // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -614,7 +682,7 @@ std::unique_ptr<IParser> CreateParserForSkiff(
     if (tableIndex == 0 && config->OverrideIntermediateTableSchema) {
         if (!IsTrivialIntermediateSchema(*consumer->GetSchema())) {
             THROW_ERROR_EXCEPTION("Cannot use \"override_intermediate_table_schema\" since output table #0 has nontrivial schema")
-                << TErrorAttribute("schema", *consumer->GetSchema());
+                .With("schema", *consumer->GetSchema());
         }
         return CreateParserForSkiff(
             skiffSchemas[tableIndex],

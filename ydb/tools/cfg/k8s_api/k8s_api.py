@@ -59,7 +59,5 @@ class K8sApiHostsInformationProvider(HostsInformationProvider):
         return ""
 
     def get_body(self, hostname):
-        # Just something for now, please present better ideas
-        hex_digest = hashlib.md5(hostname.encode()).hexdigest()
-        decimal_value = int(hex_digest, 16) % (1 << 31)
-        return decimal_value
+        hash = hashlib.sha256(hostname.encode())
+        return int(hash.hexdigest(), 16) % (2**32)

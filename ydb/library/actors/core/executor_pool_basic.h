@@ -5,26 +5,25 @@
 #include "executor_thread.h"
 #include "executor_thread_ctx.h"
 #include "executor_pool_basic_feature_flags.h"
+#include "executor_pool_shared.h"
 #include "scheduler_queue.h"
 #include "executor_pool_base.h"
 #include <memory>
 #include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <ydb/library/actors/actor_type/indexes.h>
-#include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <library/cpp/threading/chunk_queue/queue.h>
 
 #include <util/system/mutex.h>
-
-#include <queue>
+#include <util/generic/vector.h>
 
 namespace NActors {
 
     class TExecutorPoolJail;
     class TBasicExecutorPoolSanitizer;
-
+    class TSharedExecutorPool;
     struct TWaitingStatsConstants {
         static constexpr ui64 BucketCount = 128;
         static constexpr double MaxSpinThersholdUs = 12.8;
@@ -128,11 +127,11 @@ namespace NActors {
         }
     };
 
-
-
     class TBasicExecutorPool: public TExecutorPoolBase {
         friend class TBasicExecutorPoolSanitizer;
+        friend class TSharedExecutorPool;
 
+        NThreading::TPadded<std::atomic<ui64>> CheckToSleepWorkers = 0;
         NThreading::TPadded<std::atomic_bool> AllThreadsSleep = true;
         const ui64 DefaultSpinThresholdCycles;
         std::atomic<ui64> SpinThresholdCycles;
@@ -140,17 +139,16 @@ namespace NActors {
 
         TArrayHolder<NThreading::TPadded<TExecutorThreadCtx>> Threads;
         static_assert(sizeof(std::decay_t<decltype(Threads[0])>) == PLATFORM_CACHE_LINE);
-        TArrayHolder<NThreading::TPadded<std::queue<ui32>>> LocalQueues;
         TArrayHolder<TWaitingStats<ui64>> WaitingStats;
         TArrayHolder<TWaitingStats<double>> MovingWaitingStats;
-        std::atomic<ui16> LocalQueueSize;
 
         TArrayHolder<NSchedulerQueue::TReader> ScheduleReaders;
         TArrayHolder<NSchedulerQueue::TWriter> ScheduleWriters;
 
         const TString PoolName;
         const TDuration TimePerMailbox;
-        const ui32 EventsPerMailbox;
+        const ui64 TimePerMailboxTsValue;
+        const ui32 EventsPerMailboxValue;
 
         const int RealtimePriority;
 
@@ -161,27 +159,42 @@ namespace NActors {
         std::atomic<ui64> SpinningTimeUs;
 
         TAtomic ThreadCount;
+        TAtomic SuggestedThreadCount;
+        std::atomic<float> SharedCpuQuota = 0.0;
         TMutex ChangeThreadsLock;
 
-        float MinThreadCount;
-        i16 MinFullThreadCount;
-        float MaxThreadCount;
-        i16 MaxFullThreadCount;
-        float DefaultThreadCount;
-        i16 DefaultFullThreadCount;
-        IHarmonizer *Harmonizer;
+        float MinThreadCount = 0.0;
+        i16 MinFullThreadCount = 0;
+        float MaxThreadCount = 0.0;
+        i16 MaxFullThreadCount = 0;
+        float DefaultThreadCount = 0.0;
+        i16 DefaultFullThreadCount = 0;
+        IHarmonizer *Harmonizer = nullptr;
         ui64 SoftProcessingDurationTs = 0;
         bool HasOwnSharedThread = false;
+        bool SharedOnly = false;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
         TExecutorPoolJail *Jail = nullptr;
-
-        static constexpr ui64 MaxSharedThreadsForPool = 2;
-        NThreading::TPadded<std::atomic_uint64_t> SharedThreadsCount = 0;
-        NThreading::TPadded<std::atomic<TSharedExecutorThreadCtx*>> SharedThreads[MaxSharedThreadsForPool] = {nullptr, nullptr};
-
+        TSharedExecutorPool *SharedPool = nullptr;
+        class TWaker;
         std::unique_ptr<TBasicExecutorPoolSanitizer> Sanitizer;
+        std::unique_ptr<TWaker> Waker;
+
+        static constexpr i16 InvalidWakerWorkerId = -1;
+        static constexpr ui64 WakerRequestBit = ui64(1) << 63;
+        static constexpr ui64 WakerReductionMask = ~WakerRequestBit;
+
+        const bool EnableWaker;
+    public:
+        const EASProfile ActorSystemProfile;
+
+    private:
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i64> ActivationCredits = 0;
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SleepingCount = 0;
+        alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i16> WakerWorkerId = InvalidWakerWorkerId;
 
     public:
         struct TSemaphore {
@@ -207,7 +220,6 @@ namespace NActors {
             }
         };
 
-        const EASProfile ActorSystemProfile;
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
 
@@ -230,21 +242,19 @@ namespace NActors {
         explicit TBasicExecutorPool(const TBasicExecutorPoolConfig& cfg, IHarmonizer *harmonizer, TExecutorPoolJail *jail=nullptr);
         ~TBasicExecutorPool();
 
-        void Initialize(TWorkerContext& wctx) override;
-        TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingReadCounter) override;
-        TMailbox* GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingReadCounter);
-        TMailbox* GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingReadCounter);
+        void Initialize() override;
+        TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
+        TMailbox* GetReadyActivationShared(ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationRingQueue(ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationWaker(ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
         void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
-        void ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingWriteCounter, TAtomic semaphoreValue);
-        void ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter);
-
-        void SetLocalQueueSize(ui16 size);
-
+        void ScheduleActivationExRingQueue(TMailbox* mailbox, ui64 revolvingWriteCounter, std::optional<TAtomic> semaphoreValue);
+        void ScheduleActivationExWaker(TMailbox* mailbox, ui64 revolvingWriteCounter);
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;
@@ -278,16 +288,23 @@ namespace NActors {
         void CalcSpinPerThread(ui64 wakingUpConsumption);
         void ClearWaitingStats() const;
 
-        TSharedExecutorThreadCtx* ReleaseSharedThread() override;
-        void AddSharedThread(TSharedExecutorThreadCtx* thread) override;
-        bool IsSharedThreadEnabled() const override {
-            return true;
-        }
+        TSemaphore GetSemaphore() const;
+        void SetSharedPool(TSharedExecutorPool* pool);
+        void SetSharedCpuQuota(float quota);
 
+        ui64 TimePerMailboxTs() const final;
+        ui32 EventsPerMailbox() const final;
+
+        bool IsSharedOnly() const;
     private:
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 
         void WakeUpLoop(i16 currentThreadCount);
         bool WakeUpLoopShared();
+        bool TryRequestWaker(bool requireSleepingWorkers);
+        void RequestWaker(bool persistent);
+        void RunWaker(TWorkerId workerId);
+        void WakerLoop(TWorkerId workerId, EThreadState* resumeState);
+
     };
 }

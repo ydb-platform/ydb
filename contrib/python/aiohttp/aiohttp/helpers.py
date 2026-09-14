@@ -14,7 +14,6 @@ import platform
 import re
 import sys
 import time
-import warnings
 import weakref
 from collections import namedtuple
 from contextlib import suppress
@@ -22,7 +21,7 @@ from email.parser import HeaderParser
 from email.utils import parsedate
 from math import ceil
 from pathlib import Path
-from types import TracebackType
+from types import MappingProxyType, TracebackType
 from typing import (
     Any,
     Callable,
@@ -35,7 +34,6 @@ from typing import (
     List,
     Mapping,
     Optional,
-    Pattern,
     Protocol,
     Tuple,
     Type,
@@ -49,17 +47,18 @@ from urllib.request import getproxies, proxy_bypass
 
 import attr
 from multidict import MultiDict, MultiDictProxy, MultiMapping
+from propcache.api import under_cached_property as reify
 from yarl import URL
 
 from . import hdrs
-from .log import client_logger, internal_logger
+from .log import client_logger
 
 if sys.version_info >= (3, 11):
     import asyncio as async_timeout
 else:
     import async_timeout
 
-__all__ = ("BasicAuth", "ChainMapProxy", "ETag")
+__all__ = ("BasicAuth", "ChainMapProxy", "ETag", "reify")
 
 IS_MACOS = platform.system() == "Darwin"
 IS_WINDOWS = platform.system() == "Windows"
@@ -75,6 +74,12 @@ _SENTINEL = enum.Enum("_SENTINEL", "sentinel")
 sentinel = _SENTINEL.sentinel
 
 NO_EXTENSIONS = bool(os.environ.get("AIOHTTP_NO_EXTENSIONS"))
+
+# https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.1
+EMPTY_BODY_STATUS_CODES = frozenset((204, 304, *range(100, 200)))
+# https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.1
+# https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.2
+EMPTY_BODY_METHODS = hdrs.METH_HEAD_ALL
 
 DEBUG = sys.flags.dev_mode or (
     not sys.flags.ignore_environment and bool(os.environ.get("PYTHONASYNCIODEBUG"))
@@ -165,9 +170,11 @@ class BasicAuth(namedtuple("BasicAuth", ["login", "password", "encoding"])):
         """Create BasicAuth from url."""
         if not isinstance(url, URL):
             raise TypeError("url should be yarl.URL instance")
-        if url.user is None:
+        # Check raw_user and raw_password first as yarl is likely
+        # to already have these values parsed from the netloc in the cache.
+        if url.raw_user is None and url.raw_password is None:
             return None
-        return cls(url.user, url.password or "", encoding=encoding)
+        return cls(url.user or "", url.password or "", encoding=encoding)
 
     def encode(self) -> str:
         """Encode credentials."""
@@ -176,11 +183,12 @@ class BasicAuth(namedtuple("BasicAuth", ["login", "password", "encoding"])):
 
 
 def strip_auth_from_url(url: URL) -> Tuple[URL, Optional[BasicAuth]]:
-    auth = BasicAuth.from_url(url)
-    if auth is None:
+    """Remove user and password from URL if present and return BasicAuth object."""
+    # Check raw_user and raw_password first as yarl is likely
+    # to already have these values parsed from the netloc in the cache.
+    if url.raw_user is None and url.raw_password is None:
         return url, None
-    else:
-        return url.with_user(None), auth
+    return url.with_user(None), BasicAuth(url.user or "", url.password or "")
 
 
 def netrc_from_env() -> Optional[netrc.netrc]:
@@ -287,38 +295,6 @@ def proxies_from_env() -> Dict[str, ProxyInfo]:
     return ret
 
 
-def current_task(
-    loop: Optional[asyncio.AbstractEventLoop] = None,
-) -> "Optional[asyncio.Task[Any]]":
-    return asyncio.current_task(loop=loop)
-
-
-def get_running_loop(
-    loop: Optional[asyncio.AbstractEventLoop] = None,
-) -> asyncio.AbstractEventLoop:
-    if loop is None:
-        loop = asyncio.get_event_loop()
-    if not loop.is_running():
-        warnings.warn(
-            "The object should be created within an async function",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        if loop.get_debug():
-            internal_logger.warning(
-                "The object should be created within an async function", stack_info=True
-            )
-    return loop
-
-
-def isasyncgenfunction(obj: Any) -> bool:
-    func = getattr(inspect, "isasyncgenfunction", None)
-    if func is not None:
-        return func(obj)  # type: ignore[no-any-return]
-    else:
-        return False
-
-
 def get_env_proxy_for_url(url: URL) -> Tuple[URL, Optional[BasicAuth]]:
     """Get a permitted proxy for the given URL from the env."""
     if url.host is not None and proxy_bypass(url.host):
@@ -381,6 +357,20 @@ def parse_mimetype(mimetype: str) -> MimeType:
     )
 
 
+@functools.lru_cache(maxsize=56)
+def parse_content_type(raw: str) -> Tuple[str, MappingProxyType[str, str]]:
+    """Parse Content-Type header.
+
+    Returns a tuple of the parsed content type and a
+    MappingProxyType of parameters.
+    """
+    msg = HeaderParser().parsestr(f"Content-Type: {raw}")
+    content_type = msg.get_content_type()
+    params = msg.get_params(())
+    content_dict = dict(params[1:])  # First element is content type again
+    return content_type, MappingProxyType(content_dict)
+
+
 def guess_filename(obj: Any, default: Optional[str] = None) -> Optional[str]:
     name = getattr(obj, "name", None)
     if name and isinstance(name, str) and name[0] != "<" and name[-1] != ">":
@@ -426,16 +416,14 @@ def content_disposition_header(
     params is a dict with disposition params.
     """
     if not disptype or not (TOKEN > set(disptype)):
-        raise ValueError("bad content disposition type {!r}" "".format(disptype))
+        raise ValueError(f"bad content disposition type {disptype!r}")
 
     value = disptype
     if params:
         lparams = []
         for key, val in params.items():
             if not key or not (TOKEN > set(key)):
-                raise ValueError(
-                    "bad content disposition parameter" " {!r}={!r}".format(key, val)
-                )
+                raise ValueError(f"bad content disposition parameter {key!r}={val!r}")
             if quote_fields:
                 if key.lower() == "filename":
                     qval = quote(val, "", encoding=_charset)
@@ -458,91 +446,17 @@ def content_disposition_header(
     return value
 
 
-class _TSelf(Protocol, Generic[_T]):
-    _cache: Dict[str, _T]
+def is_ip_address(host: Optional[str]) -> bool:
+    """Check if host looks like an IP Address.
 
-
-class reify(Generic[_T]):
-    """Use as a class method decorator.
-
-    It operates almost exactly like
-    the Python `@property` decorator, but it puts the result of the
-    method it decorates into the instance dict after the first call,
-    effectively replacing the function it decorates with an instance
-    variable.  It is, in Python parlance, a data descriptor.
+    This check is only meant as a heuristic to ensure that
+    a host is not a domain name.
     """
-
-    def __init__(self, wrapped: Callable[..., _T]) -> None:
-        self.wrapped = wrapped
-        self.__doc__ = wrapped.__doc__
-        self.name = wrapped.__name__
-
-    def __get__(self, inst: _TSelf[_T], owner: Optional[Type[Any]] = None) -> _T:
-        try:
-            try:
-                return inst._cache[self.name]
-            except KeyError:
-                val = self.wrapped(inst)
-                inst._cache[self.name] = val
-                return val
-        except AttributeError:
-            if inst is None:
-                return self
-            raise
-
-    def __set__(self, inst: _TSelf[_T], value: _T) -> None:
-        raise AttributeError("reified property is read-only")
-
-
-reify_py = reify
-
-try:
-    from ._helpers import reify as reify_c
-
-    if not NO_EXTENSIONS:
-        reify = reify_c  # type: ignore[misc,assignment]
-except ImportError:
-    pass
-
-_ipv4_pattern = (
-    r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}"
-    r"(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
-)
-_ipv6_pattern = (
-    r"^(?:(?:(?:[A-F0-9]{1,4}:){6}|(?=(?:[A-F0-9]{0,4}:){0,6}"
-    r"(?:[0-9]{1,3}\.){3}[0-9]{1,3}$)(([0-9A-F]{1,4}:){0,5}|:)"
-    r"((:[0-9A-F]{1,4}){1,5}:|:)|::(?:[A-F0-9]{1,4}:){5})"
-    r"(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}"
-    r"(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])|(?:[A-F0-9]{1,4}:){7}"
-    r"[A-F0-9]{1,4}|(?=(?:[A-F0-9]{0,4}:){0,7}[A-F0-9]{0,4}$)"
-    r"(([0-9A-F]{1,4}:){1,7}|:)((:[0-9A-F]{1,4}){1,7}|:)|(?:[A-F0-9]{1,4}:){7}"
-    r":|:(:[A-F0-9]{1,4}){7})$"
-)
-_ipv4_regex = re.compile(_ipv4_pattern)
-_ipv6_regex = re.compile(_ipv6_pattern, flags=re.IGNORECASE)
-_ipv4_regexb = re.compile(_ipv4_pattern.encode("ascii"))
-_ipv6_regexb = re.compile(_ipv6_pattern.encode("ascii"), flags=re.IGNORECASE)
-
-
-def _is_ip_address(
-    regex: Pattern[str], regexb: Pattern[bytes], host: Optional[Union[str, bytes]]
-) -> bool:
-    if host is None:
+    if not host:
         return False
-    if isinstance(host, str):
-        return bool(regex.match(host))
-    elif isinstance(host, (bytes, bytearray, memoryview)):
-        return bool(regexb.match(host))
-    else:
-        raise TypeError(f"{host} [{type(host)}] is not a str or bytes")
-
-
-is_ipv4_address = functools.partial(_is_ip_address, _ipv4_regex, _ipv4_regexb)
-is_ipv6_address = functools.partial(_is_ip_address, _ipv6_regex, _ipv6_regexb)
-
-
-def is_ip_address(host: Optional[Union[str, bytes, bytearray, memoryview]]) -> bool:
-    return is_ipv4_address(host) or is_ipv6_address(host)
+    # For a host to be an ipv4 address, it must be all numeric.
+    # The host must contain a colon to be an IPv6 address.
+    return ":" in host or host.replace(".", "").isdigit()
 
 
 _cached_current_datetime: Optional[int] = None
@@ -619,16 +533,29 @@ def call_later(
     loop: asyncio.AbstractEventLoop,
     timeout_ceil_threshold: float = 5,
 ) -> Optional[asyncio.TimerHandle]:
-    if timeout is not None and timeout > 0:
-        when = loop.time() + timeout
-        if timeout > timeout_ceil_threshold:
-            when = ceil(when)
-        return loop.call_at(when, cb)
-    return None
+    if timeout is None or timeout <= 0:
+        return None
+    now = loop.time()
+    when = calculate_timeout_when(now, timeout, timeout_ceil_threshold)
+    return loop.call_at(when, cb)
+
+
+def calculate_timeout_when(
+    loop_time: float,
+    timeout: float,
+    timeout_ceiling_threshold: float,
+) -> float:
+    """Calculate when to execute a timeout."""
+    when = loop_time + timeout
+    if timeout > timeout_ceiling_threshold:
+        return ceil(when)
+    return when
 
 
 class TimeoutHandle:
     """Timeout handle"""
+
+    __slots__ = ("_timeout", "_loop", "_ceil_threshold", "_callbacks")
 
     def __init__(
         self,
@@ -651,7 +578,7 @@ class TimeoutHandle:
     def close(self) -> None:
         self._callbacks.clear()
 
-    def start(self) -> Optional[asyncio.Handle]:
+    def start(self) -> Optional[asyncio.TimerHandle]:
         timeout = self._timeout
         if timeout is not None and timeout > 0:
             when = self._loop.time() + timeout
@@ -678,11 +605,17 @@ class TimeoutHandle:
 
 
 class BaseTimerContext(ContextManager["BaseTimerContext"]):
+
+    __slots__ = ()
+
     def assert_timeout(self) -> None:
         """Raise TimeoutError if timeout has been exceeded."""
 
 
 class TimerNoop(BaseTimerContext):
+
+    __slots__ = ()
+
     def __enter__(self) -> BaseTimerContext:
         return self
 
@@ -698,10 +631,13 @@ class TimerNoop(BaseTimerContext):
 class TimerContext(BaseTimerContext):
     """Low resolution timeout context manager"""
 
+    __slots__ = ("_loop", "_tasks", "_cancelled", "_cancelling")
+
     def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
         self._loop = loop
         self._tasks: List[asyncio.Task[Any]] = []
         self._cancelled = False
+        self._cancelling = 0
 
     def assert_timeout(self) -> None:
         """Raise TimeoutError if timer has already been cancelled."""
@@ -709,12 +645,15 @@ class TimerContext(BaseTimerContext):
             raise asyncio.TimeoutError from None
 
     def __enter__(self) -> BaseTimerContext:
-        task = current_task(loop=self._loop)
-
+        task = asyncio.current_task(loop=self._loop)
         if task is None:
-            raise RuntimeError(
-                "Timeout context manager should be used " "inside a task"
-            )
+            raise RuntimeError("Timeout context manager should be used inside a task")
+
+        if sys.version_info >= (3, 11):
+            # Remember if the task was already cancelling
+            # so when we __exit__ we can decide if we should
+            # raise asyncio.TimeoutError or let the cancellation propagate
+            self._cancelling = task.cancelling()
 
         if self._cancelled:
             raise asyncio.TimeoutError from None
@@ -728,11 +667,22 @@ class TimerContext(BaseTimerContext):
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
     ) -> Optional[bool]:
+        enter_task: Optional[asyncio.Task[Any]] = None
         if self._tasks:
-            self._tasks.pop()
+            enter_task = self._tasks.pop()
 
         if exc_type is asyncio.CancelledError and self._cancelled:
-            raise asyncio.TimeoutError from None
+            assert enter_task is not None
+            # The timeout was hit, and the task was cancelled
+            # so we need to uncancel the last task that entered the context manager
+            # since the cancellation should not leak out of the context manager
+            if sys.version_info >= (3, 11):
+                # If the task was already cancelling don't raise
+                # asyncio.TimeoutError and instead return None
+                # to allow the cancellation to propagate
+                if enter_task.uncancel() > self._cancelling:
+                    return None
+            raise asyncio.TimeoutError from exc_val
         return None
 
     def timeout(self) -> None:
@@ -749,7 +699,7 @@ def ceil_timeout(
     if delay is None or delay <= 0:
         return async_timeout.timeout(None)
 
-    loop = get_running_loop()
+    loop = asyncio.get_running_loop()
     now = loop.time()
     when = now + delay
     if delay > ceil_threshold:
@@ -758,10 +708,11 @@ def ceil_timeout(
 
 
 class HeadersMixin:
+    """Mixin for handling headers."""
+
     ATTRS = frozenset(["_content_type", "_content_dict", "_stored_content_type"])
 
     _headers: MultiMapping[str]
-
     _content_type: Optional[str] = None
     _content_dict: Optional[Dict[str, str]] = None
     _stored_content_type: Union[str, None, _SENTINEL] = sentinel
@@ -773,10 +724,10 @@ class HeadersMixin:
             self._content_type = "application/octet-stream"
             self._content_dict = {}
         else:
-            msg = HeaderParser().parsestr("Content-Type: " + raw)
-            self._content_type = msg.get_content_type()
-            params = msg.get_params(())
-            self._content_dict = dict(params[1:])  # First element is content type again
+            content_type, content_mapping_proxy = parse_content_type(raw)
+            self._content_type = content_type
+            # _content_dict needs to be mutable so we can update it
+            self._content_dict = content_mapping_proxy.copy()
 
     @property
     def content_type(self) -> str:
@@ -784,7 +735,8 @@ class HeadersMixin:
         raw = self._headers.get(hdrs.CONTENT_TYPE)
         if self._stored_content_type != raw:
             self._parse_content_type(raw)
-        return self._content_type  # type: ignore[return-value]
+        assert self._content_type is not None
+        return self._content_type
 
     @property
     def charset(self) -> Optional[str]:
@@ -792,17 +744,14 @@ class HeadersMixin:
         raw = self._headers.get(hdrs.CONTENT_TYPE)
         if self._stored_content_type != raw:
             self._parse_content_type(raw)
-        return self._content_dict.get("charset")  # type: ignore[union-attr]
+        assert self._content_dict is not None
+        return self._content_dict.get("charset")
 
     @property
     def content_length(self) -> Optional[int]:
         """The value of Content-Length HTTP header."""
         content_length = self._headers.get(hdrs.CONTENT_LENGTH)
-
-        if content_length is not None:
-            return int(content_length)
-        else:
-            return None
+        return None if content_length is None else int(content_length)
 
 
 def set_result(fut: "asyncio.Future[_T]", result: _T) -> None:
@@ -818,8 +767,7 @@ class ErrorableProtocol(Protocol):
         self,
         exc: BaseException,
         exc_cause: BaseException = ...,
-    ) -> None:
-        ...  # pragma: no cover
+    ) -> None: ...  # pragma: no cover
 
 
 def set_exception(
@@ -905,12 +853,10 @@ class ChainMapProxy(Mapping[Union[str, AppKey[Any]], Any]):
         )
 
     @overload  # type: ignore[override]
-    def __getitem__(self, key: AppKey[_T]) -> _T:
-        ...
+    def __getitem__(self, key: AppKey[_T]) -> _T: ...
 
     @overload
-    def __getitem__(self, key: str) -> Any:
-        ...
+    def __getitem__(self, key: str) -> Any: ...
 
     def __getitem__(self, key: Union[str, AppKey[_T]]) -> Any:
         for mapping in self._maps:
@@ -921,16 +867,13 @@ class ChainMapProxy(Mapping[Union[str, AppKey[Any]], Any]):
         raise KeyError(key)
 
     @overload  # type: ignore[override]
-    def get(self, key: AppKey[_T], default: _S) -> Union[_T, _S]:
-        ...
+    def get(self, key: AppKey[_T], default: _S) -> Union[_T, _S]: ...
 
     @overload
-    def get(self, key: AppKey[_T], default: None = ...) -> Optional[_T]:
-        ...
+    def get(self, key: AppKey[_T], default: None = ...) -> Optional[_T]: ...
 
     @overload
-    def get(self, key: str, default: Any = ...) -> Any:
-        ...
+    def get(self, key: str, default: Any = ...) -> Any: ...
 
     def get(self, key: Union[str, AppKey[_T]], default: Any = None) -> Any:
         try:
@@ -993,26 +936,14 @@ def parse_http_date(date_str: Optional[str]) -> Optional[datetime.datetime]:
     return None
 
 
+@functools.lru_cache
 def must_be_empty_body(method: str, code: int) -> bool:
     """Check if a request must return an empty body."""
     return (
-        status_code_must_be_empty_body(code)
-        or method_must_be_empty_body(method)
-        or (200 <= code < 300 and method.upper() == hdrs.METH_CONNECT)
+        code in EMPTY_BODY_STATUS_CODES
+        or method in EMPTY_BODY_METHODS
+        or (200 <= code < 300 and method in hdrs.METH_CONNECT_ALL)
     )
-
-
-def method_must_be_empty_body(method: str) -> bool:
-    """Check if a method must return an empty body."""
-    # https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.1
-    # https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.2
-    return method.upper() == hdrs.METH_HEAD
-
-
-def status_code_must_be_empty_body(code: int) -> bool:
-    """Check if a status code must return an empty body."""
-    # https://datatracker.ietf.org/doc/html/rfc9112#section-6.3-2.1
-    return code in {204, 304} or 100 <= code < 200
 
 
 def should_remove_content_length(method: str, code: int) -> bool:
@@ -1022,8 +953,6 @@ def should_remove_content_length(method: str, code: int) -> bool:
     """
     # https://www.rfc-editor.org/rfc/rfc9110.html#section-8.6-8
     # https://www.rfc-editor.org/rfc/rfc9110.html#section-15.4.5-4
-    return (
-        code in {204, 304}
-        or 100 <= code < 200
-        or (200 <= code < 300 and method.upper() == hdrs.METH_CONNECT)
+    return code in EMPTY_BODY_STATUS_CODES or (
+        200 <= code < 300 and method in hdrs.METH_CONNECT_ALL
     )

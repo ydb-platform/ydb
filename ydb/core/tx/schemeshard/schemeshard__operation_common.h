@@ -15,10 +15,47 @@ namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
 
+template<typename T>
+struct TEvSchemaChangedTraits;
+
+template<>
+struct TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged::TPtr> {
+    static TActorId GetSource(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
+        return TActorId{ev->Get()->GetSource()};
+    }
+    static std::optional<ui32> GetGeneration(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
+        return {ev->Get()->GetGeneration()};
+    }
+    static bool HasOpResult(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
+        return ev->Get()->Record.HasOpResult();
+    }
+    static TString GetName() {
+        return "TEvDataShard::TEvSchemaChanged";
+    }
+};
+
+template<>
+struct TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult::TPtr> {
+    static TActorId GetSource(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+        return TActorId{ev->Sender};
+    }
+    static std::optional<ui32> GetGeneration(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& /* ev */) {
+        return std::nullopt; //TODO consider to add generation to TEvColumnShard::TEvNotifyTxCompletionResult
+    }
+    static bool HasOpResult(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& /* ev */) {
+        return false;
+    }
+    static TString GetName() {
+        return "TEvColumnShard::TEvNotifyTxCompletionResult";
+    }
+};
+
 TSet<ui32> AllIncomingEvents();
 
 void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete);
 void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath& path, TOperationContext& context);
+
+void RegisterParentPathDependencies(const TOperationId& operationId, const TOperationContext& context, const TPath& parentPath);
 
 void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup = false);
 void IncAliveChildrenDirect(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup = false);
@@ -27,8 +64,9 @@ void DecAliveChildrenDirect(const TOperationId& opId, TPathElement::TPtr parentP
 
 NKikimrSchemeOp::TModifyScheme MoveTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
 NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst);
+NKikimrSchemeOp::TModifyScheme MoveLocalIndexTask(const TString& tablePath, const TString& srcIndexPath, const TString& dstIndexName);
 
-THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context);
+THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss);
 
 void AbortUnsafeDropOperation(const TOperationId& operationId, const TTxId& txId, TOperationContext& context);
 
@@ -37,6 +75,7 @@ namespace NTableState {
 bool CollectProposeTransactionResults(const TOperationId& operationId, const TEvDataShard::TEvProposeTransactionResult__HandlePtr& ev, TOperationContext& context);
 bool CollectProposeTransactionResults(const TOperationId& operationId, const TEvColumnShard::TEvProposeTransactionResult__HandlePtr& ev, TOperationContext& context);
 bool CollectSchemaChanged(const TOperationId& operationId, const TEvDataShard::TEvSchemaChanged__HandlePtr& ev, TOperationContext& context);
+bool CollectSchemaChanged(const TOperationId& operationId, const TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& ev, TOperationContext& context);
 
 void SendSchemaChangedNotificationAck(const TOperationId& operationId, TActorId ackTo, TShardIdx shardIdx, TOperationContext& context);
 void AckAllSchemaChanges(const TOperationId& operationId, TTxState& txState, TOperationContext& context);
@@ -59,12 +98,15 @@ private:
                 << "NTableState::TProposedWaitParts"
                 << " operationId# " << OperationId;
     }
+    template<typename TEvent>
+    bool HandleReplyImpl(const TEvent& ev, TOperationContext& context);
 
 public:
     TProposedWaitParts(TOperationId id, TTxState::ETxState nextState = TTxState::Done);
 
     bool ProgressState(TOperationContext& context) override;
     bool HandleReply(TEvDataShard::TEvSchemaChanged__HandlePtr& ev, TOperationContext& context) override;
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& ev, TOperationContext& context) override;
 };
 
 } // namespace NTableState
@@ -115,6 +157,7 @@ public:
 class TDone: public TSubOperationState {
 protected:
     const TOperationId OperationId;
+    const TMaybe<TPathElement::EPathState> TargetState;
 
     TString DebugHint() const override {
         return TStringBuilder() << "TDone"
@@ -125,6 +168,8 @@ protected:
 
 public:
     explicit TDone(const TOperationId& id);
+
+    TDone(const TOperationId& id, TPathElement::EPathState targetState);
 
     bool ProgressState(TOperationContext& context) override;
 };
@@ -242,7 +287,7 @@ public:
     bool ProgressState(TOperationContext& context) override;
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult__HandlePtr& ev, TOperationContext& context) override;
 
-private:
+protected:
     const TOperationId OperationId;
 }; // TConfigurePartsAtTable
 
@@ -277,7 +322,35 @@ namespace NForceDrop {
 
 void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPathId>& paths, TOperationContext& context);
 void CollectShards(const THashSet<TPathId>& paths, TOperationId operationId, TTxState* txState, TOperationContext& context);
+void AbortRelatedOperations(TOperationId operationId, const THashSet<TTxId>& relatedTx, TOperationContext& context, TStringBuf logPrefix);
 
 } // namespace NForceDrop
 
+// Creates an ACL that interrupts inheritance from the parent, keeping only the DescribeSchema grant.
+TString InterruptInheritanceExceptDescribe(const TString& initialAcl);
+
 } // namespace NKikimr::NSchemeShard
+
+namespace NKikimr::NSchemeShard::NTableIndexVersion {
+
+// Syncs child index versions with the parent table's AlterVersion.
+// This ensures all indexes are at least at the table's version before publishing.
+// Parameters:
+//   - path: the parent table path element
+//   - table: the parent table info
+//   - targetVersion: the version to sync indexes to
+//   - operationId: for PublishToSchemeBoard
+//   - context: operation context
+//   - db: database for persistence
+//   - skipPlannedToDrop: if true, skip indexes that are PlannedToDrop (used by drop index)
+// Returns: vector of index PathIds that were published
+TVector<TPathId> SyncChildIndexVersions(
+    TPathElement::TPtr path,
+    TTableInfo::TPtr table,
+    ui64 targetVersion,
+    TOperationId operationId,
+    TOperationContext& context,
+    NIceDb::TNiceDb& db,
+    bool skipPlannedToDrop = false);
+
+} // namespace NKikimr::NSchemeShard::NTableIndexVersion

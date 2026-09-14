@@ -113,15 +113,16 @@ public:
         Y_ABORT_UNLESS(record.HasStatus());
 
         // ensure response came from our VDisk
-        Y_ABORT_UNLESS(record.HasVDiskID() && VDiskIDFromVDiskID(record.GetVDiskID()) == VDiskId);
+        Y_ABORT_UNLESS(record.HasVDiskID() && VDiskIDFromVDiskID(record.GetVDiskID()).SameExceptGeneration(VDiskId));
 
         // apply record according to the returned status
         switch (NKikimrProto::EReplyStatus status = record.GetStatus()) {
             case NKikimrProto::OK:
                 // request has been successfully processed and we should put items into queue
                 if (record.GetIsRangeOverflow() && !record.ResultSize()) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::BS_PROXY_DISCOVER,
-                            "Don't know how to process RangeOverflow with ResultSize# 0. Marker# DSPDM10");
+                    YDB_LOG_CRIT_COMP(NKikimrServices::BS_PROXY_DISCOVER, "Don't know how to process RangeOverflow",
+                        {"ResultSize", 0},
+                        {"marker", "DSPDM10"});
                     Finished = true;
                     Erroneous = true;
                 } else {
@@ -286,6 +287,7 @@ public:
         const auto& record = ev->Record;
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdiskId = VDiskIDFromVDiskID(record.GetVDiskID());
+        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(vdiskId), "incorrect VDiskId# %s", vdiskId.ToString().data());
         const TVDiskIdShort shortId(vdiskId);
         ui32 index = Info->GetOrderNumber(shortId);
         Y_ABORT_UNLESS(index < VDiskWorkers.size());
@@ -502,6 +504,8 @@ public:
                 SendToQueue(std::move(query), 0);
                 ++RequestsInFlight;
             }
+        } else {
+            GetBlockFinished = true;
         }
 
         // initial kick for workers -- send messages to corresponding VDisks

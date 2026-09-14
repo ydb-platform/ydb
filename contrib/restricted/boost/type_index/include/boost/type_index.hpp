@@ -1,5 +1,5 @@
 //
-// Copyright 2012-2024 Antony Polukhin.
+// Copyright 2012-2026 Antony Polukhin.
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -14,7 +14,7 @@
 /// By inclusion of this file most optimal type index classes will be included and used 
 /// as a boost::typeindex::type_index and boost::typeindex::type_info.
 
-#include <boost/config.hpp>
+#include <boost/type_index/detail/config.hpp>
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
@@ -49,7 +49,11 @@
 #define BOOST_TYPE_INDEX_REGISTER_CLASS
 #endif
 
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
+
 namespace boost { namespace typeindex {
+
+BOOST_TYPE_INDEX_BEGIN_MODULE_EXPORT
 
 #if defined(BOOST_TYPE_INDEX_DOXYGEN_INVOKED)
 
@@ -125,13 +129,13 @@ namespace boost { namespace typeindex {
     /// user defined type_index class.
     ///
     /// \b See boost::typeindex::type_index_facade for a full description of type_index functions.
-    typedef platform_specific type_index;
+    using type_index = platform_specific;
 #elif defined(BOOST_TYPE_INDEX_USER_TYPEINDEX)
     // Nothing to do
 #elif (!defined(BOOST_NO_RTTI) && !defined(BOOST_TYPE_INDEX_FORCE_NO_RTTI_COMPATIBILITY)) || defined(BOOST_MSVC)
-    typedef boost::typeindex::stl_type_index type_index;
+    using type_index = boost::typeindex::stl_type_index;
 #else 
-    typedef boost::typeindex::ctti_type_index type_index;
+    using type_index = boost::typeindex::ctti_type_index;
 #endif
 
 /// Depending on a compiler flags, optimal implementation of type_info will be used 
@@ -141,7 +145,7 @@ namespace boost { namespace typeindex {
 /// some user defined class.
 ///
 /// type_info \b is \b not copyable or default constructible. It is \b not assignable too!
-typedef type_index::type_info_t type_info;
+using type_info = type_index::type_info_t;
 
 #if defined(BOOST_TYPE_INDEX_DOXYGEN_INVOKED)
 
@@ -257,9 +261,11 @@ inline type_index type_id_runtime(const T& runtime_val) noexcept {
     return type_index::type_id_runtime(runtime_val);
 }
 
+BOOST_TYPE_INDEX_END_MODULE_EXPORT
+
 }} // namespace boost::typeindex
 
-
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_TYPE_INDEX_INTERFACE_UNIT)
 
 #endif // BOOST_TYPE_INDEX_HPP
 

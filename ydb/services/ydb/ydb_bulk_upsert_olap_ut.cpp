@@ -1,7 +1,7 @@
 #include "ydb_common_ut.h"
 
-#include <ydb-cpp-sdk/client/result/result.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -131,6 +131,49 @@ NKikimrConfig::TAppConfig GetAppConfig() {
     return appConfig;
 }
 
+void CreateExtTable(const TServerSettings& settings, ui32 shards = 2,
+                        const TString& storeName = TTestOlap::StoreName, const TString& tableName = TTestOlap::TableName) {
+    TString tableDescr = Sprintf(R"(
+        Name: "%s"
+        ColumnShardCount: 4
+        SchemaPresets {
+            Name: "default"
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull : true }
+                Columns { Name: "resource_type" Type: "Utf8" }
+                Columns { Name: "resource_id" Type: "Utf8" }
+                Columns { Name: "uid" Type: "Utf8" NotNull : true }
+                Columns { Name: "level" Type: "Int32" }
+                Columns { Name: "message" Type: "Utf8" }
+                Columns { Name: "json_payload" Type: "JsonDocument" }
+                Columns { Name: "ingested_at" Type: "Timestamp" }
+                Columns { Name: "saved_at" Type: "Timestamp" }
+                Columns { Name: "request_id" Type: "Utf8" }
+                Columns { Name: "flt" Type: "Float" }
+                Columns { Name: "dbl" Type: "Double" }
+                KeyColumnNames: "timestamp"
+                KeyColumnNames: "uid"
+            }
+        }
+    )", storeName.c_str());
+
+    TClient annoyingClient(settings);
+    annoyingClient.SetSecurityToken("root@builtin");
+    NMsgBusProxy::EResponseStatus status = annoyingClient.CreateOlapStore("/Root", tableDescr);
+    UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+    status = annoyingClient.CreateColumnTable("/Root", Sprintf(R"(
+        Name: "%s/%s"
+        ColumnShardCount : %d
+        Sharding {
+            HashSharding {
+                Function: HASH_FUNCTION_CLOUD_LOGS
+                Columns: ["timestamp", "uid"]
+            }
+        }
+    )", storeName.c_str(), tableName.c_str(), shards));
+    UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
@@ -258,9 +301,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             fields.push_back(std::make_shared<arrow::Field>("a", arrow::utf8()));
             fields.push_back(std::make_shared<arrow::Field>("b", arrow::utf8()));
             fields.push_back(std::make_shared<arrow::Field>("b", arrow::utf8())); // not unique column
-            if (i) {
-                fields.push_back(std::make_shared<arrow::Field>("c", arrow::utf8()));
-            }
+            fields.push_back(std::make_shared<arrow::Field>("c", arrow::utf8()));
 
             auto schema = std::make_shared<arrow::Schema>(fields);
             std::unique_ptr<arrow::RecordBatchBuilder> builder;
@@ -454,7 +495,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             csvSettings.set_delimiter("|");
 
             TString formatSettings;
-            Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+            UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
 
             NYdb::NTable::TBulkUpsertSettings upsertSettings;
             upsertSettings.FormatSettings(formatSettings);
@@ -510,7 +551,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             csvSettings.set_delimiter(",");
 
             TString formatSettings;
-            Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+            UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
 
             NYdb::NTable::TBulkUpsertSettings upsertSettings;
             upsertSettings.FormatSettings(formatSettings);
@@ -559,7 +600,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             csvSettings.set_delimiter(",");
 
             TString formatSettings;
-            Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+            UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
 
             NYdb::NTable::TBulkUpsertSettings upsertSettings;
             upsertSettings.FormatSettings(formatSettings);
@@ -669,7 +710,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
                 csvSettings.set_header(true);
 
                 TString formatSettings;
-                Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+                UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
                 upsertSettings.FormatSettings(formatSettings);
             }
 
@@ -937,7 +978,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
                 csvSettings.set_header(true);
 
                 TString formatSettings;
-                Y_PROTOBUF_SUPPRESS_NODISCARD csvSettings.SerializeToString(&formatSettings);
+                UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
                 upsertSettings.FormatSettings(formatSettings);
             }
 
@@ -946,6 +987,150 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
             Cerr << "Reordered columns (with header): " << res.GetStatus() << Endl;
             UNIT_ASSERT(res.GetStatus() == EStatus::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST(UpsertMixed) {
+        TKikimrWithGrpcAndRootSchema server(GetAppConfig());
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+
+        CreateExtTable(*server.ServerSettings);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+        TString tablePath = TTestOlap::TablePath;
+
+        {
+            TString csv =
+            "timestamp|resource_type|resource_id|uid|level|message|json_payload|ingested_at|saved_at|request_id|flt|dbl\n"
+            "1970-01-01T00:00:00Z|OBJECT|123|guid|5|data|{\"key\":\"value\"}|1970-01-01T00:00:00Z|1970-01-01T00:00:00Z|1250|1e-17|1e-80";
+
+            Ydb::Formats::CsvSettings csvSettings;
+            csvSettings.set_header(true);
+            csvSettings.set_delimiter("|");
+
+            TString formatSettings;
+            UNIT_ASSERT(csvSettings.SerializeToString(&formatSettings));
+
+            NYdb::NTable::TBulkUpsertSettings upsertSettings;
+            upsertSettings.FormatSettings(formatSettings);
+
+            auto res = client.BulkUpsert(tablePath,
+                NYdb::NTable::EDataFormat::CSV, csv, {}, upsertSettings).GetValueSync();
+
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+    
+        {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            rowsBuilder.AddListItem()
+                .BeginStruct()
+                .AddMember("timestamp").OptionalTimestamp(TInstant::Now())
+                .AddMember("resource_type").OptionalUtf8("FILE")
+                .AddMember("resource_id").OptionalUtf8("12")
+                .AddMember("uid").OptionalUtf8("guid7")
+                .AddMember("level").OptionalInt32(687)
+                .AddMember("message").OptionalUtf8("data2")
+                .AddMember("json_payload").OptionalJsonDocument("{\"key1\": \"value1\"}")
+                .AddMember("ingested_at").OptionalTimestamp(TInstant::Now())
+                .AddMember("saved_at").OptionalTimestamp(TInstant::Now())
+                .AddMember("request_id").OptionalUtf8("126")
+                .AddMember("flt").OptionalFloat(23.0)
+                .AddMember("dbl").OptionalDouble(1e+113)
+                .EndStruct();
+            rowsBuilder.EndList();
+    
+            auto result = client.BulkUpsert(tablePath, rowsBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto srcBatch = TTestOlap::SampleBatch();
+            auto schema = srcBatch->schema();
+            TString strSchema = NArrow::SerializeSchema(*schema);
+            TString strBatch = NArrow::SerializeBatchNoCompression(srcBatch);
+    
+            auto res = client.BulkUpsert(tablePath,
+                NYdb::NTable::EDataFormat::ApacheArrow, strBatch, strSchema).GetValueSync();
+
+            UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+
+        { // Read all
+            auto rows = ScanQuerySelect(client, tablePath);
+            UNIT_ASSERT_EQUAL(rows.size(), 102);
+        }
+    }
+
+    Y_UNIT_TEST(RequireAllColumnsFeatureFlagColumnTable) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestAllColumnsColumnTable` (
+                    Shard Uint64 NOT NULL,
+                    App Utf8 NOT NULL,
+                    Timestamp Int64 NOT NULL,
+                    HttpCode Uint32,
+                    Message Utf8,
+                    PRIMARY KEY (Shard, App, Timestamp)
+                )
+                WITH (
+                    STORE = COLUMN
+                )
+            )").ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Shard").Uint64(42)
+                        .AddMember("App").Utf8("app")
+                        .AddMember("Timestamp").Int64(1)
+                        // Missing HttpCode and Message columns
+                    .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert("/Root/TestAllColumnsColumnTable", rows.Build()).GetValueSync();
+            Cerr << res.GetIssues().ToString() << Endl;
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "All columns are required during BulkUpsert");
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
+        }
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Shard").Uint64(42)
+                        .AddMember("App").Utf8("app")
+                        .AddMember("Timestamp").Int64(1)
+                        .AddMember("HttpCode").Uint32(200)
+                        .AddMember("Message").Utf8("test")
+                    .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert("/Root/TestAllColumnsColumnTable", rows.Build()).GetValueSync();
+            Cerr << res.GetStatus() << Endl;
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
         }
     }
 }

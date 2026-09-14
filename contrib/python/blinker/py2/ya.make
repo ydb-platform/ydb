@@ -2,7 +2,7 @@
 
 PY2_LIBRARY()
 
-SUBSCRIBER(web-chib g:python-contrib)
+SUBSCRIBER(g:python-contrib)
 
 VERSION(1.5)
 

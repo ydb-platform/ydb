@@ -3,7 +3,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
-#include <ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -21,6 +21,8 @@ public:
 
 private:
     void PrintResponse(NDiscovery::TListEndpointsResult& result);
+
+    bool OutputPilesInfo = false;
 };
 
 class TCommandWhoAmI : public TYdbSimpleCommand {
@@ -33,6 +35,8 @@ private:
     void PrintResponse(NDiscovery::TWhoAmIResult& result);
 
     bool WithGroups = false;
+    bool WithAccessList = false;
+    bool WithAll = false;
 };
 
 }

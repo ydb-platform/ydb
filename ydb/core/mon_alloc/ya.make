@@ -19,13 +19,15 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/tcmalloc/malloc_extension
+    library/cpp/html/escape
     library/cpp/html/pcdata
     library/cpp/lfalloc/alloc_profiler
     library/cpp/lfalloc/dbg_info
     library/cpp/malloc/api
     library/cpp/monlib/service/pages
     ydb/core/base
-    ydb/core/control
+    ydb/core/control/lib
+    ydb/core/mon
     ydb/library/actors/core
     ydb/library/actors/prof
     ydb/library/services

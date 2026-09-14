@@ -54,7 +54,7 @@ def mock_s3_crt_client():
 @pytest.fixture
 def mock_get_recommended_throughput_target_gbps():
     with mock.patch(
-        's3transfer.crt.get_recommended_throughput_target_gbps'
+        'awscrt.s3.get_recommended_throughput_target_gbps'
     ) as mock_get_target_gbps:
         yield mock_get_target_gbps
 
@@ -103,7 +103,7 @@ class TestBotocoreCRTRequestSerializer(unittest.TestCase):
         self.files = FileCreator()
         self.filename = self.files.create_file('myfile', 'my content')
         self.expected_path = "/" + self.bucket + "/" + self.key
-        self.expected_host = "s3.%s.amazonaws.com" % (self.region)
+        self.expected_host = f"s3.{self.region}.amazonaws.com"
 
     def tearDown(self):
         self.files.remove_all()
@@ -362,3 +362,7 @@ class TestCreateS3CRTClient:
             mock_s3_crt_client.call_args[1]['throughput_target_gbps']
             == expected_gbps
         )
+
+    def test_always_enables_s3express(self, mock_s3_crt_client):
+        s3transfer.crt.create_s3_crt_client('us-west-2')
+        assert mock_s3_crt_client.call_args[1]['enable_s3express'] is True

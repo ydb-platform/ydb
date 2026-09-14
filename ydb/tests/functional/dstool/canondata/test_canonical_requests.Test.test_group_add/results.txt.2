@@ -1,0 +1,10 @@
+dstool -e <endpoint> --mon-port <mon_port> group list --columns GroupId PoolName SizeInUnits
+Exit Status: 0
+===== stdout =====
+┌────────────┬────────────────────────┬─────────────┐
+│ GroupId    │ PoolName               │ SizeInUnits │
+├────────────┼────────────────────────┼─────────────┤
+│ 2181038080 │ dynamic_storage_pool:1 │ 0           │
+│ 2181038081 │ dynamic_storage_pool:1 │ 2           │
+│ 2181038082 │ dynamic_storage_pool:1 │ 0           │
+└────────────┴────────────────────────┴─────────────┘

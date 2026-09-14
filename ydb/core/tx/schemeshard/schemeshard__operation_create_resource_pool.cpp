@@ -1,7 +1,7 @@
-#include "schemeshard__operation_common_resource_pool.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_resource_pool.h"
+#include "schemeshard_impl.h"
 
 
 namespace NKikimr::NSchemeShard {
@@ -88,7 +88,7 @@ class TCreateResourcePool : public TSubOperation {
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl, bool acceptExisted) {
+    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TOperationContext& context, const TPath& dstPath, const TString& acl, bool acceptExisted) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard();
         if (dstPath.IsResolved()) {
@@ -104,7 +104,7 @@ class TCreateResourcePool : public TSubOperation {
 
         if (checks) {
             checks
-                .IsValidLeafName()
+                .IsValidLeafName(context.UserToken.Get())
                 .DepthLimit()
                 .PathsLimit()
                 .DirChildrenLimit()
@@ -120,22 +120,6 @@ class TCreateResourcePool : public TSubOperation {
         }
 
         return static_cast<bool>(checks);
-    }
-
-    static void AddPathInSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TString& owner) {
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-    }
-
-    TPathElement::TPtr CreateResourcePoolPathElement(const TPath& dstPath) const {
-        TPathElement::TPtr resourcePool = dstPath.Base();
-
-        resourcePool->CreateTxId = OperationId.GetTxId();
-        resourcePool->PathType = TPathElement::EPathType::EPathTypeResourcePool;
-        resourcePool->PathState = TPathElement::EPathState::EPathStateCreate;
-        resourcePool->LastTxId  = OperationId.GetTxId();
-
-        return resourcePool;
     }
 
 public:
@@ -163,7 +147,7 @@ public:
 
         TPath dstPath = parentPath.Child(name);
         const TString& acl = Transaction.GetModifyACL().GetDiffACL();
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl, !Transaction.GetFailOnExist()));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, context, dstPath, acl, !Transaction.GetFailOnExist()));
         RETURN_RESULT_UNLESS(NResourcePool::IsApplyIfChecksPassed(Transaction, result, context));
         RETURN_RESULT_UNLESS(NResourcePool::IsDescriptionValid(result, resourcePoolDescription));
 
@@ -171,19 +155,45 @@ public:
         Y_ABORT_UNLESS(resourcePoolInfo);
         RETURN_RESULT_UNLESS(NResourcePool::IsResourcePoolInfoValid(result, resourcePoolInfo));
 
-        AddPathInSchemeShard(result, dstPath, owner);
-        const TPathElement::TPtr resourcePool = CreateResourcePoolPathElement(dstPath);
-        NResourcePool::CreateTransaction(OperationId, context, resourcePool->PathId, TTxState::TxCreateResourcePool);
-        NResourcePool::RegisterParentPathDependencies(OperationId, context, parentPath);
+        const auto newPathId = context.SS->AllocatePathId();
 
-        NIceDb::TNiceDb db(context.GetDB());
-        NResourcePool::AdvanceTransactionStateToPropose(OperationId, context, db);
-        NResourcePool::PersistResourcePool(OperationId, context, db, resourcePool, resourcePoolInfo, acl);
+        auto guard = context.DbGuard();
+
+        context.MemChanges.GrabNewPath(context.SS, newPathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabNewResourcePool(context.SS, newPathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(newPathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistResourcePool(newPathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        dstPath.MaterializeLeaf(owner, newPathId);
+        result->SetPathId(newPathId.LocalPathId);
+
+        TPathElement::TPtr resourcePool = dstPath.Base();
+        resourcePool->CreateTxId = OperationId.GetTxId();
+        resourcePool->PathType = TPathElement::EPathType::EPathTypeResourcePool;
+        resourcePool->PathState = TPathElement::EPathState::EPathStateCreate;
+        resourcePool->LastTxId  = OperationId.GetTxId();
+
+        context.SS->ResourcePools.Set(newPathId, resourcePoolInfo);
+        if (!acl.empty()) {
+            resourcePool->ApplyACL(acl);
+        }
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateResourcePool, newPathId);
+        txState.Shards.clear();
+        txState.State = TTxState::Propose;
+        context.OnComplete.ActivateTx(OperationId);
+
+        RegisterParentPathDependencies(OperationId, context, parentPath);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
         dstPath.DomainInfo()->IncPathsInside(context.SS);
-        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
@@ -191,7 +201,6 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TCreateResourcePool AbortPropose: opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TCreateResourcePool");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

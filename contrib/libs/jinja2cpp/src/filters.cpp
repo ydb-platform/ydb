@@ -481,7 +481,7 @@ InternalValue SequenceAccessor::Filter(const InternalValue& baseVal, RenderConte
     switch (m_mode)
     {
         case FirstItemMode:
-            if (listSize)
+            if (listSize && *listSize > 0)
                 result = list.GetValueByIndex(0);
             else
             {
@@ -491,7 +491,7 @@ InternalValue SequenceAccessor::Filter(const InternalValue& baseVal, RenderConte
             }
             break;
         case LastItemMode:
-            if (listSize)
+            if (listSize && *listSize > 0)
                 result = list.GetValueByIndex(listSize.value() - 1);
             else
             {
@@ -502,7 +502,7 @@ InternalValue SequenceAccessor::Filter(const InternalValue& baseVal, RenderConte
             }
             break;
         case LengthMode:
-            if (listSize)
+            if (listSize && *listSize > 0)
                 result = static_cast<int64_t>(listSize.value());
             else
                 result = static_cast<int64_t>(std::distance(list.begin(), list.end()));
@@ -511,7 +511,7 @@ InternalValue SequenceAccessor::Filter(const InternalValue& baseVal, RenderConte
         {
             std::random_device rd;
             std::mt19937 gen(rd());
-            if (listSize)
+            if (listSize && *listSize > 0)
             {
                 std::uniform_int_distribution<> dis(0, static_cast<int>(listSize.value()) - 1);
                 result = list.GetValueByIndex(dis(gen));
@@ -548,7 +548,7 @@ InternalValue SequenceAccessor::Filter(const InternalValue& baseVal, RenderConte
         }
         case ReverseMode:
         {
-            if (listSize)
+            if (listSize && *listSize > 0)
             {
                 auto size = listSize.value();
                 InternalValueList resultList(size);

@@ -8,13 +8,14 @@ Test reporter forwarding test results over trial distributed AMP commands.
 
 @since: 12.3
 """
+from __future__ import annotations
 
+from collections.abc import Sequence
 from types import TracebackType
-from typing import Callable, List, Optional, Sequence, Type, TypeVar
+from typing import Callable, Literal, TypeVar
 from unittest import TestCase as PyUnitTestCase
 
 from attrs import Factory, define
-from typing_extensions import Literal
 
 from twisted.internet.defer import Deferred, maybeDeferred
 from twisted.protocols.amp import AMP, MAX_VALUE_LENGTH
@@ -29,7 +30,7 @@ T = TypeVar("T")
 
 
 async def addError(
-    amp: AMP, testName: str, errorClass: str, error: str, frames: List[str]
+    amp: AMP, testName: str, errorClass: str, error: str, frames: list[str]
 ) -> None:
     """
     Send an error to the worker manager over an AMP connection.
@@ -38,11 +39,11 @@ async def addError(
     Then, L{managercommands.AddError} is called with the rest of the
     information and the stream IDs.
 
-    :param amp: The connection to use.
-    :param testName: The name (or ID) of the test the error relates to.
-    :param errorClass: The fully qualified name of the error type.
-    :param error: The string representation of the error.
-    :param frames: The lines of the traceback associated with the error.
+    @param amp: The connection to use.
+    @param testName: The name (or ID) of the test the error relates to.
+    @param errorClass: The fully qualified name of the error type.
+    @param error: The string representation of the error.
+    @param frames: The lines of the traceback associated with the error.
     """
 
     errorStreamId = await stream(amp, chunk(error.encode("utf-8"), MAX_VALUE_LENGTH))
@@ -58,17 +59,17 @@ async def addError(
 
 
 async def addFailure(
-    amp: AMP, testName: str, fail: str, failClass: str, frames: List[str]
+    amp: AMP, testName: str, fail: str, failClass: str, frames: list[str]
 ) -> None:
     """
     Like L{addError} but for failures.
 
-    :param amp: See L{addError}
-    :param testName: See L{addError}
-    :param failClass: The fully qualified name of the exception associated
+    @param amp: See L{addError}
+    @param testName: See L{addError}
+    @param failClass: The fully qualified name of the exception associated
         with the failure.
-    :param fail: The string representation of the failure.
-    :param frames: The lines of the traceback associated with the error.
+    @param fail: The string representation of the failure.
+    @param frames: The lines of the traceback associated with the error.
     """
     failStreamId = await stream(amp, chunk(fail.encode("utf-8"), MAX_VALUE_LENGTH))
     framesStreamId = await stream(amp, (frame.encode("utf-8") for frame in frames))
@@ -86,10 +87,10 @@ async def addExpectedFailure(amp: AMP, testName: str, error: str, todo: str) -> 
     """
     Like L{addError} but for expected failures.
 
-    :param amp: See L{addError}
-    :param testName: See L{addError}
-    :param error: The string representation of the expected failure.
-    :param todo: The string description of the expectation.
+    @param amp: See L{addError}
+    @param testName: See L{addError}
+    @param error: The string representation of the expected failure.
+    @param todo: The string description of the expectation.
     """
     errorStreamId = await stream(amp, chunk(error.encode("utf-8"), MAX_VALUE_LENGTH))
 
@@ -113,24 +114,24 @@ class ReportingResults:
     runner believes the test is otherwise complete, it can collect the results
     and do something with any errors.
 
-    :ivar _reporter: The L{WorkerReporter} this object is associated with.
+    @ivar _reporter: The L{WorkerReporter} this object is associated with.
         This is the object doing the result reporting.
 
-    :ivar _results: A list of L{Deferred} instances representing the results
+    @ivar _results: A list of L{Deferred} instances representing the results
         of reporting operations.  This is expected to grow over the course of
         the test run and then be inspected by the runner once the test is
         over.  The public interface to this list is via the context manager
         interface.
     """
 
-    _reporter: "WorkerReporter"
-    _results: List[Deferred[object]] = Factory(list)
+    _reporter: WorkerReporter
+    _results: list[Deferred[object]] = Factory(list)
 
     def __enter__(self) -> Sequence[Deferred[object]]:
         """
         Begin a new reportable context in which results can be collected.
 
-        :return: A sequence which will contain the L{Deferred} instances
+        @return: A sequence which will contain the L{Deferred} instances
             representing the results of all test result reporting that happens
             while the context manager is active.  The sequence is extended as
             the test runs so its value should not be consumed until the test
@@ -140,7 +141,7 @@ class ReportingResults:
 
     def __exit__(
         self,
-        excType: Type[BaseException],
+        excType: type[BaseException],
         excValue: BaseException,
         excTraceback: TracebackType,
     ) -> Literal[False]:
@@ -173,7 +174,7 @@ class WorkerReporter(TestResult):
     _DEFAULT_TODO = "Test expected to fail"
 
     ampProtocol: AMP
-    _reporting: Optional[ReportingResults] = None
+    _reporting: ReportingResults | None = None
 
     def __init__(self, ampProtocol):
         """
@@ -202,11 +203,11 @@ class WorkerReporter(TestResult):
             return Failure(error[1], error[0], error[2])
         return error
 
-    def _getFrames(self, failure: Failure) -> List[str]:
+    def _getFrames(self, failure: Failure) -> list[str]:
         """
         Extract frames from a C{Failure} instance.
         """
-        frames: List[str] = []
+        frames: list[str] = []
         for frame in failure.frames:
             # The code object's name, the code object's filename, and the line
             # number.
@@ -215,7 +216,7 @@ class WorkerReporter(TestResult):
 
     def _call(self, f: Callable[[], T]) -> None:
         """
-        Call L{f} if and only if a "result reporting" context is active.
+        Call C{f} if and only if a "result reporting" context is active.
 
         @param f: A function to call.  Its result is accumulated into the
             result reporting context.  It may return a L{Deferred} or a

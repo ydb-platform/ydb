@@ -64,6 +64,10 @@ private:
     }
 
     bool CanReplaceOnHybrid(const TYtOutputOpBase& operation) const {
+        if (operation.DataSink().Cluster().Value() == YtUnspecifiedCluster) {
+            // wait until runtime cluster is assigned
+            return false;
+        }
         const TStringBuf nodeName = operation.Raw()->Content();
         if (!State_->IsHybridEnabledForCluster(operation.DataSink().Cluster().Value())) {
             PushSkipStat("DisabledCluster", nodeName);
@@ -72,6 +76,9 @@ private:
 
         if (State_->HybridTakesTooLong()) {
             PushSkipStat("TakesTooLong", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReplaceOnHybrid: skip " << nodeName
+                << " by TakesTooLong: timeSpentInHybrid=" << State_->TimeSpentInHybrid
+                << ", limit=" << State_->GetHybridDqTimeSpentLimit();
             return false;
         }
 
@@ -95,6 +102,8 @@ private:
 
         if (operation.Output().Size() != 1U) {
             PushSkipStat("MultipleOutputs", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReplaceOnHybrid: skip " << nodeName
+                << " by MultipleOutputs: outputCount=" << operation.Output().Size();
             return false;
         }
 
@@ -109,6 +118,10 @@ private:
                 PushSkipStat("UnsupportedDqOpSettings", nodeName);
                 PushSettingsToStat(settings, nodeName, "SkipDqOpSettings", DqOpSupportedSettings);
             }
+            return false;
+        }
+
+        if (HasNodesToCalculate(operation.Ptr())) {
             return false;
         }
 
@@ -143,7 +156,16 @@ private:
                 return false;
             }
             const auto canUseYtPartitioningApi = State_->Configuration->_EnableYtPartitioning.Get(tableInfo->Cluster).GetOrElse(false);
+            const auto enableDynamicStoreRead = State_->Configuration->EnableDynamicStoreReadInDQ.Get().GetOrElse(false);
             if ((info.Ranges || tableInfo->Meta->IsDynamic) && !canUseYtPartitioningApi) {
+                return false;
+            }
+            if (tableInfo->Meta->IsDynamic && tableInfo->Meta->Attrs.contains("enable_dynamic_store_read") && !enableDynamicStoreRead) {
+                PushSkipStat("DynamicStoreRead", nodeName);
+                return false;
+            }
+            if (tableInfo->Meta->HasRLS) {
+                PushSkipStat("RLSTable", nodeName);
                 return false;
             }
             if (NYql::HasSetting(tableInfo->Settings.Ref(), EYtSettingType::WithQB)) {
@@ -168,6 +190,10 @@ private:
 
         if (dataSize > sizeLimit || dataChunks > chunksLimit) {
             PushSkipStat("OverLimits", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReadHybrid: skip " << nodeName
+                << " by OverLimits: dataSize=" << dataSize << " (limit=" << sizeLimit << ")"
+                << ", dataChunks=" << dataChunks << " (limit=" << chunksLimit << ")"
+                << ", orderedInput=" << orderedInput;
             return false;
         }
 
@@ -194,6 +220,16 @@ private:
                 if (TCoScriptUdf::Match(node.Get()) && NKikimr::NMiniKQL::IsSystemPython(NKikimr::NMiniKQL::ScriptTypeFromStr(node->Head().Content()))) {
                     return true;
                 }
+
+                if ((TCoScriptUdf::Match(node.Get()) && node->ChildrenSize() > 4) || (TCoUdf::Match(node.Get()) && node->ChildrenSize() == 8)) {
+                    for (const auto& setting: node->Child(TCoScriptUdf::Match(node.Get()) ? 4 : 7)->Children()) {
+                        YQL_ENSURE(setting->Head().IsAtom());
+                        if (setting->Head().Content() == "layers") {
+                            return true;
+                        }
+                    }
+                }
+
 
                 if (const auto& tableContent = TMaybeNode<TYtTableContent>(node)) {
                     if (!flow)
@@ -279,31 +315,41 @@ private:
                 .Build()
             .Done();
 
-        TExprNode::TPtr limit;
-        if (const auto& limitNode = NYql::GetSetting(sort.Settings().Ref(), EYtSettingType::Limit)) {
-            limit = GetLimitExpr(limitNode, ctx);
-        }
-
+        TExprNode::TPtr work;
         auto [direct, selector] = GetOutputSortSettings(sort, ctx);
-        auto work = direct && selector ?
-            limit ?
-                Build<TCoTopSort>(ctx, sort.Pos())
+        if (direct && selector) {
+            // Don't use runtime limit for TopSort - it may have max<ui64>() value, which cause TopSort to fail
+            TMaybe<ui64> limit = GetLimit(sort.Settings().Ref());
+            work = limit
+                ? Build<TCoTopSort>(ctx, sort.Pos())
                     .Input(input)
-                    .Count(std::move(limit))
+                    .Count<TCoUint64>()
+                        .Literal()
+                            .Value(ToString(*limit), TNodeFlags::Default)
+                        .Build()
+                    .Build()
                     .SortDirections(std::move(direct))
                     .KeySelectorLambda(std::move(selector))
-                    .Done().Ptr():
-                Build<TCoSort>(ctx, sort.Pos())
+                    .Done().Ptr()
+                : Build<TCoSort>(ctx, sort.Pos())
                     .Input(input)
                     .SortDirections(std::move(direct))
                     .KeySelectorLambda(std::move(selector))
-                    .Done().Ptr():
-            limit ?
-                Build<TCoTake>(ctx, sort.Pos())
+                    .Done().Ptr()
+                ;
+        } else {
+            TExprNode::TPtr limit;
+            if (const auto& limitNode = NYql::GetSetting(sort.Settings().Ref(), EYtSettingType::Limit)) {
+                limit = GetLimitExpr(limitNode, ctx);
+            }
+
+            work = limit
+                ? Build<TCoTake>(ctx, sort.Pos())
                     .Input(input)
                     .Count(std::move(limit))
-                    .Done().Ptr():
-                input.Ptr();
+                    .Done().Ptr()
+                : input.Ptr();
+        }
 
         auto settings = NYql::AddSetting(sort.Settings().Ref(), EYtSettingType::NoDq, {}, ctx);
         auto operation = ctx.ChangeChild(sort.Ref(), TYtTransientOpBase::idx_Settings, std::move(settings));
@@ -508,7 +554,7 @@ private:
                 sortKeys = ctx.Builder(reduce.Pos())
                     .Lambda()
                         .Param("row")
-                        .Do(std::bind(keysBuilder, std::ref(sort), std::placeholders::_1))
+                        .Do(std::bind_front(keysBuilder, std::ref(sort)))
                     .Seal().Build();
             }
         }
@@ -516,7 +562,7 @@ private:
         const auto extract = TCoLambda(ctx.Builder(reduce.Pos())
             .Lambda()
                 .Param("row")
-                .Do(std::bind(keysBuilder, std::ref(keys), std::placeholders::_1))
+                .Do(std::bind_front(keysBuilder, std::ref(keys)))
             .Seal().Build());
 
         const bool hasGetSysKeySwitch = bool(FindNode(reduce.Reducer().Body().Ptr(),
@@ -703,6 +749,7 @@ private:
     }
 
     void PushSkipStat(const TStringBuf& statName, const TStringBuf& nodeName) const {
+        State_->FullHybridExecution = false;
         PushHybridStat(statName, nodeName, "SkipReasons");
         PushHybridStat("Skip", nodeName);
     }

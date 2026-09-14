@@ -1,7 +1,6 @@
 #pragma once
 
 #include "yql_yt_table.h"
-#include "yql_yt_gateway.h"
 #include "yql_yt_provider.h"
 #include "yql_yt_op_settings.h"
 
@@ -20,10 +19,22 @@
 
 namespace NYql {
 
-bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster);
-bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq);
+constexpr TStringBuf YtUnspecifiedCluster = "$runtime";
+
+// Equivalent to Derive* with mode=Auto
+TString GetClusterFromSection(const NNodes::TYtSection& section);
+TString GetClusterFromSectionList(const NNodes::TYtSectionList& sectionList);
+
+// Derive cluster according to mode. Will return empty optional for mode=Disable if input contains multiple clusters
+TMaybe<TString> DeriveClusterFromSectionList(const NNodes::TYtSectionList& sectionList, ERuntimeClusterSelectionMode mode);
+TMaybe<TString> DeriveClusterFromInput(const NNodes::TExprBase& input, ERuntimeClusterSelectionMode mode);
+
+TString GetRuntimeCluster(const TExprNode& op, const TYtState::TPtr& state);
+
+bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster, ERuntimeClusterSelectionMode mode);
+bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq, ERuntimeClusterSelectionMode mode);
 bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsDq);
-bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq);
+bool IsYtCompleteIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq, ERuntimeClusterSelectionMode mode);
 TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, TYtState::TPtr state);
 TVector<TYtTableBaseInfo::TPtr> GetInputTableInfos(NNodes::TExprBase input);
 TVector<TYtPathInfo::TPtr> GetInputPaths(NNodes::TExprBase input);
@@ -37,11 +48,12 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
 TMaybe<ui64> GetLimit(const TExprNode& settings);
 TExprNode::TPtr GetLimitExpr(const TExprNode::TPtr& limitSetting, TExprContext& ctx);
 IGraphTransformer::TStatus UpdateTableMeta(const TExprNode::TPtr& tableNode, TExprNode::TPtr& newTableNode,
-    const TYtTablesData::TPtr& tablesData, bool checkSqlView, bool updateRowSpecType, TExprContext& ctx);
-TExprNode::TPtr ValidateAndUpdateTablesMeta(const TExprNode::TPtr& input, TStringBuf cluster, const TYtTablesData::TPtr& tablesData, bool updateRowSpecType, TExprContext& ctx);
+    const TYtTablesData::TPtr& tablesData, bool checkSqlView, bool updateRowSpecType, bool useNativeYtDefaultColumnOrder, TExprContext& ctx);
+TExprNode::TPtr ValidateAndUpdateTablesMeta(const TExprNode::TPtr& input, TStringBuf cluster,
+    const TYtTablesData::TPtr& tablesData, bool updateRowSpecType, bool useNativeYtDefaultColumnOrder, ERuntimeClusterSelectionMode mode, TExprContext& ctx);
 TExprNode::TPtr ResetTablesMeta(const TExprNode::TPtr& input, TExprContext& ctx, bool resetTmpOnly, bool isEvaluationInProgress);
 NNodes::TExprBase GetOutTable(NNodes::TExprBase ytOutput);
-std::pair<NNodes::TExprBase, TString> GetOutTableWithCluster(NNodes::TExprBase ytOutput);
+std::pair<NNodes::TExprBase, TString> GetOutTableWithCluster(NNodes::TExprBase ytOutput, bool takeFirstInHybrid = false);
 NNodes::TMaybeNode<NNodes::TCoFlatMapBase> GetFlatMapOverInputStream(NNodes::TCoLambda opLambda, const TParentsMap& parentsMap);
 NNodes::TMaybeNode<NNodes::TCoFlatMapBase> GetFlatMapOverInputStream(NNodes::TCoLambda opLambda);
 IGraphTransformer::TStatus SubstTables(TExprNode::TPtr& input, const TYtState::TPtr& state, bool anonOnly, TExprContext& ctx);
@@ -90,12 +102,12 @@ NNodes::TYtPath CopyOrTrivialMap(TPositionHandle pos, NNodes::TExprBase world, N
     const TCopyOrTrivialMapOpts& opts);
 bool IsOutputUsedMultipleTimes(const TExprNode& op, const TParentsMap& parentsMap);
 
-TMaybe<TVector<ui64>> EstimateDataSize(const TString& cluster, const TVector<TYtPathInfo::TPtr>& paths,
+TMaybe<TVector<ui64>> EstimateDataSize( const TVector<TYtPathInfo::TPtr>& paths,
     const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx);
-IGraphTransformer::TStatus TryEstimateDataSize(TVector<ui64>& result, TSet<TString>& requestedColumns,
-    const TString& cluster, const TVector<TYtPathInfo::TPtr>& paths,
+IGraphTransformer::TStatus TryEstimateDataSize(IYtGateway::TPathStatResult& result, TSet<TString>& requestedColumns,
+    const TVector<TYtPathInfo::TPtr>& paths,
     const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx);
-TMaybe<NYT::TRichYPath> BuildYtPathForStatRequest(const TString& cluster, const TYtPathInfo& pathInfo,
+TMaybe<NYT::TRichYPath> BuildYtPathForStatRequest(const TYtPathInfo& pathInfo,
     const TMaybe<TVector<TString>>& overrideColumns, const TYtState& state, TExprContext& ctx);
 
 NNodes::TYtSection UpdateInputFields(NNodes::TYtSection section, NNodes::TExprBase fields, TExprContext& ctx);
@@ -109,8 +121,16 @@ TExprNode::TPtr BuildEmptyTablesRead(TPositionHandle pos, const TExprNode& userS
 TExprNode::TPtr GetFlowSettings(TPositionHandle pos, const TYtState& state, TExprContext& ctx, TExprNode::TPtr settings = {});
 TVector<TStringBuf> GetKeyFilterColumns(const NNodes::TYtSection& section, EYtSettingTypes kind);
 bool HasNonEmptyKeyFilter(const NNodes::TYtSection& section);
+NNodes::TYtPath RemoveYtQLFilters(NNodes::TYtPath path, TExprContext& ctx);
+NNodes::TYtSection RemoveYtQLFilters(NNodes::TYtSection section, TExprContext& ctx);
+NNodes::TYtSectionList RemoveYtQLFilters(NNodes::TYtSectionList sections, TExprContext& ctx);
 
-NNodes::TYtOutputOpBase GetOutputOp(NNodes::TYtOutput output);
+NNodes::TYtOutputOpBase GetOutputOp(NNodes::TYtOutput output, bool takeFirstInHybrid = false);
+
+// Column names with the SystemMemberPrefix are reserved for YQL internals (auxiliary sort columns,
+// system columns), so user data must neither expose nor accept them. Returns the first such column of
+// rowType, or Nothing() if there are none or the ban is not yet active for the current language version.
+TMaybe<TStringBuf> FindReservedColumnName(const TTypeAnnotationNode& rowType, const TYtState& state);
 
 inline bool IsUnorderedOutput(NNodes::TYtOutput out) {
     return out.Mode() && FromString<EYtSettingType>(out.Mode().Cast().Value()) == EYtSettingType::Unordered;
@@ -143,4 +163,17 @@ bool HasYtRowNumber(const TExprNode& node);
 
 bool IsYtTableSuitableForArrowInput(NNodes::TExprBase table, std::function<void(const TString&)> unsupportedHandler);
 
-}
+NNodes::TMaybeNode<NNodes::TCoLambda> GetMapLambda(const NNodes::TYtWithUserJobsOpBase& op);
+
+TMaybe<TVector<TString>> BuildLayersPaths(const TExprNode::TPtr& input, const TString& cluster, const NLayers::ILayersRegistryPtr& layersRegistry,
+    const NLayers::ILayersIntegrationPtr& integration, const TYtSettings::TConstPtr& conf, TExprContext& ctx);
+
+bool CanReplaceParentOutputHash(const TExprNode& node);
+
+ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& config);
+
+// Reports strict (non optional) Yson columns, which cannot be written with native YT types.
+// rowType is expected to have at least one such column
+void ReportNonWritableBareYsonError(const TPosition& pos, const TStructExprType& rowType, TExprContext& ctx);
+
+};

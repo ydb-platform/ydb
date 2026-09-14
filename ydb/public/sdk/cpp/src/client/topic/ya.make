@@ -1,10 +1,7 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
     out.cpp
-    proto_accessor.cpp
 )
 
 PEERDIR(
@@ -16,7 +13,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/table
-    
+
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos

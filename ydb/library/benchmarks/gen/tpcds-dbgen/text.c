@@ -160,14 +160,13 @@ gen_text(char *dest, int min, int max, int stream)
 
     used_space = 0;
     genrand_integer(&target_len, DIST_UNIFORM, min, max, 0, stream);
-    if (dest)
-        *dest = '\0';
-    else
+    if (!dest)
     {
         dest = (char *)malloc((max + 1) * sizeof(char));
         MALLOC_CHECK(dest);
     }
-
+    // Prevent using uninitialized *dest. Fixing coverity issue UNINIT
+    *dest = '\0';
 
     while (target_len > 0)
         {

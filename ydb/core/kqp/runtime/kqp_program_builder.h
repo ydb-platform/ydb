@@ -2,7 +2,7 @@
 
 #include <ydb/core/scheme_types/scheme_type_info.h>
 
-#include <yql/essentials/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_program_builder.h>
 
 namespace NKikimr {
 
@@ -44,12 +44,9 @@ struct TKqpKeyRanges {
     bool Reverse = false;
 };
 
-class TKqpProgramBuilder: public TProgramBuilder {
+class TKqpProgramBuilder: public TDqProgramBuilder {
 public:
     TKqpProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry);
-
-    TRuntimeNode KqpReadTable(const TTableId& tableId, const TKqpKeyRange& range,
-        const TArrayRef<TKqpTableColumn>& columns);
 
     TRuntimeNode KqpWideReadTable(const TTableId& tableId, const TKqpKeyRange& range,
         const TArrayRef<TKqpTableColumn>& columns);
@@ -60,19 +57,14 @@ public:
     TRuntimeNode KqpBlockReadTableRanges(const TTableId& tableId, const TKqpKeyRanges& range,
         const TArrayRef<TKqpTableColumn>& columns, TType* returnType);
 
-    TRuntimeNode KqpLookupTable(const TTableId& tableId, const TRuntimeNode& lookupKeys,
-        const TArrayRef<TKqpTableColumn>& keyColumns, const TArrayRef<TKqpTableColumn>& columns);
-
-    TRuntimeNode KqpUpsertRows(const TTableId& tableId, const TRuntimeNode& rows,
-        const TArrayRef<TKqpTableColumn>& upsertColumns, bool isUpdate);
-
-    TRuntimeNode KqpDeleteRows(const TTableId& tableId, const TRuntimeNode& rows);
-
-    TRuntimeNode KqpEffects(const TArrayRef<const TRuntimeNode>& effects);
-
     TRuntimeNode KqpEnsure(TRuntimeNode value, TRuntimeNode predicate, TRuntimeNode issueCode, TRuntimeNode message);
 
-    TRuntimeNode KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType, const TString& leftLabel, const TString& rightLabel);
+    TRuntimeNode KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType, const TString& leftLabel, const TString& rightLabel, ui32 cookieFormatVersion = 0);
+
+    TRuntimeNode FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode);
+
+    // input: List/Flow/Stream<T> -> same container of Tuple<Uint64, T> with a 1-based rank.
+    TRuntimeNode KqpStreamEnumerate(TRuntimeNode input);
 };
 
 } // namespace NMiniKQL

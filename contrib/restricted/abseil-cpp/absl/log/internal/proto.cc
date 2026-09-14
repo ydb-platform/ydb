@@ -12,6 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// All of the data that passes through this code is trusted because it flows
+// through a closed loop within the absl::LogMessage object. It is not a robust
+// protocol buffer encoder or decoder.
+//
+// Encoding: When `LOG(INFO) << "foo"` is called, the library uses the Encode*
+// functions to build a protocol buffer in a private, fixed-size internal buffer
+// (`LogMessageData::encoded_buf`).
+//
+// Decoding: During the same logging call, `LogMessage::Flush()` calls
+// `FinalizeEncodingAndFormat()`, which uses `ProtoField::DecodeFrom` to parse
+// that same internal buffer to generate the human-readable string for
+// text-based log sinks.
+
 #include "absl/log/internal/proto.h"
 
 #include <algorithm>
@@ -20,7 +33,6 @@
 #include <cstdint>
 #include <cstring>
 
-#include "absl/base/attributes.h"
 #include "absl/base/config.h"
 #include "absl/types/span.h"
 
@@ -34,9 +46,6 @@ void EncodeRawVarint(uint64_t value, size_t size, absl::Span<char> *buf) {
     value >>= 7;
   }
   buf->remove_prefix(size);
-}
-constexpr uint64_t MakeTagType(uint64_t tag, WireType type) {
-  return tag << 3 | static_cast<uint64_t>(type);
 }
 }  // namespace
 
@@ -126,8 +135,9 @@ bool EncodeBytesTruncate(uint64_t tag, absl::Span<const char> value,
   return true;
 }
 
-ABSL_MUST_USE_RESULT absl::Span<char> EncodeMessageStart(
-    uint64_t tag, uint64_t max_size, absl::Span<char> *buf) {
+[[nodiscard]] absl::Span<char> EncodeMessageStart(uint64_t tag,
+                                                  uint64_t max_size,
+                                                  absl::Span<char> *buf) {
   const uint64_t tag_type = MakeTagType(tag, WireType::kLengthDelimited);
   const size_t tag_type_size = VarintSize(tag_type);
   max_size = std::min<uint64_t>(max_size, buf->size());

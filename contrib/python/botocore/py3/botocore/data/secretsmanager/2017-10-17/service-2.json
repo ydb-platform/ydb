@@ -5,14 +5,34 @@
     "endpointPrefix":"secretsmanager",
     "jsonVersion":"1.1",
     "protocol":"json",
+    "protocols":["json"],
     "serviceFullName":"AWS Secrets Manager",
     "serviceId":"Secrets Manager",
     "signatureVersion":"v4",
     "signingName":"secretsmanager",
     "targetPrefix":"secretsmanager",
-    "uid":"secretsmanager-2017-10-17"
+    "uid":"secretsmanager-2017-10-17",
+    "auth":["aws.auth#sigv4"]
   },
   "operations":{
+    "BatchGetSecretValue":{
+      "name":"BatchGetSecretValue",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"BatchGetSecretValueRequest"},
+      "output":{"shape":"BatchGetSecretValueResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"InvalidParameterException"},
+        {"shape":"InvalidRequestException"},
+        {"shape":"DecryptionFailure"},
+        {"shape":"InternalServiceError"},
+        {"shape":"InvalidNextTokenException"}
+      ],
+      "documentation":"<p>Retrieves the contents of the encrypted fields <code>SecretString</code> or <code>SecretBinary</code> for up to 20 secrets. To retrieve a single secret, call <a>GetSecretValue</a>. </p> <p>To choose which secrets to retrieve, you can specify a list of secrets by name or ARN, or you can use filters. If Secrets Manager encounters errors such as <code>AccessDeniedException</code> while attempting to retrieve any of the secrets, you can see the errors in <code>Errors</code> in the response.</p> <p>Secrets Manager generates CloudTrail <code>GetSecretValue</code> log entries for each secret you request when you call this action. Do not include sensitive information in request parameters because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:BatchGetSecretValue</code>, and you must have <code>secretsmanager:GetSecretValue</code> for each secret. If you use filters, you must also have <code>secretsmanager:ListSecrets</code>. If the secrets are encrypted using customer-managed keys instead of the Amazon Web Services managed key <code>aws/secretsmanager</code>, then you also need <code>kms:Decrypt</code> permissions for the keys. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p>"
+    },
     "CancelRotateSecret":{
       "name":"CancelRotateSecret",
       "http":{
@@ -49,7 +69,7 @@
         {"shape":"PreconditionNotMetException"},
         {"shape":"DecryptionFailure"}
       ],
-      "documentation":"<p>Creates a new secret. A <i>secret</i> can be a password, a set of credentials such as a user name and password, an OAuth token, or other secret information that you store in an encrypted form in Secrets Manager. The secret also includes the connection information to access a database or other service, which Secrets Manager doesn't encrypt. A secret in Secrets Manager consists of both the protected secret data and the important information needed to manage the secret.</p> <p>For secrets that use <i>managed rotation</i>, you need to create the secret through the managing service. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/service-linked-secrets.html\">Secrets Manager secrets managed by other Amazon Web Services services</a>. </p> <p>For information about creating a secret in the console, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/manage_create-basic-secret.html\">Create a secret</a>.</p> <p>To create a secret, you can provide the secret value to be encrypted in either the <code>SecretString</code> parameter or the <code>SecretBinary</code> parameter, but not both. If you include <code>SecretString</code> or <code>SecretBinary</code> then Secrets Manager creates an initial secret version and automatically attaches the staging label <code>AWSCURRENT</code> to it.</p> <p>For database credentials you want to rotate, for Secrets Manager to be able to rotate the secret, you must make sure the JSON you store in the <code>SecretString</code> matches the <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_secret_json_structure.html\">JSON structure of a database secret</a>.</p> <p>If you don't specify an KMS encryption key, Secrets Manager uses the Amazon Web Services managed key <code>aws/secretsmanager</code>. If this key doesn't already exist in your account, then Secrets Manager creates it for you automatically. All users and roles in the Amazon Web Services account automatically have access to use <code>aws/secretsmanager</code>. Creating <code>aws/secretsmanager</code> can result in a one-time significant delay in returning the result.</p> <p>If the secret is in a different Amazon Web Services account from the credentials calling the API, then you can't use <code>aws/secretsmanager</code> to encrypt the secret, and you must create and use a customer managed KMS key. </p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters except <code>SecretBinary</code> or <code>SecretString</code> because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:CreateSecret</code>. If you include tags in the secret, you also need <code>secretsmanager:TagResource</code>. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p> <p>To encrypt the secret with a KMS key other than <code>aws/secretsmanager</code>, you need <code>kms:GenerateDataKey</code> and <code>kms:Decrypt</code> permission to the key. </p>"
+      "documentation":"<p>Creates a new secret. A <i>secret</i> can be a password, a set of credentials such as a user name and password, an OAuth token, or other secret information that you store in an encrypted form in Secrets Manager. The secret also includes the connection information to access a database or other service, which Secrets Manager doesn't encrypt. A secret in Secrets Manager consists of both the protected secret data and the important information needed to manage the secret.</p> <p>For secrets that use <i>managed rotation</i>, you need to create the secret through the managing service. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/service-linked-secrets.html\">Secrets Manager secrets managed by other Amazon Web Services services</a>. </p> <p>For information about creating a secret in the console, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/manage_create-basic-secret.html\">Create a secret</a>.</p> <p>To create a secret, you can provide the secret value to be encrypted in either the <code>SecretString</code> parameter or the <code>SecretBinary</code> parameter, but not both. If you include <code>SecretString</code> or <code>SecretBinary</code> then Secrets Manager creates an initial secret version and automatically attaches the staging label <code>AWSCURRENT</code> to it.</p> <p>For database credentials you want to rotate, for Secrets Manager to be able to rotate the secret, you must make sure the JSON you store in the <code>SecretString</code> matches the <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_secret_json_structure.html\">JSON structure of a database secret</a>.</p> <p>If you don't specify an KMS encryption key, Secrets Manager uses the Amazon Web Services managed key <code>aws/secretsmanager</code>. If this key doesn't already exist in your account, then Secrets Manager creates it for you automatically. All users and roles in the Amazon Web Services account automatically have access to use <code>aws/secretsmanager</code>. Creating <code>aws/secretsmanager</code> can result in a one-time significant delay in returning the result.</p> <p>If the secret is in a different Amazon Web Services account from the credentials calling the API, then you can't use <code>aws/secretsmanager</code> to encrypt the secret, and you must create and use a customer managed KMS key. </p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters except <code>SecretBinary</code> or <code>SecretString</code> because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:CreateSecret</code>. If you include tags in the secret, you also need <code>secretsmanager:TagResource</code>. To add replica Regions, you must also have <code>secretsmanager:ReplicateSecretToRegions</code>. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p> <p>To encrypt the secret with a KMS key other than <code>aws/secretsmanager</code>, you need <code>kms:GenerateDataKey</code> and <code>kms:Decrypt</code> permission to the key. </p> <important> <p>When you enter commands in a command shell, there is a risk of the command history being accessed or utilities having access to your command parameters. This is a concern if the command includes the value of a secret. Learn how to <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/security_cli-exposure-risks.html\">Mitigate the risks of using command-line tools to store Secrets Manager secrets</a>.</p> </important>"
     },
     "DeleteResourcePolicy":{
       "name":"DeleteResourcePolicy",
@@ -111,7 +131,7 @@
         {"shape":"InvalidRequestException"},
         {"shape":"InternalServiceError"}
       ],
-      "documentation":"<p>Generates a random password. We recommend that you specify the maximum length and include every character type that the system you are generating a password for can support.</p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:GetRandomPassword</code>. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p>"
+      "documentation":"<p>Generates a random password. We recommend that you specify the maximum length and include every character type that the system you are generating a password for can support. By default, Secrets Manager uses uppercase and lowercase letters, numbers, and the following characters in passwords: <code>!\\\"#$%&amp;'()*+,-./:;&lt;=&gt;?@[\\\\]^_`{|}~</code> </p> <p>Secrets Manager generates a CloudTrail log entry when you call this action.</p> <p> <b>Required permissions: </b> <code>secretsmanager:GetRandomPassword</code>. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p>"
     },
     "GetResourcePolicy":{
       "name":"GetResourcePolicy",
@@ -144,7 +164,7 @@
         {"shape":"DecryptionFailure"},
         {"shape":"InternalServiceError"}
       ],
-      "documentation":"<p>Retrieves the contents of the encrypted fields <code>SecretString</code> or <code>SecretBinary</code> from the specified version of a secret, whichever contains content.</p> <p>We recommend that you cache your secret values by using client-side caching. Caching secrets improves speed and reduces your costs. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieving-secrets.html\">Cache secrets for your applications</a>.</p> <p>To retrieve the previous version of a secret, use <code>VersionStage</code> and specify AWSPREVIOUS. To revert to the previous version of a secret, call <a href=\"https://docs.aws.amazon.com/cli/latest/reference/secretsmanager/update-secret-version-stage.html\">UpdateSecretVersionStage</a>.</p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:GetSecretValue</code>. If the secret is encrypted using a customer-managed key instead of the Amazon Web Services managed key <code>aws/secretsmanager</code>, then you also need <code>kms:Decrypt</code> permissions for that key. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p>"
+      "documentation":"<p>Retrieves the contents of the encrypted fields <code>SecretString</code> or <code>SecretBinary</code> from the specified version of a secret, whichever contains content.</p> <p>To retrieve the values for a group of secrets, call <a>BatchGetSecretValue</a>.</p> <p>We recommend that you cache your secret values by using client-side caching. Caching secrets improves speed and reduces your costs. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieving-secrets.html\">Cache secrets for your applications</a>.</p> <p>To retrieve the previous version of a secret, use <code>VersionStage</code> and specify AWSPREVIOUS. To revert to the previous version of a secret, call <a href=\"https://docs.aws.amazon.com/cli/latest/reference/secretsmanager/update-secret-version-stage.html\">UpdateSecretVersionStage</a>.</p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:GetSecretValue</code>. If the secret is encrypted using a customer-managed key instead of the Amazon Web Services managed key <code>aws/secretsmanager</code>, then you also need <code>kms:Decrypt</code> permissions for that key. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p>"
     },
     "ListSecretVersionIds":{
       "name":"ListSecretVersionIds",
@@ -176,7 +196,7 @@
         {"shape":"InvalidNextTokenException"},
         {"shape":"InternalServiceError"}
       ],
-      "documentation":"<p>Lists the secrets that are stored by Secrets Manager in the Amazon Web Services account, not including secrets that are marked for deletion. To see secrets marked for deletion, use the Secrets Manager console.</p> <p>ListSecrets is eventually consistent, however it might not reflect changes from the last five minutes. To get the latest information for a specific secret, use <a>DescribeSecret</a>.</p> <p>To list the versions of a secret, use <a>ListSecretVersionIds</a>.</p> <p>To get the secret value from <code>SecretString</code> or <code>SecretBinary</code>, call <a>GetSecretValue</a>.</p> <p>For information about finding secrets in the console, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/manage_search-secret.html\">Find secrets in Secrets Manager</a>.</p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:ListSecrets</code>. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p>"
+      "documentation":"<p>Lists the secrets that are stored by Secrets Manager in the Amazon Web Services account, not including secrets that are marked for deletion. To see secrets marked for deletion, use the Secrets Manager console.</p> <p>All Secrets Manager operations are eventually consistent. ListSecrets might not reflect changes from the last five minutes. You can get more recent information for a specific secret by calling <a>DescribeSecret</a>.</p> <p>To list the versions of a secret, use <a>ListSecretVersionIds</a>.</p> <p>To retrieve the values for the secrets, call <a>BatchGetSecretValue</a> or <a>GetSecretValue</a>.</p> <p>For information about finding secrets in the console, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/manage_search-secret.html\">Find secrets in Secrets Manager</a>.</p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:ListSecrets</code>. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p>"
     },
     "PutResourcePolicy":{
       "name":"PutResourcePolicy",
@@ -214,7 +234,7 @@
         {"shape":"InternalServiceError"},
         {"shape":"DecryptionFailure"}
       ],
-      "documentation":"<p>Creates a new version with a new encrypted secret value and attaches it to the secret. The version can contain a new <code>SecretString</code> value or a new <code>SecretBinary</code> value. </p> <p>We recommend you avoid calling <code>PutSecretValue</code> at a sustained rate of more than once every 10 minutes. When you update the secret value, Secrets Manager creates a new version of the secret. Secrets Manager removes outdated versions when there are more than 100, but it does not remove versions created less than 24 hours ago. If you call <code>PutSecretValue</code> more than once every 10 minutes, you create more versions than Secrets Manager removes, and you will reach the quota for secret versions.</p> <p>You can specify the staging labels to attach to the new version in <code>VersionStages</code>. If you don't include <code>VersionStages</code>, then Secrets Manager automatically moves the staging label <code>AWSCURRENT</code> to this version. If this operation creates the first version for the secret, then Secrets Manager automatically attaches the staging label <code>AWSCURRENT</code> to it. If this operation moves the staging label <code>AWSCURRENT</code> from another version to this version, then Secrets Manager also automatically moves the staging label <code>AWSPREVIOUS</code> to the version that <code>AWSCURRENT</code> was removed from.</p> <p>This operation is idempotent. If you call this operation with a <code>ClientRequestToken</code> that matches an existing version's VersionId, and you specify the same secret data, the operation succeeds but does nothing. However, if the secret data is different, then the operation fails because you can't modify an existing version; you can only create new ones.</p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters except <code>SecretBinary</code> or <code>SecretString</code> because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:PutSecretValue</code>. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p>"
+      "documentation":"<p>Creates a new version of your secret by creating a new encrypted value and attaching it to the secret. version can contain a new <code>SecretString</code> value or a new <code>SecretBinary</code> value. </p> <p>Do not call <code>PutSecretValue</code> at a sustained rate of more than once every 10 minutes. When you update the secret value, Secrets Manager creates a new version of the secret. Secrets Manager keeps 100 of the most recent versions, but it keeps <i>all</i> secret versions created in the last 24 hours. If you call <code>PutSecretValue</code> more than once every 10 minutes, you will create more versions than Secrets Manager removes, and you will reach the quota for secret versions.</p> <p>You can specify the staging labels to attach to the new version in <code>VersionStages</code>. If you don't include <code>VersionStages</code>, then Secrets Manager automatically moves the staging label <code>AWSCURRENT</code> to this version. If this operation creates the first version for the secret, then Secrets Manager automatically attaches the staging label <code>AWSCURRENT</code> to it. If this operation moves the staging label <code>AWSCURRENT</code> from another version to this version, then Secrets Manager also automatically moves the staging label <code>AWSPREVIOUS</code> to the version that <code>AWSCURRENT</code> was removed from.</p> <p>This operation is idempotent. If you call this operation with a <code>ClientRequestToken</code> that matches an existing version's VersionId, and you specify the same secret data, the operation succeeds but does nothing. However, if the secret data is different, then the operation fails because you can't modify an existing version; you can only create new ones.</p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters except <code>SecretBinary</code>, <code>SecretString</code>, or <code>RotationToken</code> because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:PutSecretValue</code>. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p> <important> <p>When you enter commands in a command shell, there is a risk of the command history being accessed or utilities having access to your command parameters. This is a concern if the command includes the value of a secret. Learn how to <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/security_cli-exposure-risks.html\">Mitigate the risks of using command-line tools to store Secrets Manager secrets</a>.</p> </important>"
     },
     "RemoveRegionsFromReplication":{
       "name":"RemoveRegionsFromReplication",
@@ -246,7 +266,7 @@
         {"shape":"InvalidParameterException"},
         {"shape":"InternalServiceError"}
       ],
-      "documentation":"<p>Replicates the secret to a new Regions. See <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/create-manage-multi-region-secrets.html\">Multi-Region secrets</a>.</p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:ReplicateSecretToRegions</code>. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p>"
+      "documentation":"<p>Replicates the secret to a new Regions. See <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/create-manage-multi-region-secrets.html\">Multi-Region secrets</a>.</p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:ReplicateSecretToRegions</code>. If the primary secret is encrypted with a KMS key other than <code>aws/secretsmanager</code>, you also need <code>kms:Decrypt</code> permission to the key. To encrypt the replicated secret with a KMS key other than <code>aws/secretsmanager</code>, you need <code>kms:GenerateDataKey</code> and <code>kms:Encrypt</code> to the key. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. </p>"
     },
     "RestoreSecret":{
       "name":"RestoreSecret",
@@ -346,7 +366,7 @@
         {"shape":"PreconditionNotMetException"},
         {"shape":"DecryptionFailure"}
       ],
-      "documentation":"<p>Modifies the details of a secret, including metadata and the secret value. To change the secret value, you can also use <a>PutSecretValue</a>.</p> <p>To change the rotation configuration of a secret, use <a>RotateSecret</a> instead.</p> <p>To change a secret so that it is managed by another service, you need to recreate the secret in that service. See <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/service-linked-secrets.html\">Secrets Manager secrets managed by other Amazon Web Services services</a>.</p> <p>We recommend you avoid calling <code>UpdateSecret</code> at a sustained rate of more than once every 10 minutes. When you call <code>UpdateSecret</code> to update the secret value, Secrets Manager creates a new version of the secret. Secrets Manager removes outdated versions when there are more than 100, but it does not remove versions created less than 24 hours ago. If you update the secret value more than once every 10 minutes, you create more versions than Secrets Manager removes, and you will reach the quota for secret versions.</p> <p>If you include <code>SecretString</code> or <code>SecretBinary</code> to create a new secret version, Secrets Manager automatically moves the staging label <code>AWSCURRENT</code> to the new version. Then it attaches the label <code>AWSPREVIOUS</code> to the version that <code>AWSCURRENT</code> was removed from.</p> <p>If you call this operation with a <code>ClientRequestToken</code> that matches an existing version's <code>VersionId</code>, the operation results in an error. You can't modify an existing version, you can only create a new version. To remove a version, remove all staging labels from it. See <a>UpdateSecretVersionStage</a>.</p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters except <code>SecretBinary</code> or <code>SecretString</code> because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:UpdateSecret</code>. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. If you use a customer managed key, you must also have <code>kms:GenerateDataKey</code>, <code>kms:Encrypt</code>, and <code>kms:Decrypt</code> permissions on the key. If you change the KMS key and you don't have <code>kms:Encrypt</code> permission to the new key, Secrets Manager does not re-ecrypt existing secret versions with the new key. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html\"> Secret encryption and decryption</a>.</p>"
+      "documentation":"<p>Modifies the details of a secret, including metadata and the secret value. To change the secret value, you can also use <a>PutSecretValue</a>.</p> <p>To change the rotation configuration of a secret, use <a>RotateSecret</a> instead.</p> <p>To change a secret so that it is managed by another service, you need to recreate the secret in that service. See <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/service-linked-secrets.html\">Secrets Manager secrets managed by other Amazon Web Services services</a>.</p> <p>We recommend you avoid calling <code>UpdateSecret</code> at a sustained rate of more than once every 10 minutes. When you call <code>UpdateSecret</code> to update the secret value, Secrets Manager creates a new version of the secret. Secrets Manager removes outdated versions when there are more than 100, but it does not remove versions created less than 24 hours ago. If you update the secret value more than once every 10 minutes, you create more versions than Secrets Manager removes, and you will reach the quota for secret versions.</p> <p>If you include <code>SecretString</code> or <code>SecretBinary</code> to create a new secret version, Secrets Manager automatically moves the staging label <code>AWSCURRENT</code> to the new version. Then it attaches the label <code>AWSPREVIOUS</code> to the version that <code>AWSCURRENT</code> was removed from.</p> <p>If you call this operation with a <code>ClientRequestToken</code> that matches an existing version's <code>VersionId</code>, the operation results in an error. You can't modify an existing version, you can only create a new version. To remove a version, remove all staging labels from it. See <a>UpdateSecretVersionStage</a>.</p> <p>Secrets Manager generates a CloudTrail log entry when you call this action. Do not include sensitive information in request parameters except <code>SecretBinary</code> or <code>SecretString</code> because it might be logged. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/retrieve-ct-entries.html\">Logging Secrets Manager events with CloudTrail</a>.</p> <p> <b>Required permissions: </b> <code>secretsmanager:UpdateSecret</code>. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/reference_iam-permissions.html#reference_iam-permissions_actions\"> IAM policy actions for Secrets Manager</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/auth-and-access.html\">Authentication and access control in Secrets Manager</a>. If you use a customer managed key, you must also have <code>kms:GenerateDataKey</code>, <code>kms:Encrypt</code>, and <code>kms:Decrypt</code> permissions on the key. If you change the KMS key and you don't have <code>kms:Encrypt</code> permission to the new key, Secrets Manager does not re-encrypt existing secret versions with the new key. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html\"> Secret encryption and decryption</a>.</p> <important> <p>When you enter commands in a command shell, there is a risk of the command history being accessed or utilities having access to your command parameters. This is a concern if the command includes the value of a secret. Learn how to <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/security_cli-exposure-risks.html\">Mitigate the risks of using command-line tools to store Secrets Manager secrets</a>.</p> </important>"
     },
     "UpdateSecretVersionStage":{
       "name":"UpdateSecretVersionStage",
@@ -384,6 +404,28 @@
     }
   },
   "shapes":{
+    "APIErrorListType":{
+      "type":"list",
+      "member":{"shape":"APIErrorType"}
+    },
+    "APIErrorType":{
+      "type":"structure",
+      "members":{
+        "SecretId":{
+          "shape":"SecretIdType",
+          "documentation":"<p>The ARN or name of the secret.</p>"
+        },
+        "ErrorCode":{
+          "shape":"ErrorCode",
+          "documentation":"<p>The error Secrets Manager encountered while retrieving an individual secret as part of <a>BatchGetSecretValue</a>, for example <code>ResourceNotFoundException</code>,<code>InvalidParameterException</code>, <code>InvalidRequestException</code>, <code>DecryptionFailure</code>, or <code>AccessDeniedException</code>.</p>"
+        },
+        "Message":{
+          "shape":"ErrorMessage",
+          "documentation":"<p>A message describing the error.</p>"
+        }
+      },
+      "documentation":"<p>The error Secrets Manager encountered while retrieving an individual secret as part of <a>BatchGetSecretValue</a>.</p>"
+    },
     "AddReplicaRegionListType":{
       "type":"list",
       "member":{"shape":"ReplicaRegionType"},
@@ -393,6 +435,45 @@
       "type":"long",
       "max":1000,
       "min":1
+    },
+    "BatchGetSecretValueRequest":{
+      "type":"structure",
+      "members":{
+        "SecretIdList":{
+          "shape":"SecretIdListType",
+          "documentation":"<p>The ARN or names of the secrets to retrieve. You must include <code>Filters</code> or <code>SecretIdList</code>, but not both.</p>"
+        },
+        "Filters":{
+          "shape":"FiltersListType",
+          "documentation":"<p>The filters to choose which secrets to retrieve. You must include <code>Filters</code> or <code>SecretIdList</code>, but not both.</p>"
+        },
+        "MaxResults":{
+          "shape":"MaxResultsBatchType",
+          "documentation":"<p>The number of results to include in the response.</p> <p>If there are more results available, in the response, Secrets Manager includes <code>NextToken</code>. To get the next results, call <code>BatchGetSecretValue</code> again with the value from <code>NextToken</code>. To use this parameter, you must also use the <code>Filters</code> parameter.</p>",
+          "box":true
+        },
+        "NextToken":{
+          "shape":"NextTokenType",
+          "documentation":"<p>A token that indicates where the output should continue from, if a previous call did not show all results. To get the next results, call <code>BatchGetSecretValue</code> again with this value.</p>"
+        }
+      }
+    },
+    "BatchGetSecretValueResponse":{
+      "type":"structure",
+      "members":{
+        "SecretValues":{
+          "shape":"SecretValuesType",
+          "documentation":"<p>A list of secret values.</p>"
+        },
+        "NextToken":{
+          "shape":"NextTokenType",
+          "documentation":"<p>Secrets Manager includes this value if there's more output available than what is included in the current response. This can occur even when the response includes no values at all, such as when you ask for a filtered view of a long list. To get the next results, call <code>BatchGetSecretValue</code> again with this value.</p>"
+        },
+        "Errors":{
+          "shape":"APIErrorListType",
+          "documentation":"<p>A list of errors Secrets Manager encountered while attempting to retrieve individual secrets.</p>"
+        }
+      }
     },
     "BooleanType":{"type":"boolean"},
     "CancelRotateSecretRequest":{
@@ -450,11 +531,11 @@
         },
         "SecretBinary":{
           "shape":"SecretBinaryType",
-          "documentation":"<p>The binary data to encrypt and store in the new version of the secret. We recommend that you store your binary data in a file and then pass the contents of the file as a parameter.</p> <p>Either <code>SecretString</code> or <code>SecretBinary</code> must have a value, but not both.</p> <p>This parameter is not available in the Secrets Manager console.</p>"
+          "documentation":"<p>The binary data to encrypt and store in the new version of the secret. We recommend that you store your binary data in a file and then pass the contents of the file as a parameter.</p> <p>Either <code>SecretString</code> or <code>SecretBinary</code> must have a value, but not both.</p> <p>This parameter is not available in the Secrets Manager console.</p> <p>Sensitive: This field contains sensitive information, so the service does not include it in CloudTrail log entries. If you create your own log entries, you must also avoid logging the information in this field.</p>"
         },
         "SecretString":{
           "shape":"SecretStringType",
-          "documentation":"<p>The text data to encrypt and store in this new version of the secret. We recommend you use a JSON structure of key/value pairs for your secret value.</p> <p>Either <code>SecretString</code> or <code>SecretBinary</code> must have a value, but not both.</p> <p>If you create a secret by using the Secrets Manager console then Secrets Manager puts the protected secret text in only the <code>SecretString</code> parameter. The Secrets Manager console stores the information as a JSON structure of key/value pairs that a Lambda rotation function can parse.</p>"
+          "documentation":"<p>The text data to encrypt and store in this new version of the secret. We recommend you use a JSON structure of key/value pairs for your secret value.</p> <p>Either <code>SecretString</code> or <code>SecretBinary</code> must have a value, but not both.</p> <p>If you create a secret by using the Secrets Manager console then Secrets Manager puts the protected secret text in only the <code>SecretString</code> parameter. The Secrets Manager console stores the information as a JSON structure of key/value pairs that a Lambda rotation function can parse.</p> <p>Sensitive: This field contains sensitive information, so the service does not include it in CloudTrail log entries. If you create your own log entries, you must also avoid logging the information in this field.</p>"
         },
         "Tags":{
           "shape":"TagListType",
@@ -467,6 +548,10 @@
         "ForceOverwriteReplicaSecret":{
           "shape":"BooleanType",
           "documentation":"<p>Specifies whether to overwrite a secret with the same name in the destination Region. By default, secrets aren't overwritten.</p>"
+        },
+        "Type":{
+          "shape":"MedeaTypeType",
+          "documentation":"<p>The exact string that identifies the partner that holds the external secret. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/managed-external-secrets.html\">Using Secrets Manager managed external secrets</a>.</p>"
         }
       }
     },
@@ -584,6 +669,10 @@
           "shape":"SecretNameType",
           "documentation":"<p>The name of the secret.</p>"
         },
+        "Type":{
+          "shape":"MedeaTypeType",
+          "documentation":"<p>The exact string that identifies the partner that holds the external secret. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/managed-external-secrets.html\">Using Secrets Manager managed external secrets</a>.</p>"
+        },
         "Description":{
           "shape":"DescriptionType",
           "documentation":"<p>The description of the secret.</p>"
@@ -594,7 +683,7 @@
         },
         "RotationEnabled":{
           "shape":"RotationEnabledType",
-          "documentation":"<p>Specifies whether automatic rotation is turned on for this secret.</p> <p>To turn on rotation, use <a>RotateSecret</a>. To turn off rotation, use <a>CancelRotateSecret</a>.</p>",
+          "documentation":"<p>Specifies whether automatic rotation is turned on for this secret. If the secret has never been configured for rotation, Secrets Manager returns null.</p> <p>To turn on rotation, use <a>RotateSecret</a>. To turn off rotation, use <a>CancelRotateSecret</a>.</p>",
           "box":true
         },
         "RotationLambdaARN":{
@@ -605,9 +694,17 @@
           "shape":"RotationRulesType",
           "documentation":"<p>The rotation schedule and Lambda function for this secret. If the secret previously had rotation turned on, but it is now turned off, this field shows the previous rotation schedule and rotation function. If the secret never had rotation turned on, this field is omitted.</p>"
         },
+        "ExternalSecretRotationMetadata":{
+          "shape":"ExternalSecretRotationMetadataType",
+          "documentation":"<p>The metadata needed to successfully rotate a managed external secret. A list of key value pairs in JSON format specified by the partner. For more information about the required information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/mes-partners.html\">Managed external secrets partners</a>.</p>"
+        },
+        "ExternalSecretRotationRoleArn":{
+          "shape":"RoleARNType",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the role that allows Secrets Manager to rotate a secret held by a third-party partner. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/mes-security.html\">Security and permissions</a>.</p>"
+        },
         "LastRotatedDate":{
           "shape":"LastRotatedDateType",
-          "documentation":"<p>The last date and time that Secrets Manager rotated the secret. If the secret isn't configured for rotation, Secrets Manager returns null.</p>",
+          "documentation":"<p>The last date and time that Secrets Manager rotated the secret. If the secret isn't configured for rotation or rotation has been disabled, Secrets Manager returns null.</p>",
           "box":true
         },
         "LastChangedDate":{
@@ -627,7 +724,7 @@
         },
         "NextRotationDate":{
           "shape":"NextRotationDateType",
-          "documentation":"<p>The next rotation is scheduled to occur on or before this date. If the secret isn't configured for rotation, Secrets Manager returns null.</p>"
+          "documentation":"<p>The next rotation is scheduled to occur on or before this date. If the secret isn't configured for rotation or rotation has been disabled, Secrets Manager returns null. If rotation fails, Secrets Manager retries the entire rotation process multiple times. If rotation is unsuccessful, this date may be in the past.</p> <p>This date represents the latest date that rotation will occur, but it is not an approximate rotation date. In some cases, for example if you turn off automatic rotation and then turn it back on, the next rotation may occur much sooner than this date.</p>"
         },
         "Tags":{
           "shape":"TagListType",
@@ -664,7 +761,7 @@
       "type":"string",
       "max":3,
       "min":2,
-      "pattern":"[0-9h]+"
+      "pattern":"[0-9]+h"
     },
     "EncryptionFailure":{
       "type":"structure",
@@ -674,6 +771,7 @@
       "documentation":"<p>Secrets Manager can't encrypt the protected secret text using the provided KMS key. Check that the KMS key is available, enabled, and not in an invalid state. For more information, see <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/key-state.html\">Key state: Effect on your KMS key</a>.</p>",
       "exception":true
     },
+    "ErrorCode":{"type":"string"},
     "ErrorMessage":{"type":"string"},
     "ExcludeCharactersType":{
       "type":"string",
@@ -684,6 +782,34 @@
     "ExcludeNumbersType":{"type":"boolean"},
     "ExcludePunctuationType":{"type":"boolean"},
     "ExcludeUppercaseType":{"type":"boolean"},
+    "ExternalSecretRotationMetadataItem":{
+      "type":"structure",
+      "members":{
+        "Key":{
+          "shape":"ExternalSecretRotationMetadataItemKeyType",
+          "documentation":"<p>The key that identifies the item.</p>"
+        },
+        "Value":{
+          "shape":"ExternalSecretRotationMetadataItemValueType",
+          "documentation":"<p>The value of the specified item.</p>"
+        }
+      },
+      "documentation":"<p>The metadata needed to successfully rotate a managed external secret. A list of key value pairs in JSON format specified by the partner. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/mes-partners.html\">Managed external secret partners</a>.</p>"
+    },
+    "ExternalSecretRotationMetadataItemKeyType":{
+      "type":"string",
+      "max":256,
+      "min":1
+    },
+    "ExternalSecretRotationMetadataItemValueType":{
+      "type":"string",
+      "max":2048,
+      "min":1
+    },
+    "ExternalSecretRotationMetadataType":{
+      "type":"list",
+      "member":{"shape":"ExternalSecretRotationMetadataItem"}
+    },
     "Filter":{
       "type":"structure",
       "members":{
@@ -812,7 +938,7 @@
       "members":{
         "SecretId":{
           "shape":"SecretIdType",
-          "documentation":"<p>The ARN or name of the secret to retrieve.</p> <p>For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen\">Finding a secret from a partial ARN</a>.</p>"
+          "documentation":"<p>The ARN or name of the secret to retrieve. To retrieve a secret from another account, you must use an ARN.</p> <p>For an ARN, we recommend that you specify a complete ARN rather than a partial ARN. See <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/troubleshoot.html#ARN_secretnamehyphen\">Finding a secret from a partial ARN</a>.</p>"
         },
         "VersionId":{
           "shape":"SecretVersionIdType",
@@ -841,11 +967,11 @@
         },
         "SecretBinary":{
           "shape":"SecretBinaryType",
-          "documentation":"<p>The decrypted secret value, if the secret value was originally provided as binary data in the form of a byte array. The response parameter represents the binary data as a <a href=\"https://tools.ietf.org/html/rfc4648#section-4\">base64-encoded</a> string.</p> <p>If the secret was created by using the Secrets Manager console, or if the secret value was originally provided as a string, then this field is omitted. The secret value appears in <code>SecretString</code> instead.</p>"
+          "documentation":"<p>The decrypted secret value, if the secret value was originally provided as binary data in the form of a byte array. When you retrieve a <code>SecretBinary</code> using the HTTP API, the Python SDK, or the Amazon Web Services CLI, the value is Base64-encoded. Otherwise, it is not encoded.</p> <p>If the secret was created by using the Secrets Manager console, or if the secret value was originally provided as a string, then this field is omitted. The secret value appears in <code>SecretString</code> instead.</p> <p>Sensitive: This field contains sensitive information, so the service does not include it in CloudTrail log entries. If you create your own log entries, you must also avoid logging the information in this field.</p>"
         },
         "SecretString":{
           "shape":"SecretStringType",
-          "documentation":"<p>The decrypted secret value, if the secret value was originally provided as a string or through the Secrets Manager console.</p> <p>If this secret was created by using the console, then Secrets Manager stores the information as a JSON structure of key/value pairs. </p>"
+          "documentation":"<p>The decrypted secret value, if the secret value was originally provided as a string or through the Secrets Manager console.</p> <p>If this secret was created by using the console, then Secrets Manager stores the information as a JSON structure of key/value pairs. </p> <p>Sensitive: This field contains sensitive information, so the service does not include it in CloudTrail log entries. If you create your own log entries, you must also avoid logging the information in this field.</p>"
         },
         "VersionStages":{
           "shape":"SecretVersionStagesType",
@@ -1005,10 +1131,21 @@
       "documentation":"<p>The resource policy has syntax errors.</p>",
       "exception":true
     },
+    "MaxResultsBatchType":{
+      "type":"integer",
+      "box":true,
+      "max":20,
+      "min":1
+    },
     "MaxResultsType":{
       "type":"integer",
       "max":100,
       "min":1
+    },
+    "MedeaTypeType":{
+      "type":"string",
+      "max":256,
+      "min":0
     },
     "NameType":{
       "type":"string",
@@ -1069,7 +1206,7 @@
         },
         "BlockPublicPolicy":{
           "shape":"BooleanType",
-          "documentation":"<p>Specifies whether to block resource-based policies that allow broad access to the secret, for example those that use a wildcard for the principal. By default, public policies aren't blocked.</p>",
+          "documentation":"<p>Specifies whether to block resource-based policies that allow broad access to the secret, for example those that use a wildcard for the principal. By default, public policies aren't blocked.</p> <important> <p>Resource policy validation and the BlockPublicPolicy parameter help protect your resources by preventing public access from being granted through the resource policies that are directly attached to your secrets. In addition to using these features, carefully inspect the following policies to confirm that they do not grant public access:</p> <ul> <li> <p>Identity-based policies attached to associated Amazon Web Services principals (for example, IAM roles)</p> </li> <li> <p>Resource-based policies attached to associated Amazon Web Services resources (for example, Key Management Service (KMS) keys)</p> </li> </ul> <p>To review permissions to your secrets, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/determine-acccess_examine-iam-policies.html\">Determine who has permissions to your secrets</a>.</p> </important>",
           "box":true
         }
       }
@@ -1102,15 +1239,19 @@
         },
         "SecretBinary":{
           "shape":"SecretBinaryType",
-          "documentation":"<p>The binary data to encrypt and store in the new version of the secret. To use this parameter in the command-line tools, we recommend that you store your binary data in a file and then pass the contents of the file as a parameter. </p> <p>You must include <code>SecretBinary</code> or <code>SecretString</code>, but not both.</p> <p>You can't access this value from the Secrets Manager console.</p>"
+          "documentation":"<p>The binary data to encrypt and store in the new version of the secret. To use this parameter in the command-line tools, we recommend that you store your binary data in a file and then pass the contents of the file as a parameter. </p> <p>You must include <code>SecretBinary</code> or <code>SecretString</code>, but not both.</p> <p>You can't access this value from the Secrets Manager console.</p> <p>Sensitive: This field contains sensitive information, so the service does not include it in CloudTrail log entries. If you create your own log entries, you must also avoid logging the information in this field.</p>"
         },
         "SecretString":{
           "shape":"SecretStringType",
-          "documentation":"<p>The text to encrypt and store in the new version of the secret. </p> <p>You must include <code>SecretBinary</code> or <code>SecretString</code>, but not both.</p> <p>We recommend you create the secret string as JSON key/value pairs, as shown in the example.</p>"
+          "documentation":"<p>The text to encrypt and store in the new version of the secret. </p> <p>You must include <code>SecretBinary</code> or <code>SecretString</code>, but not both.</p> <p>We recommend you create the secret string as JSON key/value pairs, as shown in the example.</p> <p>Sensitive: This field contains sensitive information, so the service does not include it in CloudTrail log entries. If you create your own log entries, you must also avoid logging the information in this field.</p>"
         },
         "VersionStages":{
           "shape":"SecretVersionStagesType",
           "documentation":"<p>A list of staging labels to attach to this version of the secret. Secrets Manager uses staging labels to track versions of a secret through the rotation process.</p> <p>If you specify a staging label that's already associated with a different version of the same secret, then Secrets Manager removes the label from the other version and attaches it to this version. If you specify <code>AWSCURRENT</code>, and it is already attached to another version, then Secrets Manager also moves the staging label <code>AWSPREVIOUS</code> to the version that <code>AWSCURRENT</code> was removed from.</p> <p>If you don't include <code>VersionStages</code>, then Secrets Manager automatically moves the staging label <code>AWSCURRENT</code> to this version.</p>"
+        },
+        "RotationToken":{
+          "shape":"RotationTokenType",
+          "documentation":"<p>A unique identifier that indicates the source of the request. Required for secret rotations using an IAM assumed role or cross-account rotation, in which you rotate a secret in one account by using a Lambda rotation function in another account. In both cases, the rotation function assumes an IAM role to call Secrets Manager, and then Secrets Manager validates the identity using the token. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotating-secrets.html\">How rotation works</a> and <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotate-secrets_lambda\">Rotation by Lambda functions</a>.</p> <p>Sensitive: This field contains sensitive information, so the service does not include it in CloudTrail log entries. If you create your own log entries, you must also avoid logging the information in this field.</p>"
         }
       }
     },
@@ -1301,6 +1442,11 @@
         }
       }
     },
+    "RoleARNType":{
+      "type":"string",
+      "max":2048,
+      "min":20
+    },
     "RotateSecretRequest":{
       "type":"structure",
       "required":["SecretId"],
@@ -1320,11 +1466,19 @@
         },
         "RotationRules":{
           "shape":"RotationRulesType",
-          "documentation":"<p>A structure that defines the rotation configuration for this secret.</p>"
+          "documentation":"<p>A structure that defines the rotation configuration for this secret.</p> <important> <p>When changing an existing rotation schedule and setting <code>RotateImmediately</code> to <code>false</code>:</p> <ul> <li> <p>If using <code>AutomaticallyAfterDays</code> or a <code>ScheduleExpression</code> with <code>rate()</code>, the previously scheduled rotation might still occur.</p> </li> <li> <p>To prevent unintended rotations, use a <code>ScheduleExpression</code> with <code>cron()</code> for granular control over rotation windows.</p> </li> </ul> </important>"
+        },
+        "ExternalSecretRotationMetadata":{
+          "shape":"ExternalSecretRotationMetadataType",
+          "documentation":"<p>The metadata needed to successfully rotate a managed external secret. A list of key value pairs in JSON format specified by the partner. For more information about the required information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/managed-external-secrets.html\">Using Secrets Manager managed external secrets</a> </p>"
+        },
+        "ExternalSecretRotationRoleArn":{
+          "shape":"RoleARNType",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the role that allows Secrets Manager to rotate a secret held by a third-party partner. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/mes-security.html\">Security and permissions</a>.</p>"
         },
         "RotateImmediately":{
           "shape":"BooleanType",
-          "documentation":"<p>Specifies whether to rotate the secret immediately or wait until the next scheduled rotation window. The rotation schedule is defined in <a>RotateSecretRequest$RotationRules</a>.</p> <p>For secrets that use a Lambda rotation function to rotate, if you don't immediately rotate the secret, Secrets Manager tests the rotation configuration by running the <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotate-secrets_how.html\"> <code>testSecret</code> step</a> of the Lambda rotation function. The test creates an <code>AWSPENDING</code> version of the secret and then removes it.</p> <p>By default, Secrets Manager rotates the secret immediately.</p>",
+          "documentation":"<p>Specifies whether to rotate the secret immediately or wait until the next scheduled rotation window. The rotation schedule is defined in <a>RotateSecretRequest$RotationRules</a>.</p> <p>The default for <code>RotateImmediately</code> is <code>true</code>. If you don't specify this value, Secrets Manager rotates the secret immediately.</p> <p>If you set <code>RotateImmediately</code> to <code>false</code>, Secrets Manager tests the rotation configuration by running the <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotate-secrets_how.html\"> <code>testSecret</code> step</a> of the Lambda rotation function. This test creates an <code>AWSPENDING</code> version of the secret and then removes it.</p> <p>When changing an existing rotation schedule and setting <code>RotateImmediately</code> to <code>false</code>:</p> <ul> <li> <p>If using <code>AutomaticallyAfterDays</code> or a <code>ScheduleExpression</code> with <code>rate()</code>, the previously scheduled rotation might still occur.</p> </li> <li> <p>To prevent unintended rotations, use a <code>ScheduleExpression</code> with <code>cron()</code> for granular control over rotation windows.</p> </li> </ul> <p>Rotation is an asynchronous process. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotate-secrets_how.html\">How rotation works</a>.</p>",
           "box":true
         }
       }
@@ -1372,6 +1526,13 @@
       },
       "documentation":"<p>A structure that defines the rotation configuration for the secret.</p>"
     },
+    "RotationTokenType":{
+      "type":"string",
+      "max":256,
+      "min":36,
+      "pattern":"^[a-zA-Z0-9\\-]+$",
+      "sensitive":true
+    },
     "ScheduleExpressionType":{
       "type":"string",
       "max":256,
@@ -1389,6 +1550,12 @@
       "min":1,
       "sensitive":true
     },
+    "SecretIdListType":{
+      "type":"list",
+      "member":{"shape":"SecretIdType"},
+      "max":20,
+      "min":1
+    },
     "SecretIdType":{
       "type":"string",
       "max":2048,
@@ -1403,7 +1570,11 @@
         },
         "Name":{
           "shape":"SecretNameType",
-          "documentation":"<p>The friendly name of the secret. You can use forward slashes in the name to represent a path hierarchy. For example, <code>/prod/databases/dbserver1</code> could represent the secret for a server named <code>dbserver1</code> in the folder <code>databases</code> in the folder <code>prod</code>. </p>"
+          "documentation":"<p>The friendly name of the secret. </p>"
+        },
+        "Type":{
+          "shape":"MedeaTypeType",
+          "documentation":"<p>The exact string that identifies the third-party partner that holds the external secret. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/mes-partners.html\">Managed external secret partners</a>.</p>"
         },
         "Description":{
           "shape":"DescriptionType",
@@ -1426,6 +1597,14 @@
           "shape":"RotationRulesType",
           "documentation":"<p>A structure that defines the rotation configuration for the secret.</p>"
         },
+        "ExternalSecretRotationMetadata":{
+          "shape":"ExternalSecretRotationMetadataType",
+          "documentation":"<p>The metadata needed to successfully rotate a managed external secret. A list of key value pairs in JSON format specified by the partner. For more information about the required information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/mes-partners.html\">Managed external secrets partners</a>.</p>"
+        },
+        "ExternalSecretRotationRoleArn":{
+          "shape":"RoleARNType",
+          "documentation":"<p>The role that Secrets Manager assumes to call APIs required to perform the rotation. For more information about the required information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/mes-partners.html\">Managed external secrets partners</a>.</p>"
+        },
         "LastRotatedDate":{
           "shape":"LastRotatedDateType",
           "documentation":"<p>The most recent date and time that the Secrets Manager rotation process was successfully completed. This value is null if the secret hasn't ever rotated.</p>",
@@ -1447,7 +1626,7 @@
         },
         "NextRotationDate":{
           "shape":"NextRotationDateType",
-          "documentation":"<p>The next rotation is scheduled to occur on or before this date. If the secret isn't configured for rotation, Secrets Manager returns null.</p>"
+          "documentation":"<p>The next rotation is scheduled to occur on or before this date. If the secret isn't configured for rotation or rotation has been disabled, Secrets Manager returns null.</p>"
         },
         "Tags":{
           "shape":"TagListType",
@@ -1487,6 +1666,45 @@
       "max":65536,
       "min":1,
       "sensitive":true
+    },
+    "SecretValueEntry":{
+      "type":"structure",
+      "members":{
+        "ARN":{
+          "shape":"SecretARNType",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the secret.</p>"
+        },
+        "Name":{
+          "shape":"SecretNameType",
+          "documentation":"<p>The friendly name of the secret. </p>"
+        },
+        "VersionId":{
+          "shape":"SecretVersionIdType",
+          "documentation":"<p>The unique version identifier of this version of the secret.</p>"
+        },
+        "SecretBinary":{
+          "shape":"SecretBinaryType",
+          "documentation":"<p>The decrypted secret value, if the secret value was originally provided as binary data in the form of a byte array. The parameter represents the binary data as a <a href=\"https://tools.ietf.org/html/rfc4648#section-4\">base64-encoded</a> string.</p>"
+        },
+        "SecretString":{
+          "shape":"SecretStringType",
+          "documentation":"<p>The decrypted secret value, if the secret value was originally provided as a string or through the Secrets Manager console.</p>"
+        },
+        "VersionStages":{
+          "shape":"SecretVersionStagesType",
+          "documentation":"<p>A list of all of the staging labels currently attached to this version of the secret.</p>"
+        },
+        "CreatedDate":{
+          "shape":"CreatedDateType",
+          "documentation":"<p>The date the secret was created.</p>",
+          "box":true
+        }
+      },
+      "documentation":"<p>A structure that contains the secret value and other details for a secret.</p>"
+    },
+    "SecretValuesType":{
+      "type":"list",
+      "member":{"shape":"SecretValueEntry"}
     },
     "SecretVersionIdType":{
       "type":"string",
@@ -1567,7 +1785,7 @@
       "members":{
         "SecretId":{
           "shape":"SecretIdType",
-          "documentation":"<p>The ARN of the primary secret. </p>"
+          "documentation":"<p>The name of the secret or the replica ARN. The replica ARN is the same as the original primary secret ARN expect the Region is changed to the replica Region. </p>"
         }
       }
     },
@@ -1666,15 +1884,19 @@
         },
         "KmsKeyId":{
           "shape":"KmsKeyIdType",
-          "documentation":"<p>The ARN, key ID, or alias of the KMS key that Secrets Manager uses to encrypt new secret versions as well as any existing versions with the staging labels <code>AWSCURRENT</code>, <code>AWSPENDING</code>, or <code>AWSPREVIOUS</code>. If you don't have <code>kms:Encrypt</code> permission to the new key, Secrets Manager does not re-ecrypt existing secret versions with the new key. For more information about versions and staging labels, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/getting-started.html#term_version\">Concepts: Version</a>.</p> <p>A key alias is always prefixed by <code>alias/</code>, for example <code>alias/aws/secretsmanager</code>. For more information, see <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/alias-about.html\">About aliases</a>.</p> <p>If you set this to an empty string, Secrets Manager uses the Amazon Web Services managed key <code>aws/secretsmanager</code>. If this key doesn't already exist in your account, then Secrets Manager creates it for you automatically. All users and roles in the Amazon Web Services account automatically have access to use <code>aws/secretsmanager</code>. Creating <code>aws/secretsmanager</code> can result in a one-time significant delay in returning the result. </p> <important> <p>You can only use the Amazon Web Services managed key <code>aws/secretsmanager</code> if you call this operation using credentials from the same Amazon Web Services account that owns the secret. If the secret is in a different account, then you must use a customer managed key and provide the ARN of that KMS key in this field. The user making the call must have permissions to both the secret and the KMS key in their respective accounts.</p> </important>"
+          "documentation":"<p>The ARN, key ID, or alias of the KMS key that Secrets Manager uses to encrypt new secret versions as well as any existing versions with the staging labels <code>AWSCURRENT</code>, <code>AWSPENDING</code>, or <code>AWSPREVIOUS</code>. If you don't have <code>kms:Encrypt</code> permission to the new key, Secrets Manager does not re-encrypt existing secret versions with the new key. For more information about versions and staging labels, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/getting-started.html#term_version\">Concepts: Version</a>.</p> <p>A key alias is always prefixed by <code>alias/</code>, for example <code>alias/aws/secretsmanager</code>. For more information, see <a href=\"https://docs.aws.amazon.com/kms/latest/developerguide/alias-about.html\">About aliases</a>.</p> <p>If you set this to an empty string, Secrets Manager uses the Amazon Web Services managed key <code>aws/secretsmanager</code>. If this key doesn't already exist in your account, then Secrets Manager creates it for you automatically. All users and roles in the Amazon Web Services account automatically have access to use <code>aws/secretsmanager</code>. Creating <code>aws/secretsmanager</code> can result in a one-time significant delay in returning the result. </p> <important> <p>You can only use the Amazon Web Services managed key <code>aws/secretsmanager</code> if you call this operation using credentials from the same Amazon Web Services account that owns the secret. If the secret is in a different account, then you must use a customer managed key and provide the ARN of that KMS key in this field. The user making the call must have permissions to both the secret and the KMS key in their respective accounts.</p> </important>"
         },
         "SecretBinary":{
           "shape":"SecretBinaryType",
-          "documentation":"<p>The binary data to encrypt and store in the new version of the secret. We recommend that you store your binary data in a file and then pass the contents of the file as a parameter. </p> <p>Either <code>SecretBinary</code> or <code>SecretString</code> must have a value, but not both.</p> <p>You can't access this parameter in the Secrets Manager console.</p>"
+          "documentation":"<p>The binary data to encrypt and store in the new version of the secret. We recommend that you store your binary data in a file and then pass the contents of the file as a parameter. </p> <p>Either <code>SecretBinary</code> or <code>SecretString</code> must have a value, but not both.</p> <p>You can't access this parameter in the Secrets Manager console.</p> <p>Sensitive: This field contains sensitive information, so the service does not include it in CloudTrail log entries. If you create your own log entries, you must also avoid logging the information in this field.</p>"
         },
         "SecretString":{
           "shape":"SecretStringType",
-          "documentation":"<p>The text data to encrypt and store in the new version of the secret. We recommend you use a JSON structure of key/value pairs for your secret value. </p> <p>Either <code>SecretBinary</code> or <code>SecretString</code> must have a value, but not both. </p>"
+          "documentation":"<p>The text data to encrypt and store in the new version of the secret. We recommend you use a JSON structure of key/value pairs for your secret value. </p> <p>Either <code>SecretBinary</code> or <code>SecretString</code> must have a value, but not both. </p> <p>Sensitive: This field contains sensitive information, so the service does not include it in CloudTrail log entries. If you create your own log entries, you must also avoid logging the information in this field.</p>"
+        },
+        "Type":{
+          "shape":"MedeaTypeType",
+          "documentation":"<p>The exact string that identifies the third-party partner that holds the external secret. For more information, see <a href=\"https://docs.aws.amazon.com/secretsmanager/latest/userguide/mes-partners.html\">Managed external secret partners</a>.</p>"
         }
       }
     },
@@ -1741,7 +1963,7 @@
       "members":{
         "SecretId":{
           "shape":"SecretIdType",
-          "documentation":"<p>This field is reserved for internal use.</p>"
+          "documentation":"<p>The ARN or name of the secret with the resource-based policy you want to validate.</p>"
         },
         "ResourcePolicy":{
           "shape":"NonEmptyResourcePolicyType",

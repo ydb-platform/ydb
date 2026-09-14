@@ -197,7 +197,7 @@ bool TSkiffExecuteResOrPull::WriteNext(TMkqlIOCache& specsCache, const NYT::TNod
     YQL_ENSURE(rec.GetType() == NYT::TNode::EType::Map, "Expected map node");
 
     TStringStream err;
-    auto value = NCommon::ParseYsonNode(specsCache.GetHolderFactory(), rec, Specs.Outputs[0].RowType, Specs.Outputs[0].NativeYtTypeFlags, &err);
+    auto value = ParseYsonNode(specsCache.GetHolderFactory(), rec, Specs.Outputs[0].RowType, Specs.Outputs[0].NativeYtTypeFlags, &err);
     if (!value) {
         throw yexception() << "Could not parse yson node with error: " << err.Str();
     }

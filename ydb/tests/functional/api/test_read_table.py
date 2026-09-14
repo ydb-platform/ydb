@@ -88,28 +88,31 @@ class AbstractReadTableTest(object):
         )
 
         data_by_shard_id = {}
-        with session.transaction() as tx:
-            max_value = 2 ** 64
-            shard_key_bound = max_value // partitions
-            data = []
+        max_value = 2 ** 64
+        shard_key_bound = max_value // partitions
+        data = []
 
-            for shard_id in range(partitions):
-                data_by_shard_id[shard_id] = []
+        for shard_id in range(partitions):
+            data_by_shard_id[shard_id] = []
 
-            for idx in range(partitions * partitions):
-                shard_id = idx % partitions
-                table_row = {'Key1': shard_id * shard_key_bound + idx, 'Key2': idx + 1000, 'Value': str(idx ** 4)}
-                if with_data:
-                    data_by_shard_id[shard_id].append(table_row)
-                    data.append(table_row)
+        for idx in range(partitions * partitions):
+            shard_id = idx % partitions
+            table_row = {'Key1': shard_id * shard_key_bound + idx, 'Key2': idx + 1000, 'Value': str(idx ** 4)}
+            if with_data:
+                data_by_shard_id[shard_id].append(table_row)
+                data.append(table_row)
 
-            tx.execute(
-                prepared,
-                commit_tx=True,
-                parameters={
-                    '$data': data
-                }
-            )
+        def upsert_data():
+            with session.transaction() as tx:
+                tx.execute(
+                    prepared,
+                    commit_tx=True,
+                    parameters={
+                        '$data': data
+                    }
+                )
+
+        ydb.retry_operation_sync(upsert_data)
         self.logger.debug("Test successfully prepared")
         return session, table_name, data, data_by_shard_id
 
@@ -271,7 +274,7 @@ class TestReadTableSuccessStories(AbstractReadTableTest):
 class TestReadTableTruncatedResults(AbstractReadTableTest):
     @pytest.mark.parametrize('method_kind', ['async_read_table', 'read_table'])
     def test_truncated_results(self, method_kind):
-        session, table_name, prepared_data, _ = self._prepare_test('test_truncated_results', partitions=32)
+        session, table_name, prepared_data, _ = self._prepare_test(f'test_truncated_results_{method_kind}', partitions=32)
 
         sall_it = self.driver.table_client.scan_query('select * from `%s` order by Key1' % table_name)
         prev_key = None
@@ -335,7 +338,7 @@ class TestReadTableTruncatedResults(AbstractReadTableTest):
 class TestReadTableWithTabletKills(AbstractReadTableTest):
     @pytest.mark.parametrize('method_kind', ['async_read_table', 'read_table'])
     def test_read_table_async_simple(self, method_kind):
-        session, table_name, _, _ = self._prepare_test('test_read_table_async_simple')
+        session, table_name, _, _ = self._prepare_test(f'test_read_table_async_simple_{method_kind}')
 
         for _ in range(6):
             stream = self._prepare_stream(method_kind, session, table_name)

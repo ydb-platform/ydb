@@ -1,0 +1,59 @@
+{%- if with_kotlin -%}
+{%-     if target.kotlinc.flags|length %}
+
+tasks.compileKotlin.configure {
+    compilerOptions {
+{%-         for kotlinc_flag in target.kotlinc.flags|unique %}
+        freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
+{%-         endfor %}
+    }
+}
+{%      endif -%}
+{%-     if named_tests -%}
+{%-         for extra_target in ordered_extra_targets -%}
+{%-             set testname = SourceSetName(extra_target) -%}
+{%-             if testname == NS_TEST -%}
+{%-                 set kotlinCompile = 'compileTestKotlin' -%}
+{%-             else -%}
+{%-                 set kotlinCompile = 'named<KotlinCompile>("compile' + testname|title + 'Kotlin")' -%}
+{%-             endif %}
+
+tasks.{{ kotlinCompile }} {
+{%-             if target is defined %}
+    friendPaths.from(sourceSets.main.get().output)
+{%-             elif testname != NS_TEST %}
+    friendPaths.from(sourceSets.test.get().output)
+{%-             endif -%}
+{%-             if extra_target.extra_depends|length -%}
+{%-                 for extra_depend in extra_target.extra_depends %}
+    friendPaths.from(sourceSets.named("{{ TestRelDir2SourceSetName(extra_depend) }}").get().output)
+{%-                 endfor -%}
+{%-             endif -%}
+{%-             if extra_target.kotlinc.flags|length %}
+    compilerOptions {
+{%-                for kotlinc_flag in extra_target.kotlinc.flags|unique %}
+        freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
+{%-                endfor %}
+    }
+{%-             endif %}
+}
+{%-         endfor -%}
+{%-     else -%}
+{%-         if extra_targets|length %}
+
+tasks.compileTestKotlin {
+{%-             if target is defined %}
+    friendPaths.from(sourceSets.main.get().output)
+{%-             endif -%}
+{%-             set all_kotlinc_flags = all_targets|selectattr('kotlinc')|map(attribute='kotlinc')|map(attribute='flags')|sum -%}
+{%-             if all_kotlinc_flags|length %}
+    compilerOptions {
+{%-                for kotlinc_flag in all_kotlinc_flags|unique %}
+        freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
+{%-                endfor %}
+    }
+{%-             endif %}
+}
+{%-         endif -%}
+{%-     endif -%}
+{%- endif -%}

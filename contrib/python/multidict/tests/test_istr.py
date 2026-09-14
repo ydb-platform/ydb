@@ -63,12 +63,14 @@ def create_istrs(case_insensitive_str_class: Type[str]) -> Callable[[], None]:
     IMPLEMENTATION.name != "cpython",
     reason="PyPy has different GC implementation",
 )
-def test_leak(create_istrs: Callable[[], None]) -> None:
+def test_leak(
+    create_istrs: Callable[[], None], case_insensitive_str_class: Type[str]
+) -> None:
     gc.collect()
-    cnt = len(gc.get_objects())
     for _ in range(10000):
         create_istrs()
 
     gc.collect()
-    cnt2 = len(gc.get_objects())
-    assert abs(cnt - cnt2) < 10  # on PyPy these numbers are not equal
+    assert not any(
+        isinstance(obj, case_insensitive_str_class) for obj in gc.get_objects()
+    )

@@ -1,0 +1,111 @@
+service: ya_make
+title: ya ide gradle export testing
+
+arcanum:
+  review:
+    auto_assign: true
+    groups:
+      - name: ya_ide_gradle_developer
+        roles: ["ya_ide_gradle:developer"]
+
+    rules:
+      - reviewers:
+        - name: ya_ide_gradle_developer
+          ship: 1
+          assign: 1
+          ignore_self_ship: false
+
+ci:
+  secret: sec-01hmxvzfvzwhj0k6qe9vh9w9yw
+  runtime:
+    sandbox:
+      owner: YATOOL
+      notifications:
+      - statuses: [FAILURE, EXCEPTION]
+        transport: email
+        recipients: dimdim11
+  autocheck:
+    fast-targets:
+      - devtools/ya
+      - devtools/ymake
+      - devtools/yexport
+
+  actions:
+    my-action:
+      flow: gradle-tests
+      tags: ci-action
+      triggers:
+        - on: pr
+          on-demand: true
+          filters:
+            - abs-paths:
+              - build/export_generators/ide-gradle/**
+              - build/ymake.core.conf
+              - build/ymake_conf.py
+              - build/conf/**
+              - build/internal/conf/**
+              - build/platform/**
+              - build/scripts/**
+              - devtools/ya/ide/gradle/**
+              - devtools/ya/build/sem_graph/**
+              - devtools/ya/ide/tests_gradle/test_prjs/**
+              - devtools/yexport/ci/gradle_cmake_docker/**
+              - devtools/ymake/**
+
+  on-demand-auto:
+    - abs-paths:
+      - build/export_generators/ide-gradle/**
+      - build/ymake.core.conf
+      - build/ymake_conf.py
+      - build/conf/**
+      - build/internal/conf/**
+      - build/platform/**
+      - build/scripts/**
+      - devtools/ya/ide/gradle/**
+      - devtools/ya/build/sem_graph/**
+      - devtools/ya/ide/tests_gradle/test_prjs/**
+      - devtools/yexport/ci/gradle_cmake_docker/**
+      - devtools/ymake/**
+      tags: ci-action
+
+  flows:
+    gradle-tests:
+      jobs:
+        run_gradle_tests:
+          description: Build results of ya ide gradle in Gradle
+          task: common/misc/run_command
+          requirements:
+            sandbox:
+              client_tags: GENERIC & LINUX & SSD & LXC
+              container_resource: 3493534654
+              privileged: true
+              dns: dns64
+          input:
+            config:
+              arc_mount_config:
+                enabled: true
+              secret_environment_variables:
+                - key: DOCKER_OAUTH
+                  secret_spec:
+                    key: docker.token
+                - key: YA_TOKEN
+                  secret_spec:
+                    key: ya.token
+                - key: BUCKET_PASSWORD
+                  secret_spec:
+                    key: bucket.token
+                - key: YT_TOKEN
+                  secret_spec:
+                    key: YT_TOKEN
+              environment_variables:
+                - key: DOCKER_LOGIN
+                  value: robot-ya-devops
+                - key: YA_USER
+                  value: robot-ya-devops
+                - key: BUCKET_LOGIN
+                  value: robot-ya-devops
+              cmd_line: |
+                set -ex
+                . ci/tasklet/registry/common/misc/run_command/docker/docker_setup_0.sh
+                docker login -u $DOCKER_LOGIN -p $DOCKER_OAUTH registry.yandex.net
+                docker run -e YA_USER="$YA_USER" -e YA_TOKEN="$YA_TOKEN" -e BUCKET_LOGIN="$BUCKET_LOGIN" -e BUCKET_PASSWORD="$BUCKET_PASSWORD" -e YT_TOKEN="$YT_TOKEN" --network=bridge6 -v "$ARCADIA_PATH:/root/arcadia" --entrypoint /root/arcadia/devtools/yexport/ci/gradle_cmake_docker/gradle_tests.sh registry.yandex.net/yexported-cmake-build

@@ -3,22 +3,9 @@
 #include <filesystem>
 #include <format>
 
-static constexpr size_t BATCH_SIZE = 1000;
-
-static std::string JoinPath(const std::string& basePath, const std::string& path) {
-    if (basePath.empty()) {
-        return path;
-    }
-
-    std::filesystem::path prefixPathSplit(basePath);
-    prefixPathSplit /= path;
-
-    return prefixPathSplit;
-}
-
 TRunArgs GetRunArgs() {
-    std::string database = std::getenv("YDB_DATABASE");
     std::string endpoint = std::getenv("YDB_ENDPOINT");
+    std::string database = std::getenv("YDB_DATABASE");
 
     auto driverConfig = TDriverConfig()
         .SetEndpoint(endpoint)
@@ -26,7 +13,7 @@ TRunArgs GetRunArgs() {
         .SetAuthToken(std::getenv("YDB_TOKEN") ? std::getenv("YDB_TOKEN") : "");
 
     TDriver driver(driverConfig);
-    return {driver, JoinPath(database, "bulk")};
+    return {driver, database + "/" + std::string(std::getenv("YDB_TEST_ROOT")) + "/bulk"};
 }
 
 TStatus CreateTable(TTableClient& client, const std::string& table) {
@@ -48,13 +35,15 @@ TStatus CreateTable(TTableClient& client, const std::string& table) {
     return status;
 }
 
-TStatistic GetLogBatch(uint64_t logOffset, std::vector<TLogMessage>& logBatch, uint32_t lastNumber) {
+TStatistic GetLogBatch(uint64_t logOffset, std::vector<TLogMessage>& logBatch, uint32_t lastNumber,
+    size_t batchSize)
+{
     logBatch.clear();
     uint32_t correctSumApp = 0;
     uint32_t correctSumHost = 0;
     uint32_t correctRowCount = 0;
 
-    for (size_t i = 0; i < BATCH_SIZE; ++i) {
+    for (size_t i = 0; i < batchSize; ++i) {
         TLogMessage message;
         message.Pk.Id = correctRowCount + lastNumber;        
         message.Pk.App = "App_" + std::to_string(logOffset % 10);
@@ -72,8 +61,7 @@ TStatistic GetLogBatch(uint64_t logOffset, std::vector<TLogMessage>& logBatch, u
     return {correctSumApp, correctSumHost, correctRowCount};
 }
 
-TStatus WriteLogBatch(TTableClient& tableClient, const std::string& table, const std::vector<TLogMessage>& logBatch,
-                   const TRetryOperationSettings& retrySettings) {
+TValue BuildLogBatchValue(const std::vector<TLogMessage>& logBatch) {
     TValueBuilder rows;
     rows.BeginList();
     for (const auto& message : logBatch) {
@@ -88,7 +76,36 @@ TStatus WriteLogBatch(TTableClient& tableClient, const std::string& table, const
                 .EndStruct();
     }
     rows.EndList();
-    auto bulkUpsertOperation = [table, rowsValue = rows.Build()](TTableClient& tableClient) {
+    return rows.Build();
+}
+
+TDuration MeasureBulkUpsertWallTime(
+    TTableClient& tableClient,
+    const std::string& table,
+    uint64_t logOffset,
+    uint32_t idOffset,
+    const TBulkUpsertSettings& settings,
+    size_t batchSize)
+{
+    std::vector<TLogMessage> logBatch;
+    GetLogBatch(logOffset, logBatch, idOffset, batchSize);
+    auto rows = BuildLogBatchValue(logBatch);
+
+    const auto start = TInstant::Now();
+    const auto status = tableClient.BulkUpsert(table, std::move(rows), settings).GetValueSync();
+    const auto elapsed = TInstant::Now() - start;
+
+    if (!status.IsSuccess()) {
+        throw NStatusHelpers::TYdbErrorException(status);
+    }
+
+    return elapsed;
+}
+
+TStatus WriteLogBatch(TTableClient& tableClient, const std::string& table, const std::vector<TLogMessage>& logBatch,
+                   const TRetryOperationSettings& retrySettings) {
+    auto rowsValue = BuildLogBatchValue(logBatch);
+    auto bulkUpsertOperation = [table, rowsValue = std::move(rowsValue)](TTableClient& tableClient) {
         TValue r = rowsValue;
         auto status = tableClient.BulkUpsert(table, std::move(r));
         return status.GetValueSync();

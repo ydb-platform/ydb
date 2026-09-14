@@ -189,7 +189,7 @@ public:
         if (auto* opt = SavedOpts.FindPtr(optName); opt && (*opt)->ParsedOption) {
             return (*opt)->ParsedOption.GetRef();
         }
-        ythrow yexception() << "option " << optName.Quote() << " undefined";
+        throw TMisuseException() << "option " << optName.Quote() << " undefined";
     }
 
     TMap<TString, TSimpleSharedPtr<TFileConfigOptions>> SavedOpts;
@@ -230,6 +230,52 @@ public:
     }
 
     TProtoConfigFileProviderMock GetMock() const {
+        return Mock;
+    }
+};
+
+class TConfigClientMock
+    : public IConfigClient
+{
+public:
+    std::shared_ptr<IStorageConfigResult> FetchConfig(
+        const TGrpcSslSettings& grpcSettings,
+        const TVector<TString>& addrs,
+        const IEnv& env,
+        IInitLogger& logger,
+        const std::vector<TString>&,
+        int) const override
+    {
+        Y_UNUSED(grpcSettings, addrs, env, logger);
+        return SavedResult;
+    }
+
+    std::shared_ptr<IStorageConfigResult> SavedResult;
+};
+
+class TConfigClientRecorder
+    : public IConfigClient
+{
+    IConfigClient& Impl;
+    mutable TConfigClientMock Mock;
+public:
+    TConfigClientRecorder(IConfigClient& impl)
+        : Impl(impl)
+    {}
+
+    std::shared_ptr<IStorageConfigResult> FetchConfig(
+        const TGrpcSslSettings& grpcSettings,
+        const TVector<TString>& addrs,
+        const IEnv& env,
+        IInitLogger& logger,
+        const std::vector<TString>& hostOptions,
+        int interconnectPort) const override
+    {
+        Mock.SavedResult = Impl.FetchConfig(grpcSettings, addrs, env, logger, hostOptions, interconnectPort);
+        return Mock.SavedResult;
+    }
+
+    TConfigClientMock GetMock() const {
         return Mock;
     }
 };

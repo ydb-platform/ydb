@@ -42,11 +42,11 @@ EExecutionStatus TStoreWriteUnit::Execute(TOperation::TPtr op,
                                            TTransactionContext &txc,
                                            const TActorContext &ctx)
 {
-    Y_ABORT_UNLESS(!op->IsAborted() && !op->IsInterrupted());
+    Y_ENSURE(!op->IsAborted() && !op->IsInterrupted());
 
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     auto writeTx = writeOp->GetWriteTx();
-    Y_ABORT_UNLESS(writeTx);
+    Y_ENSURE(writeTx);
 
     bool cached = Pipeline.SaveForPropose(writeTx);
     if (cached) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb {
 namespace Coordination {
@@ -12,7 +12,7 @@ namespace Coordination {
 }
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 namespace NScheme {
 struct TPermissions;
@@ -198,7 +198,9 @@ struct TCreateNodeSettings : public TNodeSettings<TCreateNodeSettings> {
     TCreateNodeSettings(const Ydb::Coordination::Config& config);
 };
 struct TAlterNodeSettings : public TNodeSettings<TAlterNodeSettings> { };
-struct TDropNodeSettings : public TOperationRequestSettings<TDropNodeSettings> { };
+struct TDropNodeSettings : public TOperationRequestSettings<TDropNodeSettings> {
+    using TOperationRequestSettings<TDropNodeSettings>::TOperationRequestSettings;
+};
 struct TDescribeNodeSettings : public TOperationRequestSettings<TDescribeNodeSettings> { };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -289,6 +291,9 @@ struct TDescribeSemaphoreSettings {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TDistributedLock;
+struct TDistributedLockSettings;
+
 class TClient {
 public:
     TClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
@@ -321,6 +326,7 @@ class TSessionContext;
 
 class TSession {
     friend class TSessionContext;
+    friend class TDistributedLock;
 
 public:
     TSession() = default;
@@ -358,8 +364,12 @@ public:
     TAsyncResult<void> DeleteSemaphore(const std::string& name,
         bool force = false);
 
+    TDistributedLock CreateDistributedLock(const TDistributedLockSettings& settings);
+
 private:
     explicit TSession(TSessionContext* context);
+
+    std::shared_ptr<void> SubscribeSessionLost(std::function<void()> callback);
 
 private:
     class TImpl;

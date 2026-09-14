@@ -44,10 +44,10 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
             Processed = Scheduled = Discarded = Total = 0;
         }
 
-        TAtomic Processed;
-        TAtomic Scheduled;
-        TAtomic Discarded;
-        TAtomic Total;
+        std::atomic<size_t> Processed;
+        std::atomic<size_t> Scheduled;
+        std::atomic<size_t> Discarded;
+        std::atomic<size_t> Total;
     };
     static TCounters Counters;
 
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
         struct TWaitJob: public IObjectInQueue {
             void Process(void*) override {
                 WaitEvent.Wait();
-                AtomicIncrement(Counters.Processed);
+                ++Counters.Processed;
             }
         } job;
 
@@ -87,7 +87,26 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(0u, TEnv<T>::Queue->ObjectCount());
         UNIT_ASSERT_VALUES_EQUAL(0u, TEnv<T>::Queue->Size());
-        UNIT_ASSERT_VALUES_EQUAL((size_t)Counters.Processed, enqueued);
+        UNIT_ASSERT_VALUES_EQUAL(Counters.Processed.load(), enqueued);
+
+        Counters.Reset();
+
+        enqueued = 0;
+        {
+            TLocalSetup setup;
+            TEnv<T>::Queue->SetCurrentMaxQueueSize(MaxQueueSize / 2);
+
+            while (TEnv<T>::Queue->Add(&job) && enqueued < MaxQueueSize + 100) {
+                ++enqueued;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(enqueued, MaxQueueSize / 2);
+            UNIT_ASSERT_VALUES_EQUAL(enqueued, TEnv<T>::Queue->ObjectCount());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(0u, TEnv<T>::Queue->ObjectCount());
+        UNIT_ASSERT_VALUES_EQUAL(0u, TEnv<T>::Queue->Size());
+        UNIT_ASSERT_VALUES_EQUAL(Counters.Processed.load(), enqueued);
     }
 
     Y_UNIT_TEST(FillTest) {
@@ -101,25 +120,25 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
 //concurrent test -- send many jobs from different threads
     struct TJob: public IObjectInQueue {
         void Process(void*) override {
-            AtomicIncrement(Counters.Processed);
+            ++Counters.Processed;
         }
     };
     static TJob Job;
 
     template <typename T>
     static bool TryAdd() {
-        AtomicIncrement(Counters.Total);
+        ++Counters.Total;
         if (TEnv<T>::Queue->Add(&Job)) {
-            AtomicIncrement(Counters.Scheduled);
+            ++Counters.Scheduled;
             return true;
         } else {
-            AtomicIncrement(Counters.Discarded);
+            ++Counters.Discarded;
             return false;
         }
     }
 
     const size_t N = 100000;
-    static size_t TryCounter;
+    static std::atomic<size_t> TryCounter;
 
     template <typename T>
     void ConcurrentTest() {
@@ -128,7 +147,7 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
 
         struct TSender: public IThreadFactory::IThreadAble {
             void DoExecute() override {
-                while ((size_t)AtomicIncrement(TryCounter) <= N) {
+                while (++TryCounter <= N) {
                     if (!TryAdd<T>()) {
                         Sleep(TDuration::MicroSeconds(50));
                     }
@@ -149,9 +168,9 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
             }
         }
 
-        UNIT_ASSERT_VALUES_EQUAL((size_t)Counters.Total, N);
-        UNIT_ASSERT_VALUES_EQUAL(Counters.Processed, Counters.Scheduled);
-        UNIT_ASSERT_VALUES_EQUAL(Counters.Total, Counters.Scheduled + Counters.Discarded);
+        UNIT_ASSERT_VALUES_EQUAL(Counters.Total.load(), N);
+        UNIT_ASSERT_VALUES_EQUAL(Counters.Processed.load(), Counters.Scheduled.load());
+        UNIT_ASSERT_VALUES_EQUAL(Counters.Total.load(), Counters.Scheduled.load() + Counters.Discarded.load());
     }
 
     Y_UNIT_TEST(ConcurrentTest) {

@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TActorActivity) {
 
     Y_UNIT_TEST(Basic) {
         TAutoPtr<IActor> actor = new TTestActor();
-        const ui32 activityIndex = actor->GetActivityType();
+        const ui32 activityIndex = actor->GetActivityType().GetIndex();
 
         UNIT_ASSERT_VALUES_EQUAL(TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetIndexByName("ASYNC_DESTROYER"), activityIndex);
 

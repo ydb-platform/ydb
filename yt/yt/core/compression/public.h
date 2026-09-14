@@ -85,6 +85,14 @@ DEFINE_AMBIGUOUS_ENUM_WITH_UNDERLYING_TYPE(ECodec, i8,
     ((Bzip2_8)                   (64))
     ((Bzip2_9)                   (65))
 
+    ((ZstdFast_1)                (66))
+    ((ZstdFast_2)                (67))
+    ((ZstdFast_3)                (68))
+    ((ZstdFast_4)                (69))
+    ((ZstdFast_5)                (70))
+    ((ZstdFast_6)                (71))
+    ((ZstdFast_7)                (72))
+
     // Deprecated
     ((Zlib6)                      (2))
     ((GzipNormal)                 (2))

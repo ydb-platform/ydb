@@ -10,7 +10,9 @@ class AllureTitleHelper:
     def decorate_as_title(self, test_title):
         def decorator(func):
             # pytest.fixture wraps function, so we need to get it directly
-            if getattr(func, '__pytest_wrapped__', None):
+            if hasattr(func, "_get_wrapped_function"):  # pytest >= 8.4
+                function = func._get_wrapped_function()
+            elif hasattr(func, "__pytest_wrapped__"):  # pytest < 8.4
                 function = func.__pytest_wrapped__.obj
             else:
                 function = func

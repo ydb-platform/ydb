@@ -12,6 +12,8 @@
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/helpers.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 #include <yt/yt_proto/yt/core/tracing/proto/tracing_ext.pb.h>
 
 #include <yt/yt/library/tracing/tracer.h>
@@ -21,6 +23,9 @@
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 
 #include <library/cpp/yt/misc/tls.h>
+
+#include <util/string/cast.h>
+#include <util/string/split.h>
 
 #include <atomic>
 #include <mutex>
@@ -45,7 +50,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = TracingLogger;
+constinit const auto Logger = TracingLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -80,7 +85,7 @@ void SetGlobalTracer(const ITracerPtr& tracer)
     }
 
     if (oldTracer) {
-        oldTracer->Stop();
+        GetFinalizerInvoker()->Invoke(BIND(&ITracer::Stop, oldTracer));
     }
 }
 
@@ -88,9 +93,14 @@ void SetGlobalTracer(const ITracerPtr& tracer)
 
 namespace NDetail {
 
+// NB: Don't use max value to avoid overflow during addition.
+std::atomic<TCpuDuration> TraceContextDefaultLeakDurationThreshold = 1LL << 60;
+
+YT_DEFINE_LEAKY_GLOBAL(TCounter, TraceContextsLeakedCounter, TracingProfiler().Counter("/trace_contexts_leaked"));
+
 // Expended from YT_DEFINE_THREAD_LOCAL(TTraceContext*, CurrentTraceContext);
 // with Overrides added.
-thread_local TTraceContext *CurrentTraceContextData{};
+thread_local TTraceContext* CurrentTraceContextData{};
 YT_PREVENT_TLS_CACHING TTraceContext*& CurrentTraceContext()
 {
     NYT::NDetail::EnableErrorOriginOverrides();
@@ -111,20 +121,13 @@ void SetCurrentTraceContext(TTraceContext* context)
     std::atomic_signal_fence(std::memory_order::seq_cst);
 }
 
-TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation loc)
+TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext)
 {
-    if (NConcurrency::NDetail::PerThreadFls() == NConcurrency::NDetail::CurrentFls() && newContext) {
-        YT_LOG_TRACE("Writing propagating storage in thread FLS (Location: %v)",
-            loc);
-    }
-
-    auto& propagatingStorage = GetCurrentPropagatingStorage();
+    auto& propagatingStorage = CurrentPropagatingStorage();
 
     auto oldContext = newContext
         ? propagatingStorage.Exchange<TTraceContextPtr>(newContext).value_or(nullptr)
         : propagatingStorage.Remove<TTraceContextPtr>().value_or(nullptr);
-
-    propagatingStorage.RecordLocation(loc);
 
     auto now = GetApproximateCpuInstant();
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
@@ -132,17 +135,17 @@ TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation l
     auto delta = now - traceContextTimingCheckpoint;
 
     if (oldContext && newContext) {
-        YT_LOG_TRACE("Switching context (OldContext: %v, NewContext: %v, CpuTimeDelta: %v)",
-            oldContext,
-            newContext,
-            NProfiling::CpuDurationToDuration(delta));
+        YT_TLOG_TRACE("Switching context")
+            .With("OldContext", oldContext)
+            .With("NewContext", newContext)
+            .With("CpuTimeDelta", NProfiling::CpuDurationToDuration(delta));
     } else if (oldContext) {
-        YT_LOG_TRACE("Uninstalling context (Context: %v, CpuTimeDelta: %v)",
-            oldContext,
-            NProfiling::CpuDurationToDuration(delta));
+        YT_TLOG_TRACE("Uninstalling context")
+            .With("Context", oldContext)
+            .With("CpuTimeDelta", NProfiling::CpuDurationToDuration(delta));
     } else if (newContext) {
-        YT_LOG_TRACE("Installing context (Context: %v)",
-            newContext);
+        YT_TLOG_TRACE("Installing context")
+            .With("Context", newContext);
     }
 
     if (oldContext) {
@@ -155,31 +158,7 @@ TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation l
     return oldContext;
 }
 
-void OnContextSwitchOut()
-{
-    if (auto* context = TryGetCurrentTraceContext()) {
-        auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
-        auto now = GetApproximateCpuInstant();
-        context->IncrementElapsedCpuTime(now - traceContextTimingCheckpoint);
-        SetCurrentTraceContext(nullptr);
-        traceContextTimingCheckpoint = 0;
-    }
-}
-
-void OnContextSwitchIn()
-{
-    if (auto* context = TryGetTraceContextFromPropagatingStorage(GetCurrentPropagatingStorage())) {
-        SetCurrentTraceContext(context);
-        TraceContextTimingCheckpoint() = GetApproximateCpuInstant();
-    } else {
-        SetCurrentTraceContext(nullptr);
-        TraceContextTimingCheckpoint() = 0;
-    }
-}
-
-void OnPropagatingStorageSwitch(
-    const TPropagatingStorage& oldStorage,
-    const TPropagatingStorage& newStorage)
+void OnPropagatingStorageBeforeSwitch(const TPropagatingStorage& oldStorage)
 {
     TCpuInstant now = 0;
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
@@ -190,6 +169,12 @@ void OnPropagatingStorageSwitch(
         now = GetApproximateCpuInstant();
         oldContext->IncrementElapsedCpuTime(now - traceContextTimingCheckpoint);
     }
+}
+
+void OnPropagatingStorageAfterSwitch(const TPropagatingStorage& newStorage)
+{
+    TCpuInstant now = 0;
+    auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();
 
     if (auto* newContext = TryGetTraceContextFromPropagatingStorage(newStorage)) {
         SetCurrentTraceContext(newContext);
@@ -201,6 +186,24 @@ void OnPropagatingStorageSwitch(
         SetCurrentTraceContext(nullptr);
         traceContextTimingCheckpoint = 0;
     }
+}
+
+void OnPropagatingStorageSwitch(
+    const TPropagatingStorage& oldStorage,
+    const TPropagatingStorage& newStorage)
+{
+    OnPropagatingStorageBeforeSwitch(oldStorage);
+    OnPropagatingStorageAfterSwitch(newStorage);
+}
+
+void OnContextSwitchOut()
+{
+    OnPropagatingStorageBeforeSwitch(GetCurrentPropagatingStorage());
+}
+
+void OnContextSwitchIn()
+{
+    OnPropagatingStorageAfterSwitch(GetCurrentPropagatingStorage());
 }
 
 void InitializeTraceContexts()
@@ -229,6 +232,45 @@ void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStri
         (context.Sampled ? 1u : 0) | (context.Debug ? 2u : 0));
 }
 
+bool TryParseTraceParent(TStringBuf traceParent, TSpanContext& spanContext)
+{
+    // An adaptation of https://github.com/census-instrumentation/opencensus-go/blob/ae11cd04b/plugin/ochttp/propagation/tracecontext/propagation.go#L49-L106.
+
+    auto parts = StringSplitter(traceParent).Split('-').ToList<std::string>();
+    if (parts.size() < 3 || parts.size() > 4) {
+        return false;
+    }
+
+    // NB: We support the legacy three-part form in which version is assumed to be zero.
+    ui8 version = 0;
+    if (parts.size() == 4) {
+        if (parts[0].size() != 2 || !TryIntFromString<16>(parts[0], version) || version == 0xff) {
+            return false;
+        }
+        parts.erase(parts.begin());
+    }
+
+    if (!TTraceId::FromStringHex32(parts[0], &spanContext.TraceId) || spanContext.TraceId == InvalidTraceId) {
+        return false;
+    }
+
+    if (parts[1].size() != 16 ||
+        !TryIntFromString<16>(parts[1], spanContext.SpanId) ||
+        spanContext.SpanId == InvalidSpanId)
+    {
+        return false;
+    }
+
+    ui8 options = 0;
+    if (parts[2].size() != 2 || !TryIntFromString<16>(parts[2], options)) {
+        return false;
+    }
+    spanContext.Sampled = static_cast<bool>(options & 1u);
+    spanContext.Debug = static_cast<bool>(options & 2u);
+
+    return true;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TTraceContext::TTraceContext(
@@ -247,14 +289,19 @@ TTraceContext::TTraceContext(
     , SpanName_(spanName)
     , RequestId_(ParentContext_ ? ParentContext_->GetRequestId() : TRequestId{})
     , TargetEndpoint_(ParentContext_ ? ParentContext_->GetTargetEndpoint() : std::nullopt)
-    , LoggingTag_(ParentContext_ ? ParentContext_->GetLoggingTag() : TString{})
+    , LoggingTags_(ParentContext_ ? ParentContext_->GetLoggingTags() : NLogging::TLoggingTagList{})
     , StartTime_(startTime.value_or(GetCpuInstant()))
+    , LeakDeadline_(StartTime_ + NDetail::TraceContextDefaultLeakDurationThreshold.load(std::memory_order::relaxed))
     , Baggage_(ParentContext_ ? ParentContext_->GetBaggage() : TYsonString{})
 {
+    YT_VERIFY(TraceId_ != InvalidTraceId && SpanId_ != InvalidSpanId);
+    if (ParentContext_) {
+        ParentContext_->CheckForLeak(StartTime_);
+    }
     NDetail::InitializeTraceContexts();
 }
 
-void TTraceContext::SetTargetEndpoint(const std::optional<TString>& targetEndpoint)
+void TTraceContext::SetTargetEndpoint(const std::optional<std::string>& targetEndpoint)
 {
     TargetEndpoint_ = targetEndpoint;
 }
@@ -264,9 +311,9 @@ void TTraceContext::SetRequestId(TRequestId requestId)
     RequestId_ = requestId;
 }
 
-void TTraceContext::SetLoggingTag(const std::string& loggingTag)
+void TTraceContext::SetLoggingTags(NLogging::TLoggingTagList loggingTags)
 {
-    LoggingTag_ = loggingTag;
+    LoggingTags_ = std::move(loggingTags);
 }
 
 TAllocationTags TTraceContext::GetAllocationTags() const
@@ -381,6 +428,23 @@ TDuration TTraceContext::GetDuration() const
     return NProfiling::CpuDurationToDuration(finishTime - StartTime_);
 }
 
+void TTraceContext::CheckForLeak(TCpuInstant now)
+{
+    if (now > LeakDeadline_) [[unlikely]] {
+        if (!LeakDetected_.exchange(true)) {
+            YT_TLOG_DEBUG("Trace context leak detected")
+                .With("TraceId", GetTraceId())
+                .With("StartTime", GetStartTime());
+            NDetail::TraceContextsLeakedCounter().Increment();
+        }
+    }
+}
+
+void TTraceContext::SetLeakDurationThreshold(TDuration duration)
+{
+    LeakDeadline_.store(StartTime_ + DurationToCpuDuration(duration));
+}
+
 TTraceContext::TTagList TTraceContext::GetTags() const
 {
     auto guard = Guard(Lock_);
@@ -439,6 +503,7 @@ void TTraceContext::AddTag(const std::string& tagKey, const std::string& tagValu
     }
 
     auto guard = Guard(Lock_);
+    YT_ASSERT(std::ranges::none_of(Tags_, [&] (const auto& tag) { return tag.first == tagKey; }));
     Tags_.emplace_back(tagKey, tagValue);
 }
 
@@ -487,12 +552,12 @@ void TTraceContext::AddErrorTag()
         return;
     }
 
-    static const TString ErrorAnnotationName("error");
-    static const TString ErrorAnnotationValue("true");
+    static const std::string ErrorAnnotationName("error");
+    static const std::string ErrorAnnotationValue("true");
     AddTag(ErrorAnnotationName, ErrorAnnotationValue);
 }
 
-void TTraceContext::AddLogEntry(TCpuInstant at, TString message)
+void TTraceContext::AddLogEntry(TCpuInstant at, std::string message)
 {
     if (!IsRecorded()) {
         return;
@@ -618,7 +683,7 @@ void ToProto(
 
     if (sendBaggage) {
         if (auto baggage = context->GetBaggage()) {
-            ext->set_baggage(baggage.ToString());
+            ext->set_baggage(ToProto(baggage));
         }
     }
 }
@@ -638,9 +703,13 @@ TTraceContextPtr TTraceContext::NewRoot(const std::string& spanName, TTraceId tr
 TTraceContextPtr TTraceContext::NewChildFromSpan(
     TSpanContext parentSpanContext,
     const std::string& spanName,
-    std::optional<TString> endpoint,
+    std::optional<std::string> endpoint,
     TYsonString baggage)
 {
+    if (parentSpanContext.TraceId == InvalidTraceId) {
+        return nullptr;
+    }
+
     auto result = New<TTraceContext>(
         parentSpanContext,
         spanName);
@@ -680,7 +749,7 @@ TTraceContextPtr TTraceContext::NewChildFromRpc(
         traceContext->SetBaggage(TYsonString(ext.baggage()));
     }
     if (ext.has_target_endpoint()) {
-        traceContext->SetTargetEndpoint(FromProto<TString>(ext.target_endpoint()));
+        traceContext->SetTargetEndpoint(FromProto<std::string>(ext.target_endpoint()));
     }
     return traceContext;
 }
@@ -705,9 +774,9 @@ void FlushCurrentTraceContextElapsedTime()
 
     auto now = GetApproximateCpuInstant();
     auto delta = std::max(now - traceContextTimingCheckpoint, static_cast<TCpuInstant>(0));
-    YT_LOG_TRACE("Flushing context time (Context: %v, CpuTimeDelta: %v)",
-        context,
-        NProfiling::CpuDurationToDuration(delta));
+    YT_TLOG_TRACE("Flushing context time")
+        .With("Context", context)
+        .With("CpuTimeDelta", NProfiling::CpuDurationToDuration(delta));
     context->IncrementElapsedCpuTime(delta);
     traceContextTimingCheckpoint = now;
 }
@@ -718,13 +787,16 @@ bool IsCurrentTraceContextRecorded()
     return context && context->IsRecorded();
 }
 
-//! Do not rename, change the signature, or drop Y_NO_INLINE.
-//! Used in devtools/gdb/yt_fibers_printer.py.
-Y_NO_INLINE TTraceContext* TryGetTraceContextFromPropagatingStorage(const NConcurrency::TPropagatingStorage& storage)
+
+void SetTraceContextDefaultLeakDurationThreshold(TDuration threshold)
 {
-    auto result = storage.Find<TTraceContextPtr>();
-    return result ? result->Get() : nullptr;
+    NDetail::TraceContextDefaultLeakDurationThreshold.store(DurationToCpuDuration(threshold));
 }
+
+YT_STATIC_INITIALIZER({
+    // Seems like a reasonable default.
+    SetTraceContextDefaultLeakDurationThreshold(TDuration::Minutes(10));
+});
 
 ////////////////////////////////////////////////////////////////////////////////
 

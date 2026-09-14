@@ -1,21 +1,21 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 
 TEST_SRCS(
     test_leader_start_inflight.py
 )
 
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(ram:32 cpu:4)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+    REQUIREMENTS(ram:32)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

@@ -28,13 +28,22 @@ namespace absl {
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
+template <class Policy, class = void>
+struct policy_trait_element_is_owner : std::false_type {};
+
+template <class Policy>
+struct policy_trait_element_is_owner<
+    Policy,
+    std::enable_if_t<!std::is_void_v<typename Policy::element_is_owner>>>
+    : Policy::element_is_owner {};
+
 // Defines how slots are initialized/destroyed/moved.
 template <class Policy, class = void>
 struct common_policy_traits {
   // The actual object stored in the container.
   using slot_type = typename Policy::slot_type;
   using reference = decltype(Policy::element(std::declval<slot_type*>()));
-  using value_type = typename std::remove_reference<reference>::type;
+  using value_type = std::remove_reference_t<reference>;
 
   // PRECONDITION: `slot` is UNINITIALIZED
   // POSTCONDITION: `slot` is INITIALIZED
@@ -72,7 +81,7 @@ struct common_policy_traits {
   // Note: we use remove_const_t so that the two overloads have different args
   // in the case of sets with explicitly const value_types.
   template <class P = Policy>
-  static auto element(absl::remove_const_t<slot_type>* slot)
+  static auto element(std::remove_const_t<slot_type>* slot)
       -> decltype(P::element(slot)) {
     return P::element(slot);
   }
@@ -82,16 +91,16 @@ struct common_policy_traits {
   }
 
   static constexpr bool transfer_uses_memcpy() {
-    return std::is_same<decltype(transfer_impl<std::allocator<char>>(
-                            nullptr, nullptr, nullptr, Rank2{})),
-                        std::true_type>::value;
+    return std::is_same_v<decltype(transfer_impl<std::allocator<char>>(
+                              nullptr, nullptr, nullptr, Rank2{})),
+                          std::true_type>;
   }
 
   // Returns true if destroy is trivial and can be omitted.
   template <class Alloc>
   static constexpr bool destroy_is_trivial() {
-    return std::is_same<decltype(destroy<Alloc>(nullptr, nullptr)),
-                        std::true_type>::value;
+    return std::is_same_v<decltype(destroy<Alloc>(nullptr, nullptr)),
+                          std::true_type>;
   }
 
  private:
@@ -110,7 +119,7 @@ struct common_policy_traits {
                                                            old_slot)) {
     return P::transfer(alloc, new_slot, old_slot);
   }
-#if defined(__cpp_lib_launder) && __cpp_lib_launder >= 201606
+
   // This overload returns true_type for the trait below.
   // The conditional_t is to make the enabler type dependent.
   template <class Alloc,
@@ -126,7 +135,6 @@ struct common_policy_traits {
         static_cast<const void*>(&element(old_slot)), sizeof(value_type));
     return {};
   }
-#endif
 
   template <class Alloc>
   static void transfer_impl(Alloc* alloc, slot_type* new_slot,

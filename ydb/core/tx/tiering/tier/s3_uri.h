@@ -1,4 +1,4 @@
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
@@ -20,6 +20,8 @@ private:
         PATH_STYLE = 1,
         VIRTUAL_HOSTED_STYLE = 2,
     };
+
+    TUriStyle UriStyle = PATH_STYLE;
 
     inline static const std::vector<TString> BucketHostSeparators = { ".s3.", ".s3-" };
 
@@ -58,6 +60,7 @@ private:
 
     static TConclusion<TS3Uri> ParsePathStyleUri(const NUri::TUri& input) {
         TS3Uri result;
+        result.UriStyle = PATH_STYLE;
 
         TStringBuf path = StripPath(input.GetField(NUri::TField::FieldPath));
 
@@ -84,14 +87,16 @@ private:
 
     static TConclusion<TS3Uri> ParseVirtualHostedStyleUri(const NUri::TUri& input) {
         TS3Uri result;
+        result.UriStyle = VIRTUAL_HOSTED_STYLE;
 
-        for (const TString& sep : BucketHostSeparators) {
+        for (auto&& sep : BucketHostSeparators) {
             if (const ui64 findSep = input.GetHost().find(sep); findSep != TStringBuf::npos) {
                 result.Bucket = input.GetHost().SubStr(0, findSep);
                 result.Host = input.GetHost().SubStr(findSep + 1);
                 break;
             }
         }
+
         if (result.Host.empty()) {
             TStringBuf host;
             TStringBuf bucket;
@@ -173,6 +178,8 @@ public:
         if (Scheme) {
             settings.SetScheme(*Scheme);
         }
+
+        settings.SetUseVirtualAddressing(UriStyle == VIRTUAL_HOSTED_STYLE);
     }
 };
 

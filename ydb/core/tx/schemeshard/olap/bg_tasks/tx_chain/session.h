@@ -95,6 +95,10 @@ public:
     virtual bool IsReadyForRemoveOnFinished() const override {
         return true;
     }
+
+    virtual TStatus GetStatus() const override {
+        return TStatus{IsFinished(), TString{}};
+    }
 };
 
 }

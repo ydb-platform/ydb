@@ -6,7 +6,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/core/tx/replication/ut_helpers/write_topic.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(Worker) {
         };
 
         auto createWriterFn = [tablePathId = env.GetPathId("/Root/Table")]() {
-            return CreateLocalTableWriter(tablePathId);
+            return CreateLocalTableWriter("/Root", tablePathId);
         };
 
         auto worker = env.GetRuntime().Register(CreateWorker(env.GetSender(), std::move(createReaderFn), std::move(createWriterFn)));

@@ -18,7 +18,7 @@ namespace NKikimr::NStorage {
             ConnectedToStaticNode = *nodeId;
             TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenDynamicConfigSubscribe,
                 IEventHandle::FlagSubscribeOnSession, MakeBlobStorageNodeWardenID(ConnectedToStaticNode), SelfId(),
-                nullptr, 0));
+                nullptr, ++StaticNodeSubscriptionCookie));
         } else if (timestamp != TMonotonic::Max()) {
             if (!ReconnectScheduled) {
                 TActivationContext::Schedule(timestamp, new IEventHandle(TEvPrivate::EvReconnect, 0, SelfId(), {}, nullptr, 0));
@@ -33,14 +33,16 @@ namespace NKikimr::NStorage {
         ConnectToStaticNode();
     }
 
-    void TDistributedConfigKeeper::OnStaticNodeConnected(ui32 nodeId, TActorId sessionId) {
-        Y_ABORT_UNLESS(nodeId == ConnectedToStaticNode);
-        Y_ABORT_UNLESS(!StaticNodeSessionId);
-        StaticNodeSessionId = sessionId;
+    void TDistributedConfigKeeper::OnStaticNodeConnected(ui32 nodeId, TActorId sessionId, ui64 cookie) {
+        if (cookie == StaticNodeSubscriptionCookie) {
+            Y_ABORT_UNLESS(nodeId == ConnectedToStaticNode);
+            Y_ABORT_UNLESS(!StaticNodeSessionId);
+            StaticNodeSessionId = sessionId;
+        }
     }
 
-    void TDistributedConfigKeeper::OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId) {
-        if (nodeId != ConnectedToStaticNode || (StaticNodeSessionId && StaticNodeSessionId != sessionId)) {
+    void TDistributedConfigKeeper::OnStaticNodeDisconnected(ui32 nodeId, TActorId sessionId, ui64 cookie) {
+        if (nodeId != ConnectedToStaticNode || (StaticNodeSessionId && sessionId != StaticNodeSessionId) || cookie != StaticNodeSubscriptionCookie) {
             return; // possible race with unsubscription
         }
         ConnectedToStaticNode = 0;
@@ -63,11 +65,14 @@ namespace NKikimr::NStorage {
             StaticNodeSessionId = {};
             ConnectToStaticNode();
         }
+        if (record.HasCacheUpdate()) {
+            ApplyCacheUpdates(record.MutableCacheUpdate(), 0);
+        }
     }
 
     void TDistributedConfigKeeper::ApplyConfigUpdateToDynamicNodes(bool drop) {
         for (const auto& [sessionId, actorId] : DynamicConfigSubscribers) {
-            PushConfigToDynamicNode(actorId, sessionId);
+            PushConfigToDynamicNode(actorId, sessionId, false);
         }
         if (drop) {
             Y_ABORT_UNLESS(!PartOfNodeQuorum());
@@ -89,7 +94,7 @@ namespace NKikimr::NStorage {
 
         const bool partOfNodeQuorum = PartOfNodeQuorum();
         if (!partOfNodeQuorum || StorageConfig) {
-            PushConfigToDynamicNode(ev->Sender, sessionId);
+            PushConfigToDynamicNode(ev->Sender, sessionId, true);
         }
         if (!partOfNodeQuorum) {
             return;
@@ -102,7 +107,7 @@ namespace NKikimr::NStorage {
         Y_ABORT_UNLESS(inserted);
     }
 
-    void TDistributedConfigKeeper::PushConfigToDynamicNode(TActorId actorId, TActorId sessionId) {
+    void TDistributedConfigKeeper::PushConfigToDynamicNode(TActorId actorId, TActorId sessionId, bool addCache) {
         auto ev = std::make_unique<TEvNodeWardenDynamicConfigPush>();
         auto& record = ev->Record;
         if (!PartOfNodeQuorum()) { // this configuration is not reliable, don't push anything
@@ -112,7 +117,13 @@ namespace NKikimr::NStorage {
         } else if (auto *target = record.MutableConfig(); SelfManagementEnabled) {
             target->CopyFrom(*StorageConfig);
         } else {
-            target->CopyFrom(BaseConfig);
+            target->CopyFrom(*BaseConfig);
+        }
+        if (addCache) {
+            // push full cache to the dynamic node
+            for (auto it = Cache.begin(); it != Cache.end(); ++it) {
+                AddCacheUpdate(record.MutableCacheUpdate(), it, true);
+            }
         }
         auto handle = std::make_unique<IEventHandle>(actorId, SelfId(), ev.release());
         handle->Rewrite(TEvInterconnect::EvForward, sessionId);

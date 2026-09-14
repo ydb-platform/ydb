@@ -8,10 +8,12 @@ PEERDIR(
     library/cpp/random_provider
     library/cpp/time_provider
     yql/essentials/ast
+    yql/essentials/core
     yql/essentials/minikql/computation
     yql/essentials/public/udf
     yql/essentials/utils
     yql/essentials/providers/common/mkql
+    yql/essentials/public/langver
 )
 
 YQL_LAST_ABI_VERSION()

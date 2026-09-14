@@ -9,11 +9,11 @@ PY_SRCS(
     _common.py
     _dart_fields.py
     _requirements.py
-    _xsyn_includes.py
     bundle.py
+    check_clang_warnings.py
+    cmake_export.py
     coverage.py
     cp.py
-    cpp_style.py
     create_init_py.py
     credits.py
     docs.py

@@ -1,6 +1,15 @@
 /*
  * mixed_negation.h
  *
+ * This header declares negation (complement) operations for Roaring
+ * containers, both over the full 16-bit container domain and over specified
+ * subranges. Depending on the input representation and the density of the
+ * complement, the result may need to switch between array, bitset, and run
+ * containers.
+ *
+ * The file includes both allocating and inplace-oriented variants so callers
+ * can choose between simple result construction and reuse of an existing
+ * container when that is practical.
  */
 
 #ifndef INCLUDE_CONTAINERS_MIXED_NEGATION_H_

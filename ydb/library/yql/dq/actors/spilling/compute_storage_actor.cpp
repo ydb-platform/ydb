@@ -60,7 +60,7 @@ public:
 
     void Bootstrap() {
         auto spillingActor = CreateDqLocalFileSpillingActor(TxId_, SpillerName_,
-            SelfId(), false);
+            SelfId(), false, ESpillingType::Compute);
         SpillingActorId_ = Register(spillingActor);
         Become(&TDqComputeStorageActor::WorkState);
     }
@@ -83,7 +83,7 @@ protected:
     }
 
     void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
-        if (!Send(recipient, ev, flags)) FailWithError("Event was not sent");
+        Send(recipient, ev, flags);
     }
 
 private:

@@ -18,7 +18,7 @@ namespace NFwd {
     public:
         virtual ~IPageLoadingQueue() = default;
 
-        virtual ui64 AddToQueue(TPageId pageId, EPage type) noexcept = 0;
+        virtual ui64 AddToQueue(TPageId pageId, EPage type) = 0;
     };
 
     class IPageLoadingLogic {
@@ -31,9 +31,9 @@ namespace NFwd {
 
         virtual ~IPageLoadingLogic() = default;
 
-        virtual TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) noexcept = 0;
-        virtual void Forward(IPageLoadingQueue *head, ui64 upper) noexcept = 0;
-        virtual void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage type) noexcept = 0;
+        virtual TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) = 0;
+        virtual void Forward(IPageLoadingQueue *head, ui64 upper) = 0;
+        virtual void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage type) = 0;
 
         IPageLoadingQueue* Head = nullptr; /* will be set outside of IPageLoadingLogic impl */
         TStat Stat;

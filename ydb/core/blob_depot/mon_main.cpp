@@ -4,6 +4,11 @@
 #include "blocks.h"
 #include "space_monitor.h"
 #include "mon_main.h"
+#include "s3.h"
+#include "types.h"
+#include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -84,6 +89,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             HTML(Stream) {
+                Stream << "<a href='app?TabletID=" << Self->TabletID() << "'>Back to main page</a>";
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
                         Stream << "Data";
@@ -199,14 +205,18 @@ namespace NKikimr::NBlobDepot {
                                 key.Output(Stream);
                             }
                             TABLED() {
-                                bool first = true;
-                                for (const auto& item : value.ValueChain) {
+                                for (bool first = true; const auto& item : value.ValueChain) {
                                     if (first) {
                                         first = false;
                                     } else {
                                         Stream << "<br/>";
                                     }
-                                    Stream << TBlobSeqId::FromProto(item.GetLocator().GetBlobSeqId()).ToString();
+                                    if (item.HasBlobLocator()) {
+                                        Stream << TBlobSeqId::FromProto(item.GetBlobLocator().GetBlobSeqId()).ToString();
+                                    }
+                                    if (item.HasS3Locator()) {
+                                        Stream << TS3Locator::FromProto(item.GetS3Locator()).ToString();
+                                    }
                                     if (item.HasSubrangeBegin() || item.HasSubrangeEnd()) {
                                         Stream << "[";
                                         if (item.HasSubrangeBegin()) {
@@ -242,9 +252,9 @@ namespace NKikimr::NBlobDepot {
                     TABLEH() { Stream << "blob id"; }
                     TABLEH() { Stream << "refcount"; }
                 } else {
-                    Self->Data->EnumerateRefCount([&](TLogoBlobID id, ui32 count) {
+                    Self->Data->EnumerateRefCount([&](const auto& id, ui32 count) {
                         TABLER() {
-                            TABLED() { Stream << id; }
+                            TABLED() { Stream << id.ToString(); }
                             TABLED() { Stream << count; }
                         }
                     });
@@ -320,13 +330,19 @@ namespace NKikimr::NBlobDepot {
                     auto *info = Self->Info();
                     std::map<ui32, std::tuple<ui64, ui64>> space;
 
-                    Self->Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
-                        const ui32 groupId = info->GroupFor(id.Channel(), id.Generation());
-                        auto& [current, total] = space[groupId];
-                        total += id.BlobSize();
-                        if (id.Generation() == generation) {
-                            current += id.BlobSize();
-                        }
+                    Self->Data->EnumerateRefCount([&](const auto& key, ui32) {
+                        TOverloaded callback{
+                            [&](TLogoBlobID id) {
+                                const ui32 groupId = info->GroupFor(id.Channel(), id.Generation());
+                                auto& [current, total] = space[groupId];
+                                total += id.BlobSize();
+                                if (id.Generation() == generation) {
+                                    current += id.BlobSize();
+                                }
+                            },
+                            [&](TS3Locator) {}
+                        };
+                        callback(key);
                     });
 
                     for (const auto& [groupId, _] : Self->SpaceMonitor->Groups) {
@@ -369,6 +385,153 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
+    class TBlobDepot::TTxMonS3Config : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+        std::unique_ptr<NMon::TEvRemoteHttpInfo::THandle> Request;
+        TStringStream Stream;
+
+    public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_MON_DATA; }
+
+        TTxMonS3Config(TBlobDepot *self, NMon::TEvRemoteHttpInfo::TPtr ev)
+            : TTransactionBase(self)
+            , Request(ev.Release())
+        {}
+
+        bool Execute(TTransactionContext& /*txc*/, const TActorContext&) override {
+            HTML(Stream) {
+                Stream << "<a href='app?TabletID=" << Self->TabletID() << "'>Back to main page</a>";
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        Stream << "S3 Configuration";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { Stream << "Setting"; }
+                                    TABLEH() { Stream << "Value"; }
+                                }
+                            }
+                            TABLEBODY() {
+                                // Check if S3 is configured
+                                if (!Self->Config.HasS3BackendSettings()) {
+                                    TABLER() {
+                                        TABLED() { Stream << "Status"; }
+                                        TABLED() { Stream << "S3 not configured"; }
+                                    }
+                                    return true;
+                                }
+
+                                const auto& s3BackendSettings = Self->Config.GetS3BackendSettings();
+
+#define BD_MON_TABLE_ROW(key, value) \
+        do { \
+            TABLER() { \
+                TABLED() { Stream << key ;} \
+                TABLED() { Stream << value ;} \
+            } \
+        } while(false)
+
+#define BD_MON_TABLE_ROW_WITH_FORMATTER(config, key, formatter) \
+        do { \
+            if (config.Has##key()) { \
+                BD_MON_TABLE_ROW(#key, formatter(config.Get##key())); \
+            } \
+        } while(false)
+
+
+                                if (!s3BackendSettings.HasSettings()) {
+                                    BD_MON_TABLE_ROW("Status", "S3 settings not configured");
+                                    return true;
+                                }
+
+                                const auto& s3Settings = s3BackendSettings.GetSettings();
+
+                                TString mode;
+                                if (s3BackendSettings.HasAsyncMode()) {
+                                    mode = "Async";
+                                } else if (s3BackendSettings.HasSyncMode()) {
+                                    mode = "Sync";
+                                } else {
+                                    mode = "Unknown";
+                                }
+                                BD_MON_TABLE_ROW("Mode", mode);
+
+                                auto id_formatter = [] (auto x) { return x; };
+
+                                // Display async mode settings if applicable
+                                if (s3BackendSettings.HasAsyncMode()) {
+                                    const auto& asyncMode = s3BackendSettings.GetAsyncMode();
+
+                                    auto formatBytePerSecond = [](ui64 bytes) -> TString {
+                                        return FormatByteSize(bytes) + "/s";
+                                    };
+
+                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, MaxPendingBytes, FormatByteSize);
+                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, ThrottleStartBytes, FormatByteSize);
+                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, ThrottleMaxBytesPerSecond, formatBytePerSecond);
+                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, UploadPutsInFlight, id_formatter);
+
+                                }
+
+                                BD_MON_TABLE_ROW("Endpoint", s3Settings.GetEndpoint());
+
+                                TString schemeStr;
+                                if (s3Settings.HasScheme()) {
+                                    switch (s3Settings.GetScheme()) {
+                                    case NKikimrSchemeOp::TS3Settings::HTTPS:
+                                        schemeStr = "https";
+                                        break;
+                                    case NKikimrSchemeOp::TS3Settings::HTTP:
+                                        schemeStr = "http";
+                                        break;
+                                    }
+                                } else {
+                                    schemeStr = "unspecified";
+                                }
+                                BD_MON_TABLE_ROW("Scheme", schemeStr);
+
+                                BD_MON_TABLE_ROW("Bucket", s3Settings.GetBucket());
+
+                                                                // Helper function to mask sensitive data
+                                auto maskSensitive = [](const TString& value) -> TString {
+                                    if (value.empty()) {
+                                        return value;
+                                    }
+                                    if (value.size() <= 12) {
+                                        return TString(4, '*');
+                                    }
+                                    return value.substr(0, 2) + "****" + value.substr(value.size() - 2);
+                                };
+                                BD_MON_TABLE_ROW("AccessKey", maskSensitive(s3Settings.GetAccessKey()));
+                                BD_MON_TABLE_ROW("SecretKey", maskSensitive(s3Settings.GetSecretKey()));
+
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, Region, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, StorageClass, Ydb::Export::ExportToS3Settings::StorageClass_Name);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, UseVirtualAddressing, ToString);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, VerifySSL, ToString);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ProxyHost, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ProxyPort, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ConnectionTimeoutMs, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, RequestTimeoutMs, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, HttpRequestTimeoutMs, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ExecutorThreadsCount, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, MaxConnectionsCount, id_formatter);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            TActivationContext::Send(new IEventHandle(Request->Sender, Self->SelfId(), new NMon::TEvRemoteHttpInfoRes(
+                Stream.Str()), 0, Request->Cookie));
+        }
+    };
+
     bool TBlobDepot::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) {
         if (!Executor() || !Executor()->GetStats().IsActive) {
             return false;
@@ -388,6 +551,9 @@ namespace NKikimr::NBlobDepot {
             if (page == "data") {
                 Execute(std::make_unique<TTxMonData>(this, ev));
                 return true;
+            } if (page == "s3config") {
+                Execute(std::make_unique<TTxMonS3Config>(this, ev));
+                return true;
             } else {
                 Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(TStringBuilder()
                     << "HTTP/1.1 403 Page not found\r\n"
@@ -398,18 +564,25 @@ namespace NKikimr::NBlobDepot {
                 return true;
             }
         } else {
-            RenderMainPage(s);
+            TString nonce = NActors::NMon::GenerateCspNonce();
+            RenderMainPage(s, nonce);
+            auto* res = new NMon::TEvRemoteHttpInfoRes(s.Str());
+            res->Nonce = nonce;
+            Send(ev->Sender, res, 0, ev->Cookie);
+            return true;
         }
-
-        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(s.Str()), 0, ev->Cookie);
-        return true;
     }
 
-    void TBlobDepot::RenderMainPage(IOutputStream& s) {
+    void TBlobDepot::RenderMainPage(IOutputStream& s, const TString& nonce) {
         HTML(s) {
+            if (S3Manager) {
+                s << "<a href='app?TabletID=" << TabletID() << "&page=s3config'>S3 config</a><br>";
+            }
+
             s << "<a href='app?TabletID=" << TabletID() << "&page=data'>Contained data</a><br>";
 
-            s << R"(<script>
+            s << "<script nonce='" << nonce << "'>";
+            s << R"(
 function ready() {
     doFetch();
 }
@@ -475,20 +648,10 @@ document.addEventListener("DOMContentLoaded", ready);
                 }
                 DIV_CLASS("panel-body") {
                     KEYVALUE_TABLE({
-
-                        ui64 total = 0;
-                        ui64 trashInFlight = 0;
-                        ui64 trashPending = 0;
-                        Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
-                            total += id.BlobSize();
-                        });
-                        Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
-                            (inFlight ? trashInFlight : trashPending) += id.BlobSize();
-                        });
-
-                        KEYVALUE_UP("Data, bytes", "data", FormatByteSize(total));
-                        KEYVALUE_UP("Trash in flight, bytes", "trash_in_flight", FormatByteSize(trashInFlight));
-                        KEYVALUE_UP("Trash pending, bytes", "trash_pending", FormatByteSize(trashPending));
+                        KEYVALUE_UP("Data, bytes", "data", FormatByteSize(Data->GetTotalStoredDataSize()));
+                        KEYVALUE_UP("Data in S3, bytes", "data_s3", FormatByteSize(Data->GetTotalS3DataSize()));
+                        KEYVALUE_UP("Trash in flight, bytes", "trash_in_flight", FormatByteSize(Data->GetInFlightTrashSize()));
+                        KEYVALUE_UP("Loaded trash pending, bytes", "trash_pending", FormatByteSize(Data->GetTotalStoredTrashSize()));
 
                         std::vector<ui32> groups;
                         for (const auto& [groupId, _] : Groups) {
@@ -498,7 +661,7 @@ document.addEventListener("DOMContentLoaded", ready);
                         for (const ui32 groupId : groups) {
                             TGroupInfo& group = Groups[groupId];
                             KEYVALUE_UP(TStringBuilder() << "Data in GroupId# " << groupId << ", bytes",
-                                'g' << groupId, FormatByteSize(group.AllocatedBytes));
+                                TStringBuilder() << 'g' << groupId, FormatByteSize(group.AllocatedBytes));
                         }
                     })
                 }
@@ -537,6 +700,10 @@ document.addEventListener("DOMContentLoaded", ready);
                             KEYVALUE_UP("Blobs read with error", "d.blobs_read_error", AsStats.BlobsReadError);
                             KEYVALUE_UP("Blobs put with OK", "d.blobs_put_ok", AsStats.BlobsPutOk);
                             KEYVALUE_UP("Blobs put with error", "d.blobs_put_error", AsStats.BlobsPutError);
+                            KEYVALUE_UP("CollectGarbage in flight", "d.collect_garbage_in_flight", AsStats.CollectGarbageInFlight);
+                            KEYVALUE_UP("CollectGarbage queue", "d.collect_garbage_queue", AsStats.CollectGarbageQueue);
+                            KEYVALUE_UP("CollectGarbage OK", "d.collect_garbage_ok", AsStats.CollectGarbageOK);
+                            KEYVALUE_UP("CollectGarbage error", "d.collect_garbage_error", AsStats.CollectGarbageError);
                         })
                     }
                 }
@@ -564,24 +731,19 @@ document.addEventListener("DOMContentLoaded", ready);
             }
         };
 
-        ui64 total = 0;
-        ui64 trashInFlight = 0;
-        ui64 trashPending = 0;
-        Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
-            total += id.BlobSize();
-        });
-        Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
-            (inFlight ? trashInFlight : trashPending) += id.BlobSize();
-        });
+        const auto trashLoadState = TData::TrashLoadStateToString(Data->GetTrashLoadState());
 
         NJson::TJsonMap data{
-            {"data", formatSize(total)},
-            {"trash_in_flight", formatSize(trashInFlight)},
-            {"trash_pending", formatSize(trashPending)},
+            {"data", formatSize(Data->GetTotalStoredDataSize())},
+            {"data_s3", formatSize(Data->GetTotalS3DataSize())},
+            {"trash_in_flight", formatSize(Data->GetInFlightTrashSize())},
+            {"trash_pending", formatSize(Data->GetTotalStoredTrashSize())},
+            {"trash_load_state", trashLoadState},
+            {"loaded_trash_blobs", Data->GetLoadedTrashRecords()},
         };
 
         for (const auto& [groupId, group] : Groups) {
-            data[TStringBuilder() << "g" << groupId] = formatSize(group.AllocatedBytes);
+            data[TStringBuilder() << 'g' << groupId] = formatSize(group.AllocatedBytes);
         }
 
         if (Configured && Config.GetIsDecommittingGroup()) {

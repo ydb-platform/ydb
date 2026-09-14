@@ -1,8 +1,8 @@
 LIBRARY()
 
 PEERDIR(
-    contrib/libs/brotli/enc
-    contrib/libs/brotli/dec
+    contrib/libs/brotli/c/enc
+    contrib/libs/brotli/c/dec
     library/cpp/blockcodecs/core
 )
 

@@ -12,6 +12,9 @@
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <util/string/builder.h>
+#include <yql/essentials/parser/pg_wrapper/postgresql/src/backend/catalog/pg_type_d.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 namespace NKikimr {
 namespace NDataShard {
@@ -33,7 +36,7 @@ protected:
     virtual void CloseEraser() = 0;
 };
 
-class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
+class TCondEraseScan: public IActorCallback, public IActorExceptionHandler, public IScan, public IEraserOps {
     struct TDataShardId {
         TActorId ActorId;
         ui64 TabletId;
@@ -138,8 +141,8 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         TVector<TCell> keyCells;
 
         for (const auto& key : keyOrder) {
-            Y_ABORT_UNLESS(key.Pos != Max<TPos>());
-            Y_ABORT_UNLESS(key.Pos < row.Size());
+            Y_ENSURE(key.Pos != Max<TPos>());
+            Y_ENSURE(key.Pos < row.Size());
             keyCells.push_back(row.Get(key.Pos));
         }
 
@@ -155,7 +158,7 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         request->Record.SetSchemaVersion(tableId.SchemaVersion);
 
         for (const auto& key : keyOrder) {
-            Y_ABORT_UNLESS(key.Tag != Max<TTag>());
+            Y_ENSURE(key.Tag != Max<TTag>());
             request->Record.AddKeyColumnIds(key.Tag);
         }
 
@@ -173,12 +176,14 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
         SerializedKeys.Clear();
     }
 
-    void Reply(bool aborted = false) {
+    void Reply(EStatus status = EStatus::Done) {
         auto response = MakeHolder<TEvDataShard::TEvConditionalEraseRowsResponse>();
         response->Record.SetTabletID(DataShard.TabletId);
 
-        if (aborted) {
-            response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ABORTED);
+        if (status != EStatus::Done) {
+            response->Record.SetStatus(status == EStatus::Exception
+                ? NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ERASE_ERROR
+                : NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ABORTED);
         } else if (!Success) {
             response->Record.SetStatus(NKikimrTxDataShard::TEvConditionalEraseRowsResponse::ERASE_ERROR);
         } else if (!NoMoreData) {
@@ -215,8 +220,12 @@ class TCondEraseScan: public IActorCallback, public IScan, public IEraserOps {
     }
 
 public:
-    explicit TCondEraseScan(TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId, THolder<IEraseRowsCondition> condition, const TLimits& limits)
+    explicit TCondEraseScan(TDataShard* ds, const TActorId& replyTo,
+        const TString& databaseName, const TTableId& tableId, ui64 txId,
+        THolder<IEraseRowsCondition> condition, const TLimits& limits
+    )
         : IActorCallback(static_cast<TReceiveFunc>(&TCondEraseScan::StateWork), NKikimrServices::TActivity::CONDITIONAL_ERASE_ROWS_SCAN_ACTOR)
+        , DatabaseName(databaseName)
         , TableId(tableId)
         , DataShard{ds->SelfId(), ds->TabletID()}
         , ReplyTo(replyTo)
@@ -229,14 +238,14 @@ public:
     {
     }
 
-    void Describe(IOutputStream& o) const noexcept override {
+    void Describe(IOutputStream& o) const override {
         o << "CondEraseScan {"
           << " TableId: " << TableId
           << " TxId: " << TxId
         << " }";
     }
 
-    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
 
         Driver = driver;
@@ -245,12 +254,12 @@ public:
 
         // fill scan tags & positions in KeyOrder
         ScanTags = Condition->Tags();
-        Y_ABORT_UNLESS(ScanTags.size() == 1, "Multi-column conditions are not supported");
+        Y_ENSURE(ScanTags.size() == 1, "Multi-column conditions are not supported");
 
         THashMap<TTag, TPos> tagToPos;
 
         for (TPos pos = 0; pos < ScanTags.size(); ++pos) {
-            Y_ABORT_UNLESS(tagToPos.emplace(ScanTags.at(pos), pos).second);
+            Y_ENSURE(tagToPos.emplace(ScanTags.at(pos), pos).second);
         }
 
         for (auto& key : KeyOrder) {
@@ -272,12 +281,12 @@ public:
         sys->Send(DataShard.ActorId, new TDataShard::TEvPrivate::TEvConditionalEraseRowsRegistered(TxId, SelfId()));
     }
 
-    EScan Seek(TLead& lead, ui64) noexcept override {
+    EScan Seek(TLead& lead, ui64) override {
         lead.To(ScanTags, {}, ESeek::Lower);
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell>, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell>, const TRow& row) override {
         Stats.IncProcessed();
         if (!Condition->Check(row)) {
             return EScan::Feed;
@@ -293,7 +302,7 @@ public:
         return EScan::Sleep;
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         NoMoreData = true;
 
         if (!SerializedKeys) {
@@ -304,11 +313,19 @@ public:
         return EScan::Sleep;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
-        Reply(abort != EAbort::None);
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        Reply(status);
         PassAway();
 
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void PassAway() override {
@@ -351,6 +368,7 @@ protected:
     }
 
 protected:
+    const TString DatabaseName;
     const TTableId TableId;
 
 private:
@@ -375,9 +393,10 @@ private:
 class TIndexedCondEraseScan: public TCondEraseScan {
 public:
     explicit TIndexedCondEraseScan(
-            TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId,
+            TDataShard* ds, const TActorId& replyTo,
+            const TString& databaseName, const TTableId& tableId, ui64 txId,
             THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
-        : TCondEraseScan(ds, replyTo, tableId, txId, std::move(condition), limits)
+        : TCondEraseScan(ds, replyTo, databaseName, tableId, txId, std::move(condition), limits)
         , Indexes(std::move(indexes))
     {
     }
@@ -401,8 +420,8 @@ protected:
                 }
 
                 const TColInfo* col = scheme->ColInfo(mainColumnId);
-                Y_ABORT_UNLESS(col);
-                Y_ABORT_UNLESS(col->Tag == mainColumnId);
+                Y_ENSURE(col);
+                Y_ENSURE(col->Tag == mainColumnId);
 
                 keyOrder.emplace_back().Tag = col->Tag;
                 keys.insert(col->Tag);
@@ -413,8 +432,8 @@ protected:
     }
 
     TActorId CreateEraser() override {
-        Y_ABORT_UNLESS(!Eraser);
-        Eraser = this->Register(CreateDistributedEraser(this->SelfId(), TableId, Indexes));
+        Y_ENSURE(!Eraser);
+        Eraser = this->Register(CreateDistributedEraser(this->SelfId(), DatabaseName, TableId, Indexes));
         return Eraser;
     }
 
@@ -434,16 +453,16 @@ private:
 }; // TIndexedCondEraseScan
 
 IScan* CreateCondEraseScan(
-        TDataShard* ds, const TActorId& replyTo, const TTableId& tableId, ui64 txId,
+        TDataShard* ds, const TActorId& replyTo, const TString& databaseName, const TTableId& tableId, ui64 txId,
         THolder<IEraseRowsCondition> condition, const TLimits& limits, TIndexes indexes)
 {
-    Y_ABORT_UNLESS(ds);
-    Y_ABORT_UNLESS(condition.Get());
+    Y_ENSURE(ds);
+    Y_ENSURE(condition.Get());
 
     if (!indexes) {
-        return new TCondEraseScan(ds, replyTo, tableId, txId, std::move(condition), limits);
+        return new TCondEraseScan(ds, replyTo, databaseName, tableId, txId, std::move(condition), limits);
     } else {
-        return new TIndexedCondEraseScan(ds, replyTo, tableId, txId, std::move(condition), limits, std::move(indexes));
+        return new TIndexedCondEraseScan(ds, replyTo, databaseName, tableId, txId, std::move(condition), limits, std::move(indexes));
     }
 }
 
@@ -504,7 +523,7 @@ static bool CheckUnit(NScheme::TTypeInfo type, NKikimrSchemeOp::TTTLSettings::EU
     case NScheme::NTypeIds::Uint64:
     case NScheme::NTypeIds::DyNumber:
         return CheckUnit(false, unit, error);
-    
+
     case NScheme::NTypeIds::Pg:
         switch (NPg::PgTypeIdFromTypeDesc(type.GetPgTypeDesc())) {
             case DATEOID:
@@ -582,7 +601,7 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
                     if (CheckUnit(column->second.Type, record.GetExpiration().GetColumnUnit(), error)) {
                         localTxId = NextTieBreakerIndex++;
                         const auto tableId = TTableId(PathOwnerId, localPathId, record.GetSchemaVersion());
-                        scan.Reset(CreateCondEraseScan(this, ev->Sender, tableId, localTxId,
+                        scan.Reset(CreateCondEraseScan(this, ev->Sender, record.GetDatabaseName(), tableId, localTxId,
                             THolder(CreateEraseRowsCondition(record)), record.GetLimits(), GetIndexes(record)));
                     } else {
                         badRequest(error);
@@ -600,7 +619,7 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
 
         if (scan) {
             const ui32 localTableId = userTable->LocalTid;
-            Y_ABORT_UNLESS(Executor()->Scheme().GetTableInfo(localTableId));
+            Y_ENSURE(Executor()->Scheme().GetTableInfo(localTableId));
 
             auto* appData = AppData(ctx);
             const auto& taskName = appData->DataShardConfig.GetTtlTaskName();
@@ -633,8 +652,8 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
 
 void TDataShard::Handle(TEvPrivate::TEvConditionalEraseRowsRegistered::TPtr& ev, const TActorContext& ctx) {
     if (!InFlightCondErase || InFlightCondErase.TxId != ev->Get()->TxId) {
-        LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "Unknown conditional erase actor registered"
-            << ": at: " << TabletID());
+        YDB_LOG_WARN_CTX(ctx, "Unknown conditional erase actor registered",
+            {"tabletId", TabletID()});
         return;
     }
 
@@ -651,3 +670,7 @@ Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvEraseRowsResponse::EStatus, stream, 
 Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::TEvConditionalEraseRowsResponse::EStatus, stream, value) {
     stream << NKikimrTxDataShard::TEvConditionalEraseRowsResponse_EStatus_Name(value);
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

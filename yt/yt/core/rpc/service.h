@@ -2,11 +2,7 @@
 
 #include "public.h"
 
-#include "protocol_version.h"
-
 #include <yt/yt/core/actions/signal.h>
-
-#include <yt/yt/core/bus/public.h>
 
 #include <yt/yt/core/net/public.h>
 
@@ -180,6 +176,11 @@ struct IServiceContext
 
     //! Returns the stream of asynchronous request attachments.
     virtual NConcurrency::IAsyncZeroCopyInputStreamPtr GetRequestAttachmentsStream() = 0;
+    //! When the request attachments are delivered via direct placement transfer,
+    //! returns a non-null transfer; the service must drive it to completion, after
+    //! which #RequestAttachments become available (until then they abort). Returns
+    //! null when the attachments are delivered inline.
+    virtual IDirectPlacementTransferPtr TryGetRequestAttachmentsTransfer() = 0;
 
     //! Returns a vector of response attachments.
     virtual std::vector<TSharedRef>& ResponseAttachments() = 0;
@@ -205,7 +206,7 @@ struct IServiceContext
      *  Passing empty \p info in incremental mode is no-op.
      *  Passing empty \p info in non-incremental mode flushes the logging message.
      */
-    virtual void SetRawRequestInfo(TString info, bool incremental) = 0;
+    virtual void SetRawRequestInfo(std::string info, bool incremental) = 0;
 
     //! After this call there is no obligation to set request info for this request.
     virtual void SuppressMissingRequestInfoCheck() = 0;
@@ -218,7 +219,7 @@ struct IServiceContext
      *  Passing empty \p info in incremental mode is no-op.
      *  Passing empty \p info in non-incremental mode clears the logging infos.
      */
-    virtual void SetRawResponseInfo(TString info, bool incremental) = 0;
+    virtual void SetRawResponseInfo(std::string info, bool incremental) = 0;
 
     //! Returns the memory usage tracker for request/response messages.
     virtual const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const = 0;
@@ -238,8 +239,8 @@ struct IServiceContext
     //! Changes the response codec.
     virtual void SetResponseCodec(NCompression::ECodec codec) = 0;
 
-    // COPMAT(danilalexeev)
-    //! Returnes true if response body has been serialized with compression.
+    // COMPAT(danilalexeev): legacy RPC codecs
+    //! Returns true if response body has been serialized with compression.
     virtual bool IsResponseBodySerializedWithCompression() const = 0;
     virtual void SetResponseBodySerializedWithCompression() = 0;
 
@@ -265,6 +266,9 @@ struct IServiceContext
 
     //! Replies with a given message when the latter is set.
     void ReplyFrom(TFuture<TSharedRefArray> asyncMessage);
+
+    //! The same as ReplyFrom() but sets response info.
+    void ReplyAndLogFrom(bool incremental, TFuture<std::pair<TSharedRefArray, std::string>> asyncMessages);
 
     //! Replies with a given error when the latter is set.
     void ReplyFrom(TFuture<void> asyncError);
@@ -319,10 +323,15 @@ struct IService
     virtual const TServiceId& GetServiceId() const = 0;
 
     //! Handles incoming request.
+    /*!
+     *  #requestAttachmentsTransfer is non-null when the request's attachments are
+     *  delivered via direct placement transfer (see #TDirectPlacementTransferParameters).
+     */
     virtual void HandleRequest(
         std::unique_ptr<NProto::TRequestHeader> header,
         TSharedRefArray message,
-        NYT::NBus::IBusPtr replyBus) = 0;
+        NYT::NBus::IBusPtr replyBus,
+        NYT::NBus::IDirectPlacementTransferPtr requestAttachmentsTransfer = {}) = 0;
 
     //! Handles request cancelation.
     virtual void HandleRequestCancellation(
@@ -352,7 +361,7 @@ struct THash<NYT::NRpc::TServiceId>
     inline size_t operator()(const NYT::NRpc::TServiceId& id) const
     {
         return
-            THash<TString>()(id.ServiceName) * 497 +
+            THash<std::string>()(id.ServiceName) * 497 +
             THash<NYT::NRpc::TRealmId>()(id.RealmId);
     }
 };

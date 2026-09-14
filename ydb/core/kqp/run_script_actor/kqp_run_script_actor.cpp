@@ -1,708 +1,496 @@
 #include "kqp_run_script_actor.h"
+#include "kqp_run_script_actor_impl.h"
 
-#include <ydb/library/ydb_issue/issue_helpers.h>
+#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
-#include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
-#include <ydb/core/kqp/proxy_service/proto/result_set_meta.pb.h>
-#include <ydb/library/ydb_issue/proto/issue_id.pb.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
-
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/event_pb.h>
+#include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
-#include <library/cpp/protobuf/json/json2proto.h>
-#include <library/cpp/protobuf/json/proto2json.h>
+#include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <util/generic/size_literals.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 
+#include <util/generic/string.h>
+#include <util/string/builder.h>
+
+#include <exception>
 #include <forward_list>
 
-#define LOG_T(stream) LOG_TRACE_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". " << stream);
-#define LOG_D(stream) LOG_DEBUG_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". " << stream);
-#define LOG_I(stream) LOG_INFO_S (NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". " << stream);
-#define LOG_W(stream) LOG_WARN_S (NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". " << stream);
-#define LOG_E(stream) LOG_ERROR_S(NActors::TActivationContext::AsActorContext(), NKikimrServices::KQP_EXECUTER, "TRunScriptActor " << SelfId() << ". Ctx: " << *UserRequestContext << ". " << stream);
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_EXECUTER
 
 namespace NKikimr::NKqp {
 
 namespace {
 
-constexpr ui32 LEASE_UPDATE_FREQUENCY = 2;
+using namespace NPrivate;
 
-constexpr ui64 MIN_SAVE_RESULT_BATCH_SIZE = 5_MB;
-constexpr i32 MIN_SAVE_RESULT_BATCH_ROWS = 5000;
-constexpr ui64 RUN_SCRIPT_ACTOR_BUFFER_SIZE = 40_MB;
+class TRunScriptActor final : public TActorBootstrapped<TRunScriptActor>, IActorExceptionHandler {
+    struct TSessionState {
+        bool WaitCreation = false;
+        bool SessionOpen = false;
 
-struct TProducerState {
-    TMaybe<ui64> LastSeqNo;
-    i64 AckedFreeSpaceBytes = 0;
-    TActorId ActorId;
-    ui64 ChannelId = 0;
+        void Close(const TActorIdentity& actor, const TScriptExecutionContext& ctx) {
+            if (!SessionOpen) {
+                return;
+            }
 
-    void SendAck(const NActors::TActorIdentity& actor) const {
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo, ChannelId);
-        resp->Record.SetFreeSpace(AckedFreeSpaceBytes);
-        actor.Send(ActorId, resp.Release());
-    }
-
-    bool ResumeIfStopped(const NActors::TActorIdentity& actor, i64 freeSpaceBytes) {
-        if (LastSeqNo && AckedFreeSpaceBytes <= 0) {
-            AckedFreeSpaceBytes = freeSpaceBytes;
-            SendAck(actor);
-            return true;
+            auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+            ev->Record.MutableRequest()->SetSessionId(ctx.UserRequestContext->SessionId);
+            actor.Send(MakeKqpProxyID(actor.NodeId()), ev.release());
+            SessionOpen = false;
         }
-        return false;
-    }
-};
-
-class TRunScriptActor : public NActors::TActorBootstrapped<TRunScriptActor> {
-    enum class ERunState {
-        Created,
-        Running,
-        Cancelling,
-        Cancelled,
-        Finishing,
-        Finished,
     };
 
-    enum EWakeUp {
-        RunEvent,
-        UpdateLeaseEvent,
-    };
+    struct TActorState {
+        bool WaitStop = false;
+        TActorId Id;
 
-    struct TResultSetInfo {
-        bool Truncated = false;
-        ui64 RowCount = 0;
-        ui64 ByteCount = 0;
-        NJson::TJsonValue* Meta;
+        void Stop(const TActorIdentity& actor) {
+            if (!Id || WaitStop) {
+                return;
+            }
 
-        ui64 FirstRowId = 0;
-        ui64 AccumulatedSize = 0;
-        Ydb::ResultSet PendingResult;
+            actor.Send(Id, new TEvents::TEvPoison());
+            WaitStop = true;
+        }
     };
 
 public:
-    TRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, NKikimrConfig::TQueryServiceConfig&& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters)
-        : ExecutionId(executionId)
-        , Request(request)
-        , Database(database)
-        , LeaseGeneration(leaseGeneration)
-        , LeaseDuration(leaseDuration)
-        , ResultsTtl(resultsTtl)
-        , QueryServiceConfig(queryServiceConfig)
-        , Counters(counters)
-    {
-        UserRequestContext = MakeIntrusive<TUserRequestContext>(Request.GetTraceId(), Database, "", ExecutionId, Request.GetTraceId());
-    }
-
     static constexpr char ActorName[] = "KQP_RUN_SCRIPT_ACTOR";
 
+    TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig)
+        : Ctx(CreateExecutionContext(request, settings, queryServiceConfig))
+        , QueryRequest(CreateQueryRequest(request, settings, queryServiceConfig))
+        , QueryServiceConfig(std::move(queryServiceConfig))
+    {}
+
     void Bootstrap() {
-        Become(&TRunScriptActor::StateFunc);
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Bootstrap",
+            {"logPrefix", LogPrefix()},
+            {"streamingDisposition", (Ctx->UserRequestContext->StreamingDisposition ? Ctx->UserRequestContext->StreamingDisposition->DebugString() : "null")},
+            {"checkpointInterval", Ctx->UserRequestContext->CheckpointInterval ? ToString(*Ctx->UserRequestContext->CheckpointInterval) : "null"});
+        Become(&TThis::StateFuncCreating);
     }
 
 private:
-    STRICT_STFUNC(StateFunc,
-        hFunc(NActors::TEvents::TEvWakeup, Handle);
-        hFunc(NActors::TEvents::TEvPoison, Handle);
-        hFunc(TEvKqpExecuter::TEvStreamData, Handle);
-        hFunc(TEvKqpExecuter::TEvExecuterProgress, Handle);
-        hFunc(TEvKqp::TEvQueryResponse, Handle);
-        hFunc(TEvKqp::TEvCreateSessionResponse, Handle);
-        IgnoreFunc(TEvKqp::TEvCloseSessionResponse);
-        hFunc(TEvKqp::TEvCancelQueryResponse, Handle);
-        hFunc(TEvKqp::TEvCancelScriptExecutionRequest, Handle);
-        hFunc(TEvScriptExecutionFinished, Handle);
-        hFunc(TEvScriptLeaseUpdateResponse, Handle);
-        hFunc(TEvSaveScriptResultMetaFinished, Handle);
-        hFunc(TEvSaveScriptResultFinished, Handle);
-        hFunc(TEvCheckAliveRequest, Handle);
+    static TScriptExecutionContext::TPtr CreateExecutionContext(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+        const auto& traceId = request.GetTraceId();
+        auto userRequestContext = MakeIntrusive<TUserRequestContext>(
+            traceId,
+            settings.Database,
+            /* SessionId*/ "", // Will be set after session creation
+            settings.ExecutionId,
+            settings.CustomerSuppliedId ? settings.CustomerSuppliedId : traceId,
+            TActorId{} // Will be set in actor bootstrap
+        );
+        userRequestContext->IsStreamingQuery = settings.SaveQueryPhysicalGraph;
+        userRequestContext->CheckpointId = settings.CheckpointId;
+        userRequestContext->StreamingQueryPath = settings.StreamingQueryPath;
+        userRequestContext->WatermarkLateEventsPolicy = settings.WatermarkLateEventsPolicy;
+        userRequestContext->StreamingDisposition = settings.StreamingDisposition;
+        userRequestContext->CurrentExecutionGeneration = settings.LeaseGeneration;
+        userRequestContext->CheckpointInterval = settings.CheckpointInterval;
+
+        return std::make_shared<TScriptExecutionContext>(TScriptExecutionContext{
+            .UserRequestContext = std::move(userRequestContext),
+            .Counters = settings.Counters,
+            .LeaseGeneration = settings.LeaseGeneration,
+            .LeaseDuration = settings.LeaseDuration,
+            .ResultsTtl = settings.ResultsTtl,
+            .Timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, request.GetRequest().GetTimeoutMs(), {}, queryServiceConfig, settings.DisableDefaultTimeout),
+        });
+    }
+
+    static std::unique_ptr<TEvKqp::TEvQueryRequest> CreateQueryRequest(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
+        auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
+        ev->Record = request;
+        ev->SetSaveQueryPhysicalGraph(settings.SaveQueryPhysicalGraph);
+        ev->SetDisableDefaultTimeout(settings.DisableDefaultTimeout);
+
+        if (settings.PhysicalGraph) {
+            ev->SetQueryPhysicalGraph(std::move(*settings.PhysicalGraph));
+        }
+
+        if (request.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
+            ev->SetProgressStatsPeriod(settings.ProgressStatsPeriod ? settings.ProgressStatsPeriod : TDuration::MilliSeconds(queryServiceConfig.GetProgressStatsPeriodMs()));
+        }
+
+        return ev;
+    }
+
+    bool OnUnhandledException(const std::exception& e) final {
+        Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Got unexpected exception: " << e.what());
+        return true;
+    }
+
+    // Wait notification that script execution metadata was stored into `script_executions` table
+    STRICT_STFUNC(StateFuncCreating,
+        sFunc(TEvents::TEvWakeup, HandleCreatingFinished);
+        sFunc(TEvents::TEvPoison, HandleCreatingFailed);
+        hFunc(TEvKqp::TEvCancelScriptExecutionRequest, HandleCancellation);
+        hFunc(TEvCheckAliveRequest, HandleCheckAlive);
     )
 
-    void SendToKqpProxy(THolder<NActors::IEventBase> ev) {
-        if (!Send(MakeKqpProxyID(SelfId().NodeId()), ev.Release())) {
-            Issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Internal error"));
-            Finish(Ydb::StatusIds::INTERNAL_ERROR);
+    void HandleCreatingFinished() {
+        CreationFinished = true;
+
+        if (FinishInfo.IsFinished()) {
+            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Script execution metadata saved after failure, continue finishing",
+                {"logPrefix", LogPrefix()});
+            Finish(); // Continue finishing
+            return;
         }
+
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Script execution metadata saved, creating new session",
+            {"logPrefix", LogPrefix()});
+        Become(&TThis::StateFuncInitialize);
+
+        ScriptLeaseWatcherActor.Id = RegisterWithSameMailbox(CreateScriptLeaseWatcherActor(Ctx));
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Started script lease watcher actor",
+            {"logPrefix", LogPrefix()},
+            {"scriptLeaseWatcherActor", ScriptLeaseWatcherActor.Id});
+
+        auto ev = std::make_unique<TEvKqp::TEvCreateSessionRequest>();
+        ev->Record.SetTraceId(Ctx->UserRequestContext->TraceId);
+        ev->Record.MutableRequest()->SetDatabase(Ctx->UserRequestContext->Database);
+        Send(MakeKqpProxyID(SelfId().NodeId()), ev.release());
+        SessionState.WaitCreation = true;
     }
 
-    void CreateSession() {
-        auto ev = MakeHolder<TEvKqp::TEvCreateSessionRequest>();
-        ev->Record.MutableRequest()->SetDatabase(Request.GetRequest().GetDatabase());
-
-        SendToKqpProxy(std::move(ev));
-    }
-
-    void Handle(TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
-        const auto& resp = ev->Get()->Record;
-        if (resp.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-            if (resp.GetResourceExhausted()) {
-                Finish(Ydb::StatusIds::OVERLOADED);
-            } else {
-                Finish(Ydb::StatusIds::INTERNAL_ERROR);
-            }
+    void HandleCreatingFailed() {
+        if (!CreationFinished) {
+            // Failed to save script execution entry into database
+            YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Failed to save script execution entry",
+                {"logPrefix", LogPrefix()});
+            PassAway();
         } else {
-            SessionId = resp.GetResponse().GetSessionId();
-            UserRequestContext->SessionId = SessionId;
-
-            if (RunState == ERunState::Running) {
-                Start();
-            } else {
-                CloseSession();
-            }
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Failed to save script execution entry");
         }
     }
 
-    void CloseSession() {
-        if (SessionId) {
-            auto ev = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
-            ev->Record.MutableRequest()->SetSessionId(SessionId);
+    void HandleCancellation(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got cancel request",
+            {"logPrefix", LogPrefix()},
+            {"sender", ev->Sender});
 
-            Send(MakeKqpProxyID(SelfId().NodeId()), ev.Release());
-            SessionId.clear();
+        CancelRequests.emplace_front(std::move(ev));
+
+        if (!FinishInfo.IsSuccess()) {
+            Finish(Ydb::StatusIds::CANCELLED);
         }
     }
 
-    void Start() {
-        auto ev = MakeHolder<TEvKqp::TEvQueryRequest>();
-        ev->Record = Request;
-        ev->Record.MutableRequest()->SetSessionId(SessionId);
-        ev->SetUserRequestContext(UserRequestContext);
-        if (ev->Record.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
-            ev->SetProgressStatsPeriod(TDuration::MilliSeconds(QueryServiceConfig.GetProgressStatsPeriodMs()));
-        }
-
-        NActors::ActorIdToProto(SelfId(), ev->Record.MutableRequestActorId());
-
-        LOG_I("Start Script Execution");
-        SendToKqpProxy(std::move(ev));
-    }
-
-    void Handle(TEvCheckAliveRequest::TPtr& ev) {
-        LOG_W("Lease was expired in database"
-            << ", execution id: " << ExecutionId
-            << ", saved final status: " << FinalStatusIsSaved
-            << ", wait finalization request: " << WaitFinalizationRequest
-            << ", is executing: " << IsExecuting()
-            << ", current status: " << Status);
-
+    void HandleCheckAlive(TEvCheckAliveRequest::TPtr& ev) {
+        YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Lease was expired in database",
+            {"logPrefix", LogPrefix()},
+            {"sender", ev->Sender});
         Send(ev->Sender, new TEvCheckAliveResponse());
     }
 
-    void RunLeaseUpdater() {
-        Register(CreateScriptLeaseUpdateActor(SelfId(), Database, ExecutionId, LeaseDuration, Counters));
-        LeaseUpdateQueryRunning = true;
-        Counters->ReportRunActorLeaseUpdateBacklog(TInstant::Now() - LeaseUpdateScheduleTime);
-    }
+    // Create new kqp session
+    STRICT_STFUNC(StateFuncInitialize,
+        hFunc(TEvKqp::TEvCreateSessionResponse, HandleCreateSession);
+        hFunc(TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished, HandleLeaseWatcherFinished);
+        hFunc(TEvKqp::TEvCancelScriptExecutionRequest, HandleCancellation);
+        hFunc(TEvCheckAliveRequest, HandleCheckAlive);
+    )
 
-    bool LeaseUpdateRequired() const {
-        return IsExecuting() || SaveResultMetaInflight || SaveResultInflight;
-    }
+    void HandleCreateSession(TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
+        SessionState.WaitCreation = false;
 
-    // TODO: remove this after there will be a normal way to store results and generate execution id
-    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
-        switch (ev->Get()->Tag) {
-        case EWakeUp::RunEvent:
-            LeaseUpdateScheduleTime = TInstant::Now();
-            Schedule(LeaseDuration / LEASE_UPDATE_FREQUENCY, new NActors::TEvents::TEvWakeup(EWakeUp::UpdateLeaseEvent));
-            RunState = ERunState::Running;
-            CreateSession();
-            break;
+        const auto& record = ev->Get()->Record;
+        if (const auto status = record.GetYdbStatus(); status != Ydb::StatusIds::SUCCESS) {
+            const auto resourceExhausted = record.GetResourceExhausted();
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Create new session failed",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"resourceExhausted", resourceExhausted});
 
-        case EWakeUp::UpdateLeaseEvent:
-            if (LeaseUpdateRequired() && !FinalStatusIsSaved) {
-                RunLeaseUpdater();
+            auto error = TStringBuilder() << "Create new session failed with " << status;
+
+            if (resourceExhausted) {
+                Finish(Ydb::StatusIds::OVERLOADED, error << " (resource exhausted)");
+            } else {
+                Finish(Ydb::StatusIds::INTERNAL_ERROR, error);
             }
-            break;
+
+            return;
+        }
+
+        SessionState.SessionOpen = true;
+        const auto& session = record.GetResponse();
+        Ctx->UserRequestContext->SessionId = session.GetSessionId();
+        QueryRequest->Record.MutableRequest()->SetSessionId(Ctx->UserRequestContext->SessionId);
+
+        if (FinishInfo.IsFinished()) {
+            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Session created after finish, continue finishing",
+                {"logPrefix", LogPrefix()});
+            Finish();
+            return;
+        }
+
+        if (session.GetNodeId() != SelfId().NodeId()) {
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "New session started on unexpected node",
+                {"logPrefix", LogPrefix()},
+                {"node", session.GetNodeId()});
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Session created on wrong node " << session.GetNodeId() << ", expected local session on node " << SelfId().NodeId());
+            return;
+        }
+
+        Become(&TThis::StateFuncExecute);
+
+        const auto& physicalGraph = QueryRequest->GetQueryPhysicalGraph();
+        ScriptResultHandlerActor.Id = RegisterWithSameMailbox(CreateScriptResultHandlerActor(Ctx, physicalGraph ? std::optional(*physicalGraph) : std::nullopt, QueryServiceConfig));
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Started query",
+            {"logPrefix", LogPrefix()},
+            {"scriptResultHandlerActor", ScriptResultHandlerActor.Id},
+            {"hasPhysicalGraph", (physicalGraph ? "YES" : "NO")});
+
+        Ctx->UserRequestContext->RunScriptActorId = ScriptResultHandlerActor.Id;
+        QueryRequest->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(*Ctx->UserRequestContext)); // Make copy of context, because it may be changed
+        ActorIdToProto(ScriptResultHandlerActor.Id, QueryRequest->Record.MutableRequestActorId());
+        Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release());
+    }
+
+    void HandleLeaseWatcherFinished(TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished::TPtr& ev) {
+        ScriptLeaseWatcherActor.Id = {};
+
+        if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS || !FinishInfo.IsFinished()) {
+            const auto& issues = ev->Get()->Issues;
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got lease watcher fail",
+                {"logPrefix", LogPrefix()},
+                {"sender", ev->Sender},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
+            Finish(status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));
+        } else {
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got lease watcher finish",
+                {"logPrefix", LogPrefix()},
+                {"sender", ev->Sender});
+            Finish();
         }
     }
 
-    void TerminateActorExecution(Ydb::StatusIds::StatusCode replyStatus, const NYql::TIssues& replyIssues) {
-        for (auto& req : CancelRequests) {
-            Send(req->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(replyStatus, replyIssues));
+    // Wait query execution
+    STRICT_STFUNC(StateFuncExecute,
+        IgnoreFunc(TEvKqp::TEvCloseSessionResponse);
+        hFunc(TEvKqp::TEvQueryResponse, HandleExecute);
+        hFunc(TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished, HandleLeaseWatcherFinished);
+        hFunc(TEvRunScriptPrivate::TEvScriptResultHandlerFinished, HandleResultHandlerFinished);
+        hFunc(TEvKqp::TEvCancelScriptExecutionRequest, HandleCancellation);
+        hFunc(TEvCheckAliveRequest, HandleCheckAlive);
+    )
+
+    void HandleExecute(TEvKqp::TEvQueryResponse::TPtr& ev) {
+        if (!ScriptResultHandlerActor.Id) {
+            const auto& record = ev->Get()->Record;
+            const auto& response = record.GetResponse();
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
+            YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Ignored query response, execution already finished",
+                {"logPrefix", LogPrefix()},
+                {"sender", ev->Sender},
+                {"status", record.GetYdbStatus()},
+                {"issues", issues.ToOneLineString()});
+            return;
         }
-        PassAway();
+
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Forward query response to result handler",
+            {"logPrefix", LogPrefix()},
+            {"sender", ev->Sender});
+        Forward(ev, ScriptResultHandlerActor.Id);
     }
 
-    void RunScriptExecutionFinisher() {
-        if (!FinalStatusIsSaved) {
-            FinalStatusIsSaved = true;
-            WaitFinalizationRequest = true;
-            RunState = IsExecuting() ? ERunState::Finishing : RunState;
+    void HandleResultHandlerFinished(TEvRunScriptPrivate::TEvScriptResultHandlerFinished::TPtr& ev) {
+        ScriptResultHandlerActor.Id = {};
 
-            if (RunState == ERunState::Cancelling) {
+        if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got result handler fail",
+                {"logPrefix", LogPrefix()},
+                {"sender", ev->Sender},
+                {"status", status},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
+        } else {
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got result handler finish",
+                {"logPrefix", LogPrefix()},
+                {"sender", ev->Sender});
+        }
+
+        ExecutionInfo = std::move(ev->Get()->Info);
+        Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
+    }
+
+    // Wait query finalization
+    STRICT_STFUNC(StateFuncFinalize,
+        IgnoreFunc(TEvKqp::TEvCloseSessionResponse);
+        IgnoreFunc(TEvKqp::TEvQueryResponse); // Ignored because result handler either not started or already finished
+        sFunc(TEvents::TEvWakeup, HandleCreatingFinished);
+        sFunc(TEvents::TEvPoison, HandleCreatingFailed);
+        hFunc(TEvKqp::TEvCreateSessionResponse, HandleCreateSession);
+        hFunc(TEvScriptExecutionFinished, HandleFinalize);
+        hFunc(TEvKqp::TEvCancelScriptExecutionRequest, HandleCancellation);
+        hFunc(TEvCheckAliveRequest, HandleCheckAlive);
+    )
+
+    void HandleFinalize(TEvScriptExecutionFinished::TPtr& ev) {
+        auto guard = PassAwayGuard();
+
+        const auto status = ev->Get()->Status;
+        const auto& issues = ev->Get()->Issues;
+        const auto& info = ev->Get()->Info;
+        if (status != Ydb::StatusIds::SUCCESS) {
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got script execution finalization fail",
+                {"logPrefix", LogPrefix()},
+                {"finalize", ev->Sender},
+                {"status", status},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
+        } else {
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got script execution finalization finish",
+                {"logPrefix", LogPrefix()},
+                {"finalize", ev->Sender},
+                {"finished", info.AlreadyStopped},
+                {"exists", info.ExecutionEntryExists});
+        }
+
+        const auto alreadyStopped = info.AlreadyStopped || FinishInfo.IsSuccess();
+
+        for (auto& request : CancelRequests) {
+            Send(request->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(status, {
+                .ExecutionEntryExists = info.ExecutionEntryExists,
+                .AlreadyStopped = alreadyStopped,
+            }, issues), /* flags */ 0, request->Cookie);
+        }
+
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Exit",
+            {"logPrefix", LogPrefix()},
+            {"finishStatus", FinishInfo.Status.value_or(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)},
+            {"issues", FinishInfo.Issues.ToOneLineString()},
+            {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
+    }
+
+    void Finish() {
+        Finish(Ydb::StatusIds::SUCCESS);
+    }
+
+    void Finish(const Ydb::StatusIds::StatusCode status, const TString& message) {
+        Finish(status, {NYql::TIssue(message)});
+    }
+
+    void Finish(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues = {}) {
+        if (status != Ydb::StatusIds::SUCCESS) {
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Finish with error",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
+        } else if (!FinishInfo.IsFailed()) {
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Finish successfully",
+                {"logPrefix", LogPrefix()});
+        }
+
+        FinishInfo.Update(status, std::move(issues));
+
+        if (ScriptResultHandlerActor.Id) {
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Stopping script result handler",
+                {"logPrefix", LogPrefix()},
+                {"scriptResultHandlerActorId", ScriptResultHandlerActor.Id});
+            ScriptResultHandlerActor.Stop(SelfId());
+            return;
+        }
+
+        if (SessionState.WaitCreation) {
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Wait for session creation before exit",
+                {"logPrefix", LogPrefix()});
+            return;
+        }
+
+        if (SessionState.SessionOpen) {
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Close session",
+                {"logPrefix", LogPrefix()});
+            SessionState.Close(SelfId(), *Ctx);
+        }
+
+        if (ScriptLeaseWatcherActor.Id) {
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Stopping script lease watcher",
+                {"logPrefix", LogPrefix()},
+                {"scriptLeaseWatcherActorId", ScriptLeaseWatcherActor.Id});
+            ScriptLeaseWatcherActor.Stop(SelfId());
+            return;
+        }
+
+        if (!WaitFinalizationRequest) {
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Start script execution finalization",
+                {"logPrefix", LogPrefix()});
+            Become(&TThis::StateFuncFinalize);
+
+            const auto cancelledByUser = !CancelRequests.empty();
+            if (FinishInfo.IsFailed() && cancelledByUser) {
                 NYql::TIssue cancelIssue("Request was canceled by user");
                 cancelIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
-                Issues.AddIssue(std::move(cancelIssue));
+                FinishInfo.Issues.AddIssue(cancelIssue);
+                FinishInfo.Status = Ydb::StatusIds::CANCELLED;
+            }
+
+            const auto finalizationStatus = FinishInfo.IsSuccess() || cancelledByUser
+                ? EFinalizationStatus::FS_COMMIT
+                : EFinalizationStatus::FS_ROLLBACK;
+
+            auto execStatus = Ydb::Query::EXEC_STATUS_COMPLETED;
+            if ((FinishInfo.IsFailed() && cancelledByUser) || *FinishInfo.Status == Ydb::StatusIds::CANCELLED) {
+                execStatus = Ydb::Query::EXEC_STATUS_CANCELLED;
+            } else if (FinishInfo.IsFailed()) {
+                execStatus = Ydb::Query::EXEC_STATUS_FAILED;
             }
 
             auto scriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
-                GetFinalizationStatusFromRunState(), ExecutionId, Database, Status, GetExecStatusFromStatusCode(Status),
-                Issues, std::move(QueryStats), std::move(QueryPlan), std::move(QueryAst), LeaseGeneration
+                finalizationStatus, Ctx->UserRequestContext->CurrentExecutionId, Ctx->UserRequestContext->Database,
+                *FinishInfo.Status, execStatus, FinishInfo.Issues, std::move(ExecutionInfo.QueryStats),
+                std::move(ExecutionInfo.QueryPlan), std::move(ExecutionInfo.QueryAst), Ctx->LeaseGeneration, cancelledByUser
             );
             Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), scriptFinalizeRequest.release());
-            return;
-        }
-
-        if (!WaitFinalizationRequest && RunState != ERunState::Cancelled && RunState != ERunState::Finished) {
-            RunState = ERunState::Finished;
-            TerminateActorExecution(Ydb::StatusIds::PRECONDITION_FAILED, { NYql::TIssue("Already finished") });
-        }
-    }
-
-    void Handle(TEvScriptLeaseUpdateResponse::TPtr& ev) {
-        LeaseUpdateQueryRunning = false;
-
-        if (!ev->Get()->ExecutionEntryExists) {
-            FinalStatusIsSaved = true;
-            if (RunState == ERunState::Running) {
-                CancelRunningQuery();
-            }
-        }
-
-        if (FinishAfterLeaseUpdate) {
-            RunScriptExecutionFinisher();
-        } else if (IsExecuting() && ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            Finish(ev->Get()->Status);
-        }
-
-        if (LeaseUpdateRequired()) {
-            TInstant leaseUpdateTime = ev->Get()->CurrentDeadline - LeaseDuration / LEASE_UPDATE_FREQUENCY;
-            LeaseUpdateScheduleTime = TInstant::Now();
-            if (TInstant::Now() >= leaseUpdateTime) {
-                RunLeaseUpdater();
-            } else {
-                Schedule(leaseUpdateTime, new NActors::TEvents::TEvWakeup(EWakeUp::UpdateLeaseEvent));
-            }
-        }
-    }
-
-    // Event in case of error in registering script in database
-    // Just pass away, because we have not started execution.
-    void Handle(NActors::TEvents::TEvPoison::TPtr&) {
-        Y_ABORT_UNLESS(RunState == ERunState::Created);
-        PassAway();
-    }
-
-    bool ShouldSaveResult(size_t resultSetId) const {
-        if (SaveResultInflight) {
-            return false;
-        }
-
-        const TResultSetInfo& resultInfo = ResultSetInfos[resultSetId];
-        if (!resultInfo.PendingResult.rows_size()) {
-            return false;
-        }
-        if (resultInfo.Truncated || !IsExecuting()) {
-            return true;
-        }
-        return resultInfo.PendingResult.rows_size() >= MIN_SAVE_RESULT_BATCH_ROWS || resultInfo.ByteCount - resultInfo.AccumulatedSize >= MIN_SAVE_RESULT_BATCH_SIZE;
-    }
-
-    size_t GetBytesToSave(size_t resultSetId) const {
-        const TResultSetInfo& resultInfo = ResultSetInfos[resultSetId];
-        if (!resultInfo.PendingResult.rows_size()) {
-            return 0;
-        }
-        return resultInfo.ByteCount - resultInfo.AccumulatedSize;
-    }
-
-    void SaveResult(size_t resultSetId) {
-        if (!ExpireAt && ResultsTtl > TDuration::Zero()) {
-            ExpireAt = TInstant::Now() + ResultsTtl;
-        }
-
-        auto& resultSetInfo = ResultSetInfos[resultSetId];
-        Register(CreateSaveScriptExecutionResultActor(SelfId(), Database, ExecutionId, resultSetId, ExpireAt, resultSetInfo.FirstRowId, resultSetInfo.AccumulatedSize, std::move(resultSetInfo.PendingResult)));
-        SaveResultInflight++;
-        const ui64 bytes = resultSetInfo.ByteCount - resultSetInfo.AccumulatedSize;
-        PendingResultSetsSize -= bytes;
-        SaveResultInflightBytes = bytes;
-        resultSetInfo.FirstRowId = resultSetInfo.RowCount;
-        resultSetInfo.AccumulatedSize = resultSetInfo.ByteCount;
-        resultSetInfo.PendingResult = Ydb::ResultSet();
-    }
-
-    void SaveResult() {
-        for (size_t resultSetId = 0; resultSetId < ResultSetInfos.size(); ++resultSetId) {
-            if (ShouldSaveResult(resultSetId)) {
-                SaveResult(resultSetId);
-                break;
-            }
-        }
-    }
-
-    void Handle(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        if (RunState != ERunState::Running) {
-            return;
-        }
-
-        LOG_D("Compute stream data"
-            << ", seqNo: " << ev->Get()->Record.GetSeqNo()
-            << ", queryResultIndex: " << ev->Get()->Record.GetQueryResultIndex()
-            << ", from: " << ev->Sender);
-
-        auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
-
-        if (resultSetIndex >= ResultSetInfos.size()) {
-            // we don't know result set count, so just accept all of them
-            // it's possible to have several result sets per script
-            // they can arrive in any order and may be missed for some indices
-            ResultSetInfos.resize(resultSetIndex + 1);
-        }
-
-        bool savedResult = false;
-        auto& resultSetInfo = ResultSetInfos[resultSetIndex];
-        if (IsExecuting() && !resultSetInfo.Truncated) {
-            auto& rowCount = resultSetInfo.RowCount;
-            auto& byteCount = resultSetInfo.ByteCount;
-
-            for (auto& row : *ev->Get()->Record.MutableResultSet()->mutable_rows()) {
-                if (QueryServiceConfig.GetScriptResultRowsLimit() && rowCount + 1 > QueryServiceConfig.GetScriptResultRowsLimit()) {
-                    resultSetInfo.Truncated = true;
-                    break;
-                }
-
-                auto serializedSize = row.ByteSizeLong();
-                if (QueryServiceConfig.GetScriptResultSizeLimit() && byteCount + serializedSize > QueryServiceConfig.GetScriptResultSizeLimit()) {
-                    resultSetInfo.Truncated = true;
-                    break;
-                }
-
-                rowCount++;
-                byteCount += serializedSize;
-                PendingResultSetsSize += serializedSize;
-                *resultSetInfo.PendingResult.add_rows() = std::move(row);
-            }
-
-            bool newResultSet = resultSetInfo.Meta == nullptr;
-            if (newResultSet || resultSetInfo.Truncated) {
-                Ydb::Query::Internal::ResultSetMeta meta;
-                if (newResultSet) {
-                    *meta.mutable_columns() = ev->Get()->Record.GetResultSet().columns();
-                }
-                if (resultSetInfo.Truncated) {
-                    meta.set_truncated(true);
-                }
-
-                NJson::TJsonValue* value;
-                if (newResultSet) {
-                    value = &ResultSetMetas[resultSetIndex];
-                    resultSetInfo.Meta = value;
-                } else {
-                    value = resultSetInfo.Meta;
-                }
-                NProtobufJson::Proto2Json(meta, *value, NProtobufJson::TProto2JsonConfig());
-
-                // can't save meta when previous request is not completed for TLI reasons
-                if (SaveResultMetaInflight) {
-                    PendingResultMeta = true;
-                } else {
-                    SaveResultMeta();
-                    SaveResultMetaInflight++;
-                }
-            }
-
-            if (ShouldSaveResult(resultSetIndex)) {
-                savedResult = true;
-                SaveResult(resultSetIndex);
-            }
-        }
-
-        const i64 freeSpaceBytes = GetFreeSpaceBytes();
-        const ui32 channelId = ev->Get()->Record.GetChannelId();
-        const ui64 seqNo = ev->Get()->Record.GetSeqNo();
-        auto& channel = StreamChannels[channelId];
-        channel.ActorId = ev->Sender;
-        channel.LastSeqNo = seqNo;
-        channel.AckedFreeSpaceBytes = freeSpaceBytes;
-        channel.ChannelId = channelId;
-        channel.SendAck(SelfId());
-
-        if (!savedResult && SaveResultInflight == 0) {
-            CheckInflight();
-        }
-    }
-
-    void SaveResultMeta() {
-        NJsonWriter::TBuf sout;
-        sout.WriteJsonValue(&ResultSetMetas);
-        Register(
-            CreateSaveScriptExecutionResultMetaActor(SelfId(), Database, ExecutionId, sout.Str())
-        );
-    }
-
-    void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
-        Register(
-            CreateScriptProgressActor(ExecutionId, Database, ev->Get()->Record.GetQueryPlan(), "")
-        );
-    }
-
-    void Handle(TEvKqp::TEvQueryResponse::TPtr& ev) {
-        if (RunState != ERunState::Running) {
-            return;
-        }
-        auto& record = ev->Get()->Record;
-
-        const auto& issueMessage = record.GetResponse().GetQueryIssues();
-        NYql::IssuesFromMessage(issueMessage, Issues);
-
-        if (record.GetYdbStatus() == Ydb::StatusIds::TIMEOUT) {
-            const TDuration timeout = GetQueryTimeout(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, Request.GetRequest().GetTimeoutMs(), {}, QueryServiceConfig);
-            NYql::TIssue timeoutIssue(TStringBuilder() << "Current request timeout is " << timeout.MilliSeconds() << "ms");
-            timeoutIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
-            Issues.AddIssue(std::move(timeoutIssue));
-        }
-
-        if (record.GetResponse().HasQueryPlan()) {
-            QueryPlan = record.GetResponse().GetQueryPlan();
-        }
-
-        if (record.GetResponse().HasQueryStats()) {
-            QueryStats = record.GetResponse().GetQueryStats();
-        }
-
-        if (record.GetResponse().HasQueryAst()) {
-            QueryAst = record.GetResponse().GetQueryAst();
-        }
-
-        Finish(record.GetYdbStatus());
-    }
-
-    void Handle(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
-        switch (RunState) {
-        case ERunState::Created:
-            CancelRequests.emplace_front(std::move(ev));
-            Finish(Ydb::StatusIds::CANCELLED, ERunState::Cancelling);
-            break;
-        case ERunState::Running:
-            CancelRequests.emplace_front(std::move(ev));
-            CancelRunningQuery();
-            break;
-        case ERunState::Cancelling:
-            CancelRequests.emplace_front(std::move(ev));
-            break;
-        case ERunState::Cancelled:
-            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already cancelled"));
-            break;
-        case ERunState::Finishing:
-            CancelRequests.emplace_front(std::move(ev));
-            break;
-        case ERunState::Finished:
-            Send(ev->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(Ydb::StatusIds::PRECONDITION_FAILED, "Already finished"));
-            break;
-        }
-    }
-
-    void CancelRunningQuery() {
-        if (SessionId.empty()) {
-            Finish(Ydb::StatusIds::CANCELLED, ERunState::Cancelling);
+            WaitFinalizationRequest = true;
         } else {
-            RunState = ERunState::Cancelling;
-            auto ev = MakeHolder<TEvKqp::TEvCancelQueryRequest>();
-            ev->Record.MutableRequest()->SetSessionId(SessionId);
-
-            Send(MakeKqpProxyID(SelfId().NodeId()), ev.Release());
+            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Skipping finish with error because finalization is already in progress",
+                {"logPrefix", LogPrefix()},
+                {"finishStatus", *FinishInfo.Status},
+                {"issues", FinishInfo.Issues.ToOneLineString()},
+                {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
         }
     }
 
-    void Handle(TEvKqp::TEvCancelQueryResponse::TPtr&) {
-        Finish(Ydb::StatusIds::CANCELLED, ERunState::Cancelling);
+    TString LogPrefix() const {
+        return TStringBuilder() << "[" << ActorName << "] " << SelfId() << ". Ctx: " << *Ctx->UserRequestContext << ". LeaseGeneration: " << Ctx->LeaseGeneration << ". ";
     }
 
-    void Handle(TEvScriptExecutionFinished::TPtr& ev) {
-        WaitFinalizationRequest = false;
-
-        if (RunState == ERunState::Cancelling) {
-            RunState = ERunState::Cancelled;
-        }
-
-        if (RunState == ERunState::Finishing) {
-            RunState = ERunState::Finished;
-        }
-
-        Ydb::StatusIds::StatusCode status = ev->Get()->Status;
-        NYql::TIssues issues = std::move(ev->Get()->Issues);
-        if (RunState == ERunState::Finished) {
-            status = Ydb::StatusIds::PRECONDITION_FAILED;
-            issues.Clear();
-            issues.AddIssue("Already finished");
-        }
-        TerminateActorExecution(status, issues);
-    }
-
-    void Handle(TEvSaveScriptResultMetaFinished::TPtr& ev) {
-        if (PendingResultMeta) {
-            PendingResultMeta = false;
-            SaveResultMeta();
-            return;
-        }
-
-        SaveResultMetaInflight--;
-        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS && (Status == Ydb::StatusIds::SUCCESS || Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)) {
-            Status = ev->Get()->Status;
-            Issues.AddIssues(ev->Get()->Issues);
-        }
-        CheckInflight();
-    }
-
-    void Handle(TEvSaveScriptResultFinished::TPtr& ev) {
-        SaveResultInflight--;
-        SaveResultInflightBytes = 0;
-        if (Status == Ydb::StatusIds::SUCCESS || Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
-            if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-                Status = ev->Get()->Status;
-                Issues.AddIssues(ev->Get()->Issues);
-            } else {
-                SaveResult();
-            }
-        }
-
-        const i64 freeSpaceBytes = GetFreeSpaceBytes();
-        if (freeSpaceBytes > 0 && IsExecuting()) {
-            for (auto& [channelId, channel] : StreamChannels) {
-                if (channel.ResumeIfStopped(SelfId(), freeSpaceBytes)) {
-                    LOG_D("Resume execution, "
-                        << ", channel: " << channelId
-                        << ", seqNo: " << channel.LastSeqNo
-                        << ", freeSpace: " << freeSpaceBytes);
-                }
-            }
-        }
-
-        CheckInflight();
-    }
-
-    static Ydb::Query::ExecStatus GetExecStatusFromStatusCode(Ydb::StatusIds::StatusCode status) {
-        if (status == Ydb::StatusIds::SUCCESS) {
-            return Ydb::Query::EXEC_STATUS_COMPLETED;
-        } else if (status == Ydb::StatusIds::CANCELLED) {
-            return Ydb::Query::EXEC_STATUS_CANCELLED;
-        } else {
-            return Ydb::Query::EXEC_STATUS_FAILED;
-        }
-    }
-
-    EFinalizationStatus GetFinalizationStatusFromRunState() const {
-        if ((Status == Ydb::StatusIds::SUCCESS || Status == Ydb::StatusIds::CANCELLED) && !IsExecuting()) {
-            return EFinalizationStatus::FS_COMMIT;
-        }
-        return EFinalizationStatus::FS_ROLLBACK;
-    }
-
-    void CheckInflight() {
-        if (SaveResultMetaInflight || SaveResultInflight) {
-            return;
-        }
-
-        const int freeSpaceBytes = GetFreeSpaceBytes();
-        if (freeSpaceBytes < 0 && IsExecuting()) {
-            // try to free the space
-            size_t maxBytesToSave = 0;
-            size_t maxResultSet = 0;
-            for (size_t resultSetId = 0; resultSetId < ResultSetInfos.size(); ++resultSetId) {
-                if (size_t bytesToSave = GetBytesToSave(resultSetId); bytesToSave > maxBytesToSave) {
-                    maxBytesToSave = bytesToSave;
-                    maxResultSet = resultSetId;
-                }
-            }
-            SaveResult(maxResultSet);
-        } else {
-            if (Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED || IsExecuting()) {
-                // waiting for script completion
-                return;
-            }
-
-            if (PendingResultSetsSize) {
-                // Complete results saving
-                SaveResult();
-                return;
-            }
-
-            if (!LeaseUpdateQueryRunning) {
-                RunScriptExecutionFinisher();
-            } else {
-                FinishAfterLeaseUpdate = true;
-            }
-        }
-    }
-
-    void Finish(Ydb::StatusIds::StatusCode status, ERunState runState = ERunState::Finishing) {
-        RunState = runState;
-        Status = status;
-
-        // if query has no results, save empty json array
-        if (ResultSetInfos.empty()) {
-            ResultSetMetas.SetType(NJson::JSON_ARRAY);
-            SaveResultMeta();
-            SaveResultMetaInflight++;
-        } else {
-            CheckInflight();
-        }
-    }
-
-    void PassAway() override {
-        CloseSession();
-        NActors::TActorBootstrapped<TRunScriptActor>::PassAway();
-    }
-
-    bool IsExecuting() const {
-        return RunState != ERunState::Finished
-            && RunState != ERunState::Finishing
-            && RunState != ERunState::Cancelled
-            && RunState != ERunState::Cancelling;
-    }
-
-    i64 GetFreeSpaceBytes() const {
-        return static_cast<i64>(RUN_SCRIPT_ACTOR_BUFFER_SIZE) - static_cast<i64>(PendingResultSetsSize) - static_cast<i64>(SaveResultInflightBytes);
-    }
-
-private:
-    const TString ExecutionId;
-    NKikimrKqp::TEvQueryRequest Request;
-    const TString Database;
-    const ui64 LeaseGeneration;
-    const TDuration LeaseDuration;
-    const TDuration ResultsTtl;
+    const TScriptExecutionContext::TPtr Ctx;
+    std::unique_ptr<TEvKqp::TEvQueryRequest> QueryRequest;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
-    TIntrusivePtr<TKqpCounters> Counters;
-    TString SessionId;
-    TInstant LeaseUpdateScheduleTime;
-    bool LeaseUpdateQueryRunning = false;
-    bool FinalStatusIsSaved = false;
-    bool FinishAfterLeaseUpdate = false;
-    bool WaitFinalizationRequest = false;
-    ERunState RunState = ERunState::Created;
+    TFinishInfo FinishInfo;
+    TExecutionInfo ExecutionInfo;
+    TSessionState SessionState;
+    TActorState ScriptLeaseWatcherActor;
+    TActorState ScriptResultHandlerActor;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;
-
-    // Result
-    NYql::TIssues Issues;
-    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-
-    // Result
-    std::vector<TResultSetInfo> ResultSetInfos;
-    TMap<ui64, TProducerState> StreamChannels;
-    std::optional<TInstant> ExpireAt;
-    NJson::TJsonValue ResultSetMetas;
-    ui32 SaveResultInflight = 0;
-    ui64 SaveResultInflightBytes = 0;
-    ui32 SaveResultMetaInflight = 0;
-    bool PendingResultMeta = false;
-    ui64 PendingResultSetsSize = 0;
-    std::optional<TString> QueryPlan;
-    std::optional<TString> QueryAst;
-    std::optional<NKqpProto::TKqpStatsQuery> QueryStats;
-    TIntrusivePtr<TUserRequestContext> UserRequestContext;
+    bool CreationFinished = false;
+    bool WaitFinalizationRequest = false;
 };
 
 } // namespace
 
-NActors::IActor* CreateRunScriptActor(const TString& executionId, const NKikimrKqp::TEvQueryRequest& request, const TString& database, ui64 leaseGeneration, TDuration leaseDuration, TDuration resultsTtl, NKikimrConfig::TQueryServiceConfig queryServiceConfig, TIntrusivePtr<TKqpCounters> counters) {
-    return new TRunScriptActor(executionId, request, database, leaseGeneration, leaseDuration, resultsTtl, std::move(queryServiceConfig), counters);
+IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig) {
+    return new TRunScriptActor(request, std::move(settings), std::move(queryServiceConfig));
 }
 
 } // namespace NKikimr::NKqp

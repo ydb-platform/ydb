@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
@@ -645,24 +645,17 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
             UNIT_ASSERT(result.IsSuccess());
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            size_t readPhase = 0;
-            if (stats.query_phases().size() == 3) {
-                readPhase = 1;
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).affected_shards(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).name(), "/Root/MultiShardTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).reads().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase).table_access(0).partitions_count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 0);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase + 1).affected_shards(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase + 1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase + 1).table_access(0).name(), "/Root/MultiShardTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase + 1).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(readPhase + 1).table_access(0).partitions_count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/MultiShardTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 2);
         }
     }
 
@@ -807,7 +800,8 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
     }
 
     Y_UNIT_TEST(UpdateWhereInFullScan) {
-        TKikimrRunner kikimr;
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -823,19 +817,14 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
             UNIT_ASSERT(result.IsSuccess());
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 5);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/MultiShardTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 5);
-
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 5);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/MultiShardTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 6); // partitions_count is partition operations count
         }
     }
 
@@ -862,11 +851,6 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
-
-        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
-        }
     }
 
     Y_UNIT_TEST(DuplicateKeyPredicateLiteral) {
@@ -1050,17 +1034,14 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         Cerr << result.GetQueryPlan() << Endl;
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 0);
-
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).affected_shards(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 3);
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).partitions_count(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).affected_shards(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).deletes().rows(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).partitions_count(), 1);
     }
 
     Y_UNIT_TEST(LiteralOr) {
@@ -1094,11 +1075,6 @@ Y_UNIT_TEST_SUITE(KqpRanges) {
         }
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 3);
-
-        if (!settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).affected_shards(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).partitions_count(), 4);
-        }
     }
 
     Y_UNIT_TEST(LiteralOrCompisite) {

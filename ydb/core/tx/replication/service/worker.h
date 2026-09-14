@@ -8,7 +8,28 @@
 
 #include <functional>
 
-namespace NKikimr::NReplication::NService {
+namespace NKikimr::NReplication {
+
+class TTopicMessage;
+struct ReplicationTopicReadStats;
+struct TTransferWriteStats;
+
+enum class EWorkerOperation {
+    NONE = 0,
+    READ = 1,
+    DECOMPRESS = 2,
+    PROCESS = 3,
+    WRITE = 4,
+};
+
+struct TWorkerDetailedStats {
+    std::optional<EWorkerOperation> CurrentOperation;
+    std::unique_ptr<ReplicationTopicReadStats> ReaderStats;
+    std::unique_ptr<TTransferWriteStats> WriterStats;
+};
+
+
+namespace NService {
 
 struct TEvWorker {
     enum EEv {
@@ -20,31 +41,54 @@ struct TEvWorker {
         EvGone,
         EvStatus,
         EvDataEnd,
-
+        EvCommit,
+        EvCommitResult,
+        EvReaderStarted,
+        EvTerminateWriter,
+        EvStatsWakeup,
         EvEnd,
     };
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_WORKER));
 
     struct TEvHandshake: public TEventLocal<TEvHandshake, EvHandshake> {};
-    struct TEvPoll: public TEventLocal<TEvPoll, EvPoll> {};
+
+    struct TEvPoll: public TEventLocal<TEvPoll, EvPoll> {
+        bool SkipCommit;
+
+        explicit TEvPoll(bool skipCommit = false);
+        TString ToString() const override;
+    };
+
+    struct TEvCommit: public TEventLocal<TEvCommit, EvCommit> {
+        size_t Offset;
+
+        explicit TEvCommit(size_t offset);
+        TString ToString() const override;
+    };
+
+    struct TEvCommitResult: public TEventLocal<TEvCommitResult, EvCommitResult> {
+        size_t Offset;
+
+        explicit TEvCommitResult(size_t offset);
+        TString ToString() const override;
+    };
+
+    struct TEvReaderStarted: public TEventLocal<TEvReaderStarted, EvReaderStarted> {
+        ui64 CommittedOffset;
+
+        explicit TEvReaderStarted(ui64 committedOffset);
+        TString ToString() const override;
+    };
 
     struct TEvData: public TEventLocal<TEvData, EvData> {
-        struct TRecord {
-            ui64 Offset;
-            TString Data;
-            TInstant CreateTime;
-
-            explicit TRecord(ui64 offset, const TString& data, TInstant createTime = TInstant::Zero());
-            explicit TRecord(ui64 offset, TString&& data, TInstant createTime = TInstant::Zero());
-            void Out(IOutputStream& out) const;
-        };
-
+        ui32 PartitionId;
         TString Source;
-        TVector<TRecord> Records;
+        TVector<TTopicMessage> Records;
+        std::unique_ptr<TWorkerDetailedStats> Stats;
 
-        explicit TEvData(const TString& source, const TVector<TRecord>& records);
-        explicit TEvData(const TString& source, TVector<TRecord>&& records);
+        explicit TEvData(ui32 partitionId, const TString& source, const TVector<TTopicMessage>& records);
+        explicit TEvData(ui32 partitionId, const TString& source, TVector<TTopicMessage>&& records);
         TString ToString() const override;
     };
 
@@ -54,6 +98,7 @@ struct TEvWorker {
             S3_ERROR,
             SCHEME_ERROR,
             UNAVAILABLE,
+            OVERLOAD
         };
 
         EStatus Status;
@@ -65,9 +110,12 @@ struct TEvWorker {
 
     struct TEvStatus: public TEventLocal<TEvStatus, EvStatus> {
         TDuration Lag;
+        std::unique_ptr<TWorkerDetailedStats> DetailedStats;
 
         explicit TEvStatus(TDuration lag);
+        explicit TEvStatus(std::unique_ptr<TWorkerDetailedStats>&& detailedStats);
         TString ToString() const override;
+        static TEvStatus* FromOperation(EWorkerOperation operation);
     };
 
     struct TEvDataEnd: public TEventLocal<TEvDataEnd, EvDataEnd> {
@@ -78,6 +126,20 @@ struct TEvWorker {
         TEvDataEnd(ui64 partitionId, TVector<ui64>&& adjacentPartitionsIds, TVector<ui64>&& childPartitionsIds);
         TString ToString() const override;
     };
+
+    struct TEvTerminateWriter: public TEventLocal<TEvTerminateWriter, EvTerminateWriter> {
+        ui64 PartitionId;
+
+        explicit TEvTerminateWriter(ui64 partitionId);
+        TString ToString() const override;
+    };
+
+    struct TEvStatsWakeup: public TEventLocal<TEvStatsWakeup, EvStatsWakeup> {
+        ui64 SessionToAdd = 0;
+        ui64 SessionToRemove = 0;
+        TEvStatsWakeup() = default;
+        TEvStatsWakeup(ui64 sessionToAdd, ui64 sessionToRemove);
+    };
 };
 
 IActor* CreateWorker(
@@ -85,8 +147,5 @@ IActor* CreateWorker(
     std::function<IActor*(void)>&& createReaderFn,
     std::function<IActor*(void)>&& createWriterFn);
 
-}
-
-Y_DECLARE_OUT_SPEC(inline, NKikimr::NReplication::NService::TEvWorker::TEvData::TRecord, o, x) {
-    return x.Out(o);
-}
+} // NService
+} // NKikimr::NReplication

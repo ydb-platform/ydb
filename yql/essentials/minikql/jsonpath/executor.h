@@ -17,6 +17,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 
+#include <utility>
 #include <variant>
 
 namespace NYql::NJsonPath {
@@ -25,11 +26,11 @@ using TJsonNodes = TSmallVec<TValue>;
 
 class TResult {
 public:
-    TResult(TJsonNodes&& nodes);
+    TResult(TJsonNodes&& nodes); // NOLINT(google-explicit-constructor)
 
-    TResult(const TJsonNodes& nodes);
+    TResult(const TJsonNodes& nodes); // NOLINT(google-explicit-constructor)
 
-    TResult(TIssue&& issue);
+    TResult(TIssue&& issue); // NOLINT(google-explicit-constructor)
 
     const TJsonNodes& GetNodes() const;
 
@@ -40,54 +41,54 @@ public:
     bool IsError() const;
 
 private:
-    std::variant<TJsonNodes, TIssue> Result;
+    std::variant<TJsonNodes, TIssue> Result_;
 };
 
 class TArraySubscript {
 public:
     TArraySubscript(i64 from, TPosition fromPos)
-        : From(from)
-        , FromPos(fromPos)
-        , HasTo(false)
+        : From_(from)
+        , FromPos_(std::move(fromPos))
+        , HasTo_(false)
     {
     }
 
     TArraySubscript(i64 from, TPosition fromPos, i64 to, TPosition toPos)
-        : From(from)
-        , FromPos(fromPos)
-        , To(to)
-        , ToPos(toPos)
-        , HasTo(true)
+        : From_(from)
+        , FromPos_(std::move(fromPos))
+        , To_(to)
+        , ToPos_(std::move(toPos))
+        , HasTo_(true)
     {
     }
 
     i64 GetFrom() const {
-        return From;
+        return From_;
     }
 
     TPosition GetFromPos() const {
-        return FromPos;
+        return FromPos_;
     }
 
     i64 GetTo() const {
         YQL_ENSURE(IsRange());
-        return To;
+        return To_;
     }
 
     TPosition GetToPos() const {
-        return ToPos;
+        return ToPos_;
     }
 
     bool IsRange() const {
-        return HasTo;
+        return HasTo_;
     }
 
 private:
-    i64 From = 0;
-    TPosition FromPos;
-    i64 To = 0;
-    TPosition ToPos;
-    bool HasTo;
+    i64 From_ = 0;
+    TPosition FromPos_;
+    i64 To_ = 0;
+    TPosition ToPos_;
+    bool HasTo_;
 };
 
 using TVariablesMap = THashMap<TString, TValue>;
@@ -95,7 +96,7 @@ using TVariablesMap = THashMap<TString, TValue>;
 class TExecutor {
 public:
     TExecutor(
-        const TJsonPathPtr path,
+        TJsonPathPtr path,
         const TJsonNodes& input,
         const TVariablesMap& variables,
         const NUdf::IValueBuilder* valueBuilder);
@@ -187,12 +188,12 @@ private:
 
     TJsonNodes OptionalArrayWrapNodes(const TJsonNodes& input);
 
-    TStack<TValue> ArraySubscriptSource;
-    TStack<TValue> CurrentFilterObject;
-    TJsonPathReader Reader;
-    TJsonNodes Input;
-    const TVariablesMap& Variables;
-    const NUdf::IValueBuilder* ValueBuilder;
+    TStack<TValue> ArraySubscriptSource_;
+    TStack<TValue> CurrentFilterObject_;
+    TJsonPathReader Reader_;
+    TJsonNodes Input_;
+    const TVariablesMap& Variables_;
+    const NUdf::IValueBuilder* ValueBuilder_;
 };
 
-}
+} // namespace NYql::NJsonPath

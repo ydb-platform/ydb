@@ -3,7 +3,7 @@ import signal
 import socket
 import warnings
 from abc import ABC, abstractmethod
-from typing import Any, Awaitable, Callable, List, Optional, Set
+from typing import TYPE_CHECKING, Any, List, Optional, Set
 
 from yarl import URL
 
@@ -11,11 +11,13 @@ from .typedefs import PathLike
 from .web_app import Application
 from .web_server import Server
 
-try:
+if TYPE_CHECKING:
     from ssl import SSLContext
-except ImportError:
-    SSLContext = object  # type: ignore[misc,assignment]
-
+else:
+    try:
+        from ssl import SSLContext
+    except ImportError:  # pragma: no cover
+        SSLContext = object  # type: ignore[misc,assignment]
 
 __all__ = (
     "BaseSite",
@@ -108,7 +110,7 @@ class TCPSite(BaseSite):
     @property
     def name(self) -> str:
         scheme = "https" if self._ssl_context else "http"
-        host = "0.0.0.0" if self._host is None else self._host
+        host = "0.0.0.0" if not self._host else self._host
         return str(URL.build(scheme=scheme, host=host, port=self._port))
 
     async def start(self) -> None:
@@ -176,7 +178,7 @@ class NamedPipeSite(BaseSite):
             loop, asyncio.ProactorEventLoop  # type: ignore[attr-defined]
         ):
             raise RuntimeError(
-                "Named Pipes only available in proactor" "loop under windows"
+                "Named Pipes only available in proactor loop under windows"
             )
         super().__init__(runner, shutdown_timeout=shutdown_timeout)
         self._path = path
@@ -238,14 +240,7 @@ class SockSite(BaseSite):
 
 
 class BaseRunner(ABC):
-    __slots__ = (
-        "shutdown_callback",
-        "_handle_signals",
-        "_kwargs",
-        "_server",
-        "_sites",
-        "_shutdown_timeout",
-    )
+    __slots__ = ("_handle_signals", "_kwargs", "_server", "_sites", "_shutdown_timeout")
 
     def __init__(
         self,
@@ -254,7 +249,6 @@ class BaseRunner(ABC):
         shutdown_timeout: float = 60.0,
         **kwargs: Any,
     ) -> None:
-        self.shutdown_callback: Optional[Callable[[], Awaitable[None]]] = None
         self._handle_signals = handle_signals
         self._kwargs = kwargs
         self._server: Optional[Server] = None
@@ -312,10 +306,6 @@ class BaseRunner(ABC):
             await asyncio.sleep(0)
             self._server.pre_shutdown()
             await self.shutdown()
-
-            if self.shutdown_callback:
-                await self.shutdown_callback()
-
             await self._server.shutdown(self._shutdown_timeout)
         await self._cleanup_server()
 

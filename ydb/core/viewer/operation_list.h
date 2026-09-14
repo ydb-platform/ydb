@@ -23,6 +23,27 @@ public:
         AllowedMethods = {HTTP_METHOD_GET};
     }
 
+    bool ValidateRequest(Ydb::Operations::ListOperationsRequest& request) override {
+        if (!TBase::ValidateRequest(request)) {
+            return false;
+        }
+        ui64 offset = FromStringWithDefault<ui64>(Params.Get("offset"), 0);
+        ui64 limit = FromStringWithDefault<ui64>(Params.Get("limit"), 0);
+        if (offset >= 0 && limit > 0) {
+            if (offset % limit != 0) {
+                ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "offset must be a multiple of limit"));
+                return false;
+            }
+            if (limit > 100) {
+                ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "limit must be less than or equal to 100"));
+                return false;
+            }
+            request.set_page_size(limit);
+            request.set_page_token(std::to_string(offset / limit + 1));
+        }
+        return true;
+    }
+
     static YAML::Node GetSwagger() {
         YAML::Node node = YAML::Load(R"___(
             get:
@@ -42,9 +63,17 @@ public:
                         kind:
                           * `ss/backgrounds`
                           * `export`
-                          * `import`
+                          * `export/s3`
+                          * `export/yt`
+                          * `export/nfs`
+                          * `import/s3`
+                          * `import/nfs`
                           * `buildindex`
                           * `scriptexec`
+                          * `incbackup`
+                          * `restore`
+                          * `compaction`
+                          * `analyze`
                     required: true
                     type: string
                   - name: page_size
@@ -57,6 +86,16 @@ public:
                     description: page token
                     required: false
                     type: string
+                  - name: offset
+                    in: query
+                    description: offset. must be a multiple of limit
+                    required: false
+                    type: integer
+                  - name: limit
+                    in: query
+                    description: limit. must be less than or equal to 100
+                    required: false
+                    type: integer
                 responses:
                     200:
                         description: OK

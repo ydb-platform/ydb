@@ -9,7 +9,9 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/mind/local.h>
@@ -33,6 +35,8 @@
 
 #include <util/stream/format.h>
 
+#include "outgoing_requests.h"
+
 namespace NKikimr {
 namespace NHive {
 
@@ -55,6 +59,8 @@ using TResourceRawValues = std::tuple<i64, i64, i64, i64>; // CPU, Memory, Netwo
 using TResourceNormalizedValues = std::tuple<double, double, double, double>;
 using TOwnerIdxType = NScheme::TPairUi64Ui64;
 using TSubActorId = ui64; // = LocalId part of TActorId
+using TDataCenterPriority = std::unordered_map<TDataCenterId, i32>;
+using TSegmentId = std::tuple<TSubDomainKey, TBridgePileId>;
 
 static constexpr std::size_t MAX_TABLET_CHANNELS = 256;
 
@@ -107,6 +113,11 @@ enum class EResourceToBalance {
 
 EResourceToBalance ToResourceToBalance(NMetrics::EResource resource);
 
+enum class EGroupState {
+    Active,
+    Inactive,
+};
+
 struct ISubActor {
     const TInstant StartTime;
 
@@ -123,7 +134,22 @@ struct ISubActor {
 
 
 struct TCompleteNotifications {
-    TVector<std::pair<THolder<IEventHandle>, TDuration>> Notifications;
+    struct TNotification {
+        THolder<IEventHandle> Event;
+        TDuration Delay;
+
+        TNotification(IEventHandle* event, TDuration delay = {})
+            : Event(event)
+            , Delay(delay)
+        {
+        }
+
+        TString ToString() const {
+            return TStringBuilder() << Event->Type << " " << Event.Get()->Recipient << " " << Event->ToString();
+        }
+    };
+
+    TVector<TNotification> Notifications;
     TActorId SelfID;
 
     void Reset(const TActorId& selfId) {
@@ -133,7 +159,7 @@ struct TCompleteNotifications {
 
     void Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
         Y_ABORT_UNLESS(!!SelfID);
-        Notifications.emplace_back(new IEventHandle(recipient, SelfID, ev, flags, cookie), TDuration());
+        Notifications.emplace_back(new IEventHandle(recipient, SelfID, ev, flags, cookie));
     }
 
     void Schedule(TDuration duration, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) {
@@ -145,20 +171,44 @@ struct TCompleteNotifications {
         return Notifications.size();
     }
 
-    void Send(const TActorContext& ctx) {
-        for (auto& [notification, duration] : Notifications) {
-            if (duration) {
-                ctx.ExecutorThread.Schedule(duration, notification.Release());
+    void Send(const TActorContext&) {
+        for (auto& notification : Notifications) {
+            if (notification.Delay) {
+                TActivationContext::Schedule(notification.Delay, std::move(notification.Event));
             } else {
-                ctx.ExecutorThread.Send(notification.Release());
+                TActivationContext::Send(std::move(notification.Event));
             }
         }
         Notifications.clear();
     }
+
+    TStructuredMessage ToStructuredMessage() const {
+        return YDB_LOG_CREATE_MESSAGE({"notifications", Notifications});
+    }
 };
 
 struct TCompleteActions {
-    std::vector<std::unique_ptr<IActor>> Actors;
+    struct TActorAction {
+        std::unique_ptr<IActor> Actor;
+        std::optional<TStructuredMessage> Description;
+
+        TActorAction(IActor* actor, TStructuredMessage description)
+            : Actor(actor)
+            , Description(description)
+        {
+        }
+
+        TActorAction(IActor* actor)
+            : Actor(actor)
+        {
+        }
+
+        TString ToString() const {
+            return TypeName(*Actor.get());
+        }
+    };
+
+    std::vector<TActorAction> Actors;
     std::vector<std::function<void()>> Callbacks;
 
     void Reset() {
@@ -170,19 +220,30 @@ struct TCompleteActions {
         Actors.emplace_back(actor);
     }
 
+    void RegisterAndTrack(IActor* actor, TStructuredMessage description) {
+        Actors.emplace_back(actor, std::move(description));
+    }
+
     void Callback(std::function<void()> callback) {
         Callbacks.emplace_back(std::move(callback));
     }
 
-    void Run(const TActorContext& ctx) {
+    void Run(const TActorContext& ctx, TRequests& requests) {
         for (auto& callback : Callbacks) {
             callback();
         }
         Callbacks.clear();
-        for (auto& actor : Actors) {
-            ctx.Register(actor.release());
+        for (auto& action : Actors) {
+            auto actorId = ctx.Register(action.Actor.release());
+            if (action.Description) {
+                requests.AddRequest(std::move(*action.Description), actorId);
+            }
         }
         Actors.clear();
+    }
+
+    TStructuredMessage ToStructuredMessage() const {
+        return YDB_LOG_CREATE_MESSAGE({"actors", Actors}, {"callbacksCount", Callbacks.size()});
     }
 };
 
@@ -192,10 +253,21 @@ struct TSideEffects : TCompleteNotifications, TCompleteActions {
         TCompleteNotifications::Reset(selfId);
     }
 
-    void Complete(const TActorContext& ctx) {
-        TCompleteActions::Run(ctx);
+    void Complete(const TActorContext& ctx, TRequests& requests) {
+        TCompleteActions::Run(ctx, requests);
         TCompleteNotifications::Send(ctx);
     }
+
+    TStructuredMessage ToStructuredMessage() const {
+        auto message = TCompleteNotifications::ToStructuredMessage();
+        return message.AppendMessage(TCompleteActions::ToStructuredMessage());
+    }
+};
+
+struct IReassignCallback {
+    virtual IEventBase* MakeEvent(ui64 tabletsDone) = 0;
+
+    virtual ~IReassignCallback() = default;
 };
 
 TResourceNormalizedValues NormalizeRawValues(const TResourceRawValues& values, const TResourceRawValues& maximum);
@@ -244,6 +316,8 @@ extern const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHO
 
 class THive;
 
+class THiveDrain;
+
 struct THiveSharedSettings {
     NKikimrConfig::THiveConfig CurrentConfig;
 
@@ -284,10 +358,13 @@ struct THiveSharedSettings {
     }
 };
 
+using TDrainTarget = std::variant<TNodeId, TBridgePileId>;
+
 struct TDrainSettings {
     bool Persist = true;
     NKikimrHive::EDrainDownPolicy DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_KEEP_DOWN_UNTIL_RESTART;
     ui32 DrainInFlight = 0;
+    bool Forward = true;
 };
 
 struct TBalancerSettings {
@@ -319,9 +396,10 @@ struct TBalancerStats {
 struct TNodeFilter {
     TVector<TSubDomainKey> AllowedDomains;
     TVector<TNodeId> AllowedNodes;
-    TVector<TDataCenterId> AllowedDataCenters;
+    NKikimrHive::TDataCentersGroup AllowedDataCenters;
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
+    bool MustBePrimaryPile = true;
 
     const THive* Hive;
 
@@ -330,6 +408,8 @@ struct TNodeFilter {
     TArrayRef<const TSubDomainKey> GetEffectiveAllowedDomains() const;
 
     bool IsAllowedDataCenter(TDataCenterId dc) const;
+
+    bool IsAllowedPile(TBridgePileId pile) const;
 };
 
 struct TFollowerUpdates {
@@ -371,49 +451,49 @@ struct TFollowerUpdates {
     }
 };
 
+// same as NKikimrTabletBase::TMetrics, except not a protobuf - for lighter operations
+struct TMetrics {
+    ui64 CPU = 0;
+    ui64 Memory = 0;
+    ui64 Network = 0;
+    ui64 Counter = 0;
+    ui64 Storage = 0;
+    TVector<NKikimrTabletBase::TThroughputRecord> GroupReadThroughput;
+    TVector<NKikimrTabletBase::TThroughputRecord> GroupWriteThroughput;
+    ui64 ReadThroughput = 0;
+    ui64 WriteThroughput = 0;
+    TVector<NKikimrTabletBase::TIopsRecord> GroupReadIops;
+    TVector<NKikimrTabletBase::TIopsRecord> GroupWriteIops;
+    ui64 ReadIops = 0;
+    ui64 WriteIops = 0;
+
+    TMetrics& operator+=(const TMetrics& other);
+
+    void ToProto(NKikimrTabletBase::TMetrics* proto) const;
+};
+
+struct TReassignOperation {
+    TTabletId TabletId;
+    TVector<ui32> TabletChannels;
+    TVector<ui32> ForcedGroups;
+    bool Async;
+
+    TReassignOperation(TTabletId tablet,
+                       const TVector<ui32>& channels = {},
+                       const TVector<ui32>& groups = {},
+                       bool async = false)
+        : TabletId(tablet)
+        , TabletChannels(channels)
+        , ForcedGroups(groups)
+        , Async(async)
+    {}
+
+    auto* ToEvent() const {
+        return new TEvHive::TEvReassignTablet(TabletId, TabletChannels, ForcedGroups, Async);
+    }
+};
+
+TFullTabletId ToFullTabletId(TTabletId tabletId);
 
 } // NHive
 } // NKikimr
-
-template <>
-inline void Out<NKikimr::NHive::TCompleteNotifications>(IOutputStream& o, const NKikimr::NHive::TCompleteNotifications& n) {
-    if (!n.Notifications.empty()) {
-        o << "Notifications: ";
-        for (auto it = n.Notifications.begin(); it != n.Notifications.end(); ++it) {
-            if (it != n.Notifications.begin()) {
-                o << ',';
-            }
-            o << Hex(it->first->Type) << " " << it->first.Get()->Recipient;
-        }
-    }
-}
-
-template <>
-inline void Out<NKikimr::NHive::TCompleteActions>(IOutputStream& o, const NKikimr::NHive::TCompleteActions& n) {
-    if (!n.Callbacks.empty()) {
-        o << "Callbacks: " << n.Callbacks.size();
-    }
-    if (!n.Actors.empty()) {
-        if (!n.Callbacks.empty()) {
-            o << ' ';
-        }
-        o << "Actions: ";
-        for (auto it = n.Actors.begin(); it != n.Actors.end(); ++it) {
-            if (it != n.Actors.begin()) {
-                o << '.';
-            }
-            o << TypeName(*(it->get()));
-        }
-    }
-}
-
-template <>
-inline void Out<NKikimr::NHive::TSideEffects>(IOutputStream& o, const NKikimr::NHive::TSideEffects& e) {
-    o << '{';
-    o << static_cast<const NKikimr::NHive::TCompleteNotifications&>(e);
-    if (!e.Notifications.empty() && !e.Actors.empty()) {
-        o << ' ';
-    }
-    o << static_cast<const NKikimr::NHive::TCompleteActions&>(e);
-    o << '}';
-}

@@ -1,3 +1,6 @@
+# Requires pack_num.
+NO_BUILD_IF(OS_WINDOWS)
+
 PY3TEST()
 
 SIZE(LARGE)
@@ -15,5 +18,6 @@ TEST_SRCS(
 DEPENDS(
     yql/essentials/minikql/benchmark/pack_num
 )
+
 
 END()

@@ -25,7 +25,6 @@
 #include <stdlib.h>
 
 #include <atomic>
-#include <initializer_list>
 #include <memory>
 #include <new>
 #include <util/generic/string.h>
@@ -49,6 +48,7 @@
 #include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/channel/context.h"
 #include "src/core/lib/event_engine/default_event_engine.h"  // IWYU pragma: keep
+#include "src/core/lib/gprpp/crash.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/time.h"
 #include "src/core/lib/iomgr/call_combiner.h"
@@ -188,6 +188,7 @@ class BaseCallData : public Activity, private Wakeable {
   TString ActivityDebugTag(WakeupMask) const override { return DebugTag(); }
 
   void Finalize(const grpc_call_final_info* final_info) {
+    ScopedContext ctx(this);
     finalization_.Run(final_info);
   }
 
@@ -547,6 +548,7 @@ class BaseCallData : public Activity, private Wakeable {
  private:
   // Wakeable implementation.
   void Wakeup(WakeupMask) final;
+  void WakeupAsync(WakeupMask) final { Crash("not implemented"); }
   void Drop(WakeupMask) final;
 
   virtual void OnWakeup() = 0;
@@ -737,7 +739,8 @@ class ServerCallData : public BaseCallData {
   struct SendInitialMetadata;
 
   // Shut things down when the call completes.
-  void Completed(grpc_error_handle error, Flusher* flusher);
+  void Completed(grpc_error_handle error, bool tarpit_cancellation,
+                 Flusher* flusher);
   // Construct a promise that will "call" the next filter.
   // Effectively:
   //   - put the modified initial metadata into the batch being sent up.

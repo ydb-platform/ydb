@@ -21,9 +21,9 @@ namespace NOps {
     };
 
     struct TEvResult: public TEventLocal<TEvResult, ui32(EEv::Result)> {
-        using EAbort = NTable::EAbort;
+        using EStatus = NTable::EStatus;
 
-        TEvResult(ui64 serial, EAbort abort, THolder<TScanSnapshot> snapshot,
+        TEvResult(ui64 serial, EStatus abort, THolder<TScanSnapshot> snapshot,
                     TAutoPtr<IDestructable> result)
             : Serial(serial)
             , Status(abort)
@@ -35,7 +35,7 @@ namespace NOps {
         }
 
         ui64 Serial = 0;
-        EAbort Status = EAbort::None;
+        EStatus Status = EStatus::Done;
         TAutoPtr<IDestructable> Result;
         TIntrusivePtr<TBarrier> Barrier;
         TAutoPtr<NTable::TSubset> Subset;

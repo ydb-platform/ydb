@@ -11,7 +11,7 @@ namespace NYT::NAuth {
 struct IServiceTicketAuth
     : public virtual TRefCounted
 {
-    virtual TString IssueServiceTicket() = 0;
+    virtual std::string IssueServiceTicket() = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IServiceTicketAuth)
@@ -22,12 +22,12 @@ class TServiceTicketFixedAuth
     : public IServiceTicketAuth
 {
 public:
-    explicit TServiceTicketFixedAuth(TString ticket);
+    explicit TServiceTicketFixedAuth(std::string ticket);
 
-    TString IssueServiceTicket() override;
+    std::string IssueServiceTicket() override;
 
 private:
-    const TString Ticket_;
+    const std::string Ticket_;
 };
 
 DEFINE_REFCOUNTED_TYPE(TServiceTicketFixedAuth)

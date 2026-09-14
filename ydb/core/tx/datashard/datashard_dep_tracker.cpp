@@ -18,11 +18,11 @@ namespace {
         tmp.swap(value);
     }
 
-    TRangeTreeBase::TRange MakeSearchRange(const TTableRange& range) {
+    TRangeTreapTraits::TRange MakeSearchRange(const TTableRange& range) {
         if (range.Point) {
-            return TRangeTreeBase::TRange(range.From, true, range.From, true);
+            return TRangeTreapTraits::TRange(range.From, true, range.From, true);
         } else {
-            return TRangeTreeBase::TRange(
+            return TRangeTreapTraits::TRange(
                 range.From,
                 range.InclusiveFrom || !range.From,
                 range.To,
@@ -30,11 +30,11 @@ namespace {
         }
     }
 
-    TRangeTreeBase::TOwnedRange MakeOwnedRange(const TOwnedTableRange& range) {
+    TRangeTreapTraits::TOwnedRange MakeOwnedRange(const TOwnedTableRange& range) {
         if (range.Point) {
-            return TRangeTreeBase::TOwnedRange(range.GetOwnedFrom(), true, range.GetOwnedFrom(), true);
+            return TRangeTreapTraits::TOwnedRange(range.GetOwnedFrom(), true, range.GetOwnedFrom(), true);
         } else {
-            return TRangeTreeBase::TOwnedRange(
+            return TRangeTreapTraits::TOwnedRange(
                 range.GetOwnedFrom(),
                 range.InclusiveFrom || !range.From,
                 range.GetOwnedTo(),
@@ -51,63 +51,63 @@ namespace {
     }
 }
 
-void TDependencyTracker::UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) noexcept {
+void TDependencyTracker::UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) {
     auto& state = Tables[tableId.LocalPathId];
-    state.PlannedReads.SetKeyTypes(tableInfo.KeyColumnTypes);
-    state.PlannedWrites.SetKeyTypes(tableInfo.KeyColumnTypes);
-    state.ImmediateReads.SetKeyTypes(tableInfo.KeyColumnTypes);
-    state.ImmediateWrites.SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.PlannedReads.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.PlannedWrites.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.ImmediateReads.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
+    state.ImmediateWrites.MutableComparator().SetKeyTypes(tableInfo.KeyColumnTypes);
 }
 
-void TDependencyTracker::RemoveSchema(const TPathId& tableId) noexcept {
+void TDependencyTracker::RemoveSchema(const TPathId& tableId) {
     Tables.erase(tableId.LocalPathId);
 }
 
-void TDependencyTracker::ClearTmpRead() noexcept {
+void TDependencyTracker::ClearTmpRead() {
     TmpRead.clear();
 }
 
-void TDependencyTracker::ClearTmpWrite() noexcept {
+void TDependencyTracker::ClearTmpWrite() {
     TmpWrite.clear();
 }
 
-void TDependencyTracker::AddPlannedReads(const TOperation::TPtr& op, const TKeys& reads) noexcept {
+void TDependencyTracker::AddPlannedReads(const TOperation::TPtr& op, const TKeys& reads) {
     for (const auto& read : reads) {
         auto it = Tables.find(read.TableId);
-        Y_ABORT_UNLESS(it != Tables.end());
+        Y_ENSURE(it != Tables.end());
         auto ownedRange = MakeOwnedRange(read.Key);
         it->second.PlannedReads.AddRange(std::move(ownedRange), op);
     }
 }
 
-void TDependencyTracker::AddPlannedWrites(const TOperation::TPtr& op, const TKeys& writes) noexcept {
+void TDependencyTracker::AddPlannedWrites(const TOperation::TPtr& op, const TKeys& writes) {
     for (const auto& write : writes) {
         auto it = Tables.find(write.TableId);
-        Y_ABORT_UNLESS(it != Tables.end());
+        Y_ENSURE(it != Tables.end());
         auto ownedRange = MakeOwnedRange(write.Key);
         it->second.PlannedWrites.AddRange(std::move(ownedRange), op);
     }
 }
 
-void TDependencyTracker::AddImmediateReads(const TOperation::TPtr& op, const TKeys& reads) noexcept {
+void TDependencyTracker::AddImmediateReads(const TOperation::TPtr& op, const TKeys& reads) {
     for (const auto& read : reads) {
         auto it = Tables.find(read.TableId);
-        Y_ABORT_UNLESS(it != Tables.end());
+        Y_ENSURE(it != Tables.end());
         auto ownedRange = MakeOwnedRange(read.Key);
         it->second.ImmediateReads.AddRange(std::move(ownedRange), op);
     }
 }
 
-void TDependencyTracker::AddImmediateWrites(const TOperation::TPtr& op, const TKeys& writes) noexcept {
+void TDependencyTracker::AddImmediateWrites(const TOperation::TPtr& op, const TKeys& writes) {
     for (const auto& write : writes) {
         auto it = Tables.find(write.TableId);
-        Y_ABORT_UNLESS(it != Tables.end());
+        Y_ENSURE(it != Tables.end());
         auto ownedRange = MakeOwnedRange(write.Key);
         it->second.ImmediateWrites.AddRange(std::move(ownedRange), op);
     }
 }
 
-void TDependencyTracker::FlushPlannedReads() noexcept {
+void TDependencyTracker::FlushPlannedReads() {
     while (!DelayedPlannedReads.Empty()) {
         TOperation::TPtr op = DelayedPlannedReads.PopFront();
         auto reads = op->RemoveDelayedKnownReads();
@@ -115,7 +115,7 @@ void TDependencyTracker::FlushPlannedReads() noexcept {
     }
 }
 
-void TDependencyTracker::FlushPlannedWrites() noexcept {
+void TDependencyTracker::FlushPlannedWrites() {
     while (!DelayedPlannedWrites.Empty()) {
         TOperation::TPtr op = DelayedPlannedWrites.PopFront();
         auto writes = op->RemoveDelayedKnownWrites();
@@ -123,7 +123,7 @@ void TDependencyTracker::FlushPlannedWrites() noexcept {
     }
 }
 
-void TDependencyTracker::FlushImmediateReads() noexcept {
+void TDependencyTracker::FlushImmediateReads() {
     while (!DelayedImmediateReads.Empty()) {
         TOperation::TPtr op = DelayedImmediateReads.PopFront();
         auto reads = op->RemoveDelayedKnownReads();
@@ -131,7 +131,7 @@ void TDependencyTracker::FlushImmediateReads() noexcept {
     }
 }
 
-void TDependencyTracker::FlushImmediateWrites() noexcept {
+void TDependencyTracker::FlushImmediateWrites() {
     while (!DelayedImmediateWrites.Empty()) {
         TOperation::TPtr op = DelayedImmediateWrites.PopFront();
         auto writes = op->RemoveDelayedKnownWrites();
@@ -146,7 +146,7 @@ const TDependencyTracker::TDependencyTrackingLogic& TDependencyTracker::GetTrack
     return MvccLogic;
 }
 
-void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOperation::TPtr& op) const noexcept {
+void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOperation::TPtr& op) const {
     if (op->IsUsingSnapshot()) {
         return;
     }
@@ -215,7 +215,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
                     }
                 }
             } else if (TSysTables::IsLocksTable(k.TableId)) {
-                Y_ABORT_UNLESS(k.Range.Point, "Unexpected non-point read from the locks table");
+                Y_ENSURE(k.Range.Point, "Unexpected non-point read from the locks table");
                 const ui64 lockTxId = Parent.Self->SysLocksTable().ExtractLockTxId(k.Range.From);
 
                 // Add hard dependency on all operations that worked with the same lock
@@ -342,7 +342,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
 
     // Locking writes are uncommitted, not externally visible and behave like reads
     if (isLocking) {
-        Y_ABORT_UNLESS(!haveWrites);
+        Y_ENSURE(!haveWrites);
         if (isGlobalWriter) {
             isGlobalWriter = false;
             isGlobalReader = true;
@@ -358,7 +358,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     }
 
     auto onImmediateConflict = [&](TOperation& conflict) {
-        Y_ABORT_UNLESS(!conflict.IsImmediate());
+        Y_ENSURE(!conflict.IsImmediate());
         if (snapshot.IsMax()) {
             conflict.AddImmediateConflict(op);
         } else if (IsLess(conflict, snapshot)) {
@@ -368,16 +368,19 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
         }
     };
 
-    auto processImmediatePlanned = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
+    auto processImmediatePlanned = [&](const TRangeTreapTraits::TRange&, const TOperation::TPtr& conflict) {
         onImmediateConflict(*conflict);
+        return true;
     };
 
-    auto processPlannedPlanned = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
+    auto processPlannedPlanned = [&](const TRangeTreapTraits::TRange&, const TOperation::TPtr& conflict) {
         op->AddDependency(conflict);
+        return true;
     };
 
-    auto processPlannedImmediate = [&](const TRangeTreeBase::TRange&, const TOperation::TPtr& conflict) {
+    auto processPlannedImmediate = [&](const TRangeTreapTraits::TRange&, const TOperation::TPtr& conflict) {
         op->AddImmediateConflict(conflict);
+        return true;
     };
 
     // Second pass, add dependencies
@@ -600,7 +603,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     }
 }
 
-void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr& op) const noexcept {
+void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr& op) const {
     if (Parent.LastSnapshotOp == op) {
         Parent.LastSnapshotOp = nullptr;
     }
@@ -643,11 +646,11 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOp
     }
 }
 
-void TDependencyTracker::TFollowerDependencyTrackingLogic::AddOperation(const TOperation::TPtr&) const noexcept {
+void TDependencyTracker::TFollowerDependencyTrackingLogic::AddOperation(const TOperation::TPtr&) const {
     // all follower operations are readonly and don't conflict
 }
 
-void TDependencyTracker::TFollowerDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr&) const noexcept {
+void TDependencyTracker::TFollowerDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr&) const {
     // all follower operations are readonly and don't conflict
 }
 

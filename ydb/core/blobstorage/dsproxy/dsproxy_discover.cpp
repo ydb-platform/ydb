@@ -378,6 +378,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
 
         Y_ABORT_UNLESS(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
+        Y_ABORT_UNLESS(Info->GetTopology().IsValidId(vdisk), "incorrect VDiskId# %s", vdisk.ToString().data());
 
         Y_ABORT_UNLESS(status == NKikimrProto::OK || status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE);
         if (IsIterativeDone) {
@@ -789,17 +790,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor {
                         << " looks like we have !!! LOST THE BLOB !!! id# " << response.Id.ToString();
 
                     DSP_LOG_ALERT_S("BSD18", str.Str());
-
-                    if (FromLeader) {
-                        Sleep(TDuration::Seconds(1));
-
-                        str << " logacc# ";
-                        LogCtx.LogAcc.Output(str);
-                        str << " verboseNoData# ";
-                        str << msg->DebugInfo;
-
-                        Y_ABORT_UNLESS(false, "%s", str.Str().data());
-                    }
 
                     IsGetDataDone = true;
                     if (IsGetBlockDone) {

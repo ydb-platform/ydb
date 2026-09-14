@@ -396,4 +396,76 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT(commonLabels[0].GetName() == "common");
         UNIT_ASSERT(commonLabels[0].GetValue() == "label");
     }
+
+    Y_UNIT_TEST(MemOnlyMetric) {
+        TMetricRegistry registry;
+        i64 int_val = 0;
+        double double_val = 0;
+
+        registry.GaugeWithOpts({{"some", "gauge"}}, {true});
+        UNIT_ASSERT_EXCEPTION(registry.Gauge({{"some", "gauge"}}), yexception);
+
+        registry.LazyGaugeWithOpts(
+            {{"some", "lazy_gauge"}},
+            [&double_val](){return double_val;},
+            {true});
+        UNIT_ASSERT_EXCEPTION(
+            registry.LazyGauge(
+                {{"some", "lazy_gauge"}},
+                [&double_val](){return double_val;}),
+            yexception);
+
+        registry.IntGaugeWithOpts({{"some", "int_gauge"}}, {true});
+        UNIT_ASSERT_EXCEPTION(registry.IntGauge({{"some", "int_gauge"}}), yexception);
+
+        registry.LazyIntGaugeWithOpts(
+            {{"some", "lazy_int_gauge"}},
+            [&int_val](){return int_val;},
+            {true});
+        UNIT_ASSERT_EXCEPTION(
+            registry.LazyIntGauge(
+                {{"some", "lazy_int_gauge"}},
+                [&int_val](){return int_val;}),
+            yexception);
+
+        registry.CounterWithOpts({{"some", "counter"}}, {true});
+        UNIT_ASSERT_EXCEPTION(registry.Counter({{"some", "counter"}}), yexception);
+
+        registry.LazyCounterWithOpts({{"some", "lazy_counter"}}, [&int_val](){return int_val;}, {true});
+        UNIT_ASSERT_EXCEPTION(
+            registry.LazyCounter(
+                {{"some", "lazy_counter"}},
+                [&int_val](){return int_val;}),
+            yexception);
+
+        registry.RateWithOpts({{"some", "rate"}}, {true});
+        UNIT_ASSERT_EXCEPTION(registry.Rate({{"some", "rate"}}), yexception);
+
+        registry.LazyRateWithOpts({{"some", "lazy_rate"}}, [&double_val](){return double_val;}, {true});
+        UNIT_ASSERT_EXCEPTION(
+            registry.LazyRate(
+                {{"some", "lazy_rate"}},
+                [&double_val](){return double_val;}),
+            yexception);
+
+        registry.HistogramCounterWithOpts(
+            {{"some", "histogram_counter"}},
+            ExplicitHistogram({1, 5, 15, 20, 25}),
+            {true});
+        UNIT_ASSERT_EXCEPTION(
+            registry.HistogramCounter(
+                {{"some", "histogram_counter"}},
+                ExplicitHistogram({1, 5, 15, 20, 25})),
+                yexception);
+
+        registry.HistogramRateWithOpts(
+            {{"some", "histogram_rate"}},
+            ExponentialHistogram(5, 2),
+            {true});
+        UNIT_ASSERT_EXCEPTION(
+            registry.HistogramRate(
+                {{"some", "histogram_rate"}},
+                ExponentialHistogram(5, 2)),
+                yexception);
+    }
 }

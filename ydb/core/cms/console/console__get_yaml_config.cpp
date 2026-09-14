@@ -2,6 +2,8 @@
 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
@@ -12,6 +14,7 @@ public:
                      TEvConsole::TEvGetAllConfigsRequest::TPtr &ev)
         : TBase(self)
         , Request(std::move(ev))
+        , IngressDatabase(Request->Get()->Record.HasIngressDatabase() ? TMaybe<TString>{Request->Get()->Record.GetIngressDatabase()} : TMaybe<TString>{})
     {
     }
 
@@ -19,9 +22,34 @@ public:
     {
         Response = MakeHolder<TEvConsole::TEvGetAllConfigsResponse>();
 
-        Response->Record.MutableResponse()->mutable_identity()->set_cluster(Self->ClusterName);
-        Response->Record.MutableResponse()->mutable_identity()->set_version(Self->YamlVersion);
-        Response->Record.MutableResponse()->set_config(Self->YamlConfig);
+        if (IngressDatabase
+            // treat root (domain) database as cluster for backward compatibility
+            && *IngressDatabase != Self->DomainName && *IngressDatabase != ("/" + Self->DomainName))
+        {
+            if (Self->DatabaseYamlConfigs.contains(*IngressDatabase)) {
+                auto& identity = *Response->Record.MutableResponse()->add_identity();
+                identity.set_database(*IngressDatabase);
+                identity.set_version(Self->DatabaseYamlConfigs[*IngressDatabase].Version);
+                Response->Record.MutableResponse()->add_config(Self->DatabaseYamlConfigs[*IngressDatabase].Config);
+            }
+
+            return true;
+        }
+
+        auto& identity = *Response->Record.MutableResponse()->add_identity();
+        identity.set_cluster(Self->ClusterName);
+        identity.set_version(Self->YamlVersion);
+        Response->Record.MutableResponse()->add_config(Self->MainYamlConfig);
+
+        // Unknown/deprecated fields of the main config, cached at upload time.
+        *Response->Record.MutableMainConfigUnknownFields() = Self->MainYamlConfigUnknownFields.GetFields();
+
+        for (const auto& [database, config] : Self->DatabaseYamlConfigs) {
+            auto& dbIdentity = *Response->Record.MutableResponse()->add_identity();
+            dbIdentity.set_database(database);
+            dbIdentity.set_version(config.Version);
+            Response->Record.MutableResponse()->add_config(config.Config);
+        }
 
         for (auto &[id, cfg] : Self->VolatileYamlConfigs) {
             auto *config = Response->Record.MutableResponse()->add_volatile_configs();
@@ -34,7 +62,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxGetYamlConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxGetYamlConfig Complete");
 
         ctx.Send(Request->Sender, Response.Release());
 
@@ -44,6 +72,7 @@ public:
 private:
     TEvConsole::TEvGetAllConfigsRequest::TPtr Request;
     THolder<TEvConsole::TEvGetAllConfigsResponse> Response;
+    TMaybe<TString> IngressDatabase;
 };
 
 ITransaction *TConfigsManager::CreateTxGetYamlConfig(TEvConsole::TEvGetAllConfigsRequest::TPtr &ev)

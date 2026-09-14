@@ -1,7 +1,7 @@
 #pragma once
 
-#include "schemeshard_xxport__tx_base.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <util/string/cast.h>
 
@@ -25,7 +25,8 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
     {
     }
 
-    bool DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
+    bool DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container,
+        const TSet<std::pair<TInstant, ui64>> containerByTime, TTransactionContext&, const TActorContext&) {
         const auto& record = Request->Get()->Record;
         const auto& request = record.GetRequest();
 
@@ -54,26 +55,28 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
 
         resp.SetStatus(Ydb::StatusIds::SUCCESS);
 
-        auto it = container.begin();
+        auto it = containerByTime.end();
         ui64 skip = (page - 1) * pageSize;
-        while (it != container.end() && skip) {
-            if (IsSameDomain(it->second, domainPathId) && it->second->Kind == kind) {
+        while (it != containerByTime.begin() && skip) {
+            --it;
+            auto& item = container.at(it->second);
+            if (IsSameDomain(item, domainPathId) && item->Kind == kind) {
                 --skip;
             }
-            ++it;
         }
 
         ui64 size = 0;
-        while (it != container.end() && size < pageSize) {
-            if (IsSameDomain(it->second, domainPathId) && it->second->Kind == kind) {
-                Self->FromXxportInfo(*resp.MutableEntries()->Add(), it->second);
+        while (it != containerByTime.begin() && size < pageSize) {
+            --it;
+            auto& item = container.at(it->second);
+            if (IsSameDomain(item, domainPathId) && item->Kind == kind) {
+                Self->FromXxportInfo(*resp.MutableEntries()->Add(), *item);
                 ++size;
             }
-            ++it;
         }
 
-        if (it == container.end()) {
-            resp.SetNextPageToken("1");
+        if (it == containerByTime.begin()) {
+            resp.SetNextPageToken("0");
         } else {
             resp.SetNextPageToken(ToString(page + 1));
         }

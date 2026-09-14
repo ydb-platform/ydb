@@ -1,3 +1,5 @@
+#pragma once
+
 #include <contrib/libs/fmt/include/fmt/format.h>
 
 #include <yql/essentials/ast/yql_expr.h>
@@ -5,6 +7,7 @@
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/config.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 
 enum class EDebugOutput {
     None,
@@ -21,7 +24,7 @@ inline TString Err2Str(NYql::TAstParseResult& res, EDebugOutput debug = EDebugOu
     return s.Str();
 }
 
-class TTestAutoParamBuilder : public NYql::IAutoParamBuilder {
+class TTestAutoParamBuilder: public NYql::IAutoParamBuilder {
 public:
     TString GetParamValue(const TString& param) const {
         auto ptr = State.FindPtr(param);
@@ -75,13 +78,14 @@ public:
         return Type;
     }
 
-    class TTypeProxy : public NYql::IAutoParamTypeBuilder {
+    class TTypeProxy: public NYql::IAutoParamTypeBuilder {
     public:
-        TTypeProxy(TTestAutoParamBuilder& owner)
+        explicit TTypeProxy(TTestAutoParamBuilder& owner)
             : Owner(owner)
-        {}
+        {
+        }
 
-        void Pg(const TString& name) {
+        void Pg(const TString& name) override {
             Owner.State[Owner.CurrentParam].first.push_back(name);
         }
 
@@ -111,11 +115,12 @@ public:
         TTestAutoParamBuilder& Owner;
     };
 
-    class TDataProxy : public NYql::IAutoParamDataBuilder {
+    class TDataProxy: public NYql::IAutoParamDataBuilder {
     public:
-        TDataProxy(TTestAutoParamBuilder& owner)
+        explicit TDataProxy(TTestAutoParamBuilder& owner)
             : Owner(owner)
-        {}
+        {
+        }
 
         void Pg(const TMaybe<TString>& value) final {
             Owner.State[Owner.CurrentParam].second.push_back(value);
@@ -155,10 +160,11 @@ public:
     TTestAutoParamBuilder()
         : Type(*this)
         , Data(*this)
-    {}
+    {
+    }
 };
 
-class TTestAutoParamBuilderFactory : public NYql::IAutoParamBuilderFactory {
+class TTestAutoParamBuilderFactory: public NYql::IAutoParamBuilderFactory {
 public:
     NYql::IAutoParamBuilderPtr MakeBuilder() final {
         return MakeIntrusive<TTestAutoParamBuilder>();
@@ -166,7 +172,7 @@ public:
 };
 
 inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ESqlMode mode = NSQLTranslation::ESqlMode::QUERY, size_t maxErrors = 10, const TString& provider = {},
-    EDebugOutput debug = EDebugOutput::None, bool ansiLexer = false, NSQLTranslation::TTranslationSettings settings = {})
+                                              EDebugOutput debug = EDebugOutput::None, bool ansiLexer = false, NSQLTranslation::TTranslationSettings settings = {})
 {
     google::protobuf::Arena arena;
     const auto service = provider ? provider : TString(NYql::YtProviderName);
@@ -183,7 +189,13 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     settings.PgParser = true;
     TTestAutoParamBuilderFactory autoParamFactory;
     settings.AutoParamBuilderFactory = &autoParamFactory;
-    auto res = SqlToYql(query, settings);
+
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        nullptr,
+        NSQLTranslationPG::MakeTranslator());
+
+    auto res = SqlToYql(translators, query, settings);
     if (debug == EDebugOutput::ToCerr) {
         Err2Str(res, debug);
     }
@@ -206,11 +218,9 @@ inline void VisitAstNodes(const NYql::TAstNode& root, const TAstNodeVisitFunc& v
     }
 }
 
-    
 inline TMaybe<const NYql::TAstNode*> MaybeGetQuotedValue(const NYql::TAstNode& node) {
     const bool isQuotedList =
-        node.IsListOfSize(2) && node.GetChild(0)->IsAtom() 
-        && node.GetChild(0)->GetContent() == "quote";
+        node.IsListOfSize(2) && node.GetChild(0)->IsAtom() && node.GetChild(0)->GetContent() == "quote";
     if (isQuotedList) {
         return node.GetChild(1);
     }

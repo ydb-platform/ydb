@@ -14,6 +14,7 @@ Many application functions that on the one hand are too specific to become part 
 * [Pcre](pcre.md)
 * [Pire](pire.md)
 * [Re2](re2.md)
+* [Roaring](roaring.md)
 * [String](string.md)
 * [Unicode](unicode.md)
 * [Url](url.md)

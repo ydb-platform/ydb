@@ -1,5 +1,3 @@
 #include "snapshot.h"
 
-namespace NKikimr::NOlap::NDataLocks {
-
-}
+namespace NKikimr::NOlap::NDataLocks {}

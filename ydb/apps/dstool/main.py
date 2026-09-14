@@ -4,11 +4,22 @@ from ydb.apps.dstool.lib.arg_parser import ArgumentParser
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.commands as commands
 
+from __res import find
+
 import sys
 
 
-def main():
-    parser = ArgumentParser(description='YDB Distributed Storage Administration Tool')
+def get_version():
+    try:
+        return find('version.txt').decode('utf-8').strip()
+    except FileNotFoundError:
+        return "unknown"
+    except UnicodeDecodeError:
+        return "unknown"
+
+
+def main(args=None):
+    parser = ArgumentParser(description='YDB Distributed Storage Administration Tool', version=get_version())
 
     # common options
     common.add_host_access_options(parser)
@@ -16,7 +27,7 @@ def main():
 
     subparsers = parser.add_subparsers(help='Subcommands', dest='global_command', required=True)
     command_map = commands.make_command_map_by_structure(subparsers)
-    args = parser.parse_args()
+    args = parser.parse_args(args)
     try:
         common.apply_args(args)
         commands.run_command(command_map, args)

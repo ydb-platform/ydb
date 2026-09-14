@@ -15,13 +15,13 @@ namespace NBalancing {
         const TBlobStorageGroupType GType;
 
         TIngress Ingress;
-        TVector<std::pair<NMatrix::TVectorType, std::variant<TDiskPart, TRope>>> Parts;
+        TVector<std::tuple<NMatrix::TVectorType, std::variant<TDiskPart, TRope>, bool>> Parts;
 
         TPartsCollectorMerger(const TBlobStorageGroupType gType);
 
         static bool HaveToMergeData() { return true; }
 
-        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob&, ui64);
+        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob&, ui64, const void*);
         void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope* data, const TKeyLogoBlob& key, ui64 /*lsn*/);
         void Clear();
     };

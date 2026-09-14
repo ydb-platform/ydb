@@ -1,8 +1,8 @@
 diff --git a/src/support/runtime/exception_pointer_msvc.ipp b/src/support/runtime/exception_pointer_msvc.ipp
-index b87742b..43ac8ca 100644
+index 2be5136..1439f05 100644
 --- a/src/support/runtime/exception_pointer_msvc.ipp
 +++ b/src/support/runtime/exception_pointer_msvc.ipp
-@@ -7,61 +7,226 @@
+@@ -7,61 +7,225 @@
  //
  //===----------------------------------------------------------------------===//
  
@@ -75,7 +75,7 @@ index b87742b..43ac8ca 100644
 +#ifdef __clang__
 +struct _ThrowInfo;
 +// defined in vcruntime<ver>.dll
-+extern "C" _LIBCPP_NORETURN void __stdcall _CxxThrowException(void* __exc, _ThrowInfo* __throw_info);
++extern "C" [[noreturn]] void __stdcall _CxxThrowException(void* __exc, _ThrowInfo* __throw_info);
 +#endif
 +
 +namespace {
@@ -174,19 +174,13 @@ index b87742b..43ac8ca 100644
 -exception_ptr::exception_ptr(nullptr_t) noexcept { __ExceptionPtrCreate(this); }
 -
 -exception_ptr::exception_ptr(const exception_ptr& __other) noexcept { __ExceptionPtrCopy(this, &__other); }
--exception_ptr& exception_ptr::operator=(const exception_ptr& __other) noexcept {
--  __ExceptionPtrAssign(this, &__other);
--  return *this;
 +exception_ptr::exception_ptr(const exception_ptr& __other) noexcept : __ptr_(__other.__ptr_) {
 +  if (__ptr_) {
 +    reinterpret_cast<ExceptionPtr*>(__ptr_)->counter.fetch_add(1);
 +  }
- }
- 
--exception_ptr& exception_ptr::operator=(nullptr_t) noexcept {
--  exception_ptr dummy;
--  __ExceptionPtrAssign(this, &dummy);
-+exception_ptr& exception_ptr::operator=(const exception_ptr& __other) noexcept {
++}
+ exception_ptr& exception_ptr::operator=(const exception_ptr& __other) noexcept {
+-  __ExceptionPtrAssign(this, &__other);
 +  auto before = __ptr_;
 +  __ptr_      = __other.__ptr_;
 +  if (__ptr_) {
@@ -200,12 +194,10 @@ index b87742b..43ac8ca 100644
    return *this;
  }
  
--exception_ptr::~exception_ptr() noexcept { __ExceptionPtrDestroy(this); }
--
--exception_ptr::operator bool() const noexcept { return __ExceptionPtrToBool(this); }
--
--bool operator==(const exception_ptr& __x, const exception_ptr& __y) noexcept {
--  return __ExceptionPtrCompare(&__x, &__y);
+-exception_ptr& exception_ptr::operator=(nullptr_t) noexcept {
+-  exception_ptr dummy;
+-  __ExceptionPtrAssign(this, &dummy);
+-  return *this;
 +exception_ptr::~exception_ptr() noexcept {
 +  if (__ptr_) {
 +    if (reinterpret_cast<ExceptionPtr*>(__ptr_)->counter.fetch_sub(1) == 1) {
@@ -214,6 +206,14 @@ index b87742b..43ac8ca 100644
 +  }
  }
  
+-exception_ptr::~exception_ptr() noexcept { __ExceptionPtrDestroy(this); }
+-
+-exception_ptr::operator bool() const noexcept { return __ExceptionPtrToBool(this); }
+-
+-bool operator==(const exception_ptr& __x, const exception_ptr& __y) noexcept {
+-  return __ExceptionPtrCompare(&__x, &__y);
+-}
+-
 -void swap(exception_ptr& lhs, exception_ptr& rhs) noexcept { __ExceptionPtrSwap(&rhs, &lhs); }
 -
 -exception_ptr __copy_exception_ptr(void* __except, const void* __ptr) {
@@ -249,8 +249,8 @@ index b87742b..43ac8ca 100644
 +  return exception_ptr();
  }
  
--_LIBCPP_NORETURN void rethrow_exception(exception_ptr p) { __ExceptionPtrRethrow(&p); }
-+_LIBCPP_NORETURN void rethrow_exception(exception_ptr p) {
+-[[noreturn]] void rethrow_exception(exception_ptr p) { __ExceptionPtrRethrow(&p); }
++[[noreturn]] void rethrow_exception(exception_ptr p) {
 +  if (!p) {
 +    throw std::bad_exception();
 +  }

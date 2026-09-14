@@ -1,6 +1,4 @@
 #include "actorsystem.h"
-#include "av_bootstrapped.h"
-#include "actor_virtual.h"
 #include "actor_bootstrapped.h"
 #include "config.h"
 #include "event_local.h"
@@ -116,28 +114,6 @@ Y_UNIT_TEST_SUITE(ActorSystemPerformance) {
         }
     };
 
-    class TDolbilkaNew;
-    class TEventLocalDolbilkaNew: public NActors::TEventLocalForActor<TEventLocalDolbilkaNew, TDolbilkaNew> {
-    public:
-
-    };
-
-    class TDolbilkaNew: public TDolbilkaCommon, public NActors::TActorAutoStart {
-    private:
-        using TBase = NActors::TActorAutoStart;
-    protected:
-        virtual void DoOnStart(const TActorId& /*senderActorId*/) override {
-            Sender<TEventLocalDolbilkaNew>().SendTo(SelfId());
-        }
-
-    public:
-        void ProcessEvent(NActors::TEventContext<TEventLocalDolbilkaNew>& /*ev*/) {
-            if (MakeStep()) {
-                Sender<TEventLocalDolbilkaNew>().SendTo(SelfId());
-            }
-        }
-    };
-
     class IDolbilkaSimple {
     public:
         virtual ~IDolbilkaSimple() = default;
@@ -157,12 +133,6 @@ Y_UNIT_TEST_SUITE(ActorSystemPerformance) {
     Y_UNIT_TEST(PerfTest) {
         THolder<TQueueTestRuntime> runtime(new TQueueTestRuntime);
         runtime->Start();
-        TDolbilkaNew* dNew = new TDolbilkaNew;
-        runtime->Register(dNew);
-        while (dNew->GetDurationInProgress() < TDuration::Seconds(1000) && !dNew->IsFinished()) {
-            Sleep(TDuration::Seconds(1));
-        }
-        Y_ABORT_UNLESS(dNew->IsFinished());
         TDolbilkaOld* dOld = new TDolbilkaOld;
         runtime->Register(dOld);
         while (dOld->GetDurationInProgress() < TDuration::Seconds(1000) && !dOld->IsFinished()) {
@@ -175,7 +145,6 @@ Y_UNIT_TEST_SUITE(ActorSystemPerformance) {
 
         }
         Cerr << "DURATION_OLD: " << 1.0 * dOld->GetOperationDuration() << "ns" << Endl;
-        Cerr << "DURATION_NEW: " << 1.0 * dNew->GetOperationDuration() << "ns" << Endl;
         Cerr << "DURATION_SIMPLE: " << 1.0 * dSimple->GetOperationDuration() << "ns" << Endl;
 
     }

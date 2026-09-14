@@ -14,15 +14,14 @@ struct TChunkStripeStatistics
     i64 RowCount = 0;
     i64 ValueCount = 0;
     i64 MaxBlockSize = 0;
-
-    void Persist(const TPersistenceContext& context);
+    i64 CompressedDataSize = 0;
 };
 
-TChunkStripeStatistics operator + (
+TChunkStripeStatistics operator+(
     const TChunkStripeStatistics& lhs,
     const TChunkStripeStatistics& rhs);
 
-TChunkStripeStatistics& operator += (
+TChunkStripeStatistics& operator+=(
     TChunkStripeStatistics& lhs,
     const TChunkStripeStatistics& rhs);
 
@@ -33,6 +32,8 @@ TChunkStripeStatisticsVector AggregateStatistics(
     const TChunkStripeStatisticsVector& statistics);
 
 void Serialize(const TChunkStripeStatistics& statistics, NYson::IYsonConsumer* consumer);
+
+void FormatValue(TStringBuilderBase* builder, const TChunkStripeStatistics& statistics, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
 

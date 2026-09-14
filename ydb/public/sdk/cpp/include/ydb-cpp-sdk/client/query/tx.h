@@ -1,12 +1,10 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 
 #include <util/stream/output.h>
 
-#include <optional>
-
-namespace NYdb::inline V3::NQuery {
+namespace NYdb::inline Dev::NQuery {
 
 struct TTxOnlineSettings {
     using TSelf = TTxOnlineSettings;
@@ -42,6 +40,14 @@ struct TTxSettings {
         return TTxSettings(TS_SNAPSHOT_RW);
     }
 
+    static TTxSettings ReadCommittedRW() {
+        return TTxSettings(TS_READ_COMMITTED_RW);
+    }
+
+    static TTxSettings StrictSerializableRW() {
+        return TTxSettings(TS_STRICT_SERIALIZABLE_RW);
+    }
+
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:
@@ -59,6 +65,12 @@ struct TTxSettings {
         case TS_SNAPSHOT_RW:
             out << "SnapshotRW";
             break;
+        case TS_READ_COMMITTED_RW:
+            out << "ReadCommittedRW";
+            break;
+        case TS_STRICT_SERIALIZABLE_RW:
+            out << "StrictSerializableRW";
+            break;
         default:
             out << "Unknown";
             break;
@@ -71,6 +83,8 @@ struct TTxSettings {
         TS_STALE_RO,
         TS_SNAPSHOT_RO,
         TS_SNAPSHOT_RW,
+        TS_READ_COMMITTED_RW,
+        TS_STRICT_SERIALIZABLE_RW,
     };
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
@@ -85,35 +99,4 @@ private:
     ETransactionMode Mode_;
 };
 
-struct TTxControl {
-    using TSelf = TTxControl;
-
-    static TTxControl Tx(const std::string& txId) {
-        return TTxControl(txId);
-    }
-
-    static TTxControl BeginTx(const TTxSettings& settings = TTxSettings()) {
-        return TTxControl(settings);
-    }
-
-    static TTxControl NoTx() {
-        return TTxControl();
-    }
-
-    const std::optional<std::string> TxId_;
-    const std::optional<TTxSettings> TxSettings_;
-    FLUENT_SETTING_FLAG(CommitTx);
-
-    bool HasTx() const { return TxId_.has_value() || TxSettings_.has_value(); }
-
-private:
-    TTxControl() {}
-
-    TTxControl(const std::string& txId)
-        : TxId_(txId) {}
-
-    TTxControl(const TTxSettings& txSettings)
-        : TxSettings_(txSettings) {}
-};
-
-} // namespace NYdb::V3::NQuery
+} // namespace NYdb::NQuery

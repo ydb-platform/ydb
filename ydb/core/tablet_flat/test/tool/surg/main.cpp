@@ -32,6 +32,17 @@ namespace NTest {
 
             return ui8(rop) < names.size() ? names[ui8(rop)] : "?error";
         }
+
+        static const char* Do(ELockMode mode)
+        {
+            static const std::array<const char*, 3> names{{
+                "None",
+                "Shared",
+                "Exclusive"
+            }};
+
+            return ui8(mode) < names.size() ? names[ui8(mode)] : "?error";
+        }
     };
 
     class TDumpValue {
@@ -77,7 +88,7 @@ namespace NTest {
             return true;
         }
 
-        void DoBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp) noexcept
+        void DoBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp)
         {
             Out
                 << " +Begin ABI[" << tail << ", " << head << "]"
@@ -85,7 +96,7 @@ namespace NTest {
                 << Endl;
         }
 
-        void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>> annex) noexcept
+        void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>> annex)
         {
             Out << " | Annex " << annex.size() << " items" << Endl;
 
@@ -93,7 +104,7 @@ namespace NTest {
                 Out << " | " << (*one).Group << " : " << (*one).Logo << Endl;
         }
 
-        void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion rowVersion) noexcept
+        void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion rowVersion)
         {
             ui32 keyBytes = 0, opsBytes = 0;
 
@@ -119,7 +130,7 @@ namespace NTest {
             }
         }
 
-        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId) noexcept
+        void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId)
         {
             ui32 keyBytes = 0, opsBytes = 0;
 
@@ -145,24 +156,48 @@ namespace NTest {
             }
         }
 
-        void DoCommitTx(ui32 tid, ui64 txId, TRowVersion rowVersion) noexcept
+        void DoLockRowTx(ui32 tid, ELockMode mode, TKeys key, ui64 txId)
+        {
+            ui32 keyBytes = 0;
+
+            for (const auto& one : key) {
+                keyBytes += one.Size();
+            }
+
+            Updates++;
+            KeyBytes += keyBytes;
+            KeyItems += key.size();
+
+            Out
+                << " | LockRowTx " << tid
+                << ": " << TNames::Do(mode) << "." << unsigned(mode)
+                << ", " << key.size() << " keys (" << keyBytes << "b)"
+                << " txId " << txId
+                << Endl;
+
+            for (const auto& one : key) {
+                Out << "   > key: " << TDumpValue(one) << " <" << Endl;
+            }
+        }
+
+        void DoCommitTx(ui32 tid, ui64 txId, TRowVersion rowVersion)
         {
             Out << " | CommitTx " << tid << " txId " << txId << " @" << rowVersion << Endl;
         }
 
-        void DoRemoveTx(ui32 tid, ui64 txId) noexcept
+        void DoRemoveTx(ui32 tid, ui64 txId)
         {
             Out << " | RemoveTx " << tid << " txId " << txId << Endl;
         }
 
-        void DoFlush(ui32 tid, ui64 stamp, TEpoch epoch) noexcept
+        void DoFlush(ui32 tid, ui64 stamp, TEpoch epoch)
         {
             Out
                 << " | Flush " << tid << ", " << epoch << " eph"
                 << ", stamp " << NFmt::TStamp(stamp) << Endl;
         }
 
-        void Finalize() const noexcept
+        void Finalize() const
         {
             Out
                 << " ' Stats: " << Updates << " ups"
@@ -210,7 +245,7 @@ namespace NTest {
         for (auto& bundle : part.GetBundles()) {
             Cerr << " | + bundle";
             for (auto& pageCollection : bundle.GetPageCollections()) {
-                Y_ABORT_UNLESS(pageCollection.HasLargeGlobId(), "Found a page collection without a largeGlobId");
+                Y_ENSURE(pageCollection.HasLargeGlobId(), "Found a page collection without a largeGlobId");
                 Cerr << " " << LogoBlobIDFromLogoBlobID(pageCollection.GetLargeGlobId().GetLead());
             }
             if (bundle.HasEpoch()) {

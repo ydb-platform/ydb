@@ -84,8 +84,6 @@ class table__g_l_y_f(DefaultTable.DefaultTable):
 
     """
 
-    dependencies = ["fvar"]
-
     # this attribute controls the amount of padding applied to glyph data upon compile.
     # Glyph lenghts are aligned to multiples of the specified value.
     # Allowed values are (0, 1, 2, 4). '0' means no padding; '1' (default) also means
@@ -93,9 +91,6 @@ class table__g_l_y_f(DefaultTable.DefaultTable):
     padding = 1
 
     def decompile(self, data, ttFont):
-        self.axisTags = (
-            [axis.axisTag for axis in ttFont["fvar"].axes] if "fvar" in ttFont else []
-        )
         loca = ttFont["loca"]
         pos = int(loca[0])
         nextPos = 0
@@ -134,9 +129,7 @@ class table__g_l_y_f(DefaultTable.DefaultTable):
             glyph.expand(self)
 
     def compile(self, ttFont):
-        self.axisTags = (
-            [axis.axisTag for axis in ttFont["fvar"].axes] if "fvar" in ttFont else []
-        )
+        optimizeSpeed = ttFont.cfg[ttLib.OPTIMIZE_FONT_SPEED]
         if not hasattr(self, "glyphOrder"):
             self.glyphOrder = ttFont.getGlyphOrder()
         padding = self.padding
@@ -148,7 +141,12 @@ class table__g_l_y_f(DefaultTable.DefaultTable):
         boundsDone = set()
         for glyphName in self.glyphOrder:
             glyph = self.glyphs[glyphName]
-            glyphData = glyph.compile(self, recalcBBoxes, boundsDone=boundsDone)
+            glyphData = glyph.compile(
+                self,
+                recalcBBoxes,
+                boundsDone=boundsDone,
+                optimizeSize=not optimizeSpeed,
+            )
             if padding > 1:
                 glyphData = pad(glyphData, size=padding)
             locations.append(currentLocation)
@@ -714,7 +712,7 @@ class Glyph(object):
             self.decompileCoordinates(data)
 
     def compile(
-        self, glyfTable, recalcBBoxes=True, *, boundsDone=None, optimizeSize=None
+        self, glyfTable, recalcBBoxes=True, *, boundsDone=None, optimizeSize=True
     ):
         if hasattr(self, "data"):
             if recalcBBoxes:
@@ -732,8 +730,6 @@ class Glyph(object):
         if self.isComposite():
             data = data + self.compileComponents(glyfTable)
         else:
-            if optimizeSize is None:
-                optimizeSize = getattr(glyfTable, "optimizeSize", True)
             data = data + self.compileCoordinates(optimizeSize=optimizeSize)
         return data
 
@@ -969,11 +965,10 @@ class Glyph(object):
         lastcomponent = len(self.components) - 1
         more = 1
         haveInstructions = 0
-        for i in range(len(self.components)):
+        for i, compo in enumerate(self.components):
             if i == lastcomponent:
                 haveInstructions = hasattr(self, "program")
                 more = 0
-            compo = self.components[i]
             data = data + compo.compile(more, haveInstructions, glyfTable)
         if haveInstructions:
             instructions = self.program.getBytecode()
@@ -1187,7 +1182,7 @@ class Glyph(object):
         ):
             return
         try:
-            coords, endPts, flags = self.getCoordinates(glyfTable)
+            coords, endPts, flags = self.getCoordinates(glyfTable, round=otRound)
             self.xMin, self.yMin, self.xMax, self.yMax = coords.calcIntBounds()
         except NotImplementedError:
             pass
@@ -1206,9 +1201,7 @@ class Glyph(object):
         Return True if bounds were calculated, False otherwise.
         """
         for compo in self.components:
-            if hasattr(compo, "firstPt") or hasattr(compo, "transform"):
-                return False
-            if not float(compo.x).is_integer() or not float(compo.y).is_integer():
+            if not compo._hasOnlyIntegerTranslate():
                 return False
 
         # All components are untransformed and have an integer x/y translate
@@ -1222,7 +1215,7 @@ class Glyph(object):
                 if boundsDone is not None:
                     boundsDone.add(glyphName)
             # empty components shouldn't update the bounds of the parent glyph
-            if g.numberOfContours == 0:
+            if g.yMin == g.yMax and g.xMin == g.xMax:
                 continue
 
             x, y = compo.x, compo.y
@@ -1241,7 +1234,7 @@ class Glyph(object):
         else:
             return self.numberOfContours == -1
 
-    def getCoordinates(self, glyfTable):
+    def getCoordinates(self, glyfTable, *, round=noRound):
         """Return the coordinates, end points and flags
 
         This method returns three values: A :py:class:`GlyphCoordinates` object,
@@ -1267,13 +1260,23 @@ class Glyph(object):
             for compo in self.components:
                 g = glyfTable[compo.glyphName]
                 try:
-                    coordinates, endPts, flags = g.getCoordinates(glyfTable)
+                    coordinates, endPts, flags = g.getCoordinates(
+                        glyfTable, round=round
+                    )
                 except RecursionError:
                     raise ttLib.TTLibError(
                         "glyph '%s' contains a recursive component reference"
                         % compo.glyphName
                     )
                 coordinates = GlyphCoordinates(coordinates)
+                # if asked to round e.g. while computing bboxes, it's important we
+                # do it immediately before a component transform is applied to a
+                # simple glyph's coordinates in case these might still contain floats;
+                # however, if the referenced component glyph is another composite, we
+                # must not round here but only at the end, after all the nested
+                # transforms have been applied, or else rounding errors will compound.
+                if round is not noRound and g.numberOfContours > 0:
+                    coordinates.toInt(round=round)
                 if hasattr(compo, "firstPt"):
                     # component uses two reference points: we apply the transform _before_
                     # computing the offset between the points
@@ -1930,6 +1933,18 @@ class GlyphComponent(object):
         result = self.__eq__(other)
         return result if result is NotImplemented else not result
 
+    def _hasOnlyIntegerTranslate(self):
+        """Return True if it's a 'simple' component.
+
+        That is, it has no anchor points and no transform other than integer translate.
+        """
+        return (
+            not hasattr(self, "firstPt")
+            and not hasattr(self, "transform")
+            and float(self.x).is_integer()
+            and float(self.y).is_integer()
+        )
+
 
 class GlyphCoordinates(object):
     """A list of glyph coordinates.
@@ -2012,8 +2027,8 @@ class GlyphCoordinates(object):
         if round is noRound:
             return
         a = self._a
-        for i in range(len(a)):
-            a[i] = round(a[i])
+        for i, value in enumerate(a):
+            a[i] = round(value)
 
     def calcBounds(self):
         a = self._a
@@ -2143,8 +2158,8 @@ class GlyphCoordinates(object):
         """
         r = self.copy()
         a = r._a
-        for i in range(len(a)):
-            a[i] = -a[i]
+        for i, value in enumerate(a):
+            a[i] = -value
         return r
 
     def __round__(self, *, round=otRound):
@@ -2189,8 +2204,8 @@ class GlyphCoordinates(object):
             other = other._a
             a = self._a
             assert len(a) == len(other)
-            for i in range(len(a)):
-                a[i] += other[i]
+            for i, value in enumerate(other):
+                a[i] += value
             return self
         return NotImplemented
 
@@ -2213,8 +2228,8 @@ class GlyphCoordinates(object):
             other = other._a
             a = self._a
             assert len(a) == len(other)
-            for i in range(len(a)):
-                a[i] -= other[i]
+            for i, value in enumerate(other):
+                a[i] -= value
             return self
         return NotImplemented
 

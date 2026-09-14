@@ -1,5 +1,6 @@
 /*
-    Copyright (c) 2005-2022 Intel Corporation
+    Copyright (c) 2005-2024 Intel Corporation
+    Copyright (c) 2026 UXL Foundation Contributors
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -118,7 +119,7 @@ static const dynamic_link_descriptor MallocLinkTable[] = {
 #if _WIN32||_WIN64
 #define MALLOCLIB_NAME "tbbmalloc" DEBUG_SUFFIX ".dll"
 #elif __APPLE__
-#define MALLOCLIB_NAME "libtbbmalloc" DEBUG_SUFFIX ".dylib"
+#define MALLOCLIB_NAME "libtbbmalloc" DEBUG_SUFFIX ".2.dylib"
 #elif __FreeBSD__ || __NetBSD__ || __OpenBSD__ || __sun || _AIX || __ANDROID__
 #define MALLOCLIB_NAME "libtbbmalloc" DEBUG_SUFFIX ".so"
 #elif __unix__  // Note that order of these #elif's is important!
@@ -157,6 +158,14 @@ void initialize_cache_aligned_allocator() {
 }
 
 //! Executed on very first call through allocate_handler
+/** Only one of initialize_allocate_handler() and initialize_cache_aligned_allocate_handler()
+    is called, since each one of them also initializes the other.
+
+    In the current implementation of oneTBB library initialization, cache_aligned_allocate() is
+    used, which in turn calls initialize_cache_aligned_allocate_handler(). As mentioned above,
+    that also initializes the regular allocate_handler.
+
+    Therefore, initialize_allocate_handler() is not called in the current library implementation. */
 static void* initialize_allocate_handler(std::size_t size) {
     initialize_cache_aligned_allocator();
     __TBB_ASSERT(allocate_handler != &initialize_allocate_handler, nullptr);
@@ -220,7 +229,7 @@ static void* std_cache_aligned_allocate(std::size_t bytes, std::size_t alignment
     if (!base) {
         return nullptr;
     }
-    std::uintptr_t result = (base + nfs_size) & ~(nfs_size - 1);
+    std::uintptr_t result = align_to_greater(base, nfs_size);
     // Round up to the next cache line (align the base address)
     __TBB_ASSERT((result - base) >= sizeof(std::uintptr_t), "Cannot store a base pointer to the header");
     __TBB_ASSERT(space - (result - base) >= bytes, "Not enough space for the storage");
@@ -241,7 +250,7 @@ static void std_cache_aligned_deallocate(void* p) {
         __TBB_ASSERT(reinterpret_cast<std::uintptr_t>(p) >= 0x4096, "attempt to free block not obtained from cache_aligned_allocator");
         // Recover where block actually starts
         std::uintptr_t base = (reinterpret_cast<std::uintptr_t*>(p))[-1];
-        __TBB_ASSERT(((base + nfs_size) & ~(nfs_size - 1)) == reinterpret_cast<std::uintptr_t>(p), "Incorrect alignment or not allocated by std_cache_aligned_deallocate?");
+        __TBB_ASSERT(align_to_greater(base, nfs_size) == reinterpret_cast<std::uintptr_t>(p), "Incorrect alignment or not allocated by std_cache_aligned_deallocate?");
         std::free(reinterpret_cast<void*>(base));
     }
 #endif

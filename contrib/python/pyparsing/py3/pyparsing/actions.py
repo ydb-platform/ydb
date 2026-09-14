@@ -22,7 +22,7 @@ class OnlyOnce:
     Note: parse action signature must include all 3 arguments.
     """
 
-    def __init__(self, method_call: Callable[[str, int, ParseResults], Any]):
+    def __init__(self, method_call: Callable[[str, int, ParseResults], Any]) -> None:
         from .core import _trim_arity
 
         self.callable = _trim_arity(method_call)
@@ -56,36 +56,45 @@ def match_only_at_col(n: int) -> ParseAction:
     return verify_col
 
 
-def replace_with(repl_str: str) -> ParseAction:
+def replace_with(repl_str: Any) -> ParseAction:
     """
     Helper method for common parse actions that simply return
     a literal value.  Especially useful when used with
-    :class:`transform_string<ParserElement.transform_string>` ().
+    :meth:`~ParserElement.transform_string`.
 
-    Example::
+    Example:
 
-        num = Word(nums).set_parse_action(lambda toks: int(toks[0]))
-        na = one_of("N/A NA").set_parse_action(replace_with(math.nan))
-        term = na | num
+    .. doctest::
 
-        term[1, ...].parse_string("324 234 N/A 234") # -> [324, 234, nan, 234]
+       >>> num = Word(nums).set_parse_action(lambda toks: int(toks[0]))
+       >>> na = one_of("N/A NA").set_parse_action(replace_with(math.nan))
+       >>> term = na | num
+
+       >>> term[1, ...].parse_string("324 234 N/A 234")
+       ParseResults([324, 234, nan, 234], {})
     """
     return lambda s, l, t: [repl_str]
 
 
 def remove_quotes(s: str, l: int, t: ParseResults) -> Any:
-    """
+    r"""
     Helper parse action for removing quotation marks from parsed
-    quoted strings.
+    quoted strings, that use a single character for quoting. For parsing
+    strings that may have multiple characters, use the :class:`QuotedString`
+    class.
 
-    Example::
+    Example:
 
-        # by default, quotation marks are included in parsed results
-        quoted_string.parse_string("'Now is the Winter of our Discontent'") # -> ["'Now is the Winter of our Discontent'"]
+    .. doctest::
 
-        # use remove_quotes to strip quotation marks from parsed results
-        quoted_string.set_parse_action(remove_quotes)
-        quoted_string.parse_string("'Now is the Winter of our Discontent'") # -> ["Now is the Winter of our Discontent"]
+       >>> # by default, quotation marks are included in parsed results
+       >>> quoted_string.parse_string("'Now is the Winter of our Discontent'")
+       ParseResults(["'Now is the Winter of our Discontent'"], {})
+
+       >>> # use remove_quotes to strip quotation marks from parsed results
+       >>> dequoted = quoted_string().set_parse_action(remove_quotes)
+       >>> dequoted.parse_string("'Now is the Winter of our Discontent'")
+       ParseResults(['Now is the Winter of our Discontent'], {})
     """
     return t[0][1:-1]
 
@@ -115,36 +124,53 @@ def with_attribute(*args: tuple[str, str], **attr_dict) -> ParseAction:
     To verify that the attribute exists, but without specifying a value,
     pass ``with_attribute.ANY_VALUE`` as the value.
 
-    Example::
+    The next two examples use the following input data and tag parsers:
 
-        html = '''
-            <div>
-            Some text
-            <div type="grid">1 4 0 1 0</div>
-            <div type="graph">1,3 2,3 1,1</div>
-            <div>this has no type</div>
-            </div>
-        '''
-        div,div_end = make_html_tags("div")
+    .. testcode::
 
-        # only match div tag having a type attribute with value "grid"
-        div_grid = div().set_parse_action(with_attribute(type="grid"))
-        grid_expr = div_grid + SkipTo(div | div_end)("body")
-        for grid_header in grid_expr.search_string(html):
-            print(grid_header.body)
+       html = '''
+           <div>
+           Some text
+           <div type="grid">1 4 0 1 0</div>
+           <div type="graph">1,3 2,3 1,1</div>
+           <div>this has no type</div>
+           </div>
+       '''
+       div,div_end = make_html_tags("div")
 
-        # construct a match with any div tag having a type attribute, regardless of the value
-        div_any_type = div().set_parse_action(with_attribute(type=with_attribute.ANY_VALUE))
-        div_expr = div_any_type + SkipTo(div | div_end)("body")
-        for div_header in div_expr.search_string(html):
-            print(div_header.body)
+    Only match div tag having a type attribute with value "grid":
 
-    prints::
+    .. testcode::
 
-        1 4 0 1 0
+       div_grid = div().set_parse_action(with_attribute(type="grid"))
+       grid_expr = div_grid + SkipTo(div | div_end)("body")
+       for grid_header in grid_expr.search_string(html):
+           print(grid_header.body)
 
-        1 4 0 1 0
-        1,3 2,3 1,1
+    prints:
+
+    .. testoutput::
+
+       1 4 0 1 0
+
+    Construct a match with any div tag having a type attribute,
+    regardless of the value:
+
+    .. testcode::
+
+       div_any_type = div().set_parse_action(
+           with_attribute(type=with_attribute.ANY_VALUE)
+       )
+       div_expr = div_any_type + SkipTo(div | div_end)("body")
+       for div_header in div_expr.search_string(html):
+           print(div_header.body)
+
+    prints:
+
+    .. testoutput::
+
+       1 4 0 1 0
+       1,3 2,3 1,1
     """
     attrs_list: list[tuple[str, str]] = []
     if args:
@@ -155,7 +181,7 @@ def with_attribute(*args: tuple[str, str], **attr_dict) -> ParseAction:
     def pa(s: str, l: int, tokens: ParseResults) -> None:
         for attrName, attrValue in attrs_list:
             if attrName not in tokens:
-                raise ParseException(s, l, "no matching attribute " + attrName)
+                raise ParseException(s, l, f"no matching attribute {attrName!r}")
             if attrValue != with_attribute.ANY_VALUE and tokens[attrName] != attrValue:  # type: ignore [attr-defined]
                 raise ParseException(
                     s,
@@ -167,43 +193,62 @@ def with_attribute(*args: tuple[str, str], **attr_dict) -> ParseAction:
 
 
 with_attribute.ANY_VALUE = object()  # type: ignore [attr-defined]
+"Value to use with :class:`with_attribute` parse action, to match any value, as long as the attribute is present"
 
 
 def with_class(classname: str, namespace: str = "") -> ParseAction:
     """
-    Simplified version of :class:`with_attribute` when
+    Simplified version of :meth:`with_attribute` when
     matching on a div class - made difficult because ``class`` is
     a reserved word in Python.
 
-    Example::
+    Using similar input data to the :meth:`with_attribute` examples:
 
-        html = '''
-            <div>
-            Some text
-            <div class="grid">1 4 0 1 0</div>
-            <div class="graph">1,3 2,3 1,1</div>
-            <div>this &lt;div&gt; has no class</div>
-            </div>
+    .. testcode::
 
-        '''
-        div,div_end = make_html_tags("div")
-        div_grid = div().set_parse_action(with_class("grid"))
+       html = '''
+           <div>
+           Some text
+           <div class="grid">1 4 0 1 0</div>
+           <div class="graph">1,3 2,3 1,1</div>
+           <div>this &lt;div&gt; has no class</div>
+           </div>
+       '''
+       div,div_end = make_html_tags("div")
 
-        grid_expr = div_grid + SkipTo(div | div_end)("body")
-        for grid_header in grid_expr.search_string(html):
-            print(grid_header.body)
+    Only match div tag having the "grid" class:
 
-        div_any_type = div().set_parse_action(with_class(withAttribute.ANY_VALUE))
-        div_expr = div_any_type + SkipTo(div | div_end)("body")
-        for div_header in div_expr.search_string(html):
-            print(div_header.body)
+    .. testcode::
 
-    prints::
+       div_grid = div().set_parse_action(with_class("grid"))
+       grid_expr = div_grid + SkipTo(div | div_end)("body")
+       for grid_header in grid_expr.search_string(html):
+           print(grid_header.body)
 
-        1 4 0 1 0
+    prints:
 
-        1 4 0 1 0
-        1,3 2,3 1,1
+    .. testoutput::
+
+       1 4 0 1 0
+
+    Construct a match with any div tag having a class attribute,
+    regardless of the value:
+
+    .. testcode::
+
+       div_any_type = div().set_parse_action(
+           with_class(withAttribute.ANY_VALUE)
+       )
+       div_expr = div_any_type + SkipTo(div | div_end)("body")
+       for div_header in div_expr.search_string(html):
+           print(div_header.body)
+
+    prints:
+
+    .. testoutput::
+
+       1 4 0 1 0
+       1,3 2,3 1,1
     """
     classattr = f"{namespace}:class" if namespace else "class"
     return with_attribute(**{classattr: classname})

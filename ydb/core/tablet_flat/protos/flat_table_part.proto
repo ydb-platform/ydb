@@ -33,6 +33,11 @@ message TBTreeIndexMeta {
     optional uint64 GroupDataSize = 7; // Group pages data size (includes history and external blobs)
 }
 
+message TBloomFilterMeta {
+    optional uint32 PageId = 1;         // EPage::Bloom page identifier
+    optional uint32 PrefixColumns = 2;  // Number of leading PK columns in this bloom filter
+}
+
 message TLayout {
     optional uint32 Index = 1;
     optional uint32 Globs = 2;  // EPage::Globs, external blobs catalog
@@ -47,6 +52,7 @@ message TLayout {
     repeated TBTreeIndexMeta BTreeGroupIndexes = 11;
     repeated TBTreeIndexMeta BTreeHistoricIndexes = 12;
     optional uint32 BTreeIndexesFormatVersion = 13;
+    repeated TBloomFilterMeta ByKeyPrefixes = 14; // Per-prefix bloom filter pages
 }
 
 message TStat {

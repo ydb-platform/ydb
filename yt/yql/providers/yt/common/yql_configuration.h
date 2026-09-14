@@ -1,5 +1,7 @@
 #pragma once
 
+#include "yql_yt_settings.h"
+
 #include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <util/system/types.h>
@@ -13,6 +15,8 @@ constexpr size_t YQL_JOB_CODEC_BLOCK_COUNT = 16;
 constexpr size_t YQL_JOB_CODEC_BLOCK_SIZE = 1_MB;
 
 constexpr size_t YQL_JOB_CODEC_MEM = YQL_JOB_CODEC_BLOCK_COUNT * YQL_JOB_CODEC_BLOCK_SIZE + (30_MB);
+
+constexpr size_t YQL_ARROW_MEMORY_POOL_RESERVE = 1_GB;
 
 constexpr ui64 DEFAULT_TOP_SORT_LIMIT = 1000ULL;
 
@@ -49,11 +53,19 @@ constexpr bool DEFAULT_USE_NATIVE_DESC_SORT = false;
 
 constexpr ui64 DEFAULT_MAX_CHUNKS_FOR_DQ_READ = 500;
 
-constexpr bool DEFAULT_USE_KEY_BOUND_API = false;
+constexpr bool DEFAULT_USE_KEY_BOUND_API = true;
+
+constexpr bool DEFAULT_PASS_SQL_FLAGS_FOR_VIEW_TRANSLATION = false;
 
 constexpr ui32 DEFAULT_MAX_OPERATION_FILES = 1000;
 
 constexpr bool DEFAULT_JOIN_COMMON_USE_MULTI_OUT = false;
+
+constexpr bool DEFAULT_JOIN_COMMON_USE_FLAT_PAYLOAD = false;
+
+// Above this column count the common-join intermediate falls back to the Variant payload.
+// Set below the YT limit because too many columns can actually hurt overall performance.
+constexpr ui64 DEFAULT_JOIN_COMMON_FLAT_PAYLOAD_COLUMN_LIMIT = 1024;
 
 constexpr bool DEFAULT_USE_RPC_READER_IN_DQ = false;
 constexpr size_t DEFAULT_RPC_READER_INFLIGHT = 1;
@@ -67,7 +79,10 @@ const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES =
         NUdf::EDataSlot::Int64, NUdf::EDataSlot::Uint64,
         NUdf::EDataSlot::Bool, NUdf::EDataSlot::Double,
         NUdf::EDataSlot::String, NUdf::EDataSlot::Json,
-        NUdf::EDataSlot::Yson, NUdf::EDataSlot::Utf8
+        NUdf::EDataSlot::Yson, NUdf::EDataSlot::Utf8,
+        NUdf::EDataSlot::Date, NUdf::EDataSlot::Datetime,
+        NUdf::EDataSlot::Timestamp, NUdf::EDataSlot::Interval,
+        NUdf::EDataSlot::Float,
     };
 const TSet<TString> DEFAULT_BLOCK_INPUT_SUPPORTED_TYPES = {"tuple"};
 const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES =
@@ -78,7 +93,9 @@ const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES =
         NUdf::EDataSlot::Int64, NUdf::EDataSlot::Uint64,
         NUdf::EDataSlot::Bool, NUdf::EDataSlot::Double,
         NUdf::EDataSlot::String, NUdf::EDataSlot::Utf8,
-        NUdf::EDataSlot::Yson
+        NUdf::EDataSlot::Yson, NUdf::EDataSlot::Float,
+        NUdf::EDataSlot::Date, NUdf::EDataSlot::Datetime,
+        NUdf::EDataSlot::Timestamp, NUdf::EDataSlot::Interval,
     };
 const TSet<TString> DEFAULT_BLOCK_OUTPUT_SUPPORTED_TYPES = {};
 const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_OUTPUT_SUPPORTED_DATA_TYPES =
@@ -101,7 +118,7 @@ constexpr ui64 DEFAULT_TABLE_CONTENT_LOCAL_EXEC = 0;
 
 constexpr ui32 DEFAULT_BATCH_LIST_FOLDER_CONCURRENCY = 5;
 
-constexpr bool DEFAULT_PARTITION_BY_CONSTANT_KEYS_VIA_MAP = false;
+constexpr bool DEFAULT_PARTITION_BY_CONSTANT_KEYS_VIA_MAP = true;
 
 constexpr ui64 DEFAULT_LLVM_NODE_COUNT_LIMIT = 200000;
 
@@ -109,11 +126,63 @@ constexpr ui16 DEFAULT_MIN_COLUMN_GROUP_SIZE = 2;
 constexpr ui16 DEFAULT_MAX_COLUMN_GROUPS = 64;
 
 constexpr bool DEFAULT_DISABLE_FUSE_OPERATIONS = false;
-constexpr bool DEFAULT_ENABLE_FUSE_MAP_TO_MAPREDUCE = false;
+constexpr EFuseMapToMapReduceMode DEFAULT_FUSE_MAP_TO_MAPREDUCE = EFuseMapToMapReduceMode::Disable;
 
 constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 
 constexpr bool DEFAULT_USE_QL_FILTER = false;
-constexpr bool DEFAULT_PRUNE_QL_FILTER_LAMBDA = true;
+// Leave room below YT's MaxExpressionDepth because YQL and YT have independent release cycles.
+constexpr ui32 DEFAULT_QL_FILTER_DEPTH_LIMIT = 45;
+
+constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
+
+constexpr bool DEFAULT_REPORT_EQUIJOIN_STATS = true;
+
+constexpr ERuntimeClusterSelectionMode DEFAULT_RUNTIME_CLUSTER_SELECTION = NYql::ERuntimeClusterSelectionMode::Disable;
+
+constexpr bool DEFAULT_ALLOW_REMOTE_CLUSTER_INPUT = false;
+
+constexpr bool DEFAULT_USE_COLUMN_GROUPS_FROM_INPUT_TABLE = false;
+
+constexpr bool DEFAULT_USE_NATIVE_DYNAMIC_TABLE_READ = false;
+
+constexpr bool DEFAULT_FORBID_SENSITIVE_DATA_IN_OPERATION_SPEC = false;
+
+constexpr ui64 DEFAULT_LOCAL_TABLE_CONTENT_LIMIT = 10_GB;
+
+constexpr bool DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER = false;
+
+constexpr bool DEFAULT_EARLY_PARTITION_PRUNING = false;
+
+constexpr bool DEFAULT_VALIDATE_CLUSTERS = false;
+
+constexpr bool DEFAULT_REQUEST_ONLY_REQUIRED_ATTRS = true;
+constexpr bool DEFAULT_CACHE_SCHEMA_BY_SCHEMA_ID = true;
+
+constexpr ui64 DEFAULT_QUERY_DUMP_TABLE_SIZE_LIMIT = 100_GB;
+constexpr ui64 DEFAULT_QUERY_DUMP_TABLE_COUNT_PER_CLUSTER_LIMIT = 5;
+constexpr ui64 DEFAULT_QUERY_DUMP_FILE_COUNT_PER_OPERATION_LIMIT = 5;
+
+constexpr bool DEFAULT_KEEP_WORLD_DEP_FOR_FILL_OP = false;
+
+constexpr bool DEFAULT_ENABLE_RLS_TABLES_SUPPORT = false;
+
+constexpr ETmpSecurityMode DEFAULT_TMP_FOLDER_SECURITY = ETmpSecurityMode::Disable;
+
+constexpr bool DEFAULT_ENABLE_QL_FILTER = false;
+
+const ui64 DEFAULT_MIN_JOB_STATE_SIZE_TO_PASS_VIA_FILE = 32_KB;
+
+constexpr bool DEFAULT_QUERY_CACHE_COMBINE_CHUNKS_REPLACE = true;
+
+constexpr bool DEFAULT_PARSE_EXPRESSION_COLUMNS = false;
+
+constexpr TDuration DEFAULT_SECURE_TMP_TOKEN_USERS_ACCESS_PERIOD = TDuration::Days(10);
+
+constexpr bool DEFAULT_JOIN_COMMON_ANY_SIDE_FIRST = false;
+
+constexpr bool DEFAULT_FIX_ENDLESS_LOOP_IN_DROP_IF_EXISTS = false;
+
+constexpr bool DEFAULT_APPLY_MAX_JOB_COUNT_TO_ALL = false;
 
 } // NYql

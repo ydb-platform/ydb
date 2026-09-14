@@ -1,0 +1,18 @@
+package NYql.NYtflow.NProto;
+
+import "yt/yql/providers/ytflow/integration/proto/pq.proto";
+
+message TQYTSourceMessage {
+   optional string Cluster = 1;
+   optional string Path = 2;
+   optional bytes RowType = 3;
+}
+
+message TQYTSinkMessage {
+   optional string Cluster = 1;
+   optional string Path = 2;
+   optional bytes RowType = 3;
+   optional bool DoesExist = 5;
+   optional bool Truncate = 6;
+   repeated string KeyColumns = 7;
+}

@@ -1,12 +1,24 @@
 # Aggregate functions
 
+{% note info %}
+
+Aggregate functions ignore `NULL` in their arguments, except for `COUNT` when `*` is specified as the argument, as well as `BOOL_AND` / `BOOL_OR` / `BOOL_XOR` functions, in which `NULL` is considered without omissions.
+
+{% endnote %}
+
 ## COUNT {#count}
 
 Counting the number of rows in the table (if `*` or constant is specified as the argument) or non-empty values in a table column (if the column name is specified as an argument).
 
 Like other aggregate functions, it can be combined with [GROUP BY](../syntax/group_by.md) to get statistics on the parts of the table that correspond to the values in the columns being grouped. Use the modifier [DISTINCT](../syntax/group_by.md#distinct) to count distinct values.
 
-### Examples
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `Uint64`
+- **Result**: `Uint64`
+
+#### Examples
 
 ```yql
 SELECT COUNT(*) FROM my_table;
@@ -26,7 +38,13 @@ Minimum or maximum value.
 
 As an argument, you may use an arbitrary computable expression with a numeric result.
 
-### Examples
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
+
+#### Examples
 
 ```yql
 SELECT MIN(value), MAX(value) FROM my_table;
@@ -40,6 +58,14 @@ As an argument, you may use an arbitrary computable expression with a numeric re
 
 Integers are automatically expanded to 64 bits to reduce the risk of overflow.
 
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `WidenIntegral(T)`
+- **Result**: `WidenIntegral(T)`
+
+#### Examples
+
 ```yql
 SELECT SUM(value) FROM my_table;
 ```
@@ -52,7 +78,13 @@ As an argument, you may use an arbitrary computable expression with a numeric re
 
 Integer values and time intervals are automatically converted to Double.
 
-### Examples
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<T, Uint64>`
+- **Result**: `T`
+
+#### Examples
 
 ```yql
 SELECT AVG(value) FROM my_table;
@@ -66,7 +98,13 @@ The value `NULL` is equated to `false` (if the argument type is `Bool?`).
 
 The function *does not* do the implicit type casting to Boolean for strings and numbers.
 
-### Examples
+#### Types
+
+- **Item**: `Bool`
+- **SerializedState**: `Uint64`
+- **Result**: `Uint64`
+
+#### Examples
 
 ```yql
 SELECT
@@ -85,7 +123,21 @@ Sum or arithmetic average, but only for the rows that satisfy the condition pass
 
 Therefore, `SUM_IF(value, condition)` is a slightly shorter notation for `SUM(IF(condition, value))`, same for `AVG`. The argument's data type expansion is similar to the same-name functions without a suffix.
 
-### Examples
+NB. `WidenStateIntegral(T) = if (T is Interval) then Decimal(35, 0) else WidenIntegral(T)`
+
+#### Types SumIf
+
+- **Item**: `T`
+- **SerializedState**: `WidenStateIntegral(T)`
+- **Result**: `WidenIntegral(T)`
+
+#### Types AvgIf
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<WidenStateIntegral(T), Uint64>`
+- **Result**: `WidenIntegral(T)`
+
+#### Examples
 
 ```yql
 SELECT
@@ -112,7 +164,13 @@ Get the value for an expression specified as an argument, for one of the table r
 
 Because of no guarantee, `SOME` is computationally cheaper than [MIN / MAX](#min-max) often used in similar situations.
 
-### Examples
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
+
+#### Examples
 
 ```yql
 SELECT
@@ -141,7 +199,13 @@ By selecting accuracy, you can trade added resource and RAM consumption for decr
 
 All the three functions are aliases at the moment, but `CountDistinctEstimate` may start using a different algorithm in the future.
 
-### Examples
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `String`
+- **Result**: `Uint64`
+
+#### Examples
 
 ```yql
 SELECT
@@ -169,7 +233,13 @@ To return a list of multiple values from one line, **DO NOT** use the `AGGREGATE
 
 For example, you can combine it with `DISTINCT` and the function [String::JoinFromList](../udf/list/string.md) (it's an equivalent of `','.join(list)` in Python) to output to a string all the values found in the column after [GROUP BY](../syntax/group_by.md).
 
-### Examples
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `List<T>`
+- **Result**: `List<T>`
+
+#### Examples
 
 ```yql
 SELECT
@@ -219,7 +289,19 @@ If the second argument is always `NULL`, the aggregation result is `NULL`.
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](#aggregate-by) argument.
 
-### Examples
+#### Types without limit
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<T1, T2>`
+- **Result**: `T1`
+
+#### Types with limit
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<List<T1>, T2>`
+- **Result**: `List<T1>`
+
+#### Examples
 
 ```yql
 SELECT
@@ -244,7 +326,13 @@ FROM my_table;
 
 Return a list of the maximum/minimum values of an expression. The first argument is an expression, the second argument limits the number of items.
 
-### Examples
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<Uint32, List<T>>`
+- **Result**: `List<T>`
+
+#### Examples
 
 ```yql
 SELECT
@@ -269,7 +357,13 @@ Return a list of values of the first argument for the rows containing the maximu
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing a value and a key is passed as the first [AGGREGATE_BY](#aggregate-by) argument. In this case, the limit for the number of items is passed by the second argument at factory creation.
 
-### Examples
+#### Types
+
+- **Item**: `T1`
+- **SerializedState**: `Tuple<Uint32, List<Tuple<T2, T1>>>`
+- **Result**: `List<T1>`
+
+#### Examples
 
 ```yql
 SELECT
@@ -304,7 +398,13 @@ Optional arguments:
 1. For `TOPFREQ`, the desired number of items in the result. `MODE` is an alias to `TOPFREQ` with this argument set to 1. For `TOPFREQ`, this argument is also 1 by default.
 2. The number of items in the buffer used: lets you trade memory consumption for accuracy. Default: 100.
 
-### Examples
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<Uint32, Uint32, List<Tuple<Uint64, T>>>`
+- **Result**: `List<Struct<Frequency: Uint64, Value: T>>`
+
+#### Examples
 
 ```yql
 SELECT
@@ -328,7 +428,13 @@ Several abbreviated aliases are also defined, for example, `VARPOP` or `STDDEVSA
 
 If all the values passed are `NULL`, it returns `NULL`.
 
-### Examples
+#### Types
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Double, Double, Double>`
+- **Result**: `Double`
+
+#### Examples
 
 ```yql
 SELECT
@@ -349,7 +455,19 @@ Unlike most other aggregate functions, they don't skip `NULL`, but accept it as 
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing two values is passed as the first [AGGREGATE_BY](#aggregate-by) argument.
 
-### Examples
+#### Types CORRELATION
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Uint64, Double, Double, Double, Double, Double>`
+- **Result**: `Double`
+
+#### Types COVARIANCE
+
+- **Item**: `Double`
+- **SerializedState**: `Tuple<Uint64, Double, Double, Double>`
+- **Result**: `Double`
+
+#### Examples
 
 ```yql
 SELECT
@@ -378,6 +496,14 @@ The first argument (N) must be a table column name. If you need to bypass this r
 
 {% endnote %}
 
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `String`
+- **Result**: `T`, `Tuple<T, ...>`, `Struct<name1: T, ...>` or `List<T>` depending on the second argument
+
+#### Examples
+
 ```yql
 SELECT
     MEDIAN(numeric_column),
@@ -392,6 +518,12 @@ FROM my_table;
 Plotting an approximate histogram based on a numeric expression with automatic selection of buckets.
 
 [Auxiliary functions](../udf/list/histogram.md)
+
+#### Types
+
+- **Item**: `Double`
+- **SerializedState**: `String`
+- **Result**: `HistogramStruct`
 
 ### Basic settings
 
@@ -458,7 +590,7 @@ While FastGreedyShrink is used most of the time, SlowShrink is mostly used for h
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing a value and a weight is passed as the first [AGGREGATE_BY](#aggregate-by) argument.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -498,7 +630,7 @@ The format of the result is totally similar to [adaptive histograms](#histogram)
 
 If the spread of input values is uncontrollably large, we recommend that you specify the minimum and maximum values to prevent potential failures due to high memory consumption.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -510,7 +642,7 @@ FROM my_table;
 
 ## BOOL_AND, BOOL_OR and BOOL_XOR {#bool-and-or-xor}
 
-### Signature
+#### Signature
 
 ```yql
 BOOL_AND(Bool?)->Bool?
@@ -543,7 +675,13 @@ Examples of such behavior can be found below.
 
 To skip `NULL` values during aggregation, use the `MIN`/`MAX` or `BIT_AND`/`BIT_OR`/`BIT_XOR` functions.
 
-### Examples
+#### Types
+
+- **Item**: `Bool`
+- **SerializedState**: `Bool`
+- **Result**: `Bool`
+
+#### Examples
 
 ```yql
 $data = [
@@ -572,7 +710,13 @@ FROM AS_TABLE($data);
 
 Apply the relevant bitwise operation to all values of a numeric column or expression.
 
-### Examples
+#### Types
+
+- **Item**: `T`
+- **SerializedState**: `T`
+- **Result**: `T`
+
+#### Examples
 
 ```yql
 SELECT
@@ -594,7 +738,7 @@ Applying an [aggregation factory](basic.md#aggregationfactory) to all values of 
 1. Column, `DISTINCT` column or expression.
 2. Factory.
 
-### Examples
+#### Examples
 
 ```yql
 $count_factory = AggregationFactory("COUNT");
@@ -613,3 +757,57 @@ FROM my_table;
 ```
 
 
+
+## RANDOM_SAMPLE and RANDOM_VALUE
+
+#### Signature
+
+This functions are available since version [2025.04](../changelog/2025.04.md).
+
+```yql
+RANDOM_SAMPLE(T?, limit:Uint64)->List<T>
+RANDOM_SAMPLE(T, limit:Uint64)->List<T>
+RANDOM_VALUE(T)->T
+RANDOM_VALUE(T?)->Optional<T>
+```
+
+Selects up to `limit` random values. `RANDOM_VALUE` is equivalent to `RANDOM_SAMPLE` with `limit=1`, except it returns an element instead of a list. The probability of each input value appearing in the resulting list is exactly `limit/count(*)`.
+
+{% note info %}
+
+When applied to an empty table with no grouping keys, `RANDOM_SAMPLE` returns an empty list instead of NULL.
+
+{% endnote %}
+
+#### Types RANDOM_SAMPLE
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<List<T>, Uint64, Uint64>`
+- **Result**: `List<T>`
+
+#### Types RANDOM_VALUE
+
+- **Item**: `T`
+- **SerializedState**: `Tuple<List<T>, Uint64, Uint64>`
+- **Result**: `T`
+
+#### Examples
+
+```yql
+SELECT
+   RANDOM_SAMPLE(region, 5) as five_random_regions,
+   RANDOM_VALUE(region) as random_region
+FROM users
+```
+
+{% note warning %}
+
+The final result is non-deterministic (it is impossible to perform two runs that are guaranteed to yield the same result).
+
+{% endnote %}
+
+{% note warning %}
+
+Choose a reasonable `limit` value, as the aggregation function keeps `limit` elements in memory during execution. Using a large `limit` when processing large elements can cause out-of-memory errors.
+
+{% endnote %}

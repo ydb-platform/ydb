@@ -6,8 +6,7 @@
 
 #include "util.h"
 
-namespace NYql {
-namespace NUdf {
+namespace NYql::NUdf {
 
 class TArgsDechunker {
 public:
@@ -17,10 +16,9 @@ public:
     bool Next(std::vector<arrow::Datum>& chunk, ui64& chunkLen);
 
 private:
-    const std::vector<arrow::Datum> Args;
-    std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Arrays;
-    bool Finish = false;
+    const std::vector<arrow::Datum> Args_;
+    std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Arrays_;
+    bool Finish_ = false;
 };
 
-}
-}
+} // namespace NYql::NUdf

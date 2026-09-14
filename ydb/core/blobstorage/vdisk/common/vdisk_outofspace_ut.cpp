@@ -1,6 +1,7 @@
 #include "defs.h"
 #include "vdisk_outofspace.h"
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/protos/whiteboard_flags.pb.h>
 #include <util/generic/ptr.h>
 #include <util/stream/null.h>
 #include <util/system/thread.h>
@@ -37,6 +38,33 @@ namespace NKikimr {
             state.Update(4, flags | NKikimrBlobStorage::StatusDiskSpaceOrange);
             state.Update(5, flags | NKikimrBlobStorage::StatusDiskSpaceLightYellowMove);
             UNIT_ASSERT_EQUAL(state.GetGlobalColor(), TSpaceColor::ORANGE);
+        }
+
+        Y_UNIT_TEST(ToWhiteboardFlag) {
+            using EFlag = NKikimrWhiteboard::EFlag;
+
+            struct TCase {
+                TSpaceColor::E Color;
+                EFlag Expected;
+            };
+
+            const TCase cases[] = {
+                {TSpaceColor::GREEN, EFlag::Green},
+                {TSpaceColor::CYAN, EFlag::Green},
+                {TSpaceColor::LIGHT_YELLOW, EFlag::Yellow},
+                {TSpaceColor::YELLOW, EFlag::Orange},
+                {TSpaceColor::LIGHT_ORANGE, EFlag::Orange},
+                {TSpaceColor::PRE_ORANGE, EFlag::Orange},
+                {TSpaceColor::ORANGE, EFlag::Orange},
+                {TSpaceColor::RED, EFlag::Red},
+                {TSpaceColor::BLACK, EFlag::Red},
+            };
+
+            for (const auto& testCase : cases) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    TOutOfSpaceState::ToWhiteboardFlag(testCase.Color),
+                    testCase.Expected);
+            }
         }
     }
 

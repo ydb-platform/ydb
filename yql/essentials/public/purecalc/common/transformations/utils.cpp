@@ -9,10 +9,10 @@ using namespace NYql::NPureCalc;
 TExprNode::TPtr NYql::NPureCalc::NodeFromBlocks(
     const TPositionHandle& pos,
     const TStructExprType* structType,
-    TExprContext& ctx
-) {
-    const auto items = structType->GetItems();
-    Y_ENSURE(items.size() > 0);
+    TExprContext& ctx) {
+    const auto& items = structType->GetItems();
+    Y_ENSURE(!items.empty());
+    // clang-format off
     return ctx.Builder(pos)
         .Lambda()
             .Param("stream")
@@ -50,52 +50,57 @@ TExprNode::TPtr NYql::NPureCalc::NodeFromBlocks(
                         .Params("fields", items.size())
                         .Callable("AsStruct")
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                    ui32 i = 0;
-                                    for (const auto& item : items) {
-                                        parent.List(i)
-                                            .Atom(0, item->GetName())
-                                            .Arg(1, "fields", i++)
-                                        .Seal();
-                                    }
-                                    return parent;
-                                })
+                                ui32 i = 0;
+                                for (const auto& item : items) {
+                                    parent.List(i)
+                                        .Atom(0, item->GetName())
+                                        .Arg(1, "fields", i++)
+                                    .Seal();
+                                }
+                                return parent;
+                            })
                         .Seal()
                     .Seal()
                 .Seal()
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr NYql::NPureCalc::NodeToBlocks(
     const TPositionHandle& pos,
     const TStructExprType* structType,
-    TExprContext& ctx
-) {
-    const auto items = structType->GetItems();
-    Y_ENSURE(items.size() > 0);
+    TExprContext& ctx) {
+    const auto& items = structType->GetItems();
+    Y_ENSURE(!items.empty());
+    // clang-format off
     return ctx.Builder(pos)
         .Lambda()
             .Param("stream")
             .Callable("FromFlow")
                 .Callable(0, "NarrowMap")
-                    .Callable(0, "WideToBlocks")
-                        .Callable(0, "ExpandMap")
-                            .Callable(0, "ToFlow")
-                                .Arg(0, "stream")
-                            .Seal()
-                            .Lambda(1)
-                                .Param("item")
-                                .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
-                                    ui32 i = 0;
-                                    for (const auto& item : items) {
-                                        lambda.Callable(i++, "Member")
-                                            .Arg(0, "item")
-                                            .Atom(1, item->GetName())
-                                        .Seal();
-                                    }
-                                    return lambda;
-                                })
+                    .Callable(0, "ToFlow")
+                        .Callable(0, "WideToBlocks")
+                            .Callable(0, "FromFlow")
+                                .Callable(0, "ExpandMap")
+                                    .Callable(0, "ToFlow")
+                                        .Arg(0, "stream")
+                                    .Seal()
+                                    .Lambda(1)
+                                        .Param("item")
+                                        .Do([&](TExprNodeBuilder& lambda) -> TExprNodeBuilder& {
+                                            ui32 i = 0;
+                                            for (const auto& item : items) {
+                                                lambda.Callable(i++, "Member")
+                                                    .Arg(0, "item")
+                                                    .Atom(1, item->GetName())
+                                                .Seal();
+                                            }
+                                            return lambda;
+                                        })
+                                    .Seal()
+                                .Seal()
                             .Seal()
                         .Seal()
                     .Seal()
@@ -122,16 +127,17 @@ TExprNode::TPtr NYql::NPureCalc::NodeToBlocks(
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr NYql::NPureCalc::ApplyToIterable(
     const TPositionHandle& pos,
-    const TExprNode::TPtr iterable,
-    const TExprNode::TPtr lambda,
+    const TExprNode::TPtr& iterable,
+    const TExprNode::TPtr& lambda,
     bool wrapLMap,
-    TExprContext& ctx
-) {
+    TExprContext& ctx) {
     if (wrapLMap) {
+        // clang-format off
         return ctx.Builder(pos)
             .Callable("LMap")
                 .Add(0, iterable)
@@ -143,19 +149,21 @@ TExprNode::TPtr NYql::NPureCalc::ApplyToIterable(
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     } else {
+        // clang-format off
         return ctx.Builder(pos)
             .Apply(lambda)
                 .With(0, iterable)
             .Seal()
             .Build();
+        // clang-format on
     }
 }
 
 const TStructExprType* NYql::NPureCalc::WrapBlockStruct(
     const TStructExprType* structType,
-    TExprContext& ctx
-) {
+    TExprContext& ctx) {
     TVector<const TItemExprType*> members;
     for (const auto& item : structType->GetItems()) {
         const auto blockItemType = ctx.MakeType<TBlockExprType>(item->GetItemType());
@@ -168,8 +176,7 @@ const TStructExprType* NYql::NPureCalc::WrapBlockStruct(
 
 const TStructExprType* NYql::NPureCalc::UnwrapBlockStruct(
     const TStructExprType* structType,
-    TExprContext& ctx
-) {
+    TExprContext& ctx) {
     TVector<const TItemExprType*> members;
     for (const auto& item : structType->GetItems()) {
         if (item->GetName() == PurecalcBlockColumnLength) {

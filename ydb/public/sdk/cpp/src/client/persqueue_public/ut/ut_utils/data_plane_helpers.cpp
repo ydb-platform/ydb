@@ -1,13 +1,13 @@
 #include "data_plane_helpers.h"
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 namespace NKikimr::NPersQueueTests {
 
     using namespace NYdb::NPersQueue;
 
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> CreateWriter(
-        NYdb::TDriver& driver,
+        const NYdb::TDriver& driver,
         const NYdb::NPersQueue::TWriteSessionSettings& settings,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> creds
     ) {
@@ -17,7 +17,7 @@ namespace NKikimr::NPersQueueTests {
     }
 
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> CreateWriter(
-        NYdb::TDriver& driver,
+        const NYdb::TDriver& driver,
         const TString& topic,
         const TString& sourceId,
         std::optional<ui32> partitionGroup,
@@ -114,7 +114,7 @@ namespace NKikimr::NPersQueueTests {
                 createPartitionStreamEvent->Confirm();
             } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*event)) {
                 destroyPartitionStreamEvent->Confirm();
-            } else if (auto* closeSessionEvent = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
+            } else if (std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*event)) {
                 return {};
             }
         }

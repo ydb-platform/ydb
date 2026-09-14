@@ -189,7 +189,7 @@ genrand_integer (int *dest, int dist, int min, int max, int mean, int stream)
         break;
      default:
         INTERNAL ("Undefined distribution");
-        break;
+        exit(EXIT_FAILURE);
      }
 
    if (dest == NULL)
@@ -236,7 +236,7 @@ genrand_key (ds_key_t * dest, int dist, ds_key_t min, ds_key_t max,
         break;
      default:
         INTERNAL ("Undefined distribution");
-        break;
+        exit(EXIT_FAILURE);
      }
 
    if (dest == NULL)
@@ -296,7 +296,7 @@ genrand_decimal (decimal_t * dest, int dist, decimal_t * min, decimal_t * max,
         break;
      default:
         INTERNAL ("Undefined distribution");
-        break;
+        exit(EXIT_FAILURE);
      }
 
    dest->number = res.number;

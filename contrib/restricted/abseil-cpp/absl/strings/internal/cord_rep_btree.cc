@@ -36,10 +36,6 @@ namespace absl {
 ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
-#ifdef ABSL_INTERNAL_NEED_REDUNDANT_CONSTEXPR_DECL
-constexpr size_t CordRepBtree::kMaxCapacity;
-#endif
-
 namespace {
 
 using NodeStack = CordRepBtree * [CordRepBtree::kMaxDepth];
@@ -1118,7 +1114,10 @@ void CordRepBtree::Rebuild(CordRepBtree** stack, CordRepBtree* tree,
       OpResult result = node->AddEdge<kBack>(true, edge, length);
       while (result.action == CordRepBtree::kPopped) {
         stack[height] = result.tree;
-        if (stack[++height] == nullptr) {
+        if (ABSL_PREDICT_FALSE(++height >= kMaxDepth)) {
+          ABSL_RAW_LOG(FATAL, "CordRepBtree::Rebuild() exceeded max depth");
+        }
+        if (stack[height] == nullptr) {
           result.action = CordRepBtree::kSelf;
           stack[height] = CordRepBtree::New(node, result.tree);
         } else {
@@ -1126,7 +1125,7 @@ void CordRepBtree::Rebuild(CordRepBtree** stack, CordRepBtree* tree,
           result = node->AddEdge<kBack>(true, result.tree, length);
         }
       }
-      while (stack[++height] != nullptr) {
+      while (++height < kMaxDepth && stack[height] != nullptr) {
         stack[height]->length += length;
       }
     }

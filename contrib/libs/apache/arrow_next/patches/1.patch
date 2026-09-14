@@ -1,0 +1,11 @@
+--- contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.cc	(index)
++++ contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.cc	(working tree)
+@@ -314,7 +314,7 @@ struct DerefConstIterator {
+ 
+   using value_type = Scalar;
+   using pointer = const Scalar*;
+-  using difference_type = typename ConstIterator::difference_type;
++  using difference_type = size_t;
+ 
+   const value_type& operator*() const { return *(*it); }
+ 

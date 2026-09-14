@@ -4,7 +4,7 @@
 
 #include <util/datetime/base.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 //! Partition stream.
 struct TPartitionStream : public TThrRefBase {
@@ -71,11 +71,11 @@ struct TReadSessionEvent {
 
         struct TMessageInformation {
             TMessageInformation(ui64 offset,
-                                std::string messageGroupId,
+                                std::string_view messageGroupId,
                                 ui64 seqNo,
                                 TInstant createTime,
                                 TInstant writeTime,
-                                std::string ip,
+                                std::string_view ip,
                                 TWriteSessionMeta::TPtr meta,
                                 ui64 uncompressedSize);
             ui64 Offset;

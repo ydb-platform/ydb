@@ -1,14 +1,15 @@
 #pragma once
 
-#include <functional>
-#include <util/datetime/base.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
 
-namespace NYdb::inline V3 {
+#include <functional>
+
+namespace NYdb::inline Dev {
 
 class IClientImplCommon {
 public:
     virtual ~IClientImplCommon() = default;
-    virtual void ScheduleTask(const std::function<void()>& fn, TDuration timeout) = 0;
+    virtual void ScheduleTask(const std::function<void()>& fn, TDeadline::Duration timeout) = 0;
 };
 
 }

@@ -2,13 +2,19 @@
 #include "config.h"
 #include "helpers.h"
 
+#include <yt/yt/client/api/formatted_table_reader.h>
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/skynet.h>
+#include <yt/yt/client/api/table_partition_reader.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
 #include <yt/yt/client/formats/config.h>
 #include <yt/yt/client/formats/parser.h>
+
+#include <yt/yt/client/signature/generator.h>
+#include <yt/yt/client/signature/signature.h>
+#include <yt/yt/client/signature/validator.h>
 
 #include <yt/yt/client/table_client/adapters.h>
 #include <yt/yt/client/table_client/blob_reader.h>
@@ -25,7 +31,9 @@
 
 #include <yt/yt/client/ypath/public.h>
 
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
+
 #include <yt/yt/core/misc/finally.h>
 
 #include <yt/yt/core/ytree/convert.h>
@@ -33,6 +41,7 @@
 namespace NYT::NDriver {
 
 using namespace NApi;
+using namespace NApi::NDetail;
 using namespace NChaosClient;
 using namespace NChunkClient;
 using namespace NCodegen;
@@ -55,8 +64,7 @@ NLogging::TLogger WithCommandTag(
     const NLogging::TLogger& logger,
     const ICommandContextPtr& context)
 {
-    return logger.WithTag("Command: %v",
-        context->Request().CommandName);
+    return logger.WithTag("Command", context->Request().CommandName);
 }
 
 } // namespace
@@ -81,16 +89,23 @@ void TReadTableCommand::Register(TRegistrar registrar)
             return command->Options.OmitInaccessibleColumns;
         })
         .Default(false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "omit_inaccessible_rows",
+        [] (TThis* command) -> auto& {
+            return command->Options.OmitInaccessibleRows;
+        })
+        .Default(false);
 }
 
 void TReadTableCommand::DoExecute(ICommandContextPtr context)
 {
-    YT_LOG_DEBUG("Executing \"read_table\" command (Path: %v, Unordered: %v, StartRowIndexOnly: %v, "
-        "OmitInaccessibleColumns: %v)",
-        Path,
-        Unordered,
-        StartRowIndexOnly,
-        Options.OmitInaccessibleColumns);
+    YT_TLOG_DEBUG("Executing \"read_table\" command")
+        .With("Path", Path)
+        .With("Unordered", Unordered)
+        .With("StartRowIndexOnly", StartRowIndexOnly)
+        .With("OmitInaccessibleColumns", Options.OmitInaccessibleColumns)
+        .With("OmitInaccessibleRows", Options.OmitInaccessibleRows);
     Options.Ping = true;
     Options.EnableTableIndex = ControlAttributes->EnableTableIndex;
     Options.EnableRowIndex = ControlAttributes->EnableRowIndex;
@@ -139,25 +154,23 @@ void TReadTableCommand::DoExecute(ICommandContextPtr context)
 
     auto finally = Finally([&] {
         auto dataStatistics = reader->GetDataStatistics();
-        YT_LOG_DEBUG("Command statistics (RowCount: %v, WrittenSize: %v, "
-            "ReadUncompressedDataSize: %v, ReadCompressedDataSize: %v, "
-            "OmittedInaccessibleColumns: %v)",
-            dataStatistics.row_count(),
-            writer->GetWrittenSize(),
-            dataStatistics.uncompressed_data_size(),
-            dataStatistics.compressed_data_size(),
-            reader->GetOmittedInaccessibleColumns());
+        YT_TLOG_DEBUG("Command statistics")
+            .With("RowCount", dataStatistics.row_count())
+            .With("WrittenSize", writer->GetWrittenSize())
+            .With("ReadUncompressedDataSize", dataStatistics.uncompressed_data_size())
+            .With("ReadCompressedDataSize", dataStatistics.compressed_data_size())
+            .With("OmittedInaccessibleColumns", reader->GetOmittedInaccessibleColumns());
     });
-
-    TRowBatchReadOptions options{
-        .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
-        .Columnar = (format.GetType() == EFormatType::Arrow)
-    };
 
     PipeReaderToWriterByBatches(
         reader,
         writer,
-        options);
+        TPipeReaderToWriterByBatchesOptions{
+            .StartingOptions = {
+                .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
+                .Columnar = (format.GetType() == EFormatType::Arrow),
+            },
+        });
 }
 
 bool TReadTableCommand::HasResponseParameters() const
@@ -230,6 +243,51 @@ void TReadBlobTableCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TReadTablePartitionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cookie", &TThis::Cookie);
+    registrar.Parameter("control_attributes", &TThis::ControlAttributes)
+        .DefaultNew();
+}
+
+void TReadTablePartitionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto client = context->GetClient();
+
+    auto cookie = ConvertTo<TTablePartitionCookiePtr>(TYsonString(Cookie));
+
+    auto valid = WaitFor(context->GetDriver()->GetSignatureValidator()->Validate(cookie.Underlying()))
+        .ValueOrThrow();
+
+    if (!valid) {
+        THROW_ERROR_EXCEPTION("Signature validation failed");
+    }
+
+    Options.EnableTableIndex = ControlAttributes->EnableTableIndex;
+    Options.EnableRowIndex = ControlAttributes->EnableRowIndex;
+    Options.EnableRangeIndex = ControlAttributes->EnableRangeIndex;
+    Options.EnableTabletIndex = ControlAttributes->EnableTabletIndex;
+
+    auto format = NYson::ConvertToYsonString(context->GetOutputFormat());
+    auto formatStream = WaitFor(client->CreateFormattedTablePartitionReader(cookie, format, Options))
+        .ValueOrThrow();
+
+    auto output = context->Request().OutputStream;
+    while (true) {
+        auto block = WaitFor(formatStream->Read())
+            .ValueOrThrow();
+
+        if (!block) {
+            break;
+        }
+
+        WaitFor(output->Write(block))
+            .ThrowOnError();
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TLocateSkynetShareCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("path", &TThis::Path);
@@ -254,7 +312,9 @@ void TLocateSkynetShareCommand::DoExecute(ICommandContextPtr context)
         syncOutputStream.get());
 
     Serialize(*skynetPartsLocations.ValueOrThrow(), consumer.get());
+
     consumer->Flush();
+    syncOutputStream->Finish();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -298,7 +358,8 @@ void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
     TWritingValueConsumer valueConsumer(
         schemalessWriter,
         ConvertTo<TTypeConversionConfigPtr>(context->GetInputFormat().Attributes()),
-        MaxRowBufferSize);
+        MaxRowBufferSize,
+        context->Request().MemoryUsageTracker);
 
     TTableOutput output(CreateParserForFormat(
         context->GetInputFormat(),
@@ -330,6 +391,8 @@ void TGetTableColumnarStatisticsCommand::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("enable_early_finish", &TThis::EnableEarlyFinish)
         .Default(true);
+    registrar.Parameter("enable_read_size_estimation", &TThis::EnableReadSizeEstimation)
+        .Default(false);
 }
 
 void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
@@ -337,6 +400,7 @@ void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
     Options.FetchChunkSpecConfig = context->GetConfig()->TableReader;
     Options.FetcherConfig = context->GetConfig()->Fetcher;
     Options.EnableEarlyFinish = EnableEarlyFinish;
+    Options.EnableReadSizeEstimation = EnableReadSizeEstimation;
 
     if (MaxChunksPerNodeFetch) {
         Options.FetcherConfig = CloneYsonStruct(Options.FetcherConfig);
@@ -359,7 +423,8 @@ void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
     }
 
     if (!asyncSchemaYsons.empty()) {
-        YT_LOG_DEBUG("Fetching schemas for tables without column selectors (TableCount: %v)", asyncSchemaYsons.size());
+        YT_TLOG_DEBUG("Fetching schemas for tables without column selectors")
+            .With("TableCount", asyncSchemaYsons.size());
         auto allSchemas = WaitFor(AllSucceeded(asyncSchemaYsons))
             .ValueOrThrow();
         for (int pathIndex = 0, missingColumnIndex = 0; pathIndex < std::ssize(Paths); ++pathIndex) {
@@ -374,11 +439,11 @@ void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
         }
     }
 
-    YT_LOG_DEBUG("Starting fetching columnar statistics");
+    YT_TLOG_DEBUG("Starting fetching columnar statistics");
 
     auto allStatisticsOrError = WaitFor(context->GetClient()->GetColumnarStatistics(Paths, Options));
 
-    YT_LOG_DEBUG("Finished fetching columnar statistics");
+    YT_TLOG_DEBUG("Finished fetching columnar statistics");
 
     auto allStatistics = allStatisticsOrError.ValueOrThrow();
 
@@ -432,6 +497,7 @@ void TGetTableColumnarStatisticsCommand::DoExecute(ICommandContextPtr context)
                             })
                             .OptionalItem("chunk_row_count", statistics.ChunkRowCount)
                             .OptionalItem("legacy_chunk_row_count", statistics.LegacyChunkRowCount)
+                            .OptionalItem("read_size_estimate", statistics.ReadDataSizeEstimate)
                         .EndMap();
                 }
             });
@@ -446,7 +512,11 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
     registrar.Parameter("partition_mode", &TThis::PartitionMode)
         .Default(ETablePartitionMode::Unordered);
     registrar.Parameter("data_weight_per_partition", &TThis::DataWeightPerPartition)
-        .GreaterThan(0);
+        .GreaterThan(0)
+        .Default();
+    registrar.Parameter("compressed_data_size_per_partition", &TThis::CompressedDataSizePerPartition)
+        .GreaterThan(0)
+        .Default();
     registrar.Parameter("max_partition_count", &TThis::MaxPartitionCount)
         .GreaterThan(0)
         .Default();
@@ -454,6 +524,17 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("adjust_data_weight_per_partition", &TThis::AdjustDataWeightPerPartition)
         .Default(true);
+    registrar.Parameter("enable_cookies", &TThis::EnableCookies)
+        .Default(false);
+    registrar.Parameter("fetch_cookie_node_descriptors", &TThis::FetchCookieNodeDescriptors)
+        .Default(false);
+    registrar.Parameter("omit_inaccessible_rows", &TThis::OmitInaccessibleRows)
+        .Default(false);
+    registrar.Postprocessor([] (TThis* command) {
+        if (!command->DataWeightPerPartition && !command->CompressedDataSizePerPartition) {
+            THROW_ERROR_EXCEPTION("Must specify either \"data_weight_per_partition\" or \"compressed_data_size_per_partition\"");
+        }
+    });
 }
 
 void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
@@ -464,9 +545,14 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
 
     Options.PartitionMode = PartitionMode;
     Options.DataWeightPerPartition = DataWeightPerPartition;
+    Options.CompressedDataSizePerPartition = CompressedDataSizePerPartition;
     Options.MaxPartitionCount = MaxPartitionCount;
     Options.EnableKeyGuarantee = EnableKeyGuarantee;
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;
+    Options.EnableCookies = EnableCookies;
+    Options.FetchCookieNodeDescriptors = FetchCookieNodeDescriptors;
+
+    Options.OmitInaccessibleRows = OmitInaccessibleRows;
 
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
         .ValueOrThrow();
@@ -626,6 +712,13 @@ void TReshardTableCommand::Register(TRegistrar registrar)
         })
         .Default();
 
+    registrar.ParameterWithUniversalAccessor<std::vector<i64>>(
+        "cumulative_data_weights",
+        [] (TThis* command) -> auto& {
+            return command->Options.CumulativeDataWeights;
+        })
+        .Default();
+
     registrar.Postprocessor([] (TThis* command) {
         if (command->PivotKeys && command->TabletCount) {
             THROW_ERROR_EXCEPTION("Cannot specify both \"pivot_keys\" and \"tablet_count\"");
@@ -710,6 +803,20 @@ void TAlterTableCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<TConstrainedTableSchema>>(
+        "constrained_schema",
+        [] (TThis* command) -> auto& {
+            return command->Options.ConstrainedSchema;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TColumnNameToConstraintMap>>(
+        "constraints",
+        [] (TThis* command) -> auto& {
+            return command->Options.Constraints;
+        })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
         "dynamic",
         [] (TThis* command) -> auto& {
@@ -735,6 +842,13 @@ void TAlterTableCommand::Register(TRegistrar registrar)
         "replication_progress",
         [] (TThis* command) -> auto& {
             return command->Options.ReplicationProgress;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<TTimestamp>>(
+        "clip_timestamp",
+        [] (TThis* command) -> auto& {
+            return command->Options.ClipTimestamp;
         })
         .Optional(/*init*/ false);
 }
@@ -784,7 +898,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "execution_pool",
         [] (TThis* command) -> auto& {
             return command->Options.ExecutionPool;
@@ -846,17 +960,79 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<EOptimizationLevel>>(
+        "optimization_level",
+        [] (TThis* command) -> auto& {
+            return command->Options.OptimizationLevel;
+        })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<TVersionedReadOptions>(
         "versioned_read_options",
         [] (TThis* command) -> auto& {
             return command->Options.VersionedReadOptions;
         })
         .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
         "use_lookup_cache",
         [] (TThis* command) -> auto& {
             return command->Options.UseLookupCache;
         })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "rowset_processing_batch_size",
+        [] (TThis* command) -> auto& {
+            return command->Options.RowsetProcessingBatchSize;
+        })
+        .GreaterThan(0)
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "write_rowset_size",
+        [] (TThis* command) -> auto& {
+            return command->Options.WriteRowsetSize;
+        })
+        .GreaterThan(0)
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<i64>>(
+        "max_join_batch_size",
+        [] (TThis* command) -> auto& {
+            return command->Options.MaxJoinBatchSize;
+        })
+        .GreaterThan(0)
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "use_order_by_in_join_subqueries",
+        [] (TThis* command) -> auto& {
+            return command->Options.UseOrderByInJoinSubqueries;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "enable_parallelize_unordered_group_by",
+        [] (TThis* command) -> auto& {
+            return command->Options.EnableParallelizeUnorderedGroupBy;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<EStatisticsAggregation>>(
+        "statistics_aggregation",
+        [] (TThis* command) -> auto& {
+            return command->Options.StatisticsAggregation;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<int>>(
+        "hyper_log_log_precision",
+        [] (TThis* command) -> auto& {
+            return command->Options.HyperLogLogPrecision;
+        })
+        .GreaterThan(6)
+        .LessThan(15)
         .Optional(/*init*/ false);
 }
 
@@ -871,15 +1047,17 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
 
     if (PlaceholderValues) {
         Options.PlaceholderValues = ConvertToYsonString(PlaceholderValues);
+    }
 
-        YT_LOG_DEBUG("Query: %v, Timestamp: %v, PlaceholderValues: %v",
-            Query,
-            Options.Timestamp,
-            Options.PlaceholderValues);
-    } else {
-        YT_LOG_DEBUG("Query: %v, Timestamp: %v",
-            Query,
-            Options.Timestamp);
+    YT_TLOG_DEBUG("Executing query")
+        .With("Query", Query)
+        .With("Timestamp", Options.Timestamp)
+        .WithIf(static_cast<bool>(PlaceholderValues), "PlaceholderValues", Options.PlaceholderValues);
+
+    auto format = context->GetOutputFormat();
+    // Allows to display simple types like `timestamp` correctly in UI (YT-16386).
+    if (format.GetType() == EFormatType::WebJson) {
+        Options.UseOriginalTableSchema = true;
     }
 
     auto result = WaitFor(clientBase->SelectRows(Query, Options))
@@ -888,7 +1066,8 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
     const auto& rowset = result.Rowset;
     const auto& statistics = result.Statistics;
 
-    YT_LOG_INFO("Query result statistics (%v)", statistics);
+    YT_TLOG_INFO("Query result statistics")
+        .With("Statistics", statistics);
 
     if (EnableStatistics) {
         ProduceResponseParameters(context, [&] (NYson::IYsonConsumer* consumer) {
@@ -896,7 +1075,6 @@ void TSelectRowsCommand::DoExecute(ICommandContextPtr context)
         });
     }
 
-    auto format = context->GetOutputFormat();
     auto output = context->Request().OutputStream;
     auto writer = CreateSchemafulWriterForFormat(format, rowset->GetSchema(), output);
 
@@ -1089,6 +1267,13 @@ void TLookupRowsCommand::Register(TRegistrar registrar)
             return command->Options.VersionedReadOptions;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+        "execution_pool",
+        [] (TThis* command) -> auto& {
+            return command->Options.ExecutionPool;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
@@ -1106,11 +1291,11 @@ void TLookupRowsCommand::DoExecute(ICommandContextPtr context)
 
     if (Path.GetColumns()) {
         THROW_ERROR_EXCEPTION("Columns cannot be specified with table path, use \"column_names\" instead")
-            << TErrorAttribute("rich_ypath", Path);
+            .With("rich_ypath", Path);
     }
     if (Path.HasNontrivialRanges()) {
         THROW_ERROR_EXCEPTION("Ranges cannot be specified")
-            << TErrorAttribute("rich_ypath", Path);
+            .With("rich_ypath", Path);
     }
 
     if (Versioned && Options.VersionedReadOptions.ReadMode != NTableClient::EVersionedIOMode::Default) {
@@ -1252,7 +1437,7 @@ void TPullRowsCommand::DoExecute(ICommandContextPtr context)
 {
     if (Path.HasNontrivialRanges()) {
         THROW_ERROR_EXCEPTION("Ranges cannot be specified")
-            << TErrorAttribute("rich_ypath", Path);
+            .With("rich_ypath", Path);
     }
 
     auto format = context->GetOutputFormat();
@@ -1600,6 +1785,13 @@ void TAlterTableReplicaCommand::Register(TRegistrar registrar)
         "replica_path",
         [] (TThis* command) -> auto& {
             return command->Options.ReplicaPath;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "force",
+        [] (TThis* command) -> auto& {
+            return command->Options.Force;
         })
         .Optional(/*init*/ false);
 

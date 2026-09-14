@@ -1,0 +1,150 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "utc0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "utcZ";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "gmt0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "gmtZ";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "lnd0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "lndZ";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "msk0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "mskZ";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "los0";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ];
+                            [
+                                "losZ";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "DataType";
+                                        "String"
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        [
+                            "2025-12-04 23:24:54+0000"
+                        ];
+                        [
+                            "2025-12-04 23:24:54+00:00"
+                        ];
+                        [
+                            "2025-12-04 23:24:54+0000"
+                        ];
+                        [
+                            "2025-12-04 23:24:54+00:00"
+                        ];
+                        [
+                            "2025-12-04 23:24:54+0000"
+                        ];
+                        [
+                            "2025-12-04 23:24:54+00:00"
+                        ];
+                        [
+                            "2025-12-04 23:24:54+0300"
+                        ];
+                        [
+                            "2025-12-04 23:24:54+03:00"
+                        ];
+                        [
+                            "2025-12-04 23:24:54-0800"
+                        ];
+                        [
+                            "2025-12-04 23:24:54-08:00"
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

@@ -3,6 +3,7 @@
 #include "client.h"
 #include "dynamic_table_transaction.h"
 #include "queue_transaction.h"
+#include "prerequisite.h"
 
 #include <yt/yt/client/table_client/unversioned_row.h>
 #include <yt/yt/client/table_client/versioned_row.h>
@@ -60,19 +61,16 @@ struct TTransactionCommitOptions
     //! Cell ids of additional 2PC participants.
     //! Used to implement cross-cluster commit via RPC proxy.
     std::vector<NObjectClient::TCellId> AdditionalParticipantCellIds;
+    std::vector<NTransactionClient::TTransactionSignature> ExpectedPrepareSignatures;
 
     //! If |true| then any participant (including alien cells) can become a coordinator.
     //! If |false| then coordinator will be chosen on the primary cell of the cluster
     //! that has been specified when starting transaction.
     bool AllowAlienCoordinator = false;
 
-    //! All strongly ordered transactions are ordered by commit timestamp.
-    bool StronglyOrdered = false;
-};
-
-struct TTransactionPingOptions
-{
-    bool EnableRetries = false;
+    //! Transactions that have intersecting ordering tags are committed in the order of
+    //! their commit timestamps.
+    TStrongOrderingTagsMap StrongOrderingTags = {};
 };
 
 struct TTransactionCommitResult
@@ -87,16 +85,14 @@ struct TTransactionCommitResult
 };
 
 struct TTransactionAbortOptions
-    : public TMutatingOptions
-    , public TPrerequisiteOptions
+    : public TPrerequisiteAbortOptions
     , public TTransactionalOptions
-{
-    bool Force = false;
-};
+{ };
 
 struct TTransactionFlushResult
 {
     std::vector<NElection::TCellId> ParticipantCellIds;
+    std::vector<NTransactionClient::TTransactionSignature> ExpectedPrepareSignatures;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -113,43 +109,28 @@ struct TTransactionFlushResult
  */
 struct ITransaction
     : public virtual IClientBase
+    , public virtual IPrerequisite
     , public virtual IDynamicTableTransaction
     , public virtual IQueueTransaction
 {
-    virtual IClientPtr GetClient() const = 0;
-    virtual NTransactionClient::ETransactionType GetType() const = 0;
-    virtual NTransactionClient::TTransactionId GetId() const = 0;
-    virtual NTransactionClient::TTimestamp GetStartTimestamp() const = 0;
-    virtual NTransactionClient::EAtomicity GetAtomicity() const = 0;
-    virtual NTransactionClient::EDurability GetDurability() const = 0;
-    virtual TDuration GetTimeout() const = 0;
-
-    virtual TFuture<void> Ping(const NApi::TTransactionPingOptions& options = {}) = 0;
-    virtual TFuture<TTransactionCommitResult> Commit(const TTransactionCommitOptions& options = {}) = 0;
-    virtual TFuture<void> Abort(const TTransactionAbortOptions& options = {}) = 0;
-    virtual void Detach() = 0;
-    virtual TFuture<TTransactionFlushResult> Flush() = 0;
-    virtual void RegisterAlienTransaction(const ITransactionPtr& transaction) = 0;
-
     using TCommittedHandlerSignature = void();
     using TCommittedHandler = TCallback<TCommittedHandlerSignature>;
     DECLARE_INTERFACE_SIGNAL(TCommittedHandlerSignature, Committed);
 
-    using TAbortedHandlerSignature = void(const TError& error);
-    using TAbortedHandler = TCallback<TAbortedHandlerSignature>;
-    DECLARE_INTERFACE_SIGNAL(TAbortedHandlerSignature, Aborted);
+    virtual NTransactionClient::ETransactionType GetType() const = 0;
+    virtual NTransactionClient::TTimestamp GetStartTimestamp() const = 0;
+    virtual NTransactionClient::EAtomicity GetAtomicity() const = 0;
+    virtual NTransactionClient::EDurability GetDurability() const = 0;
 
-    // Verified dynamic casts to a more specific interface.
+    virtual TFuture<TTransactionCommitResult> Commit(const TTransactionCommitOptions& options = {}) = 0;
 
-    template <class TDerivedTransaction>
-    TDerivedTransaction* As();
-    template <class TDerivedTransaction>
-    TDerivedTransaction* TryAs();
+    virtual void Detach() = 0;
 
-    template <class TDerivedTransaction>
-    const TDerivedTransaction* As() const;
-    template <class TDerivedTransaction>
-    const TDerivedTransaction* TryAs() const;
+    virtual TFuture<void> Abort(const TPrerequisiteAbortOptions& options = {}) override;
+    virtual TFuture<void> Abort(const TTransactionAbortOptions& options) = 0;
+
+    virtual TFuture<TTransactionFlushResult> Flush() = 0;
+    virtual void RegisterAlienTransaction(const ITransactionPtr& transaction) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(ITransaction)
@@ -182,7 +163,3 @@ TFuture<ITransactionPtr> StartAlienTransaction(
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-
-#define TRANSACTION_INL_H_
-#include "transaction-inl.h"
-#undef TRANSACTION_INL_H_

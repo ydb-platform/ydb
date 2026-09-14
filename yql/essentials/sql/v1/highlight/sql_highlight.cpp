@@ -1,0 +1,316 @@
+#include "sql_highlight.h"
+
+#include "data_language_json.h"
+
+#include <yql/essentials/sql/v1/lexer/regex/regex.h>
+
+#include <contrib/libs/re2/re2/re2.h>
+
+#include <library/cpp/resource/resource.h>
+
+#include <util/generic/algorithm.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/stream/output.h>
+#include <util/string/builder.h>
+#include <util/string/join.h>
+
+namespace NSQLHighlight {
+
+using NSQLTranslationV1::Merged;
+using NSQLTranslationV1::TRegexPattern;
+
+struct TSyntax {
+    const NSQLReflect::TLexerGrammar* Grammar;
+    THashMap<TString, TString> RegexesDefault;
+    THashMap<TString, TString> RegexesANSI;
+
+    TString Concat(const TVector<TStringBuf>& names) {
+        TString concat;
+        for (const auto& name : names) {
+            concat += Get(name);
+        }
+        return concat;
+    }
+
+    [[nodiscard]] TString Get(const TStringBuf name, bool ansi = false) const {
+        if (Grammar->PunctuationNames.contains(name)) {
+            return RE2::QuoteMeta(Grammar->BlockByName.at(name));
+        }
+        if (ansi) {
+            return RegexesANSI.at(name);
+        }
+        return RegexesDefault.at(name);
+    }
+};
+
+NSQLTranslationV1::TRegexPattern CaseInsensitive(TStringBuf text) {
+    return {
+        .Body = TString(text),
+        .IsCaseInsensitive = true,
+    };
+}
+
+template <EUnitKind K>
+TUnit MakeUnit(TSyntax& syntax);
+
+template <>
+TUnit MakeUnit<EUnitKind::Keyword>(TSyntax& s) {
+    using NSQLReflect::TLexerGrammar;
+
+    TUnit unit = {.Kind = EUnitKind::Keyword};
+
+    for (const auto& keyword : s.Grammar->KeywordNames) {
+        const TStringBuf content = TLexerGrammar::KeywordBlockByName(keyword);
+        unit.Patterns.push_back(CaseInsensitive(content));
+    }
+
+    for (const TString& type : LoadHints()) {
+        unit.Patterns.emplace_back(CaseInsensitive(type));
+    }
+
+    unit.Patterns = {Merged(std::move(unit.Patterns))};
+    return unit;
+}
+
+template <>
+TUnit MakeUnit<EUnitKind::Punctuation>(TSyntax& s) {
+    TUnit unit = {.Kind = EUnitKind::Punctuation};
+    for (const auto& name : s.Grammar->PunctuationNames) {
+        const TString content = s.Get(name);
+        unit.Patterns.push_back({content});
+    }
+
+    unit.Patterns = {Merged(std::move(unit.Patterns))};
+    unit.IsPlain = false;
+    unit.IsCodeGenExcluded = true;
+    return unit;
+}
+
+template <>
+TUnit MakeUnit<EUnitKind::QuotedIdentifier>(TSyntax& s) {
+    return {
+        .Kind = EUnitKind::QuotedIdentifier,
+        .RangePatterns = {
+            {.BeginPlain = R"(`)", .EndPlain = R"(`)", .EscapeRegex = R"re(\\.)re"},
+        },
+        .Patterns = {
+            {.Body = s.Get("ID_QUOTED")},
+            {.Body = s.Concat({"COMMAT", "ID_PLAIN"})},
+        },
+        .IsPlain = false,
+    };
+}
+
+template <>
+TUnit MakeUnit<EUnitKind::BindParameterIdentifier>(TSyntax& s) {
+    return {
+        .Kind = EUnitKind::BindParameterIdentifier,
+        .Patterns = {
+            {.Body = s.Concat({"DOLLAR", "ID_PLAIN"})},
+        },
+        .IsPlain = false,
+    };
+}
+
+template <>
+TUnit MakeUnit<EUnitKind::OptionIdentifier>(TSyntax& s) {
+    return {
+        .Kind = EUnitKind::OptionIdentifier,
+        .Patterns = {
+            {
+                .Body = TStringBuilder()
+                        << s.Get("ID_PLAIN") << "(\\." << s.Get("ID_PLAIN") << ")?",
+                .Before = TStringBuilder() << "PRAGMA" << s.Get("WS"),
+                .IsCaseInsensitive = true,
+            },
+        },
+    };
+}
+
+template <>
+TUnit MakeUnit<EUnitKind::TypeIdentifier>(TSyntax& s) {
+    TVector<NSQLTranslationV1::TRegexPattern> types;
+    for (const TString& type : LoadTypes()) {
+        types.emplace_back(CaseInsensitive(type));
+    }
+
+    return {
+        .Kind = EUnitKind::TypeIdentifier,
+        .Patterns = {
+            {.Body = s.Get("ID_PLAIN"), .After = s.Get("LESS")},
+            {.Body = "DECIMAL", .IsCaseInsensitive = true},
+            {Merged(std::move(types))},
+        },
+    };
+}
+
+TUnit MakeUnitUDF(TSyntax& s) {
+    return {
+        .Kind = EUnitKind::FunctionIdentifier,
+        .Patterns = {
+            {.Body = s.Concat({"ID_PLAIN", "NAMESPACE", "ID_PLAIN"})},
+        },
+    };
+}
+
+TUnit MakeUnitBuiltin(TSyntax& s) {
+    return {
+        .Kind = EUnitKind::FunctionIdentifier,
+        .Patterns = {
+            {.Body = s.Get("ID_PLAIN"), .After = s.Get("LPAREN")},
+        },
+    };
+}
+
+template <>
+TUnit MakeUnit<EUnitKind::Identifier>(TSyntax& s) {
+    return {
+        .Kind = EUnitKind::Identifier,
+        .Patterns = {
+            {.Body = s.Get("ID_PLAIN")},
+        },
+    };
+}
+
+template <>
+TUnit MakeUnit<EUnitKind::Literal>(TSyntax& s) {
+    return {
+        .Kind = EUnitKind::Literal,
+        .Patterns = {
+            {.Body = s.Get("REAL")},
+            {.Body = s.Get("INTEGER_VALUE")},
+            {.Body = s.Get("DIGITS")},
+            {.Body = "TRUE", .IsCaseInsensitive = true},
+            {.Body = "FALSE", .IsCaseInsensitive = true},
+        },
+    };
+}
+
+template <>
+TUnit MakeUnit<EUnitKind::StringLiteral>(TSyntax& s) {
+    return {
+        .Kind = EUnitKind::StringLiteral,
+        .RangePatterns = {
+            {.BeginPlain = R"(')", .EndPlain = R"(')", .EscapeRegex = R"re(\\.)re", .EscapeRegexANSI = R"re('')re"},
+            {.BeginPlain = R"(")", .EndPlain = R"(")", .EscapeRegex = R"re(\\.)re", .EscapeRegexANSI = R"re("")re"},
+            {.BeginPlain = TRangePattern::EmbeddedPythonBegin, .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},
+            {.BeginPlain = TRangePattern::EmbeddedJavaScriptBegin, .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},
+            {.BeginPlain = R"(@@)", .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},
+        },
+        .Patterns = {{.Body = s.Get("STRING_VALUE")}},
+        .PatternsANSI = TVector<TRegexPattern>{
+            TRegexPattern{.Body = s.Get("STRING_VALUE", /* ansi = */ true)},
+        },
+        .IsPlain = false,
+    };
+}
+
+template <>
+TUnit MakeUnit<EUnitKind::Comment>(TSyntax& s) {
+    return {
+        .Kind = EUnitKind::Comment,
+        .RangePatterns = {{.BeginPlain = R"(/*)", .EndPlain = R"(*/)"}},
+        .Patterns = {{.Body = s.Get("COMMENT")}},
+        .PatternsANSI = Nothing(),
+        .IsPlain = false,
+    };
+}
+
+template <>
+TUnit MakeUnit<EUnitKind::Whitespace>(TSyntax& s) {
+    return {
+        .Kind = EUnitKind::Whitespace,
+        .Patterns = {
+            {.Body = s.Get("WS")},
+        },
+        .IsPlain = false,
+        .IsCodeGenExcluded = true,
+    };
+}
+
+TSyntax MakeSyntax(const NSQLReflect::TLexerGrammar& grammar) {
+    using NSQLTranslationV1::MakeRegexByOtherName;
+
+    TSyntax syntax;
+    syntax.Grammar = &grammar;
+    for (auto& [k, v] : MakeRegexByOtherName(*syntax.Grammar, /* ansi = */ false)) {
+        syntax.RegexesDefault.emplace(std::move(k), std::move(v));
+    }
+    for (auto& [k, v] : MakeRegexByOtherName(*syntax.Grammar, /* ansi = */ true)) {
+        syntax.RegexesANSI.emplace(std::move(k), std::move(v));
+    }
+    return syntax;
+}
+
+THighlighting MakeHighlighting() {
+    return MakeHighlighting(NSQLReflect::LoadLexerGrammar());
+}
+
+THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar) {
+    TSyntax s = MakeSyntax(grammar);
+
+    THighlighting h;
+    h.Units.emplace_back(MakeUnit<EUnitKind::Comment>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::Punctuation>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::OptionIdentifier>(s));
+    h.Units.emplace_back(MakeUnitUDF(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::TypeIdentifier>(s));
+    h.Units.emplace_back(MakeUnitBuiltin(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::Literal>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::Keyword>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::QuotedIdentifier>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::BindParameterIdentifier>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::Identifier>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::StringLiteral>(s));
+    h.Units.emplace_back(MakeUnit<EUnitKind::Whitespace>(s));
+
+    return h;
+}
+
+} // namespace NSQLHighlight
+
+// TODO(YQL-21521): use GENERATE_ENUM_SERIALIZATION
+Y_DECLARE_OUT_SPEC(, NSQLHighlight::EUnitKind, out, value) {
+    switch (value) {
+        case NSQLHighlight::EUnitKind::Keyword:
+            out << "keyword";
+            break;
+        case NSQLHighlight::EUnitKind::Punctuation:
+            out << "punctuation";
+            break;
+        case NSQLHighlight::EUnitKind::QuotedIdentifier:
+            out << "quoted-identifier";
+            break;
+        case NSQLHighlight::EUnitKind::BindParameterIdentifier:
+            out << "bind-parameter-identifier";
+            break;
+        case NSQLHighlight::EUnitKind::OptionIdentifier:
+            out << "option-identifier";
+            break;
+        case NSQLHighlight::EUnitKind::TypeIdentifier:
+            out << "type-identifier";
+            break;
+        case NSQLHighlight::EUnitKind::FunctionIdentifier:
+            out << "function-identifier";
+            break;
+        case NSQLHighlight::EUnitKind::Identifier:
+            out << "identifier";
+            break;
+        case NSQLHighlight::EUnitKind::Literal:
+            out << "literal";
+            break;
+        case NSQLHighlight::EUnitKind::StringLiteral:
+            out << "string-literal";
+            break;
+        case NSQLHighlight::EUnitKind::Comment:
+            out << "comment";
+            break;
+        case NSQLHighlight::EUnitKind::Whitespace:
+            out << "ws";
+            break;
+        case NSQLHighlight::EUnitKind::Error:
+            out << "error";
+            break;
+    }
+}

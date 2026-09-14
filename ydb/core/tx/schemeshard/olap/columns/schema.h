@@ -8,11 +8,10 @@ private:
     using TBase = TOlapColumnBase;
     YDB_READONLY(ui32, Id, Max<ui32>());
 public:
-    TOlapColumnSchema(const TOlapColumnBase& base, const ui32 id, const std::optional<ui32> columnFamilyId = {})
+    TOlapColumnSchema(const TOlapColumnBase& base, const ui32 id)
         : TBase(base)
         , Id(id)
     {
-        ColumnFamilyId = columnFamilyId;
     }
 
     TOlapColumnSchema(const std::optional<ui32>& keyOrder)
@@ -53,11 +52,11 @@ public:
 
     const TOlapColumnSchema* GetByIdVerified(const ui32 id) const noexcept;
 
-    bool ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate, const TOlapColumnFamiliesDescription& columnFamilies, IErrorCollector& errors,
+    bool ApplyUpdate(const TOlapColumnsUpdate& schemaUpdate, IErrorCollector& errors,
         ui32& nextEntityId);
 
     void Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
     void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
-    bool Validate(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
+    bool ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
 };
 }

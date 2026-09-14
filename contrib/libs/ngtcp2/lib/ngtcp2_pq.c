@@ -30,11 +30,10 @@
 #include "ngtcp2_macro.h"
 
 void ngtcp2_pq_init(ngtcp2_pq *pq, ngtcp2_pq_less less, const ngtcp2_mem *mem) {
-  pq->q = NULL;
-  pq->mem = mem;
-  pq->length = 0;
-  pq->capacity = 0;
-  pq->less = less;
+  *pq = (ngtcp2_pq){
+    .mem = mem,
+    .less = less,
+  };
 }
 
 void ngtcp2_pq_free(ngtcp2_pq *pq) {
@@ -74,7 +73,7 @@ int ngtcp2_pq_push(ngtcp2_pq *pq, ngtcp2_pq_entry *item) {
     void *nq;
     size_t ncapacity;
 
-    ncapacity = ngtcp2_max_size(4, pq->capacity * 2);
+    ncapacity = ngtcp2_max(4, pq->capacity * 2);
 
     nq =
       ngtcp2_mem_realloc(pq->mem, pq->q, ncapacity * sizeof(ngtcp2_pq_entry *));
@@ -161,19 +160,3 @@ void ngtcp2_pq_remove(ngtcp2_pq *pq, ngtcp2_pq_entry *item) {
 int ngtcp2_pq_empty(const ngtcp2_pq *pq) { return pq->length == 0; }
 
 size_t ngtcp2_pq_size(const ngtcp2_pq *pq) { return pq->length; }
-
-int ngtcp2_pq_each(const ngtcp2_pq *pq, ngtcp2_pq_item_cb fun, void *arg) {
-  size_t i;
-
-  if (pq->length == 0) {
-    return 0;
-  }
-
-  for (i = 0; i < pq->length; ++i) {
-    if ((*fun)(pq->q[i], arg)) {
-      return 1;
-    }
-  }
-
-  return 0;
-}

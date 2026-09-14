@@ -97,8 +97,11 @@ if TYPE_CHECKING:
 
 warnings.warn(
     "pkg_resources is deprecated as an API. "
-    "See https://setuptools.pypa.io/en/latest/pkg_resources.html",
-    DeprecationWarning,
+    "See https://setuptools.pypa.io/en/latest/pkg_resources.html. "
+    "The pkg_resources package is slated for removal as early as "
+    "2025-11-30. Refrain from using this package or pin to "
+    "Setuptools<81.",
+    UserWarning,
     stacklevel=2,
 )
 
@@ -128,7 +131,9 @@ class _ZipLoaderModule(Protocol):
     __loader__: zipimport.zipimporter
 
 
-_PEP440_FALLBACK = re.compile(r"^v?(?P<safe>(?:[0-9]+!)?[0-9]+(?:\.[0-9]+)*)", re.I)
+_PEP440_FALLBACK = re.compile(
+    r"^v?(?P<safe>(?:[0-9]+!)?[0-9]+(?:\.[0-9]+)*)", re.IGNORECASE
+)
 
 
 class PEP440Warning(RuntimeWarning):
@@ -440,11 +445,7 @@ def _macos_arch(machine):
 
 
 def get_build_platform():
-    """Return this platform's string for platform-specific distributions
-
-    XXX Currently this is the same as ``distutils.util.get_platform()``, but it
-    needs some hacks for Linux and macOS.
-    """
+    """Return this platform's string for platform-specific distributions"""
     from sysconfig import get_platform
 
     plat = get_platform()
@@ -708,14 +709,19 @@ class WorkingSet:
         If there is no active distribution for the requested project, ``None``
         is returned.
         """
-        dist = self.by_key.get(req.key)
+        dist: Distribution | None = None
 
-        if dist is None:
-            canonical_key = self.normalized_to_canonical_keys.get(req.key)
+        candidates = (
+            req.key,
+            self.normalized_to_canonical_keys.get(req.key),
+            safe_name(req.key).replace(".", "-"),
+        )
 
-            if canonical_key is not None:
-                req.key = canonical_key
-                dist = self.by_key.get(canonical_key)
+        for candidate in filter(None, candidates):
+            dist = self.by_key.get(candidate)
+            if dist:
+                req.key = candidate
+                break
 
         if dist is not None and dist not in req:
             # XXX add more info

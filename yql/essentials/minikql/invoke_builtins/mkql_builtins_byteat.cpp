@@ -1,23 +1,21 @@
-#include "mkql_builtins_impl.h"  // Y_IGNORE 
+#include "mkql_builtins_impl.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <typename TInput, typename TOutput, bool IsOptional>
 struct TByteAtArgs {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput, typename TOutput, bool IsOptional>
-const TFunctionParamMetadata TByteAtArgs<TInput, TOutput, IsOptional>::Value[4] = {
-    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
-    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { NUdf::TDataType<ui32>::Id, 0 },
-    { 0, 0 }
-};
-
+const std::array<TFunctionParamMetadata, 4> TByteAtArgs<TInput, TOutput, IsOptional>::Value = {{{TOutput::Id, TFunctionParamMetadata::FlagIsNullable},
+                                                                                                {TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+                                                                                                {NUdf::TDataType<ui32>::Id, 0},
+                                                                                                {0, 0}}};
 
 template <typename TInput, typename TOutput>
 struct TByteAt {
@@ -89,7 +87,7 @@ struct TByteAt {
             const auto pos = BinaryOperator::CreateAdd(index, skip, "pos", block);
 
             const auto half = CastInst::Create(Instruction::Trunc, left, Type::getInt64Ty(context), "half", block);
-            const auto ptr = CastInst::Create(Instruction::IntToPtr, half, PointerType::getUnqual(type) , "ptr", block);
+            const auto ptr = CastInst::Create(Instruction::IntToPtr, half, PointerType::getUnqual(type), "ptr", block);
 
             const auto bytePtr = GetElementPtrInst::CreateInBounds(type, ptr, {pos}, "bptr", block);
             const auto got = new LoadInst(type, bytePtr, "got", block);
@@ -104,19 +102,18 @@ struct TByteAt {
 #endif
 };
 
-}
+} // namespace
 
 void RegisterByteAt(IBuiltinFunctionRegistry& registry) {
     const auto name = "ByteAt";
     RegisterFunctionImpl<TByteAt<NUdf::TDataType<char*>, NUdf::TDataType<ui8>>,
-        TByteAtArgs<NUdf::TDataType<char*>, NUdf::TDataType<ui8>, false>, TBinaryWrap<false, false>>(registry, name);
+                         TByteAtArgs<NUdf::TDataType<char*>, NUdf::TDataType<ui8>, false>, TBinaryWrap<false, false>>(registry, name);
     RegisterFunctionImpl<TByteAt<NUdf::TDataType<char*>, NUdf::TDataType<ui8>>,
-        TByteAtArgs<NUdf::TDataType<char*>, NUdf::TDataType<ui8>, true>, TBinaryWrap<true, false>>(registry, name);
+                         TByteAtArgs<NUdf::TDataType<char*>, NUdf::TDataType<ui8>, true>, TBinaryWrap<true, false>>(registry, name);
     RegisterFunctionImpl<TByteAt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<ui8>>,
-        TByteAtArgs<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<ui8>, false>, TBinaryWrap<false, false>>(registry, name);
+                         TByteAtArgs<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<ui8>, false>, TBinaryWrap<false, false>>(registry, name);
     RegisterFunctionImpl<TByteAt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<ui8>>,
-        TByteAtArgs<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<ui8>, true>, TBinaryWrap<true, false>>(registry, name);
+                         TByteAtArgs<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<ui8>, true>, TBinaryWrap<true, false>>(registry, name);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

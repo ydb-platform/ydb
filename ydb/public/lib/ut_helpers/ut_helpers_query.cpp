@@ -110,4 +110,26 @@ void EnsureSessionClosed(NYdbGrpc::IStreamRequestCtrl::TPtr p, int expected, boo
     promise.GetFuture().Wait();
 }
 
+void EnsureSessionClosedWithHint(NYdbGrpc::IStreamRequestCtrl::TPtr p, Ydb::StatusIds::StatusCode expectedStatus,
+    Ydb::Query::SessionState::SessionHintCase expectedHint, bool& allDoneOk)
+{
+    auto* processor = dynamic_cast<NYdbGrpc::IStreamRequestReadProcessor<Ydb::Query::SessionState>*>(p.Get());
+    UNIT_ASSERT(processor);
+
+    auto promise = NThreading::NewPromise<void>();
+    auto resp = std::make_shared<Ydb::Query::SessionState>();
+    processor->Read(resp.get(), [&allDoneOk, resp, promise, expectedStatus, expectedHint](TGrpcStatus grpcStatus) mutable {
+        UNIT_ASSERT(grpcStatus.GRpcStatusCode == grpc::StatusCode::OK);
+        allDoneOk &= (resp->status() == expectedStatus);
+        allDoneOk &= (resp->session_hint_case() == expectedHint);
+        if (!allDoneOk) {
+            Cerr << "Expected status: " << static_cast<int>(expectedStatus)
+                 << ", hint case: " << static_cast<int>(expectedHint)
+                 << ", got response: " << resp->DebugString() << Endl;
+        }
+        promise.SetValue();
+    });
+    promise.GetFuture().Wait();
+}
+
 }

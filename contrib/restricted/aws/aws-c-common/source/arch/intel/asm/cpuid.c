@@ -27,3 +27,14 @@ void aws_run_cpuid(uint32_t eax, uint32_t ecx, uint32_t *abcd) {
     abcd[2] = ecx;
     abcd[3] = edx;
 }
+
+uint64_t aws_run_xgetbv(uint32_t xcr) {
+    /* NOTE: we could have used the _xgetbv() intrinsic in <immintrin.h>, but it's missing from GCC < 9.0:
+     * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=71659 */
+
+    /* xgetbv writes high and low of 64bit value to EDX:EAX */
+    uint32_t xcrhigh;
+    uint32_t xcrlow;
+    __asm__ __volatile__("xgetbv" : "=a"(xcrlow), "=d"(xcrhigh) : "c"(xcr));
+    return (((uint64_t)xcrhigh) << 32) | xcrlow;
+}

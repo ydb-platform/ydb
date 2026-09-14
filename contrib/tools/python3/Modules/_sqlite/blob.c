@@ -1,5 +1,10 @@
+#ifndef Py_BUILD_CORE_BUILTIN
+#  define Py_BUILD_CORE_MODULE 1
+#endif
+
 #include "blob.h"
 #include "util.h"
+#include "pycore_weakref.h"    // FT_CLEAR_WEAKREFS()
 
 #define clinic_state() (pysqlite_get_state_by_type(Py_TYPE(self)))
 #include "clinic/blob.c.h"
@@ -47,9 +52,7 @@ blob_dealloc(pysqlite_Blob *self)
 
     close_blob(self);
 
-    if (self->in_weakreflist != NULL) {
-        PyObject_ClearWeakRefs((PyObject*)self);
-    }
+    FT_CLEAR_WEAKREFS((PyObject*)self, self->in_weakreflist);
     tp->tp_clear((PyObject *)self);
     tp->tp_free(self);
     Py_DECREF(tp);
@@ -97,10 +100,12 @@ pysqlite_close_all_blobs(pysqlite_Connection *self)
 {
     for (int i = 0; i < PyList_GET_SIZE(self->blobs); i++) {
         PyObject *weakref = PyList_GET_ITEM(self->blobs, i);
-        PyObject *blob = PyWeakref_GetObject(weakref);
-        if (!Py_IsNone(blob)) {
-            close_blob((pysqlite_Blob *)blob);
+        PyObject *blob;
+        if (!PyWeakref_GetRef(weakref, &blob)) {
+            continue;
         }
+        close_blob((pysqlite_Blob *)blob);
+        Py_DECREF(blob);
     }
 }
 
@@ -108,14 +113,6 @@ static void
 blob_seterror(pysqlite_Blob *self, int rc)
 {
     assert(self->connection != NULL);
-#if SQLITE_VERSION_NUMBER < 3008008
-    // SQLite pre 3.8.8 does not set this blob error on the connection
-    if (rc == SQLITE_ABORT) {
-        PyErr_SetString(self->connection->OperationalError,
-                        "Cannot operate on an expired blob handle");
-        return;
-    }
-#endif
     _pysqlite_seterror(self->connection->state, self->connection->db);
 }
 
@@ -170,14 +167,14 @@ _sqlite3.Blob.read as blob_read
 
 Read data at the current offset position.
 
-If the end of the blob is reached, the data up to end of file will be returned.
-When length is not specified, or is negative, Blob.read() will read until the
-end of the blob.
+If the end of the blob is reached, the data up to end of file will
+be returned.  When length is not specified, or is negative,
+Blob.read() will read until the end of the blob.
 [clinic start generated code]*/
 
 static PyObject *
 blob_read_impl(pysqlite_Blob *self, int length)
-/*[clinic end generated code: output=1fc99b2541360dde input=f2e4aa4378837250]*/
+/*[clinic end generated code: output=1fc99b2541360dde input=6b745ad37720e556]*/
 {
     if (!check_blob(self)) {
         return NULL;
@@ -237,13 +234,13 @@ _sqlite3.Blob.write as blob_write
 
 Write data at the current offset.
 
-This function cannot change the blob length.  Writing beyond the end of the
-blob will result in an exception being raised.
+This function cannot change the blob length.  Writing beyond the end
+of the blob will result in an exception being raised.
 [clinic start generated code]*/
 
 static PyObject *
 blob_write_impl(pysqlite_Blob *self, Py_buffer *data)
-/*[clinic end generated code: output=b34cf22601b570b2 input=a84712f24a028e6d]*/
+/*[clinic end generated code: output=b34cf22601b570b2 input=0d372cb0240a5d49]*/
 {
     if (!check_blob(self)) {
         return NULL;
@@ -267,14 +264,15 @@ _sqlite3.Blob.seek as blob_seek
 
 Set the current access position to offset.
 
-The origin argument defaults to os.SEEK_SET (absolute blob positioning).
-Other values for origin are os.SEEK_CUR (seek relative to the current position)
-and os.SEEK_END (seek relative to the blob's end).
+The origin argument defaults to os.SEEK_SET (absolute blob
+positioning).  Other values for origin are os.SEEK_CUR (seek
+relative to the current position) and os.SEEK_END (seek relative to
+the blob's end).
 [clinic start generated code]*/
 
 static PyObject *
 blob_seek_impl(pysqlite_Blob *self, int offset, int origin)
-/*[clinic end generated code: output=854c5a0e208547a5 input=5da9a07e55fe6bb6]*/
+/*[clinic end generated code: output=854c5a0e208547a5 input=84aea1b6b48607dd]*/
 {
     if (!check_blob(self)) {
         return NULL;
@@ -431,6 +429,10 @@ subscript_slice(pysqlite_Blob *self, PyObject *item)
         return NULL;
     }
 
+    if (len == 0) {
+        return PyBytes_FromStringAndSize(NULL, 0);
+    }
+
     if (step == 1) {
         return read_multiple(self, len, start);
     }
@@ -515,21 +517,25 @@ ass_subscript_slice(pysqlite_Blob *self, PyObject *item, PyObject *value)
         return -1;
     }
 
-    if (len == 0) {
-        return 0;
-    }
-
     Py_buffer vbuf;
     if (PyObject_GetBuffer(value, &vbuf, PyBUF_SIMPLE) < 0) {
         return -1;
     }
 
-    int rc = -1;
     if (vbuf.len != len) {
         PyErr_SetString(PyExc_IndexError,
                         "Blob slice assignment is wrong size");
+        PyBuffer_Release(&vbuf);
+        return -1;
     }
-    else if (step == 1) {
+
+    if (len == 0) {
+        PyBuffer_Release(&vbuf);
+        return 0;
+    }
+
+    int rc = -1;
+    if (step == 1) {
         rc = inner_write(self, vbuf.buf, len, start);
     }
     else {
@@ -578,7 +584,7 @@ static PyMethodDef blob_methods[] = {
 };
 
 static struct PyMemberDef blob_members[] = {
-    {"__weaklistoffset__", T_PYSSIZET, offsetof(pysqlite_Blob, in_weakreflist), READONLY},
+    {"__weaklistoffset__", Py_T_PYSSIZET, offsetof(pysqlite_Blob, in_weakreflist), Py_READONLY},
     {NULL},
 };
 

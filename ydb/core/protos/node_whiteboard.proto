@@ -7,6 +7,7 @@ import "ydb/core/protos/whiteboard_flags.proto";
 import "ydb/core/protos/memory_stats.proto";
 import "google/protobuf/descriptor.proto";
 import "ydb/core/protos/tracing.proto";
+import "ydb/core/protos/blobstorage_disk_color.proto";
 
 package NKikimrWhiteboard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -38,9 +39,10 @@ message TTabletStateInfo {
         ResolveLeader = 11;
         Deleted = 12;
         Stopped = 13;
-        Reserved14 = 14;
+        Terminating = 14;
         Reserved15 = 15;
         Reserved16 = 16;
+        Reserved17 = 17;
     }
 
     optional uint64 TabletId = 1 [(DefaultField) = true];
@@ -108,11 +110,13 @@ message TNodeStateInfo {
     optional uint64 WriteThroughput = 15; // bytes written per second
     optional ESessionState SessionState = 16;
     optional bool SameScope = 17; // true if the peer is in the same scope
+    optional string PeerBridgePileName = 18;
 }
 
 message TEvNodeStateRequest {
     optional uint64 ChangedSince = 1;
     repeated int32 FieldsRequired = 2 [packed = true];
+    repeated fixed64 FilterNodeId = 22;
 }
 
 message TEvNodeStateResponse {
@@ -146,6 +150,10 @@ message TPDiskStateInfo {
     optional uint32 ExpectedSlotCount = 22 [(DefaultField) = true];
     optional uint64 EnforcedDynamicSlotSize = 23 [(DefaultField) = true];
     optional uint32 NumActiveSlots = 24 [(DefaultField) = true];
+    optional uint32 SlotSizeInUnits = 25;
+    optional double PDiskUsage = 26; // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E PDiskCapacityAlert = 27; // Max(SharedQuota.Color, CommonLog.Color)
+    optional uint64 ExpectedSlotSize = 28 [(DefaultField) = true];
 }
 
 message TEvPDiskStateRequest {
@@ -177,6 +185,15 @@ message TVDiskSatisfactionRank {
     optional TRank LevelRank = 2;
 }
 
+message TVDiskDetailedReplicationStatus {
+    enum E {
+        Replicated = 0;         // Disk is fully replicated, no replication needed
+        WaitingForToken = 1;    // Replication is waiting for a token from the broker
+        InProgress = 2;         // Replication is in progress, data is being transferred to VDisk
+        PhantomsOnly = 3;       // Replication cannot finish due to phantom blobs
+    }
+}
+
 message TVDiskStateInfo {
     optional NKikimrBlobStorage.TVDiskID VDiskId = 1 [(DefaultField) = true];
     optional uint64 CreateTime = 2;
@@ -203,6 +220,8 @@ message TVDiskStateInfo {
     optional bool UnreplicatedPhantoms = 20 [default = false, (DefaultField) = true];
     // The same for the non-phantom-like blobs.
     optional bool UnreplicatedNonPhantoms = 21 [default = false,  (DefaultField) = true];
+    // Detailed replication status.
+    optional TVDiskDetailedReplicationStatus.E DetailedReplicationStatus = 37;
     // Replication progress (0 to 1). Only for replication, not blob scrubbing.
     optional float ReplicationProgress = 30 [(DefaultField) = true];
     // Replication ETA.
@@ -230,6 +249,12 @@ message TVDiskStateInfo {
     optional uint64 ReadThroughput = 22 [(DefaultField) = true];
     // Write bytes per second to PDisk for TEvVPut blobs and replication bytes only
     optional uint64 WriteThroughput = 23 [(DefaultField) = true];
+
+    optional uint32 GroupSizeInUnits = 32;
+    optional double VDiskSlotUsage = 33; // 100.0 * Owner.Used / Owner.LightYellowLimit
+    optional double NormalizedOccupancy = 34;
+    optional double VDiskRawUsage = 35; // 100.0 * Owner.Used / Owner.HardLimit
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E CapacityAlert = 36;
 }
 
 message TEvVDiskStateRequest {
@@ -263,6 +288,9 @@ message TBSGroupStateInfo {
     optional uint64 BlobDepotId = 21 [(DefaultField) = true]; // if set, then this is virtual group
     optional bool NoVDisksInGroup = 22 [(DefaultField) = true];
     optional uint64 BlobDepotOnlineTime = 23 [(DefaultField) = true];
+    optional uint32 GroupSizeInUnits = 24;
+    optional uint32 BridgeProxyGroupId = 25; // when running in Bridge mode
+    optional uint32 BridgePileId = 26; // also in Bridge mode
 }
 
 message TEvBSGroupStateRequest {
@@ -279,6 +307,16 @@ message TEvBSGroupStateResponse {
 enum EConfigState {
     Consistent = 0;
     Outdated = 1;
+}
+
+message TSystemThreadInfo {
+    optional string Name = 1;
+    optional uint32 Threads = 2;
+    optional double SystemUsage = 3;
+    optional double UserUsage = 4;
+    optional uint32 MinorPageFaults = 5;
+    optional uint32 MajorPageFaults = 6;
+    map<string, uint32> States = 7;
 }
 
 message TSystemStateInfo {
@@ -345,6 +383,12 @@ message TSystemStateInfo {
     optional double CoresUsed = 39;
     optional uint32 CoresTotal = 40;
     optional float NetworkUtilization = 41;
+    optional uint64 NetworkWriteThroughput = 42;
+    optional uint32 RealNumberOfCpus = 43; // number of cpus without cgroups limitations
+    repeated TSystemThreadInfo Threads = 44;
+    optional uint64 PID = 45;
+    optional uint64 GrpcRequestBytes = 46; // gRPC request throughput in bytes per second
+    optional uint64 GrpcResponseBytes = 47; // gRPC response throughput in bytes per second
 }
 
 message TEvSystemStateRequest {

@@ -1,10 +1,20 @@
 #pragma once
 
-#include <ydb/core/change_exchange/visitor.h>
+#include "visitor.h"
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/stream/output.h>
+
+namespace NACLib {
+    class TUserContext;
+}
+
+// This definition used to mark cdc cases which doesn't pass any user SID, but could pass it in future
+#define BUILTIN_ACL_CDC_WITHOUT_USER_SID ""
+
+// Users which mark change data stream records
+#define BUILTIN_ACL_CDC_INITIAL_SCAN BUILTIN_ACL_CDC_WITHOUT_USER_SID
 
 namespace NKikimr::NChangeExchange {
 
@@ -18,10 +28,11 @@ public:
     };
 
     enum class EKind: ui8 {
-        AsyncIndex,
-        CdcDataChange,
-        CdcHeartbeat,
-        IncrementalRestore,
+        AsyncIndex = 0,
+        CdcDataChange = 1,
+        CdcHeartbeat = 2 ,
+        IncrementalRestore = 3,
+        CdcSchemaChange = 4,
     };
 
 public:
@@ -33,6 +44,7 @@ public:
     virtual const TString& GetBody() const = 0;
     virtual ESource GetSource() const = 0;
     virtual const TString& GetSourceId() const = 0;
+    virtual TIntrusivePtr<NACLib::TUserContext> GetUserCtx() const = 0;
     virtual bool IsBroadcast() const = 0;
 
     virtual void Accept(IVisitor& visitor) const = 0;
@@ -52,10 +64,13 @@ class TChangeRecordBase: public IChangeRecord {
     friend class TChangeRecordBuilder;
 
 public:
+    virtual ~TChangeRecordBase();
+
     ui64 GetOrder() const override { return Order; }
     const TString& GetBody() const override { return Body; }
     ESource GetSource() const override { return Source; }
     const TString& GetSourceId() const override { return SourceId; }
+    TIntrusivePtr<NACLib::TUserContext> GetUserCtx() const override;
     bool IsBroadcast() const override { return false; }
 
     void RewriteTxId(ui64) override { Y_ABORT("not implemented"); }
@@ -68,6 +83,7 @@ protected:
     TString Body;
     ESource Source = ESource::Unspecified;
     TString SourceId;
+    TIntrusivePtr<NACLib::TUserContext> UserCtx;
 
 }; // TChangeRecordBase
 
@@ -109,6 +125,11 @@ public:
 
     TSelf& WithSource(ESource source) {
         GetRecord()->Source = source;
+        return static_cast<TSelf&>(*this);
+    }
+
+    TSelf& WithUserCtx(TIntrusivePtr<NACLib::TUserContext> userCtx) {
+        GetRecord()->UserCtx = userCtx;
         return static_cast<TSelf&>(*this);
     }
 

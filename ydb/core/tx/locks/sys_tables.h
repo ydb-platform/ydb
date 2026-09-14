@@ -5,6 +5,7 @@
 
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 
+#include <util/generic/maybe.h>
 #include <util/system/unaligned_mem.h>
 
 namespace NKikimrMiniKQL {
@@ -19,7 +20,15 @@ struct TSysTables {
         enum EDefaultKind {
             DEFAULT_UNDEFINED = 0,
             DEFAULT_SEQUENCE = 1,
-            DEFAULT_LITERAL = 2
+            DEFAULT_LITERAL = 2,
+            DEFAULT_EXPRESSION = 3
+        };
+
+        struct TDefaultExpressionColumnInfo {
+            TString ExprText;
+            TString Context;
+            TVector<TString> Dependencies;
+            bool Stored = false;
         };
 
         TString Name;
@@ -32,6 +41,8 @@ struct TSysTables {
         Ydb::TypedValue DefaultFromLiteral;
         bool IsBuildInProgress = false;
         bool IsNotNullColumn = false; //maybe move into TTypeInfo?
+        bool SetNotNullInProgress = false;
+        TMaybe<TDefaultExpressionColumnInfo> DefaultExpression;
 
         TTableColumnInfo() = default;
 
@@ -43,12 +54,20 @@ struct TSysTables {
             DefaultKind = DEFAULT_LITERAL;
         }
 
+        void SetDefaultFromExpression() {
+            DefaultKind = DEFAULT_EXPRESSION;
+        }
+
         bool IsDefaultFromSequence() const {
             return DefaultKind == DEFAULT_SEQUENCE;
         }
 
         bool IsDefaultFromLiteral() const {
             return DefaultKind == DEFAULT_LITERAL;
+        }
+
+        bool IsDefaultFromExpression() const {
+            return DefaultKind == DEFAULT_EXPRESSION;
         }
 
         TTableColumnInfo(TString name, ui32 colId, NScheme::TTypeInfo type,
@@ -116,6 +135,10 @@ struct TSysTables {
             };
 
             bool HasWrites = false; // Not exposed as a column
+            ui64 WriterIndex = 0; // Not exposed as a column
+            ui64 WriteSeqNum = 0; // Not exposed as a column
+            // False when restored from TPersistentLock, which cannot carry the write seq num.
+            bool WriteSeqNumKnown = false;
 
             bool IsEmpty() const { return (LockId == 0); }
             bool IsError() const { return IsError(Counter); }
@@ -173,7 +196,7 @@ struct TSysTables {
             case EColumns::PathId:
                 return "PathId";
             };
-            Y_ASSERT("Unknown column");
+            Y_ASSERT(false && "Unknown column");
             return "";
         }
 
@@ -199,7 +222,7 @@ struct TSysTables {
         }
 
         static bool ExtractKey(const TArrayRef<const TCell>& key, EColumns columnId, ui64& value) {
-            Y_ABORT_UNLESS(columnId == EColumns::LockId ||
+            Y_ENSURE(columnId == EColumns::LockId ||
                      columnId == EColumns::DataShard ||
                      columnId == EColumns::SchemeShard ||
                      columnId == EColumns::PathId);
@@ -212,7 +235,7 @@ struct TSysTables {
             if (cell.IsNull())
                 return false;
 
-            Y_ABORT_UNLESS(cell.Size() == sizeof(ui64));
+            Y_ENSURE(cell.Size() == sizeof(ui64));
             value = ReadUnaligned<ui64>(reinterpret_cast<const ui64*>(cell.Data()));
             return true;
         }

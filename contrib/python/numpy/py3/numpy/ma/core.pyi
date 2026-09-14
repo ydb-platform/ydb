@@ -1,32 +1,201 @@
-from collections.abc import Callable
-from typing import Any, TypeVar
-from numpy import ndarray, dtype, float64
+# pyright: reportIncompatibleMethodOverride=false
+# ruff: noqa: ANN001, ANN002, ANN003, ANN201, ANN202 ANN204
 
-from numpy import (
-    amax as amax,
-    amin as amin,
-    bool_ as bool_,
-    expand_dims as expand_dims,
-    clip as clip,
-    indices as indices,
-    ones_like as ones_like,
-    squeeze as squeeze,
-    zeros_like as zeros_like,
-)
+from typing import Any, SupportsIndex, TypeVar
 
-from numpy.lib.function_base import (
-    angle as angle,
-)
+from _typeshed import Incomplete
+from typing_extensions import deprecated
 
-# TODO: Set the `bound` to something more suitable once we
-# have proper shape support
-_ShapeType = TypeVar("_ShapeType", bound=Any)
+from numpy import _OrderKACF, amax, amin, bool_, dtype, expand_dims, float64, ndarray
+from numpy._typing import ArrayLike, _DTypeLikeBool
+
+__all__ = [
+    "MAError",
+    "MaskError",
+    "MaskType",
+    "MaskedArray",
+    "abs",
+    "absolute",
+    "add",
+    "all",
+    "allclose",
+    "allequal",
+    "alltrue",
+    "amax",
+    "amin",
+    "angle",
+    "anom",
+    "anomalies",
+    "any",
+    "append",
+    "arange",
+    "arccos",
+    "arccosh",
+    "arcsin",
+    "arcsinh",
+    "arctan",
+    "arctan2",
+    "arctanh",
+    "argmax",
+    "argmin",
+    "argsort",
+    "around",
+    "array",
+    "asanyarray",
+    "asarray",
+    "bitwise_and",
+    "bitwise_or",
+    "bitwise_xor",
+    "bool_",
+    "ceil",
+    "choose",
+    "clip",
+    "common_fill_value",
+    "compress",
+    "compressed",
+    "concatenate",
+    "conjugate",
+    "convolve",
+    "copy",
+    "correlate",
+    "cos",
+    "cosh",
+    "count",
+    "cumprod",
+    "cumsum",
+    "default_fill_value",
+    "diag",
+    "diagonal",
+    "diff",
+    "divide",
+    "empty",
+    "empty_like",
+    "equal",
+    "exp",
+    "expand_dims",
+    "fabs",
+    "filled",
+    "fix_invalid",
+    "flatten_mask",
+    "flatten_structured_array",
+    "floor",
+    "floor_divide",
+    "fmod",
+    "frombuffer",
+    "fromflex",
+    "fromfunction",
+    "getdata",
+    "getmask",
+    "getmaskarray",
+    "greater",
+    "greater_equal",
+    "harden_mask",
+    "hypot",
+    "identity",
+    "ids",
+    "indices",
+    "inner",
+    "innerproduct",
+    "isMA",
+    "isMaskedArray",
+    "is_mask",
+    "is_masked",
+    "isarray",
+    "left_shift",
+    "less",
+    "less_equal",
+    "log",
+    "log2",
+    "log10",
+    "logical_and",
+    "logical_not",
+    "logical_or",
+    "logical_xor",
+    "make_mask",
+    "make_mask_descr",
+    "make_mask_none",
+    "mask_or",
+    "masked",
+    "masked_array",
+    "masked_equal",
+    "masked_greater",
+    "masked_greater_equal",
+    "masked_inside",
+    "masked_invalid",
+    "masked_less",
+    "masked_less_equal",
+    "masked_not_equal",
+    "masked_object",
+    "masked_outside",
+    "masked_print_option",
+    "masked_singleton",
+    "masked_values",
+    "masked_where",
+    "max",
+    "maximum",
+    "maximum_fill_value",
+    "mean",
+    "min",
+    "minimum",
+    "minimum_fill_value",
+    "mod",
+    "multiply",
+    "mvoid",
+    "ndim",
+    "negative",
+    "nomask",
+    "nonzero",
+    "not_equal",
+    "ones",
+    "ones_like",
+    "outer",
+    "outerproduct",
+    "power",
+    "prod",
+    "product",
+    "ptp",
+    "put",
+    "putmask",
+    "ravel",
+    "remainder",
+    "repeat",
+    "reshape",
+    "resize",
+    "right_shift",
+    "round",
+    "round_",
+    "set_fill_value",
+    "shape",
+    "sin",
+    "sinh",
+    "size",
+    "soften_mask",
+    "sometrue",
+    "sort",
+    "sqrt",
+    "squeeze",
+    "std",
+    "subtract",
+    "sum",
+    "swapaxes",
+    "take",
+    "tan",
+    "tanh",
+    "trace",
+    "transpose",
+    "true_divide",
+    "var",
+    "where",
+    "zeros",
+    "zeros_like",
+]
+
+_ShapeType_co = TypeVar("_ShapeType_co", bound=tuple[int, ...], covariant=True)
 _DType_co = TypeVar("_DType_co", bound=dtype[Any], covariant=True)
 
-__all__: list[str]
 
-MaskType = bool_
-nomask: bool_
+MaskType = bool
+nomask: bool
 
 class MaskedArrayFutureWarning(FutureWarning): ...
 class MAError(Exception): ...
@@ -82,6 +251,7 @@ cosh: _MaskedUnaryOperation
 tanh: _MaskedUnaryOperation
 abs: _MaskedUnaryOperation
 absolute: _MaskedUnaryOperation
+angle: _MaskedUnaryOperation
 fabs: _MaskedUnaryOperation
 negative: _MaskedUnaryOperation
 floor: _MaskedUnaryOperation
@@ -109,20 +279,21 @@ greater_equal: _MaskedBinaryOperation
 less: _MaskedBinaryOperation
 greater: _MaskedBinaryOperation
 logical_and: _MaskedBinaryOperation
-alltrue: _MaskedBinaryOperation
+def alltrue(target: ArrayLike, axis: SupportsIndex | None = 0, dtype: _DTypeLikeBool | None = None) -> Incomplete: ...
 logical_or: _MaskedBinaryOperation
-sometrue: Callable[..., Any]
+def sometrue(target: ArrayLike, axis: SupportsIndex | None = 0, dtype: _DTypeLikeBool | None = None) -> Incomplete: ...
 logical_xor: _MaskedBinaryOperation
 bitwise_and: _MaskedBinaryOperation
 bitwise_or: _MaskedBinaryOperation
 bitwise_xor: _MaskedBinaryOperation
 hypot: _MaskedBinaryOperation
-divide: _MaskedBinaryOperation
-true_divide: _MaskedBinaryOperation
-floor_divide: _MaskedBinaryOperation
-remainder: _MaskedBinaryOperation
-fmod: _MaskedBinaryOperation
-mod: _MaskedBinaryOperation
+
+divide: _DomainedBinaryOperation
+true_divide: _DomainedBinaryOperation
+floor_divide: _DomainedBinaryOperation
+remainder: _DomainedBinaryOperation
+fmod: _DomainedBinaryOperation
+mod: _DomainedBinaryOperation
 
 def make_mask_descr(ndtype): ...
 def getmask(a): ...
@@ -168,11 +339,11 @@ class MaskedIterator:
     def __setitem__(self, index, value): ...
     def __next__(self): ...
 
-class MaskedArray(ndarray[_ShapeType, _DType_co]):
+class MaskedArray(ndarray[_ShapeType_co, _DType_co]):
     __array_priority__: Any
     def __new__(cls, data=..., mask=..., dtype=..., copy=..., subok=..., ndmin=..., fill_value=..., keep_mask=..., hard_mask=..., shrink=..., order=...): ...
     def __array_finalize__(self, obj): ...
-    def __array_wrap__(self, obj, context=...): ...
+    def __array_wrap__(self, obj, context=..., return_scalar=...): ...
     def view(self, dtype=..., type=..., fill_value=...): ...
     def __getitem__(self, indx): ...
     def __setitem__(self, indx, value): ...
@@ -273,10 +444,10 @@ class MaskedArray(ndarray[_ShapeType, _DType_co]):
     def var(self, axis=..., dtype=..., out=..., ddof=..., keepdims=...): ...
     def std(self, axis=..., dtype=..., out=..., ddof=..., keepdims=...): ...
     def round(self, decimals=..., out=...): ...
-    def argsort(self, axis=..., kind=..., order=..., endwith=..., fill_value=...): ...
+    def argsort(self, axis=..., kind=..., order=..., endwith=..., fill_value=..., *, stable=...): ...
     def argmin(self, axis=..., fill_value=..., out=..., *, keepdims=...): ...
     def argmax(self, axis=..., fill_value=..., out=..., *, keepdims=...): ...
-    def sort(self, axis=..., kind=..., order=..., endwith=..., fill_value=...): ...
+    def sort(self, axis=..., kind=..., order=..., endwith=..., fill_value=..., *, stable=...): ...
     def min(self, axis=..., out=..., fill_value=..., keepdims=...): ...
     # NOTE: deprecated
     # def tostring(self, fill_value=..., order=...): ...
@@ -285,6 +456,7 @@ class MaskedArray(ndarray[_ShapeType, _DType_co]):
     def partition(self, *args, **kwargs): ...
     def argpartition(self, *args, **kwargs): ...
     def take(self, indices, axis=..., out=..., mode=...): ...
+
     copy: Any
     diagonal: Any
     flatten: Any
@@ -293,17 +465,26 @@ class MaskedArray(ndarray[_ShapeType, _DType_co]):
     swapaxes: Any
     T: Any
     transpose: Any
-    def tolist(self, fill_value=...): ...
-    def tobytes(self, fill_value=..., order=...): ...
-    def tofile(self, fid, sep=..., format=...): ...
-    def toflex(self): ...
-    torecords: Any
+
+    @property  # type: ignore[misc]
+    def mT(self): ...
+
+    #
+    def toflex(self) -> Incomplete: ...
+    def torecords(self) -> Incomplete: ...
+    def tolist(self, fill_value: Incomplete | None = None) -> Incomplete: ...
+    @deprecated("tostring() is deprecated. Use tobytes() instead.")
+    def tostring(self, /, fill_value: Incomplete | None = None, order: _OrderKACF = "C") -> bytes: ...  # type: ignore[override]  # pyright: ignore[reportIncompatibleMethodOverride]
+    def tobytes(self, /, fill_value: Incomplete | None = None, order: _OrderKACF = "C") -> bytes: ...  # type: ignore[override]  # pyright: ignore[reportIncompatibleMethodOverride]
+    def tofile(self, /, fid: Incomplete, sep: str = "", format: str = "%s") -> Incomplete: ...
+
+    #
     def __reduce__(self): ...
     def __deepcopy__(self, memo=...): ...
 
-class mvoid(MaskedArray[_ShapeType, _DType_co]):
+class mvoid(MaskedArray[_ShapeType_co, _DType_co]):
     def __new__(
-        self,
+        self,  # pyright: ignore[reportSelfClsParameterName]
         data,
         mask=...,
         dtype=...,
@@ -328,8 +509,7 @@ class MaskedConstant(MaskedArray[Any, dtype[float64]]):
     def __new__(cls): ...
     __class__: Any
     def __array_finalize__(self, obj): ...
-    def __array_prepare__(self, obj, context=...): ...
-    def __array_wrap__(self, obj, context=...): ...
+    def __array_wrap__(self, obj, context=..., return_scalar=...): ...
     def __format__(self, format_spec): ...
     def __reduce__(self): ...
     def __iop__(self, other): ...
@@ -417,8 +597,8 @@ maximum: _extrema_operation
 
 def take(a, indices, axis=..., out=..., mode=...): ...
 def power(a, b, third=...): ...
-def argsort(a, axis=..., kind=..., order=..., endwith=..., fill_value=...): ...
-def sort(a, axis=..., kind=..., order=..., endwith=..., fill_value=...): ...
+def argsort(a, axis=..., kind=..., order=..., endwith=..., fill_value=..., *, stable=...): ...
+def sort(a, axis=..., kind=..., order=..., endwith=..., fill_value=..., *, stable=...): ...
 def compressed(x): ...
 def concatenate(arrays, axis=...): ...
 def diag(v, k=...): ...
@@ -435,7 +615,8 @@ def size(obj, axis=...): ...
 def diff(a, /, n=..., axis=..., prepend=..., append=...): ...
 def where(condition, x=..., y=...): ...
 def choose(indices, choices, out=..., mode=...): ...
-def round(a, decimals=..., out=...): ...
+def round_(a, decimals=..., out=...): ...
+round = round_
 
 def inner(a, b): ...
 innerproduct = inner
@@ -452,19 +633,23 @@ def asanyarray(a, dtype=...): ...
 def fromflex(fxarray): ...
 
 class _convert2ma:
-    __doc__: Any
-    def __init__(self, funcname, params=...): ...
-    def getdoc(self): ...
-    def __call__(self, *args, **params): ...
+    def __init__(self, /, funcname: str, np_ret: str, np_ma_ret: str, params: dict[str, Any] | None = None) -> None: ...
+    def __call__(self, /, *args: object, **params: object) -> Any: ...  # noqa: ANN401
+    def getdoc(self, /, np_ret: str, np_ma_ret: str) -> str | None: ...
 
 arange: _convert2ma
+clip: _convert2ma
 empty: _convert2ma
 empty_like: _convert2ma
 frombuffer: _convert2ma
 fromfunction: _convert2ma
 identity: _convert2ma
+indices: _convert2ma
 ones: _convert2ma
+ones_like: _convert2ma
+squeeze: _convert2ma
 zeros: _convert2ma
+zeros_like: _convert2ma
 
 def append(a, b, axis=...): ...
 def dot(a, b, strict=..., out=...): ...

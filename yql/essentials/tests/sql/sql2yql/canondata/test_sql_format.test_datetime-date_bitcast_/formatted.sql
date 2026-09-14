@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     BITCAST(Yql::Date(AsAtom('1')) AS Uint8)
 ;

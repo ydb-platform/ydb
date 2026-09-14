@@ -54,7 +54,8 @@ class Handle:
             info.append('cancelled')
         if self._callback is not None:
             info.append(format_helpers._format_callback_source(
-                self._callback, self._args))
+                self._callback, self._args,
+                debug=self._loop.get_debug()))
         if self._source_traceback:
             frame = self._source_traceback[-1]
             info.append(f'created at {frame[0]}:{frame[1]}')
@@ -90,7 +91,8 @@ class Handle:
             raise
         except BaseException as exc:
             cb = format_helpers._format_callback_source(
-                self._callback, self._args)
+                self._callback, self._args,
+                debug=self._loop.get_debug())
             msg = f'Exception in callback {cb}'
             context = {
                 'message': msg,
@@ -171,6 +173,14 @@ class AbstractServer:
 
     def close(self):
         """Stop serving.  This leaves existing connections open."""
+        raise NotImplementedError
+
+    def close_clients(self):
+        """Close all active connections."""
+        raise NotImplementedError
+
+    def abort_clients(self):
+        """Close all active connections immediately."""
         raise NotImplementedError
 
     def get_loop(self):
@@ -282,7 +292,7 @@ class AbstractEventLoop:
 
     # Method scheduling a coroutine object: create a task.
 
-    def create_task(self, coro, *, name=None, context=None):
+    def create_task(self, coro, **kwargs):
         raise NotImplementedError
 
     # Methods for interacting with threads.
@@ -320,6 +330,7 @@ class AbstractEventLoop:
             *, family=socket.AF_UNSPEC,
             flags=socket.AI_PASSIVE, sock=None, backlog=100,
             ssl=None, reuse_address=None, reuse_port=None,
+            keep_alive=None,
             ssl_handshake_timeout=None,
             ssl_shutdown_timeout=None,
             start_serving=True):
@@ -330,8 +341,8 @@ class AbstractEventLoop:
 
         If host is an empty string or None all interfaces are assumed
         and a list of multiple sockets will be returned (most likely
-        one for IPv4 and another one for IPv6). The host parameter can also be
-        a sequence (e.g. list) of hosts to bind to.
+        one for IPv4 and another one for IPv6). The host parameter can also
+        be a sequence (e.g. list) of hosts to bind to.
 
         family can be set to either AF_INET or AF_INET6 to force the
         socket to use IPv4 or IPv6. If not set it will be determined
@@ -358,6 +369,9 @@ class AbstractEventLoop:
         they all set this flag when being created. This option is not
         supported on Windows.
 
+        keep_alive set to True keeps connections active by enabling the
+        periodic transmission of messages.
+
         ssl_handshake_timeout is the time in seconds that an SSL server
         will wait for completion of the SSL handshake before aborting the
         connection. Default is 60s.
@@ -368,8 +382,9 @@ class AbstractEventLoop:
 
         start_serving set to True (default) causes the created server
         to start accepting connections immediately.  When set to False,
-        the user should await Server.start_serving() or Server.serve_forever()
-        to make the server to start accepting connections.
+        the user should await Server.start_serving() or
+        Server.serve_forever() to make the server to start accepting
+        connections.
         """
         raise NotImplementedError
 
@@ -432,8 +447,9 @@ class AbstractEventLoop:
 
         start_serving set to True (default) causes the created server
         to start accepting connections immediately.  When set to False,
-        the user should await Server.start_serving() or Server.serve_forever()
-        to make the server to start accepting connections.
+        the user should await Server.start_serving() or
+        Server.serve_forever() to make the server to start accepting
+        connections.
         """
         raise NotImplementedError
 
@@ -464,8 +480,8 @@ class AbstractEventLoop:
 
         protocol_factory must be a callable returning a protocol instance.
 
-        socket family AF_INET, socket.AF_INET6 or socket.AF_UNIX depending on
-        host (or family if specified), socket type SOCK_DGRAM.
+        socket family AF_INET, socket.AF_INET6 or socket.AF_UNIX depending
+        on host (or family if specified), socket type SOCK_DGRAM.
 
         reuse_address tells the kernel to reuse a local socket in
         TIME_WAIT state, without waiting for its natural timeout to
@@ -505,7 +521,8 @@ class AbstractEventLoop:
     async def connect_write_pipe(self, protocol_factory, pipe):
         """Register write pipe in event loop.
 
-        protocol_factory should instantiate object with BaseProtocol interface.
+        protocol_factory should instantiate object with BaseProtocol
+        interface.
         Pipe is file-like object already switched to nonblocking.
         Return pair (transport, protocol), where transport support
         WriteTransport interface."""

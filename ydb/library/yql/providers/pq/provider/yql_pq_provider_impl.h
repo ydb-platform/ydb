@@ -10,9 +10,6 @@
 
 namespace NYql {
 
-TIntrusivePtr<IDataProvider> CreatePqDataSource(TPqState::TPtr state, IPqGateway::TPtr gateway);
-TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway);
-
 THolder<IGraphTransformer> CreatePqLoadTopicMetadataTransformer(TPqState::TPtr state);
 
 THolder<IGraphTransformer> CreatePqDataSinkIODiscoveryTransformer(TPqState::TPtr state);

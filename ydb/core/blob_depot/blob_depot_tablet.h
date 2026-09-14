@@ -6,6 +6,7 @@
 #include "schema.h"
 #include "mon_main.h"
 
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
 namespace NKikimr::NTesting {
@@ -34,7 +35,34 @@ namespace NKikimr::NBlobDepot {
                 EvDeliver,
                 EvJsonTimer,
                 EvJsonUpdate,
+                EvUploadResult,
+                EvDeleteResult,
+                EvScanFound,
+                EvScanContinue,
+                EvDeleteThrottleWakeup,
+                EvPutThrottleWakeup,
+                EvMoveDataContinue,
+                EvMoveDataBlobCopied,
             };
+        };
+
+        struct TEvMoveDataContinue
+            : TEventLocal<TEvMoveDataContinue, TEvPrivate::EvMoveDataContinue>
+        {};
+
+        struct TEvMoveDataBlobCopied
+            : TEventLocal<TEvMoveDataBlobCopied, TEvPrivate::EvMoveDataBlobCopied>
+        {
+            NKikimrProto::EReplyStatus Status;
+            NKikimrBlobDepot::TBlobLocator NewLocator;
+            TString ErrorReason;
+
+            TEvMoveDataBlobCopied(NKikimrProto::EReplyStatus status,
+                    NKikimrBlobDepot::TBlobLocator newLocator, TString errorReason = {})
+                : Status(status)
+                , NewLocator(std::move(newLocator))
+                , ErrorReason(std::move(errorReason))
+            {}
         };
 
     public:
@@ -53,6 +81,11 @@ namespace NKikimr::NBlobDepot {
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
 
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
+        TControlWrapper MaxLoadedTrashRecords = 1'000'000;
+
+        TControlWrapper S3MaxWritesInFlight = 32;
+        TControlWrapper S3MaxDeletesInFlight = 3;
+        TControlWrapper S3MaxObjectsToDeleteAtOnce = 10;
 
         struct TAgent {
             struct TConnection {
@@ -77,6 +110,8 @@ namespace NKikimr::NBlobDepot {
 
             NKikimrBlobStorage::TPDiskSpaceColor::E LastPushedSpaceColor = {};
             float LastPushedApproximateFreeSpaceShare = 0.0f;
+
+            THashSet<TS3Locator> S3WritesInFlight;
         };
 
         struct TPipeServerContext {
@@ -160,13 +195,25 @@ namespace NKikimr::NBlobDepot {
         void DefaultSignalTabletActive(const TActorContext&) override {} // signalled explicitly after load is complete
 
         void OnActivateExecutor(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT24, "OnActivateExecutor", (Id, GetLogId()));
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnActivateExecutor",
+                {"marker", "BDT24"},
+                {"id", GetLogId()});
+            if (AppData()->Icb) {
+                auto& controls = AppData()->Icb->BlobDepotControls;
+                TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, controls.MaxLoadedTrashRecords);
+                TControlBoard::RegisterSharedControl(S3MaxWritesInFlight, controls.S3MaxWritesInFlight);
+                TControlBoard::RegisterSharedControl(S3MaxDeletesInFlight, controls.S3MaxDeletesInFlight);
+                TControlBoard::RegisterSharedControl(S3MaxObjectsToDeleteAtOnce, controls.S3MaxObjectsToDeleteAtOnce);
+            }
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
             ExecuteTxInitSchema();
         }
 
         void OnLoadFinished() {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT25, "OnLoadFinished", (Id, GetLogId()));
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnLoadFinished",
+                {"marker", "BDT25"},
+                {"id", GetLogId()});
             Become(&TThis::StateWork);
             SignalTabletActive(TActivationContext::AsActorContext());
         }
@@ -179,20 +226,27 @@ namespace NKikimr::NBlobDepot {
             KickSpaceMonitor();
             StartDataLoad();
             UpdateThroughputs();
+            InitS3Manager();
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 0;
+            TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_LOADING_KEYS] = 1;
         }
 
         void StartDataLoad();
         void OnDataLoadComplete();
 
         void OnDetach(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT26, "OnDetach", (Id, GetLogId()));
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnDetach",
+                {"marker", "BDT26"},
+                {"id", GetLogId()});
 
             // TODO: what does this callback mean
             PassAway();
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& /*ev*/, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT27, "OnTabletDead", (Id, GetLogId()));
+            YDB_LOG_DEBUG_COMP(BLOB_DEPOT, "OnTabletDead",
+                {"marker", "BDT27"},
+                {"id", GetLogId()});
             PassAway();
         }
 
@@ -234,6 +288,62 @@ namespace NKikimr::NBlobDepot {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+        void MoveDataCompleted(const TActorContext& ctx) override;
+
+        struct TMoveDataState {
+            enum class EPhase {
+                Idle,
+                ScanningIndex,
+                CopyingBlob,
+                UpdatingIndex,
+                CheckingTrash,
+                Vacuum,
+            };
+
+            EPhase Phase = EPhase::Idle;
+            TSet<ui32> Groups;
+            TActorId RequestSender;
+
+            std::optional<TString> Key;
+            ui32 ValueChainIndex = 0;
+            ui32 ValueVersion = 0;
+
+            bool RecordTouched = false;
+            bool NeedsAnotherPass = false;
+
+            TLogoBlobID BlobId;
+            NKikimrBlobDepot::TBlobLocator BlobLocator;
+            NKikimrBlobDepot::TBlobLocator NewBlobLocator;
+            TBlobSeqId NewBlobSeqId;
+            THashMap<TLogoBlobID, NKikimrBlobDepot::TBlobLocator> BlobIdToNewLocator;
+            TSet<TBlobSeqId> ProtectedBlobSeqIds;
+            bool ApplyingIndexUpdate = false;
+
+            bool IsInProgress() const {
+                return Phase != EPhase::Idle;
+            }
+        };
+
+        TMoveDataState MoveData;
+        TDeque<TEvTablet::TEvMoveData::TPtr> MoveDataRequestsQueue;
+
+        void Handle(TEvTablet::TEvMoveData::TPtr ev);
+        void Handle(TEvMoveDataBlobCopied::TPtr ev);
+        bool ValidateMoveDataGroups(const TSet<ui32>& moveDataGroups, const TActorId& sender) const;
+        bool NeedMoveBlob(const NKikimrBlobDepot::TBlobLocator& locator) const;
+        void StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& sender);
+        void ContinueMoveData();
+        void StartMoveDataBlobCopy();
+        void ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId);
+        void RestartMoveDataScan();
+        void FinishMoveData(const TActorContext& ctx);
+
+        class TTxMoveDataScan;
+        class TTxMoveDataUpdateIndex;
+        class TMoveDataCopyActor;
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
         void Execute(std::unique_ptr<NTabletFlatExecutor::TTransactionBase<TBlobDepot>> tx) {
             Executor()->Execute(tx.release(), TActivationContext::AsActorContext());
         }
@@ -269,6 +379,15 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
         void Handle(TEvBlobDepot::TEvDiscardSpoiledBlobSeq::TPtr ev);
+        void Handle(TEvBlobDepot::TEvPrepareWriteS3::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // S3 operations
+
+        class TS3Manager;
+        std::unique_ptr<TS3Manager> S3Manager;
+
+        void InitS3Manager();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Space monitoring
@@ -283,12 +402,13 @@ namespace NKikimr::NBlobDepot {
         // Monitoring
 
         class TTxMonData;
+        class TTxMonS3Config;
 
         TJsonHandler JsonHandler;
 
         bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
 
-        void RenderMainPage(IOutputStream& s);
+        void RenderMainPage(IOutputStream& s, const TString& nonce);
         NJson::TJsonValue RenderJson(bool pretty);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -316,6 +436,10 @@ namespace NKikimr::NBlobDepot {
             ui64 BlobsPutOk = 0;
             ui64 BlobsPutError = 0;
             ui32 CopyIteration = 0;
+            ui32 CollectGarbageInFlight = 0;
+            ui32 CollectGarbageQueue = 0;
+            ui32 CollectGarbageOK = 0;
+            ui32 CollectGarbageError = 0;
 
             void ToJson(NJson::TJsonValue& json, bool pretty) const;
         } AsStats;
@@ -323,6 +447,9 @@ namespace NKikimr::NBlobDepot {
         class TGroupAssimilator;
 
         void StartGroupAssimilator();
+        void OnUpdateDecommitState();
+
+        ui32 PerGenerationCounter = 1;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group metrics exchange

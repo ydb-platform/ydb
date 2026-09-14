@@ -1,4 +1,5 @@
 #include "blobstorage_pdisk_ut_actions.h"
+#include <ydb/core/util/lz4_data_generator.h>
 
 namespace NKikimr {
 
@@ -442,7 +443,8 @@ void TTestChunkWrite20Read02::TestFSM(const TActorContext &ctx) {
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
         ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, BlockSize * 3,
-            new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, true, 1, false));
+            new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, true, 1,
+            TWriteSource::Unknown, false));
         break;
     }
     case 40:
@@ -454,7 +456,8 @@ void TTestChunkWrite20Read02::TestFSM(const TActorContext &ctx) {
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
         ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, BlockSize,
-            new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, true, 1, false));
+            new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, true, 1,
+            TWriteSource::Unknown, false));
         break;
     }
     case 50:
@@ -1117,9 +1120,9 @@ void TTestChunkUnlockRestart::TestFSM(const TActorContext &ctx) {
     switch (TestStep) {
     case 0:
         WhiteboardID = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(WhiteboardID, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(WhiteboardID, SelfId());
         NodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(NodeWardenId, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(NodeWardenId, SelfId());
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         VERBOSE_COUT(" Sending TEvInit");
         ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid, TActorId(), SelfId()));
@@ -1324,9 +1327,9 @@ void TTestWhiteboard::TestFSM(const TActorContext &ctx) {
     {
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
         TActorId whiteboardID = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(whiteboardID, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(whiteboardID, SelfId());
         TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(nodeWardenId, SelfId());
+        ctx.ActorSystem()->RegisterLocalService(nodeWardenId, SelfId());
         for (int owner = 0; owner < ExpectedOwnerCount; ++owner) {
             ctx.Send(Yard, new NPDisk::TEvYardInit(2, TVDiskID(TGroupId::Zero(), 0, 0, 0, owner), *PDiskGuid, TActorId(), SelfId()));
         }
@@ -3964,6 +3967,49 @@ void TTestStartingPointRebootsIteration::TestFSM(const TActorContext &ctx) {
         break;
     }
     TestStep += 10;
+}
+
+void TTestRawReadsAndWrites::TestFSM(const TActorContext& ctx) {
+    switch (TestStep++) {
+        case 0:
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+            break;
+
+        case 1:
+            TEST_RESPONSE(EvYardInitResult, OK);
+            std::tie(Owner, OwnerRound) = {LastResponse.Owner, LastResponse.OwnerRound};
+            ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
+            break;
+
+        case 2:
+            TEST_RESPONSE(EvChunkReserveResult, OK);
+            ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
+            ChunkIdx = LastResponse.ChunkIds.front();
+            ctx.Send(Yard, new NPDisk::TEvChunkWriteRaw(Owner, OwnerRound, ChunkIdx, 0, TRope(FastGenDataForLZ4(4096, 1))));
+            break;
+
+        case 3:
+            TEST_RESPONSE(EvChunkWriteRawResult, OK);
+            ctx.Send(Yard, new NPDisk::TEvChunkReadRaw(Owner, OwnerRound, ChunkIdx, 0, 4096));
+            break;
+
+        case 4:
+            TEST_RESPONSE(EvChunkReadRawResult, OK);
+            TEST_DATA_EQUALS(LastResponse.Rope.ConvertToString(), FastGenDataForLZ4(4096, 1));
+            ctx.Send(Yard, new NPDisk::TEvChunkWriteRaw(Owner, OwnerRound, ChunkIdx, 4096, TRope(FastGenDataForLZ4(4096, 2))));
+            break;
+
+        case 5:
+            TEST_RESPONSE(EvChunkWriteRawResult, OK);
+            ctx.Send(Yard, new NPDisk::TEvChunkReadRaw(Owner, OwnerRound, ChunkIdx, 0, 8192));
+            break;
+
+        case 6:
+            TEST_RESPONSE(EvChunkReadRawResult, OK);
+            TEST_DATA_EQUALS(LastResponse.Rope.ConvertToString(), FastGenDataForLZ4(4096, 1) + FastGenDataForLZ4(4096, 2));
+            SignalDoneEvent();
+            break;
+    }
 }
 
 } // NKikimr

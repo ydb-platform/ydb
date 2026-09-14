@@ -1,0 +1,50 @@
+partition_mode: OnePartition
+volume_config {
+    path: "kv_volume"
+    partition_count: 16
+    channel_media: ["hdd", "hdd", "hdd"]
+}
+actions {
+    name: "write"
+    period_us: 50000
+    action_data_mode {
+        worker {}
+    }
+    action_command {
+        write {
+            size: 4096
+            count: 5
+            channel: 0
+        }
+    }
+}
+actions {
+    name: "read"
+    parent_action: "write"
+    action_data_mode {
+        from_prev_actions {
+            action_name: "write"
+        }
+    }
+    action_command {
+        read {
+            size: 1024
+            count: 5
+            verify_data: true
+        }
+    }
+}
+actions {
+    name: "delete"
+    parent_action: "read"
+    action_data_mode {
+        from_prev_actions {
+            action_name: "write"
+        }
+    }
+    action_command {
+        delete {
+            count: 5
+        }
+    }
+}

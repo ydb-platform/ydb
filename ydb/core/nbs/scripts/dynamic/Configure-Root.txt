@@ -1,0 +1,611 @@
+ConfigureRequest {
+  Actions {
+    AddConfigItem {
+      ConfigItem {
+        Config {
+          ActorSystemConfig {
+            Executor {
+              Type: BASIC
+              Threads: 9
+              SpinThreshold: 1
+              Name: "System"
+            }
+            Executor {
+              Type: BASIC
+              Threads: 16
+              SpinThreshold: 1
+              Name: "User"
+            }
+            Executor {
+              Type: BASIC
+              Threads: 7
+              SpinThreshold: 1
+              Name: "Batch"
+            }
+            Executor {
+              Type: IO
+              Threads: 1
+              Name: "IO"
+            }
+            Executor {
+              Type: BASIC
+              Threads: 3
+              SpinThreshold: 10
+              Name: "IC"
+              TimePerMailboxMicroSecs: 100
+            }
+            Scheduler {
+              Resolution: 64
+              SpinThreshold: 0
+              ProgressThreshold: 10000
+            }
+            SysExecutor: 0
+            UserExecutor: 1
+            IoExecutor: 3
+            BatchExecutor: 2
+            ServiceExecutor {
+              ServiceName: "Interconnect"
+              ExecutorId: 4
+            }
+          }
+          LogConfig {
+            SysLog: false
+            DefaultLevel: 3
+          }
+          NameserviceConfig {
+            Node {
+              NodeId: 1
+              Port: 29501
+              Host: "localhost"
+              InterconnectHost: "localhost"
+              Location {
+                DataCenter: "1"
+                Rack: "1"
+              }
+            }
+            ClusterUUID: "local"
+            AcceptUUID: "local"
+          }
+          InterconnectConfig {
+            StartTcp: true
+          }
+          DomainsConfig {
+            Domain {
+              DomainId: 1
+              SchemeRoot: 72075186232723360
+              SSId: 1
+              HiveUid: 1
+              PlanResolution: 10
+              Name: "Root"
+              StoragePoolTypes {
+                Kind: "ssd"
+                PoolConfig {
+                  BoxId: 1
+                  ErasureSpecies: "none"
+                  VDiskKind: "Default"
+                  Kind: "ssd"
+                  PDiskFilter {
+                    Property {
+                      Type: SSD
+                    }
+                  }
+                }
+              }
+              StoragePoolTypes {
+                Kind: "rot"
+                PoolConfig {
+                  BoxId: 1
+                  ErasureSpecies: "none"
+                  VDiskKind: "Default"
+                  Kind: "rot"
+                  PDiskFilter {
+                    Property {
+                      Type: ROT
+                    }
+                  }
+                }
+              }
+              ExplicitMediators: 72075186232426497
+              ExplicitCoordinators: 72075186232360961
+              ExplicitAllocators: 72075186232492033
+            }
+            StateStorage {
+              SSId: 1
+              Ring {
+                NToSelect: 1
+                Node: 1
+              }
+            }
+            HiveConfig {
+              HiveUid: 1
+              Hive: 72057594037968897
+            }
+          }
+          BlobStorageConfig {
+            ServiceSet {
+              PDisks {
+                NodeID: 1
+                PDiskID: 1
+                Path: "data/pdisk-ssd-1.data"
+                PDiskGuid: 16684173266925138728
+                PDiskCategory: 1
+              }
+              PDisks {
+                NodeID: 1
+                PDiskID: 2
+                Path: "data/pdisk-ssd-2.data"
+                PDiskGuid: 16684173266925138729
+                PDiskCategory: 1
+              }
+              PDisks {
+                NodeID: 1
+                PDiskID: 3
+                Path: "data/pdisk-ssd-3.data"
+                PDiskGuid: 16684173266925138739
+                PDiskCategory: 1
+              }
+              PDisks {
+                NodeID: 1
+                PDiskID: 4
+                Path: "data/pdisk-ssd-4.data"
+                PDiskGuid: 16684173266925138749
+                PDiskCategory: 1
+              }
+              PDisks {
+                NodeID: 1
+                PDiskID: 5
+                Path: "data/pdisk-ssd-5.data"
+                PDiskGuid: 16684173266925138759
+                PDiskCategory: 1
+              }
+              AvailabilityDomains: 1
+            }
+          }
+          ChannelProfileConfig {
+            Profile {
+              ProfileId: 0
+              Channel {
+                ErasureSpecies: "none"
+                PDiskCategory: 1
+                VDiskCategory: Default
+                StoragePoolKind: "ssd"
+              }
+              Channel {
+                ErasureSpecies: "none"
+                PDiskCategory: 1
+                VDiskCategory: Default
+                StoragePoolKind: "ssd"
+              }
+              Channel {
+                ErasureSpecies: "none"
+                PDiskCategory: 1
+                VDiskCategory: Default
+                StoragePoolKind: "ssd"
+              }
+            }
+            Profile {
+              ProfileId: 1
+              Channel {
+                ErasureSpecies: "none"
+                PDiskCategory: 1
+                VDiskCategory: Default
+                StoragePoolKind: "ssd"
+              }
+              Channel {
+                ErasureSpecies: "none"
+                PDiskCategory: 1
+                VDiskCategory: Default
+                StoragePoolKind: "ssd"
+              }
+              Channel {
+                ErasureSpecies: "none"
+                PDiskCategory: 1
+                VDiskCategory: Default
+                StoragePoolKind: "ssd"
+              }
+              Channel {
+                ErasureSpecies: "none"
+                PDiskCategory: 1
+                VDiskCategory: Default
+                StoragePoolKind: "ssd"
+              }
+              Channel {
+                ErasureSpecies: "none"
+                PDiskCategory: 1
+                VDiskCategory: Default
+                StoragePoolKind: "ssd"
+              }
+              Channel {
+                ErasureSpecies: "none"
+                PDiskCategory: 1
+                VDiskCategory: Default
+                StoragePoolKind: "ssd"
+              }
+              Channel {
+                ErasureSpecies: "none"
+                PDiskCategory: 1
+                VDiskCategory: Default
+                StoragePoolKind: "ssd"
+              }
+            }
+          }
+          BootstrapConfig {
+            Tablet {
+              Type: FLAT_HIVE
+              Node: 1
+              Info {
+                TabletID: 72057594037968897
+                Channels {
+                  Channel: 0
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 1
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 2
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+              }
+            }
+            Tablet {
+              Type: FLAT_BS_CONTROLLER
+              Node: 1
+              Info {
+                TabletID: 72057594037932033
+                Channels {
+                  Channel: 0
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 1
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 2
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+              }
+            }
+            Tablet {
+              Type: FLAT_SCHEMESHARD
+              Node: 1
+              Info {
+                TabletID: 72075186232723360
+                Channels {
+                  Channel: 0
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 1
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 2
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+              }
+            }
+            Tablet {
+              Type: FLAT_TX_COORDINATOR
+              Node: 1
+              Info {
+                TabletID: 72075186232360961
+                Channels {
+                  Channel: 0
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 1
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 2
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+              }
+            }
+            Tablet {
+              Type: TX_MEDIATOR
+              Node: 1
+              Info {
+                TabletID: 72075186232426497
+                Channels {
+                  Channel: 0
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 1
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 2
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+              }
+            }
+            Tablet {
+              Type: TX_ALLOCATOR
+              Node: 1
+              Info {
+                TabletID: 72075186232492033
+                Channels {
+                  Channel: 0
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 1
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 2
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+              }
+            }
+            Tablet {
+              Type: CMS
+              Node: 1
+              Info {
+                TabletID: 72057594037936128
+                Channels {
+                  Channel: 0
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 1
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 2
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+              }
+            }
+            Tablet {
+              Type: NODE_BROKER
+              Node: 1
+              Info {
+                TabletID: 72057594037936129
+                Channels {
+                  Channel: 0
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 1
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 2
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+              }
+            }
+            Tablet {
+              Type: TENANT_SLOT_BROKER
+              Node: 1
+              Info {
+                TabletID: 72057594037936130
+                Channels {
+                  Channel: 0
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 1
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 2
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+              }
+            }
+            Tablet {
+              Type: CONSOLE
+              Node: 1
+              Info {
+                TabletID: 72057594037936131
+                Channels {
+                  Channel: 0
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 1
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+                Channels {
+                  Channel: 2
+                  History {
+                    FromGeneration: 0
+                    GroupID: 0
+                  }
+                  ChannelErasureName: "none"
+                }
+              }
+            }
+          }
+          VDiskConfig {
+            VDiskKinds {
+              Kind: Log
+              BaseKind: Default
+              Config {
+                FreshUseDreg: true
+                AllowKeepFlags: false
+              }
+            }
+            VDiskKinds {
+              Kind: LocalMode
+              BaseKind: Default
+              Config {
+                HullCompLevel0MaxSstsAtOnce: 2
+                HullCompSortedPartsNum: 1
+              }
+            }
+          }
+          KQPConfig {
+            Enable: true
+          }
+          GRpcConfig {
+            StartGRpcProxy: true
+            Host: "[::]"
+            Port: 9001
+            GRpcMemoryQuotaBytes: 1073741824
+            StreamingConfig {
+              EnableOutputStreams: true
+            }
+            KeepAliveEnable: true
+            KeepAliveIdleTimeoutTriggerSec: 90
+            KeepAliveMaxProbeCount: 3
+            KeepAliveProbeIntervalSec: 10
+          }
+          DynamicNameserviceConfig {
+            MaxStaticNodeId: 1000
+          }
+          PQConfig {
+            Enabled: false
+          }
+        }
+      }
+      EnableAutoSplit: true
+    }
+  }
+  Actions {
+    AddConfigItem {
+      ConfigItem {
+        Config {
+          TenantPoolConfig {
+            IsEnabled: true
+            Slots {
+              Id: "dynamic-slot-1"
+              DomainName: "Root"
+              IsDynamic: true
+              Type: "default"
+            }
+          }
+        }
+        UsageScope {
+          TenantAndNodeTypeFilter {
+            Tenant: "dynamic"
+          }
+        }
+      }
+    }
+  }
+}

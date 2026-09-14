@@ -2,6 +2,8 @@ package NYT.NNodeTrackerClient.NProto;
 
 import "yt_proto/yt/client/node_tracker_client/proto/node.proto";
 
+option go_package = "a.yandex-team.ru/yt/go/proto/client/node_tracker_client";
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Provides a mapping from node ids to descriptors.

@@ -346,7 +346,7 @@ static int s_profile_property_add_sub_property(
     int was_present = 0;
     aws_hash_table_remove(&property->sub_properties, key_string, NULL, &was_present);
     if (was_present) {
-        AWS_LOGF_WARN(
+        AWS_LOGF_DEBUG(
             AWS_LS_SDKUTILS_PROFILE,
             "subproperty \"%s\" of property \"%s\" had value overridden with new value",
             key_string->bytes,
@@ -385,7 +385,7 @@ static int s_profile_property_merge(struct aws_profile_property *dest, const str
         }
 
         if (dest->value) {
-            AWS_LOGF_WARN(
+            AWS_LOGF_DEBUG(
                 AWS_LS_SDKUTILS_PROFILE,
                 "property \"%s\" has value \"%s\" replaced during merge",
                 dest->name->bytes,
@@ -420,7 +420,7 @@ static int s_profile_property_merge(struct aws_profile_property *dest, const str
         int was_present = 0;
         aws_hash_table_remove(&dest->sub_properties, dest_key, NULL, &was_present);
         if (was_present) {
-            AWS_LOGF_WARN(
+            AWS_LOGF_DEBUG(
                 AWS_LS_SDKUTILS_PROFILE,
                 "subproperty \"%s\" of property \"%s\" had value overridden during property merge",
                 dest_key->bytes,
@@ -665,7 +665,7 @@ static int s_profile_collection_add_profile(
              * existing one supercedes: ignore this (and its properties) completely by failing the add
              * which sets the current profile to NULL
              */
-            AWS_LOGF_WARN(
+            AWS_LOGF_DEBUG(
                 AWS_LS_SDKUTILS_PROFILE,
                 "Existing prefixed default config profile supercedes unprefixed default profile");
             s_log_parse_context(AWS_LL_WARN, context);
@@ -678,7 +678,7 @@ static int s_profile_collection_add_profile(
              * stomp over existing: remove it, then proceed with add
              * element destroy function will clean up the profile and key
              */
-            AWS_LOGF_WARN(
+            AWS_LOGF_DEBUG(
                 AWS_LS_SDKUTILS_PROFILE, "Prefixed default config profile replacing unprefixed default profile");
             s_log_parse_context(AWS_LL_WARN, context);
 
@@ -1039,7 +1039,7 @@ static bool s_parse_property_continuation(
      * A continuation without a current property is bad
      */
     if (context->current_profile == NULL || context->current_property == NULL) {
-        AWS_LOGF_WARN(AWS_LS_SDKUTILS_PROFILE, "Property continuation seen outside of a current property");
+        AWS_LOGF_ERROR(AWS_LS_SDKUTILS_PROFILE, "Property continuation seen outside of a current property");
         s_log_parse_context(AWS_LL_WARN, context);
 
         context->parse_error = AWS_ERROR_SDKUTILS_PARSE_FATAL;
@@ -1047,7 +1047,7 @@ static bool s_parse_property_continuation(
     }
 
     if (s_profile_property_add_continuation(context->current_property, &continuation_cursor)) {
-        AWS_LOGF_WARN(AWS_LS_SDKUTILS_PROFILE, "Property continuation could not be applied to the current property");
+        AWS_LOGF_DEBUG(AWS_LS_SDKUTILS_PROFILE, "Property continuation could not be applied to the current property");
         s_log_parse_context(AWS_LL_WARN, context);
 
         context->parse_error = AWS_ERROR_SDKUTILS_PARSE_RECOVERABLE;
@@ -1214,7 +1214,7 @@ static void s_parse_and_apply_line_to_profile_collection(
         return;
     }
 
-    AWS_LOGF_WARN(AWS_LS_SDKUTILS_PROFILE, "Unidentifiable line type encountered while parsing profile file");
+    AWS_LOGF_ERROR(AWS_LS_SDKUTILS_PROFILE, "Unidentifiable line type encountered while parsing profile file");
     s_log_parse_context(AWS_LL_WARN, context);
 
     context->parse_error = AWS_ERROR_SDKUTILS_PARSE_FATAL;
@@ -1316,7 +1316,7 @@ struct aws_profile_collection *aws_profile_collection_new_from_file(
     AWS_LOGF_DEBUG(AWS_LS_SDKUTILS_PROFILE, "Creating profile collection from file at \"%s\"", file_path->bytes);
 
     if (aws_byte_buf_init_from_file(&file_contents, allocator, aws_string_c_str(file_path)) != 0) {
-        AWS_LOGF_WARN(AWS_LS_SDKUTILS_PROFILE, "Failed to read file at \"%s\"", file_path->bytes);
+        AWS_LOGF_DEBUG(AWS_LS_SDKUTILS_PROFILE, "Failed to read file at \"%s\"", file_path->bytes);
         return NULL;
     }
 
@@ -1541,14 +1541,19 @@ struct aws_string *aws_get_config_file_path(
 AWS_STATIC_STRING_FROM_LITERAL(s_default_profile_env_variable_name, "AWS_PROFILE");
 
 struct aws_string *aws_get_profile_name(struct aws_allocator *allocator, const struct aws_byte_cursor *override_name) {
-
+    /**
+     * Profile name is resolved in the following order.
+     * 1. If the override_path variable is provided.
+     * 2. Check `AWS_PROFILE` environment variable and use the value if it is not empty.
+     * 3. Use "default". */
     struct aws_string *profile_name = NULL;
-
-    if (aws_get_environment_value(allocator, s_default_profile_env_variable_name, &profile_name) ||
-        profile_name == NULL) {
-        if (override_name != NULL && override_name->ptr != NULL) {
-            profile_name = aws_string_new_from_array(allocator, override_name->ptr, override_name->len);
-        } else {
+    if (override_name != NULL && override_name->ptr != NULL) {
+        profile_name = aws_string_new_from_array(allocator, override_name->ptr, override_name->len);
+    } else {
+        /* Try to fetch profile from AWS_PROFILE environment variable */
+        aws_get_environment_value(allocator, s_default_profile_env_variable_name, &profile_name);
+        /* Use default profile if it doesn't exist. */
+        if (profile_name == NULL) {
             profile_name = aws_string_new_from_string(allocator, s_default_profile_name);
         }
     }

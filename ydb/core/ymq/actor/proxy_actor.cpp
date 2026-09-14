@@ -1,4 +1,4 @@
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "error.h"
 #include "proxy_actor.h"
 

@@ -3,16 +3,20 @@
 
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxStorePermissions : public TTransactionBase<TCms> {
 public:
     TTxStorePermissions(TCms *self, THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
-            const TString &owner, TAutoPtr<TRequestInfo> scheduled, const TMaybe<TString> &maintenanceTaskId)
+            const TString &owner, const TString &requestId, i32 priority, TAutoPtr<TRequestInfo> scheduled, const TMaybe<TString> &maintenanceTaskId)
         : TBase(self)
         , Request(std::move(req))
         , Response(std::move(resp))
         , Owner(owner)
+        , RequestId(requestId)
+        , Priority(priority)
         , Scheduled(scheduled)
         , MaintenanceTaskId(maintenanceTaskId)
         , NextPermissionId(self->State->NextPermissionId)
@@ -23,35 +27,53 @@ public:
     TTxType GetTxType() const override { return TXTYPE_STORE_PERMISSIONS ; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStorePermissions Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxStorePermissions Execute");
 
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::Param>().Key(1).Update(NIceDb::TUpdate<Schema::Param::NextPermissionID>(NextPermissionId),
-                                                NIceDb::TUpdate<Schema::Param::NextRequestID>(NextRequestId));
+        db.Table<Schema::Param>().Key(Schema::Param::Key).Update(
+            NIceDb::TUpdate<Schema::Param::NextPermissionID>(NextPermissionId),
+            NIceDb::TUpdate<Schema::Param::NextRequestID>(NextRequestId)
+        );
 
         const auto &rec = Response->Get<TEvCms::TEvPermissionResponse>()->Record;
 
+        auto now = ctx.Now();
         if (MaintenanceTaskId) {
             Y_ABORT_UNLESS(Scheduled);
+
+            const ui32 maxInflightActions = Scheduled->Request.GetMaxPermissionCount();
 
             Self->State->MaintenanceRequests.emplace(Scheduled->RequestId, *MaintenanceTaskId);
             Self->State->MaintenanceTasks.emplace(*MaintenanceTaskId, TTaskInfo{
                 .TaskId = *MaintenanceTaskId,
                 .RequestId = Scheduled->RequestId,
                 .Owner = Scheduled->Owner,
-                .HasSingleCompositeActionGroup = !Scheduled->Request.GetPartialPermissionAllowed()
+                .HasSingleCompositeActionGroup = !Scheduled->Request.GetPartialPermissionAllowed(),
+                .CreateTime = now,
+                .LastRefreshTime = now,
+                .MaxInflightActions = maxInflightActions
             });
 
             db.Table<Schema::MaintenanceTasks>().Key(*MaintenanceTaskId).Update(
                 NIceDb::TUpdate<Schema::MaintenanceTasks::RequestID>(Scheduled->RequestId),
                 NIceDb::TUpdate<Schema::MaintenanceTasks::Owner>(Scheduled->Owner),
-                NIceDb::TUpdate<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>(!Scheduled->Request.GetPartialPermissionAllowed())
+                NIceDb::TUpdate<Schema::MaintenanceTasks::HasSingleCompositeActionGroup>(!Scheduled->Request.GetPartialPermissionAllowed()),
+                NIceDb::TUpdate<Schema::MaintenanceTasks::CreateTime>(now.MicroSeconds()),
+                NIceDb::TUpdate<Schema::MaintenanceTasks::LastRefreshTime>(now.MicroSeconds()),
+                NIceDb::TUpdate<Schema::MaintenanceTasks::MaxInflightActions>(maxInflightActions)
+            );
+        } else if (Scheduled != nullptr && Self->State->MaintenanceRequests.contains(Scheduled->RequestId)) {
+            const auto& taskId = Self->State->MaintenanceRequests[Scheduled->RequestId];
+            auto& task = Self->State->MaintenanceTasks.at(taskId);
+
+            task.LastRefreshTime = now;
+            db.Table<Schema::MaintenanceTasks>().Key(taskId).Update(
+                NIceDb::TUpdate<Schema::MaintenanceTasks::LastRefreshTime>(now.MicroSeconds())
             );
         }
 
         for (const auto &permission : rec.GetPermissions()) {
             const auto &id = permission.GetId();
-            const auto &requestId = Scheduled ? Scheduled->RequestId : "";
             ui64 deadline = permission.GetDeadline();
             TString actionStr;
             google::protobuf::TextFormat::PrintToString(permission.GetAction(), &actionStr);
@@ -60,7 +82,8 @@ public:
             row.Update(NIceDb::TUpdate<Schema::Permission::Owner>(Owner),
                        NIceDb::TUpdate<Schema::Permission::Action>(actionStr),
                        NIceDb::TUpdate<Schema::Permission::Deadline>(deadline),
-                       NIceDb::TUpdate<Schema::Permission::RequestID>(requestId));
+                       NIceDb::TUpdate<Schema::Permission::RequestID>(RequestId),
+                       NIceDb::TUpdate<Schema::Permission::Priority>(Priority));
 
             if (MaintenanceTaskId) {
                 Y_ABORT_UNLESS(Self->State->MaintenanceTasks.contains(*MaintenanceTaskId));
@@ -121,7 +144,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxStorePermissions complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxStorePermissions complete");
 
         Self->Reply(Request.Get(), Response, ctx);
         Self->SchedulePermissionsCleanup(ctx);
@@ -132,6 +155,8 @@ private:
     THolder<IEventBase> Request;
     TAutoPtr<IEventHandle> Response;
     TString Owner;
+    TString RequestId;
+    i32 Priority;
     TAutoPtr<TRequestInfo> Scheduled;
     const TMaybe<TString> MaintenanceTaskId;
     ui64 NextPermissionId;
@@ -140,9 +165,10 @@ private:
 };
 
 ITransaction *TCms::CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,
-        const TString &owner, TAutoPtr<TRequestInfo> scheduled, const TMaybe<TString> &maintenanceTaskId)
+        const TString &owner, const TString &requestId, i32 priority, TAutoPtr<TRequestInfo> scheduled,
+        const TMaybe<TString> &maintenanceTaskId)
 {
-    return new TTxStorePermissions(this, std::move(req), std::move(resp), owner, std::move(scheduled), maintenanceTaskId);
+    return new TTxStorePermissions(this, std::move(req), std::move(resp), owner, requestId, priority, std::move(scheduled), maintenanceTaskId);
 }
 
 } // namespace NKikimr::NCms

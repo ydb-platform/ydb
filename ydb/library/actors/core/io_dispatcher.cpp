@@ -136,7 +136,7 @@ namespace NActors {
         size_t NumRunningThreads = 0;
 
         void StartThread() {
-            auto thread = std::make_unique<TThread>(*this, TlsActivationContext->ExecutorThread.ActorSystem);
+            auto thread = std::make_unique<TThread>(*this, TActivationContext::ActorSystem());
             const TThread::TId id = thread->Id();
             Threads.emplace(id, std::move(thread));
             *NumThreads = ++NumRunningThreads;

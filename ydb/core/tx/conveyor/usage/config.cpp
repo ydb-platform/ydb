@@ -1,6 +1,8 @@
 #include "config.h"
 #include <util/string/builder.h>
 
+#include <ydb/core/protos/config.pb.h>
+
 namespace NKikimr::NConveyor {
 
 bool TConfig::DeserializeFromProto(const NKikimrConfig::TConveyorConfig& config) {
@@ -57,6 +59,30 @@ double TConfig::GetWorkerCPUUsage(const ui32 workerIdx) const {
     } else {
         return fractionalPart;
     }
+}
+
+TCPULimitsConfig::TCPULimitsConfig(const double cpuGroupThreadsLimit, const TString& cpuGroupName)
+    : CPUGroupThreadsLimit(cpuGroupThreadsLimit)
+    , CPUGroupName(cpuGroupName) {
+}
+
+TConclusionStatus TCPULimitsConfig::DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config) {
+    if (config.HasCpuGroupThreadsLimit()) {
+        CPUGroupThreadsLimit = config.GetCpuGroupThreadsLimit();
+        CPUGroupName = config.GetCpuGroupName();
+    }
+    return TConclusionStatus::Success();
+}
+
+TString TCPULimitsConfig::DebugString() const {
+    TStringBuilder sb;
+    if (CPUGroupThreadsLimit) {
+        sb << "CPUGroupThreadsLimit=" << *CPUGroupThreadsLimit << ";";
+        sb << "CPUGroupName=" << CPUGroupName << ";";
+    } else {
+        sb << "Disabled;";
+    }
+    return sb;
 }
 
 }

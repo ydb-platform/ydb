@@ -1,7 +1,11 @@
+#include "datashard_impl.h"
+#include "datashard_integrity_trails.h"
 #include "datashard_kqp.h"
 #include "execution_unit_ctors.h"
 #include "setup_sys_locks.h"
 #include "datashard_locks_db.h"
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
 
 
 namespace NKikimr {
@@ -68,14 +72,14 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
     if (op->IsImmediate()) {
         // Every time we execute immediate transaction we may choose a new mvcc version
-        op->MvccReadWriteVersion.reset();
+        op->CachedMvccVersion.reset();
     }
 
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     if (tx->IsTxDataReleased()) {
-        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
+        switch (Pipeline.RestoreDataTx(tx, txc, ctx, tx->GetUserCtx())) {
             case ERestoreDataStatus::Ok:
                 break;
 
@@ -86,7 +90,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
                 // For immediate transactions we want to translate this into a propose failure
                 if (op->IsImmediate()) {
                     const auto& dataTx = tx->GetDataTx();
-                    Y_ABORT_UNLESS(!dataTx->Ready());
+                    Y_ENSURE(!dataTx->Ready());
                     op->SetAbortedFlag();
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
                     op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
@@ -94,7 +98,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
                 }
 
                 // For planned transactions errors are not expected
-                Y_ABORT("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
+                Y_ENSURE(false, "Failed to restore tx data: " << tx->GetDataTx()->GetErrors());
         }
     }
 
@@ -102,12 +106,12 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
     IEngineFlat* engine = tx->GetDataTx()->GetEngine();
-    Y_VERIFY_S(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
+    Y_ENSURE(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
 
     if (op->IsImmediate() && !tx->ReValidateKeys(txc.DB.GetScheme())) {
         // Immediate transactions may be reordered with schema changes and become invalid
         const auto& dataTx = tx->GetDataTx();
-        Y_ABORT_UNLESS(!dataTx->Ready());
+        Y_ENSURE(!dataTx->Ready());
         op->SetAbortedFlag();
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
         op->Result()->SetProcessError(dataTx->Code(), dataTx->GetErrors());
@@ -120,8 +124,10 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
     else {
         ui64 consumed = tx->GetDataTx()->GetTxSize() + engine->GetMemoryAllocated();
         if (MaybeRequestMoreTxMemory(consumed, txc)) {
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID()
-                << " requested " << txc.GetRequestedMemory() << " more memory");
+            YDB_LOG_TRACE_CTX(ctx, "TExecuteDataTxUnit::Execute: requested more memory",
+                {"operation", *op},
+                {"tabletId", DataShard.TabletID()},
+                {"requestedMemory", txc.GetRequestedMemory()});
 
             DataShard.IncCounter(COUNTER_TX_WAIT_RESOURCE);
             return EExecutionStatus::Restart;
@@ -153,7 +159,11 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
                     // Lock cannot be created and we must abort
                     op->SetAbortedFlag();
                     BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::LOCKS_BROKEN);
+                    op->Result()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
                     return EExecutionStatus::Executed;
+
+                case EEnsureCurrentLock::Missing:
+                    Y_ENSURE(false, "unreachable");
             }
         }
     }
@@ -169,10 +179,11 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
             throw;
         }
     } catch (const TMemoryLimitExceededException&) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << DataShard.TabletID()
-            << " exceeded memory limit " << txc.GetMemoryLimit()
-            << " and requests " << txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR
-            << " more for the next try");
+        YDB_LOG_TRACE_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: exceeded memory limit and requests more for the next try",
+            {"operation", *op},
+            {"tabletId", DataShard.TabletID()},
+            {"memoryLimit", txc.GetMemoryLimit()},
+            {"memoryLimitWithFactor", txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR});
 
         txc.NotEnoughMemory();
         DataShard.IncCounter(DataShard.NotEnoughMemoryCounter(txc.GetNotEnoughMemoryCount()));
@@ -185,8 +196,9 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
         return EExecutionStatus::Restart;
     } catch (const TNotReadyTabletException&) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID()
-            << " is not ready for " << *op << " execution");
+        YDB_LOG_TRACE_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: tablet is not ready for execution",
+            {"tabletId", DataShard.TabletID()},
+            {"operation", *op});
 
         DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
@@ -195,8 +207,9 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 
         return EExecutionStatus::Restart;
     } catch (const TRollbackAndWaitException&) {
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID()
-            << " needs to wait " << *op << " for dependencies");
+        YDB_LOG_TRACE_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: tablet needs to wait for dependencies",
+            {"tabletId", DataShard.TabletID()},
+            {"operation", *op});
 
         tx->GetDataTx()->ResetCollectedChanges();
         tx->ReleaseTxData(txc, ctx);
@@ -233,9 +246,8 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     DataShard.ReleaseCache(*tx);
     tx->GetDataTx()->ResetCounters();
 
-    auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
-    tx->GetDataTx()->SetReadVersion(readVersion);
-    tx->GetDataTx()->SetWriteVersion(writeVersion);
+    auto mvccVersion = DataShard.GetMvccVersion(tx);
+    tx->GetDataTx()->SetMvccVersion(mvccVersion);
 
     // TODO: is it required to always prepare outgoing read sets?
     if (!engine->IsAfterOutgoingReadsetsExtracted()) {
@@ -265,18 +277,21 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 
         switch (engineResult) {
             case IEngineFlat::EResult::ResultTooBig:
-                LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage);
+                YDB_LOG_ERROR_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: result too big",
+                    {"errorMessage", errorMessage});
                 break;
             case IEngineFlat::EResult::Cancelled:
-                LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage);
-                Y_ABORT_UNLESS(tx->GetDataTx()->CanCancel());
+                YDB_LOG_NOTICE_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: execution cancelled",
+                    {"errorMessage", errorMessage});
+                Y_ENSURE(tx->GetDataTx()->CanCancel());
                 break;
             default:
                 if (op->IsReadOnly() || op->IsImmediate()) {
-                    LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, errorMessage);
+                    YDB_LOG_CRIT_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: unexpected execution error",
+                        {"errorMessage", errorMessage});
                 } else {
                     // TODO: Kill only current datashard tablet.
-                    Y_FAIL_S("Unexpected execution error in read-write transaction: "
+                    Y_ENSURE(false, "Unexpected execution error in read-write transaction: "
                              << errorMessage);
                 }
                 break;
@@ -301,15 +316,17 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         op->ChangeRecords() = std::move(tx->GetDataTx()->GetCollectedChanges());
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Executed operation " << *op << " at tablet " << DataShard.TabletID()
-                                      << " with status " << result->GetStatus());
+    YDB_LOG_TRACE_CTX(ctx, "TExecuteDataTxUnit::ExecuteDataTx: executed operation with status",
+        {"operation", *op},
+        {"tabletId", DataShard.TabletID()},
+        {"resultStatus", result->GetStatus()});
 
     auto& counters = tx->GetDataTx()->GetCounters();
 
-    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Datashard execution counters for " << *op << " at "
-                                                    << DataShard.TabletID() << ": " << counters.ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Datashard execution counters",
+        {"operation", *op},
+        {"tabletId", DataShard.TabletID()},
+        {"counters", counters});
 
     KqpUpdateDataShardStatCounters(DataShard, counters);
     if (tx->GetDataTx()->CollectStats()) {
@@ -326,13 +343,14 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         TVector<ui64> participants; // empty participants
         DataShard.GetVolatileTxManager().PersistAddVolatileTx(
             tx->GetTxId(),
-            writeVersion,
+            mvccVersion,
             commitTxIds,
             tx->GetDataTx()->GetVolatileDependencies(),
             participants,
             tx->GetDataTx()->GetVolatileChangeGroup(),
             tx->GetDataTx()->GetVolatileCommitOrdered(),
             /* arbiter */ false,
+            /* disable expectations */ false,
             txc);
     }
 
@@ -342,16 +360,29 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 
     AddLocksToResult(op, ctx);
 
+    if (!guardLocks.LockTxId) {
+        mvccVersion.ToProto(op->Result()->Record.MutableCommitVersion());
+    }
+
     Pipeline.AddCommittingOp(op);
 }
 
 void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx) {
-    auto locks = DataShard.SysLocksTable().ApplyLocks();
+    auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
+    op->Result()->Record.MutableTxStats()->SetLocksBrokenAsBreaker(locksBrokenByTx.size());
+    if (!locksBrokenByTx.empty()) {
+        if (auto breakerQuerySpanId = DataShard.SysLocksTable().GetCurrentBreakerQuerySpanId()) {
+            op->Result()->Record.MutableTxStats()->AddBreakerQuerySpanIds(*breakerQuerySpanId);
+        }
+    }
+    NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), op->GetTxId(), locksBrokenByTx);
+
     for (const auto& lock : locks) {
         if (lock.IsError()) {
-            LOG_NOTICE_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
-                         "Lock is not set for " << *op << " at " << DataShard.TabletID()
-                                                << " lock " << lock);
+            YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "TExecuteDataTxUnit::AddLocksToResult: lock is not set",
+                {"operation", *op},
+                {"tabletId", DataShard.TabletID()},
+                {"lock", lock});
         }
         op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
                                 lock.SchemeShard, lock.PathId, lock.HasWrites);
@@ -368,3 +399,7 @@ THolder<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard& dataShard, TPipeline
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "concurrent_cache.h"
 #endif
-#undef CONCURRENT_CACHE_INL_H_
 
 namespace NYT {
 
@@ -21,10 +20,10 @@ struct TConcurrentCache<T>::TLookupTable final
     std::atomic<size_t> Size = 0;
     TAtomicPtr<TLookupTable> Next;
 
-    TLookupTable(size_t capacity, IMemoryUsageTrackerPtr memoryUsageTracker)
+    TLookupTable(size_t capacity, TMemoryUsageTrackerGuard memoryUsageGuard)
         : THashTable(capacity)
         , Capacity(capacity)
-        , MemoryUsageGuard(TMemoryUsageTrackerGuard::Acquire(std::move(memoryUsageTracker), THashTable::GetByteSize()))
+        , MemoryUsageGuard(std::move(memoryUsageGuard))
     { }
 
     typename THashTable::TItemRef Insert(TValuePtr item)
@@ -48,13 +47,16 @@ TConcurrentCache<T>::RenewTable(const TIntrusivePtr<TLookupTable>& head, size_t 
     }
 
     // Rotate lookup table.
-    auto newHead = New<TLookupTable>(capacity, MemoryUsageTracker_);
+    auto memoryUsageGuard = TMemoryUsageTrackerGuard::Acquire(
+        MemoryUsageTracker_,
+        TLookupTable::GetByteSize(capacity));
+    auto newHead = New<TLookupTable>(capacity, std::move(memoryUsageGuard));
     newHead->Next = head;
 
     if (Head_.SwapIfCompare(head, newHead)) {
         constexpr auto& Logger = LockFreeLogger;
-        YT_LOG_DEBUG("Concurrent cache lookup table rotated (LoadFactor: %v)",
-            head->Size.load());
+        YT_TLOG_DEBUG("Concurrent cache lookup table rotated")
+            .With("LoadFactor", head->Size.load());
 
         // Head_ swapped, remove third lookup table.
         head->Next.Reset();
@@ -68,7 +70,11 @@ template <class T>
 TConcurrentCache<T>::TConcurrentCache(size_t capacity, IMemoryUsageTrackerPtr tracker)
     : MemoryUsageTracker_(std::move(tracker))
     , Capacity_(capacity)
-    , Head_(New<TLookupTable>(capacity, tracker))
+    , Head_(New<TLookupTable>(
+        capacity,
+        TMemoryUsageTrackerGuard::Acquire(
+            MemoryUsageTracker_,
+            TLookupTable::GetByteSize(capacity))))
 {
     YT_VERIFY(capacity > 0);
 }
@@ -79,8 +85,8 @@ TConcurrentCache<T>::~TConcurrentCache()
     auto head = Head_.Acquire();
 
     constexpr auto& Logger = LockFreeLogger;
-    YT_LOG_DEBUG("Concurrent cache head statistics (ElementCount: %v)",
-        head->Size.load());
+    YT_TLOG_DEBUG("Concurrent cache head statistics")
+        .With("ElementCount", head->Size.load());
 }
 
 template <class T>
@@ -90,7 +96,7 @@ TConcurrentCache<T>::TCachedItemRef::TCachedItemRef(typename THashTable::TItemRe
 { }
 
 template <class T>
-typename TConcurrentCache<T>::TLookuper& TConcurrentCache<T>::TLookuper::operator= (TLookuper&& other)
+typename TConcurrentCache<T>::TLookuper& TConcurrentCache<T>::TLookuper::operator=(TLookuper&& other) noexcept
 {
     Parent_ = std::move(other.Parent_);
     Primary_ = std::move(other.Primary_);
@@ -111,7 +117,7 @@ TConcurrentCache<T>::TLookuper::TLookuper(
 
 template <class T>
 template <class TKey>
-typename TConcurrentCache<T>::TCachedItemRef TConcurrentCache<T>::TLookuper::operator() (const TKey& key)
+typename TConcurrentCache<T>::TCachedItemRef TConcurrentCache<T>::TLookuper::operator()(const TKey& key)
 {
     auto fingerprint = THash<T>()(key);
 
@@ -165,7 +171,7 @@ typename TConcurrentCache<T>::TLookuper TConcurrentCache<T>::GetSecondaryLookupe
 }
 
 template <class T>
-typename TConcurrentCache<T>::TInserter& TConcurrentCache<T>::TInserter::operator= (TInserter&& other)
+typename TConcurrentCache<T>::TInserter& TConcurrentCache<T>::TInserter::operator=(TInserter&& other) noexcept
 {
     Parent_ = std::move(other.Parent_);
     Primary_ = std::move(other.Primary_);
@@ -200,6 +206,12 @@ typename TConcurrentCache<T>::TInserter TConcurrentCache<T>::GetInserter()
 }
 
 template <class T>
+size_t TConcurrentCache<T>::GetCapacity() const
+{
+    return Capacity_.load(std::memory_order::acquire);
+}
+
+template <class T>
 void TConcurrentCache<T>::SetCapacity(size_t capacity)
 {
     YT_VERIFY(capacity > 0);
@@ -209,6 +221,13 @@ void TConcurrentCache<T>::SetCapacity(size_t capacity)
     if (primary->Size >= std::min(capacity, primary->Capacity)) {
         RenewTable(primary, capacity);
     }
+}
+
+template <class T>
+void TConcurrentCache<T>::ForceRotate()
+{
+    auto primary = Head_.Acquire();
+    RenewTable(primary, Capacity_.load(std::memory_order::acquire));
 }
 
 template <class T>

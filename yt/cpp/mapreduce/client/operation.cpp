@@ -11,6 +11,7 @@
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
@@ -21,9 +22,6 @@
 #include <yt/cpp/mapreduce/interface/protobuf_format.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-
-#include <yt/cpp/mapreduce/http/requests.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
 
 #include <yt/cpp/mapreduce/io/job_reader.h>
 #include <yt/cpp/mapreduce/io/job_writer.h>
@@ -222,11 +220,24 @@ TStructuredJobTableList ApplyProtobufColumnFilters(
         return tableList;
     }
 
-    auto isDynamic = NRawClient::BatchTransform(
+    TVector<TRichYPath> tableListPaths;
+    for (const auto& table: tableList) {
+        Y_ABORT_UNLESS(table.RichYPath, "Cannot get path to apply column filters");
+        tableListPaths.emplace_back(*table.RichYPath);
+    }
+
+    auto isDynamic = NRawClient::RemoteClustersBatchTransform(
         preparer.GetClient()->GetRawClient(),
-        tableList,
+        preparer.GetContext(),
+        tableListPaths,
         [&] (IRawBatchRequestPtr batch, const auto& table) {
-            return batch->Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
+            // In case of external cluster, we can't use the current transaction
+            // since it is unknown for the external cluster.
+            // Hence, we should take a global transaction.
+            if (table.Cluster_ && !table.Cluster_->empty()) {
+                return batch->Get(TTransactionId(), table.Path_ + "/@dynamic", TGetOptions());
+            }
+            return batch->Get(preparer.GetTransactionId(), table.Path_ + "/@dynamic", TGetOptions());
         });
 
     auto newTableList = tableList;
@@ -770,7 +781,10 @@ void BuildUserJobFluently(
                     list.Item().Value(BuildJobProfilerSpec(jobProfiler));
                 })
             .EndList()
-        .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr());
+        .Item("start_queue_consumer_registration_manager").Value(false)
+        .Item("enable_rpc_proxy_in_job_proxy").Value(userJobSpec.EnableRpcProxyInJobProxy_)
+        .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr())
+        .Item("enable_debug_command_line_arguments").Value(preparer.ShouldEnableDebugCommandLineArguments());
 }
 
 struct TNirvanaContext
@@ -842,6 +856,9 @@ void BuildCommonOperationPart(
         MergeNodes((*specNode)["annotations"], nirvanaContext.Annotations);
     }
 
+    if (baseSpec.Alias_) {
+        (*specNode)["alias"] = *baseSpec.Alias_;
+    }
     TString pool;
     if (baseSpec.Pool_) {
         pool = *baseSpec.Pool_;
@@ -880,6 +897,12 @@ void BuildCommonOperationPart(
     }
     if (baseSpec.MaxFailedJobCount_.Defined()) {
         (*specNode)["max_failed_job_count"] = *baseSpec.MaxFailedJobCount_;
+    }
+    if (baseSpec.Description_.Defined()) {
+        (*specNode)["description"] = *baseSpec.Description_;
+    }
+    if (baseSpec.Annotations_.Defined()) {
+        (*specNode)["annotations"] = *baseSpec.Annotations_;
     }
 }
 
@@ -1044,17 +1067,19 @@ void CheckInputTablesExist(
 {
     Y_ENSURE(!paths.empty(), "Input tables are not set");
     for (auto& path : paths) {
-        auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
-        auto exists = RequestWithRetry<bool>(
-            preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            [&preparer, &curTransactionId, &path] (TMutationId /*mutationId*/) {
-                return preparer.GetClient()->GetRawClient()->Exists(
-                    curTransactionId,
-                    path.Path_);
-            });
-        Y_ENSURE_EX(
-            path.Cluster_.Defined() || exists,
-            TApiUsageError() << "Input table '" << path.Path_ << "' doesn't exist");
+        if (!path.Cluster_.Defined()) {
+            auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
+            auto exists = RequestWithRetry<bool>(
+                preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
+                [&preparer, &curTransactionId, &path] (TMutationId /*mutationId*/) {
+                    return preparer.GetClient()->GetRawClient()->Exists(
+                        curTransactionId,
+                        path.Path_);
+                });
+            Y_ENSURE_EX(
+                exists,
+                TApiUsageError() << "Input table '" << path.Path_ << "' doesn't exist");
+        }
     }
 }
 
@@ -2266,7 +2291,7 @@ public:
     }
 
     const TOperationId& GetId() const;
-    TString GetWebInterfaceUrl() const;
+    TString GetWebInterfaceUrl(const TClientPtr& client) const;
 
     void OnPrepared();
     void SetDelayedStartFunction(std::function<TOperationId()> start);
@@ -2285,6 +2310,8 @@ public:
     TMaybe<TYtError> GetError();
     TJobStatistics GetJobStatistics();
     TMaybe<TOperationBriefProgress> GetBriefProgress();
+    TMaybe<THashMap<TString, TYtError>> GetAlerts();
+
     void AbortOperation();
     void CompleteOperation();
     void SuspendOperation(const TSuspendOperationOptions& options);
@@ -2304,7 +2331,13 @@ public:
 private:
     void OnStarted(const TOperationId& operationId);
 
-    void UpdateAttributesAndCall(bool needJobStatistics, std::function<void(const TOperationAttributes&)> func);
+    struct TUpdateAttributesOptions
+    {
+        bool NeedJobStatistics = false;
+        bool NeedAlerts = false;
+    };
+
+    void UpdateAttributesAndCall(const TUpdateAttributesOptions& options, std::function<void(const TOperationAttributes&)> func);
 
     void SyncFinishOperationImpl(const TOperationAttributes&);
     static void* SyncFinishOperationProc(void* );
@@ -2401,10 +2434,10 @@ const TOperationId& TOperation::TOperationImpl::GetId() const
     return *Id_;
 }
 
-TString TOperation::TOperationImpl::GetWebInterfaceUrl() const
+TString TOperation::TOperationImpl::GetWebInterfaceUrl(const TClientPtr& client) const
 {
     ValidateOperationStarted();
-    return GetOperationWebInterfaceUrl(Context_.ServerName, *Id_);
+    return GetOperationWebInterfaceUrl(Context_.ServerName, *Id_, client);
 }
 
 void TOperation::TOperationImpl::OnPrepared()
@@ -2470,7 +2503,7 @@ TString TOperation::TOperationImpl::GetStatus()
         }
     }
     TMaybe<TString> state;
-    UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
+    UpdateAttributesAndCall(/*options*/ {}, [&] (const TOperationAttributes& attributes) {
         state = attributes.State;
     });
 
@@ -2532,7 +2565,7 @@ EOperationBriefState TOperation::TOperationImpl::GetBriefState()
 {
     ValidateOperationStarted();
     EOperationBriefState result = EOperationBriefState::InProgress;
-    UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
+    UpdateAttributesAndCall(/*options*/ {}, [&] (const TOperationAttributes& attributes) {
         Y_ABORT_UNLESS(attributes.BriefState,
             "get_operation for operation %s has not returned \"state\" field",
             GetGuidAsString(*Id_).data());
@@ -2545,7 +2578,7 @@ TMaybe<TYtError> TOperation::TOperationImpl::GetError()
 {
     ValidateOperationStarted();
     TMaybe<TYtError> result;
-    UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
+    UpdateAttributesAndCall(/*options*/ {}, [&] (const TOperationAttributes& attributes) {
         Y_ABORT_UNLESS(attributes.Result);
         result = attributes.Result->Error;
     });
@@ -2556,7 +2589,7 @@ TJobStatistics TOperation::TOperationImpl::GetJobStatistics()
 {
     ValidateOperationStarted();
     TJobStatistics result;
-    UpdateAttributesAndCall(true, [&] (const TOperationAttributes& attributes) {
+    UpdateAttributesAndCall(/*options*/ {.NeedJobStatistics = true}, [&] (const TOperationAttributes& attributes) {
         if (attributes.Progress) {
             result = attributes.Progress->JobStatistics;
         }
@@ -2570,13 +2603,23 @@ TMaybe<TOperationBriefProgress> TOperation::TOperationImpl::GetBriefProgress()
     {
         auto g = Guard(Lock_);
         if (CompletePromise_.Defined()) {
-            // Poller do this job for us
+            // Poller do this job for us.
             return Attributes_.BriefProgress;
         }
     }
     TMaybe<TOperationBriefProgress> result;
-    UpdateAttributesAndCall(false, [&] (const TOperationAttributes& attributes) {
+    UpdateAttributesAndCall(/*options*/ {}, [&] (const TOperationAttributes& attributes) {
         result = attributes.BriefProgress;
+    });
+    return result;
+}
+
+TMaybe<THashMap<TString, TYtError>> TOperation::TOperationImpl::GetAlerts()
+{
+    ValidateOperationStarted();
+    TMaybe<THashMap<TString, TYtError>> result;
+    UpdateAttributesAndCall(/*options*/ {.NeedAlerts = true}, [&] (const TOperationAttributes& attributes) {
+        result = attributes.Alerts;
     });
     return result;
 }
@@ -2641,30 +2684,39 @@ void TOperation::TOperationImpl::OnStarted(const TOperationId& operationId)
 }
 
 void TOperation::TOperationImpl::UpdateAttributesAndCall(
-    bool needJobStatistics,
+    const TUpdateAttributesOptions& options,
     std::function<void(const TOperationAttributes&)> func)
 {
     {
         auto g = Guard(Lock_);
         if (Attributes_.BriefState
             && *Attributes_.BriefState != EOperationBriefState::InProgress
-            && (!needJobStatistics || Attributes_.Progress))
+            && (!options.NeedJobStatistics || Attributes_.Progress))
         {
             func(Attributes_);
             return;
         }
     }
 
+    auto filter = TOperationAttributeFilter()
+        .Add(EOperationAttribute::Result)
+        .Add(EOperationAttribute::State)
+        .Add(EOperationAttribute::BriefProgress);
+    // To avoid overloading Cypress, we only request the progress attribute as needed,
+    // typically when the user asks for job statistics.
+    if (options.NeedJobStatistics) {
+        filter.Add(EOperationAttribute::Progress);
+    }
+    if (options.NeedAlerts) {
+        filter.Add(EOperationAttribute::Alerts);
+    }
+
     auto attributes = RequestWithRetry<TOperationAttributes>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this] (TMutationId /*mutationId*/) {
+        [this, &filter] (TMutationId /*mutationId*/) {
             return RawClient_->GetOperation(
                 *Id_,
-                TGetOperationOptions().AttributeFilter(TOperationAttributeFilter()
-                    .Add(EOperationAttribute::Result)
-                    .Add(EOperationAttribute::Progress)
-                    .Add(EOperationAttribute::State)
-                    .Add(EOperationAttribute::BriefProgress)));
+                TGetOperationOptions().AttributeFilter(filter));
         });
 
     func(attributes);
@@ -2803,9 +2855,12 @@ void TOperation::TOperationImpl::SyncFinishOperationImpl(const TOperationAttribu
             // so we call `GetJobStatistics' in order to get it from server
             // and cache inside object.
             GetJobStatistics();
-        } catch (const TErrorResponse& ) {
+        } catch (const std::exception& e) {
             // But if for any reason we failed to get attributes
             // we complete operation using what we have.
+            YT_LOG_ERROR("Failed to get job statistics for operation %v: %v",
+                *Id_,
+                e.what());
             auto g = Guard(Lock_);
             Attributes_ = attributes;
         }
@@ -2883,7 +2938,7 @@ const TOperationId& TOperation::GetId() const
 
 TString TOperation::GetWebInterfaceUrl() const
 {
-    return Impl_->GetWebInterfaceUrl();
+    return Impl_->GetWebInterfaceUrl(Client_);
 }
 
 void TOperation::OnPrepared()
@@ -2959,6 +3014,11 @@ TJobStatistics TOperation::GetJobStatistics()
 TMaybe<TOperationBriefProgress> TOperation::GetBriefProgress()
 {
     return Impl_->GetBriefProgress();
+}
+
+TMaybe<THashMap<TString, TYtError>> TOperation::GetAlerts()
+{
+    return Impl_->GetAlerts();
 }
 
 void TOperation::AbortOperation()

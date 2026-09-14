@@ -1,0 +1,16 @@
+diff --git a/contrib/deprecated/http-parser/http_parser.c b/contrib/deprecated/http-parser/http_parser.c
+index 95ff42f783d9..726810366a11 100644
+--- a/contrib/deprecated/http-parser/http_parser.c
++++ b/contrib/deprecated/http-parser/http_parser.c
+@@ -1342,6 +1342,12 @@ size_t http_parser_execute (http_parser *parser,
+               } else if (parser->index == sizeof(TRANSFER_ENCODING)-2) {
+                 parser->header_state = h_transfer_encoding;
+                 parser->extra_flags |= F_TRANSFER_ENCODING >> 8;
++                /* Multiple `Transfer-Encoding` headers should be treated as
++                 * one, but with values separate by a comma.
++                 *
++                 * See: https://tools.ietf.org/html/rfc7230#section-3.2.2
++                 */
++                parser->flags &= ~F_CHUNKED;
+               }
+               break;

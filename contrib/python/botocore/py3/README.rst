@@ -13,14 +13,14 @@ Botocore is maintained and published by `Amazon Web Services`_.
 Notices
 -------
 
-On 2021-01-15, deprecation for Python 2.7 was announced and support was dropped
-on 2021-07-15. To avoid disruption, customers using Botocore on Python 2.7 may
-need to upgrade their version of Python or pin the version of Botocore. For
-more information, see this `blog post <https://aws.amazon.com/blogs/developer/announcing-end-of-support-for-python-2-7-in-aws-sdk-for-python-and-aws-cli-v1/>`__.
+On 2026-04-29, support for Python 3.9 will end for Botocore. This follows the
+Python Software Foundation `end of support <https://peps.python.org/pep-0596/#lifespan>`__
+for the runtime which occurred on 2025-10-31.
 
-On 2022-05-30, support was dropped for Python 3.6. This follows the
-Python Software Foundation `end of support <https://www.python.org/dev/peps/pep-0494/#lifespan>`__
-for the runtime which occurred on 2021-12-23.
+On 2025-04-22, support for Python 3.8 ended for Botocore. This follows the
+Python Software Foundation `end of support <https://peps.python.org/pep-0569/#lifespan>`__
+for the runtime which occurred on 2024-10-07.
+
 For more information, see this `blog post <https://aws.amazon.com/blogs/developer/python-support-policy-updates-for-aws-sdks-and-tools/>`__.
 
 .. _`Amazon Web Services`: https://aws.amazon.com/what-is-aws/
@@ -42,11 +42,11 @@ Assuming that you have Python and ``virtualenv`` installed, set up your environm
 
     $ git clone https://github.com/boto/botocore.git
     $ cd botocore
-    $ virtualenv venv
+    $ python -m venv .venv
     ...
-    $ . venv/bin/activate
-    $ pip install -r requirements.txt
-    $ pip install -e .
+    $ source .venv/bin/activate
+    $ python -m pip install -r requirements.txt
+    $ python -m pip install -e .
 
 .. code-block:: sh
 
@@ -93,7 +93,7 @@ applicable for ``botocore``:
 
 * Ask a question on `Stack Overflow <https://stackoverflow.com/>`__ and tag it with `boto3 <https://stackoverflow.com/questions/tagged/boto3>`__
 * Open a support ticket with `AWS Support <https://console.aws.amazon.com/support/home#/>`__
-* If it turns out that you may have found a bug, please `open an issue <https://github.com/boto/botocore/issues/new>`__
+* If it turns out that you may have found a bug, please `open an issue <https://github.com/boto/botocore/issues/new/choose>`__
 
 
 Contributing

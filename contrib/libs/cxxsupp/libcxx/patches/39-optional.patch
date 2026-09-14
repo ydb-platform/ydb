@@ -1,8 +1,8 @@
 diff --git a/include/optional b/include/optional
-index a16e485..e6ff853 100644
+index fa32d75..63fbce5 100644
 --- a/include/optional
 +++ b/include/optional
-@@ -288,7 +288,7 @@ struct __optional_destruct_base<_Tp, false> {
+@@ -295,7 +295,7 @@ struct __optional_destruct_base<_Tp, false> {
    };
    bool __engaged_;
  

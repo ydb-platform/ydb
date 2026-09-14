@@ -6,13 +6,17 @@
 #include <arrow/buffer_builder.h>
 #include <arrow/csv/chunker.h>
 #include <arrow/csv/options.h>
+#include <arrow/csv/parser.h>
 #include <arrow/json/chunker.h>
 #include <arrow/json/options.h>
 #include <arrow/io/memory.h>
 #include <arrow/util/endian.h>
+#include <arrow/util/string_view.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/size_literals.h>
+
+#include <optional>
 
 #include <ydb/core/external_sources/object_storage/events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -27,6 +31,7 @@ namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
 class TArrowFileFetcher : public NActors::TActorBootstrapped<TArrowFileFetcher> {
     static constexpr uint64_t PrefixSize = 10_MB;
+    struct TRequest;
 public:
     TArrowFileFetcher(NActors::TActorId s3FetcherId, const THashMap<TString, TString>& params)
         : S3FetcherId_{s3FetcherId}
@@ -62,6 +67,7 @@ public:
         switch (Config_->Format) {
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames:
+            case EFileFormat::Csv:
             case EFileFormat::JsonEachRow:
             case EFileFormat::JsonList: {
                 RequestPartialFile(std::move(localRequest), ctx, 0, 10_MB);
@@ -105,7 +111,22 @@ public:
         switch (Config_->Format) {
             case EFileFormat::CsvWithNames:
             case EFileFormat::TsvWithNames: {
-                file = CleanupCsvFile(data, request, std::dynamic_pointer_cast<CsvConfig>(Config_)->ParseOpts, ctx);
+                file = CleanupCsvFile(data, request, Config_->CsvParseOpts, ctx);
+                if (!file) {
+                    return;
+                }
+                ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
+                break;
+            }
+            case EFileFormat::Csv: {
+                auto withHeader = PrependSyntheticCsvHeader(data, request, Config_->CsvParseOpts, ctx);
+                if (!withHeader) {
+                    return;
+                }
+                file = CleanupCsvFile(*withHeader, request, Config_->CsvParseOpts, ctx);
+                if (!file) {
+                    return;
+                }
                 ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
                 break;
             }
@@ -115,12 +136,18 @@ public:
                     return;
                 }
                 file = BuildParquetFileFromMetadata(data, request, ctx);
+                if (!file) {
+                    return;
+                }
                 ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
                 break;
             }
             case EFileFormat::JsonEachRow:
             case EFileFormat::JsonList: {
-                file = CleanupJsonFile(data, request, std::dynamic_pointer_cast<JsonConfig>(Config_)->ParseOpts, ctx);
+                file = CleanupJsonFile(data, request, Config_->JsonParseOpts, ctx);
+                if (!file) {
+                    return;
+                }
                 ctx.Send(request.Requester, new TEvArrowFile(Config_, std::move(file), request.Path));
                 break;
             }
@@ -128,6 +155,54 @@ public:
             default:
                 Y_ABORT("Invalid format should be unreachable");
         }
+    }
+
+    static std::optional<size_t> DetectCsvColumnCount(const TString& data, const arrow::csv::ParseOptions& options, TString& parseError) {
+        constexpr int32_t kSingleRow = 1;
+        arrow::csv::BlockParser parser(options, /*num_cols=*/-1, /*first_row=*/-1, /*max_num_rows=*/kSingleRow);
+
+        arrow::util::string_view view{data.data(), data.size()};
+        uint32_t parsedBytes = 0;
+        // ParseFinal tolerates a missing trailing newline on the last (in this case only) row.
+        auto status = parser.ParseFinal(view, &parsedBytes);
+        if (!status.ok()) {
+            parseError = status.ToString();
+            return std::nullopt;
+        }
+        if (parser.num_cols() <= 0) {
+            parseError = "first CSV row produced zero columns";
+            return std::nullopt;
+        }
+        return static_cast<size_t>(parser.num_cols());
+    }
+
+    std::optional<TString> PrependSyntheticCsvHeader(const TString& data, const TRequest& request, const arrow::csv::ParseOptions& options, const NActors::TActorContext& ctx) {
+        TString parseError;
+        auto columnCount = DetectCsvColumnCount(data, options, parseError);
+        if (!columnCount) {
+            auto error = MakeError(
+                request.Path,
+                NFq::TIssuesIds::INTERNAL_ERROR,
+                TStringBuilder{} << "couldn't determine column count for headerless CSV " << request.Path << ": " << parseError
+            );
+            SendError(ctx, error);
+            return std::nullopt;
+        }
+
+        TStringBuilder header;
+        for (size_t i = 0; i < *columnCount; ++i) {
+            if (i > 0) {
+                header << options.delimiter;
+            }
+            header << "column" << i;
+        }
+        header << '\n';
+
+        TString result;
+        result.reserve(header.size() + data.size());
+        result.append(header);
+        result.append(data);
+        return result;
     }
 
     void HandleS3Error(TEvS3RangeError::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -208,7 +283,7 @@ private:
                 decompressedData << decompressedChunk;
             }
             return std::move(decompressedData);
-        } catch (const yexception& error) {
+        } catch (const std::exception& error) {
             auto errorEv = MakeError(
                 request.Path,
                 NFq::TIssuesIds::INTERNAL_ERROR,
@@ -232,6 +307,9 @@ private:
         auto chunker = arrow::csv::MakeChunker(options);
         std::shared_ptr<arrow::Buffer> whole, partial;
         auto arrowData = BuildBufferFromData(data, request, ctx);
+        if (!arrowData) {
+            return nullptr;
+        }
         auto status = chunker->Process(arrowData, &whole, &partial);
 
         if (!status.ok()) {
@@ -273,6 +351,9 @@ private:
 
     std::shared_ptr<arrow::io::RandomAccessFile> BuildParquetFileFromMetadata(const TString& data, const TRequest& request, const NActors::TActorContext& ctx) {
         auto arrowData = BuildBufferFromData(data, request, ctx);
+        if (!arrowData) {
+            return nullptr;
+        }
         return std::make_shared<arrow::io::BufferReader>(std::move(arrowData));
     }
 
@@ -280,6 +361,9 @@ private:
         auto chunker = arrow::json::MakeChunker(options);
         std::shared_ptr<arrow::Buffer> whole, partial;
         auto arrowData = BuildBufferFromData(data, request, ctx);
+        if (!arrowData) {
+            return nullptr;
+        }
 
         if (Config_->Format == EFileFormat::JsonList) {
             auto empty = std::make_shared<arrow::Buffer>(nullptr, 0);

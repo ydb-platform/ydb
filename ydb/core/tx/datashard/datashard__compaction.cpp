@@ -1,5 +1,7 @@
 #include "datashard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -19,89 +21,92 @@ public:
         auto& record = Ev->Get()->Record;
 
         if (!Self->IsStateActive()) {
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction tx at non-ready tablet " << Self->TabletID()
-                << " state " << Self->State
-                << ", requested from " << Ev->Sender);
+            YDB_LOG_WARN_CTX(ctx, "Compaction tx at non-ready tablet",
+                {"tabletId", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"state", Self->State},
+                {"sender", Ev->Sender});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 record.GetPathId().GetOwnerId(),
                 record.GetPathId().GetLocalId(),
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
 
         const auto pathId = TPathId::FromProto(record.GetPathId());
 
         if (Self->GetPathOwnerId() != pathId.OwnerId) {
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction " << Self->TabletID()
-                << " of not owned " << pathId
-                << ", self path owner id# " << Self->GetPathOwnerId());
+            YDB_LOG_WARN_CTX(ctx, "Compaction of not owned path",
+                {"tabletId", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"pathId", pathId},
+                {"pathOwnerId", Self->GetPathOwnerId()});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
 
         const auto& tableId = pathId.LocalPathId;
         auto it = Self->TableInfos.find(tableId);
         if (it == Self->TableInfos.end()) {
-            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction " << Self->TabletID()
-                << " of unknown " << pathId
-                << ", requested from " << Ev->Sender);
+            YDB_LOG_WARN_CTX(ctx, "Compaction with cookie of unknown path",
+                {"tabletId", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"pathId", pathId},
+                {"sender", Ev->Sender});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
         const TUserTable& tableInfo = *it->second;
         const auto localTid = tableInfo.LocalTid;
 
-        ++tableInfo.Stats.BackgroundCompactionRequests;
+        ++tableInfo.Stats.CompactionRequests;
 
         bool hasBorrowed = txc.DB.HasBorrowed(tableInfo.LocalTid, Self->TabletID());
         if (hasBorrowed && !record.GetCompactBorrowed()) {
             // normally we should not receive requests to compact in this case
             // but in some rare cases like schemeshard restart we can
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction of tablet# " << Self->TabletID()
-                << " of path# " << pathId
-                << ", requested from# " << Ev->Sender
-                << " contains borrowed parts, failed");
+            YDB_LOG_DEBUG_CTX(ctx, "Compaction contains borrowed parts, failed",
+                {"tabletId", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"pathId", pathId},
+                {"sender", Ev->Sender});
 
-            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_BORROWED);
+            Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_BORROWED);
 
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::BORROWED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
 
         if (Self->Executor()->HasLoanedParts()) {
             // normally we should not receive requests to compact in this case
             // but in some rare cases like schemeshard restart we can
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction of tablet# " << Self->TabletID()
-                << " of path# " << pathId
-                << ", requested from# " << Ev->Sender
-                << " contains loaned parts, failed");
+            YDB_LOG_DEBUG_CTX(ctx, "Compaction contains loaned parts, failed",
+                {"tabletId", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"pathId", pathId},
+                {"sender", Ev->Sender});
 
-            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_LOANED);
+            Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_LOANED);
 
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::LOANED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
 
@@ -111,46 +116,47 @@ public:
         bool hasSchemaChanges = Self->Executor()->HasSchemaChanges(tableInfo.LocalTid);
         if (isEmpty || isSingleParted && !hasBorrowed && !hasSchemaChanges && !record.GetCompactSinglePartedShards()) {
             // nothing to compact
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Background compaction of tablet# " << Self->TabletID()
-                << " of path# " << pathId
-                << ", requested from# " << Ev->Sender
-                << " is not needed");
+            YDB_LOG_DEBUG_CTX(ctx, "Compaction is not needed",
+                {"tabletId", Self->TabletID()},
+                {"cookie", Ev->Cookie},
+                {"pathId", pathId},
+                {"sender", Ev->Sender});
 
-            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_NOT_NEEDED);
+            Self->IncCounter(COUNTER_TX_COMPACTION_NOT_NEEDED);
 
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
             return true;
         }
 
         auto compactionId = Self->Executor()->CompactTable(tableInfo.LocalTid);
         if (compactionId) {
-            LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-                "Started background compaction# " << compactionId
-                << " of " << Self->TabletID()
-                << " tableId# " << tableId
-                << " localTid# " << localTid
-                << ", requested from " << Ev->Sender
-                << ", partsCount# " << stats.PartCount
-                << ", memtableSize# " << stats.MemDataSize
-                << ", memtableWaste# " << stats.MemDataWaste
-                << ", memtableRows# " << stats.MemRowCount);
+            YDB_LOG_INFO_CTX(ctx, "Started compaction",
+                {"compactionId", compactionId},
+                {"cookie", Ev->Cookie},
+                {"tabletId", Self->TabletID()},
+                {"tableId", tableId},
+                {"localTid", localTid},
+                {"sender", Ev->Sender},
+                {"partsCount", stats.PartCount},
+                {"memtableSize", stats.MemDataSize},
+                {"memtableWaste", stats.MemDataWaste},
+                {"memtableRows", stats.MemRowCount});
 
-            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION);
-            Self->CompactionWaiters[tableInfo.LocalTid].emplace_back(std::make_tuple(compactionId, Ev->Sender));
-            ++tableInfo.Stats.BackgroundCompactionCount;
+            Self->IncCounter(COUNTER_TX_COMPACTION);
+            Self->CompactionWaiters[tableInfo.LocalTid].emplace_back(compactionId, Ev->Sender, Ev->Cookie);
+            ++tableInfo.Stats.CompactionCount;
         } else {
             // compaction failed, for now we don't care
-            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_FAILED_START);
+            Self->IncCounter(COUNTER_TX_COMPACTION_FAILED_START);
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
                 Self->TabletID(),
                 pathId,
                 NKikimrTxDataShard::TEvCompactTableResult::FAILED);
-            ctx.Send(Ev->Sender, std::move(response));
+            ctx.Send(Ev->Sender, std::move(response), 0, Ev->Cookie);
         }
 
         return true;
@@ -183,10 +189,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Updated last full compaction of tablet# "<< Self->TabletID()
-            << ", tableId# " << TableId
-            << ", last full compaction# " << Ts);
+        YDB_LOG_DEBUG_CTX(ctx, "Updated last full compaction",
+            {"tabletId", Self->TabletID()},
+            {"tableId", TableId},
+            {"lastFullCompactionTime", Ts});
     }
 };
 
@@ -197,10 +203,11 @@ void TDataShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorCon
 void TDataShard::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
     auto finishedInfo = Executor()->GetFinishedCompactionInfo(tableId);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-        "CompactionComplete of tablet# "<< TabletID() << ", table# " << tableId
-        << ", finished edge# " << finishedInfo.Edge
-        << ", ts " << finishedInfo.FullCompactionTs);
+    YDB_LOG_DEBUG_CTX(ctx, "CompactionComplete",
+        {"tabletId", TabletID()},
+        {"tableId", tableId},
+        {"edge", finishedInfo.Edge},
+        {"fullCompactionTime", finishedInfo.FullCompactionTs});
 
     TLocalPathId localPathId = InvalidLocalPathId;
     if (tableId >= Schema::MinLocalTid) {
@@ -234,30 +241,31 @@ void TDataShard::ReplyCompactionWaiters(
     const NTabletFlatExecutor::TFinishedCompactionInfo& compactionInfo,
     const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-        "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
-        << ", finished edge# " << compactionInfo.Edge
-        << ", front# " << (CompactionWaiters[tableId].empty() ? 0UL : std::get<0>(CompactionWaiters[tableId].front())));
+    YDB_LOG_DEBUG_CTX(ctx, "ReplyCompactionWaiters",
+        {"tabletId", TabletID()},
+        {"tableId", tableId},
+        {"edge", compactionInfo.Edge},
+        {"firstCompactionId", (CompactionWaiters[tableId].empty() ? 0UL : CompactionWaiters[tableId].front().CompactionId)});
 
     auto fullCompactionQueue = CompactionWaiters.FindPtr(tableId);
     while (fullCompactionQueue && !fullCompactionQueue->empty()) {
         const auto& waiter = fullCompactionQueue->front();
-        if (std::get<0>(waiter) > compactionInfo.Edge) {
+        if (waiter.CompactionId > compactionInfo.Edge) {
             break;
         }
 
-        const auto& sender = std::get<1>(waiter);
         auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
             TabletID(),
             GetPathOwnerId(),
             localPathId,
             NKikimrTxDataShard::TEvCompactTableResult::OK);
-        ctx.Send(sender, std::move(response));
+        ctx.Send(waiter.ActorId, std::move(response), 0, waiter.Cookie);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
-            << " sending TEvCompactTableResult to# " << sender
-            << "pathId# " << TPathId(GetPathOwnerId(), localPathId));
+        YDB_LOG_DEBUG_CTX(ctx, "ReplyCompactionWaiters, sending TEvCompactTableResult",
+            {"tabletId", TabletID()},
+            {"tableId", tableId},
+            {"waiterActorId", waiter.ActorId},
+            {"pathId", TPathId(GetPathOwnerId(), localPathId)});
 
         fullCompactionQueue->pop_front();
     }
@@ -277,10 +285,11 @@ void TDataShard::ReplyCompactionWaiters(
                         waiter->RequestedTable);
                     ctx.Send(waiter->ActorId, std::move(response));
 
-                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                        "ReplyCompactionWaiters of tablet# "<< TabletID() << ", table# " << tableId
-                        << " sending TEvCompactBorrowedResult to# " << waiter->ActorId
-                        << "pathId# " << TPathId(GetPathOwnerId(), waiter->RequestedTable));
+                    YDB_LOG_DEBUG_CTX(ctx, "ReplyCompactionWaiters, sending TEvCompactBorrowedResult",
+                        {"tabletId", TabletID()},
+                        {"tableId", tableId},
+                        {"waiterActorId", waiter->ActorId},
+                        {"pathId", TPathId(GetPathOwnerId(), waiter->RequestedTable)});
                 }
 
                 compactBorrowedQueue->pop_front();
@@ -299,8 +308,8 @@ void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const T
     auto it = TableInfos.find(tableId);
     if (it != TableInfos.end()) {
         const TUserTable& tableInfo = *it->second;
-        response->Record.SetBackgroundCompactionRequests(tableInfo.Stats.BackgroundCompactionRequests);
-        response->Record.SetBackgroundCompactionCount(tableInfo.Stats.BackgroundCompactionCount);
+        response->Record.SetCompactionRequests(tableInfo.Stats.CompactionRequests);
+        response->Record.SetCompactionCount(tableInfo.Stats.CompactionCount);
         response->Record.SetCompactBorrowedCount(tableInfo.Stats.CompactBorrowedCount);
     }
 
@@ -309,3 +318,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const T
 
 } // NDataShard
 } // NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

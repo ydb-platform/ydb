@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
     const TInstant now = TInstant::ParseIso8601Deprecated("2017-11-05T01:02:03Z");
 
     Y_UNIT_TEST(Encode) {
-        auto check = [](bool cloud, bool buffered, TStringBuf expectedResourceKey) {
+        auto check = [](bool cloud, bool buffered, bool memOnly, TStringBuf expectedResourceKey) {
             TString json;
             TStringOutput out(json);
             auto e = cloud
@@ -158,6 +158,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
                     e->OnLabel("metric", "single");
                     e->OnLabel("labels", "l1");
                     e->OnLabelsEnd();
+                    e->OnMemOnly(memOnly);
                 }
                 e->OnUint64(now, 17);
                 e->OnMetricEnd();
@@ -219,6 +220,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
                     e->OnLabel("labels", "l6");
                     e->OnLabelsEnd();
                 }
+                e->OnMemOnly(memOnly);
                 e->OnMetricEnd();
             }
             e->OnStreamEnd();
@@ -235,10 +237,12 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             UNIT_ASSERT_EQUAL(parseJson(json), parseJson(expectedJson));
         };
 
-        check(false, false, "/expected.json");
-        check(false, true, "/expected_buffered.json");
-        check(true, false, "/expected_cloud.json");
-        check(true, true, "/expected_cloud_buffered.json");
+        check(false, false, false, "/expected.json");
+        check(true, false, false, "/expected_cloud.json");
+        check(false, true, false, "/expected_buffered.json");
+        check(true, true, false, "/expected_cloud_buffered.json");
+        check(false, false, true, "/expected_memOnly.json");
+        check(false, true, true, "/expected_buffered_memOnly.json");
     }
 
     TLogHistogramSnapshotPtr TestLogHistogram(ui32 v = 1) {
@@ -291,7 +295,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             auto encoder = buffered ? BufferedEncoderCloudJson(&out, 2) : EncoderCloudJson(&out, 2);
             const TString expectedMessage = TStringBuilder()
                 << "metric type '" << metricType << "' is not supported by cloud json format";
-            UNIT_ASSERT_EXCEPTION_CONTAINS_C(emit(encoder.Get(), metricType), yexception, expectedMessage,
+            UNIT_ASSERT_EXCEPTION_CONTAINS_C(emit(encoder.Get(), metricType), TJsonEncodeError, expectedMessage,
                                              TString("buffered: ") + ToString(buffered));
         };
 
@@ -301,6 +305,60 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         doTest(true, EMetricType::HIST);
         doTest(true, EMetricType::LOGHIST);
         doTest(true, EMetricType::DSUMMARY);
+    }
+
+    Y_UNIT_TEST(InvalidUtfLabelsRaiseJsonEncodeError) {
+        const TString invalidUtf("\xff", 1);
+
+        auto doTest = [&](bool buffered, TStringBuf name, TStringBuf value) {
+            TString json;
+            TStringOutput out(json);
+            auto encoder = buffered ? BufferedEncoderCloudJson(&out) : EncoderCloudJson(&out);
+
+            encoder->OnStreamBegin();
+            encoder->OnMetricBegin(EMetricType::GAUGE);
+            encoder->OnLabelsBegin();
+            if (buffered) {
+                encoder->OnLabel(name, value);
+                encoder->OnLabelsEnd();
+                encoder->OnDouble(now, 1.0);
+                encoder->OnMetricEnd();
+                encoder->OnStreamEnd();
+                UNIT_ASSERT_EXCEPTION(encoder->Close(), TJsonEncodeError);
+            } else {
+                UNIT_ASSERT_EXCEPTION(encoder->OnLabel(name, value), TJsonEncodeError);
+            }
+        };
+
+        doTest(false, invalidUtf, "value");
+        doTest(false, "name", invalidUtf);
+        doTest(true, invalidUtf, "value");
+        doTest(true, "name", invalidUtf);
+    }
+
+    Y_UNIT_TEST(MissingMetricNameRaisesJsonEncodeError) {
+        auto doTest = [&](bool buffered) {
+            TString json;
+            TStringOutput out(json);
+            auto encoder = buffered ? BufferedEncoderCloudJson(&out) : EncoderCloudJson(&out);
+
+            encoder->OnStreamBegin();
+            encoder->OnMetricBegin(EMetricType::GAUGE);
+            encoder->OnLabelsBegin();
+            encoder->OnLabel("label", "value");
+            if (buffered) {
+                encoder->OnLabelsEnd();
+                encoder->OnDouble(now, 1.0);
+                encoder->OnMetricEnd();
+                encoder->OnStreamEnd();
+                UNIT_ASSERT_EXCEPTION_CONTAINS(encoder->Close(), TJsonEncodeError, "label 'name' is not defined");
+            } else {
+                UNIT_ASSERT_EXCEPTION_CONTAINS(encoder->OnLabelsEnd(), TJsonEncodeError, "label 'name' is not defined");
+            }
+        };
+
+        doTest(false);
+        doTest(true);
     }
 
     Y_UNIT_TEST(MetricsWithDifferentLabelOrderGetMerged) {
@@ -478,7 +536,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
             AssertLabelEqual(s.GetLabels(0), "export", "Oxygen");
             AssertLabelEqual(s.GetLabels(1), "metric", "QueueSize");
-
+            UNIT_ASSERT_EQUAL(s.GetIsMemOnly(), true);
             UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
             auto ts = TInstant::ParseIso8601Deprecated("2017-11-05T12:34:56.000Z");
             AssertPointEqual(s.GetPoints(0), ts, 3.14159);
@@ -487,6 +545,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             const NProto::TMultiSample& s = samples.GetSamples(3);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::GAUGE);
             UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+            UNIT_ASSERT_EQUAL(s.GetIsMemOnly(), true);
             AssertLabelEqual(s.GetLabels(0), "metric", "Writes");
 
             UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 2);
@@ -1286,5 +1345,4 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             AssertLabelEqual(s.GetLabels(1), "export", "Oxygen");
         }
     }
-
 }

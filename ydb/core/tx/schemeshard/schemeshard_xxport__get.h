@@ -1,6 +1,6 @@
 #pragma once
-#include "schemeshard_xxport__tx_base.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -34,7 +34,7 @@ struct TSchemeShard::TXxport::TTxGet: public TSchemeShard::TXxport::TTxBase {
             return true;
         }
 
-        Self->FromXxportInfo(entry, it->second);
+        Self->FromXxportInfo(entry, *it->second);
 
         Send(Request->Sender, std::move(response), 0, Request->Cookie);
         return true;

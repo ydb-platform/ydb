@@ -46,9 +46,6 @@ class NormalizeTuples(Transformation):
     """
     tuple_name = "__tuple"
 
-    def __init__(self):
-        Transformation.__init__(self)
-
     def get_new_id(self):
         i = 0
         while 1:

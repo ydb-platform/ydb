@@ -16,7 +16,7 @@
     ();
 #else
 // Clang does not support gnu-style attributes on lambda functions yet
-#define COLD_BLOCK_BYVALUE [=]() {
+#define COLD_BLOCK_BYVALUE [=, this]() {
 #define COLD_BLOCK_BYREF [&]() {
 #define COLD_BLOCK_END \
     }                  \

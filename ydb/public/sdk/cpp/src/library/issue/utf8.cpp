@@ -2,7 +2,9 @@
 
 #include <util/charset/wide.h>
 
-namespace NYdb::NIssue {
+namespace NYdb {
+inline namespace Dev {
+namespace NIssue {
 
 namespace {
 
@@ -55,4 +57,6 @@ bool IsUtf8(const std::string_view& str) {
     return true;
 }
 
+}
+}
 }

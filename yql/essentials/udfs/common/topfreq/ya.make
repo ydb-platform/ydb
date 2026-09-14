@@ -16,9 +16,9 @@ YQL_UDF_CONTRIB(topfreq_udf)
     
     END()
 
-RECURSE_FOR_TESTS(
-    test
-    ut
-)
-
-
+IF (NOT EXPORT_CMAKE)
+    RECURSE_FOR_TESTS(
+        test
+        ut
+    )
+ENDIF()

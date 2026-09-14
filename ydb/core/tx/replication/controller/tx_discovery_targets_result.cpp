@@ -1,7 +1,9 @@
 #include "controller_impl.h"
-#include "util.h"
+#include "target_transfer.h"
 
 #include <util/string/join.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
@@ -21,21 +23,23 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_WARN_CTX(ctx, "Unknown replication",
+                {"rid", rid});
             return true;
         }
 
         if (Replication->GetState() != TReplication::EState::Ready) {
-            CLOG_W(ctx, "Replication state mismatch"
-                << ": rid# " << rid
-                << ", state# " << Replication->GetState());
+            YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
+                {"rid", rid},
+                {"state", Replication->GetState()});
             return true;
         }
 
@@ -43,27 +47,40 @@ public:
 
         if (Ev->Get()->IsSuccess()) {
             for (const auto& target : Ev->Get()->ToAdd) {
-                const auto tid = Replication->AddTarget(target.Kind, target.SrcPath, target.DstPath);
+                const auto tid = Replication->AddTarget(target.Kind, target.Config);
+
+                TString transformLambda;
+                TString runAsUser;
+                TString directoryPath;
+                if (auto p = std::dynamic_pointer_cast<const TTargetTransfer::TTransferConfig>(target.Config)) {
+                    transformLambda = p->GetTransformLambda();
+                    runAsUser = p->GetRunAsUser();
+                    directoryPath = p->GetDirectoryPath();
+                }
+
                 db.Table<Schema::Targets>().Key(rid, tid).Update(
                     NIceDb::TUpdate<Schema::Targets::Kind>(target.Kind),
-                    NIceDb::TUpdate<Schema::Targets::SrcPath>(target.SrcPath),
-                    NIceDb::TUpdate<Schema::Targets::DstPath>(target.DstPath)
+                    NIceDb::TUpdate<Schema::Targets::SrcPath>(target.Config->GetSrcPath()),
+                    NIceDb::TUpdate<Schema::Targets::DstPath>(target.Config->GetDstPath()),
+                    NIceDb::TUpdate<Schema::Targets::TransformLambda>(transformLambda),
+                    NIceDb::TUpdate<Schema::Targets::RunAsUser>(runAsUser),
+                    NIceDb::TUpdate<Schema::Targets::DirectoryPath>(directoryPath)
                 );
 
-                CLOG_N(ctx, "Add target"
-                    << ": rid# " << rid
-                    << ", tid# " << tid
-                    << ", kind# " << target.Kind
-                    << ", srcPath# " << target.SrcPath
-                    << ", dstPath# " << target.DstPath);
+                YDB_LOG_NOTICE_CTX(ctx, "Add target",
+                    {"rid", rid},
+                    {"tid", tid},
+                    {"kind", target.Kind},
+                    {"srcPath", target.Config->GetSrcPath()},
+                    {"dstPath", target.Config->GetDstPath()});
             }
         } else {
             const auto error = JoinSeq(", ", Ev->Get()->Failed);
             Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Discovery error: " << error);
 
-            CLOG_E(ctx, "Discovery error"
-                << ": rid# " << rid
-                << ", error# " << error);
+            YDB_LOG_ERROR_CTX(ctx, "Discovery error",
+                {"rid", rid},
+                {"error", error});
         }
 
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
@@ -76,7 +93,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Replication) {
             Replication->Progress(ctx);

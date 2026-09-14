@@ -8,6 +8,9 @@
 
 #include <library/cpp/yt/malloc/malloc.h>
 
+#include <library/cpp/yt/memory/free_list.h>
+#include <library/cpp/yt/memory/poison.h>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -19,7 +22,7 @@ constexpr auto SmallRankToSize = std::to_array<size_t>({
     0,
     16, 32, 48, 64, 96, 128,
     192, 256, 384, 512, 768, 1024, 1536, 2048,
-    3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768
+    3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768,
 });
 
 // Helper array for mapping size to small chunk rank.
@@ -113,7 +116,8 @@ public:
     void* Allocate()
     {
         auto* obj = FreeList_.Extract();
-        if (Y_LIKELY(obj)) {
+        if (obj) [[likely]] {
+            RecycleFreedMemory(TMutableRef(&obj[1], ObjectSize_ - sizeof(TFreeListItem)));
             AllocatedItems.Increment();
             AliveItems.Update(GetRefCounter(this)->GetRefCount() + 1);
             // Fast path.
@@ -127,7 +131,10 @@ public:
     {
         FreedItems.Increment();
         AliveItems.Update(GetRefCounter(this)->GetRefCount() - 1);
-        FreeList_.Put(static_cast<TFreeListItem*>(obj));
+        auto* typedPtr = static_cast<TFreeListItem*>(obj);
+        // Poison all memory except the header used for FreeList_.
+        PoisonFreedMemory(TMutableRef(&typedPtr[1], ObjectSize_ - sizeof(TFreeListItem)));
+        FreeList_.Put(typedPtr);
         Unref(this);
     }
 
@@ -150,9 +157,9 @@ public:
 
         size_t totalSize = segmentCount * (sizeof(TFreeListItem) + ObjectSize_ * ObjectCount_);
 
-        YT_LOG_TRACE("Destroying arena (ObjectSize: %v, TotalSize: %v)",
-            ObjectSize_,
-            totalSize);
+        YT_TLOG_TRACE("Destroying arena")
+            .With("ObjectSize", ObjectSize_)
+            .With("TotalSize", totalSize);
 
         if (MemoryTracker_) {
             MemoryTracker_->Release(totalSize);
@@ -170,6 +177,17 @@ public:
 
         auto maxRefCount = static_cast<ssize_t>(segmentCount * ObjectCount_) + 4;
         return segmentCount > 1 && refCount * 2 < maxRefCount || segmentCount == 1 && refCount == 2;
+    }
+
+    i64 GetAliveByteSize() const
+    {
+        return GetAliveItemCount() * ObjectSize_;
+    }
+
+    i64 GetAliveItemCount() const
+    {
+        auto refCount = GetRefCounter(this)->GetRefCount();
+        return refCount;
     }
 
     IMemoryUsageTrackerPtr GetMemoryTracker() const
@@ -193,6 +211,7 @@ private:
         // Build chain of chunks.
         auto objectCount = ObjectCount_;
         auto objectSize = ObjectSize_;
+        auto poisonedSize = objectSize - sizeof(TFreeListItem);
 
         YT_VERIFY(objectCount > 0);
         YT_VERIFY(objectSize > 0);
@@ -202,6 +221,7 @@ private:
             auto* current = reinterpret_cast<TFreeListItem*>(ptr);
             ptr += objectSize;
 
+            PoisonFreedMemory(TMutableRef(&current[1], poisonedSize));
             current->Next.store(reinterpret_cast<TFreeListItem*>(ptr), std::memory_order::release);
         }
 
@@ -209,6 +229,7 @@ private:
 
         auto* current = reinterpret_cast<TFreeListItem*>(ptr);
         current->Next.store(nullptr, std::memory_order::release);
+        PoisonFreedMemory(TMutableRef(&current[1], poisonedSize));
 
         return {head, current};
     }
@@ -227,12 +248,12 @@ private:
         auto refCount = GetRefCounter(this)->GetRefCount();
         constexpr auto& Logger = LockFreeLogger;
 
-        YT_LOG_TRACE("Allocating segment (ObjectSize: %v, RefCount: %v, SegmentCount: %v, TotalObjectCapacity: %v, TotalSize: %v)",
-            ObjectSize_,
-            refCount,
-            segmentCount,
-            segmentCount * ObjectCount_,
-            segmentCount * totalSize);
+        YT_TLOG_TRACE("Allocating segment")
+            .With("ObjectSize", ObjectSize_)
+            .With("RefCount", refCount)
+            .With("SegmentCount", segmentCount)
+            .With("TotalObjectCapacity", segmentCount * ObjectCount_)
+            .With("TotalSize", segmentCount * totalSize);
 
 #ifdef YT_ENABLE_REF_COUNTED_TRACKING
         TRefCountedTrackerFacade::AllocateSpace(GetRefCountedTypeCookie<TSmallArena>(), totalSize);
@@ -254,6 +275,7 @@ private:
         // Extract one element.
         auto* next = head->Next.load();
         FreeList_.Put(next, tail);
+        RecycleFreedMemory(TMutableRef(head, ObjectSize_));
         return head;
     }
 };
@@ -281,6 +303,7 @@ public:
 
         auto itemCount = ++RefCount_;
         auto ptr = malloc(allocatedSize);
+        PoisonUninitializedMemory(TMutableRef(ptr, allocatedSize));
 
         auto header = reinterpret_cast<TSizeHeader*>(ptr);
         header->Size = allocatedSize;
@@ -296,11 +319,22 @@ public:
         ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(ptr) - sizeof(TSizeHeader));
 
         auto allocatedSize = reinterpret_cast<TSizeHeader*>(ptr)->Size;
+        PoisonFreedMemory(TMutableRef(ptr, allocatedSize));
         ReleaseMemory(allocatedSize);
         free(ptr);
         FreedItems.Increment();
         AliveItems.Update(RefCount_.load() - 1);
         Unref();
+    }
+
+    i64 GetAliveByteSize() const
+    {
+        return AcquiredMemory_.load();
+    }
+
+    i64 GetAliveItemCount() const
+    {
+        return RefCount_.load();
     }
 
     size_t Unref()
@@ -435,7 +469,7 @@ TSlabAllocator::TSlabAllocator(
     LargeArena_.reset(new TLargeArena(memoryTracker, profiler));
 }
 
-void TSlabAllocator::TLargeArenaDeleter::operator() (TLargeArena* arena)
+void TSlabAllocator::TLargeArenaDeleter::operator()(TLargeArena* arena)
 {
     arena->Unref();
 }
@@ -504,6 +538,34 @@ bool TSlabAllocator::ReallocateArenasIfNeeded()
     return hasReallocatedArenas;
 }
 
+i64 TSlabAllocator::GetAliveByteSize() const
+{
+    i64 byteSize = 0;
+
+    for (size_t rank = 1; rank < SmallRankCount; ++rank) {
+        auto arena = SmallArenas_[rank].Acquire();
+        byteSize += arena->GetAliveByteSize();
+    }
+
+    byteSize += LargeArena_->GetAliveByteSize();
+
+    return byteSize;
+}
+
+i64 TSlabAllocator::GetAliveItemCount() const
+{
+    i64 itemCount = 0;
+
+    for (size_t rank = 1; rank < SmallRankCount; ++rank) {
+        auto arena = SmallArenas_[rank].Acquire();
+        itemCount += arena->GetAliveItemCount();
+    }
+
+    itemCount += LargeArena_->GetAliveItemCount();
+
+    return itemCount;
+}
+
 void TSlabAllocator::Free(void* ptr)
 {
     YT_ASSERT(ptr);
@@ -521,4 +583,3 @@ void TSlabAllocator::Free(void* ptr)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-

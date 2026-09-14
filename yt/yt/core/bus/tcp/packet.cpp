@@ -6,9 +6,7 @@
 
 #include <library/cpp/yt/string/guid.h>
 
-#include <library/cpp/yt/misc/unaligned.h>
-
-namespace NYT::NBus {
+namespace NYT::NBus::NTcp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -152,23 +150,23 @@ protected:
 
     ui32 GetPartSize(int index) const
     {
-        return UnalignedLoad(PartSizes_ + index);
+        return ReadUnaligned<ui32>(PartSizes_ + index);
     }
 
     void SetPartSize(int index, ui32 size)
     {
-        UnalignedStore(PartSizes_ + index, size);
+        WriteUnaligned<ui32>(PartSizes_ + index, size);
     }
 
 
     ui64 GetPartChecksum(int index) const
     {
-        return UnalignedLoad(PartChecksums_ + index);
+        return ReadUnaligned<ui64>(PartChecksums_ + index);
     }
 
     void SetPartChecksum(int index, ui64 checksum)
     {
-        UnalignedStore(PartChecksums_ + index, checksum);
+        WriteUnaligned<ui64>(PartChecksums_ + index, checksum);
     }
 
 private:
@@ -248,7 +246,7 @@ public:
         return FixedHeader_.PacketId;
     }
 
-    TSharedRefArray GrabMessage() const override
+    TSharedRefArray GrabMessage() override
     {
         return std::move(Message_);
     }
@@ -270,17 +268,17 @@ private:
     bool EndFixedHeaderPhase()
     {
         if (FixedHeader_.Signature != PacketSignature) {
-            YT_LOG_ERROR("Packet header signature mismatch (PacketId: %v, ExpectedSignature: %X, ActualSignature: %X)",
-                FixedHeader_.PacketId,
-                PacketSignature,
-                FixedHeader_.Signature);
+            YT_TLOG_ERROR("Packet header signature mismatch")
+                .With("PacketId", FixedHeader_.PacketId)
+                .WithFormat("ExpectedSignature", "%X", PacketSignature)
+                .WithFormat("ActualSignature", "%X", FixedHeader_.Signature);
             return false;
         }
 
         if (FixedHeader_.PartCount > MaxMessagePartCount) {
-            YT_LOG_ERROR("Invalid packet part count (PacketId: %v, PartCount: %v)",
-                FixedHeader_.PacketId,
-                FixedHeader_.PartCount);
+            YT_TLOG_ERROR("Invalid packet part count")
+                .With("PacketId", FixedHeader_.PacketId)
+                .With("PartCount", FixedHeader_.PartCount);
             return false;
         }
 
@@ -289,8 +287,8 @@ private:
             if (expectedChecksum != NullChecksum) {
                 auto actualChecksum = GetFixedChecksum();
                 if (expectedChecksum != actualChecksum) {
-                    YT_LOG_ERROR("Fixed packet header checksum mismatch (PacketId: %v)",
-                        FixedHeader_.PacketId);
+                    YT_TLOG_ERROR("Fixed packet header checksum mismatch")
+                        .With("PacketId", FixedHeader_.PacketId);
                     return false;
                 }
             }
@@ -313,8 +311,8 @@ private:
             if (expectedChecksum != NullChecksum) {
                 auto actualChecksum = GetVariableChecksum();
                 if (expectedChecksum != actualChecksum) {
-                    YT_LOG_ERROR("Variable packet header checksum mismatch (PacketId: %v)",
-                        FixedHeader_.PacketId);
+                    YT_TLOG_ERROR("Variable packet header checksum mismatch")
+                        .With("PacketId", FixedHeader_.PacketId);
                     return false;
                 }
             }
@@ -323,10 +321,10 @@ private:
         for (int index = 0; index < static_cast<int>(FixedHeader_.PartCount); ++index) {
             ui32 partSize = GetPartSize(index);
             if (partSize != NullPacketPartSize && partSize > MaxMessagePartSize) {
-                YT_LOG_ERROR("Invalid packet part size (PacketId: %v, PartIndex: %v, PartSize: %v)",
-                    FixedHeader_.PacketId,
-                    index,
-                    partSize);
+                YT_TLOG_ERROR("Invalid packet part size")
+                    .With("PacketId", FixedHeader_.PacketId)
+                    .With("PartIndex", index)
+                    .With("PartSize", partSize);
                 return false;
             }
         }
@@ -342,8 +340,8 @@ private:
             if (expectedChecksum != NullChecksum) {
                 auto actualChecksum = GetChecksum(Parts_[PartIndex_]);
                 if (expectedChecksum != actualChecksum) {
-                    YT_LOG_ERROR("Packet part checksum mismatch (PacketId: %v)",
-                        FixedHeader_.PacketId);
+                    YT_TLOG_ERROR("Packet part checksum mismatch")
+                        .With("PacketId", FixedHeader_.PacketId);
                     return false;
                 }
             }
@@ -369,7 +367,7 @@ private:
             } else if (partSize == 0) {
                 Parts_.push_back(TSharedRef::MakeEmpty());
             } else {
-                auto part = TSharedMutableRef::Allocate<TPacketDecoderTag>(partSize);
+                auto part = TSharedMutableRef::Allocate<TPacketDecoderTag>(partSize, TSharedMutableRefAllocateOptions{.InitializeStorage = false});
                 BeginPhase(EPacketPhase::MessagePart, part.Begin(), part.Size());
                 Parts_.push_back(std::move(part));
                 break;
@@ -539,6 +537,6 @@ IPacketTranscoderFactory* GetYTPacketTranscoderFactory()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NBus
+} // namespace NYT::NBus::NTcp
 
-Y_DECLARE_PODTYPE(NYT::NBus::TPacketHeader);
+Y_DECLARE_PODTYPE(NYT::NBus::NTcp::TPacketHeader);

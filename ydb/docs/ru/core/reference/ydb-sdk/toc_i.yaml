@@ -7,12 +7,24 @@ items:
     href: auth.md
   - name: Параметризованные запросы
     href: parameterized_queries.md
+  - name: Форматы данных
+    href: data-formats/index.md
+    items:
+    - name: Protobuf (Value)
+      href: data-formats/format-protobuf.md
+    - name: Apache Arrow
+      href: data-formats/format-arrow.md
   - name: Работа с топиками
     href: topic.md
   - name: Работа с узлами координации
     href: coordination.md
   - name: Обработка ошибок в API
     href: error_handling.md
+    items:
+    - name: Статусы завершения сервера YDB
+      href: ydb-status-codes.md
+    - name: Статусы завершения gRPC
+      href: grpc-status-codes.md
   - name: gRPC API
     items:
     - name: Обзор
@@ -21,5 +33,9 @@ items:
       href: grpc-headers.md
     - name: Health Check API
       href: health-check-api.md
+  - name: Наблюдаемость
+    include:
+      mode: link
+      path: observability/toc_p.yaml
   - name: Сравнение возможностей SDK
     href: feature-parity.md

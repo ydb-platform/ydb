@@ -12,8 +12,6 @@
 //    event processing time histograms
 #define ACTORSLIB_COLLECT_EXEC_STATS
 
-static constexpr bool ActorLibCollectUsageStats = false;
-
 namespace NActors {
     using TPoolId = ui8;
     using TPoolsMask = ui64;
@@ -32,7 +30,7 @@ namespace NActors {
     static constexpr TPoolWeight DefPoolWeight = 32;
     static constexpr TPoolWeight MaxPoolWeight = 1024;
 
-    using TWorkerId = i16;
+    using TWorkerId = ui16;
     static constexpr TWorkerId WorkerBits = 11;
     static constexpr TWorkerId MaxWorkers = 1 << WorkerBits;
 

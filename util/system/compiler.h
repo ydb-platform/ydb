@@ -16,12 +16,12 @@
     #include <intrin.h>
 #endif
 
-// useful cross-platfrom definitions for compilers
+// useful cross-platform definitions for compilers
 
 /**
  * @def Y_FUNC_SIGNATURE
  *
- * Use this macro to get pretty function name (see example).
+ * Use this macro to get a pretty signature of the current function (see an example).
  *
  * @code
  * void Hi() {
@@ -67,7 +67,7 @@
 /**
  * @def Y_DECLARE_UNUSED
  *
- * Macro is needed to silence compiler warning about unused entities (e.g. function or argument).
+ * Use this macro to silence compiler warnings about unused entities (e.g. a function or an argument).
  *
  * @code
  * Y_DECLARE_UNUSED int FunctionUsedSolelyForDebugPurposes();
@@ -75,7 +75,7 @@
  *
  * void Foo(const int argumentUsedOnlyForDebugPurposes Y_DECLARE_UNUSED) {
  *     assert(argumentUsedOnlyForDebugPurposes == 42);
- *     // however you may as well omit `Y_DECLARE_UNUSED` and use `UNUSED` macro instead
+ *     // however you may as well omit `Y_DECLARE_UNUSED` and use `Y_UNUSED` macro instead
  *     Y_UNUSED(argumentUsedOnlyForDebugPurposes);
  * }
  * @endcode
@@ -98,7 +98,7 @@
 /**
  * @def Y_FORCE_INLINE
  *
- * Macro to use in place of 'inline' in function declaration/definition to force
+ * Macro to use in place of 'inline' in a function declaration/definition to force
  * it to be inlined.
  */
 #if !defined(Y_FORCE_INLINE)
@@ -118,7 +118,7 @@
 /**
  * @def Y_NO_INLINE
  *
- * Macro to use in place of 'inline' in function declaration/definition to
+ * Macro to use in place of 'inline' in a function declaration/definition to
  * prevent it from being inlined.
  */
 #if !defined(Y_NO_INLINE)
@@ -129,6 +129,19 @@
         #define Y_NO_INLINE __attribute__((__noinline__))
     #else
         #define Y_NO_INLINE
+    #endif
+#endif
+
+/**
+ * @def Y_EMPTY_BASES
+ *
+ * Macro to enable EBO (empty base optimization).
+ */
+#if !defined(Y_EMPTY_BASES)
+    #if defined(_MSC_VER)
+        #define Y_EMPTY_BASES __declspec(empty_bases)
+    #else
+        #define Y_EMPTY_BASES
     #endif
 #endif
 
@@ -206,6 +219,30 @@
 template <class... Types>
 constexpr Y_FORCE_INLINE int Y_UNUSED(Types&&...) {
     return 0;
+}
+#endif
+
+/**
+ * @def Y_INITIALIZED
+ *
+ * This function can be used to silence erroneous bugprone-use-after-move warnings from clang-tidy.
+ * (see https://clang.llvm.org/extra/clang-tidy/checks/bugprone/use-after-move.html#silencing-erroneous-warnings)
+ *
+ * @code
+ * void Foo(T value, int i) {
+ *     if (i == 1) {
+ *         DoSomethingWith(std::move(value));
+ *     }
+ *     if (i == 2) {
+ *         Y_INITIALIZED(value);
+ *         DoOtherThingWith(std::move(value));
+ *     }
+ * }
+ */
+#if defined(__cplusplus)
+template <class... Types>
+constexpr Y_FORCE_INLINE int Y_INITIALIZED(Types&...) {
+    return 0; // constexpr void functions are not supported in c++11
 }
 #endif
 
@@ -351,7 +388,7 @@ _YandexAbort();
 /**
  * @def Y_PRAGMA
  *
- * Macro for use in other macros to define compiler pragma
+ * Macro to use in other macros to define compiler pragma
  * See below for other usage examples
  *
  * @code
@@ -431,7 +468,7 @@ _YandexAbort();
  * Y_PRAGMA_DIAGNOSTIC_PUSH
  * Y_PRAGMA_NO_WSHADOW
  *
- * // some code which use variable shadowing, e.g.:
+ * // some code that uses variable shadowing, e.g.:
  *
  * for (int i = 0; i < 100; ++i) {
  *   Use(i);
@@ -468,7 +505,7 @@ _YandexAbort();
  * Y_PRAGMA_DIAGNOSTIC_PUSH
  * Y_PRAGMA_NO_UNUSED_FUNCTION
  *
- * // some code which introduces a function which later will not be used, e.g.:
+ * // some code that introduces a function that later will not be used, e.g.:
  *
  * void Foo() {
  * }
@@ -501,7 +538,7 @@ _YandexAbort();
  * Y_PRAGMA_DIAGNOSTIC_PUSH
  * Y_PRAGMA_NO_UNUSED_PARAMETER
  *
- * // some code which introduces a function with unused parameter, e.g.:
+ * // some code that introduces a function with an unused parameter, e.g.:
  *
  * void foo(int a) {
  *     // a is not referenced
@@ -565,13 +602,13 @@ _YandexAbort();
 #if (defined(__clang__) || defined(__GNUC__)) && !defined(_msan_enabled_)
     /**
  * @def Y_CONST_FUNCTION
-   methods and functions, marked with this method are promised to:
+   Methods and functions marked with this attribute promise to:
      1. do not have side effects
-     2. this method do not read global memory
-   NOTE: this attribute can't be set for methods that depend on data, pointed by this
-   this allow compilers to do hard optimization of that functions
-   NOTE: in common case this attribute can't be set if method have pointer-arguments
-   NOTE: as result there no any reason to discard result of such method
+     2. do not read global memory
+   It allows compilers to do hard optimization in code that uses these functions/methods.
+   NOTE: this attribute can't be set for methods that use class members.
+   NOTE: this attribute can't be set for functions/methods that have pointer arguments.
+   NOTE: as a consequence there are no reasons to discard the result of such a method or a function.
 */
     #define Y_CONST_FUNCTION [[gnu::const]]
 #endif
@@ -583,11 +620,11 @@ _YandexAbort();
 #if defined(__clang__) || defined(__GNUC__)
     /**
  * @def Y_PURE_FUNCTION
-   methods and functions, marked with this method are promised to:
+   Methods and functions marked with this attribute promise to:
      1. do not have side effects
-     2. result will be the same if no global memory changed
-   this allow compilers to do hard optimization of that functions
-   NOTE: as result there no any reason to discard result of such method
+     2. return the same result if no global memory is changed
+   It allows compilers to do hard optimization in code that uses these functions/methods.
+   NOTE: as a consequence there are no reasons to discard the result of such a method or a function.
 */
     #define Y_PURE_FUNCTION [[gnu::pure]]
 #endif
@@ -619,8 +656,8 @@ _YandexAbort();
     #define Y_REINITIALIZES_OBJECT
 #endif
 
-// Use at the end of macros declaration. It allows macros usage only with semicolon at the end.
-// It prevents from warnings for extra semicolons when building with flag `-Wextra-semi`.
+// Use at the end of macros declarations. It allows macros usage only with a semicolon at the end.
+// It disables warnings about extra semicolons when building with a flag `-Wextra-semi`.
 #define Y_SEMICOLON_GUARD static_assert(true, "")
 
 #ifdef __cplusplus
@@ -643,7 +680,7 @@ Y_FORCE_INLINE void DoNotOptimizeAway(T&& datum) {
 
 /**
  * The usage for `const T&` is prohibited.
- * The compiler assume that a constant reference, even though escaped via asm volatile, is unchanged.
+ * The compiler assumes that a constant reference, even though escaped via asm volatile, is unchanged.
  * The const-ref interface is deleted to discourage new uses of it, as subtle compiler optimizations (invariant hoisting, etc.) can occur.
  * For more details see https://github.com/google/benchmark/pull/1493.
  */
@@ -658,30 +695,22 @@ Y_FORCE_INLINE void DoNotOptimizeAway(const T&) = delete;
 #endif
 
 /**
- * @def Y_LIFETIME_BOUND
+ * @def Y_HAS_BUILTIN
  *
- * The attribute on a function parameter can be used to tell the compiler
- * that function return value may refer that parameter.
- * The compiler may produce compile-time warning if it is able to detect that
- * an object or reference refers to another object with a shorter lifetime.
+ * A wrapper around `__has_builtin` that evaluates to zero when the compiler
+ * does not provide the feature-checking macro.
  */
-#if defined(__clang__) && defined(__cplusplus) && defined(__has_cpp_attribute)
-    #if defined(__CUDACC__) && (!Y_CUDA_AT_LEAST(11, 0) || (__clang_major__ < 13))
-        #define Y_LIFETIME_BOUND
-    #elif __has_cpp_attribute(clang::lifetimebound)
-        #define Y_LIFETIME_BOUND [[clang::lifetimebound]]
-    #else
-        #define Y_LIFETIME_BOUND
-    #endif
+#ifdef __has_builtin
+    #define Y_HAS_BUILTIN(x) __has_builtin(x)
 #else
-    #define Y_LIFETIME_BOUND
+    #define Y_HAS_BUILTIN(x) 0
 #endif
 
 /**
- * @def Y_HAVE_ATTRIBUTE
+ * @def Y_HAS_ATTRIBUTE
  *
  * A function-like feature checking macro that is a wrapper around
- * `__has_attribute`, which is defined by GCC 5+ and Clang and evaluates to a
+ * `__has_attribute` that is defined by GCC 5+ and Clang and evaluates to a
  * nonzero constant integer if the attribute is supported or 0 if not.
  *
  * It evaluates to zero if `__has_attribute` is not defined by the compiler.
@@ -691,9 +720,68 @@ Y_FORCE_INLINE void DoNotOptimizeAway(const T&) = delete;
  *     Clang: https://clang.llvm.org/docs/LanguageExtensions.html
  */
 #ifdef __has_attribute
-    #define Y_HAVE_ATTRIBUTE(x) __has_attribute(x)
+    #define Y_HAS_ATTRIBUTE(x) __has_attribute(x)
 #else
-    #define Y_HAVE_ATTRIBUTE(x) 0
+    #define Y_HAS_ATTRIBUTE(x) 0
+#endif
+
+/**
+ * @def Y_HAS_CPP_ATTRIBUTE
+ *
+ * A function-like feature checking macro that is a wrapper around
+ * `__has_cpp_attribute` evaluates to a  nonzero constant integer
+ * if the attribute is supported or 0 if not.
+ *
+ * It evaluates to zero if `__has_cpp_attribute` is not defined by the compiler.
+ *
+ * @see
+ *     GCC: https://gcc.gnu.org/gcc-5/changes.html
+ *     Clang: https://clang.llvm.org/docs/LanguageExtensions.html
+ */
+#if defined(__cplusplus) && defined(__has_cpp_attribute)
+    #define Y_HAS_CPP_ATTRIBUTE(x) __has_cpp_attribute(x)
+#else
+    #define Y_HAS_CPP_ATTRIBUTE(x) 0
+#endif
+
+/**
+ * @def Y_LIFETIME_BOUND
+ *
+ * This attribute on a function parameter can be used to tell the compiler
+ * that the function return value may refer that parameter.
+ * When applied to a parameter of a constructor it means that the constructed object
+ * may refer that parameter.
+ * This attribute can also be used to annotate non-static member functions meaning that the
+ * return value of this function may refer to the object on which the member function is invoked.
+ *
+ * The compiler may produce a compile-time warning if it is able to detect that
+ * an object or a reference refers to another object with a shorter lifetime.
+ *
+ * @see
+ *    Clang: https://clang.llvm.org/docs/AttributeReference.html#lifetimebound
+ */
+#if defined(__CUDACC__) && (!Y_CUDA_AT_LEAST(11, 0) || (__clang_major__ < 13))
+    #define Y_LIFETIME_BOUND
+#elif Y_HAS_CPP_ATTRIBUTE(clang::lifetimebound)
+    #define Y_LIFETIME_BOUND [[clang::lifetimebound]]
+#elif Y_HAS_CPP_ATTRIBUTE(msvc::lifetimebound)
+    #define Y_LIFETIME_BOUND [[msvc::lifetimebound]]
+#else
+    #define Y_LIFETIME_BOUND
+#endif
+
+/**
+ * @def Y_LIFETIME_CAPTURE_BY(X)
+ *
+ * The attribute on a function parameter or implicit object parameter indicates
+ * that the capturing entity X may refer to the object referred by that parameter.
+ */
+#if defined(__CUDACC__) && (!Y_CUDA_AT_LEAST(11, 0) || (__clang_major__ < 13))
+    #define Y_LIFETIME_CAPTURE_BY(X)
+#elif Y_HAS_CPP_ATTRIBUTE(clang::lifetime_capture_by)
+    #define Y_LIFETIME_CAPTURE_BY(X) [[clang::lifetime_capture_by(X)]]
+#else
+    #define Y_LIFETIME_CAPTURE_BY(X)
 #endif
 
 /**
@@ -711,8 +799,112 @@ Y_FORCE_INLINE void DoNotOptimizeAway(const T&) = delete;
  * Y_RETURNS_NONNULL extern void* mymalloc(size_t len);
  * @endcode
  */
-#if Y_HAVE_ATTRIBUTE(returns_nonnull)
+#if Y_HAS_ATTRIBUTE(returns_nonnull)
     #define Y_RETURNS_NONNULL __attribute__((returns_nonnull))
 #else
     #define Y_RETURNS_NONNULL
+#endif
+
+/**
+ * @def Y_NONNULL
+ *
+ * The nonnull attribute indicates that a function parameter must not be null.
+ *
+ * @see
+ *    GCC: https://gcc.gnu.org/onlinedocs/gcc/Common-Function-Attributes.html#index-nonnull-function-attribute
+ *    Clang: https://clang.llvm.org/docs/AttributeReference.html#id15
+ *
+ * @code
+ * void func(char* Y_NONNULL arr, size_t len);
+ * @endcode
+ */
+#if Y_HAS_ATTRIBUTE(nonnull)
+    #define Y_NONNULL __attribute__((nonnull))
+#else
+    #define Y_NONNULL
+#endif
+
+/**
+ * @def Y_NO_UNIQUE_ADDRESS
+ *
+ * A macro that applies the [[no_unique_address]] attribute to a class/struct member,
+ * allowing it to potentially occupy no additional memory if it is empty.
+ * https://en.cppreference.com/w/cpp/language/attributes/no_unique_address
+ *
+ * @code
+ *
+ * struct TEmpty { ... };
+ *
+ * struct TFoo {
+ *     ...
+ *     Y_NO_UNIQUE_ADDRESS TEmpty Empty;
+ * };
+ *
+ * @endcode
+ */
+#if Y_HAS_CPP_ATTRIBUTE(no_unique_address)
+    #define Y_NO_UNIQUE_ADDRESS [[no_unique_address]]
+#elif Y_HAS_CPP_ATTRIBUTE(msvc::no_unique_address)
+    #define Y_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
+#else
+    #define Y_NO_UNIQUE_ADDRESS
+#endif
+
+/**
+ * @def Y_TRIVIAL_ABI
+ *
+ * Indicates that a class or structure can be considered trivial for the purpose of calls.
+ *
+ * @see https://clang.llvm.org/docs/AttributeReference.html#trivial-abi
+ */
+#if Y_HAS_CPP_ATTRIBUTE(clang::trivial_abi)
+    #define Y_TRIVIAL_ABI [[clang::trivial_abi]]
+#else
+    #define Y_TRIVIAL_ABI
+#endif
+
+/**
+ * @def Y_CORO_AWAIT_ELIDABLE
+ *
+ * A class attribute which can be applied to a coroutine return type.
+ *
+ * Allows the compiler to apply heap allocation elision when the coroutine with such return type
+ * is immediately awaited or passed as an argument to a Y_CORO_AWAIT_ELIDABLE_ARGUMENT parameter.
+ *
+ * See https://clang.llvm.org/docs/AttributeReference.html#coro-await-elidable
+ */
+#if defined(__clang__) && Y_HAS_CPP_ATTRIBUTE(clang::coro_await_elidable)
+    #define Y_CORO_AWAIT_ELIDABLE [[clang::coro_await_elidable]]
+#else
+    #define Y_CORO_AWAIT_ELIDABLE
+#endif
+
+/**
+ * @def Y_CORO_AWAIT_ELIDABLE_ARGUMENT
+ *
+ * A function parameter attribute which allows the compiler to apply heap allocation elision for
+ * a coroutine with Y_CORO_AWAIT_ELIDABLE return type passed as argument to the annotated parameter.
+ *
+ * See https://clang.llvm.org/docs/AttributeReference.html#coro-await-elidable-argument
+ */
+#if defined(__clang__) && Y_HAS_CPP_ATTRIBUTE(clang::coro_await_elidable_argument)
+    #define Y_CORO_AWAIT_ELIDABLE_ARGUMENT [[clang::coro_await_elidable_argument]]
+#else
+    #define Y_CORO_AWAIT_ELIDABLE_ARGUMENT
+#endif
+
+/**
+ * @def Y_CORO_ONLY_DESTROY_WHEN_COMPLETE
+ *
+ * A class attribute which can be applied to a coroutine return type.
+ *
+ * Allows the compiler to skip generation of destructors for intermediate suspension points
+ * and reduce code size.
+ *
+ * See https://clang.llvm.org/docs/AttributeReference.html#coro-only-destroy-when-complete
+ */
+#if defined(__clang__) && Y_HAS_CPP_ATTRIBUTE(clang::coro_only_destroy_when_complete)
+    #define Y_CORO_ONLY_DESTROY_WHEN_COMPLETE [[clang::coro_only_destroy_when_complete]]
+#else
+    #define Y_CORO_ONLY_DESTROY_WHEN_COMPLETE
 #endif

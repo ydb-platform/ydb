@@ -2,6 +2,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
+IF (SANITIZER_TYPE  == "address")
+    SPLIT_FACTOR(100)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -16,36 +20,60 @@ REQUIREMENTS(ram:32)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/invoke_builtins/header.ya.make.inc)
 
+ENABLE(TIDY_ALLOW_GENERATED)
+SET(TIDY_HEADER_FILTER "${ARCADIA_ROOT}/yql/essentials/minikql/comp_nodes/ut/")
+
 SET(ORIG_SRC_DIR yql/essentials/minikql/comp_nodes/ut)
 
 SET(ORIG_SOURCES
     mkql_test_factory.cpp
     mkql_bit_utils_ut.cpp
+    mkql_block_agg_ut.cpp
     mkql_block_compress_ut.cpp
+    mkql_block_coalesce_ut.cpp
     mkql_block_exists_ut.cpp
+    mkql_block_logical_ut.cpp
     mkql_block_skiptake_ut.cpp
-    mkql_block_map_join_ut_utils.cpp
     mkql_block_map_join_ut.cpp
+    mkql_block_test_helper.cpp
+    mkql_block_serializer_test_utils.cpp
+    mkql_block_fuzzer.cpp
+    mkql_block_getelem_ut.cpp
+    mkql_block_guess_ut.cpp
+    mkql_block_way_ut.cpp
+    mkql_block_just_ut.cpp
     mkql_block_top_sort_ut.cpp
+    mkql_block_variant_ut.cpp
+    mkql_block_uuid_ut.cpp
+    mkql_block_dynumber_ut.cpp
+    mkql_block_variant_item_ut.cpp
+    mkql_block_variant_node_ut.cpp
+    mkql_block_dynamic_variant_ut.cpp
     mkql_blocks_ut.cpp
+    mkql_callable_ut.cpp
     mkql_combine_ut.cpp
     mkql_condense_ut.cpp
+    mkql_convert_ut.cpp
     mkql_decimal_ut.cpp
     mkql_chain_map_ut.cpp
     mkql_chopper_ut.cpp
     mkql_filters_ut.cpp
     mkql_flatmap_ut.cpp
     mkql_fromstring_ut.cpp
+    mkql_linear_ut.cpp
+    mkql_list_join_ut.cpp
     mkql_multihopping_saveload_ut.cpp
     mkql_multihopping_ut.cpp
     mkql_multimap_ut.cpp
     mkql_fold_ut.cpp
+    mkql_erased_ut.cpp
     mkql_heap_ut.cpp
     mkql_compare_ut.cpp
     mkql_computation_node_ut.cpp
     mkql_group_ut.cpp
     mkql_dict_ut.cpp
     mkql_isa_detection_ut.cpp
+    mkql_iterable_ut.cpp
     mkql_join_ut.cpp
     mkql_join_dict_ut.cpp
     mkql_grace_join_ut.cpp
@@ -54,11 +82,14 @@ SET(ORIG_SOURCES
     mkql_match_recognize_list_ut.cpp
     mkql_match_recognize_nfa_ut.cpp
     mkql_match_recognize_ut.cpp
+    mkql_mutdict_ut.cpp
     mkql_safe_circular_buffer_ut.cpp
     mkql_sort_ut.cpp
     mkql_switch_ut.cpp
     mkql_time_order_recover_saveload_ut.cpp
     mkql_todict_ut.cpp
+    mkql_udf_profile_ut.cpp
+    mkql_udf_ut.cpp
     mkql_variant_ut.cpp
     mkql_wide_chain_map_ut.cpp
     mkql_wide_chopper_ut.cpp
@@ -72,13 +103,19 @@ SET(ORIG_SOURCES
     mkql_listfromrange_ut.cpp
     mkql_mapnext_ut.cpp
     mkql_rh_hash_ut.cpp
+    mkql_runtime_feature_ut.cpp
 )
 
 PEERDIR(
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/sql/pg_dummy
+    yql/essentials/minikql/udf_value_test_support
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/sql/pg
+    yql/essentials/types/dynumber
+    yql/essentials/utils/random_data_generator
 )
 
 IF (ARCH_X86_64)
@@ -109,4 +146,3 @@ COPY(
     OUTPUT_INCLUDES
         yql/essentials/minikql/computation/mkql_computation_node_codegen.h
 )
-

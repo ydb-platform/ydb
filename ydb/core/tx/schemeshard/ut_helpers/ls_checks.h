@@ -1,15 +1,14 @@
 #pragma once
 
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/core/protos/replication.pb.h>
-
-#include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/core/scheme/scheme_pathid.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/follower_group.pb.h>
-#include <ydb/core/protos/subdomains.pb.h>
-
 #include <ydb/public/api/protos/ydb_table.pb.h>
+
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
 
 #include <functional>
 
@@ -23,7 +22,24 @@ struct TPathVersion {
     TPathId PathId = TPathId();
     ui64 Version = Max<ui64>();
 };
-using TApplyIf = TVector<TPathVersion>;
+
+struct TApplyIfUnit : TPathVersion {
+    std::vector<NKikimrSchemeOp::EPathType> PathTypes;
+
+    TApplyIfUnit() {}
+
+    TApplyIfUnit(const TPathVersion& pathVersion) {
+        PathId = pathVersion.PathId;
+        Version = pathVersion.Version;
+    }
+
+    TApplyIfUnit(TPathVersion&& pathVersion) {
+        PathId = std::move(pathVersion.PathId);
+        Version = std::move(pathVersion.Version);
+    }
+};
+
+using TApplyIf = TVector<TApplyIfUnit>;
 
 using TUserAttrs = TVector<std::pair<TString, TString>>;
 
@@ -40,6 +56,7 @@ namespace NLs {
 
     TCheckFunc PathsInsideDomain(ui64 count);
     TCheckFunc PQPartitionsInsideDomain(ui64 count);
+    TCheckFunc PQGroupsInsideDomain(ui64 count);
     TCheckFunc TopicReservedStorage(ui64 expected);
     TCheckFunc TopicAccountSize(ui64 expected);
     TCheckFunc TopicAccountSizeGE(ui64 expected);
@@ -48,6 +65,7 @@ namespace NLs {
     TCheckFunc ShardsInsideDomain(ui64 count);
     TCheckFunc ShardsInsideDomainOneOf(TSet<ui64> variants);
     TCheckFunc DomainLimitsIs(ui64 maxPaths, ui64 maxShards, ui64 maxPQPartitions = 0);
+    TCheckFunc SchemeLimits(const NKikimrSubDomains::TSchemeLimits& expected);
 
     TCheckFunc FreezeStateEqual(NKikimrSchemeOp::EFreezeState expectedState);
 
@@ -74,6 +92,7 @@ namespace NLs {
     TCheckFunc ExtractTenantSysViewProcessor(ui64* tenantSVPId);
     TCheckFunc ExtractTenantStatisticsAggregator(ui64* tenantSAId);
     TCheckFunc ExtractDomainHive(ui64* domainHiveId);
+    TCheckFunc ExtractChildren(TVector<TString>* children);
 
     void NotFinished(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void Finished(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -92,11 +111,20 @@ namespace NLs {
 
 
     void IsTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsColumnTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsExternalTable(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsExternalDataSource(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsView(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsSysView(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsSecret(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsStreamingQuery(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsDirectory(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsReplication(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsTransfer(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsTestShardSet(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, const NKikimrSchemeOp::EPathType pathType);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
     TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -117,6 +145,8 @@ namespace NLs {
     TCheckFunc MaxPartitionsCountEqual(ui32 count);
     void HasMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void NoMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    TCheckFunc MinTopicPartitionsCountEqual(ui32 count);
+    TCheckFunc MaxTopicPartitionsCountEqual(ui32 count);
     TCheckFunc PartitioningByLoadStatus(bool status);
     TCheckFunc ColumnFamiliesCount(ui32 size);
     TCheckFunc ColumnFamiliesHas(ui32 familyId);
@@ -126,6 +156,7 @@ namespace NLs {
         NKikimrSchemeOp::TTTLSettings::EUnit columnUnit = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO);
     TCheckFunc HasTtlDisabled();
     TCheckFunc IsBackupTable(bool value);
+    TCheckFunc IsRestoreTable(bool value);
     TCheckFunc ReplicationMode(NKikimrSchemeOp::TTableReplicationConfig::EReplicationMode mode);
     TCheckFunc ReplicationState(NKikimrReplication::TReplicationState::StateCase state);
 
@@ -139,7 +170,9 @@ namespace NLs {
     TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui32 tabletCount, ui32 groupCount,
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
     TCheckFunc CheckPQAlterVersion (const TString& name, ui64 alterVersion);
+    TCheckFunc ColumnTableIndexesCount(ui32 count);
     TCheckFunc IndexesCount(ui32 count);
+    TCheckFunc CheckPathState(NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
 
     TCheckFunc IndexType(NKikimrSchemeOp::EIndexType type);
     TCheckFunc IndexState(NKikimrSchemeOp::EIndexState state);
@@ -153,6 +186,8 @@ namespace NLs {
                                      ui32 levels
                                   );
 
+    TCheckFunc SpecializedIndexDescription(const TString& proto);
+
     TCheckFunc SequenceName(const TString& name);
     TCheckFunc SequenceIncrement(i64 increment);
     TCheckFunc SequenceMaxValue(i64 maxValue);
@@ -165,10 +200,15 @@ namespace NLs {
     TCheckFunc StreamFormat(NKikimrSchemeOp::ECdcStreamFormat format);
     TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
     TCheckFunc StreamVirtualTimestamps(bool value);
+    TCheckFunc StreamUserSIDs(bool value);
+    TCheckFunc StreamTraceIds(bool value);
     TCheckFunc StreamResolvedTimestamps(const TDuration& value);
+    TCheckFunc StreamSchemaChanges(bool value);
     TCheckFunc StreamAwsRegion(const TString& value);
     TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed);
     TCheckFunc RetentionPeriod(const TDuration& value);
+    TCheckFunc ConsumerExist(const TString& name);
+    TCheckFunc ConsumersSize(ui64 size);
 
     TCheckFunc HasBackupInFly(ui64 txId);
     void NoBackupInFly(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -188,6 +228,9 @@ namespace NLs {
     TCheckFunc ServerlessComputeResourcesMode(NKikimrSubDomains::EServerlessComputeResourcesMode serverlessComputeResourcesMode);
 
     TCheckFunc IncrementalBackup(bool flag);
+
+    TCheckFunc CheckMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
+    TCheckFunc CheckColumnTableMultiColumnStatistics(const TString& name, const TVector<TString>& columns, const TVector<NKikimrSchemeOp::EMultiColumnStatisticsType>& types);
 
     struct TInverseTag {
         bool Value = false;

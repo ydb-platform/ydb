@@ -1,7 +1,5 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
     utf8.cpp
     yql_issue.cpp

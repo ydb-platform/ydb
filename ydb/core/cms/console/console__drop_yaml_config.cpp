@@ -4,6 +4,8 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
 using namespace NKikimrConsole;
@@ -32,11 +34,15 @@ public:
             }
 
             if (Self->ClusterName != cluster) {
-                ythrow yexception() << "ClusterName mismatch";
+                ythrow yexception() << "ClusterName mismatch"
+                    << " expected " << Self->ClusterName
+                    << " but got " << cluster;
             }
 
             if (Version != Self->YamlVersion) {
-                ythrow yexception() << "Version mismatch";
+                ythrow yexception() << "Version mismatch"
+                    << " expected " << Self->YamlVersion
+                    << " but got " << Version;
             }
         } catch (const yexception& ex) {
             Error = true;
@@ -63,13 +69,13 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TTxDropYamlConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxDropYamlConfig Complete");
 
         ctx.Send(Response.Release());
 
         if (!Error && Modify) {
             Self->YamlVersion = 0;
-            Self->YamlConfig.clear();
+            Self->MainYamlConfig.clear();
             Self->YamlDropped = true;
 
             Self->VolatileYamlConfigs.clear();

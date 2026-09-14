@@ -2,10 +2,10 @@ YQL_UDF_CONTRIB(unicode_udf)
     
     YQL_ABI_VERSION(
         2
-        27
+        37
         0
     )
-    
+
     SRCS(
         unicode_base.cpp
     )

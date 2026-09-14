@@ -1,10 +1,12 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/system/mutex.h>
@@ -23,12 +25,14 @@ public:
         TActorSystem* actorSystem,
         NYql::TKikimrConfiguration::TPtr config,
         bool needCollectSchemeData = false,
-        TKqpTempTablesState::TConstPtr tempTablesState = nullptr)
+        TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt)
         : Cluster(cluster)
         , NeedCollectSchemeData(needCollectSchemeData)
         , ActorSystem(actorSystem)
         , Config(config)
         , TempTablesState(std::move(tempTablesState))
+        , FederatedQuerySetup(federatedQuerySetup)
     {}
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadata(
@@ -61,6 +65,9 @@ private:
 
     void OnLoadedTableMetadata(NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult);
 
+    NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadSysViewRewrittenMetadata(
+        const TString& cluster, const TString& table, const TString& sysViewName);
+
     const TString Cluster;
     TVector<NKikimrKqp::TKqpTableMetadataProto> CollectedSchemeData;
     TMutex Lock;
@@ -68,6 +75,7 @@ private:
     TActorSystem* ActorSystem;
     NYql::TKikimrConfiguration::TPtr Config;
     TKqpTempTablesState::TConstPtr TempTablesState;
+    std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 };
 
 } // namespace NKikimr::NKqp

@@ -5,6 +5,7 @@
     "endpointPrefix":"connect-campaigns",
     "jsonVersion":"1.1",
     "protocol":"rest-json",
+    "protocols":["rest-json"],
     "serviceFullName":"AmazonConnectCampaignService",
     "serviceId":"ConnectCampaigns",
     "signatureVersion":"v4",
@@ -450,6 +451,10 @@
         "enableAnswerMachineDetection":{
           "shape":"Boolean",
           "documentation":"<p>Enable or disable answering machine detection</p>"
+        },
+        "awaitAnswerMachinePrompt":{
+          "shape":"Boolean",
+          "documentation":"<p>Enable or disable await answer machine prompt</p>"
         }
       },
       "documentation":"<p>Answering Machine Detection config</p>"
@@ -472,7 +477,8 @@
       "type":"string",
       "documentation":"<p>The value of the attribute.</p>",
       "max":32767,
-      "min":0
+      "min":0,
+      "pattern":".*"
     },
     "Attributes":{
       "type":"map",
@@ -530,7 +536,8 @@
       "type":"string",
       "documentation":"<p>Identifier representing a Campaign</p>",
       "max":256,
-      "min":0
+      "min":0,
+      "pattern":"[\\S]*"
     },
     "CampaignName":{
       "type":"string",
@@ -573,8 +580,9 @@
     "ClientToken":{
       "type":"string",
       "documentation":"<p>Client provided parameter used for idempotency. Its value must be unique for each request.</p>",
-      "max":64,
-      "min":0
+      "max":200,
+      "min":0,
+      "pattern":"[a-zA-Z0-9_\\-.]*"
     },
     "ConflictException":{
       "type":"structure",
@@ -686,6 +694,7 @@
       "documentation":"<p>The phone number of the customer, in E.164 format.</p>",
       "max":20,
       "min":0,
+      "pattern":"[\\d\\-+]*",
       "sensitive":true
     },
     "DialRequest":{
@@ -706,7 +715,10 @@
     },
     "DialRequestId":{
       "type":"string",
-      "documentation":"<p>Identifier representing a Dial request</p>"
+      "documentation":"<p>Identifier representing a Dial request</p>",
+      "max":256,
+      "min":0,
+      "pattern":"[a-zA-Z0-9_\\-.]*"
     },
     "DialRequestList":{
       "type":"list",
@@ -903,7 +915,8 @@
       "type":"string",
       "documentation":"<p>Amazon Connect Instance Id</p>",
       "max":256,
-      "min":0
+      "min":0,
+      "pattern":"[a-zA-Z0-9_\\-.]*"
     },
     "InstanceIdFilter":{
       "type":"structure",

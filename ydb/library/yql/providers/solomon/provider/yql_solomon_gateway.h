@@ -32,6 +32,7 @@ public:
     virtual NThreading::TFuture<TGetMetaResult> GetMeta(
         const TGetMetaRequest& request) const = 0;
 
+    virtual void AddCluster(const TSolomonClusterConfig& cluster) = 0;
     virtual TMaybe<TSolomonClusterConfig> GetClusterConfig(const TStringBuf cluster) const = 0;
     virtual bool HasCluster(const TStringBuf cluster) const = 0;
 };

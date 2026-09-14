@@ -13,7 +13,7 @@
 #include <util/system/compiler.h>
 
 #include <cmath>
-#include <ctype.h>
+#include <cctype>
 
 namespace NYql::NDom {
 
@@ -24,8 +24,9 @@ namespace {
 
 size_t AsciiSize(const TStringBuf& str) {
     size_t s = 0U;
-    while (s < str.size() && isascii(str[s]))
+    while (s < str.size() && isascii(str[s])) {
         ++s;
+    }
     return s;
 }
 
@@ -63,14 +64,14 @@ TString DecodeUtf(const TStringBuf& str, size_t from)
     return result;
 }
 
-template<bool DecodeUtf8>
-class TDomCallbacks : public TJsonCallbacks {
+template <bool DecodeUtf8>
+class TDomCallbacks: public TJsonCallbacks {
 public:
     TDomCallbacks(const IValueBuilder* valueBuilder, bool throwException)
         : TJsonCallbacks(throwException)
-        , ValueBuilder(valueBuilder)
+        , ValueBuilder_(valueBuilder)
     {
-        Result.push({});
+        Result_.emplace();
     }
 
     bool OnNull() override {
@@ -100,10 +101,10 @@ public:
     bool OnString(const TStringBuf& value) override {
         if constexpr (DecodeUtf8) {
             if (const auto from = AsciiSize(value); from < value.size()) {
-                return PushToCurrentCollection(MakeString(DecodeUtf(value, from), ValueBuilder));
+                return PushToCurrentCollection(SetUtf8Mark(MakeString(DecodeUtf(value, from), ValueBuilder_)));
             }
         }
-        return PushToCurrentCollection(MakeString(value, ValueBuilder));
+        return PushToCurrentCollection(SetUtf8Mark(MakeString(value, ValueBuilder_)));
     }
 
     bool OnOpenMap() override {
@@ -115,8 +116,8 @@ public:
     }
 
     bool OnCloseMap() override {
-        Y_DEBUG_ABORT_UNLESS(!Result.empty());
-        auto& items = Result.top();
+        Y_DEBUG_ABORT_UNLESS(!Result_.empty());
+        auto& items = Result_.top();
         Y_DEBUG_ABORT_UNLESS(items.size() % 2 == 0);
 
         TSmallVec<TPair, TStdAllocatorForUdf<TPair>> pairs;
@@ -124,7 +125,7 @@ public:
             pairs.emplace_back(std::move(items[i]), std::move(items[i + 1]));
         }
 
-        Result.pop();
+        Result_.pop();
         return PushToCurrentCollection(MakeDict(pairs.data(), pairs.size()));
     }
 
@@ -133,10 +134,10 @@ public:
     }
 
     bool OnCloseArray() override {
-        Y_DEBUG_ABORT_UNLESS(!Result.empty());
-        auto& items = Result.top();
-        TUnboxedValue list = MakeList(items.data(), items.size(), ValueBuilder);
-        Result.pop();
+        Y_DEBUG_ABORT_UNLESS(!Result_.empty());
+        auto& items = Result_.top();
+        TUnboxedValue list = MakeList(items.data(), items.size(), ValueBuilder_);
+        Result_.pop();
         return PushToCurrentCollection(std::move(list));
     }
 
@@ -146,82 +147,109 @@ public:
 
     TUnboxedValue GetResult() && {
         Y_DEBUG_ABORT_UNLESS(IsResultSingle());
-        return std::move(Result.top()[0]);
+        return std::move(Result_.top()[0]);
     }
 
 private:
     bool OnCollectionOpen() {
-        Result.emplace();
+        Result_.emplace();
         return true;
     }
 
     bool PushToCurrentCollection(TUnboxedValue&& value) {
-        Y_DEBUG_ABORT_UNLESS(!Result.empty());
-        Result.top().emplace_back(std::move(value));
+        Y_DEBUG_ABORT_UNLESS(!Result_.empty());
+        Result_.top().emplace_back(std::move(value));
         return true;
     }
 
     bool IsResultSingle() {
-        return Result.size() == 1 && Result.top().size() == 1;
+        return Result_.size() == 1 && Result_.top().size() == 1;
     }
 
-    const IValueBuilder* ValueBuilder;
+    const IValueBuilder* ValueBuilder_;
 
     using TUnboxedValues = TSmallVec<TUnboxedValue, TStdAllocatorForUdf<TUnboxedValue>>;
-    std::stack<TUnboxedValues, TSmallVec<TUnboxedValues, TStdAllocatorForUdf<TUnboxedValues>>> Result;
+    std::stack<TUnboxedValues, TSmallVec<TUnboxedValues, TStdAllocatorForUdf<TUnboxedValues>>> Result_;
 };
 
-class TTestCallbacks : public TJsonCallbacks {
+class TTestCallbacks: public TJsonCallbacks {
 public:
     TTestCallbacks()
         : TJsonCallbacks(false)
-    {}
-
-    bool OnNull() final { return true; }
-
-    bool OnBoolean(bool) final { return true; }
-
-    bool OnInteger(long long) final { return true; }
-
-    bool OnUInteger(unsigned long long) final { return true; }
-
-    bool OnDouble(double value) final { return !std::isinf(value); }
-
-    bool OnString(const TStringBuf&) final { return true; }
-
-    bool OnOpenMap() final { return true; }
-
-    bool OnMapKey(const TStringBuf&) final { return true; }
-
-    bool OnCloseMap() final { return true; }
-
-    bool OnOpenArray() final { return true; }
-
-    bool OnCloseArray() final { return true; }
-
-    bool OnEnd() final {
-        if (HasResult)
-            return false;
-
-        return HasResult = true;
+    {
     }
 
- private:
-     bool HasResult = false;
+    bool OnNull() final {
+        return true;
+    }
+
+    bool OnBoolean(bool) final {
+        return true;
+    }
+
+    bool OnInteger(long long) final {
+        return true;
+    }
+
+    bool OnUInteger(unsigned long long) final {
+        return true;
+    }
+
+    bool OnDouble(double value) final {
+        return !std::isinf(value);
+    }
+
+    bool OnString(const TStringBuf&) final {
+        return true;
+    }
+
+    bool OnOpenMap() final {
+        return true;
+    }
+
+    bool OnMapKey(const TStringBuf&) final {
+        return true;
+    }
+
+    bool OnCloseMap() final {
+        return true;
+    }
+
+    bool OnOpenArray() final {
+        return true;
+    }
+
+    bool OnCloseArray() final {
+        return true;
+    }
+
+    bool OnEnd() final {
+        if (HasResult_) {
+            return false;
+        }
+
+        return HasResult_ = true;
+    }
+
+private:
+    bool HasResult_ = false;
 };
 
 bool IsEntity(const TUnboxedValuePod value) {
     switch (GetNodeType(value)) {
-        case ENodeType::Entity: return true;
-        case ENodeType::Attr: return IsEntity(value.GetVariantItem().Release());
-        default: return false;
+        case ENodeType::Entity:
+            return true;
+        case ENodeType::Attr:
+            return IsEntity(value.GetVariantItem().Release());
+        default:
+            return false;
     }
 }
 
-template<bool SkipMapEntity, bool EncodeUtf8>
-void WriteValue(const TUnboxedValuePod value, TJsonWriter& writer);
+template <bool SkipMapEntity, bool EncodeUtf8>
+void WriteValue(TUnboxedValuePod value, TJsonWriter& writer);
 
-template<bool SkipMapEntity, bool EncodeUtf8>
+template <bool SkipMapEntity, bool EncodeUtf8>
 void WriteArray(const TUnboxedValuePod value, TJsonWriter& writer) {
     writer.OpenArray();
     if (value.IsBoxed()) {
@@ -232,62 +260,78 @@ void WriteArray(const TUnboxedValuePod value, TJsonWriter& writer) {
             }
         } else {
             const auto it = value.GetListIterator();
-            for (TUnboxedValue v; it.Next(v); WriteValue<SkipMapEntity, EncodeUtf8>(v, writer))
+            for (TUnboxedValue v; it.Next(v); WriteValue<SkipMapEntity, EncodeUtf8>(v, writer)) {
                 continue;
+            }
         }
     }
     writer.CloseArray();
 }
 
-template<bool SkipMapEntity, bool EncodeUtf8>
+template <bool SkipMapEntity, bool EncodeUtf8>
 void WriteMap(const TUnboxedValuePod value, TJsonWriter& writer) {
     writer.OpenMap();
     if (value.IsBoxed()) {
-        TUnboxedValue key, payload;
+        TUnboxedValue key;
+        TUnboxedValue payload;
         for (const auto it = value.GetDictIterator(); it.NextPair(key, payload);) {
-            if constexpr (SkipMapEntity)
-                if (IsEntity(payload))
+            if constexpr (SkipMapEntity) {
+                if (IsEntity(payload)) {
                     continue;
+                }
+            }
             const TStringBuf str = key.AsStringRef();
-            if constexpr (EncodeUtf8)
-                if (const auto from = AsciiSize(str); from < str.size())
-                    writer.WriteKey(EncodeUtf(str, from));
-                else
-                    writer.WriteKey(str);
-            else
-                writer.WriteKey(str);
+            if constexpr (EncodeUtf8) {
+                if (const auto from = AsciiSize(str); from < str.size()) {
+                    writer.Write(EncodeUtf(str, from));
+                } else {
+                    writer.Write(str);
+                }
+            } else {
+                writer.Write(str);
+            }
             WriteValue<SkipMapEntity, EncodeUtf8>(payload, writer);
         }
     }
     writer.CloseMap();
 }
 
-template<bool SkipMapEntity, bool EncodeUtf8>
+template <bool SkipMapEntity, bool EncodeUtf8>
 void WriteValue(const TUnboxedValuePod value, TJsonWriter& writer) {
     switch (GetNodeType(value)) {
         case ENodeType::String: {
-            const TStringBuf str = value.AsStringRef();
+            const auto cleanValue = ClearUtf8Mark(value);
+            const TStringBuf str = cleanValue.AsStringRef();
             if constexpr (EncodeUtf8) {
                 if (const auto from = AsciiSize(str); from < str.size()) {
-                    return writer.Write(EncodeUtf(str, from));
+                    writer.Write(EncodeUtf(str, from));
+                    return;
                 }
             }
-            return writer.Write(str);
+            writer.Write(str);
+            return;
         }
         case ENodeType::Bool:
-            return writer.Write(value.Get<bool>());
+            writer.Write(value.Get<bool>());
+            return;
         case ENodeType::Int64:
-            return writer.Write(value.Get<i64>());
+            writer.Write(value.Get<i64>());
+            return;
         case ENodeType::Uint64:
-            return writer.Write(value.Get<ui64>());
+            writer.Write(value.Get<ui64>());
+            return;
         case ENodeType::Double:
-            return writer.Write(value.Get<double>());
+            writer.Write(value.Get<double>());
+            return;
         case ENodeType::Entity:
-             return writer.WriteNull();
+            writer.WriteNull();
+            return;
         case ENodeType::List:
-            return WriteArray<SkipMapEntity, EncodeUtf8>(value, writer);
+            WriteArray<SkipMapEntity, EncodeUtf8>(value, writer);
+            return;
         case ENodeType::Dict:
-            return WriteMap<SkipMapEntity, EncodeUtf8>(value, writer);
+            WriteMap<SkipMapEntity, EncodeUtf8>(value, writer);
+            return;
         case ENodeType::Attr:
             writer.OpenMap();
             writer.WriteKey("$attributes");
@@ -298,7 +342,7 @@ void WriteValue(const TUnboxedValuePod value, TJsonWriter& writer) {
     }
 }
 
-}
+} // namespace
 
 bool IsValidJson(const TStringBuf json) {
     TMemoryInput input(json.data(), json.size());
@@ -306,9 +350,9 @@ bool IsValidJson(const TStringBuf json) {
     return ReadJson(&input, &callbacks);
 }
 
-TUnboxedValue TryParseJsonDom(const TStringBuf json, const IValueBuilder* valueBuilder, bool dencodeUtf8) {
+TUnboxedValue TryParseJsonDom(const TStringBuf json, const IValueBuilder* valueBuilder, bool decodeUtf8) {
     TMemoryInput input(json.data(), json.size());
-    if (dencodeUtf8) {
+    if (decodeUtf8) {
         TDomCallbacks<true> callbacks(valueBuilder, /* throwException */ true);
         if (!ReadJson(&input, &callbacks)) {
             UdfTerminate("Internal error: parser error occurred but corresponding callback was not called");
@@ -329,21 +373,22 @@ TString SerializeJsonDom(const NUdf::TUnboxedValuePod dom, bool skipMapEntity, b
 
     config.SetFormatOutput(false);
     config.WriteNanAsString = writeNanAsString;
-    
+
     config.FloatToStringMode = EFloatToStringMode::PREC_AUTO;
     TJsonWriter writer(&output, config);
-    if (skipMapEntity)
-        if (encodeUtf8)
+    if (skipMapEntity) {
+        if (encodeUtf8) {
             WriteValue<true, true>(dom, writer);
-        else
+        } else {
             WriteValue<true, false>(dom, writer);
-    else
-        if (encodeUtf8)
-            WriteValue<false, true>(dom, writer);
-        else
-            WriteValue<false, false>(dom, writer);
+        }
+    } else if (encodeUtf8) {
+        WriteValue<false, true>(dom, writer);
+    } else {
+        WriteValue<false, false>(dom, writer);
+    }
     writer.Flush();
     return output.Str();
 }
 
-}
+} // namespace NYql::NDom

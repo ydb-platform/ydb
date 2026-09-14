@@ -1,12 +1,16 @@
 #include "node_warden.h"
 #include "node_warden_impl.h"
+#include "distconf.h"
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/incrhuge/incrhuge_keeper.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/wcache.h>
+#include <library/cpp/streams/zstd/zstd.h>
 #include <util/string/split.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 using namespace NKikimr;
 using namespace NStorage;
@@ -40,13 +44,44 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
         bool comprehensive, bool updateCache, const char *origin) {
     if (Cfg->IsCacheEnabled() && updateCache) {
         Y_ABORT_UNLESS(!isStatic);
-        return EnqueueSyncOp(WrapCacheOp(UpdateServiceSet(serviceSet, comprehensive, [=] {
+        return EnqueueSyncOp(WrapCacheOp(UpdateServiceSet(serviceSet, comprehensive, [=, this] {
             ApplyServiceSet(serviceSet, false, comprehensive, false, origin);
         })));
     }
 
-    STLOG(PRI_DEBUG, BS_NODE, NW18, "ApplyServiceSet", (IsStatic, isStatic), (Comprehensive, comprehensive),
-        (Origin, origin), (ServiceSet, serviceSet));
+    YDB_LOG_DEBUG("ApplyServiceSet",
+        {"marker", "NW18"},
+        {"isStatic", isStatic},
+        {"comprehensive", comprehensive},
+        {"origin", origin},
+        {"serviceSet", serviceSet});
+
+    for (const auto& incomingGroup : serviceSet.GetGroups()) {
+        const ui32 groupId = incomingGroup.GetGroupID();
+        if (incomingGroup.GetEntityStatus() != NKikimrBlobStorage::DESTROY) {
+            const auto it = Groups.find(groupId);
+            const auto *ep = it != Groups.end() ? &it->second.EncryptionParams : nullptr;
+            const bool storedHasEncryptionMode = ep && ep->HasEncryptionMode();
+            const ui32 storedEncryptionMode = storedHasEncryptionMode ? ep->GetEncryptionMode() : 0;
+            const ui32 storedLifeCyclePhase = storedHasEncryptionMode ? ep->GetLifeCyclePhase() : 0;
+            const ui32 incomingEncryptionMode = incomingGroup.GetEncryptionMode();
+            const bool incomingEncryptionModeIsKnown = incomingEncryptionMode <= static_cast<ui32>(TBlobStorageGroupInfo::EEM_ENC_V1);
+            const bool firstInvalidEncryptionMode = !storedHasEncryptionMode && !incomingEncryptionModeIsKnown;
+            const bool encryptionModeChanged = storedHasEncryptionMode && storedEncryptionMode != incomingEncryptionMode;
+            if (firstInvalidEncryptionMode || encryptionModeChanged) {
+                STLOG(PRI_ERROR, BS_NODE, NW114, "ApplyServiceSet group EncryptionMode diagnostics",
+                    (Origin, origin),
+                    (GroupId, groupId),
+                    (IncomingGeneration, incomingGroup.GetGroupGeneration()),
+                    (StoredHasEncryptionMode, storedHasEncryptionMode),
+                    (StoredEncryptionModeRaw, storedEncryptionMode),
+                    (IncomingEncryptionModeRaw, incomingEncryptionMode),
+                    (StoredLifeCyclePhase, storedLifeCyclePhase),
+                    (IncomingLifeCyclePhase, incomingGroup.GetLifeCyclePhase()));
+                break;
+            }
+        }
+    }
 
     // apply proxy information before we try to start VDisks/PDisks
     ApplyGroupInfoFromServiceSet(serviceSet);
@@ -54,10 +89,16 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
     // merge new configuration into current one
     NKikimrBlobStorage::TNodeWardenServiceSet *target = isStatic ? &StaticServices : &DynamicServices;
     NProtoBuf::RepeatedPtrField<TServiceSetPDisk> *to = target->MutablePDisks();
+    TVector<TServiceSetPDisk> pdisksToRestart;
     if (comprehensive) {
         to->Clear();
     }
-    MergeServiceSetPDisks(to, serviceSet.GetPDisks());
+    MergeServiceSetPDisks(to, serviceSet.GetPDisks(), pdisksToRestart);
+
+    UpdateBlobStorageExecutorPoolMapping();
+    for (const TServiceSetPDisk& pdisk : pdisksToRestart) {
+        DoRestartLocalPDisk(pdisk);
+    }
 
     if (!EnableProxyMock) {
         // in mock mode we don't need PDisk/VDisk instances
@@ -68,107 +109,143 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
     for (auto& [vslotId, vdisk] : LocalVDisks) {
         if (vdisk.UnderlyingPDiskDestroyed) {
             auto& tempVSlotId = vslotId;
-            STLOG_DEBUG_FAIL(BS_NODE, NW37, "UnderlyingPDiskDestroyed escaped", (VSlotId, tempVSlotId));
+            YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "UnderlyingPDiskDestroyed escaped",
+                {"marker", "NW37"},
+                {"VSlotId", tempVSlotId});
             vdisk.UnderlyingPDiskDestroyed = false;
         }
     }
 }
 
 void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
-    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled));
+    if (AppData()->BridgeModeEnabled && !BridgeInfo) {
+        // block until bridge information is filled in by distconf after bootstrapping
+        PendingQueryStorageConfigQ.push_back(ev);
+        return;
+    }
+
+    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo));
     if (ev->Get()->Subscribe) {
         StorageConfigSubscribers.insert(ev->Sender);
     }
 }
 
 void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
-    ev->Get()->Config->Swap(&StorageConfig);
-    SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
+    auto *msg = ev->Get();
+    StorageConfig = std::move(msg->Config);
+    CommittedStorageConfig = std::move(msg->CommittedConfig);
+    SelfManagementEnabled = msg->SelfManagementEnabled;
+    BridgeInfo = std::move(msg->BridgeInfo);
 
-    if (StorageConfig.HasBlobStorageConfig()) {
-        if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
-            const NKikimrBlobStorage::TNodeWardenServiceSet *proposed = nullptr;
-            if (const auto& proposedConfig = ev->Get()->ProposedConfig) {
-                Y_VERIFY_S(StorageConfig.GetGeneration() < proposedConfig->GetGeneration(),
-                    "StorageConfig.Generation# " << StorageConfig.GetGeneration()
-                    << " ProposedConfig.Generation# " << proposedConfig->GetGeneration());
-                Y_ABORT_UNLESS(proposedConfig->HasBlobStorageConfig()); // must have the BlobStorageConfig and the ServiceSet
-                const auto& proposedBsConfig = proposedConfig->GetBlobStorageConfig();
-                Y_ABORT_UNLESS(proposedBsConfig.HasServiceSet());
-                proposed = &proposedBsConfig.GetServiceSet();
-            }
-            ApplyStorageConfig(bsConfig.GetServiceSet(), proposed);
+    if (StorageConfig->HasBlobStorageConfig()) {
+        const auto& bsConfig = StorageConfig->GetBlobStorageConfig();
+        if (bsConfig.HasServiceSet()) {
+            ApplyStorageConfig(bsConfig.GetServiceSet());
         }
+        SyncRateQuoter->UpdateBytesPerSecond(bsConfig.GetBridgeSyncRateBytesPerSecond());
     }
 
-    if (StorageConfig.HasStateStorageConfig() && StorageConfig.HasStateStorageBoardConfig() && StorageConfig.HasSchemeBoardConfig()) {
-        ApplyStateStorageConfig(ev->Get()->ProposedConfig.get());
+    if (StorageConfig->HasStateStorageConfig() && StorageConfig->HasStateStorageBoardConfig() && StorageConfig->HasSchemeBoardConfig()) {
+        ApplyStateStorageConfig();
     } else {
-        Y_ABORT_UNLESS(!StorageConfig.HasStateStorageConfig() && !StorageConfig.HasStateStorageBoardConfig() &&
-            !StorageConfig.HasSchemeBoardConfig());
+        Y_ABORT_UNLESS(!StorageConfig->HasStateStorageConfig() && !StorageConfig->HasStateStorageBoardConfig() &&
+            !StorageConfig->HasSchemeBoardConfig());
     }
 
     for (const TActorId& subscriber : StorageConfigSubscribers) {
-        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled));
+        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, SelfManagementEnabled, BridgeInfo, CommittedStorageConfig));
+    }
+
+    if (StorageConfig->HasConfigComposite()) {
+        TString mainConfigYaml;
+        ui64 mainConfigYamlVersion;
+        auto error = DecomposeConfig(StorageConfig->GetConfigComposite(), &mainConfigYaml, &mainConfigYamlVersion, nullptr);
+        if (error) {
+            YDB_LOG_DEBUG_COMP_FAIL(BS_NODE, "failed to decompose yaml configuration",
+                {"marker", "NW49"},
+                {"Error", error});
+        } else if (mainConfigYaml) {
+            std::optional<TString> storageConfigYaml = GetStorageYaml(*StorageConfig);
+            std::optional<ui64> storageConfigYamlVersion = storageConfigYaml
+                ? std::make_optional(NYamlConfig::GetStorageMetadata(*storageConfigYaml).Version.value_or(0))
+                : std::nullopt;
+
+            // TODO(alexvru): make this blocker for confirmation?
+            PersistConfig(std::move(mainConfigYaml), mainConfigYamlVersion, std::move(storageConfigYaml),
+                storageConfigYamlVersion);
+        }
+    } else {
+        Y_DEBUG_ABORT_UNLESS(!StorageConfig->HasCompressedStorageYaml());
     }
 
     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, 0, ev->Sender, SelfId(),
         nullptr, ev->Cookie));
+
+    if (BridgeInfo) {
+        for (auto& ev : std::exchange(PendingQueryStorageConfigQ, {})) {
+            TAutoPtr<IEventHandle> temp(ev.Release());
+            Receive(temp);
+        }
+    }
 }
 
 void TNodeWarden::HandleUnsubscribe(STATEFN_SIG) {
     StorageConfigSubscribers.erase(ev->Sender);
 }
 
-void TNodeWarden::ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current,
-        const NKikimrBlobStorage::TNodeWardenServiceSet *proposed) {
-    if (!proposed) { // just start the required services
-        // wipe out obsolete VSlots from running PDisks from current.Prev; however, it is not synchronous
-        return ApplyStaticServiceSet(current);
-    }
-
+void TNodeWarden::ApplyStorageConfig(const NKikimrBlobStorage::TNodeWardenServiceSet& current) {
     ApplyStaticServiceSet(current);
 }
 
-void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConfig* /*proposed*/) {
+void TNodeWarden::ApplyStateStorageConfig() {
     if (!Cfg->DomainsConfig) {
         return; // no state storage management
     }
 
     // apply updates for the state storage proxy
-#define FETCH_CONFIG(PART, PREFIX, PROTO) \
-    Y_ABORT_UNLESS(StorageConfig.Has##PROTO##Config()); \
-    char PART##Prefix[TActorId::MaxServiceIDLength] = PREFIX; \
-    TIntrusivePtr<TStateStorageInfo> PART##Info = BuildStateStorageInfo(PART##Prefix, StorageConfig.Get##PROTO##Config());
+#define FETCH_CONFIG(PART, PROTO) \
+    Y_ABORT_UNLESS(StorageConfig->Has##PROTO##Config()); \
+    TIntrusivePtr<TStateStorageInfo> PART##Info = Build##PROTO##Info(StorageConfig->Get##PROTO##Config());
 
-    FETCH_CONFIG(stateStorage, "ssr", StateStorage)
-    FETCH_CONFIG(board, "ssb", StateStorageBoard)
-    FETCH_CONFIG(schemeBoard, "sbr", SchemeBoard)
+    FETCH_CONFIG(stateStorage, StateStorage)
+    FETCH_CONFIG(board, StateStorageBoard)
+    FETCH_CONFIG(schemeBoard, SchemeBoard)
 
-    STLOG(PRI_DEBUG, BS_NODE, NW52, "ApplyStateStorageConfig",
-        (StateStorageConfig, StorageConfig.GetStateStorageConfig()),
-        (NewStateStorageInfo, *stateStorageInfo),
-        (CurrentStateStorageInfo, StateStorageInfo.Get()),
-        (StateStorageBoardConfig, StorageConfig.GetStateStorageBoardConfig()),
-        (NewStateStorageBoardInfo, *boardInfo),
-        (CurrentStateStorageBoardInfo, BoardInfo.Get()),
-        (SchemeBoardConfig, StorageConfig.GetSchemeBoardConfig()),
-        (NewSchemeBoardInfo, *schemeBoardInfo),
-        (CurrentSchemeBoardInfo, SchemeBoardInfo.Get()));
+    YDB_LOG_DEBUG("ApplyStateStorageConfig",
+        {"marker", "NW55"},
+        {"stateStorageConfig", StorageConfig->GetStateStorageConfig()},
+        {"newStateStorageInfo", *stateStorageInfo},
+        {"currentStateStorageInfo", StateStorageInfo.Get()},
+        {"stateStorageBoardConfig", StorageConfig->GetStateStorageBoardConfig()},
+        {"newStateStorageBoardInfo", *boardInfo},
+        {"currentStateStorageBoardInfo", BoardInfo.Get()},
+        {"schemeBoardConfig", StorageConfig->GetSchemeBoardConfig()},
+        {"newSchemeBoardInfo", *schemeBoardInfo},
+        {"currentSchemeBoardInfo", SchemeBoardInfo.Get()});
 
     auto changed = [](const TStateStorageInfo& prev, const TStateStorageInfo& cur) {
-        auto equalRing = [](const auto& r1, const auto& r2) {
-            return r1.IsDisabled == r2.IsDisabled
-                && r1.UseRingSpecificNodeSelection == r2.UseRingSpecificNodeSelection
-                && r1.Replicas == r2.Replicas;
+
+        auto equalGroup = [](const auto& g1, const auto& g2) {
+            auto equalRing = [](const auto& r1, const auto& r2) {
+                return r1.IsDisabled == r2.IsDisabled
+                    && r1.UseRingSpecificNodeSelection == r2.UseRingSpecificNodeSelection
+                    && r1.Replicas == r2.Replicas;
+            };
+            return g1.Rings.size() == g2.Rings.size()
+                && g1.NToSelect == g2.NToSelect
+                && g1.WriteOnly == g2.WriteOnly
+                && g1.State == g2.State
+                && std::equal(g1.Rings.begin(), g1.Rings.end(), g2.Rings.begin(), equalRing);
         };
-        return prev.NToSelect != cur.NToSelect
-            || prev.Rings.size() != cur.Rings.size()
-            || !std::equal(prev.Rings.begin(), prev.Rings.end(), cur.Rings.begin(), equalRing)
+        return prev.RingGroups.size() != cur.RingGroups.size()
+            || !std::equal(prev.RingGroups.begin(), prev.RingGroups.end(), cur.RingGroups.begin(), equalGroup)
             || prev.StateStorageVersion != cur.StateStorageVersion
+            || prev.ClusterStateGeneration != cur.ClusterStateGeneration
+            || prev.ClusterStateGuid != cur.ClusterStateGuid
             || prev.CompatibleVersions.size() != cur.CompatibleVersions.size()
             || !std::equal(prev.CompatibleVersions.begin(), prev.CompatibleVersions.end(), cur.CompatibleVersions.begin());
     };
+
 
     TActorSystem *as = TActivationContext::ActorSystem();
     const bool changedStateStorage = !StateStorageProxyConfigured || changed(*StateStorageInfo, *stateStorageInfo);
@@ -180,31 +257,49 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
 
     // start new replicas if needed
     THashSet<TActorId> localActorIds;
+    THashSet<TActorId> newActorIds;
     auto startReplicas = [&](TIntrusivePtr<TStateStorageInfo>&& info, auto&& factory, const char *comp, auto *which) {
         // collect currently running local replicas
         if (const auto& current = *which) {
-            for (const auto& ring : current->Rings) {
-                for (const auto& replicaId : ring.Replicas) {
-                    if (replicaId.NodeId() == LocalNodeId) {
-                        const auto [it, inserted] = localActorIds.insert(replicaId);
-                        Y_ABORT_UNLESS(inserted);
+            for (const auto& ringGroup : current->RingGroups) {
+                for (const auto& ring : ringGroup.Rings) {
+                    for (const auto& replicaId : ring.Replicas) {
+                        if (replicaId.NodeId() == LocalNodeId) {
+                            YDB_LOG_INFO("Local replica found",
+                                {"marker", "NW54"},
+                                {"component", comp},
+                                {"replicaId", replicaId});
+                            localActorIds.insert(replicaId);
+                        }
                     }
                 }
             }
         }
 
-        for (const auto& ring : info->Rings) {
-            for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
-                if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
-                    if (!localActorIds.erase(replicaId)) {
-                        STLOG(PRI_INFO, BS_NODE, NW08, "starting new state storage replica",
-                            (Component, comp), (ReplicaId, replicaId), (Index, index), (Config, *info));
-                        as->RegisterLocalService(replicaId, as->Register(factory(info, index), TMailboxType::ReadAsFilled,
-                            AppData()->SystemPoolId));
-                    } else if (which == &StateStorageInfo) {
-                        Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(info, nullptr, nullptr));
-                    } else {
-                        // TODO(alexvru): update other kinds of replicas
+        for (const auto& ringGroup : info->RingGroups) {
+            for (const auto& ring : ringGroup.Rings) {
+                if (ring.IsDisabled) {
+                    continue;
+                }
+                for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
+                    if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
+                        if (!localActorIds.contains(replicaId) && !newActorIds.contains(replicaId)) {
+                            YDB_LOG_INFO("Starting state storage new replica",
+                                {"marker", "NW08"},
+                                {"component", comp},
+                                {"replicaId", replicaId},
+                                {"index", index},
+                                {"config", *info});
+                            as->RegisterLocalService(replicaId, as->Register(factory(info, index), TMailboxType::ReadAsFilled,
+                                AppData()->SystemPoolId));
+                        } else if (which == &StateStorageInfo && !newActorIds.contains(replicaId)) {
+                            Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(info, nullptr, nullptr));
+                        } else if (which == &BoardInfo && !newActorIds.contains(replicaId)) {
+                            Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, info, nullptr));
+                        } else if (which == &SchemeBoardInfo && !newActorIds.contains(replicaId)) {
+                            Send(replicaId, new TEvStateStorage::TEvUpdateGroupConfig(nullptr, nullptr, info));
+                        }
+                        newActorIds.insert(replicaId);
                     }
                 }
             }
@@ -222,15 +317,9 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
         startReplicas(std::move(schemeBoardInfo), CreateSchemeBoardReplica, "SchemeBoard", &SchemeBoardInfo);
     }
 
-    // terminate unused replicas
-    for (const auto& replicaId : localActorIds) {
-        STLOG(PRI_INFO, BS_NODE, NW43, "terminating useless state storage replica", (ReplicaId, replicaId));
-        const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
-    }
-
     // reconfigure proxy
-    STLOG(PRI_INFO, BS_NODE, NW50, "updating state storage proxy configuration");
+    YDB_LOG_INFO("Updating state storage proxy configuration",
+        {"marker", "NW50"});
     if (StateStorageProxyConfigured) {
         Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvUpdateGroupConfig(StateStorageInfo, BoardInfo,
             SchemeBoardInfo));
@@ -240,6 +329,17 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
         const TActorId stubInstance = as->RegisterLocalService(MakeStateStorageProxyID(), newInstance);
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, stubInstance, newInstance, nullptr, 0));
         StateStorageProxyConfigured = true;
+    }
+
+    // terminate unused replicas
+    for (const auto& replicaId : localActorIds) {
+        if (!newActorIds.contains(replicaId)) {
+            YDB_LOG_INFO("Terminating useless state storage replica",
+                {"marker", "NW43"},
+                {"replicaId", replicaId});
+            const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+        }
     }
 }
 
@@ -272,13 +372,24 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
     };
 
     // register new actor
-    TActorId actorId = Register(CreateIncrHugeKeeper(settings), TMailboxType::HTSwap, AppData()->SystemPoolId);
+    TActorId actorId = Register(CreateIncrHugeKeeper(settings), TMailboxType::HTSwap,
+        GetBlobStorageExecutorPoolId(pdiskId).value_or(AppData()->SystemPoolId));
 
     // bind it to service
-    TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(keeperId, actorId);
+    TActivationContext::ActorSystem()->RegisterLocalService(keeperId, actorId);
 
     // forward to just created service
     TActivationContext::Send(ev->Forward(keeperId));
+}
+
+void TNodeWarden::Handle(TEvNodeWardenNotifyConfigMismatch::TPtr ev) {
+    //TODO: config mismatch with node
+    auto *msg = ev->Get();
+    YDB_LOG_INFO("TEvNodeWardenNotifyConfigMismatch",
+        {"marker", "NW51"},
+        {"nodeId", msg->NodeId},
+        {"clusterStateGeneration", msg->ClusterStateGeneration},
+        {"clusterStateGuid", msg->ClusterStateGuid});
 }
 
 void TNodeWarden::Handle(TEvNodeWardenQueryBaseConfig::TPtr ev) {
@@ -297,4 +408,16 @@ void TNodeWarden::Handle(TEvNodeWardenQueryBaseConfig::TPtr ev) {
         }
         Send(sender, response.release(), 0, cookie);
     });
+}
+
+void TNodeWarden::Handle(TEvNodeWardenListLocalDDisks::TPtr ev) {
+    auto res = std::make_unique<TEvNodeWardenListLocalDDisksResult>();
+    for (auto& [k, v] : LocalVDisks) {
+        if (v.RuntimeData && v.RuntimeData->DDisk) {
+            auto vdId = v.GetVSlotId().GetVDiskServiceId();
+            auto [nodeId, pdiskId, vslotId] = DecomposeVDiskServiceId(vdId);
+            res->Infos.emplace_back(MakeBlobStorageDDiskId(nodeId, pdiskId, vslotId), MakeBlobStoragePersistentBufferId(nodeId, pdiskId, vslotId));
+        }
+    }
+    Send(ev->Sender, res.release(), 0, ev->Cookie);
 }

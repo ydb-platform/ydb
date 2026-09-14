@@ -10,6 +10,8 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_CONFIGS
+
 namespace NKikimr::NConsole {
 
 namespace {
@@ -37,8 +39,8 @@ public:
 
     void Die(const TActorContext &ctx) override
     {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTabletConfigSender(" << Subscription->Id << ") Die");
+        YDB_LOG_TRACE_CTX(ctx, "TTabletConfigSender Die",
+            {"subscriptionId", Subscription->Id});
 
         if (Pipe)
             NTabletPipe::CloseClient(ctx, Pipe);
@@ -61,7 +63,7 @@ public:
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, Subscription->Subscriber.TabletId, pipeConfig);
-        Pipe = ctx.ExecutorThread.RegisterActor(pipe);
+        Pipe = ctx.Register(pipe);
     }
 
     void SendNotifyRequest(const TActorContext &ctx)
@@ -74,16 +76,16 @@ public:
         Subscription->CurrentConfigId.Serialize(*request->Record.MutableConfigId());
         request->Record.MutableConfig()->CopyFrom(Subscription->CurrentConfig);
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTabletConfigSender(" << Subscription->Id << ") send TEvConfigNotificationRequest: "
-                    << request->Record.ShortDebugString());
+        YDB_LOG_TRACE_CTX(ctx, "TTabletConfigSender Send",
+            {"subscriptionId", Subscription->Id},
+            {"ev", request->Record.ShortDebugString()});
 
         NTabletPipe::SendData(ctx, Pipe, request.Release(), Subscription->Cookie);
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTabletConfigSender(" << Subscription->Id << ") Bootstrap");
+        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender Bootstrap",
+            {"subscriptionId", Subscription->Id});
         Become(&TThis::StateWork);
 
         SendNotifyRequest(ctx);
@@ -103,24 +105,24 @@ public:
 
     void Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTabletConfigSender(" << Subscription->Id << ") die to poison pill");
+        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender die to poison pill",
+            {"subscriptionId", Subscription->Id});
         ctx.Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvSenderDied(Subscription));
         Die(ctx);
     }
 
     void Handle(TConfigsProvider::TEvPrivate::TEvNotificationTimeout::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTabletConfigSender(" << Subscription->Id << ") die to timeout");
+        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender die to timeout",
+            {"subscriptionId", Subscription->Id});
         ctx.Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvNotificationTimeout(Subscription));
         Die(ctx);
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTabletConfigSender(" << Subscription->Id << ") connection "
-                    << ((ev->Get()->Status == NKikimrProto::OK) ? "established" : "failed"));
+        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender connection status",
+            {"subscriptionId", Subscription->Id},
+            {"status", ((ev->Get()->Status == NKikimrProto::OK) ? "established" : "failed")});
 
         if (ev->Get()->Status != NKikimrProto::OK) {
             OnPipeDestroyed(ctx);
@@ -128,8 +130,8 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& /*ev*/, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TTabletConfigSender(" << Subscription->Id << ") TEvTabletPipe::TEvClientDestroyed");
+        YDB_LOG_DEBUG_CTX(ctx, "TTabletConfigSender TEvTabletPipe::TEvClientDestroyed",
+            {"subscriptionId", Subscription->Id});
 
         OnPipeDestroyed(ctx);
     }
@@ -176,8 +178,8 @@ public:
 
     void Die(const TActorContext &ctx) override
     {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TServiceConfigSender(" << Subscription->Id << ") Die");
+        YDB_LOG_TRACE_CTX(ctx, "TServiceConfigSender Die",
+            {"subscriptionId", Subscription->Id});
 
         auto nodeId = Subscription->Subscriber.ServiceId.NodeId();
         ctx.Send(TActivationContext::InterconnectProxy(nodeId),
@@ -192,9 +194,9 @@ public:
         Subscription->CurrentConfigId.Serialize(*request->Record.MutableConfigId());
         request->Record.MutableConfig()->CopyFrom(Subscription->CurrentConfig);
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TServiceConfigSender(" << Subscription->Id << ") send TEvConfigNotificationRequest: "
-                    << request->Record.ShortDebugString());
+        YDB_LOG_TRACE_CTX(ctx, "TServiceConfigSender Send",
+            {"subscriptionId", Subscription->Id},
+            {"ev", request->Record.ShortDebugString()});
 
         ctx.Send(Subscription->Subscriber.ServiceId, request.Release(),
                  IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
@@ -204,8 +206,8 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TServiceConfigSender(" << Subscription->Id << ") Bootstrap");
+        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender Bootstrap",
+            {"subscriptionId", Subscription->Id});
         Become(&TThis::StateWork);
 
         SendNotifyRequest(ctx);
@@ -225,9 +227,8 @@ public:
 
     void Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TServiceConfigSender(" << Subscription->Id
-                    << ") die to poison pill");
+        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender die to poison pill",
+            {"subscriptionId", Subscription->Id});
         ctx.Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvSenderDied(Subscription));
         Die(ctx);
     }
@@ -237,10 +238,9 @@ public:
         RetryInterval += RetryInterval;
         RetryInterval = Min(RetryInterval, TDuration::Minutes(1));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TServiceConfigSender(" << Subscription->Id
-                    << ") undelivered notification (retry in "
-                    << RetryInterval.Seconds() << " seconds)");
+        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender undelivered notification",
+            {"subscriptionId", Subscription->Id},
+            {"retryInterval", RetryInterval.Seconds()});
 
         if (!ScheduledRetry) {
             ctx.Schedule(RetryInterval, new TEvents::TEvWakeup);
@@ -253,10 +253,9 @@ public:
         RetryInterval += RetryInterval;
         RetryInterval = Min(RetryInterval, TDuration::Minutes(1));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TServiceConfigSender(" << Subscription->Id
-                    << ") disconnected (retry in "
-                    << RetryInterval.Seconds() << " seconds)");
+        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender disconnected",
+            {"subscriptionId", Subscription->Id},
+            {"retryInterval", RetryInterval.Seconds()});
 
         if (!ScheduledRetry) {
             ctx.Schedule(RetryInterval, new TEvents::TEvWakeup);
@@ -266,8 +265,8 @@ public:
 
     void Handle(TConfigsProvider::TEvPrivate::TEvNotificationTimeout::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TServiceConfigSender(" << Subscription->Id << ") die to timeout");
+        YDB_LOG_DEBUG_CTX(ctx, "TServiceConfigSender die to timeout",
+            {"subscriptionId", Subscription->Id});
         ctx.Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvNotificationTimeout(Subscription));
         Die(ctx);
     }
@@ -308,8 +307,8 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") send TEvConfigSubscriptionResponse");
+        YDB_LOG_TRACE_CTX(ctx, "TSubscriptionClientSender send TEvConfigSubscriptionResponse",
+            {"subscriber", Subscription->Subscriber});
 
         Send(Subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionResponse(Subscription->Generation, Ydb::StatusIds::SUCCESS),
              IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
@@ -323,6 +322,7 @@ public:
             HFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvents::TEvUndelivered, Handle);
+            HFuncTraced(TEvents::TEvWakeup, Handle);
             HFuncTraced(TEvInterconnect::TEvNodeDisconnected, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
 
@@ -335,27 +335,31 @@ public:
 
     void Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") received poison pill, "
-                                                 << "will die.");
+        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender received poison pill, will die",
+            {"subscriber", Subscription->Subscriber});
         Die(ctx);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") received undelivered notification, "
-                                            << "will disconnect.");
+        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender received undelivered notification, will disconnect",
+            {"subscriber", Subscription->Subscriber});
 
         Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerDisconnected(Subscription));
         Die(ctx);
     }
 
+    void Handle(TEvents::TEvWakeup::TPtr &/*ev*/, const TActorContext &ctx)
+    {
+        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender received wake up",
+            {"subscriber", Subscription->Subscriber});
+        Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerCoolDown(Subscription));
+    }
+
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") received node disconnected notification, "
-                                                 << "will disconnect.");
+        YDB_LOG_DEBUG_CTX(ctx, "TSubscriptionClientSender received node disconnected notification, will disconnect",
+            {"subscriber", Subscription->Subscriber});
 
         Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerDisconnected(Subscription));
         Die(ctx);
@@ -366,10 +370,12 @@ public:
         TAutoPtr<NConsole::TEvConsole::TEvConfigSubscriptionNotification> notification = ev->Release();
         notification.Get()->Record.SetOrder(NextOrder++);
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") send TEvConfigSubscriptionNotificationRequest: "
-                                                 << notification.Get()->Record.ShortDebugString());
+        YDB_LOG_TRACE_CTX(ctx, "TSubscriptionClientSender send",
+            {"subscriber", Subscription->Subscriber},
+            {"ev", notification.Get()->Record.ShortDebugString()});
 
+        const float mbytes = notification.Get()->GetCachedByteSize() / 1'000'000.f;
+        Schedule(TDuration::MilliSeconds(100) * mbytes, new TEvents::TEvWakeup());
         Send(Subscription->Subscriber, notification.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
 
@@ -385,12 +391,12 @@ protected:
 
 void TConfigsProvider::Bootstrap(const TActorContext &ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider::Bootstrap");
+    YDB_LOG_DEBUG_CTX(ctx, "TConfigsProvider::Bootstrap");
 
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
         NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-        mon->RegisterActorPage(actorsMonPage, "console_configs_provider", "Console Configs Provider", false, TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
+        mon->RegisterActorPage(actorsMonPage, "console_configs_provider", "Console Configs Provider", false, TActivationContext::ActorSystem(), SelfId());
     }
 
     Become(&TThis::StateWork);
@@ -415,14 +421,15 @@ void TConfigsProvider::ClearState()
 void TConfigsProvider::ApplyConfigModifications(const TConfigModifications &modifications,
                                                 const TActorContext &ctx)
 {
-    LOG_TRACE(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider: applying config midifications");
+    YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: applying config midifications");
 
     TSubscriptionSet subscriptions;
     TInMemorySubscriptionSet inMemorySubscriptions;
 
     for (auto &[id, _] : modifications.RemovedItems) {
         auto item = ConfigIndex.GetItem(id);
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider: remove " << item->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: remove",
+            {"item", item->ToString()});
         ConfigIndex.RemoveItem(id);
         SubscriptionIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, subscriptions);
         InMemoryIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, inMemorySubscriptions);
@@ -430,10 +437,12 @@ void TConfigsProvider::ApplyConfigModifications(const TConfigModifications &modi
     for (auto &pr : modifications.ModifiedItems) {
         auto item = ConfigIndex.GetItem(pr.first);
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider: remove modified " << item->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: remove modified",
+            {"item", item->ToString()});
         ConfigIndex.RemoveItem(pr.first);
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider: add modified " << pr.second->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: add modified",
+            {"item", pr.second->ToString()});
         ConfigIndex.AddItem(pr.second);
 
         SubscriptionIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, subscriptions);
@@ -444,7 +453,8 @@ void TConfigsProvider::ApplyConfigModifications(const TConfigModifications &modi
         }
     }
     for (auto item : modifications.AddedItems) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider: add new " << item->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: add new",
+            {"item", item->ToString()});
         ConfigIndex.AddItem(item);
         SubscriptionIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, subscriptions);
         InMemoryIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, inMemorySubscriptions);
@@ -457,14 +467,14 @@ void TConfigsProvider::ApplyConfigModifications(const TConfigModifications &modi
 void TConfigsProvider::ApplySubscriptionModifications(const TSubscriptionModifications &modifications,
                                                       const TActorContext &ctx)
 {
-    LOG_TRACE(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider: applying subscription midifications");
+    YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: applying subscription midifications");
 
     TSubscriptionSet subscriptions;
 
     for (auto &id : modifications.RemovedSubscriptions) {
         auto subscription = SubscriptionIndex.GetSubscription(id);
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider: remove subscription " << subscription->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: remove subscription",
+            {"subscription", subscription->ToString()});
         if (subscription->Worker) {
             ctx.Send(subscription->Worker, new TEvents::TEvPoisonPill);
             subscription->Worker = TActorId();
@@ -472,25 +482,23 @@ void TConfigsProvider::ApplySubscriptionModifications(const TSubscriptionModific
         SubscriptionIndex.RemoveSubscription(id);
     }
     for (auto &subscription : modifications.AddedSubscriptions) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider: add subscription " << subscription->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: add subscription",
+            {"subscription", subscription->ToString()});
         SubscriptionIndex.AddSubscription(subscription);
         subscriptions.insert(subscription);
     }
     for (auto &pr : modifications.ModifiedLastProvided) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider: update last provided config for subscription"
-                    << " id=" << pr.first
-                    << " lastprovidedconfig=" << pr.second.ToString());
+        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: update last provided config for subscription",
+            {"subscriptionId", pr.first},
+            {"lastProvidedConfig", pr.second});
         auto subscription = SubscriptionIndex.GetSubscription(pr.first);
         subscription->LastProvidedConfig = pr.second;
         subscriptions.insert(subscription);
     }
     for (auto &pr : modifications.ModifiedCookies) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider: update cookie for subscription"
-                    << " id=" << pr.first
-                    << " cookie=" << pr.second);
+        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: update cookie for subscription",
+            {"subscriptionId", pr.first},
+            {"cookie", pr.second});
         auto subscription = SubscriptionIndex.GetSubscription(pr.first);
         subscription->Cookie = pr.second;
         if (subscription->Worker) {
@@ -522,15 +530,46 @@ void TConfigsProvider::CheckSubscriptions(const TInMemorySubscriptionSet &subscr
                                           const TActorContext &ctx)
 {
     for (auto &subscription : subscriptions)
-        CheckSubscription(subscription, ctx);
+        ScheduledUpdates[subscription->Subscriber] = EUpdate::All;
+    ProcessScheduledUpdates(ctx);
+}
+
+void TConfigsProvider::ProcessScheduledUpdates(const TActorContext &ctx)
+{
+    while (!ScheduledUpdates.empty() && InflightUpdates.size() < MAX_INFLIGHT_UPDATES) {
+        auto it = ScheduledUpdates.begin();
+        if (auto subscription = InMemoryIndex.GetSubscription(it->first)) {
+            switch (it->second) {
+            case EUpdate::All:
+                if (CheckSubscription(subscription, ctx)) {
+                    InflightUpdates.insert(subscription->Subscriber);
+                }
+                break;
+            case EUpdate::Yaml:
+                if (UpdateConfig(subscription, ctx)) {
+                    InflightUpdates.insert(subscription->Subscriber);
+                }
+                break;
+            }
+        }
+        ScheduledUpdates.erase(it);
+    }
+
+    *Counters.ScheduledConfigUpdates = ScheduledUpdates.size();
+    *Counters.InflightConfigUpdates = InflightUpdates.size();
+}
+
+void TConfigsProvider::RemoveSubscription(const TActorId& subscriber) {
+    InMemoryIndex.RemoveSubscription(subscriber);
+    ScheduledUpdates.erase(subscriber);
+    InflightUpdates.erase(subscriber);
 }
 
 void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
                                          const TActorContext &ctx)
 {
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TConfigsProvider: check if update is required for subscription"
-                << " id=" << subscription->Id);
+    YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: check if update is required for subscription",
+        {"subscriptionId", subscription->Id});
 
     auto config = ConfigIndex.BuildConfig(subscription->NodeId, subscription->Host,
                                           subscription->Tenant, subscription->NodeType,
@@ -546,34 +585,30 @@ void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
     }
 
     if (subscription->LastProvidedConfig == configId) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider: no changes found for subscription"
-                    << " id=" << subscription->Id);
+        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: no changes found for subscription",
+            {"subscriptionId", subscription->Id});
         return;
     }
 
     if (configId != subscription->CurrentConfigId) {
         if (subscription->Worker) {
-            LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "TConfigsProvider: killing outdated worker for subscription"
-                        << " id=" << subscription->Id);
+            YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: killing outdated worker for subscription",
+                {"subscriptionId", subscription->Id});
             ctx.Send(subscription->Worker, new TEvents::TEvPoisonPill);
             return;
         }
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider: new config found for subscription"
-                    << " id=" << subscription->Id
-                    << " configid=" << configId.ToString());
+        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: new config found for subscription",
+            {"subscriptionId", subscription->Id},
+            {"configId", configId});
 
         subscription->CurrentConfigId = std::move(configId);
         subscription->CurrentConfig.Clear();
         config->ComputeConfig(subscription->CurrentConfig);
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TConfigsProvider: create new worker to update config for subscription"
-                << " id=" << subscription->Id);
+    YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: create new worker to update config for subscription",
+        {"subscriptionId", subscription->Id});
 
     IActor *worker;
     if (subscription->Subscriber.ServiceId)
@@ -583,12 +618,12 @@ void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
     subscription->Worker = ctx.RegisterWithSameMailbox(worker);
 }
 
-void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscription,
+bool TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscription,
                                          const TActorContext &ctx)
 {
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TConfigsProvider: check if update is required for volatile subscription"
-                    << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation);
+    YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: check if update is required for volatile subscription",
+        {"subscriber", subscription->Subscriber},
+        {"generation", subscription->Generation});
 
     auto config = ConfigIndex.BuildConfig(subscription->NodeId, subscription->Host,
                                           subscription->Tenant, subscription->NodeType,
@@ -649,7 +684,7 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
 
     bool yamlChanged = false;
 
-    if (subscription->YamlConfigVersion != YamlConfigVersion) {
+    if (subscription->MainYamlConfigVersion != MainYamlConfigVersion) {
         yamlChanged = true;
     }
 
@@ -662,16 +697,16 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
     }
 
     if (affectedKinds.empty() && !yamlChanged && subscription->FirstUpdateSent) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider: no changes found for subscription"
-                        << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation);
-        return;
+        YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: no changes found for subscription",
+            {"subscriber", subscription->Subscriber},
+            {"generation", subscription->Generation});
+        return false;
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TConfigsProvider: new config found for subscription"
-                    << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation
-                    << " version=" << version.ShortDebugString());
+    YDB_LOG_TRACE_CTX(ctx, "TConfigsProvider: new config found for subscription",
+        {"subscriber", subscription->Subscriber},
+        {"generation", subscription->Generation},
+        {"version", version.ShortDebugString()});
 
     subscription->LastProvided.Swap(&version);
 
@@ -683,23 +718,16 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
             std::move(appConfig),
             affectedKinds);
 
-    if (subscription->YamlConfigVersion != YamlConfigVersion) {
-        subscription->YamlConfigVersion = YamlConfigVersion;
-        request->Record.SetYamlConfig(YamlConfig);
+    if (subscription->MainYamlConfigVersion != MainYamlConfigVersion) {
+        subscription->MainYamlConfigVersion = MainYamlConfigVersion;
+        request->Record.SetMainYamlConfig(MainYamlConfig);
     } else {
-        request->Record.SetYamlConfigNotChanged(true);
+        request->Record.SetMainYamlConfigNotChanged(true);
     }
 
     for (auto &[id, hash] : VolatileYamlConfigHashes) {
         auto *volatileConfig = request->Record.AddVolatileConfigs();
         volatileConfig->SetId(id);
-        auto hashes = subscription->VolatileYamlConfigHashes.size();
-        Y_UNUSED(hashes);
-        auto itt = subscription->VolatileYamlConfigHashes.find(id);
-        if (itt != subscription->VolatileYamlConfigHashes.end()) {
-            auto tmp = itt->second;
-            Y_UNUSED(tmp);
-        }
         if (auto it = subscription->VolatileYamlConfigHashes.find(id); it != subscription->VolatileYamlConfigHashes.end() && it->second == hash) {
             volatileConfig->SetNotChanged(true);
         } else {
@@ -709,9 +737,19 @@ void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscriptio
 
     subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
 
-    ctx.Send(subscription->Worker, request.Release());
+    if (auto it = DatabaseYamlConfigs.find(subscription->Tenant); it != DatabaseYamlConfigs.end()) {
+        if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version) {
+            subscription->DatabaseYamlConfigVersion = it->second.Version;
+            request->Record.SetDatabaseYamlConfig(it->second.Config);
+        } else {
+            request->Record.SetDatabaseYamlConfigNotChanged(true);
+        }
+    }
 
+    ctx.Send(subscription->Worker, request.Release());
     subscription->FirstUpdateSent = true;
+
+    return true;
 }
 
 void TConfigsProvider::DumpStateHTML(IOutputStream &os) const {
@@ -722,7 +760,7 @@ void TConfigsProvider::DumpStateHTML(IOutputStream &os) const {
                     os << "Presistent Config" << Endl;
                 }
                 PRE() {
-                    os << YamlConfig;
+                    os << MainYamlConfig;
                 }
                 for (auto &[id, config] : VolatileYamlConfigs) {
                     TAG(TH5) {
@@ -749,7 +787,7 @@ void TConfigsProvider::DumpStateHTML(IOutputStream &os) const {
                            << "  ConfigVersions: " << s->LastProvided.ShortDebugString() << Endl
                            << "  ServeYaml: " << s->ServeYaml << Endl
                            << "  YamlApiVersion: " << s->YamlApiVersion << Endl
-                           << "  YamlVersion: " << s->YamlConfigVersion << ".[";
+                           << "  YamlVersion: " << s->MainYamlConfigVersion << ".[";
                         bool first = true;
                         for (auto &[id, hash] : s->VolatileYamlConfigHashes) {
                             os << (first ? "" : ",") << id << "." << hash;
@@ -783,13 +821,13 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
     auto existing = InMemoryIndex.GetSubscription(subscriber);
     if (existing) {
         if (existing->Generation >= rec.GetGeneration()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                        "TConfigsProvider received stale subscription request "
-                        << subscriber.ToString() << ":" << rec.GetGeneration());
+            YDB_LOG_DEBUG_CTX(ctx, "TConfigsProvider received stale subscription request",
+                {"subscriber", subscriber},
+                {"generation", rec.GetGeneration()});
             return;
         }
 
-        InMemoryIndex.RemoveSubscription(subscriber);
+        RemoveSubscription(subscriber);
         Send(existing->Worker, new TEvents::TEvPoisonPill());
     }
 
@@ -809,7 +847,11 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
     if (rec.HasServeYaml() && rec.GetServeYaml() && rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1) {
         subscription->ServeYaml = rec.GetServeYaml();
         subscription->YamlApiVersion = rec.GetYamlApiVersion();
-        subscription->YamlConfigVersion = rec.GetYamlVersion();
+        subscription->MainYamlConfigVersion = rec.GetMainYamlVersion();
+        // FIXME: store version to avoid resending
+        // if (auto it = DatabaseYamlConfigs.find(rec.GetOptions().GetTenant()); it != DatabaseYamlConfigs.end()) {
+        //     subscription->DatabaseYamlConfig = it->second.Config;
+        // }
         for (auto &volatileConfigVersion : rec.GetVolatileYamlVersion()) {
             subscription->VolatileYamlConfigHashes[volatileConfigVersion.GetId()] = volatileConfigVersion.GetHash();
         }
@@ -817,13 +859,14 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev
 
     InMemoryIndex.AddSubscription(subscription);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TConfigsProvider registered new subscription "
-                << subscriber.ToString() << ":" << rec.GetGeneration());
+    YDB_LOG_DEBUG_CTX(ctx, "TConfigsProvider registered new subscription",
+        {"subscriber", subscriber},
+        {"generation", rec.GetGeneration()});
 
     subscription->Worker = RegisterWithSameMailbox(new TSubscriptionClientSender(subscription, SelfId()));
 
-    CheckSubscription(subscription, ctx);
+    ScheduledUpdates[subscription->Subscriber] = EUpdate::All;
+    ProcessScheduledUpdates(ctx);
 }
 
 void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx)
@@ -833,16 +876,17 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &e
 
     auto subscription = InMemoryIndex.GetSubscription(subscriber);
     if (!subscription || subscription->Generation > rec.GetGeneration()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider received stale subscription canceled request "
-                    << subscriber.ToString() << ":" << rec.GetGeneration());
+        YDB_LOG_DEBUG_CTX(ctx, "TConfigsProvider received stale subscription canceled request",
+            {"subscriber", subscriber},
+            {"generation", rec.GetGeneration()});
         return;
     }
 
     Y_ABORT_UNLESS(subscription->Worker);
 
-    InMemoryIndex.RemoveSubscription(subscriber);
+    RemoveSubscription(subscriber);
     Send(subscription->Worker, new TEvents::TEvPoisonPill());
+    ProcessScheduledUpdates(ctx);
 }
 
 void TConfigsProvider::Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const TActorContext &ctx)
@@ -850,12 +894,27 @@ void TConfigsProvider::Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const
     auto subscription = ev->Get()->Subscription;
     auto existing = InMemoryIndex.GetSubscription(subscription->Subscriber);
     if (existing == subscription) {
-        InMemoryIndex.RemoveSubscription(subscription->Subscriber);
+        RemoveSubscription(subscription->Subscriber);
+
         Send(subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionCanceled(subscription->Generation));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider removed subscription "
-                    << subscription->Subscriber<< ":" << subscription->Generation << " (subscription worker died)");
+        YDB_LOG_DEBUG_CTX(ctx, "TConfigsProvider removed subscription (subscription worker died)",
+            {"subscriber", subscription->Subscriber},
+            {"generation", subscription->Generation});
     }
+
+    ProcessScheduledUpdates(ctx);
+}
+
+void TConfigsProvider::Handle(TEvPrivate::TEvWorkerCoolDown::TPtr &ev, const TActorContext &ctx)
+{
+    auto subscription = ev->Get()->Subscription;
+    auto existing = InMemoryIndex.GetSubscription(subscription->Subscriber);
+    if (existing == subscription) {
+        InflightUpdates.erase(subscription->Subscriber);
+    }
+
+    ProcessScheduledUpdates(ctx);
 }
 
 void TConfigsProvider::Handle(TEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev, const TActorContext &ctx)
@@ -887,8 +946,8 @@ void TConfigsProvider::Handle(TEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev
         }
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "Send TEvCheckConfigUpdatesResponse: " << response->Record.ShortDebugString());
+    YDB_LOG_TRACE_CTX(ctx, "Send",
+        {"ev", response->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -980,8 +1039,8 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigItemsRequest::TPtr &ev, co
     for (auto &item : items)
         item->Serialize(*response->Record.AddConfigItems());
 
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "Send TEvGetConfigItemsResponse: " << response->Record.ShortDebugString());
+    YDB_LOG_TRACE_CTX(ctx, "Send",
+        {"ev", response->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -992,16 +1051,14 @@ void TConfigsProvider::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr &e
     auto subscription = SubscriptionIndex.GetSubscription(rec.GetSubscriptionId());
     // Subscription was removed
     if (!subscription) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "Config notification response for missing subscription id="
-                    << rec.GetSubscriptionId());
+        YDB_LOG_DEBUG_CTX(ctx, "Config notification response for missing subscription",
+            {"subscriptionId", rec.GetSubscriptionId()});
         return;
     }
     // Service was restarted.
     if (ev->Cookie != subscription->Cookie) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "Config notification response cookie mismatch for"
-                    << " subscription id=" << rec.GetSubscriptionId());
+        YDB_LOG_DEBUG_CTX(ctx, "Config notification response cookie mismatch for subscription",
+            {"subscriptionId", rec.GetSubscriptionId()});
         Y_ABORT_UNLESS(subscription->Subscriber.ServiceId);
         return;
     }
@@ -1028,8 +1085,8 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetConfigSubscriptionRequest::TPtr 
         resp->Record.MutableSubscription()->SetId(id);
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "Send TEvGetConfigSubscriptionResponse: " << resp->Record.ShortDebugString());
+    YDB_LOG_TRACE_CTX(ctx, "Send",
+        {"ev", resp->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -1051,8 +1108,8 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigItemsRequest::TPtr &ev
     for (auto &item : items)
         item->Serialize(*response->Record.AddConfigItems());
 
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "Send TEvGetNodeConfigItemsResponse: " << response->Record.ShortDebugString());
+    YDB_LOG_TRACE_CTX(ctx, "Send",
+        {"ev", response->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -1088,16 +1145,20 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
         }
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "Send TEvGetNodeConfigResponse: " << response->Record.ShortDebugString());
+    YDB_LOG_TRACE_CTX(ctx, "Send",
+        {"ev", response->Record.ShortDebugString()});
 
     if (rec.HasServeYaml() && rec.GetServeYaml() && rec.HasYamlApiVersion() && rec.GetYamlApiVersion() == 1) {
-        response->Record.SetYamlConfig(YamlConfig);
+        response->Record.SetMainYamlConfig(MainYamlConfig);
 
         for (auto &[id, config] : VolatileYamlConfigs) {
             auto &item = *response->Record.AddVolatileConfigs();
             item.SetId(id);
             item.SetConfig(config);
+        }
+
+        if (auto it = DatabaseYamlConfigs.find(rec.GetNode().GetTenant()); it != DatabaseYamlConfigs.end()) {
+            response->Record.SetDatabaseYamlConfig(it->second.Config);
         }
     }
 
@@ -1121,8 +1182,8 @@ void TConfigsProvider::Handle(TEvConsole::TEvListConfigSubscriptionsRequest::TPt
             pr.second->Serialize(*response->Record.AddSubscriptions());
     }
 
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "Send TEvListConfigSubscriptionsResponse: " << response->Record.ShortDebugString());
+    YDB_LOG_TRACE_CTX(ctx, "Send",
+        {"ev", response->Record.ShortDebugString()});
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
 }
@@ -1131,22 +1192,19 @@ void TConfigsProvider::Handle(TEvPrivate::TEvNotificationTimeout::TPtr &ev, cons
 {
     auto subscription = ev->Get()->Subscription;
 
-    LOG_ERROR_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "Couldn't deliver config notification for subscription "
-                << subscription->ToString() );
+    YDB_LOG_ERROR_CTX(ctx, "Couldn't deliver config notification for subscription",
+        {"subscription", subscription->ToString()});
 
     // Subscription was removed
     if (!SubscriptionIndex.GetSubscription(subscription->Id)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "Config notification timeout for missing subscription id="
-                    << subscription->Id);
+        YDB_LOG_DEBUG_CTX(ctx, "Config notification timeout for missing subscription",
+            {"subscriptionId", subscription->Id});
         return;
     }
     // Worker has changed.
     if (ev->Sender != subscription->Worker) {
-        LOG_ERROR_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "Config notification timeout from unexpected worker for"
-                    << " subscription id=" << subscription->Id);
+        YDB_LOG_ERROR_CTX(ctx, "Config notification timeout from unexpected worker for subscription",
+            {"subscriptionId", subscription->Id});
         return;
     }
     subscription->Worker = TActorId();
@@ -1158,16 +1216,14 @@ void TConfigsProvider::Handle(TEvPrivate::TEvSenderDied::TPtr &ev, const TActorC
     auto subscription = ev->Get()->Subscription;
     // Subscription was removed
     if (!SubscriptionIndex.GetSubscription(subscription->Id)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "Config sender died for missing subscription id="
-                    << subscription->Id);
+        YDB_LOG_DEBUG_CTX(ctx, "Config sender died for missing subscription",
+            {"subscriptionId", subscription->Id});
         return;
     }
     // Worker has changed.
     if (ev->Sender != subscription->Worker) {
-        LOG_ERROR_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "Unexpected config sender died for"
-                    << " subscription id=" << subscription->Id);
+        YDB_LOG_ERROR_CTX(ctx, "Unexpected config sender died for subscription",
+            {"subscriptionId", subscription->Id});
         return;
     }
     subscription->Worker = TActorId();
@@ -1202,8 +1258,8 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateConfigs::TPtr &ev, const TAct
 {
     auto &event = ev->Get()->Event;
     if (event) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider send: " << ev->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "Send",
+            {"ev", ev->ToString()});
         ctx.Send(event.Release());
     }
 
@@ -1214,8 +1270,8 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
 {
     auto &event = ev->Get()->Event;
     if (event) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider send: " << ev->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "Send",
+            {"ev", ev->ToString()});
         ctx.Send(event.Release());
     }
 
@@ -1223,49 +1279,80 @@ void TConfigsProvider::Handle(TEvPrivate::TEvUpdateSubscriptions::TPtr &ev, cons
 }
 
 void TConfigsProvider::Handle(TEvPrivate::TEvUpdateYamlConfig::TPtr &ev, const TActorContext &ctx) {
-    YamlConfig = ev->Get()->YamlConfig;
-    VolatileYamlConfigs.clear();
+    DatabaseYamlConfigs = ev->Get()->DatabaseYamlConfigs;
+    if (!ev->Get()->ChangedDatabase) {
+        MainYamlConfig = ev->Get()->MainYamlConfig;
+        VolatileYamlConfigs.clear();
 
-    YamlConfigVersion = NYamlConfig::GetVersion(YamlConfig);
-    VolatileYamlConfigHashes.clear();
-    for (auto& [id, config] : ev->Get()->VolatileYamlConfigs) {
-        auto doc = NFyaml::TDocument::Parse(config);
-        // we strip it to provide old format for config dispatcher
-        auto node = doc.Root().Map().at("selector_config");
-        TString strippedConfig = "\n" + config.substr(node.BeginMark().InputPos, node.EndMark().InputPos - node.BeginMark().InputPos) + "\n";
-        VolatileYamlConfigs[id] = strippedConfig;
-        VolatileYamlConfigHashes[id] = THash<TString>()(strippedConfig);
-    }
+        MainYamlConfigVersion = NYamlConfig::GetVersion(MainYamlConfig);
+        VolatileYamlConfigHashes.clear();
 
-    for (auto &[_, subscription] : InMemoryIndex.GetSubscriptions()) {
-        if (subscription->ServeYaml) {
-            auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
-                    subscription->Generation,
-                    NKikimrConfig::TAppConfig{},
-                    THashSet<ui32>{});
+        for (auto& [id, config] : ev->Get()->VolatileYamlConfigs) {
+            auto doc = NFyaml::TDocument::Parse(config);
+            // we strip it to provide old format for config dispatcher
+            auto node = doc.Root().Map().at("selector_config");
+            TString strippedConfig = "\n" + config.substr(node.BeginMark().InputPos, node.EndMark().InputPos - node.BeginMark().InputPos) + "\n";
+            VolatileYamlConfigs[id] = strippedConfig;
+            VolatileYamlConfigHashes[id] = THash<TString>()(strippedConfig);
+        }
 
-            if (subscription->YamlConfigVersion != YamlConfigVersion) {
-                subscription->YamlConfigVersion = YamlConfigVersion;
-                request->Record.SetYamlConfig(YamlConfig);
-            } else {
-                request->Record.SetYamlConfigNotChanged(true);
+        for (auto &[_, subscription] : InMemoryIndex.GetSubscriptions()) {
+            ScheduledUpdates.emplace(subscription->Subscriber, EUpdate::Yaml);
+        }
+    } else {
+        const auto* subs = InMemoryIndex.GetSubscriptions(ev->Get()->ChangedDatabase);
+        if (subs) {
+            for (auto &subscription : *subs) {
+                ScheduledUpdates.emplace(subscription->Subscriber, EUpdate::Yaml);
             }
-
-            for (auto &[id, hash] : VolatileYamlConfigHashes) {
-                auto *volatileConfig = request->Record.AddVolatileConfigs();
-                volatileConfig->SetId(id);
-                if (auto it = subscription->VolatileYamlConfigHashes.find(id); it != subscription->VolatileYamlConfigHashes.end() && it->second == hash) {
-                    volatileConfig->SetNotChanged(true);
-                } else {
-                    volatileConfig->SetConfig(VolatileYamlConfigs[id]);
-                }
-            }
-
-            subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
-
-            ctx.Send(subscription->Worker, request.Release());
         }
     }
+
+    ProcessScheduledUpdates(ctx);
+}
+
+bool TConfigsProvider::UpdateConfig(TInMemorySubscription::TPtr subscription,
+                                    const TActorContext &ctx)
+{
+    if (subscription->ServeYaml) {
+        auto request = MakeHolder<TEvConsole::TEvConfigSubscriptionNotification>(
+                subscription->Generation,
+                NKikimrConfig::TAppConfig{},
+                THashSet<ui32>{});
+
+        if (subscription->MainYamlConfigVersion != MainYamlConfigVersion) {
+            subscription->MainYamlConfigVersion = MainYamlConfigVersion;
+            request->Record.SetMainYamlConfig(MainYamlConfig);
+        } else {
+            request->Record.SetMainYamlConfigNotChanged(true);
+        }
+
+        for (auto &[id, hash] : VolatileYamlConfigHashes) {
+            auto *volatileConfig = request->Record.AddVolatileConfigs();
+            volatileConfig->SetId(id);
+            if (auto it = subscription->VolatileYamlConfigHashes.find(id); it != subscription->VolatileYamlConfigHashes.end() && it->second == hash) {
+                volatileConfig->SetNotChanged(true);
+            } else {
+                volatileConfig->SetConfig(VolatileYamlConfigs[id]);
+            }
+        }
+
+        subscription->VolatileYamlConfigHashes = VolatileYamlConfigHashes;
+
+        if (auto it = DatabaseYamlConfigs.find(subscription->Tenant); it != DatabaseYamlConfigs.end()) {
+            if (!subscription->DatabaseYamlConfigVersion || *subscription->DatabaseYamlConfigVersion != it->second.Version) {
+                subscription->DatabaseYamlConfigVersion = it->second.Version;
+                request->Record.SetDatabaseYamlConfig(it->second.Config);
+            } else {
+                request->Record.SetDatabaseYamlConfigNotChanged(true);
+            }
+        }
+
+        ctx.Send(subscription->Worker, request.Release());
+        return true;
+    }
+
+    return false;
 }
 
 } // namespace NKikimr::NConsole

@@ -52,10 +52,12 @@ namespace NKikimr {
                          EJobType type,
                          const TVDiskID &vdisk,
                          const TActorId &service,
+                         const TActorId &sstWriterId,
                          const NSyncer::TPeerSyncState &peerState,
                          const std::shared_ptr<TSjCtx> &ctx)
             : VDiskId(vdisk)
             , ServiceId(service)
+            , SstWriterId(sstWriterId)
             , Type(type)
             , OldSyncState(peerState.SyncState)
             , Current(peerState)
@@ -101,16 +103,29 @@ namespace NKikimr {
         }
 
         void TSyncerJobTask::PrepareToFullRecovery(const TSyncState &syncState) {
-            Y_ABORT_UNLESS(Phase == EStart || Phase == EWaitRemote, "%s", Sublog.Get().data());
+            Y_VERIFY_S(Phase == EStart || Phase == EWaitRemote,
+                Ctx->SyncerCtx->VCtx->VDiskLogPrefix << Sublog.Get());
             Phase = EStart;
             Type = EFullRecover;
             Current.LastSyncStatus = TSyncStatusVal::FullRecover;
             Current.SyncState = syncState;
-            FullRecoverInfo = TFullRecoverInfo();
+            // we send initial request with unordered data protocol
+            // If peer doesn't support new protocol or new protocol is disabled on peer, we'll change
+            // the protocol after receiving response
+            FullRecoverInfo = TFullRecoverInfo(NKikimrBlobStorage::EFullSyncProtocol::UnorderedData);
             ++RedirCounter;
+
+            EnterFullRecovery = true;
+            Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_DEBUG, BS_SYNCER,
+                    VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
+                        "PrepareToFullRecovery: fromVDisk# %s toVDisk# %s",
+                        VDiskId.ToString().data(), Ctx->SelfVDiskId.ToString().data()));
         }
 
         TSjOutcome TSyncerJobTask::ContinueInFullRecoveryMode() {
+#ifdef USE_MERGE_FULL_SYNC_SCHEME
+            return ReplyAndDie(TSyncStatusVal::FullRecover);
+#endif
             if (RedirCounter > 3) {
                 return ReplyAndDie(TSyncStatusVal::RedirLoop);
             } else {
@@ -123,7 +138,8 @@ namespace NKikimr {
             Phase = EFinished;
 
             // setup Current
-            Y_ABORT_UNLESS(status != TSyncStatusVal::Running, "%s", Sublog.Get().data());
+            Y_VERIFY_S(status != TSyncStatusVal::Running,
+                Ctx->SyncerCtx->VCtx->VDiskLogPrefix << Sublog.Get());
             auto now = TAppData::TimeProvider->Now();
             Current.LastSyncStatus = status;
             Current.LastTry = now;
@@ -141,8 +157,9 @@ namespace NKikimr {
         }
 
         TSjOutcome TSyncerJobTask::NextRequest() {
-            Y_ABORT_UNLESS(Phase == EStart || Phase == EWaitLocal || Phase == ETerminated,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+            Y_VERIFY_S(Phase == EStart || Phase == EWaitLocal || Phase == ETerminated,
+                Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
+                "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
 
             Sublog.Log() << "NextRequest\n";
 
@@ -151,8 +168,9 @@ namespace NKikimr {
             }
 
             if (EndOfStream) {
-                Y_ABORT_UNLESS(Phase == EWaitLocal,
-                         "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+                Y_VERIFY_S(Phase == EWaitLocal,
+                    Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
+                    "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
                 return ReplyAndDie(TSyncStatusVal::SyncDone);
             }
 
@@ -162,10 +180,13 @@ namespace NKikimr {
                 auto msg = std::make_unique<TEvBlobStorage::TEvVSyncFull>(Current.SyncState, Ctx->SelfVDiskId, VDiskId,
                     FullRecoverInfo->VSyncFullMsgsReceived, FullRecoverInfo->Stage,
                     FullRecoverInfo->LogoBlobFrom.LogoBlobID(), ReadUnaligned<ui64>(&FullRecoverInfo->BlockTabletFrom.TabletId),
-                    FullRecoverInfo->BarrierFrom);
+                    FullRecoverInfo->BarrierFrom, FullRecoverInfo->Protocol);
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncFullBytesSent() += msg->GetCachedByteSize();
                 ++Ctx->SyncerCtx->MonGroup.SyncerVSyncFullMessagesSent();
-                return TSjOutcome::Event(ServiceId, std::move(msg));
+
+                bool full = EnterFullRecovery;
+                EnterFullRecovery = false;
+                return TSjOutcome::Event(ServiceId, std::move(msg), full);
             } else {
                 auto msg = std::make_unique<TEvBlobStorage::TEvVSync>(Current.SyncState, Ctx->SelfVDiskId, VDiskId);
                 Ctx->SyncerCtx->MonGroup.SyncerVSyncBytesSent() += msg->GetCachedByteSize();
@@ -185,6 +206,7 @@ namespace NKikimr {
                 return ReplyAndDie(TSyncStatusVal::ProtocolError);
             }
 
+            const TSyncState oldSyncState = GetCurrent().SyncState;
             SetSyncState(newSyncState);
             EndOfStream = record.GetFinished();
 
@@ -196,7 +218,8 @@ namespace NKikimr {
 
                 if (Ctx->SyncerCtx->Config->EnableLocalSyncLogDataCutting) {
                     std::unique_ptr<IActor> actor(CreateLocalSyncDataCutter(Ctx->SyncerCtx->Config,
-                            Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, parentId, std::move(msg)));
+                            Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, parentId, std::move(msg),
+                            oldSyncState));
                     return TSjOutcome::Actor(std::move(actor), true);
                 } else {
 
@@ -227,17 +250,18 @@ namespace NKikimr {
             SetSyncState(newSyncState);
             EndOfStream = false;
             Phase = EStart;
-            Y_ABORT_UNLESS(Type == EJustSync);
+            Y_VERIFY_S(Type == EJustSync, Ctx->SyncerCtx->VCtx->VDiskLogPrefix);
 
             Sublog.Log() << "HandleRestart: newSyncState# " << newSyncState << "\n";
             return NextRequest();
         }
 
         void TSyncerJobTask::HandleStatusFlags(const NKikimrBlobStorage::TEvVSyncResult &record) {
-            Y_DEBUG_ABORT_UNLESS(record.GetStatus() == NKikimrProto::OK ||
+            Y_VERIFY_DEBUG_S(record.GetStatus() == NKikimrProto::OK ||
                 record.GetStatus() == NKikimrProto::ALREADY ||
                 record.GetStatus() == NKikimrProto::NODATA ||
-                record.GetStatus() == NKikimrProto::RESTART);
+                record.GetStatus() == NKikimrProto::RESTART,
+                Ctx->SyncerCtx->VCtx->VDiskLogPrefix);
             if (record.HasStatusFlags()) {
                 auto flags = static_cast<NPDisk::TStatusFlags>(record.GetStatusFlags());
                 TVDiskID fromVDisk = VDiskIDFromVDiskID(record.GetVDiskID());
@@ -247,10 +271,11 @@ namespace NKikimr {
         }
 
         TSjOutcome TSyncerJobTask::Handle(TEvBlobStorage::TEvVSyncResult::TPtr &ev, const TActorId &parentId) {
-            Y_ABORT_UNLESS(Phase == EWaitRemote,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
-            Sublog.Log() << "Handle(TEvVSyncResult): " << ev->Get()->ToString() << "\n";
+            Y_VERIFY_S(Phase == EWaitRemote,
+                Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
+                "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
 
+            Sublog.Log() << "Handle(TEvVSyncResult): " << ev->Get()->ToString() << "\n";
 
             size_t bytesReceived = ev->Get()->GetCachedByteSize();
             Ctx->SyncerCtx->MonGroup.SyncerVSyncBytesReceived() += bytesReceived;
@@ -320,18 +345,28 @@ namespace NKikimr {
             FullRecoverInfo->BlockTabletFrom = record.GetBlockTabletFrom();
             FullRecoverInfo->BarrierFrom = TKeyBarrier(record.GetBarrierFrom());
 
+            if (record.HasProtocol()) {
+                FullRecoverInfo->Protocol = record.GetProtocol();
+            } else {
+                // Protocol may change after initial message when new protocol is either disabled
+                // on peer or not supported at all due to old version
+                FullRecoverInfo->Protocol = NKikimrBlobStorage::EFullSyncProtocol::Legacy;
+            }
+
             if (FullRecoverInfo->VSyncFullMsgsReceived == 1) {
                 SetSyncState(syncState); // from now keep this position in memory
             } else {
-                Y_ABORT_UNLESS(FullRecoverInfo->VSyncFullMsgsReceived > 1,
-                         "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
-                Y_ABORT_UNLESS(GetCurrent().SyncState == syncState,
-                         "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+                Y_VERIFY_S(FullRecoverInfo->VSyncFullMsgsReceived > 1,
+                    Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
+                    "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
+                Y_VERIFY_S(GetCurrent().SyncState == syncState,
+                    Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
+                    "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
             }
 
             if (!data.empty()) {
                 const TVDiskID vdisk(VDiskIDFromVDiskID(record.GetVDiskID()));
-                // While working on full recovery we put OldSyncState to the revery log,
+                // While working on full recovery we put OldSyncState to the recovery log,
                 // while keeping in memory correct SyncState obtained from remote vdisk;
                 // the correct SyncState is written by committer only once. We required
                 // to work this way because records we get from remote node are not ordered
@@ -342,7 +377,8 @@ namespace NKikimr {
 
                 if (Ctx->SyncerCtx->Config->EnableLocalSyncLogDataCutting) {
                     std::unique_ptr<IActor> actor(CreateLocalSyncDataCutter(Ctx->SyncerCtx->Config,
-                            Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, parentId, std::move(msg)));
+                            Ctx->SyncerCtx->VCtx, Ctx->SyncerCtx->SkeletonId, parentId, std::move(msg),
+                            OldSyncState));
                     return TSjOutcome::Actor(std::move(actor), true);
                 } else {
                     auto msg = std::make_unique<TEvLocalSyncData>(vdisk, OldSyncState, data);
@@ -369,8 +405,10 @@ namespace NKikimr {
         }
 
         TSjOutcome TSyncerJobTask::Handle(TEvBlobStorage::TEvVSyncFullResult::TPtr &ev, const TActorId &parentId) {
-            Y_ABORT_UNLESS(Phase == EWaitRemote,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+            Y_VERIFY_S(Phase == EWaitRemote,
+                Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
+                "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
+
             Sublog.Log() << "Handle(TEvVSyncFullResult): " << ev->Get()->ToString() << "\n";
 
             size_t bytesReceived = ev->Get()->GetCachedByteSize();
@@ -378,8 +416,10 @@ namespace NKikimr {
             BytesReceived += bytesReceived;
 
             const NKikimrBlobStorage::TEvVSyncFullResult &record = ev->Get()->Record;
-            Y_ABORT_UNLESS(record.GetCookie() == FullRecoverInfo->VSyncFullMsgsReceived,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+            Y_VERIFY_S(record.GetCookie() == FullRecoverInfo->VSyncFullMsgsReceived,
+                Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
+                "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
+
             FullRecoverInfo->VSyncFullMsgsReceived++;
             TVDiskID fromVDisk = VDiskIDFromVDiskID(record.GetVDiskID());
             if (!Ctx->SelfVDiskId.SameGroupAndGeneration(fromVDisk)) {
@@ -420,16 +460,19 @@ namespace NKikimr {
         }
 
         TSjOutcome TSyncerJobTask::Handle(TEvLocalSyncDataResult::TPtr &ev) {
-            Y_ABORT_UNLESS(Phase == EWaitLocal || Phase == ETerminated,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+            Y_VERIFY_S(Phase == EWaitLocal || Phase == ETerminated,
+                Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
+                "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
+
             Sublog.Log() << "Handle(TEvLocalSyncDataResult): " << ev->Get()->ToString() << "\n";
 
             if (ev->Get()->Status == NKikimrProto::OUT_OF_SPACE) {
                 // no space
                 return ReplyAndDie(TSyncStatusVal::OutOfSpace);
             }
-            Y_ABORT_UNLESS(ev->Get()->Status == NKikimrProto::OK,
-                     "msg# %s Phase# %s Log# %s", ev->Get()->ToString().data(), EPhaseToStr(Phase), Sublog.Get().data());
+            Y_VERIFY_S(ev->Get()->Status == NKikimrProto::OK,
+                Ctx->SyncerCtx->VCtx->VDiskLogPrefix << "msg# " << ev->Get()->ToString() <<
+                "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
 
             if (EndOfStream) {
                 return ReplyAndDie(TSyncStatusVal::SyncDone);
@@ -444,9 +487,15 @@ namespace NKikimr {
             }
         }
 
+        TSjOutcome TSyncerJobTask::Handle(TEvFullSyncFinished::TPtr& /*ev*/) {
+            return ReplyAndDie(TSyncStatusVal::SyncDone);
+        }
+
         TSjOutcome TSyncerJobTask::Terminate(ESyncStatus status) {
-            Y_ABORT_UNLESS(Phase == EWaitLocal || Phase == EWaitRemote || Phase == EStart,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+            Y_VERIFY_S(Phase == EWaitLocal || Phase == EWaitRemote || Phase == EStart,
+                Ctx->SyncerCtx->VCtx->VDiskLogPrefix <<
+                "Phase# " << EPhaseToStr(Phase) << " Log# " << Sublog.Get());
+
             Sublog.Log() << "Terminate: status# " << status << "\n";
             Phase = ETerminated;
             Current.LastSyncStatus = status;

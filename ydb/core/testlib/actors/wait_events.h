@@ -27,8 +27,8 @@ namespace NActors {
         /**
          * Wait for a first event
          */
-        void Wait() {
-            Runtime.WaitFor(TypeName<TEvType>(), [&]{ return EventSeen; });
+        void Wait(TDuration simTimeout = TDuration::Max()) {
+            Runtime.WaitFor(TypeName<TEvType>(), [&]{ return EventSeen; }, simTimeout);
         }
 
         /**

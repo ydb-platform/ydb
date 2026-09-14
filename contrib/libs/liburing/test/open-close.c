@@ -218,6 +218,39 @@ err:
 	return -1;
 }
 
+static int test_open_direct_cloexec(struct io_uring *ring, const char *path, int dfd)
+{
+	struct io_uring_cqe *cqe;
+	struct io_uring_sqe *sqe;
+	int ret;
+
+	sqe = io_uring_get_sqe(ring);
+	if (!sqe) {
+		fprintf(stderr, "get sqe failed\n");
+		goto err;
+	}
+	io_uring_prep_openat(sqe, dfd, path, O_RDONLY | O_CLOEXEC, 0);
+	sqe->file_index = 1;
+
+	ret = io_uring_submit(ring);
+	if (ret <= 0) {
+		fprintf(stderr, "sqe submit failed: %d\n", ret);
+		goto err;
+	}
+
+	ret = io_uring_wait_cqe(ring, &cqe);
+	if (ret < 0) {
+		fprintf(stderr, "wait completion %d\n", ret);
+		goto err;
+	}
+	if (cqe->res != -EINVAL)
+		return 1;
+	io_uring_cqe_seen(ring, cqe);
+	return 0;
+err:
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
 	struct io_uring ring;
@@ -286,6 +319,12 @@ int main(int argc, char *argv[])
 	ret = test_close_flush();
 	if (ret) {
 		fprintf(stderr, "test_close_flush failed\n");
+		goto err;
+	}
+
+	ret = test_open_direct_cloexec(&ring, path, -1);
+	if (ret) {
+		fprintf(stderr, "test_open_direct_cloexex failed\n");
 		goto err;
 	}
 

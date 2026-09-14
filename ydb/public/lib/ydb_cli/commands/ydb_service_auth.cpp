@@ -1,10 +1,10 @@
 #include "ydb_service_auth.h"
 
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/colors.h>
 #include "ydb_sdk_core_access.h"
 
-namespace NYdb {
-namespace NConsoleClient {
+namespace NYdb::NConsoleClient {
 
 TCommandAuth::TCommandAuth()
     : TClientCommandTree("auth", {}, "Auth service operations")
@@ -18,23 +18,26 @@ TCommandGetToken::TCommandGetToken()
 
 void TCommandGetToken::Config(TConfig& config) {
     TYdbSimpleCommand::Config(config);
-    config.Opts->AddLongOption('f', "force", "Print token without prompt").NoArgument().StoreTrue(&ForceMode);
+    config.Opts->AddLongOption('f', "force", "Print token without prompt").NoArgument().StoreTrue(&config.AssumeYes);
     config.SetFreeArgsNum(0);
 }
 
-int TCommandGetToken::Run(TConfig& config) {
-    auto credentialsProviderFactory = config.CredentialsGetter(config);
-
-    if (!ForceMode) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+bool TCommandGetToken::Prompt(TConfig& config) {
+    if (!config.AssumeYes) {
+        NColorizer::TColors colors = NConsoleClient::AutoColors(Cout);
         Cout << colors.RedColor() << "Caution: Your auth token will be printed to console." << colors.OldColor()
-            << " Use \"--force\" (\"-f\") option to print without prompting." << Endl
-            << "Do you want to proceed (y/n)? : ";
-        if (!AskYesOrNo()) {
-            return EXIT_FAILURE;
+            << " Use \"--force\" (\"-f\") option to print without prompting." << Endl;
+
+        if (!AskYesOrNo("Do you want to proceed?", /* defaultAnswer */ false)) {
+            return false;
         }
     }
 
+    return true;
+}
+
+int TCommandGetToken::Run(TConfig& config) {
+    auto credentialsProviderFactory = config.GetSingletonCredentialsProviderFactory();
     if (credentialsProviderFactory) {
         auto driver = CreateDriver(config);
         TDummyClient client(driver);
@@ -49,5 +52,4 @@ int TCommandGetToken::Run(TConfig& config) {
     return EXIT_FAILURE;
 }
 
-}
-}
+} // namespace NConsoleClient::NYdb

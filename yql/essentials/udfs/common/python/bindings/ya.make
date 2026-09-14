@@ -1,6 +1,6 @@
 PY23_NATIVE_LIBRARY()
 
-YQL_ABI_VERSION(2 27 0)
+YQL_ABI_VERSION(2 45 0)
 
 SRCS(
     py_callable.cpp
@@ -11,6 +11,7 @@ SRCS(
     py_list.cpp
     py_lazy_mkql_dict.cpp
     py_lazy_mkql_list.cpp
+    py_linear.cpp
     py_iterator.cpp
     py_resource.cpp
     py_stream.cpp
@@ -49,6 +50,9 @@ NO_COMPILER_WARNINGS()
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut3
-)
+IF (NOT EXPORT_CMAKE)
+    RECURSE_FOR_TESTS(
+        ut2
+        ut3
+    )
+ENDIF()

@@ -1,7 +1,9 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+
+#include <util/folder/dirut.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -85,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan-Filter");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (Map)-Filter-TableFullScan");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -113,7 +115,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan-Filter");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (Map)-Filter-TableFullScan");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -203,7 +205,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto join = FindPlanNodeByKv(
             plan,
             "Node Type",
-            "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan-Filter"
+            "Aggregate-InnerJoin (Map)-Filter-TableFullScan"
         );
 
         UNIT_ASSERT(join.IsDefined());
@@ -366,9 +368,9 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
-        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)-Filter-Filter");
+        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (Map)-Filter");
         UNIT_ASSERT(join1.IsDefined());
-        auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-Filter");
+        auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (Map)-Filter");
         UNIT_ASSERT(join2.IsDefined());
     }
 
@@ -400,6 +402,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto* spilling = appCfg.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
         spilling->SetEnable(true);
         spilling->SetRoot("./spilling/");
+        MakeDirIfNotExist("./spilling");
         auto kikimr = DefaultKikimrRunner({}, appCfg);
 
         auto db = kikimr.GetTableClient();
@@ -489,13 +492,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         node = FindPlanNodeByKv(plan, "Name", "TableFullScan");
         UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
 
-
-        if (settings.AppConfig.GetTableServiceConfig().GetEnableKqpDataQueryStreamLookup()) {
-            node = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
-        } else {
-            node = FindPlanNodeByKv(plan, "Name", "TablePointLookup");
-        }
-
+        node = FindPlanNodeByKv(plan, "Node Type", "TableLookup");
         if (node.IsDefined()) {
             UNIT_ASSERT_EQUAL(node.GetMapSafe().at("Table").GetStringSafe(), "KeyValue");
         }
@@ -520,10 +517,10 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
         Cerr << plan << Endl;
 
-        auto upsertsCount = CountPlanNodesByKv(plan, "Node Type", "Upsert-ConstantExpr");
+        auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
         UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 2);
 
-        auto deletesCount = CountPlanNodesByKv(plan, "Node Type", "Delete-ConstantExpr");
+        auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
         UNIT_ASSERT_VALUES_EQUAL(deletesCount, 1);
 
         auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableFullScan");
@@ -593,7 +590,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         UNIT_ASSERT(ValidatePlanNodeIds(plan));
 
         Cout << plan.GetStringRobust() << Endl;
-        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (JoinDict)");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (Dict)");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
@@ -853,9 +850,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(IdxFullscan) {
         TKikimrSettings settings;
-        NKikimrConfig::TAppConfig appConfig;
         settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
-        settings.SetAppConfig(appConfig);
 
         TKikimrRunner kikimr(settings);
         CreateSampleTables(kikimr);
@@ -893,11 +888,8 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
     }
 
     Y_UNIT_TEST(MultiJoinCteLinks) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(false);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(false);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig);
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(false);
         TKikimrRunner kikimr{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -924,10 +916,719 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto cteLink1 = FindPlanNodeByKv(
             plan,
             "Subplan Name",
-            "CTE precompute_1_0"
+            "CTE precompute_0_0"
         );
 
         UNIT_ASSERT(cteLink1.IsDefined());
+    }
+
+    Y_UNIT_TEST_TWIN(CreateTableAs, Stats) {
+        auto kikimrSettings = TKikimrSettings().SetWithSampleTables(false).SetEnableTempTables(true);
+        kikimrSettings.AppConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        TKikimrRunner kikimr(kikimrSettings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery( R"(
+                CREATE TABLE `/Root/Source` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 Int32,
+                    PRIMARY KEY (Col1)
+                )
+                WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10);
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery( R"(
+                SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto settings = NYdb::NQuery::TExecuteQuerySettings()
+            .ExecMode(NYdb::NQuery::EExecMode::Explain);
+        if (Stats) {
+            settings.StatsMode(NYdb::NQuery::EStatsMode::Full);
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/Destination` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+
+            UNIT_ASSERT(result.GetStats());
+            UNIT_ASSERT(result.GetStats()->GetPlan());
+
+            Cerr << "PLAN::" << *result.GetStats()->GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            auto sink = FindPlanNodeByKv(
+                plan,
+                "Name",
+                "FillTable"
+            );
+
+            UNIT_ASSERT(sink.IsDefined());
+
+            UNIT_ASSERT_VALUES_EQUAL(sink["SinkType"], "KqpTableSink");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/Destination");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "Destination");
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `test/Destination2` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+
+            UNIT_ASSERT(result.GetStats());
+            UNIT_ASSERT(result.GetStats()->GetPlan());
+
+            Cerr << "PLAN::" << *result.GetStats()->GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            auto sink = FindPlanNodeByKv(
+                plan,
+                "Name",
+                "FillTable"
+            );
+
+            UNIT_ASSERT(sink.IsDefined());
+
+            UNIT_ASSERT_VALUES_EQUAL(sink["SinkType"], "KqpTableSink");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/test/Destination2");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "test/Destination2");
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                PRAGMA TablePathPrefix("/Root/test");
+
+                CREATE TABLE `test2/Destination3` (
+                    PRIMARY KEY (Col1)
+                )
+                WITH (AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4)
+                AS SELECT * FROM `/Root/Source`;
+            )", NYdb::NQuery::TTxControl::NoTx(), settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT(result.GetResultSets().empty());
+
+            UNIT_ASSERT(result.GetStats());
+            UNIT_ASSERT(result.GetStats()->GetPlan());
+
+            Cerr << "PLAN::" << *result.GetStats()->GetPlan() << Endl;
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+            UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+            auto sink = FindPlanNodeByKv(
+                plan,
+                "Name",
+                "FillTable"
+            );
+
+            UNIT_ASSERT(sink.IsDefined());
+
+            UNIT_ASSERT_VALUES_EQUAL(sink["SinkType"], "KqpTableSink");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Path"], "/Root/test/test2/Destination3");
+            UNIT_ASSERT_VALUES_EQUAL(sink["Table"], "test/test2/Destination3");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(UpdateConditional, UseStreamIndex) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(R"(
+            UPDATE `/Root/EightShard` SET Data=Data+1 WHERE Data > 0;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+        NJson::WriteJson(&Cerr, &plan, true);
+
+        auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 1);
+
+        auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableFullScan");
+        UNIT_ASSERT_VALUES_EQUAL(fullScansCount, 1);
+
+        /* check tables section */
+        const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[0].GetMapSafe();
+        UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/EightShard");
+
+        THashMap<TString, int> counter;
+        auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+            for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+            }
+        };
+
+        countOperationsByType("reads");
+        countOperationsByType("writes");
+
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], upsertsCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["FullScan"], fullScansCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], 0);
+    }
+
+    Y_UNIT_TEST(UpdateConditionalKey) {
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(R"(
+            UPDATE `/Root/EightShard` SET Data=Data-1 WHERE Key In (100,200,300);
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        Cerr << plan << Endl;
+
+        auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 1);
+
+        auto rangeScansCount = CountPlanNodesByKv(plan, "Node Type", "TableRangeScan");
+        UNIT_ASSERT_VALUES_EQUAL(rangeScansCount, 1);
+
+        /* check tables section */
+        const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[0].GetMapSafe();
+        UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/EightShard");
+
+        THashMap<TString, int> counter;
+        auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+            for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+            }
+        };
+
+        countOperationsByType("reads");
+        countOperationsByType("writes");
+
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], upsertsCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], rangeScansCount);
+    }
+
+    Y_UNIT_TEST(UpdateOn) {
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(R"(
+            UPDATE `/Root/EightShard` ON SELECT 100 AS Key, 0 AS Data;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        Cerr << plan << Endl;
+
+        auto updatesCount = CountPlanNodesByKv(plan, "Name", "Update");
+        UNIT_ASSERT_VALUES_EQUAL(updatesCount, 1);
+
+        auto lookupCount = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
+        UNIT_ASSERT_VALUES_EQUAL(lookupCount, 0);
+
+        /* check tables section */
+        const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[0].GetMapSafe();
+        UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/EightShard");
+
+        THashMap<TString, int> counter;
+        auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+            for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+            }
+        };
+
+        countOperationsByType("writes");
+
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], updatesCount);
+        UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 0);
+        UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], lookupCount);
+    }
+
+    Y_UNIT_TEST_TWIN(UpdateSecondaryConditional, UseStreamIndex) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(session);
+
+        auto result = session.ExplainDataQuery(R"(
+            UPDATE `/Root/SecondaryKeys` SET Fk=Fk+1 WHERE Value != "test";
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        NJson::WriteJson(&Cerr, &plan, true);
+
+        auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
+
+        auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, (UseStreamIndex ? 0 : 1));
+
+        auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableFullScan");
+        UNIT_ASSERT_VALUES_EQUAL(fullScansCount, 1);
+
+        /* check tables section */
+        {
+            const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[0].GetMapSafe();
+            UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys");
+
+            THashMap<TString, int> counter;
+            auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+                for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                    ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+                }
+            };
+
+            countOperationsByType("reads");
+            countOperationsByType("writes");
+
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["FullScan"], fullScansCount);
+            UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], 0);
+        }
+
+        {
+            const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[1].GetMapSafe();
+            UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys/Index/indexImplTable");
+
+            THashMap<TString, int> counter;
+            auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+                for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                    ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+                }
+            };
+
+            countOperationsByType("writes");
+
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 1);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(UpdateSecondaryConditionalPrimaryKey, UseStreamIndex) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        auto result = session.ExplainDataQuery(R"(
+            UPDATE `/Root/SecondaryKeys` SET Fk=Fk+1 WHERE Key IN (1, 2, 3);
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+        NJson::WriteJson(&Cerr, &plan, true);
+
+        auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
+
+        auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, (UseStreamIndex ? 0 : 1));
+
+        auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableRangeScan");
+        UNIT_ASSERT_VALUES_EQUAL(fullScansCount, 1);
+
+        /* check tables section */
+        {
+            const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[0].GetMapSafe();
+            UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys");
+
+            THashMap<TString, int> counter;
+            auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+                for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                    ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+                }
+            };
+
+            countOperationsByType("reads");
+            countOperationsByType("writes");
+
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], fullScansCount);
+            UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], 0);
+        }
+
+        {
+            const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[1].GetMapSafe();
+            UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys/Index/indexImplTable");
+
+            THashMap<TString, int> counter;
+            auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+                for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                    ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+                }
+            };
+
+            countOperationsByType("writes");
+
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 1);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(UpdateSecondaryConditionalSecondaryKey, UseStreamIndex) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        auto result = session.ExplainDataQuery(R"(
+            UPDATE `/Root/SecondaryKeys` SET Fk=Fk+1 WHERE Fk IN (1, 2, 3);
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        Cerr << plan << Endl;
+
+        auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
+
+        auto updatesCount = CountPlanNodesByKv(plan, "Name", "Update");
+        UNIT_ASSERT_VALUES_EQUAL(updatesCount, 0);
+
+        auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, (UseStreamIndex ? 0 : 1));
+
+        auto fullScansCount = CountPlanNodesByKv(plan, "Node Type", "TableRangeScan");
+        UNIT_ASSERT_VALUES_EQUAL(fullScansCount, 1);
+
+        /* check tables section */
+        {
+            const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[0].GetMapSafe();
+            UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys");
+
+            THashMap<TString, int> counter;
+            auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+                for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                    ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+                }
+            };
+
+            countOperationsByType("writes");
+
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
+        }
+
+        if (!UseStreamIndex) {
+            const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[1].GetMapSafe();
+            UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys/Index/indexImplTable");
+
+            THashMap<TString, int> counter;
+            auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+                for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                    ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+                }
+            };
+
+            countOperationsByType("reads");
+            if (!UseStreamIndex) {
+                countOperationsByType("writes");
+            }
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], UseStreamIndex ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], UseStreamIndex ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["Scan"], fullScansCount);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(UpdateOnSecondary, UseStreamIndex) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(UseStreamIndex);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        auto result = session.ExplainDataQuery(R"(
+            UPDATE `/Root/SecondaryKeys` ON SELECT 100 AS Key, 100 AS Fk, "test" AS Value;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+        NJson::WriteJson(&Cerr, &plan, true);
+
+        auto updatesCount = CountPlanNodesByKv(plan, "Name", "Update");
+        UNIT_ASSERT_VALUES_EQUAL(updatesCount, 0); // Rows have beed read already, so it's better to use upsert.
+
+        auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, (UseStreamIndex ? 1 : 2));
+
+        auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, (UseStreamIndex ? 0 : 1));
+
+        auto lookupCount = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
+        UNIT_ASSERT_VALUES_EQUAL(lookupCount, (UseStreamIndex ? 0 : 1));
+
+        /* check tables section */
+        {
+            const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[0].GetMapSafe();
+            UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys");
+
+            THashMap<TString, int> counter;
+            auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+                for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                    ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+                }
+            };
+
+            countOperationsByType("reads");
+            countOperationsByType("writes");
+
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], 1);
+        }
+
+        {
+            const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[1].GetMapSafe();
+            UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys/Index/indexImplTable");
+
+            THashMap<TString, int> counter;
+            auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+                for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                    ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+                }
+            };
+
+            countOperationsByType("writes");
+
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], 0);
+        }
+    }
+
+    Y_UNIT_TEST(UpdateOnSecondaryWithoutSecondaryKey) {
+        TKikimrSettings settings;
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        auto result = session.ExplainDataQuery(R"(
+            UPDATE `/Root/SecondaryKeys` ON SELECT 100 AS Key, "test" AS Value;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        Cerr << plan << Endl;
+
+        auto updatesCount = CountPlanNodesByKv(plan, "Name", "Update");
+        UNIT_ASSERT_VALUES_EQUAL(updatesCount, 1);
+
+        auto upsertsCount = CountPlanNodesByKv(plan, "Name", "Upsert");
+        UNIT_ASSERT_VALUES_EQUAL(upsertsCount, 0);
+
+        auto deletesCount = CountPlanNodesByKv(plan, "Name", "Delete");
+        UNIT_ASSERT_VALUES_EQUAL(deletesCount, 0);
+
+        auto lookupCount = CountPlanNodesByKv(plan, "Node Type", "TableLookup");
+        UNIT_ASSERT_VALUES_EQUAL(lookupCount, 0);
+
+        /* check tables section */
+        {
+            const auto& tableInfo = plan.GetMapSafe().at("tables").GetArraySafe()[0].GetMapSafe();
+            UNIT_ASSERT_VALUES_EQUAL(tableInfo.at("name"), "/Root/SecondaryKeys");
+
+            THashMap<TString, int> counter;
+            auto countOperationsByType = [&tableInfo, &counter](const auto& type) {
+                for (const auto& op : tableInfo.at(type).GetArraySafe()) {
+                    ++counter[op.GetMapSafe().at("type").GetStringSafe()];
+                }
+            };
+
+            countOperationsByType("writes");
+
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpsert"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiUpdate"], 1);
+            UNIT_ASSERT_VALUES_EQUAL(counter["MultiErase"], 0);
+            UNIT_ASSERT_VALUES_EQUAL(counter["Lookup"], lookupCount);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(plan.GetMapSafe().at("tables").GetArraySafe().size(), 1);
+    }
+
+    Y_UNIT_TEST(ExplainQueryWithUndeclaredParams) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto params = TParamsBuilder()
+            .AddParam("$min_key")
+                .Uint64(10)
+                .Build()
+            .AddParam("$max_key")
+                .Uint64(100)
+                .Build()
+            .Build();
+
+        auto result = db.ExecuteQuery(
+            R"(
+                SELECT * FROM `/Root/KeyValue` WHERE Key >= $min_key AND Key <= $max_key;
+            )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            params,
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto plan = result.GetStats()->GetPlan();
+        UNIT_ASSERT(plan);
+        Cerr << *plan << Endl;
+
+        NJson::TJsonValue planJson;
+        NJson::ReadJsonTree(*plan, &planJson, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(planJson));
+
+        auto range = FindPlanNodeByKv(planJson, "ReadRange", "[\"Key [$min_key, $max_key]\"]");
+        UNIT_ASSERT_C(range.IsDefined(), "Expected ReadRange with parameter references in plan");
+    }
+
+    Y_UNIT_TEST(ExplainUpsertWithUndeclaredParamsNoSideEffects) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto readTable = [&]() {
+            auto result = db.ExecuteQuery(
+                R"(SELECT Key, Value FROM `/Root/KeyValue` ORDER BY Key;)",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return FormatResultSetYson(result.GetResultSet(0));
+        };
+
+        auto dataBefore = readTable();
+
+        auto params = TParamsBuilder()
+            .AddParam("$key")
+                .Uint64(999)
+                .Build()
+            .AddParam("$value")
+                .String("ExplainShouldNotInsertThis")
+                .Build()
+            .Build();
+
+        auto explainResult = db.ExecuteQuery(
+            R"(UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES ($key, $value);)",
+            NYdb::NQuery::TTxControl::NoTx(),
+            params,
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+        auto plan = explainResult.GetStats()->GetPlan();
+        UNIT_ASSERT(plan);
+        Cerr << *plan << Endl;
+
+        NJson::TJsonValue planJson;
+        NJson::ReadJsonTree(*plan, &planJson, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(planJson));
+
+        auto upsert = FindPlanNodeByKv(planJson, "Name", "Upsert");
+        UNIT_ASSERT_C(upsert.IsDefined(), "Expected Upsert node in explain plan");
+
+        auto dataAfter = readTable();
+        UNIT_ASSERT_VALUES_EQUAL_C(dataBefore, dataAfter,
+            "EXPLAIN should not modify data, but table contents changed");
+    }
+
+    Y_UNIT_TEST(UpsertWithIndex) {
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto tableBuilder = db.GetTableBuilder();
+        tableBuilder
+            .AddNullableColumn("Key", EPrimitiveType::String)
+            .AddNullableColumn("IndexedCol", EPrimitiveType::String)
+            .AddNullableColumn("Value", EPrimitiveType::String);
+        tableBuilder.SetPrimaryKeyColumns(std::vector<std::string>{"Key"});
+        tableBuilder.AddSecondaryIndex("Idx", std::vector<std::string>{"IndexedCol"});
+        auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+        auto explainResult = querySession.ExecuteQuery(
+            Q1_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, IndexedCol, Value) VALUES
+                ("k1", "idx1", "val1");
+            )"),
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+        ).ExtractValueSync();
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+        UNIT_ASSERT(explainResult.GetStats().has_value());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*explainResult.GetStats()->GetPlan(), &plan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(plan));
+
+        Cerr << WriteJson(plan, /*formatOutput*/ true, /*sortkeys*/ false, /*validateUtf8*/ true) << Endl;
+
+        
     }
 }
 

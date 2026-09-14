@@ -10,6 +10,8 @@
 #include <util/generic/bitmap.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DATASHARD_BACKUP
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -17,7 +19,7 @@ using namespace NActors;
 using namespace NExportScan;
 using namespace NTable;
 
-class TExportScan: private NActors::IActorCallback, public NTable::IScan {
+class TExportScan: private NActors::IActorCallback, public IActorExceptionHandler, public NTable::IScan {
     enum EStateBits {
         ES_REGISTERED = 0, // Actor is registered
         ES_INITIALIZED, // Seek(...) was called
@@ -32,7 +34,7 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
         TStats()
             : IBuffer::TStats()
         {
-            auto counters = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "store_to_yt");
+            auto counters = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "export");
 
             MonRows = counters->GetCounter("Rows", true);
             MonBytesRead = counters->GetCounter("BytesRead", true);
@@ -112,10 +114,9 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
     }
 
     void Handle(TEvExportScan::TEvReset::TPtr&) {
-        Y_ABORT_UNLESS(IsReady());
+        Y_ENSURE(IsReady());
 
-        EXPORT_LOG_D("Handle TEvExportScan::TEvReset"
-            << ": self# " << SelfId());
+        YDB_LOG_DEBUG("[Export] Handle TEvExportScan::TEvReset");
 
         Stats.Reset(new TStats);
         State.Reset(ES_UPLOADER_READY).Reset(ES_BUFFER_SENT).Reset(ES_NO_MORE_DATA);
@@ -124,10 +125,9 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
     }
 
     void Handle(TEvExportScan::TEvFeed::TPtr&) {
-        Y_ABORT_UNLESS(IsReady());
+        Y_ENSURE(IsReady());
 
-        EXPORT_LOG_D("Handle TEvExportScan::TEvFeed"
-            << ": self# " << SelfId());
+        YDB_LOG_DEBUG("[Export] Handle TEvExportScan::TEvFeed");
 
         State.Set(ES_UPLOADER_READY).Reset(ES_BUFFER_SENT);
         Spent->Alter(true);
@@ -137,11 +137,10 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
     }
 
     void Handle(TEvExportScan::TEvFinish::TPtr& ev) {
-        Y_ABORT_UNLESS(IsReady());
+        Y_ENSURE(IsReady());
 
-        EXPORT_LOG_D("Handle TEvExportScan::TEvFinish"
-            << ": self# " << SelfId()
-            << ", msg# " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("[Export] Handle TEvExportScan::TEvFinish",
+            {"msg", ev->Get()->ToString()});
 
         Success = ev->Get()->Success;
         Error = ev->Get()->Error;
@@ -149,8 +148,11 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
     }
 
 public:
-    static constexpr TStringBuf LogPrefix() {
-        return "scanner"sv;
+
+    NActors::NStructuredLog::TStructuredMessage LogPrefix() {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "ExportScan"},
+            {"selfId", this->SelfId()});
     }
 
     explicit TExportScan(std::function<IActor*()>&& createUploaderFn, IBuffer::TPtr buffer)
@@ -163,7 +165,7 @@ public:
     {
     }
 
-    void Describe(IOutputStream& o) const noexcept override {
+    void Describe(IOutputStream& o) const override {
         o << "ExportScan { "
               << "Uploader: " << Uploader
               << Stats->ToString() << " "
@@ -172,13 +174,12 @@ public:
           << " }";
     }
 
-    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         TlsActivationContext->AsActorContext().RegisterWithSameMailbox(this);
 
         Driver = driver;
         Scheme = std::move(scheme);
         Spent = new TSpent(TAppData::TimeProvider.Get());
-        Buffer->ColumnsOrder(Scheme->Tags());
 
         return {EScan::Feed, {}};
     }
@@ -190,9 +191,10 @@ public:
         MaybeReady();
     }
 
-    EScan Seek(TLead& lead, ui64) noexcept override {
+    EScan Seek(TLead& lead, ui64) override {
         lead.To(Scheme->Tags(), {}, ESeek::Lower);
         Buffer->Clear();
+        Buffer->ColumnsOrder(Scheme->Tags());
 
         State.Set(ES_INITIALIZED);
         MaybeReady();
@@ -201,32 +203,43 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell>, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell>, const TRow& row) override {
         if (!Buffer->Collect(row)) {
             Success = false;
             Error = Buffer->GetError();
-            EXPORT_LOG_E("Error read data from table: " << Error);
+            YDB_LOG_ERROR("[Export] Feed: Buffer collect failed",
+                {"error", Error});
             return EScan::Final;
         }
 
         return MaybeSendBuffer();
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         State.Set(ES_NO_MORE_DATA);
         return MaybeSendBuffer();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         auto outcome = EExportOutcome::Success;
-        if (abort != EAbort::None) {
-            outcome = EExportOutcome::Aborted;
+        if (status != EStatus::Done) {
+            outcome = status == EStatus::Exception
+                ? EExportOutcome::Error
+                : EExportOutcome::Aborted;
         } else if (!Success) {
             outcome = EExportOutcome::Error;
         }
 
         PassAway();
         return new TExportScanProduct(outcome, Error, Stats->BytesRead, Stats->Rows);
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void PassAway() override {
@@ -238,6 +251,7 @@ public:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix());
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExportScan::TEvReset, Handle);
             hFunc(TEvExportScan::TEvFeed, Handle);
@@ -268,3 +282,7 @@ NTable::IScan* CreateExportScan(IBuffer::TPtr buffer, std::function<IActor*()>&&
 
 } // NDataShard
 } // NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

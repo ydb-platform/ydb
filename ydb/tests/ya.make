@@ -1,12 +1,15 @@
 RECURSE(
+    compatibility
+    datashard
     example
     fq
     functional
+    hash_test
     library
     library/sqs
     olap
     oss
-    postgres_integrations
+    solomon
     sql
     stability
     stress

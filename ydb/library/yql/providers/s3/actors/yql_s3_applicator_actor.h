@@ -16,7 +16,7 @@ THolder<NActors::IActor> MakeS3ApplicatorActor(
     std::optional<ui32> restartNumber,
     bool commit,
     const THashMap<TString, TString>& secureParams,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const NYql::NDqProto::TExternalEffect& externalEffect);
 
 } // namespace NYql::NDq

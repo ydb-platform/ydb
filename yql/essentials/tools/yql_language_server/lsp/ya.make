@@ -1,0 +1,9 @@
+RECURSE(
+    api
+    consumer
+    json_rpc
+    message
+    server
+    support
+    testing
+)

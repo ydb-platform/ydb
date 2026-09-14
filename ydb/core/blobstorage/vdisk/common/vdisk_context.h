@@ -77,6 +77,9 @@ namespace NKikimr {
         std::atomic<ui32> CurrentOOSStatusFlag = NKikimrBlobStorage::StatusIsValid;
         std::shared_ptr<NMonGroup::TOutOfSpaceGroup> OOSMonGroup;
 
+        // response status
+        std::shared_ptr<NMonGroup::TResponseStatusGroup> ResponseStatusMonGroup;
+
     private:
         // Managing disk space
         TOutOfSpaceState OutOfSpaceState;
@@ -97,6 +100,7 @@ namespace NKikimr {
                 const TVDiskID &selfVDisk,
                 TActorSystem *as,   // can be nullptr for tests
                 NPDisk::EDeviceType type,
+                ui32 pDiskId = 0,
                 bool donorMode = false,
                 TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
@@ -120,23 +124,17 @@ namespace NKikimr {
                         OutOfSpaceState.UpdateLocalLog(ev.StatusFlags);
                     }
                     return true;
-                case NKikimrProto::ERROR:
                 case NKikimrProto::INVALID_OWNER:
                 case NKikimrProto::INVALID_ROUND:
                     // BlobStorage group reconfiguration, just return false and wait until
                     // node warden restarts VDisk
-                    LOG_NOTICE(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
-                            VDISKP(VDiskLogPrefix,
-                                "CheckPDiskResponse: Group Reconfiguration: %s",
-                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
+                    YDB_LOG_NOTICE_CTX_COMP(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER, VDISKP(VDiskLogPrefix, "CheckPDiskResponse: Group Reconfiguration: %s", FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
                     return false;
+                case NKikimrProto::ERROR:
                 case NKikimrProto::CORRUPTED:
                 case NKikimrProto::OUT_OF_SPACE: {
                     // Device is out of order
-                    LOG_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
-                            VDISKP(VDiskLogPrefix,
-                                "CheckPDiskResponse: Recoverable error from PDisk: %s",
-                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
+                    YDB_LOG_ERROR_CTX_COMP(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER, VDISKP(VDiskLogPrefix, "CheckPDiskResponse: Recoverable error from PDisk: %s", FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
                     actorSystemOrCtx.Send(VDiskActorId, new TEvPDiskErrorStateChange(ev.Status, ev.StatusFlags, ev.ErrorReason));
                     return false;
                 }

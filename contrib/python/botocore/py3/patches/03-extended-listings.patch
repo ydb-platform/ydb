@@ -4,9 +4,13 @@ date: 2021-10-27T00:34:16+03:00
 
     Add ListObjectsV1Ext into boto3 and add a test for it
 
---- contrib/python/botocore/py3/botocore/data/s3/2006-03-01/service-2.json	(73e85ed9c4be248886f10db6b7d83f27d446916c)
-+++ contrib/python/botocore/py3/botocore/data/s3/2006-03-01/service-2.json	(cc02b99f18408f40978b56abfd8e5e9b2c2492d7)
-@@ -746,2 +746,15 @@
+diff --git a/botocore/data/s3/2006-03-01/service-2.json b/botocore/data/s3/2006-03-01/service-2.json
+index 84bbf5a..8e6ab55 100644
+--- a/botocore/data/s3/2006-03-01/service-2.json
++++ b/botocore/data/s3/2006-03-01/service-2.json
+@@ -946,6 +946,19 @@
+       ],
+       "documentation":"<important> <p>End of support notice: Beginning November 21, 2025, Amazon S3 will stop returning <code>DisplayName</code>. Update your applications to use canonical IDs (unique identifier for Amazon Web Services accounts), Amazon Web Services account ID (12 digit identifier) or IAM ARNs (full resource naming) as a direct replacement of <code>DisplayName</code>. </p> <p>This change affects the following Amazon Web Services Regions: US East (N. Virginia) Region, US West (N. California) Region, US West (Oregon) Region, Asia Pacific (Singapore) Region, Asia Pacific (Sydney) Region, Asia Pacific (Tokyo) Region, Europe (Ireland) Region, and South America (São Paulo) Region.</p> </important> <p>Returns some or all (up to 1,000) of the objects in a bucket with each request. You can use the request parameters as selection criteria to return a subset of the objects in a bucket. A <code>200 OK</code> response can contain valid or invalid XML. Make sure to design your application to parse the contents of the response and handle it appropriately. For more information about listing objects, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/ListingKeysUsingAPIs.html\">Listing object keys programmatically</a> in the <i>Amazon S3 User Guide</i>. To get a list of your buckets, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListBuckets.html\">ListBuckets</a>.</p> <note> <ul> <li> <p> <b>General purpose bucket</b> - For general purpose buckets, <code>ListObjectsV2</code> doesn't return prefixes that are related only to in-progress multipart uploads.</p> </li> <li> <p> <b>Directory buckets</b> - For directory buckets, <code>ListObjectsV2</code> response includes the prefixes that are related only to in-progress multipart uploads. </p> </li> <li> <p> <b>Directory buckets</b> - For directory buckets, you must make requests for this API operation to the Zonal endpoint. These endpoints support virtual-hosted-style requests in the format <code>https://<i>amzn-s3-demo-bucket</i>.s3express-<i>zone-id</i>.<i>region-code</i>.amazonaws.com/<i>key-name</i> </code>. Path-style requests are not supported. For more information about endpoints in Availability Zones, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/endpoint-directory-buckets-AZ.html\">Regional and Zonal endpoints for directory buckets in Availability Zones</a> in the <i>Amazon S3 User Guide</i>. For more information about endpoints in Local Zones, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-lzs-for-directory-buckets.html\">Concepts for directory buckets in Local Zones</a> in the <i>Amazon S3 User Guide</i>.</p> </li> </ul> </note> <dl> <dt>Permissions</dt> <dd> <ul> <li> <p> <b>General purpose bucket permissions</b> - To use this operation, you must have READ access to the bucket. You must have permission to perform the <code>s3:ListBucket</code> action. The bucket owner has this permission by default and can grant this permission to others. For more information about permissions, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-with-s3-actions.html#using-with-s3-actions-related-to-bucket-subresources\">Permissions Related to Bucket Subresource Operations</a> and <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-access-control.html\">Managing Access Permissions to Your Amazon S3 Resources</a> in the <i>Amazon S3 User Guide</i>.</p> </li> <li> <p> <b>Directory bucket permissions</b> - To grant access to this API operation on a directory bucket, we recommend that you use the <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateSession.html\"> <code>CreateSession</code> </a> API operation for session-based authorization. Specifically, you grant the <code>s3express:CreateSession</code> permission to the directory bucket in a bucket policy or an IAM identity-based policy. Then, you make the <code>CreateSession</code> API call on the bucket to obtain a session token. With the session token in your request header, you can make API requests to this operation. After the session token expires, you make another <code>CreateSession</code> API call to generate a new session token for use. Amazon Web Services CLI or SDKs create session and refresh the session token automatically to avoid service interruptions when a session expires. For more information about authorization, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateSession.html\"> <code>CreateSession</code> </a>.</p> </li> </ul> </dd> <dt>Sorting order of returned objects</dt> <dd> <ul> <li> <p> <b>General purpose bucket</b> - For general purpose buckets, <code>ListObjectsV2</code> returns objects in lexicographical order based on their key names.</p> </li> <li> <p> <b>Directory bucket</b> - For directory buckets, <code>ListObjectsV2</code> does not return objects in lexicographical order.</p> </li> </ul> </dd> <dt>HTTP Host header syntax</dt> <dd> <p> <b>Directory buckets </b> - The HTTP Host header syntax is <code> <i>Bucket-name</i>.s3express-<i>zone-id</i>.<i>region-code</i>.amazonaws.com</code>.</p> </dd> </dl> <important> <p>This section describes the latest revision of this action. We recommend that you use this revised API operation for application development. For backward compatibility, Amazon S3 continues to support the prior version of this API operation, <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjects.html\">ListObjects</a>.</p> </important> <p>The following operations are related to <code>ListObjectsV2</code>:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html\">GetObject</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html\">PutObject</a> </p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html\">CreateBucket</a> </p> </li> </ul> <important> <p>You must URL encode any signed header values that contain spaces. For example, if your header value is <code>my file.txt</code>, containing two spaces after <code>my</code>, you must URL encode this value to <code>my%20%20file.txt</code>.</p> </important>"
      },
 +    "ListObjectsV1Ext":{
 +      "name":"ListObjectsV1Ext",
@@ -22,7 +26,9 @@ date: 2021-10-27T00:34:16+03:00
 +      "documentation":"<p>Yandex S3-specific extended listing method. Same as V2, but includes user metadata for each object. The rest of the parameters are exactly the same as in ListObjectsV2.</p>"
 +    },
      "ListParts":{
-@@ -6516,6 +6529,59 @@
+       "name":"ListParts",
+       "http":{
+@@ -7902,6 +7915,59 @@
          }
        }
      },
@@ -82,7 +88,7 @@ date: 2021-10-27T00:34:16+03:00
      "ListPartsOutput":{
        "type":"structure",
        "members":{
-@@ -6706,6 +6772,12 @@
+@@ -8139,6 +8205,12 @@
        "key":{"shape":"MetadataKey"},
        "value":{"shape":"MetadataValue"}
      },
@@ -92,10 +98,10 @@ date: 2021-10-27T00:34:16+03:00
 +      "key":{"shape":"MetadataKey","locationName":"Name"},
 +      "value":{"shape":"MetadataValue","locationName":"Value"}
 +    },
-     "MetadataDirective":{
-       "type":"string",
-       "enum":[
-@@ -7010,6 +7082,40 @@
+     "MetadataConfiguration":{
+       "type":"structure",
+       "required":["JournalTableConfiguration"],
+@@ -8534,6 +8606,40 @@
        },
        "documentation":"<p>An object consists of data and its descriptive metadata.</p>"
      },
@@ -135,8 +141,8 @@ date: 2021-10-27T00:34:16+03:00
 +    },
      "ObjectAlreadyInActiveTierError":{
        "type":"structure",
-       "members":{
-@@ -7072,6 +7178,11 @@
+       "members":{},
+@@ -8608,6 +8714,11 @@
        "member":{"shape":"Object"},
        "flattened":true
      },
@@ -148,9 +154,13 @@ date: 2021-10-27T00:34:16+03:00
      "ObjectLockConfiguration":{
        "type":"structure",
        "members":{
---- contrib/python/botocore/py3/botocore/handlers.py	(73e85ed9c4be248886f10db6b7d83f27d446916c)
-+++ contrib/python/botocore/py3/botocore/handlers.py	(cc02b99f18408f40978b56abfd8e5e9b2c2492d7)
-@@ -807,2 +807,23 @@ def decode_list_object_v2(parsed, context, **kwargs):
+diff --git a/botocore/handlers.py b/botocore/handlers.py
+index 65f12db..912ead5 100644
+--- a/botocore/handlers.py
++++ b/botocore/handlers.py
+@@ -853,6 +853,27 @@ def decode_list_object_v2(parsed, context, **kwargs):
+     )
+ 
  
 +def decode_list_object_v1ext(parsed, context, **kwargs):
 +    # From the documentation: If you specify encoding-type request parameter,
@@ -161,7 +171,7 @@ date: 2021-10-27T00:34:16+03:00
 +        top_level_keys=['Delimiter', 'Prefix', 'StartAfter'],
 +        nested_keys=[('Contents', 'Key'), ('CommonPrefixes', 'Prefix')],
 +        parsed=parsed,
-+        context=context
++        context=context,
 +    )
 +    # lowercase metadata keys
 +    if 'Contents' in parsed:
@@ -174,7 +184,13 @@ date: 2021-10-27T00:34:16+03:00
 +
 +
  def decode_list_object_versions(parsed, context, **kwargs):
-@@ -1240,2 +1261,3 @@ BUILTIN_HANDLERS = [
+     # From the documentation: If you specify encoding-type request parameter,
+     # Amazon S3 includes this element in the response, and returns encoded key
+@@ -1570,6 +1591,7 @@ BUILTIN_HANDLERS = [
+     ),
+     ('after-call.s3.ListObjects', decode_list_object),
      ('after-call.s3.ListObjectsV2', decode_list_object_v2),
 +    ('after-call.s3.ListObjectsV1Ext', decode_list_object_v1ext),
      ('after-call.s3.ListObjectVersions', decode_list_object_versions),
+     # Cloudsearchdomain search operation will be sent by HTTP POST
+     ('request-created.cloudsearchdomain.Search', change_get_to_post),

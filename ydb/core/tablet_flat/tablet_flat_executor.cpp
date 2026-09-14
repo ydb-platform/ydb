@@ -1,5 +1,7 @@
 #include "tablet_flat_executor.h"
+#include "flat_backup.h"
 #include "flat_executor.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -12,7 +14,7 @@ namespace NFlatExecutorSetup {
     void ITablet::SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx) {
         Y_UNUSED(snapContext);
         Y_UNUSED(ctx);
-        Y_ABORT("must be overriden if plan to use table snapshot completion");
+        Y_TABLET_ERROR("must be overriden if plan to use table snapshot completion");
     }
 
     void ITablet::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
@@ -20,7 +22,12 @@ namespace NFlatExecutorSetup {
         Y_UNUSED(ctx);
     }
 
-    void ITablet::DataCleanupComplete(const TActorContext& ctx) {
+    void ITablet::VacuumComplete(ui64 vacuumGeneration, const TActorContext& ctx) {
+        Y_UNUSED(vacuumGeneration);
+        Y_UNUSED(ctx);
+    }
+
+    void ITablet::MoveDataCompleted(const TActorContext& ctx) {
         Y_UNUSED(ctx);
     }
 
@@ -28,7 +35,11 @@ namespace NFlatExecutorSetup {
         Y_UNUSED(ctx);
     }
 
-    void ITablet::ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx)
+    void ITablet::BackupSnapshotComplete(const TActorContext &ctx) {
+        Y_UNUSED(ctx);
+    }
+
+    void ITablet::ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx)
     {
         Y_UNUSED(status);
         Y_UNUSED(prod);
@@ -79,6 +90,35 @@ namespace NFlatExecutorSetup {
 
     void ITablet::OnFollowerDataUpdated() {
         // nothing by default
+    }
+
+    bool ITablet::NeedBackup() const {
+        if (TabletInfo->BootType != ETabletBootType::Normal) {
+            return false;
+        }
+
+        if (TabletInfo->TenantPathId != TPathId()) {
+            return false;
+        }
+
+        switch (TabletInfo->TabletType) {
+            case NKikimrTabletBase::TTabletTypes_EType_Mediator:
+            case NKikimrTabletBase::TTabletTypes_EType_Coordinator:
+            case NKikimrTabletBase::TTabletTypes_EType_Hive:
+            case NKikimrTabletBase::TTabletTypes_EType_BSController:
+            case NKikimrTabletBase::TTabletTypes_EType_SchemeShard:
+            case NKikimrTabletBase::TTabletTypes_EType_Cms:
+            case NKikimrTabletBase::TTabletTypes_EType_NodeBroker:
+            case NKikimrTabletBase::TTabletTypes_EType_TxAllocator:
+            case NKikimrTabletBase::TTabletTypes_EType_Console:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    TIntrusiveConstPtr<NTable::TBackupExclusion> ITablet::BackupExclusion() const {
+        return nullptr; // everything is included in backup
     }
 }
 

@@ -1,0 +1,21 @@
+PRAGMA YqlSelect = 'force';
+PRAGMA AnsiImplicitCrossJoin;
+
+$x = (
+    SELECT
+        1 AS a
+);
+
+$y = (
+    SELECT
+        2 AS b
+);
+
+SELECT
+    a,
+    b
+FROM
+    $x
+,
+    $y
+;

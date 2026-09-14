@@ -13,16 +13,21 @@
 #pragma once
 
 #include <pfr/detail/config.hpp>
+
 #include <pfr/detail/core.hpp>
-#include <pfr/detail/sequence_tuple.hpp>
-#include <pfr/detail/make_integer_sequence.hpp>
-#include <pfr/detail/fields_count.hpp>
-#include <pfr/detail/stdarray.hpp>
 #include <pfr/detail/fake_object.hpp>
+#include <pfr/detail/fields_count.hpp>
+#include <pfr/detail/for_each_field.hpp>
+#include <pfr/detail/make_integer_sequence.hpp>
+#include <pfr/detail/sequence_tuple.hpp>
+#include <pfr/detail/stdarray.hpp>
+
+#if !defined(PFR_INTERFACE_UNIT)
 #include <type_traits>
 #include <string_view>
 #include <array>
 #include <memory> // for std::addressof
+#endif
 
 namespace pfr { namespace detail {
 
@@ -99,7 +104,7 @@ consteval auto name_of_field_impl() noexcept {
     static_assert(!sv.empty(),
         "====================> Boost.PFR: Field reflection parser configured in a wrong way. "
         "Please define the PFR_FUNCTION_SIGNATURE to a compiler specific macro, "
-        "that outputs the whole function signature including non-type template parameters."  
+        "that outputs the whole function signature including non-type template parameters."
     );
 
     constexpr auto skip = detail::make_core_name_skip PFR_CORE_NAME_PARSING;
@@ -167,7 +172,7 @@ consteval auto name_of_field() noexcept {
         && std::string_view{
             detail::name_of_field_impl<
                 core_name_skip, detail::make_clang_wrapper(std::addressof(
-                    fake_object<core_name_skip>.size_at_begin
+                    detail::fake_object<core_name_skip>().size_at_begin
                 ))
             >().data()
         } == "size_at_begin",
@@ -187,7 +192,7 @@ consteval auto name_of_field() noexcept {
 template <class T, std::size_t I>
 inline constexpr auto stored_name_of_field = detail::name_of_field<T,
     detail::make_clang_wrapper(std::addressof(detail::sequence_tuple::get<I>(
-        detail::tie_as_tuple(detail::fake_object<T>)
+        detail::tie_as_tuple(detail::fake_object<T>())
     )))
 >();
 
@@ -234,6 +239,22 @@ constexpr auto tie_as_names_tuple() noexcept {
     );
 
     return detail::tie_as_names_tuple_impl<T>(detail::make_index_sequence<detail::fields_count<T>()>{});
+}
+
+template <class T, class F>
+constexpr void for_each_field_with_name(T&& value, F&& func) {
+    return pfr::detail::for_each_field(
+        std::forward<T>(value),
+        [f = std::forward<F>(func)](auto&& field, auto index) mutable {
+            using IndexType = decltype(index);
+            using FieldType = decltype(field);
+            constexpr auto name = pfr::detail::get_name<std::remove_reference_t<T>, IndexType::value>();
+            if constexpr (std::is_invocable_v<F, std::string_view, FieldType, IndexType>) {
+                f(name, std::forward<FieldType>(field), index);
+            } else {
+                f(name, std::forward<FieldType>(field));
+            }
+        });
 }
 
 }} // namespace pfr::detail

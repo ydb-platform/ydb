@@ -5,12 +5,13 @@
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_tables.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
-#include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NYDBTest::NColumnShard {
 
@@ -21,7 +22,8 @@ bool TReadOnlyController::DoOnAfterFilterAssembling(const std::shared_ptr<arrow:
     return true;
 }
 
-bool TReadOnlyController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
+bool TReadOnlyController::DoOnWriteIndexComplete(
+    const NOlap::TColumnEngineChanges& change, const ::NKikimr::NColumnShard::TColumnShard& /*shard*/) {
     if (change.TypeString() == NOlap::TCleanupPortionsColumnEngineChanges::StaticTypeName()) {
         CleaningFinishedCounter.Inc();
     }
@@ -31,9 +33,6 @@ bool TReadOnlyController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChang
     if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
         TTLFinishedCounter.Inc();
     }
-    if (change.TypeString() == NOlap::TInsertColumnEngineChanges::StaticTypeName()) {
-        InsertFinishedCounter.Inc();
-    }
     if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
         CompactionFinishedCounter.Inc();
         AFL_VERIFY(CompactionsLimit.Dec() >= 0);
@@ -42,7 +41,9 @@ bool TReadOnlyController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChang
 }
 
 bool TReadOnlyController::DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
-    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", change.TypeString())("tablet_id", tabletId);
+    YDB_LOG_NOTICE("",
+        {"event", change.TypeString()},
+        {"tabletId", tabletId});
     if (change.TypeString() == NOlap::TCleanupPortionsColumnEngineChanges::StaticTypeName()) {
         CleaningStartedCounter.Inc();
     }
@@ -51,9 +52,6 @@ bool TReadOnlyController::DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColum
     }
     if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
         TTLStartedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TInsertColumnEngineChanges::StaticTypeName()) {
-        InsertStartedCounter.Inc();
     }
     if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
         CompactionStartedCounter.Inc();

@@ -50,9 +50,11 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
     std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer() {
         TPortManager pm;
+        NKikimrConfig::TAppConfig appConfig;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -231,10 +233,12 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
 
-        auto deSpan = trace.Root.BFSFindOne("DataExecuter");
-        UNIT_ASSERT(deSpan);
+        Cerr << "Trace: " << trace.ToString() << Endl;
 
-        auto dsTxSpans = deSpan->get().FindAll("Datashard.Transaction");
+        
+        auto commitSpan = trace.Root.BFSFindOne("Commit");
+        UNIT_ASSERT(commitSpan);
+        auto dsTxSpans = commitSpan->get().FindAll("Datashard.WriteTransaction");
         UNIT_ASSERT_VALUES_EQUAL(2, dsTxSpans.size()); // Two shards, each executes a user transaction.
 
         for (auto dsTxSpan : dsTxSpans) {
@@ -250,32 +254,37 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
 
             auto progress = tabletTxs[1];
             CheckTxHasWriteLog(progress);
-            CheckTxHasDatashardUnits(progress, usesVolatileTxs ? 6 : 11);
+            CheckTxHasDatashardUnits(progress, usesVolatileTxs ? 7 : 12);
         }
 
         std::string canon = ExpectedSpan("Session.query.QUERY_ACTION_EXECUTE",
             ExpectedSpan("CompileService", "CompileActor"),
-            "LiteralExecuter",
             ExpectedSpan("DataExecuter",
                 "WaitForTableResolve",
+                ExpectedSpan("ComputeActor",
+                    Repeat(("ForwardWriteActor"), 1)),
                 "RunTasks",
-                Repeat(
-                    ExpectedSpan("Datashard.Transaction",
-                        ExpectedSpan("Tablet.Transaction",
-                            ExpectedSpan("Tablet.Transaction.Execute",
-                                Repeat("Datashard.Unit", 3)),
-                            Conditional(!usesVolatileTxs,
-                                ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry")),
-                            "Tablet.Transaction.Complete"),
-                        Conditional(usesVolatileTxs, "Datashard.SendWithConfirmedReadOnlyLease"),
-                        ExpectedSpan("Tablet.Transaction",
-                            ExpectedSpan("Tablet.Transaction.Execute",
-                                Repeat("Datashard.Unit", usesVolatileTxs ? 6 : 11)),
-                            ExpectedSpan("Tablet.WriteLog",
-                                "Tablet.WriteLog.LogEntry"),
-                            "Tablet.Transaction.Complete"),
-                        "Datashard.SendResult"),
-                    2)))
+                ExpectedSpan(
+                    "WaitTasks"),
+                ExpectedSpan(
+                    "Commit",
+                    Repeat(
+                        ExpectedSpan("Datashard.WriteTransaction",
+                            ExpectedSpan("Tablet.Transaction",
+                                ExpectedSpan("Tablet.Transaction.Execute",
+                                    Repeat("Datashard.Unit", 3)),
+                                Conditional(!usesVolatileTxs,
+                                    ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry")),
+                                "Tablet.Transaction.Complete"),
+                            Conditional(usesVolatileTxs, "Datashard.SendWithConfirmedReadOnlyLease"),
+                            ExpectedSpan("Tablet.Transaction",
+                                ExpectedSpan("Tablet.Transaction.Execute",
+                                    Repeat("Datashard.Unit", usesVolatileTxs ? 7 : 12)),
+                                ExpectedSpan("Tablet.WriteLog",
+                                    "Tablet.WriteLog.LogEntry"),
+                                "Tablet.Transaction.Complete"),
+                            "Datashard.SendWriteResult"),
+                        2))))
             .ToString();
 
         UNIT_ASSERT_VALUES_EQUAL(trace.ToString(), canon);
@@ -359,6 +368,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                         Repeat(
                             ExpectedSpan("Datashard.Read",
                                 ExpectedSpan("Tablet.Transaction",
+                                    ExpectedSpan("Tablet.Transaction.Enqueued"),
                                     ExpectedSpan("Tablet.Transaction.Execute",
                                         Repeat("Datashard.Unit", 3)),
                                     // No extra page fault with btree index (root is in meta)
@@ -443,6 +453,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                         Repeat(
                             ExpectedSpan("Datashard.Read",
                                 ExpectedSpan("Tablet.Transaction",
+                                    ExpectedSpan("Tablet.Transaction.Enqueued"),
                                     ExpectedSpan("Tablet.Transaction.Execute",
                                         Repeat("Datashard.Unit", 4)),
                                     "Tablet.Transaction.Complete"),
@@ -489,12 +500,12 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         auto writeTx = tabletTxs[0];
 
         CheckTxHasWriteLog(writeTx);
-        CheckTxHasDatashardUnits(writeTx, 5);
+        CheckTxHasDatashardUnits(writeTx, 6);
 
         std::string canon = ExpectedSpan("Datashard.WriteTransaction",
             ExpectedSpan("Tablet.Transaction",
                 ExpectedSpan("Tablet.Transaction.Execute",
-                    Repeat("Datashard.Unit", 5)),
+                    Repeat("Datashard.Unit", 6)),
                 ExpectedSpan("Tablet.WriteLog", "Tablet.WriteLog.LogEntry"),
                 "Tablet.Transaction.Complete"),
             "Datashard.SendImmediateWriteResult")

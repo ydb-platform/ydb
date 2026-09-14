@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eu
 
-TARGET_INFO_FILE="$(realpath $1)"
+TARGET_INFO_FILE="$1"
 
 if [ ! -f $TARGET_INFO_FILE ]; then
     echo "File $TARGET_INFO_FILE doesn't exist. Creating new one"
@@ -26,6 +26,7 @@ if [ ! -f $TARGET_INFO_FILE ]; then
     exit
 fi
 
+TARGET_INFO_FILE="$(realpath $TARGET_INFO_FILE)"
 IFS=';' read -r BASE_REV GIT_FROM < "$TARGET_INFO_FILE"
 TO=$(dirname $(realpath "$TARGET_INFO_FILE"))
 HEAD_REV=$(cd $TO; git rev-parse HEAD)

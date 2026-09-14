@@ -1,0 +1,56 @@
+--- contrib/libs/libpng/pngrutil.c	(index)
++++ contrib/libs/libpng/pngrutil.c	(working tree)
+@@ -897,7 +897,7 @@ png_inflate_read(png_structrp png_ptr, png_bytep read_buffer, uInt read_size,
+ 
+ /* CHUNK HANDLING */
+ /* Read and check the IDHR chunk */
+-static png_handle_result_code
++png_handle_result_code
+ png_handle_IHDR(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ {
+    png_byte buf[13];
+@@ -1099,7 +1099,7 @@ png_handle_PLTE(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+  */
+ #define png_handle_IDAT NULL
+ 
+-static png_handle_result_code
++png_handle_result_code
+ png_handle_IEND(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ {
+    png_debug(1, "in png_handle_IEND");
+@@ -2016,7 +2016,7 @@ png_handle_mDCV(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ #endif
+ 
+ #ifdef PNG_READ_eXIf_SUPPORTED
+-static png_handle_result_code /* PRIVATE */
++png_handle_result_code /* PRIVATE */
+ png_handle_eXIf(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ {
+    png_bytep buffer = NULL;
+@@ -2388,7 +2388,7 @@ png_handle_tIME(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ 
+ #ifdef PNG_READ_tEXt_SUPPORTED
+ /* Note: this does not properly handle chunks that are > 64K under DOS */
+-static png_handle_result_code /* PRIVATE */
++png_handle_result_code /* PRIVATE */
+ png_handle_tEXt(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ {
+    png_text  text_info;
+@@ -2464,7 +2464,7 @@ png_handle_tEXt(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ 
+ #ifdef PNG_READ_zTXt_SUPPORTED
+ /* Note: this does not correctly handle chunks that are > 64K under DOS */
+-static png_handle_result_code /* PRIVATE */
++png_handle_result_code /* PRIVATE */
+ png_handle_zTXt(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ {
+    png_const_charp errmsg = NULL;
+@@ -2584,7 +2584,7 @@ png_handle_zTXt(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ 
+ #ifdef PNG_READ_iTXt_SUPPORTED
+ /* Note: this does not correctly handle chunks that are > 64K under DOS */
+-static png_handle_result_code /* PRIVATE */
++png_handle_result_code /* PRIVATE */
+ png_handle_iTXt(png_structrp png_ptr, png_inforp info_ptr, png_uint_32 length)
+ {
+    png_const_charp errmsg = NULL;

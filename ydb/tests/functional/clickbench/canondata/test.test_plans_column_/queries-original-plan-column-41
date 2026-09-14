@@ -52,7 +52,7 @@
                                                                 "ExternalPlanNodeId": 4
                                                             }
                                                         ],
-                                                        "Limit": "SUM(10,10000)",
+                                                        "Limit": "Min(If,SUM(10,10000))",
                                                         "Name": "Limit"
                                                     }
                                                 ],
@@ -89,6 +89,8 @@
                                                                 "PlanNodeId": 3,
                                                                 "Plans": [
                                                                     {
+                                                                        "Blocks": "True",
+                                                                        "HashFunc": "HashV2",
                                                                         "KeyColumns": [
                                                                             "WindowClientHeight",
                                                                             "WindowClientWidth"
@@ -98,12 +100,24 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Filter-TableRangeScan",
+                                                                                "Node Type": "Aggregate-Filter-TableRangeScan",
                                                                                 "Operators": [
                                                                                     {
+                                                                                        "Aggregation": "{SUM(1)}",
+                                                                                        "GroupBy": "[item.WindowClientHeight,item.WindowClientWidth]",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Aggregate",
+                                                                                        "Phase": "Intermediate"
+                                                                                    },
+                                                                                    {
+                                                                                        "Blocks": "True",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 2
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
@@ -115,17 +129,15 @@
                                                                                         "Name": "TableRangeScan",
                                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                                         "ReadColumns": [
+                                                                                            "CounterID [62, 62]",
+                                                                                            "EventDate [15887, 15917]",
                                                                                             "DontCountHits",
                                                                                             "IsRefresh",
                                                                                             "URLHash",
                                                                                             "WindowClientHeight",
                                                                                             "WindowClientWidth"
                                                                                         ],
-                                                                                        "ReadRanges": [
-                                                                                            "CounterID [62, 62]",
-                                                                                            "EventDate [15887, 15917]"
-                                                                                        ],
-                                                                                        "ReadRangesExpectedSize": 1,
+                                                                                        "ReadRangesExpectedSize": "1",
                                                                                         "ReadRangesKeys": [
                                                                                             "CounterID",
                                                                                             "EventDate"
@@ -271,28 +283,6 @@
                                                                                                     }
                                                                                                 },
                                                                                                 {
-                                                                                                    "GroupBy": {
-                                                                                                        "Aggregates": [
-                                                                                                            {
-                                                                                                                "Column": {
-                                                                                                                    "Id": 114
-                                                                                                                },
-                                                                                                                "Function": {
-                                                                                                                    "Id": 2
-                                                                                                                }
-                                                                                                            }
-                                                                                                        ],
-                                                                                                        "KeyColumns": [
-                                                                                                            {
-                                                                                                                "Id": 44
-                                                                                                            },
-                                                                                                            {
-                                                                                                                "Id": 43
-                                                                                                            }
-                                                                                                        ]
-                                                                                                    }
-                                                                                                },
-                                                                                                {
                                                                                                     "Projection": {
                                                                                                         "Columns": [
                                                                                                             {
@@ -300,15 +290,11 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "Id": 43
-                                                                                                            },
-                                                                                                            {
-                                                                                                                "Id": 114
                                                                                                             }
                                                                                                         ]
                                                                                                     }
                                                                                                 }
-                                                                                            ],
-                                                                                            "Version": 5
+                                                                                            ]
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }

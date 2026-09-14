@@ -9,6 +9,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    TYPE_CHECKING,
 )
 
 import ydb
@@ -21,10 +22,14 @@ from ydb.table import (
     _scan_query_request_factory,
     _wrap_scan_query_response,
     BaseTxContext,
+    TableClientSettings,
     TableDescription,
 )
 from . import _utilities
 from ydb import _apis, _session_impl
+
+if TYPE_CHECKING:
+    from .driver import Driver as AsyncDriver
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +44,7 @@ class Session(BaseSession):
         row_limit=None,
         settings=None,
         use_snapshot=None,
+        return_not_null_data_as_optional=None,
     ):  # pylint: disable=W0236
         request = _session_impl.read_table_request_factory(
             self._state,
@@ -48,6 +54,7 @@ class Session(BaseSession):
             ordered,
             row_limit,
             use_snapshot=use_snapshot,
+            return_not_null_data_as_optional=return_not_null_data_as_optional,
         )
         stream_it = await self._driver(
             request,
@@ -105,6 +112,7 @@ class Session(BaseSession):
         alter_partitioning_settings=None,
         set_key_bloom_filter=None,
         set_read_replicas_settings=None,
+        rename_indexes=None,
     ):  # pylint: disable=W0236,R0913,R0914
         return await super().alter_table(
             path,
@@ -123,6 +131,7 @@ class Session(BaseSession):
             alter_partitioning_settings,
             set_key_bloom_filter,
             set_read_replicas_settings,
+            rename_indexes,
         )
 
     def transaction(self, tx_mode=None, *, allow_split_transactions=None):
@@ -147,9 +156,8 @@ class Session(BaseSession):
         return await super().rename_tables(rename_items, settings)
 
 
-class TableClient(BaseTableClient):
-    def __init__(self, driver, table_client_settings=None):
-        # type:(ydb.Driver, ydb.TableClientSettings) -> None
+class TableClient(BaseTableClient["AsyncDriver"]):
+    def __init__(self, driver: "AsyncDriver", table_client_settings: Optional[TableClientSettings] = None) -> None:
         super().__init__(driver=driver, table_client_settings=table_client_settings)
         self._pool: Optional[SessionPool] = None
 
@@ -166,6 +174,9 @@ class TableClient(BaseTableClient):
     async def bulk_upsert(self, *args, **kwargs):  # pylint: disable=W0236
         return await super().bulk_upsert(*args, **kwargs)
 
+    async def describe_system_view(self, path, settings=None):  # pylint: disable=W0236
+        return await super().describe_system_view(path, settings)
+
     async def scan_query(self, query, parameters=None, settings=None):  # pylint: disable=W0236
         request = _scan_query_request_factory(query, parameters, settings)
         response = await self._driver(
@@ -179,7 +190,7 @@ class TableClient(BaseTableClient):
             lambda resp: _wrap_scan_query_response(resp, self._table_client_settings),
         )
 
-    def _init_pool_if_needed(self):
+    def _init_pool_if_needed(self) -> None:
         if self._pool is None:
             self._pool = SessionPool(self._driver, 10)
 
@@ -198,13 +209,14 @@ class TableClient(BaseTableClient):
         Create a YDB table.
 
         :param path: A table path
-        :param table_description: TableDescription instanse.
+        :param table_description: TableDescription instance.
         :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
 
         :return: Operation or YDB error otherwise.
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.create_table(path=path, table_description=table_description, settings=settings)
@@ -226,6 +238,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.drop_table(path=path, settings=settings)
@@ -250,6 +263,7 @@ class TableClient(BaseTableClient):
         alter_partitioning_settings: Optional["ydb.PartitioningSettings"] = None,
         set_key_bloom_filter: Optional["ydb.FeatureFlag"] = None,
         set_read_replicas_settings: Optional["ydb.ReadReplicasSettings"] = None,
+        rename_indexes: Optional[List["ydb.RenameIndexItem"]] = None,
     ) -> "ydb.Operation":
         """
         Alter a YDB table.
@@ -269,11 +283,13 @@ class TableClient(BaseTableClient):
         :param set_compaction_policy: Compaction policy
         :param alter_partitioning_settings: ydb.PartitioningSettings to alter
         :param set_key_bloom_filter: ydb.FeatureFlag to set key bloom filter
+        :param rename_indexes: List of ydb.RenameIndexItem to rename
 
         :return: Operation or YDB error otherwise.
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.alter_table(
@@ -293,6 +309,7 @@ class TableClient(BaseTableClient):
                 alter_partitioning_settings=alter_partitioning_settings,
                 set_key_bloom_filter=set_key_bloom_filter,
                 set_read_replicas_settings=set_read_replicas_settings,
+                rename_indexes=rename_indexes,
             )
 
         return await self._pool.retry_operation(callee)
@@ -312,6 +329,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.describe_table(path=path, settings=settings)
@@ -335,6 +353,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.copy_table(
@@ -360,6 +379,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.copy_tables(source_destination_pairs=source_destination_pairs, settings=settings)
@@ -381,6 +401,7 @@ class TableClient(BaseTableClient):
         """
 
         self._init_pool_if_needed()
+        assert self._pool is not None
 
         async def callee(session: Session):
             return await session.rename_tables(rename_items=rename_items, settings=settings)
@@ -440,13 +461,14 @@ async def retry_operation(callee, retry_settings=None, *args, **kwargs):  # pyli
     :param args: A tuple with positional arguments to be passed into the coroutine.
     :param kwargs: A dictionary with keyword arguments to be passed into the coroutine.
 
-    Returns awaitable result of coroutine. If retries are not succussful exception is raised.
+    Returns awaitable result of coroutine. If retries are not successful exception is raised.
     """
 
     opt_generator = ydb.retry_operation_impl(callee, retry_settings, *args, **kwargs)
     for next_opt in opt_generator:
         if isinstance(next_opt, ydb.YdbRetryOperationSleepOpt):
-            await asyncio.sleep(next_opt.timeout)
+            if next_opt.timeout > 0:
+                await asyncio.sleep(next_opt.timeout)
         else:
             try:
                 return await next_opt.result
@@ -485,7 +507,7 @@ class SessionPool:
         self._should_stop = asyncio.Event()
         self._waiters = 0
         self._driver = driver
-        self._active_queue = asyncio.PriorityQueue()
+        self._active_queue: asyncio.PriorityQueue[Any] = asyncio.PriorityQueue()
         self._active_count = 0
         self._size = size
         self._req_settings = settings_impl.BaseRequestSettings().with_timeout(3)
@@ -549,25 +571,29 @@ class SessionPool:
             i += 1
         return None
 
-    async def _prepare_session(self, timeout, retry_num) -> ydb.ISession:
+    async def _prepare_session(
+        self, timeout: typing.Optional[float], retry_num: typing.Optional[int]
+    ) -> typing.Optional[ydb.ISession]:
         session = self._create()
         try:
             new_sess = await asyncio.wait_for(self._init_session(session, retry_num=retry_num), timeout=timeout)
             if not new_sess:
                 self._destroy(session)
+                return None
             return new_sess
         except BaseException as e:
             self._destroy(session)
             raise e
 
-    async def _get_session_from_queue(self, timeout: float):
+    async def _get_session_from_queue(self, timeout: typing.Optional[float]) -> Session:
         task_wait = asyncio.ensure_future(asyncio.wait_for(self._active_queue.get(), timeout=timeout))
         task_should_stop = asyncio.ensure_future(self._should_stop.wait())
         try:
             done, _ = await asyncio.wait((task_wait, task_should_stop), return_when=asyncio.FIRST_COMPLETED)
         except asyncio.CancelledError:
+            task_should_stop.cancel()
             cancelled = task_wait.cancel()
-            if not cancelled:
+            if not cancelled and not task_wait.exception():
                 priority, session = task_wait.result()
                 self._active_queue.put_nowait((priority, session))
             raise
@@ -577,8 +603,12 @@ class SessionPool:
         _, session = task_wait.result()
         return session
 
-    async def acquire(self, timeout: float = None, retry_timeout: float = None, retry_num: int = None) -> Session:
-
+    async def acquire(
+        self,
+        timeout: typing.Optional[float] = None,
+        retry_timeout: typing.Optional[float] = None,
+        retry_num: typing.Optional[int] = None,
+    ) -> Session:
         if self._should_stop.is_set():
             self._logger.error("Take session from closed session pool")
             raise ValueError("Take session from closed session pool.")
@@ -600,13 +630,13 @@ class SessionPool:
                 self._size,
             )
             try:
-                session = await self._prepare_session(timeout=retry_timeout, retry_num=retry_num)
+                prepared_session = await self._prepare_session(timeout=retry_timeout, retry_num=retry_num)
             except asyncio.TimeoutError:
                 raise issues.SessionPoolEmpty("Timeout when creating session") from None
 
-            if session is not None:
-                self._logger.debug("Acquired new created session: %s", session.session_id)
-                return session
+            if prepared_session is not None:
+                self._logger.debug("Acquired new created session: %s", prepared_session.session_id)
+                return typing.cast(Session, prepared_session)
 
         try:
             self._waiters += 1
@@ -679,7 +709,7 @@ class SessionPool:
         await self._active_queue.put((priority, session))
         return None
 
-    async def _send_keep_alive(self, session: ydb.ISession):
+    async def _send_keep_alive(self, session: typing.Optional[ydb.ISession]) -> bool:
         if session is None:
             return False
         if self._should_stop.is_set():
@@ -687,9 +717,10 @@ class SessionPool:
             return False
         await session.keep_alive(self._req_settings)
         try:
-            await self.release(session)
+            await self.release(typing.cast(Session, session))
         except BaseException:  # pylint: disable=W0703
             self._destroy(session)
+        return True
 
     async def _keep_alive_loop(self):
         while True:

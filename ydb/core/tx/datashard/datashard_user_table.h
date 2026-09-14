@@ -1,12 +1,13 @@
 #pragma once
 
 #include <ydb/core/base/storage_pools.h>
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
@@ -28,15 +29,18 @@ struct TUserTable : public TThrRefBase {
     struct TUserFamily {
         using ECodec = NTable::NPage::ECodec;
         using ECache = NTable::NPage::ECache;
+        using ECacheMode = NTable::NPage::ECacheMode;
 
         TUserFamily(const NKikimrSchemeOp::TFamilyDescription& family)
             : ColumnCodec(family.GetColumnCodec())
             , ColumnCache(family.GetColumnCache())
+            , ColumnCacheMode(family.GetColumnCacheMode())
             , OuterThreshold(SaveGetThreshold(family.GetStorageConfig().GetDataThreshold()))
             , ExternalThreshold(SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold()))
             , Storage(family.GetStorage())
             , Codec(ExtractDbCodec(family))
             , Cache(ExtractDbCache(family))
+            , CacheMode(ExtractDbCacheMode(family))
             , Room(new TStorageRoom(family.GetRoom()))
             , Name(family.GetName())
         {
@@ -50,6 +54,10 @@ struct TUserTable : public TThrRefBase {
             if (family.HasColumnCache()) {
                 ColumnCache = family.GetColumnCache();
                 Cache = ToDbCache(ColumnCache);
+            }
+            if (family.HasColumnCacheMode()) {
+                ColumnCacheMode = family.GetColumnCacheMode();
+                CacheMode = ToDbCacheMode(ColumnCacheMode);
             }
             if (family.GetStorageConfig().HasDataThreshold()) {
                 OuterThreshold = SaveGetThreshold(family.GetStorageConfig().GetDataThreshold());
@@ -77,6 +85,7 @@ struct TUserTable : public TThrRefBase {
 
         NKikimrSchemeOp::EColumnCodec ColumnCodec;
         NKikimrSchemeOp::EColumnCache ColumnCache;
+        NKikimrSchemeOp::EColumnCacheMode ColumnCacheMode;
         ui32 OuterThreshold;
         ui32 ExternalThreshold;
         NKikimrSchemeOp::EColumnStorage Storage;
@@ -84,6 +93,7 @@ struct TUserTable : public TThrRefBase {
 
         ECodec Codec;
         ECache Cache;
+        ECacheMode CacheMode;
         TStorageRoom::TPtr Room;
 
         ui32 MainChannel() const {
@@ -210,7 +220,7 @@ struct TUserTable : public TThrRefBase {
                     return ECodec::LZ4;
                 // keep no default
             }
-            Y_ABORT("unexpected");
+            Y_ENSURE(false, "unexpected");
         }
 
         static ECache ExtractDbCache(const NKikimrSchemeOp::TFamilyDescription& family) {
@@ -229,7 +239,25 @@ struct TUserTable : public TThrRefBase {
                     return ECache::Ever;
                 // keep no default
             }
-            Y_ABORT("unexpected");
+            Y_ENSURE(false, "unexpected");
+        }
+
+        static ECacheMode ExtractDbCacheMode(const NKikimrSchemeOp::TFamilyDescription& family) {
+            if (family.HasColumnCacheMode()) {
+                return ToDbCacheMode(family.GetColumnCacheMode());
+            }
+            return ECacheMode::Regular;
+        }
+
+        static ECacheMode ToDbCacheMode(NKikimrSchemeOp::EColumnCacheMode cacheMode) {
+            switch (cacheMode) {
+                case NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeRegular:
+                    return ECacheMode::Regular;
+                case NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory:
+                    return ECacheMode::TryKeepInMemory;
+                // keep no default
+            }
+            Y_ENSURE(false, "unexpected");
         }
     };
 
@@ -240,6 +268,7 @@ struct TUserTable : public TThrRefBase {
         bool IsKey;
         ui32 Family = 0;
         bool NotNull = false;
+        bool SetNotNullInProgress = false;
 
         TUserColumn(NScheme::TTypeInfo type, TString typeMod, TString name, bool isKey = false)
             : Type(type)
@@ -281,7 +310,7 @@ struct TUserTable : public TThrRefBase {
                 columnIds.reserve(columnNames.size());
                 for (const auto& columnName : columnNames) {
                     auto it = nameToId.find(columnName);
-                    Y_ABORT_UNLESS(it != nameToId.end());
+                    Y_ENSURE(it != nameToId.end());
                     columnIds.push_back(it->second);
                 }
             };
@@ -306,7 +335,10 @@ struct TUserTable : public TThrRefBase {
         EState State;
         bool VirtualTimestamps = false;
         TDuration ResolvedTimestampsInterval;
+        bool SchemaChanges = false;
         TMaybe<TString> AwsRegion;
+        bool UserSIDs = false;
+        bool TraceIds = false;
 
         TCdcStream() = default;
 
@@ -317,6 +349,9 @@ struct TUserTable : public TThrRefBase {
             , State(streamDesc.GetState())
             , VirtualTimestamps(streamDesc.GetVirtualTimestamps())
             , ResolvedTimestampsInterval(TDuration::MilliSeconds(streamDesc.GetResolvedTimestampsIntervalMs()))
+            , SchemaChanges(streamDesc.GetSchemaChanges())
+            , UserSIDs(streamDesc.GetUserSIDs())
+            , TraceIds(streamDesc.GetTraceIds())
         {
             if (const auto& awsRegion = streamDesc.GetAwsRegion()) {
                 AwsRegion = awsRegion;
@@ -399,8 +434,8 @@ struct TUserTable : public TThrRefBase {
         ui64 DataSizeResolution = 0;
         ui64 RowCountResolution = 0;
         ui32 HistogramBucketsCount = 0;
-        ui64 BackgroundCompactionRequests = 0;
-        ui64 BackgroundCompactionCount = 0;
+        ui64 CompactionRequests = 0;
+        ui64 CompactionCount = 0;
         ui64 CompactBorrowedCount = 0;
         NTable::TKeyAccessSample AccessStats;
     };
@@ -430,6 +465,12 @@ struct TUserTable : public TThrRefBase {
     TReplicationConfig ReplicationConfig;
     TIncrementalBackupConfig IncrementalBackupConfig;
     bool IsBackup = false;
+    // Per-table METRICS_LEVEL override (Unspecified = falls back to the
+    // database-wide TABLES_METRICS_LEVEL default).
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel DetailedMetricsLevel =
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
+    ui32 UniqueIndexKeySize = 0;
+    NKikimrSchemeOp::ESpecialTableType SpecialTableType = NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeNone;
 
     TMap<TPathId, TTableIndex> Indexes;
 
@@ -459,6 +500,7 @@ struct TUserTable : public TThrRefBase {
     TMap<TPathId, TCdcStream> CdcStreams;
     ui32 AsyncIndexCount = 0;
     ui32 JsonCdcStreamCount = 0;
+    TSet<TPathId> SchemaChangesCdcStreams;
 
     // Tablet thread access only, updated in-place
     mutable TStats Stats;
@@ -491,7 +533,7 @@ struct TUserTable : public TThrRefBase {
 
     void GetSchema(NKikimrSchemeOp::TTableDescription& description) const {
         bool ok = description.ParseFromArray(Schema.data(), Schema.size());
-        Y_ABORT_UNLESS(ok);
+        Y_ENSURE(ok);
     }
 
     void SetSchema(const NKikimrSchemeOp::TTableDescription& description) {
@@ -505,6 +547,10 @@ struct TUserTable : public TThrRefBase {
     void SetTableSchemaVersion(ui64 schemaVersion);
     bool ResetTableSchemaVersion();
 
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetDetailedMetricsLevel() const {
+        return DetailedMetricsLevel;
+    }
+
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
     void SwitchIndexState(const TPathId& indexPathId, TTableIndex::EState state);
     void DropIndex(const TPathId& indexPathId);
@@ -515,6 +561,7 @@ struct TUserTable : public TThrRefBase {
     void DropCdcStream(const TPathId& streamPathId);
     bool HasCdcStreams() const;
     bool NeedSchemaSnapshots() const;
+    const TSet<TPathId>& GetSchemaChangesCdcStreams() const;
 
     bool IsReplicated() const;
     bool IsIncrementalRestore() const;

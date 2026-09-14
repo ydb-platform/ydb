@@ -1,0 +1,53 @@
+#include "lexer.h"
+#include <yql/essentials/public/issue/yql_issue.h>
+
+#include <util/string/builder.h>
+
+#include <utility>
+
+namespace NSQLTranslation {
+
+namespace {
+
+class TDummyLexer: public ILexer {
+public:
+    explicit TDummyLexer(TString name)
+        : Name_(std::move(name))
+    {
+    }
+
+    bool Tokenize(const TString& query, const TString& queryName, const TTokenCallback& onNextToken, NYql::TIssues& issues, size_t maxErrors) final {
+        Y_UNUSED(query);
+        Y_UNUSED(queryName);
+        Y_UNUSED(onNextToken);
+        Y_UNUSED(maxErrors);
+        issues.AddIssue(NYql::TIssue({}, TStringBuilder() << "Lexer " << Name_ << " is not supported"));
+        return false;
+    }
+
+private:
+    const TString Name_;
+};
+
+class TDummyFactory: public ILexerFactory {
+public:
+    explicit TDummyFactory(TString name)
+        : Name_(std::move(name))
+    {
+    }
+
+    ILexer::TPtr MakeLexer() const final {
+        return MakeHolder<TDummyLexer>(Name_);
+    }
+
+private:
+    const TString Name_;
+};
+
+} // namespace
+
+TLexerFactoryPtr MakeDummyLexerFactory(const TString& name) {
+    return MakeIntrusive<TDummyFactory>(name);
+}
+
+} // namespace NSQLTranslation

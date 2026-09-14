@@ -46,11 +46,10 @@ TJobMkqlReaderImpl::TJobMkqlReaderImpl(const TFile& in)
 {
 }
 
-TJobMkqlWriterImpl::TJobMkqlWriterImpl(const TMkqlIOSpecs& specs, const TVector<TFile>& outHandles)
+TJobMkqlWriterImpl::TJobMkqlWriterImpl(const TVector<TFile>& outHandles)
     : NPrivate::TOutStreamsHolder(outHandles)
     , TMkqlWriterImpl(GetVectorOfStreams(), YQL_JOB_CODEC_BLOCK_COUNT, YQL_JOB_CODEC_BLOCK_SIZE)
 {
-    SetSpecs(specs);
 }
 
 void TJobMkqlWriterImpl::DoFinish(bool abort) {

@@ -63,7 +63,7 @@ EExecutionStatus TLoadAndWaitInRSUnit::Execute(TOperation::TPtr op,
         if (!Pipeline.LoadInReadSets(op, txc, ctx))
             return EExecutionStatus::Restart;
 
-        Y_ABORT_UNLESS(op->HasLoadedInRSFlag());
+        Y_ENSURE(op->HasLoadedInRSFlag());
 
         if (!IsReadyToExecute(op))
             return EExecutionStatus::Continue;

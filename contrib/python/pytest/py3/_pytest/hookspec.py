@@ -1,5 +1,6 @@
 """Hook specifications for pytest plugins which are invoked by pytest itself
 and by builtin plugins."""
+
 from pathlib import Path
 from typing import Any
 from typing import Dict
@@ -15,17 +16,19 @@ from pluggy import HookspecMarker
 
 from _pytest.deprecated import WARNING_CMDLINE_PREPARSE_HOOK
 
+
 if TYPE_CHECKING:
     import pdb
+    from typing import Literal
     import warnings
-    from typing_extensions import Literal
 
-    from _pytest._code.code import ExceptionRepr
     from _pytest._code.code import ExceptionInfo
+    from _pytest._code.code import ExceptionRepr
+    from _pytest.compat import LEGACY_PATH
+    from _pytest.config import _PluggyPlugin
     from _pytest.config import Config
     from _pytest.config import ExitCode
     from _pytest.config import PytestPluginManager
-    from _pytest.config import _PluggyPlugin
     from _pytest.config.argparsing import Parser
     from _pytest.fixtures import FixtureDef
     from _pytest.fixtures import SubRequest
@@ -42,7 +45,6 @@ if TYPE_CHECKING:
     from _pytest.runner import CallInfo
     from _pytest.terminal import TerminalReporter
     from _pytest.terminal import TestShortLogReport
-    from _pytest.compat import LEGACY_PATH
 
 
 hookspec = HookspecMarker("pytest")
@@ -55,26 +57,29 @@ hookspec = HookspecMarker("pytest")
 @hookspec(historic=True)
 def pytest_addhooks(pluginmanager: "PytestPluginManager") -> None:
     """Called at plugin registration time to allow adding new hooks via a call to
-    ``pluginmanager.add_hookspecs(module_or_class, prefix)``.
+    :func:`pluginmanager.add_hookspecs(module_or_class, prefix) <pytest.PytestPluginManager.add_hookspecs>`.
 
     :param pytest.PytestPluginManager pluginmanager: The pytest plugin manager.
 
     .. note::
-        This hook is incompatible with ``hookwrapper=True``.
+        This hook is incompatible with hook wrappers.
     """
 
 
 @hookspec(historic=True)
 def pytest_plugin_registered(
-    plugin: "_PluggyPlugin", manager: "PytestPluginManager"
+    plugin: "_PluggyPlugin",
+    plugin_name: str,
+    manager: "PytestPluginManager",
 ) -> None:
     """A new pytest plugin got registered.
 
     :param plugin: The plugin module or instance.
-    :param pytest.PytestPluginManager manager: pytest plugin manager.
+    :param plugin_name: The name by which the plugin is registered.
+    :param manager: The pytest plugin manager.
 
     .. note::
-        This hook is incompatible with ``hookwrapper=True``.
+        This hook is incompatible with hook wrappers.
     """
 
 
@@ -96,8 +101,8 @@ def pytest_addoption(parser: "Parser", pluginmanager: "PytestPluginManager") -> 
         <pytest.Parser.addini>`.
 
     :param pytest.PytestPluginManager pluginmanager:
-        The pytest plugin manager, which can be used to install :py:func:`hookspec`'s
-        or :py:func:`hookimpl`'s and allow one plugin to call another plugin's hooks
+        The pytest plugin manager, which can be used to install :py:func:`~pytest.hookspec`'s
+        or :py:func:`~pytest.hookimpl`'s and allow one plugin to call another plugin's hooks
         to change how command line options are added.
 
     Options can later be accessed through the
@@ -113,7 +118,7 @@ def pytest_addoption(parser: "Parser", pluginmanager: "PytestPluginManager") -> 
     attribute or can be retrieved as the ``pytestconfig`` fixture.
 
     .. note::
-        This hook is incompatible with ``hookwrapper=True``.
+        This hook is incompatible with hook wrappers.
     """
 
 
@@ -128,7 +133,7 @@ def pytest_configure(config: "Config") -> None:
     imported.
 
     .. note::
-        This hook is incompatible with ``hookwrapper=True``.
+        This hook is incompatible with hook wrappers.
 
     :param pytest.Config config: The pytest config object.
     """
@@ -284,10 +289,34 @@ def pytest_ignore_collect(
     """
 
 
+@hookspec(firstresult=True)
+def pytest_collect_directory(path: Path, parent: "Collector") -> "Optional[Collector]":
+    """Create a :class:`~pytest.Collector` for the given directory, or None if
+    not relevant.
+
+    .. versionadded:: 8.0
+
+    For best results, the returned collector should be a subclass of
+    :class:`~pytest.Directory`, but this is not required.
+
+    The new node needs to have the specified ``parent`` as a parent.
+
+    Stops at first non-None result, see :ref:`firstresult`.
+
+    :param path: The path to analyze.
+
+    See :ref:`custom directory collectors` for a simple example of use of this
+    hook.
+    """
+
+
 def pytest_collect_file(
     file_path: Path, path: "LEGACY_PATH", parent: "Collector"
 ) -> "Optional[Collector]":
     """Create a :class:`~pytest.Collector` for the given path, or None if not relevant.
+
+    For best results, the returned collector should be a subclass of
+    :class:`~pytest.File`, but this is not required.
 
     The new node needs to have the specified ``parent`` as a parent.
 
@@ -858,8 +887,8 @@ def pytest_warning_recorded(
     """Process a warning captured by the internal pytest warnings plugin.
 
     :param warning_message:
-        The captured warning. This is the same object produced by :py:func:`warnings.catch_warnings`, and contains
-        the same attributes as the parameters of :py:func:`warnings.showwarning`.
+        The captured warning. This is the same object produced by :class:`warnings.catch_warnings`,
+        and contains the same attributes as the parameters of :py:func:`warnings.showwarning`.
 
     :param when:
         Indicates when the warning was captured. Possible values:
@@ -940,10 +969,10 @@ def pytest_exception_interact(
     interactively handled.
 
     May be called during collection (see :hook:`pytest_make_collect_report`),
-    in which case ``report`` is a :class:`CollectReport`.
+    in which case ``report`` is a :class:`~pytest.CollectReport`.
 
     May be called during runtest of an item (see :hook:`pytest_runtest_protocol`),
-    in which case ``report`` is a :class:`TestReport`.
+    in which case ``report`` is a :class:`~pytest.TestReport`.
 
     This hook is not called if the exception that was raised is an internal
     exception like ``skip.Exception``.

@@ -11,35 +11,54 @@ SRCS(
     board_lookup.cpp
     board_publish.cpp
     board_replica.cpp
+    bridge.h
+    bridge.cpp
     blobstorage.h
     blobstorage.cpp
+    blobstorage_data_kind.h
     blobstorage_grouptype.cpp
+    blobstorage_relevance.cpp
+    boot_type.h
+    boot_type.cpp
     channel_profiles.h
     counters.cpp
     counters.h
+    database_kind.cpp
+    database_kind.h
     defs.h
     domain.cpp
     domain.h
+    storage_pool_kinds.h
     event_filter.cpp
     event_filter.h
     events.h
     feature_flags.h
     feature_flags_service.cpp
     feature_flags_service.h
+    fulltext.cpp
+    fulltext.h
     group_stat.cpp
     group_stat.h
     hive.h
+    http_database_param.cpp
+    http_database_param.h
     interconnect_channels.h
+    kmeans_clusters.cpp
+    local_user_token.cpp
+    local_user_token.h
     localdb.cpp
     localdb.h
     location.h
     logoblob.cpp
     logoblob.h
     memory_controller_iface.h
+    mon_auth.cpp
     nameservice.h
+    nodestate.h
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
+    request_types.h
     resource_profile.h
     row_version.cpp
     row_version.h
@@ -55,13 +74,16 @@ SRCS(
     statestorage_monitoring.cpp
     statestorage_proxy.cpp
     statestorage_replica.cpp
+    statestorage_ringwalker.h
     storage_pools.cpp
     storage_pools.h
     subdomain.h
     subdomain.cpp
+    superlemmer.h
     table_index.cpp
     tablet.cpp
     tablet.h
+    tablet_history_cutter.h
     tablet_killer.cpp
     tablet_pipe.h
     tablet_pipecache.h
@@ -79,6 +101,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/snowball
     ydb/library/actors/core
     ydb/library/actors/helpers
     ydb/library/actors/interconnect
@@ -86,13 +109,19 @@ PEERDIR(
     ydb/library/actors/wilson
     ydb/library/aclib
     library/cpp/deprecated/enum_codegen
+    library/cpp/dot_product
+    library/cpp/l1_distance
+    library/cpp/l2_distance
     library/cpp/logger
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/random_provider
+    library/cpp/svnversion
     library/cpp/time_provider
+    ydb/core/audit/audit_config
     ydb/core/base/generated
     ydb/core/base/services
+    ydb/core/control/lib
     ydb/core/debug
     ydb/core/erasure
     ydb/core/graph/api
@@ -107,7 +136,14 @@ PEERDIR(
     ydb/public/api/protos/out
     yql/essentials/minikql
     library/cpp/deprecated/atomic
+    library/cpp/json
 )
+
+PEERDIR(
+    ydb/library/superlemmer_stub
+)
+
+YQL_LAST_ABI_VERSION()
 
 IF (NOT OS_WINDOWS)
 PEERDIR(
@@ -115,7 +151,10 @@ PEERDIR(
 )
 ENDIF()
 
+GENERATE_ENUM_SERIALIZATION(boot_type.h)
 GENERATE_ENUM_SERIALIZATION(memory_controller_iface.h)
+GENERATE_ENUM_SERIALIZATION(auth.h)
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(database_kind.h)
 
 END()
 
@@ -123,7 +162,12 @@ RECURSE(
     generated
 )
 
+IF (NOT OPENSOURCE OR OPENSOURCE_PROJECT == "ydb")
 RECURSE_FOR_TESTS(
     ut
+    ut_auth
+    ut_backtrace
     ut_board_subscriber
+    ut_http_database_param
 )
+ENDIF()

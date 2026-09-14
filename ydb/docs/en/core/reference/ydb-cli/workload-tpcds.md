@@ -1,6 +1,6 @@
 # TPC-DS workload
 
-The workload is based on the TPC-DS [documentation](https://www.tpc.org/TPC_Documents_Current_Versions/pdf/TPC-DS_v3.2.0.pdf), with the queries and table schemas adapted for {{ ydb-short-name }}.
+The workload is based on the TPC-DS [specification](https://www.tpc.org/TPC_Documents_Current_Versions/pdf/TPC-DS_v3.2.0.pdf), with the queries and table schemas adapted for {{ ydb-short-name }}.
 
 This benchmark generates a workload typical for decision support systems.
 
@@ -14,9 +14,9 @@ All commands support the common option `--path`, which specifies the path to the
 
 ### Available options { #common_options }
 
-Name | Description | Default value
----|---|---
-`--path` or `-p` | Path to the directory with tables. | `/`
+| Name              | Description                         | Default value |
+|-------------------|-------------------------------------|---------------|
+| `--path` or `-p` | Path to the directory with tables.   | `/`           |
 
 ## Initializing the load test {#init}
 
@@ -50,14 +50,15 @@ See the command description:
 
 ### Available options {#load_files_options}
 
-| Name                                  | Description                                                                                                                                                    | Default value |
-|---------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
-| `--scale <value>`                     | Data scale. Typically, powers of ten are used.                                                                                                                  |               |
-| `--tables <value>`                    | Comma-separated list of tables to generate. Available tables: `customer`, `nation`, `order_line`, `part_psupp`, `region`, `supplier`.                           | All tables    |
-| `--process-count <value>` or `-C <value>` | Specifies the number of processes for parallel data generation.                                                                                                  | `1`           |
-| `--process-index <value>` or `-i <value>` | Specifies the process number when data generation is split into multiple processes.                                                                              | `0`           |
-| `--state <path>`                      | Path to the state file for resuming generation. If the generation is interrupted, it will resume from the same point when restarted.                                |               |
-| `--clear-state`                       | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                                             |               |
+| Name                                  | Description                                                                                                                                       | Default value |
+|---------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
+| `--scale <value>`                     | Data scale. Typically, powers of ten are used. Also supports fractional scale, which is not described in the TPC-DS specification. It can be useful for quickly testing small YDB databases. Examples: `0.1`, `0.3`.                                                                                                   |               |
+| `--tables <value>`                    | Comma-separated list of tables to generate. Available tables: `customer`, `nation`, `order_line`, `part_psupp`, `region`, `supplier`.             | All tables    |
+| `--process-count <value>` or `-C <value>` | Specifies the number of processes for parallel data generation.                                                                               | `1`           |
+| `--process-index <value>` or `-i <value>` | Specifies the process number when data generation is split into multiple processes.                                                           | `0`           |
+| `--state <path>`                      | Path to the state file for resuming generation. If the generation is interrupted, it will resume from the same point when restarted.              |               |
+| `--clear-state`                       | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                             |               |
+| `--dry-run`                           | Do not execute loading queries, but only display their text.                                                                                     |               |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 
@@ -81,9 +82,11 @@ See the command description:
 
 ### TPC-DS-specific options { #run_tpcds_options }
 
-Name | Description | Default value
----|---|---
-`--ext-query-dir <name>` | Directory with external queries for load execution. Queries should be in files named `q[1-99].sql`. |
+| Name                       | Description                                                                                         | Default value |
+|----------------------------|-----------------------------------------------------------------------------------------------------|---------------|
+| `--syntax <value>`         | Syntax of the queries to use. Available values: `yql`. For more information about working with YQL syntax, see [here](../../yql/reference/index.md). | `yql` |
+| `--float-mode <value>`     | Float mode. Can be `float`, `decimal` or `decimal_ydb`. If the value is `float` - float will be used, `decimal` means that decimal with canonical size specified in the TPC-DS specification (`Decimal(12, 2)`) will be used, and `decimal_ydb` means that all float will be converted to `Decimal(22, 9)`. For more information about the Decimal type, see [documentation](../../yql/reference/types/primitive.md#numeric). | `float` |
+| `--scale <value>`          | Scale factor. See the TPC-DS specification, chapter 3. Used in TPC-DS queries. Also supports fractional scale, which is not described in the TPC-DS specification. It can be useful for quickly testing small YDB databases. Examples: `0.1`, `0.3`. For scale factors `1`, `10`, `100`, `1000` canonical answers are specified (see the `--check-canonical` option description). | 1 |
 
 ## Test data cleanup { #cleanup }
 

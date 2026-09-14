@@ -2,15 +2,20 @@
 
 ## Install ydb-dstool package
 
+For Unix-like systems:
+
 ```bash
-user@host:~$ pip install ydb-dstool
+user@host:~$ curl -sSL 'https://install.ydb.tech/dstool' | bash
 ```
 
-## Set up environment and run
+For Windows:
 
-```bash
-user@host:~$ export PATH=${PATH}:${HOME}/.local/bin
-user@host:~$ ydb-dstool -e ydb.endpoint cluster list
+```powershell
+iex (New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows')
+```
+
+```cmd
+@"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://install.ydb.tech/dstool-windows'))"
 ```
 
 # How to run ydb-dstool from source
@@ -23,49 +28,12 @@ user@host:~$ cd github
 user@host:~/github$ git clone https://github.com/ydb-platform/ydb.git
 ```
 
-## Install grpc_tools python package
-
-Follow the steps described at https://grpc.io/docs/languages/python/quickstart.
-
-Typical command to install the `grpc_tools` package:
+## Use ya make to build ydb-dstool
 
 ```bash
-pip3 install grpcio-tools 'protobuf<5.0.0,>=3.13.0'
-```
-
-## Compile proto files for python
-
-```bash
-user@host:~$ cd ~/github/ydb
-user@host:~/github/ydb$ ydb_root=$(pwd)
-user@host:~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
-```
-
-## Set up environment and run
-
-```bash
-user@host:~$ cd ~/github/ydb
-user@host:~/github/ydb$ ydb_root=$(pwd)
-user@host:~/github/ydb$ export PATH=${PATH}:${ydb_root}/ydb/apps/dstool
-user@host:~/github/ydb$ export PYTHONPATH=${PYTHONPATH}:${ydb_root}
-user@host:~/github/ydb$ alias ydb-dstool=${PWD}/main.py
-user@host:~/github/ydb$ ydb-dstool -e ydb.endpoint cluster list
-```
-
-# How to build and upload ydb-dstool package
-
-```bash
-user@host:~$ mkdir github
-user@host:~$ cd github
-user@host:~/github$ git clone https://github.com/ydb-platform/ydb.git
-user@host:~/github$ cd ydb
-user@host:~/github/ydb$ ydb_root=$(pwd)
-user@host:~/github/ydb$ ./ydb/apps/dstool/compile_protos.py --ydb-root ${ydb_root} 2>/dev/null
-user@host:~/github/ydb$ mv ydb/apps/dstool/setup.py .
-user@host:~/github/ydb$ python3 -m pip install --upgrade build
-user@host:~/github/ydb$ python3 -m build
-user@host:~/github/ydb$ python3 -m pip install --upgrade twine
-user@host:~/github/ydb$ python3 -m twine upload dist/*
+user@host:~/github$ cd ydb/apps/dstool
+user@host:~/github/ydb/apps/dstool$ ya make
+user@host:~/github/ydb/apps/dstool$ ./ydb-dstool --help
 ```
 
 # How to do things with ydb-dstool
@@ -298,6 +266,8 @@ user@host:~$ ydb-dstool -e ydbd.endpoint pdisk set --status ACTIVE --allow-worki
 enables pdisk ```"[NODE_ID:PDISK_ID]"```. The ```--allow-working-disks``` command option allows to set state for working pdisks.
 
 ## Do things with vdisks
+
+VDisk ids can be specified in square-bracket hex format like `[8200001b:3:0:7:0]` or round-bracket decimal format like `(2181038107-3-0-7-0)`.
 
 ### List vdisks
 
@@ -642,3 +612,50 @@ The above command performs various
 
 operations until user terminates the process (e.g. by entering ```Ctrl + c```). The operations are created so that they don't
 break failure model of any groups.
+
+The workload can also be configured with YAML:
+
+```bash
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster workload run --config-file workload.yaml
+```
+
+For example:
+
+```yaml
+sleep_between_rounds: 2s
+check_fail_model: true
+random_seed: 42
+
+actions:
+  wipe_vdisk:
+    - weight: 1
+  evict_vdisk:
+    - weight: 1
+  restart_node:
+    - weight: 2
+      signal: KILL
+      ask_cms:
+        availability_mode: MODE_KEEP_AVAILABLE
+      filter:
+        only_types:
+          types: [STORAGE_NODE]
+```
+
+Each entry in `actions` is selected by its relative positive `weight`, which defaults to `1`. An action can be listed more
+than once with different weights, filters, or CMS settings. Supported actions are `wipe_vdisk`, `evict_vdisk`,
+`set_read_only`, `restart_node`, `change_pdisk_key`, `restart_pdisk`, `obliterate_pdisk`, `kill_tablet`, `switch_pile`,
+`disconnect_pile`, and `disconnect_socket`.
+
+Node restarts are unlimited by default. Set `max_node_restarts_per_minute` to apply a rolling aggregate rate limit across
+all `restart_node` configurations. Tenant filters match the single tenant path of each dynamic node; serverless databases
+are out of scope.
+
+Field and enum names are case-insensitive and separators are ignored, so names such as `WipeVDisk`, `wipe_vdisk`, and
+`wipe-vdisk` are equivalent. Durations use protobuf duration syntax, for example `0.5s`, `2s`, or `1.5s`. Unknown fields,
+invalid values, and duplicate fields are rejected before the workload connects to the cluster. When `--config-file` is set,
+the legacy workload-specific options are ignored. The workload intentionally rejects the global `--dry-run` option because
+several actions cannot be simulated safely. See [`protos/cluster_workload.proto`](protos/cluster_workload.proto) for the complete
+field and filter schema.
+
+`change_pdisk_key` and `obliterate_pdisk` use the Berkanavt test-cluster paths shown by the existing workload tooling and are
+intended for that deployment layout. `change_pdisk_key` refuses to run unless the node uses the expected PDisk key file.

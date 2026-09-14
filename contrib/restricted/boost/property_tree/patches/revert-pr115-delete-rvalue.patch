@@ -1,0 +1,26 @@
+From 5438bf79d27cd9e656a16ddcb9688f68537cea31 Mon Sep 17 00:00:00 2001
+From: Mohammad Nejati <ashtumashtum@gmail.com>
+Date: Sun, 19 Nov 2023 08:01:09 +0000
+Subject: [PATCH] Prevent calls to get_child with temporary default values
+
+Resolves #42
+---
+ include/boost/property_tree/ptree.hpp |  4 ++++
+ test/test_property_tree.cpp           |  6 ++++++
+ test/test_property_tree.hpp           | 29 +++++++++++++++++++--------
+ 3 files changed, 31 insertions(+), 8 deletions(-)
+
+diff --git a/include/boost/property_tree/ptree.hpp b/include/boost/property_tree/ptree.hpp
+index ac4593ba5..2743123c9 100644
+--- a/include/boost/property_tree/ptree.hpp
++++ b/include/boost/property_tree/ptree.hpp
+@@ -270,9 +270,5 @@ namespace boost { namespace property_tree
+         const self_type &get_child(const path_type &path,
+                                    const self_type &default_value) const;
+ 
+-        /** Prevents calls to get_child with temporary default values */
+-        void get_child(const path_type &path,
+-                       const self_type &&default_value) const = delete;
+-
+         /** Get the child at the given path, or return boost::null. */
+         optional<self_type &> get_child_optional(const path_type &path);

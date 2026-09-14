@@ -13,7 +13,9 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb import Driver, DriverConfig, SessionPool
 from ydb.draft import DynamicConfigClient
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.ydb_fixtures import ydb_database_ctx
+from ydb.tests.library.fixtures import ydb_database_ctx
+
+from helpers import cluster_endpoint, CaptureFileOutput
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +47,6 @@ CLUSTER_CONFIG = dict(
     # two builtin users with empty passwords
     default_users=dict((i, '') for i in ('root', 'other-user')),
 )
-
-
-def cluster_endpoint(cluster):
-    return f'{cluster.nodes[1].host}:{cluster.nodes[1].port}'
 
 
 def ydbcli_db_schema_exec(cluster, operation_proto):
@@ -116,22 +114,6 @@ def alter_user_attrs(cluster, path, **kwargs):
     )
 
     ydbcli_db_schema_exec(cluster, alter_proto)
-
-
-class CaptureFileOutput:
-    def __init__(self, filename):
-        self.filename = filename
-
-    def __enter__(self):
-        self.saved_pos = os.path.getsize(self.filename)
-        return self
-
-    def __exit__(self, *exc):
-        # unreliable way to get all due audit records into the file
-        time.sleep(0.1)
-        with open(self.filename, 'rb', buffering=0) as f:
-            f.seek(self.saved_pos)
-            self.captured = f.read().decode('utf-8')
 
 
 @pytest.fixture(scope='module')
@@ -434,7 +416,8 @@ def test_dynconfig(ydb_cluster, prepared_test_env, _client_session_pool_with_aut
         _client_session_pool_with_auth_root.retry_operation_sync(apply_config, config=config)
 
     print(capture_audit.captured, file=sys.stderr)
-    assert json.dumps(config) in capture_audit.captured
+    cfg = json.dumps(config)
+    assert cfg in capture_audit.captured
 
 
 @pytest.mark.parametrize('config_fixture', ["_bad_dynconfig", "_good_dynconfig"])
@@ -450,4 +433,30 @@ def test_broken_dynconfig(ydb_cluster, prepared_test_env, pool_fixture, config_f
             pass
 
     print(capture_audit.captured, file=sys.stderr)
-    assert json.dumps(config) in capture_audit.captured
+    cfg = json.dumps(config)
+    assert cfg in capture_audit.captured
+
+
+def test_create_and_remove_tenant(ydb_cluster):
+    capture_audit = CaptureFileOutput(ydb_cluster.config.audit_file_path)
+    print('AAA', capture_audit.filename, file=sys.stderr)
+
+    with capture_audit:
+        database = '/Root/users/database'
+        ydb_cluster.create_database(
+            database,
+            storage_pool_units_count={
+                'hdd': 1
+            }
+        )
+        database_nodes = ydb_cluster.register_and_start_slots(database, count=1)
+        ydb_cluster.wait_tenant_up(database)
+        time.sleep(1)
+        ydb_cluster.remove_database(database)
+        ydb_cluster.unregister_and_stop_slots(database_nodes)
+
+    print(capture_audit.captured, file=sys.stderr)
+    assert "BEGIN INIT DATABASE CONFIG" in capture_audit.captured
+    assert "END INIT DATABASE CONFIG" in capture_audit.captured
+    assert "BEGIN REMOVE DATABASE" in capture_audit.captured
+    assert "END REMOVE DATABASE" in capture_audit.captured

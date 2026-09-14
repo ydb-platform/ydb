@@ -6,7 +6,7 @@ SPLIT_FACTOR(20)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -22,10 +22,14 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     dsproxy_put_ut.cpp
     dsproxy_quorum_tracker_ut.cpp
+    dsproxy_get_block_ut.cpp
     dsproxy_sequence_ut.cpp
     dsproxy_patch_ut.cpp
     dsproxy_counters_ut.cpp
     dsproxy_request_reporting_ut.cpp
+    dsproxy_discover_ut.cpp
+    dsproxy_check_integrity_ut.cpp
+    dsproxy_dormant_ut.cpp
 )
 
 IF (BUILD_TYPE != "DEBUG")

@@ -24,11 +24,7 @@
 #endif
 
 #  ifndef BOOST_REGEX_TRAITS_HPP_INCLUDED
-#ifdef BOOST_REGEX_CXX03
-#     error #include <boost/regex/v4/regex_traits.hpp>
-#else
 #     include <boost/regex/v5/regex_traits.hpp>
-#endif
 #  endif
 
 #endif // include

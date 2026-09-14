@@ -1,0 +1,10 @@
+$fact = EvaluateCode(
+    Yql::Fold(
+        ListFromRange(1,11),
+        ReprCode(1),
+        ($item, $state)->{ 
+            return FuncCode("*", $state, ReprCode($item)) 
+        })
+);
+
+select $fact;

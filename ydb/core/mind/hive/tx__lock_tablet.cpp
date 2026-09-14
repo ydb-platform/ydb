@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -16,6 +18,7 @@ private:
 
     TSideEffects SideEffects;
     TActorId PreviousOwner;
+    bool Success = true;
 
 public:
     TTxLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie, THive* hive)
@@ -33,7 +36,11 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_LOCK_TABLET_EXECUTION; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxLockTabletExecution::Execute TabletId: " << TabletId);
+        YDB_LOG_DEBUG("THive::TTxLockTabletExecution::Execute locking tablet execution",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"ownerActor", OwnerActor},
+            {"isReconnect", IsReconnect});
 
         SideEffects.Reset(Self->SelfId());
 
@@ -43,6 +50,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << " to an invalid owner actor"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -53,6 +61,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << ", which doesn't exist"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -62,6 +71,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to lock tablet " << TabletId << " to " << OwnerActor << ", which is on a different node"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -71,6 +81,7 @@ public:
                     NKikimrProto::ERROR,
                     TStringBuilder() << "Trying to restore lock to tablet " << TabletId << ", which has expired"
                 ), 0, Cookie);
+            Success = false;
             return true;
         }
 
@@ -96,6 +107,9 @@ public:
             }
             tablet->InitiateStop(SideEffects);
             db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::LeaderNode>(0);
+            if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                tablet->BecomeUnknown(tablet->Hive.FindNode(tablet->LockedToActor.NodeId()));
+            }
         }
         if (tablet->LockedToActor == OwnerActor && tablet->PendingUnlockSeqNo == 0) {
             // Lock is still valid, watch for node disconnections
@@ -107,8 +121,18 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
-        SideEffects.Complete(ctx);
+        if (Success) {
+            YDB_LOG_DEBUG("THive::TTxLockTabletExecution::Complete",
+                {"logPrefix", GetLogPrefix()},
+                {"tabletId", TabletId},
+                {"sideEffects", SideEffects});
+        } else {
+            YDB_LOG_NOTICE("THive::TTxLockTabletExecution::Complete tablet locked successfully",
+                {"logPrefix", GetLogPrefix()},
+                {"tabletId", TabletId},
+                {"sideEffects", SideEffects});
+        }
+        SideEffects.Complete(ctx, Self->Requests);
     }
 
 private:

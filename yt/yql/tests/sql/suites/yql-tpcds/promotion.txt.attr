@@ -1,0 +1,122 @@
+{
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "p_promo_sk";
+            "required" = %true;
+            "sort_order" = "ascending";
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "p_promo_id";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_start_date_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "p_end_date_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "p_item_sk";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "p_cost";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "p_response_target";
+            "required" = %true;
+            "type" = "int32";
+            "type_v3" = "int32";
+        };
+        {
+            "name" = "p_promo_name";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_channel_dmail";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_channel_email";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_channel_catalog";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_channel_tv";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_channel_radio";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_channel_press";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_channel_event";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_channel_demo";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_channel_details";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_purpose";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+        {
+            "name" = "p_discount_active";
+            "required" = %true;
+            "type" = "string";
+            "type_v3" = "string";
+        };
+    ];
+}

@@ -5,17 +5,271 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_rec.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio.h>
 #include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include <util/generic/set.h>
 
 namespace NKikimr {
 
+    template <class TKey, class TMemRec>
+    struct TRecIndex : public TThrRefBase {
+        typedef TIndexRecord<TKey, TMemRec> TRec;
+
+        TTrackableVector<TRec> LoadedIndex;
+
+        TRecIndex(TVDiskContextPtr vctx)
+            : LoadedIndex(TMemoryConsumer(vctx->SstIndex))
+        {}
+
+        bool IsLoaded() const {
+            return !LoadedIndex.empty();
+        }
+
+        ui64 Elements() const {
+            Y_DEBUG_ABORT_UNLESS(IsLoaded());
+            return LoadedIndex.size();
+        }
+    };
+
+    template <>
+    struct TRecIndex<TKeyLogoBlob, TMemRecLogoBlob> : public TThrRefBase {
+        typedef TIndexRecord<TKeyLogoBlob, TMemRecLogoBlob> TRec;
+
+#pragma pack(push, 4)
+        struct TLogoBlobIdHigh {
+            union {
+                struct {
+                    ui64 TabletId; // 8 bytes
+                    ui64 StepR1 : 24; // 8 bytes
+                    ui64 Generation : 32;
+                    ui64 Channel : 8;
+                } N;
+
+                ui64 X[2];
+            } Raw;
+
+            TLogoBlobIdHigh() {
+                Raw.X[0] = Raw.X[1] = 0;
+            }
+
+            explicit TLogoBlobIdHigh(const TLogoBlobID& id) {
+                Raw.X[0] = id.GetRaw()[0];
+                Raw.X[1] = id.GetRaw()[1];
+            }
+
+            TLogoBlobIdHigh(ui64 tabletId, ui32 generation, ui32 step, ui8 channel) {
+                Raw.N.TabletId = tabletId;
+                Raw.N.Channel = channel;
+                Raw.N.Generation = generation;
+                Raw.N.StepR1 = (step & 0xFFFFFF00ull) >> 8;
+            }
+
+            bool operator == (const TLogoBlobIdHigh& r) const {
+                return Raw.X[0] == r.Raw.X[0] && Raw.X[1] == r.Raw.X[1];
+            }
+
+            bool operator != (const TLogoBlobIdHigh& r) const {
+                return !(operator == (r));
+            }
+
+            bool operator < (const TLogoBlobIdHigh& r) const {
+                return Raw.X[0] != r.Raw.X[0] ? Raw.X[0] < r.Raw.X[0] : Raw.X[1] < r.Raw.X[1];
+            }
+        };
+
+        static_assert(sizeof(TLogoBlobIdHigh) == 16, "expect sizeof(TLogoBlobIdHigh) == 16");
+
+        struct TLogoBlobIdLow {
+            union {
+                struct {
+                    ui64 PartId : 4; // 8 bytes
+                    ui64 BlobSize : 26;
+                    ui64 CrcMode : 2;
+                    ui64 Cookie : 24;
+                    ui64 StepR2 : 8;
+                } N;
+
+                ui64 X;
+            } Raw;
+
+            TLogoBlobIdLow() {
+                Raw.X = 0;
+            }
+
+            explicit TLogoBlobIdLow(const TLogoBlobID& id) {
+                Raw.X = id.GetRaw()[2];
+            }
+
+            TLogoBlobIdLow(ui32 step, ui32 cookie, ui32 crcMode, ui32 blobSize, ui32 partId) {
+                Raw.N.StepR2 = step & 0x000000FFull;
+                Raw.N.Cookie = cookie;
+                Raw.N.CrcMode = crcMode;
+                Raw.N.BlobSize = blobSize;
+                Raw.N.PartId = partId;
+            }
+
+            bool operator == (const TLogoBlobIdLow& r) const {
+                return Raw.X == r.Raw.X;
+            }
+
+            bool operator != (const TLogoBlobIdLow& r) const {
+                return !(operator == (r));
+            }
+
+            bool operator < (const TLogoBlobIdLow& r) const {
+                return Raw.X < r.Raw.X;
+            }
+        };
+
+        static_assert(sizeof(TLogoBlobIdLow) == 8, "expect sizeof(TLogoBlobIdLow) == 8");
+
+        struct TRecHigh {
+        private:
+            TLogoBlobIdHigh Key;
+            ui32 LowRangeEndIndex;
+
+        public:
+            TRecHigh(TLogoBlobIdHigh key)
+                : Key(key)
+            {}
+
+            TLogoBlobIdHigh GetKey() const {
+                return ReadUnaligned<TLogoBlobIdHigh>(&Key);
+            }
+
+            ui32 GetLowRangeEndIndex() const {
+                return LowRangeEndIndex;
+            }
+
+            void SetLowRangeEndIndex(ui32 i) {
+                LowRangeEndIndex = i;
+            }
+
+            bool operator < (const TLogoBlobIdHigh &key) const {
+                return GetKey() < key;
+            }
+        };
+
+        static_assert(sizeof(TRecHigh) == 20, "expect sizeof(TRecHigh) == 20");
+
+        struct TRecLow {
+        private:
+            TLogoBlobIdLow Key;
+            TMemRecLogoBlob MemRec;
+
+        public:
+            TRecLow(TLogoBlobIdLow key, TMemRecLogoBlob memRec)
+                : Key(key)
+                , MemRec(memRec)
+            {}
+
+            TLogoBlobIdLow GetKey() const {
+                return ReadUnaligned<TLogoBlobIdLow>(&Key);
+            }
+
+            TMemRecLogoBlob GetMemRec() const {
+                return ReadUnaligned<TMemRecLogoBlob>(&MemRec);
+            }
+
+            bool operator < (const TLogoBlobIdLow &key) const {
+                return GetKey() < key;
+            }
+        };
+
+        static_assert(sizeof(TRecLow) == 28, "expect sizeof(TRecLow) == 28");
+#pragma pack(pop)
+
+        TTrackableVector<TRecHigh> IndexHigh;
+        TTrackableVector<TRecLow> IndexLow;
+
+        TRecIndex(TVDiskContextPtr vctx)
+            : IndexHigh(TMemoryConsumer(vctx->SstIndex))
+            , IndexLow(TMemoryConsumer(vctx->SstIndex))
+        {}
+
+        bool IsLoaded() const {
+            return !IndexLow.empty();
+        }
+
+        ui64 Elements() const {
+            Y_DEBUG_ABORT_UNLESS(IsLoaded());
+            return IndexLow.size();
+        }
+
+        void LoadLinearIndex(const TTrackableVector<TRec>& linearIndex) {
+            if (linearIndex.empty()) {
+                return;
+            }
+
+            IndexHigh.clear();
+            IndexHigh.reserve(linearIndex.size());
+            IndexLow.clear();
+            IndexLow.reserve(linearIndex.size());
+
+            const TRec* rec = linearIndex.begin();
+
+            auto blobId = rec->GetKey().LogoBlobID();
+            TLogoBlobIdHigh high(blobId);
+            TLogoBlobIdLow low(blobId);
+            TLogoBlobIdHigh highPrev = high;
+
+            IndexHigh.emplace_back(high);
+            IndexLow.emplace_back(low, rec->GetMemRec());
+            ++rec;
+
+            for (; rec != linearIndex.end(); ++rec) {
+                auto blobId = rec->GetKey().LogoBlobID();
+                TLogoBlobIdHigh high(blobId);
+                TLogoBlobIdLow low(blobId);
+
+                if (Y_UNLIKELY(high != highPrev)) {
+                    IndexHigh.back().SetLowRangeEndIndex(IndexLow.size());
+                    IndexHigh.emplace_back(high);
+                    highPrev = high;
+                }
+
+                IndexLow.emplace_back(low, rec->GetMemRec());
+            }
+
+            IndexHigh.back().SetLowRangeEndIndex(IndexLow.size());
+            IndexHigh.shrink_to_fit();
+        }
+
+        void SaveLinearIndex(TTrackableVector<TRec>* linearIndex) const {
+            if (IndexLow.empty()) {
+                return;
+            }
+
+            linearIndex->clear();
+            linearIndex->reserve(IndexLow.size());
+
+            const TRecHigh* high = IndexHigh.begin();
+            const TRecLow* low = IndexLow.begin();
+            const TRecLow* lowRangeEnd = low + high->GetLowRangeEndIndex();
+
+            while (low != IndexLow.end()) {
+                auto highKey = high->GetKey();
+                auto lowKey = low->GetKey();
+                TLogoBlobID blobId(highKey.Raw.X[0], highKey.Raw.X[1], lowKey.Raw.X);
+                linearIndex->emplace_back(TKeyLogoBlob(blobId), low->GetMemRec());
+
+                ++low;
+                if (Y_UNLIKELY(low == lowRangeEnd)) {
+                    ++high;
+                    if (high != IndexHigh.end()) {
+                        lowRangeEnd = IndexLow.begin() + high->GetLowRangeEndIndex();
+                    }
+                }
+            }
+        }
+    };
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TLevelSegment
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec>
-    struct TLevelSegment : public TThrRefBase {
+    struct TLevelSegment : public TRecIndex<TKey, TMemRec> {
         typedef TLevelSegment<TKey, TMemRec> TThis;
         using TKeyType = TKey;
         using TMemRecType = TMemRec;
@@ -40,7 +294,7 @@ namespace NKikimr {
             }
 
             TString ToString() const {
-                return Sprintf("[%u %p %s]", Level, SstPtr.Get(), SstPtr->FirstKey().ToString().data());
+                return Sprintf("[%u %u (%s-%s)]", Level, SstPtr->GetFirstLsn(), SstPtr->FirstKey().ToString().data(), SstPtr->LastKey().ToString().data());
             }
 
         private:
@@ -56,37 +310,11 @@ namespace NKikimr {
             }
         };
 
-        // records stored in the index
-#pragma pack(push, 4)
-        struct TRec {
-            TKey Key;
-            TMemRec MemRec;
-
-            TRec() = default;
-
-            TRec(const TKey &key)
-                : Key(key)
-                , MemRec()
-            {}
-
-            TRec(const TKey &key, const TMemRec &memRec)
-                : Key(key)
-                , MemRec(memRec)
-            {}
-
-            struct TLess {
-                bool operator () (const TRec &x, const TKey &key) const {
-                    return x.Key < key;
-                }
-            };
-        };
-#pragma pack(pop)
-
         TDiskPart LastPartAddr; // tail of reverted list of parts (on disk)
-        TTrackableVector<TRec> LoadedIndex;    // the whole index loaded into memory
         TTrackableVector<TDiskPart> LoadedOutbound;
         TIdxDiskPlaceHolder::TInfo Info;
         TVector<ui32> AllChunks;    // all chunk ids that store index and data for this segment
+        TDiskPart HeapStripe; // non-empty if this SST lives in the stripe heap
         std::vector<TDiskPart> IndexParts; // index part locations; the first one is 'placeholder', stored as LastPartAddr
         NHullComp::TSstRatioThreadSafeHolder StorageRatio;
         // Every Sst has unique id
@@ -95,8 +323,8 @@ namespace NKikimr {
         ui64 VolatileOrderId = 0;
 
         TLevelSegment(TVDiskContextPtr vctx)
-            : LastPartAddr()
-            , LoadedIndex(TMemoryConsumer(vctx->SstIndex))
+            : TRecIndex<TKey, TMemRec>(vctx)
+            , LastPartAddr()
             , LoadedOutbound(TMemoryConsumer(vctx->SstIndex))
             , Info()
             , AllChunks()
@@ -104,8 +332,8 @@ namespace NKikimr {
         {}
 
         TLevelSegment(TVDiskContextPtr vctx, const TDiskPart &addr)
-            : LastPartAddr(addr)
-            , LoadedIndex(TMemoryConsumer(vctx->SstIndex))
+            : TRecIndex<TKey, TMemRec>(vctx)
+            , LastPartAddr(addr)
             , LoadedOutbound(TMemoryConsumer(vctx->SstIndex))
             , Info()
             , AllChunks()
@@ -115,20 +343,25 @@ namespace NKikimr {
         }
 
         TLevelSegment(TVDiskContextPtr vctx, const NKikimrVDiskData::TDiskPart &pb)
-            : LastPartAddr(pb)
-            , LoadedIndex(TMemoryConsumer(vctx->SstIndex))
+            : TRecIndex<TKey, TMemRec>(vctx)
+            , LastPartAddr(pb)
             , LoadedOutbound(TMemoryConsumer(vctx->SstIndex))
             , Info()
             , AllChunks()
             , StorageRatio()
-        {}
+        {
+            // HeapStripe is not stored: it is derived from chunk ownership by ResolveHeapStripe() once the huge
+            // keeper has been recovered
+        }
+
+        // A stripe-backed SST is written as a single index part filling its whole stripe, so the stripe extent is
+        // just the SST address. Ownership of the chunk is what tells the two kinds of SST apart.
+        void ResolveHeapStripe(const THashSet<TChunkIdx>& stripeChunks) {
+            HeapStripe = stripeChunks.contains(LastPartAddr.ChunkIdx) ? LastPartAddr : TDiskPart();
+        }
 
         const TDiskPart &GetEntryPoint() const {
             return LastPartAddr;
-        }
-
-        bool IsLoaded() const {
-            return !LoadedIndex.empty();
         }
 
         void SetAddr(const TDiskPart &addr) {
@@ -151,19 +384,15 @@ namespace NKikimr {
             LastPartAddr.SerializeToProto(pb);
         }
 
-        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
-            // here we handle SST itself (index part) + any referenced data chunks
-            for (TChunkIdx chunkIdx : AllChunks) {
-                const bool inserted = chunks.insert(chunkIdx).second;
-                Y_ABORT_UNLESS(inserted);
-            }
-
-            // iterate through referenced huge blobs and add their chunks to map
+        // Every huge blob this SST references. Chunk ownership and stripe extents are both derived from this one
+        // traversal, so the set of chunks the hull claims can never disagree with the extents it keeps alive.
+        template<typename TCallback>
+        void ForEachHugeBlob(TCallback&& callback) const {
             TDiskDataExtractor extr;
             TMemIterator it(this);
             it.SeekToFirst();
             while (it.Valid()) {
-                const TMemRec& memRec = it->MemRec;
+                const TMemRec& memRec = it.GetMemRec();
                 switch (memRec.GetType()) {
                     case TBlobType::HugeBlob:
                     case TBlobType::ManyHugeBlobs:
@@ -171,7 +400,7 @@ namespace NKikimr {
                         for (const TDiskPart *part = extr.Begin; part != extr.End; ++part) {
                             if (part->Size) {
                                 Y_ABORT_UNLESS(part->ChunkIdx);
-                                chunks.insert(part->ChunkIdx);
+                                callback(*part);
                             }
                         }
                         extr.Clear();
@@ -185,19 +414,43 @@ namespace NKikimr {
             }
         }
 
+        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
+            // here we handle SST itself (index part) + any referenced data chunks
+            for (TChunkIdx chunkIdx : AllChunks) {
+                const bool inserted = chunks.insert(chunkIdx).second;
+                // Heap-backed SSTs share the chunk with the stripe heap.
+                Y_ABORT_UNLESS(inserted || !HeapStripe.Empty());
+            }
+
+            ForEachHugeBlob([&chunks](const TDiskPart& part) { chunks.insert(part.ChunkIdx); });
+        }
+
+        // Every extent of this SST that lives in the stripe heap: the huge blobs it points at, plus the stripe the
+        // SST itself occupies. Must run after ResolveHeapStripe, which is what fills HeapStripe in.
+        template<typename TCallback>
+        void ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks, TCallback&& callback) const {
+            if (!HeapStripe.Empty()) {
+                callback(HeapStripe);
+            }
+            ForEachHugeBlob([&](const TDiskPart& part) {
+                if (stripeChunks.contains(part.ChunkIdx)) {
+                    callback(part);
+                }
+            });
+        }
+
         class TMemIterator;
 
         ui64 GetFirstLsn() const { return Info.FirstLsn; }
         ui64 GetLastLsn() const { return Info.LastLsn; }
-        const TKey &FirstKey() const;
-        const TKey &LastKey() const;
-        // number of elements in the sst
-        ui64 Elements() const {
-            Y_DEBUG_ABORT_UNLESS(IsLoaded());
-            return LoadedIndex.size();
-        }
+        TKey FirstKey() const;
+        TKey LastKey() const;
+
         // append cur seg chunk ids (index and data) to the vector
         void FillInChunkIds(TVector<ui32> &vec) const {
+            if (!HeapStripe.Empty()) {
+                return;
+            }
             // copy chunks ids
             for (auto idx : AllChunks)
                 vec.push_back(idx);
@@ -218,9 +471,7 @@ namespace NKikimr {
         class TWriter;
     };
 
-    extern template struct TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
     extern template struct TLevelSegment<TKeyBarrier, TMemRecBarrier>;
     extern template struct TLevelSegment<TKeyBlock, TMemRecBlock>;
 
 } // NKikimr
-

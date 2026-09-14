@@ -3,6 +3,7 @@ package NYT.NChaosClient.NProto;
 option go_package = "a.yandex-team.ru/yt/go/proto/client/chaos_client";
 
 import "yt_proto/yt/core/misc/proto/guid.proto";
+import "yt_proto/yt/client/tablet_client/proto/secondary_index.proto";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -54,6 +55,7 @@ message TReplicationCard
     optional uint64 current_timestamp = 7;
     optional bytes replicated_table_options = 8; // NTabletClient::TReplicatedTableOptions
     optional NYT.NProto.TGuid replication_card_collocation_id = 9;
+    repeated NYT.NTabletClient.NProto.TIndexInfo secondary_indices = 10;
 }
 
 message TUpstreamReplicationCard

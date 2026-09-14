@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <yt/yt/core/dns/dns_resolver.h>
+
 #include <yt/yt/core/net/config.h>
 
 namespace NYT::NHttp {
@@ -52,11 +54,20 @@ void TServerConfig::Register(TRegistrar registrar)
     registrar.Parameter("enable_keep_alive", &TThis::EnableKeepAlive)
         .Default(true);
 
+    registrar.Parameter("max_connection_age", &TThis::MaxConnectionAge)
+        .Default();
+
     registrar.Parameter("cancel_fiber_on_connection_close", &TThis::CancelFiberOnConnectionClose)
         .Default();
 
     registrar.Parameter("nodelay", &TThis::NoDelay)
         .Default(true);
+
+    registrar.Parameter("server_name", &TThis::ServerName)
+        .Default("Http");
+
+    registrar.Parameter("enable_per_path_request_profiling", &TThis::EnablePerPathRequestProfiling)
+        .Default(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -66,10 +77,12 @@ void TClientConfig::Register(TRegistrar registrar)
     registrar.Parameter("max_idle_connections", &TThis::MaxIdleConnections)
         .Default(0)
         .GreaterThanOrEqual(0);
-    registrar.Parameter("dialer", &TThis::Dialer)
-        .DefaultNew();
+    registrar.Parameter("dns_resolve_options", &TThis::DnsResolveOptions)
+        .Default();
     registrar.Parameter("omit_question_mark_for_empty_query", &TThis::OmitQuestionMarkForEmptyQuery)
         .Default(false);
+    registrar.Parameter("dialer", &TThis::Dialer)
+        .DefaultNew();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

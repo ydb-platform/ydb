@@ -45,7 +45,7 @@ public:
             Coordinator1,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            YqSharedResources,
+            YqSharedResources->UserSpaceYdbDriver,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
@@ -55,7 +55,7 @@ public:
             Coordinator2,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            YqSharedResources,
+            YqSharedResources->UserSpaceYdbDriver,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
@@ -65,7 +65,7 @@ public:
             Coordinator3,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            YqSharedResources,
+            YqSharedResources->UserSpaceYdbDriver,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
@@ -112,7 +112,6 @@ Y_UNIT_TEST_SUITE(LeaderElectionTests) {
         UNIT_ASSERT(coordinatorId2 == coordinatorId3);
 
         NActors::TActorId currentLeader;
-        NActors::TActorId notActive;
         if (coordinatorId1 == Coordinator1) {
             currentLeader = LeaderElection1;
         } else if (coordinatorId1 == Coordinator2) {

@@ -5,12 +5,14 @@ OpenType subtables.
 Most are constructed upon import from data in otData.py, all are populated with
 converter objects from otConverters.py.
 """
+
 import copy
 from enum import IntEnum
 from functools import reduce
 from math import radians
 import itertools
 from collections import defaultdict, namedtuple
+from fontTools.ttLib import OPTIMIZE_FONT_SPEED
 from fontTools.ttLib.tables.TupleVariation import TupleVariation
 from fontTools.ttLib.tables.otTraverse import dfs_base_table
 from fontTools.misc.arrayTools import quantizeRect
@@ -236,6 +238,8 @@ class VarComponent:
         return data[i:]
 
     def compile(self, font):
+        optimizeSpeed = font.cfg[OPTIMIZE_FONT_SPEED]
+
         data = []
 
         flags = self.flags
@@ -259,7 +263,8 @@ class VarComponent:
             data.append(_write_uint32var(self.axisIndicesIndex))
             data.append(
                 TupleVariation.compileDeltaValues_(
-                    [fl2fi(v, 14) for v in self.axisValues]
+                    [fl2fi(v, 14) for v in self.axisValues],
+                    optimizeSize=not optimizeSpeed,
                 )
             )
         else:
@@ -986,8 +991,7 @@ class Coverage(FormatSwitchingBaseTable):
             if brokenOrder or len(ranges) * 3 < len(glyphs):  # 3 words vs. 1 word
                 # Format 2 is more compact
                 index = 0
-                for i in range(len(ranges)):
-                    start, end = ranges[i]
+                for i, (start, end) in enumerate(ranges):
                     r = RangeRecord()
                     r.StartID = start
                     r.Start = font.getGlyphName(start)
@@ -1400,8 +1404,7 @@ class ClassDef(FormatSwitchingBaseTable):
             glyphCount = endGlyph - startGlyph + 1
             if len(ranges) * 3 < glyphCount + 1:
                 # Format 2 is more compact
-                for i in range(len(ranges)):
-                    cls, start, startName, end, endName = ranges[i]
+                for i, (cls, start, startName, end, endName) in enumerate(ranges):
                     rec = ClassRangeRecord()
                     rec.Start = startName
                     rec.End = endName
@@ -1459,8 +1462,7 @@ class AlternateSubst(FormatSwitchingBaseTable):
         if alternates is None:
             alternates = self.alternates = {}
         items = list(alternates.items())
-        for i in range(len(items)):
-            glyphName, set = items[i]
+        for i, (glyphName, set) in enumerate(items):
             items[i] = font.getGlyphID(glyphName), glyphName, set
         items.sort()
         cov = Coverage()
@@ -1516,8 +1518,8 @@ class LigatureSubst(FormatSwitchingBaseTable):
             input = _getGlyphsFromCoverageTable(rawTable["Coverage"])
             ligSets = rawTable["LigatureSet"]
             assert len(input) == len(ligSets)
-            for i in range(len(input)):
-                ligatures[input[i]] = ligSets[i].Ligature
+            for i, inp in enumerate(input):
+                ligatures[inp] = ligSets[i].Ligature
         else:
             assert 0, "unknown format: %s" % self.Format
         self.ligatures = ligatures
@@ -1573,8 +1575,7 @@ class LigatureSubst(FormatSwitchingBaseTable):
             ligatures = newLigatures
 
         items = list(ligatures.items())
-        for i in range(len(items)):
-            glyphName, set = items[i]
+        for i, (glyphName, set) in enumerate(items):
             items[i] = font.getGlyphID(glyphName), glyphName, set
         items.sort()
         cov = Coverage()
@@ -2139,6 +2140,7 @@ class Paint(getFormatSwitchingBaseTableClass("uint8")):
 # subclass for each alternate field name.
 #
 _equivalents = {
+    "PatchMap": ("IFT ", "IFTX"),
     "MarkArray": ("Mark1Array",),
     "LangSys": ("DefaultLangSys",),
     "Coverage": (
@@ -2226,24 +2228,28 @@ _equivalents = {
 def fixLookupOverFlows(ttf, overflowRecord):
     """Either the offset from the LookupList to a lookup overflowed, or
     an offset from a lookup to a subtable overflowed.
-    The table layout is:
-    GPSO/GUSB
-            Script List
-            Feature List
-            LookUpList
-                    Lookup[0] and contents
-                            SubTable offset list
-                                    SubTable[0] and contents
-                                    ...
-                                    SubTable[n] and contents
-                    ...
-                    Lookup[n] and contents
-                            SubTable offset list
-                                    SubTable[0] and contents
-                                    ...
-                                    SubTable[n] and contents
+
+    The table layout is::
+
+      GPSO/GUSB
+              Script List
+              Feature List
+              LookUpList
+                      Lookup[0] and contents
+                              SubTable offset list
+                                      SubTable[0] and contents
+                                      ...
+                                      SubTable[n] and contents
+                      ...
+                      Lookup[n] and contents
+                              SubTable offset list
+                                      SubTable[0] and contents
+                                      ...
+                                      SubTable[n] and contents
+
     If the offset to a lookup overflowed (SubTableIndex is None)
-            we must promote the *previous*	lookup to an Extension type.
+            we must promote the *previous* lookup to an Extension type.
+
     If the offset from a lookup to subtable overflowed, then we must promote it
             to an Extension Lookup type.
     """
@@ -2271,8 +2277,7 @@ def fixLookupOverFlows(ttf, overflowRecord):
         lookup = lookups[lookupIndex]
         if lookup.LookupType != extType:
             lookup.LookupType = extType
-            for si in range(len(lookup.SubTable)):
-                subTable = lookup.SubTable[si]
+            for si, subTable in enumerate(lookup.SubTable):
                 extSubTableClass = lookupTypes[overflowRecord.tableType][extType]
                 extSubTable = extSubTableClass()
                 extSubTable.Format = 1
@@ -2578,6 +2583,34 @@ def fixSubTableOverFlows(ttf, overflowRecord):
 # End of OverFlow logic
 
 
+# ---------------------------------------------------------------------------
+# IFT - Incremental Font Transfer tables
+# ---------------------------------------------------------------------------
+
+
+class EntryIdStringData(BaseTable):
+    """IFT entry ID string data block (raw bytes pool)."""
+
+    def decompile(self, reader, font):
+        # This subtable is reached via an LOffset, so the reader's data buffer
+        # is already scoped to the bytes starting at the subtable's offset within
+        # the IFT table blob.  Reading to the end of that buffer is correct; the
+        # actual bytes consumed are determined by the entryIdStringLength fields
+        # in the MappingEntries records.
+        self.data = bytes(reader.data[reader.pos :])
+
+    def compile(self, writer, font):
+        writer.writeData(self.data)
+
+    def toXML2(self, xmlWriter, font):
+        xmlWriter.simpletag("data", value=self.data.hex())
+        xmlWriter.newline()
+
+    def fromXML(self, name, attrs, content, font):
+        if name == "data":
+            self.data = bytes.fromhex(attrs["value"])
+
+
 def _buildClasses():
     import re
     from .otData import otData
@@ -2586,7 +2619,7 @@ def _buildClasses():
     namespace = globals()
 
     # populate module with classes
-    for name, table in otData:
+    for name, fields in otData:
         baseClass = BaseTable
         m = formatPat.match(name)
         if m:
@@ -2595,7 +2628,7 @@ def _buildClasses():
             # the first row of a format-switching otData table describes the Format;
             # the first column defines the type of the Format field.
             # Currently this can be either 'uint16' or 'uint8'.
-            formatType = table[0][0]
+            formatType = fields[0].type
             baseClass = getFormatSwitchingBaseTableClass(formatType)
         if name not in namespace:
             # the class doesn't exist yet, so the base implementation is used.
@@ -2669,7 +2702,7 @@ def _buildClasses():
     # add converters to classes
     from .otConverters import buildConverters
 
-    for name, table in otData:
+    for name, fields in otData:
         m = formatPat.match(name)
         if m:
             # XxxFormatN subtable, add converter to "base" table
@@ -2679,13 +2712,13 @@ def _buildClasses():
             if not hasattr(cls, "converters"):
                 cls.converters = {}
                 cls.convertersByName = {}
-            converters, convertersByName = buildConverters(table[1:], namespace)
+            converters, convertersByName = buildConverters(fields[1:], namespace)
             cls.converters[format] = converters
             cls.convertersByName[format] = convertersByName
             # XXX Add staticSize?
         else:
             cls = namespace[name]
-            cls.converters, cls.convertersByName = buildConverters(table, namespace)
+            cls.converters, cls.convertersByName = buildConverters(fields, namespace)
             # XXX Add staticSize?
 
 

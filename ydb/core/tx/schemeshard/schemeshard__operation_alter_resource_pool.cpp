@@ -1,5 +1,5 @@
-#include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_common_resource_pool.h"
 #include "schemeshard_impl.h"
 
 
@@ -82,17 +82,14 @@ class TAlterResourcePool : public TSubOperation {
         }
     }
 
-    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath, const TString& acl) {
+    static bool IsDestinationPathValid(const THolder<TProposeResponse>& result, const TPath& dstPath) {
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
+            .NotUnderOperation()
             .FailOnWrongType(TPathElement::EPathType::EPathTypeResourcePool)
-            .IsValidLeafName()
-            .DepthLimit()
-            .PathsLimit()
-            .DirChildrenLimit()
-            .IsValidACL(acl);
+            ;
 
         if (!checks) {
             result->SetError(checks.GetStatus(), checks.GetError());
@@ -140,8 +137,7 @@ public:
         RETURN_RESULT_UNLESS(NResourcePool::IsParentPathValid(result, parentPath));
 
         const TPath& dstPath = parentPath.Child(name);
-        const TString& acl = Transaction.GetModifyACL().GetDiffACL();
-        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath, acl));
+        RETURN_RESULT_UNLESS(IsDestinationPathValid(result, dstPath));
         RETURN_RESULT_UNLESS(NResourcePool::IsApplyIfChecksPassed(Transaction, result, context));
         RETURN_RESULT_UNLESS(NResourcePool::IsDescriptionValid(result, resourcePoolDescription));
 
@@ -153,12 +149,27 @@ public:
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
         const TPathElement::TPtr resourcePool = ReplaceResourcePoolPathElement(dstPath);
-        NResourcePool::CreateTransaction(OperationId, context, resourcePool->PathId, TTxState::TxAlterResourcePool);
-        NResourcePool::RegisterParentPathDependencies(OperationId, context, parentPath);
 
-        NIceDb::TNiceDb db(context.GetDB());
-        NResourcePool::AdvanceTransactionStateToPropose(OperationId, context, db);
-        NResourcePool::PersistResourcePool(OperationId, context, db, resourcePool, resourcePoolInfo, acl);
+        auto guard = context.DbGuard();
+
+        context.MemChanges.GrabPath(context.SS, resourcePool->PathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabResourcePool(context.SS, resourcePool->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(resourcePool->PathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistResourcePool(resourcePool->PathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        context.SS->ResourcePools.Set(resourcePool->PathId, resourcePoolInfo);
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterResourcePool, resourcePool->PathId);
+        txState.Shards.clear();
+        txState.State = TTxState::Propose;
+        context.OnComplete.ActivateTx(OperationId);
+
+        RegisterParentPathDependencies(OperationId, context, parentPath);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
@@ -168,7 +179,6 @@ public:
 
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TAlterResourcePool AbortPropose: opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TAlterResourcePool");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

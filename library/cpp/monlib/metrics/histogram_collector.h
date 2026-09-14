@@ -41,6 +41,11 @@ namespace NMonitoring {
          * @return snapshot of the state of this collector.
          */
         virtual IHistogramSnapshotPtr Snapshot() const = 0;
+
+        /**
+        * @return copy of collector implementation
+        */
+        virtual THolder<IHistogramCollector> Clone() = 0;
     };
 
     using IHistogramCollectorPtr = THolder<IHistogramCollector>;
@@ -87,7 +92,7 @@ namespace NMonitoring {
      *
      * @param bucketsCount the total number of buckets. The value must be >= 2.
      * @param base         the exponential growth factor for the buckets width.
-     *                     The value must be >= 1.0.
+     *                     The value must be > 1.0.
      * @param scale        the linear scale for the buckets. The value must be >= 1.0.
      */
     IHistogramCollectorPtr ExponentialHistogram(

@@ -4,6 +4,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_update_op.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -108,7 +109,7 @@ public:
 
     void Init(const TScheme& scheme) override {
         Y_UNUSED(scheme);
-        Y_ABORT_UNLESS("Not supported by flat db wrapper");
+        Y_ENSURE(false, "Not supported by flat db wrapper");
     }
 
     const TScheme& GetScheme() const override {
@@ -117,7 +118,7 @@ public:
 
     TString FinishTransaction(bool commit) override {
         Y_UNUSED(commit);
-        Y_ABORT_UNLESS("Not supported by flat db wrapper");
+        Y_ENSURE(false, "Not supported by flat db wrapper");
         return "42";
     }
 
@@ -129,7 +130,7 @@ public:
     void Precharge(ui32 root,
                            TRawVals keyFrom, TRawVals keyTo,
                            TTagsRef tags, ui32 flags) override {
-        bool res = Db->Precharge(root, keyFrom, keyTo, tags, flags, -1, -1);
+        bool res = Db->Precharge(root, keyFrom, keyTo, tags, flags, -1, -1).Ready;
         if (!res)
             throw TIteratorNotReady();
     }
@@ -344,9 +345,9 @@ private:
         const auto num = one.ColumnCount;
 
         if (num != two.ColumnCount) {
-            Y_ABORT("Got different key columns count");
+            Y_TABLET_ERROR("Got different key columns count");
         } else if (!std::equal(one.Types, one.Types + num, two.Types)) {
-            Y_ABORT("TDbTupleRef rows types vec are not the same");
+            Y_TABLET_ERROR("TDbTupleRef rows types vec are not the same");
         } else {
             return CompareTypedCellVectors(one.Columns, two.Columns, one.Types, num);
         }

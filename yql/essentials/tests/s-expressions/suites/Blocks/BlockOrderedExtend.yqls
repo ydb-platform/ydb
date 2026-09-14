@@ -1,0 +1,20 @@
+(
+# The test is based on sql/suites/blocks/extend.sql canonization.
+# XXX: Explicitly enable PeepHoleBlock and PeepHoleFinalBlock steps.
+(let world (Configure! world (DataSource 'config) 'BlockEngine 'force))
+(let wconf (DataSink 'result))
+
+(let x1 (AsStruct '('"x" (Int32 '"1"))))
+(let x2 (AsStruct '('"x" (Int32 '"2"))))
+(let x3 (AsStruct '('"x" (Int32 '"3"))))
+(let x4 (AsStruct '('"x" (Int32 '"4"))))
+
+(let t1 (TableSource (AsList x1 x3 x2)))
+(let t2 (TableSource (AsList x4 x1)))
+
+(let union (OrderedExtend t1 t2))
+
+(let world (Write! world wconf (Key) union '('('type))))
+(let world (Commit! world wconf))
+(return world)
+)

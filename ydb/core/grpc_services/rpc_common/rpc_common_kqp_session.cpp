@@ -12,9 +12,11 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_PROXY
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -29,8 +31,11 @@ using TEvCreateSessionTableRequest = TGrpcRequestOperationCall<Ydb::Table::Creat
 using TEvDeleteSessionTableRequest = TGrpcRequestOperationCall<Ydb::Table::DeleteSessionRequest,
     Ydb::Table::DeleteSessionResponse>;
 
-using TEvDeleteSessionQueryRequest = TGrpcRequestOperationCall<Ydb::Query::DeleteSessionRequest,
+using TEvDeleteSessionQueryRequest = TGrpcRequestNoOperationCall<Ydb::Query::DeleteSessionRequest,
     Ydb::Query::DeleteSessionResponse>;
+
+using TEvCreateSessionQueryRequest = TGrpcRequestNoOperationCall<Ydb::Query::CreateSessionRequest,
+    Ydb::Query::CreateSessionResponse>;
 
 class TCreateSessionRPC : public TActorBootstrapped<TCreateSessionRPC> {
 public:
@@ -46,8 +51,9 @@ public:
         const auto& deadline = Request->GetDeadline();
 
         if (deadline <= now) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
-                SelfId() << " Request deadline has expired for " << now - deadline << " seconds");
+            YDB_LOG_WARN("Request deadline has expired",
+                {"selfId", SelfId()},
+                {"expiredTimeSeconds", now - deadline});
 
             Reply(Ydb::StatusIds::TIMEOUT);
             return;
@@ -111,8 +117,10 @@ private:
         auto actorId = NRpcService::DoLocalRpcSameMailbox<TEvDeleteSessionRequest>(
             std::move(request), std::move(cb), database, Request->GetSerializedToken(), ctx);
 
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
-            SelfId() << " Client lost, session " << sessionId << " will be closed by " << actorId);
+        YDB_LOG_NOTICE("Client lost, session will be closed by actor",
+            {"selfId", SelfId()},
+            {"sessionId", sessionId},
+            {"actorId", actorId});
     }
 
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
@@ -288,6 +296,11 @@ IActor* TEvCreateSessionTableRequest::CreateRpcActor(NKikimr::NGRpcService::IReq
     return TCreateSessionTableService::New(msg);
 }
 
+template<>
+IActor* TEvCreateSessionQueryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return TCreateSessionQueryService::New(msg);
+}
+
 void DoDeleteSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& provider) {
     provider.RegisterActor(TDeleteSessionTableService::New(p.release()));
 }
@@ -295,6 +308,11 @@ void DoDeleteSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityPro
 template<>
 IActor* TEvDeleteSessionTableRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return TDeleteSessionTableService::New(msg);
+}
+
+template<>
+IActor* TEvDeleteSessionQueryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return TDeleteSessionQueryService::New(msg);
 }
 
 namespace NQuery {

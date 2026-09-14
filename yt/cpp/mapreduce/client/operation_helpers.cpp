@@ -1,10 +1,11 @@
 #include "operation_helpers.h"
 
+#include "client.h"
+
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 
 #include <yt/cpp/mapreduce/http/context.h>
-#include <yt/cpp/mapreduce/http/requests.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
 
 #include <yt/cpp/mapreduce/interface/config.h>
 #include <yt/cpp/mapreduce/interface/raw_client.h>
@@ -12,6 +13,7 @@
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <util/string/builder.h>
+#include <util/string/subst.h>
 
 #include <util/system/mutex.h>
 #include <util/system/rwlock.h>
@@ -58,8 +60,7 @@ bool UseLocalModeOptimization(
                 localModeAttr,
                 TExistsOptions().ReadFrom(EMasterReadKind::Cache));
         });
-    if (exists)
-    {
+    if (exists) {
         auto fqdnNode = RequestWithRetry<TNode>(
             clientRetryPolicy->CreatePolicyForGenericRequest(),
             [&rawClient, &localModeAttr] (TMutationId /*mutationId*/) {
@@ -69,8 +70,8 @@ bool UseLocalModeOptimization(
                     TGetOptions().ReadFrom(EMasterReadKind::Cache));
             });
         if (!fqdnNode.IsUndefined()) {
-            auto fqdn = fqdnNode.AsString();
-            isLocalMode = (fqdn == TProcessState::Get()->FqdnHostName);
+            auto fqdn = to_lower(fqdnNode.AsString());
+            isLocalMode = (fqdn == to_lower(TProcessState::Get()->FqdnHostName));
             YT_LOG_DEBUG("Checking local mode; LocalModeFqdn: %v FqdnHostName: %v IsLocalMode: %v",
                 fqdn,
                 TProcessState::Get()->FqdnHostName,
@@ -86,13 +87,17 @@ bool UseLocalModeOptimization(
     return isLocalMode;
 }
 
-TString GetOperationWebInterfaceUrl(TStringBuf serverName, TOperationId operationId)
+TString GetOperationWebInterfaceUrl(TStringBuf serverName, TOperationId operationId, const TClientPtr& client)
 {
     serverName.ChopSuffix(":80");
     serverName.ChopSuffix(".yt.yandex-team.ru");
     serverName.ChopSuffix(".yt.yandex.net");
-    return ::TStringBuilder() << "https://yt.yandex-team.ru/" << serverName <<
-        "/operations/" << GetGuidAsString(operationId);
+    TString operationLinkPattern = client->GetContext().Config->OperationLinkPattern.Get(client);
+    SubstGlobal(operationLinkPattern, "{operation_id}", GetGuidAsString(operationId));
+    SubstGlobal(operationLinkPattern, "{id}", GetGuidAsString(operationId));
+    SubstGlobal(operationLinkPattern, "{cluster_ui_host}", serverName);
+    SubstGlobal(operationLinkPattern, "{proxy}", serverName);
+    return ::TStringBuilder() << operationLinkPattern;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

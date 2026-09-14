@@ -1,4 +1,3 @@
-/* syntax version 1 */
 SELECT
     -128t AS i8_min
 ;

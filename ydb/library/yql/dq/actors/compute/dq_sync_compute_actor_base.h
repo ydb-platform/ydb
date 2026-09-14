@@ -3,11 +3,12 @@
 #include "dq_compute_actor_impl.h"
 #include "dq_compute_actor_async_input_helper.h"
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
+#include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 
 namespace NYql::NDq {
 
 template<typename TDerived>
-class TDqSyncComputeActorBase: public TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync> {
+class TDqSyncComputeActorBase: public TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>, public IDqInputChannelCallbacks {
     using TBase = TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>;
 public:
     using TDqComputeActorBase<TDerived, TComputeActorAsyncInputHelperSync>::TDqComputeActorBase;
@@ -15,10 +16,11 @@ public:
 
     TComputeActorAsyncInputHelperSync CreateInputHelper(const TString& logPrefix,
         ui64 index,
-        NDqProto::EWatermarksMode watermarksMode
+        NDqProto::EWatermarksMode watermarksMode,
+        TDuration watermarksIdleTimeout
     )
     {
-        return TComputeActorAsyncInputHelperSync(logPrefix, index, watermarksMode);
+        return TComputeActorAsyncInputHelperSync(logPrefix, index, watermarksMode, watermarksIdleTimeout);
     }
 
     const IDqAsyncInputBuffer* GetInputTransform(ui64, const TComputeActorAsyncInputHelperSync& inputTransformInfo) const
@@ -30,7 +32,7 @@ protected:
     void DoExecuteImpl() override{
         auto sourcesState = static_cast<TDerived*>(this)->GetSourcesState();
 
-        TBase::PollAsyncInput();
+        auto lastPollResult = TBase::PollAsyncInput();
         ERunStatus status = TaskRunner->Run();
 
         CA_LOG_T("Resume execution, run status: " << status);
@@ -39,15 +41,38 @@ protected:
              static_cast<TDerived*>(this)->PollSources(std::move(sourcesState));
         }
 
-        if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && this->Checkpoints && this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
-            this->Checkpoints->DoCheckpoint();
+        if ((status == ERunStatus::PendingInput || status == ERunStatus::Finished) && this->Checkpoints) {
+            DrainCheckpointsFromInputChannelsAfterFinish(); // Drain checkpoints from finished channels
+
+            if (this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
+                this->Checkpoints->DoCheckpoint();
+            }
         }
 
         TBase::ProcessOutputsImpl(status);
+
+        if (lastPollResult && (*lastPollResult != EResumeSource::CAPollAsyncNoSpace || status == ERunStatus::PendingInput)) {
+            // If only reason for continuing was lack on space on all sources,
+            // only continue execution when input was consumed;
+            // otherwise this may result in busy-poll
+            TBase::ContinueExecute(*lastPollResult);
+        }
     }
 
     void DoTerminateImpl() override {
+        // we want to log debug output info only for long running (OLAP) tasks
+        if (TaskRunner && TBase::State == NDqProto::COMPUTE_STATE_FAILURE && TBase::RuntimeSettings.CollectFull()) {
+            auto& stats = *TaskRunner->GetStats();
+            if (stats.StartTs && TInstant::Now() - stats.StartTs > TDuration::Seconds(60)) {
+                auto taskRunnerDebugString = TaskRunner->GetOutputDebugString();
+                if (taskRunnerDebugString) {
+                    CA_LOG_E("TaskRunner->Output Debug String: " << taskRunnerDebugString);
+                }
+            }
+        }
+
         TaskRunner.Reset();
+        TBase::DoTerminateImpl();
     }
 
     void InvalidateMeminfo() override {
@@ -57,16 +82,29 @@ protected:
         }
     }
 
-    bool DoHandleChannelsAfterFinishImpl() override final{ 
+    bool DoHandleChannelsAfterFinishImpl() override final {
         Y_ABORT_UNLESS(this->Checkpoints);
+
+        // Read checkpoint from input channels
+        DrainCheckpointsFromInputChannelsAfterFinish();
 
         if (this->Checkpoints->HasPendingCheckpoint() && !this->Checkpoints->ComputeActorStateSaved() && ReadyToCheckpoint()) {
             this->Checkpoints->DoCheckpoint();
         }
 
         // Send checkpoints to output channels.
+        CA_LOG_D("Drain outputs after finish");
         TBase::ProcessOutputsImpl(ERunStatus::Finished);
         return true;  // returns true, when channels were handled synchronously
+    }
+
+    void ExtraMonitoringInfo(TStringStream& str, const TCgiParameters&) override {
+        if (TaskRunner) {
+            str << Endl << "TaskRunner" << Endl
+                << "  LastFetchTime: " << TaskRunner->LastFetchTime << Endl
+                << "  LastFetchStatus: " << TaskRunner->LastFetchStatus << Endl
+                << "  OutputDebugString: " << TaskRunner->GetOutputDebugString() << Endl;
+        }
     }
 
 protected: //TDqComputeActorChannels::ICalbacks
@@ -77,34 +115,50 @@ protected: //TDqComputeActorChannels::ICalbacks
         return inputChannel->Channel->GetFreeSpace();
     }
 
+    // Called only on v1 DQ channels
     void TakeInputChannelData(TChannelDataOOB&& channelData, bool ack) override final {
-        auto* inputChannel = this->InputChannelsMap.FindPtr(channelData.Proto.GetChannelId());
-        YQL_ENSURE(inputChannel, "task: " << this->Task.GetId() << ", unknown input channelId: " << channelData.Proto.GetChannelId());
+        const auto channelId = channelData.Proto.GetChannelId();
+        typename TBase::TInputChannelInfo* const inputChannel = this->InputChannelsMap.FindPtr(channelId);
+        YQL_ENSURE(inputChannel, "task: " << this->Task.GetId() << ", unknown input channelId: " << channelId);
 
-        auto channel = inputChannel->Channel;
+        const auto channel = inputChannel->Channel;
 
-        if (channelData.RowCount()) {
+        if (const auto chunkCount = channelData.ChunkCount()) {
             TDqSerializedBatch batch;
             batch.Proto = std::move(*channelData.Proto.MutableData());
             batch.Payload = std::move(channelData.Payload);
             auto guard = TBase::BindAllocator();
             channel->Push(std::move(batch));
+            CA_LOG_T("Got data batch from input channel #" << channelId << " with " << chunkCount << " chunks");
+        }
+
+        if (channelData.Proto.HasWatermark()) {
+            Y_ABORT_UNLESS(inputChannel->WatermarksMode != NDqProto::WATERMARKS_MODE_DISABLED);
+            const auto& watermarkRequest = channelData.Proto.GetWatermark();
+            const TInstant watermark = TInstant::MicroSeconds(watermarkRequest.GetTimestampUs());
+            channel->Push(watermark);
+            CA_LOG_T("Got watermark from input channel #" << channelId << ": " << watermark);
         }
 
         if (channelData.Proto.HasCheckpoint()) {
             Y_ABORT_UNLESS(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             Y_ABORT_UNLESS(this->Checkpoints);
             const auto& checkpoint = channelData.Proto.GetCheckpoint();
+            auto guard = TBase::BindAllocator();
             inputChannel->Pause(checkpoint);
             this->Checkpoints->RegisterCheckpoint(checkpoint, channelData.Proto.GetChannelId());
+            CA_LOG_T("Got checkpoint from input channel #" << channelId << ": " << checkpoint.GetGeneration() << "." << checkpoint.GetId());
         }
 
         if (channelData.Proto.GetFinished()) {
             channel->Finish();
+            CA_LOG_T("Got finished marker from input channel #" << channelId);
         }
 
         if (ack) {
+            const auto freeSpace = channel->GetFreeSpace();
             this->Channels->SendChannelDataAck(channel->GetChannelId(), channel->GetFreeSpace());
+            CA_LOG_T("Got ack from input channel #" << channelId << ", send free space: " << freeSpace);
         }
 
         TBase::ContinueExecute(EResumeSource::CATakeInput);
@@ -133,31 +187,59 @@ protected: //TDqComputeActorChannels::ICalbacks
 
 protected: //TDqComputeActorCheckpoints::ICallbacks
     bool ReadyToCheckpoint() const override final {
-        for (auto& [id, channelInfo] : this->InputChannelsMap) {
+        // When task become finished, there will be no read attempts from inputs,
+        // so stale data may stay in channels/sources
+        const auto allowNonEmptyInputs = this->State == NDqProto::COMPUTE_STATE_FINISHED;
+
+        for (const auto& [_, sourceInfo] : this->SourcesMap) {
+            if (!sourceInfo.Buffer->Empty() && !allowNonEmptyInputs) {
+                return false;
+            }
+        }
+
+        for (const auto& [_, channelInfo] : this->InputChannelsMap) {
             if (channelInfo.CheckpointingMode == NDqProto::CHECKPOINTING_MODE_DISABLED) {
                 continue;
             }
 
+            // Checkpoints should be distributed also over finished channels, so here we wait pause unconditionally
             if (!channelInfo.IsPaused()) {
                 return false;
             }
-            if (!channelInfo.Channel->Empty()) {
+
+            if (!channelInfo.Channel->Empty() && !allowNonEmptyInputs) {
                 return false;
             }
         }
+
+        for (const auto& [_, transformInfo] : this->InputTransformsMap) {
+            const auto buffer = transformInfo.Buffer;
+            if (!buffer->Empty() && !allowNonEmptyInputs) {
+                return false;
+            }
+
+            if (buffer->IsPending()) {
+                return false;
+            }
+        }
+
         return true;
     }
 
     void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) override final {
         Y_ABORT_UNLESS(this->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
+        CA_LOG_D("Inject barrier to outputs, output channels #" << this->OutputChannelsMap.size() << ", sinks #" << this->SinksMap.size() << ", output transforms #" << this->OutputTransformsMap.size());
+
         for (const auto& [id, channelInfo] : this->OutputChannelsMap) {
             if (!channelInfo.IsTransformOutput) {
                 channelInfo.Channel->Push(NDqProto::TCheckpoint(checkpoint));
             }
         }
+
         for (const auto& [outputIndex, sink] : this->SinksMap) {
             sink.Buffer->Push(NDqProto::TCheckpoint(checkpoint));
         }
+
         for (const auto& [outputIndex, transform] : this->OutputTransformsMap) {
             transform.Buffer->Push(NDqProto::TCheckpoint(checkpoint));
         }
@@ -178,6 +260,98 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
             source.AsyncInput->SaveState(checkpoint, sourceState);
             sourceState.InputIndex = inputIndex;
         }
+    }
+
+    TString GetTaskDebugState() const final {
+        auto diagnostics = TStringBuilder() << TBase::GetTaskDebugState();
+
+        ui64 emptySources = 0;
+        ui64 bytesInSources = 0;
+        i64 sourcesFreeSpace = 0;
+        for (const auto& [_, sourceInfo] : this->SourcesMap) {
+            if (sourceInfo.Buffer) {
+                emptySources += sourceInfo.Buffer->Empty();
+                bytesInSources += sourceInfo.Buffer->GetStoredBytes();
+                sourcesFreeSpace += sourceInfo.Buffer->GetFreeSpace();
+            }
+        }
+
+        ui64 checkpointedInputChannels = 0;
+        ui64 emptyInputChannels = 0;
+        ui64 pausedInputChannels = 0;
+        ui64 finishedInputChannels = 0;
+        ui64 bytesInInputChannels = 0;
+        i64 inputChannelsFreeSpace = 0;
+        for (const auto& [_, channelInfo] : this->InputChannelsMap) {
+            if (channelInfo.CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                checkpointedInputChannels++;
+
+                if (channelInfo.Channel) {
+                    emptyInputChannels += channelInfo.Channel->Empty();
+                    pausedInputChannels += channelInfo.IsPaused();
+                    finishedInputChannels += channelInfo.Channel->IsFinished();
+                    bytesInInputChannels += channelInfo.Channel->GetStoredBytes();
+                    inputChannelsFreeSpace += channelInfo.Channel->GetFreeSpace();
+                }
+            }
+        }
+
+        ui64 emptyInputTransforms = 0;
+        ui64 pendingInputTransforms = 0;
+        ui64 bytesInInputTransforms = 0;
+        i64 inputTransformsFreeSpace = 0;
+        for (const auto& [_, transformInfo] : this->InputTransformsMap) {
+            if (const auto buffer = transformInfo.Buffer) {
+                emptyInputTransforms += buffer->Empty();
+                pendingInputTransforms += buffer->IsPending();
+                bytesInInputTransforms += buffer->GetStoredBytes();
+                inputTransformsFreeSpace += buffer->GetFreeSpace();
+            }
+        }
+
+        diagnostics << "Inputs state. ["
+            << "Channels paused: " << pausedInputChannels << " / " << checkpointedInputChannels
+            << ". Channels finished: " << finishedInputChannels << " / " << checkpointedInputChannels
+            << ". Channels empty: " << emptyInputChannels << " / " << checkpointedInputChannels << " (stored bytes: " << bytesInInputChannels << ", fs: " << inputChannelsFreeSpace << ")"
+            << ". Sources empty: " << emptySources << " / " << this->SourcesMap.size() << " (stored bytes: " << bytesInSources << ", fs: " << sourcesFreeSpace << ")"
+            << ". Transforms empty: " << emptyInputTransforms << " / " << this->InputTransformsMap.size() << " (stored bytes: " << bytesInInputTransforms << ", fs: " << inputTransformsFreeSpace << ")"
+            << ". Transforms pending: " << pendingInputTransforms << " / " << this->InputTransformsMap.size()
+            << "] ";
+
+        const auto getOutputStats = [](const auto& objects, const auto outputInfoExtractor) -> TString {
+            ui64 noLimit = 0;
+            ui64 softLimit = 0;
+            ui64 hardLimit = 0;
+            for (const auto& [_, info] : objects) {
+                if (const auto& output = outputInfoExtractor(info)) {
+                    switch (output->GetFillLevel()) {
+                        case NoLimit:
+                            noLimit++;
+                            break;
+                        case SoftLimit:
+                            softLimit++;
+                            break;
+                        case HardLimit:
+                            hardLimit++;
+                            break;
+                    }
+                }
+            }
+
+            return TStringBuilder() << "no + soft + hard limit: {" << noLimit << " + " << softLimit << " + " << hardLimit << "} / " << objects.size();
+        };
+
+        diagnostics
+            << "Outputs state. [Channels ready: " << this->ProcessOutputsState.ChannelsReady
+            << ". Has data to send: " << this->ProcessOutputsState.HasDataToSend
+            << ". Data was sent: " << this->ProcessOutputsState.DataWasSent
+            << ". All outputs finished: " << this->ProcessOutputsState.AllOutputsFinished
+            << ". Channels: " << getOutputStats(this->OutputChannelsMap, [](const auto& info) { return info.Channel; })
+            << ". Sinks: " << getOutputStats(this->SinksMap, [](const auto& info) { return info.Buffer; })
+            << ". Transforms: " << getOutputStats(this->OutputTransformsMap, [](const auto& info) { return info.OutputBuffer; })
+            << "] ";
+
+        return diagnostics;
     }
 
 protected:
@@ -202,24 +376,38 @@ protected:
         auto* alloc = guard.GetMutex();
         alloc->SetLimit(this->MemoryQuota->GetMkqlMemoryLimit());
 
-        this->MemoryQuota->TrySetIncreaseMemoryLimitCallback(alloc);
+        this->MemoryQuota->BindScopedAlloc(alloc);
+        this->MemoryQuota->TrySetIncreaseMemoryLimitCallback();
 
         TDqTaskRunnerMemoryLimits limits;
         limits.ChannelBufferSize = this->MemoryLimits.ChannelBufferSize;
         limits.OutputChunkMaxSize = this->MemoryLimits.OutputChunkMaxSize;
+        limits.ChunkSizeLimit = this->MemoryLimits.ChunkSizeLimit;
+        limits.ArrayBufferMinFillPercentage = this->MemoryLimits.ArrayBufferMinFillPercentage;
+        limits.BufferPageAllocSize = this->MemoryLimits.BufferPageAllocSize;
+        limits.ChannelQuotaManager = TBase::MemoryLimits.ChannelQuotaManager;
 
         if (!limits.OutputChunkMaxSize) {
             limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
-	}
-    
+        }
+
         if (this->Task.GetEnableSpilling()) {
             TaskRunner->SetSpillerFactory(std::make_shared<TDqSpillerFactory>(execCtx.GetTxId(), NActors::TActivationContext::ActorSystem(), execCtx.GetWakeupCallback(), execCtx.GetErrorCallback()));
         }
 
-        TaskRunner->Prepare(this->Task, limits, execCtx);
+        this->WatermarksTracker.SetNotifyHandler([this]() {
+            // This code is called from TaskRunner (either directly or from input transform/helper code), which is owned by sync CA, so `*this` must be alive at that point
+            this->ScheduleIdlenessCheck();
+        });
+        this->WatermarkGeneratorTracker.SetNotifyHandler([this](TInstant checkTime) {
+            this->ScheduleSourceIdlenessCheck(checkTime);
+        });
+
+        TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker, &this->WatermarkGeneratorTracker);
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);
+            channel.Channel->SetCallback(this);
         }
 
         for (auto& [inputIndex, source] : this->SourcesMap) {
@@ -233,6 +421,9 @@ protected:
 
         for (auto& [channelId, channel] : this->OutputChannelsMap) {
             channel.Channel = TaskRunner->GetOutputChannel(channelId);
+            if (this->Task.GetDqChannelVersion() >= 2u && channel.HasPeer) {
+                channel.Channel->Bind(this->SelfId(), channel.PeerId);
+            }
         }
 
         for (auto& [outputIndex, transform] : this->OutputTransformsMap) {
@@ -253,7 +444,36 @@ protected:
         );
     }
 
-    const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() override {
+    // Must be called under bound MKQL allocator
+    void DrainCheckpointsFromInputChannelsAfterFinish() {
+        Y_ABORT_UNLESS(this->Checkpoints);
+
+        if (this->Channels) {
+            // There is no need to drain v1 channels, because checkpoints will be registered automatically in TakeInputChannelData() method
+            return;
+        }
+
+        CA_LOG_D("Drain #" << this->InputChannelsMap.size() << " inputs after finish");
+
+        // In v2 channels case, checkpoint must be drained manually, because after finish input producer cannot be used.
+        // All stale data, that was in channel after early finish should be drained.
+        for (const auto& [_, info] : this->InputChannelsMap) {
+            const IDqInputChannel::TPtr& channel = info.Channel;
+            Y_ENSURE(channel);
+
+            if (info.CheckpointingMode == NDqProto::ECheckpointingMode::CHECKPOINTING_MODE_DISABLED || !channel->IsFinished()) {
+                continue;
+            }
+
+            TUnboxedValueBatch batch(channel->GetInputType());
+            TMaybe<TInstant> watermark;
+            while (channel->Pop(batch, watermark)) {
+                CA_LOG_T("Skipped data batch after early finish with rows #" << batch.RowCount() << ", watermark: " << (watermark ? ToString(*watermark) : "<null>"));
+            }
+        }
+    }
+
+    const NYql::NDq::TDqTaskRunnerStats* GetTaskRunnerStats() override {
         return TaskRunner ? TaskRunner->GetStats() : nullptr;
     }
 
@@ -265,11 +485,16 @@ protected:
         return sinkInfo.Buffer.Get();
     }
 
+    TDqComputeActorWatermarks* GetInputTransformWatermarksTracker(ui64 inputId) override {
+        return TaskRunner ? TaskRunner->GetInputTransformWatermarksTracker(inputId): nullptr;
+    }
+
 protected:
-    // methods that are called via static_cast<TDerived*>(this) and may be overriden by a dervied class
+    // Methods that are called via static_cast<TDerived*>(this) and may be overridden by a derived class
     void* GetSourcesState() const {
         return nullptr;
     }
+
     void PollSources(void* /* state */) {
     }
 
@@ -282,42 +507,39 @@ protected:
         YQL_ENSURE(!outputChannel.Finished || this->Checkpoints);
 
         const bool wasFinished = outputChannel.Finished;
-        auto channelId = outputChannel.Channel->GetChannelId();
+        const auto channelId = outputChannel.Channel->GetChannelId();
+        const bool hasFreeMemoryBeforeDrain = this->Channels->HasFreeMemoryInChannel(channelId);
 
         CA_LOG_T("About to drain channelId: " << channelId
+            << ", Checkpointing mode: " << NDqProto::ECheckpointingMode_Name(outputChannel.CheckpointingMode)
             << ", hasPeer: " << outputChannel.HasPeer
+            << ", hasFreeMemory: " << hasFreeMemoryBeforeDrain
             << ", finished: " << outputChannel.Channel->IsFinished());
 
         this->ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
         this->ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
 
-        TBase::UpdateBlocked(outputChannel, !this->Channels->HasFreeMemoryInChannel(channelId));
+        TBase::UpdateBlocked(outputChannel, !hasFreeMemoryBeforeDrain);
 
         ui32 sentChunks = 0;
         while ((!outputChannel.Finished || this->Checkpoints) &&
-            this->Channels->HasFreeMemoryInChannel(outputChannel.ChannelId))
+            this->Channels->HasFreeMemoryInChannel(channelId))
         {
             const static ui32 drainPackSize = 16;
             std::vector<typename TBase::TOutputChannelInfo::TDrainedChannelMessage> channelData = outputChannel.DrainChannel(drainPackSize);
             ui32 idx = 0;
             for (auto&& i : channelData) {
-                if (auto* w = i.GetWatermarkOptional()) {
-                    CA_LOG_I("Resume inputs by watermark");
-                    // This is excessive, inputs should be resumed after async CA received response with watermark from task runner.
-                    // But, let it be here, it's better to have the same code as in checkpoints
-                    TBase::ResumeInputsByWatermark(TInstant::MicroSeconds(w->GetTimestampUs()));
-                }
-                if (i.GetCheckpointOptional()) {
-                    CA_LOG_I("Resume inputs by checkpoint");
-                    TBase::ResumeInputsByCheckpoint();
-                }
-
-                this->Channels->SendChannelData(i.BuildChannelData(outputChannel.ChannelId), ++idx == channelData.size());
+                this->Channels->SendChannelData(i.BuildChannelData(channelId), ++idx == channelData.size());
                 ++sentChunks;
             }
+
             if (drainPackSize != channelData.size()) {
                 if (!outputChannel.Finished) {
-                    CA_LOG_T("output channelId: " << outputChannel.ChannelId << ", nothing to send and is not finished");
+                    CA_LOG_T("Output channelId: " << channelId << ", nothing to send and is not finished (sent #" << sentChunks << " chunks)");
+                } else if (sentChunks) {
+                    CA_LOG_T("Output channelId: " << channelId << " drained after finish, sent #" << sentChunks << " chunks");
+                } else {
+                    CA_LOG_T("Output channelId: " << channelId << " drained after finish, nothing to send");
                 }
                 break;
             }
@@ -327,9 +549,10 @@ protected:
         this->ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
         this->ProcessOutputsState.DataWasSent |= (!wasFinished && outputChannel.Finished) || sentChunks;
     }
+
     void DrainAsyncOutput(ui64 outputIndex, typename TBase::TAsyncOutputInfoBase& outputInfo) override final {
         this->ProcessOutputsState.AllOutputsFinished &= outputInfo.Finished;
-        if (outputInfo.Finished && !this->Checkpoints) {
+        if ((outputInfo.Finished && !this->Checkpoints) || outputInfo.Failed) {
             return;
         }
 
@@ -363,6 +586,15 @@ protected:
 
         this->ProcessOutputsState.HasDataToSend |= !outputInfo.Finished;
         this->ProcessOutputsState.DataWasSent |= outputInfo.Finished || sent;
+    }
+
+    // Called only on v2 DQ channels
+    void TakeCheckpoint(const NDqProto::TCheckpoint& checkpoint, ui64 channelId) override {
+        CA_LOG_T("Take checkpoint from channelId: " << channelId << ", checkpoint: " << checkpoint.ShortDebugString());
+        auto* inputChannel = this->InputChannelsMap.FindPtr(channelId);
+        YQL_ENSURE(inputChannel, "task: " << this->Task.GetId() << ", unknown input channelId: " << channelId);
+        inputChannel->Pause(checkpoint);
+        this->Checkpoints->RegisterCheckpoint(checkpoint, channelId);
     }
 
 protected:

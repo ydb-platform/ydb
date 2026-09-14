@@ -382,15 +382,9 @@ public:
     auto& GetParentData() {return m_parentData;}
     auto& GetParentData() const {return m_parentData;}
 
-    void SetParentData(const InternalValue& val)
-    {
-        m_parentData = val.GetData();
-    }
+    void SetParentData(const InternalValue& val);
 
-    void SetParentData(InternalValue&& val)
-    {
-        m_parentData = std::move(val.GetData());
-    }
+    void SetParentData(InternalValue&& val);
 
     bool ShouldExtendLifetime() const
     {
@@ -444,12 +438,7 @@ public:
 private:
     friend class boost::iterator_core_access;
 
-    void increment()
-    {
-        m_isFinished = !m_iterator->MoveNext();
-        ++ m_currentIndex;
-        m_currentVal = m_isFinished ? InternalValue() : m_iterator->GetCurrent();
-    }
+    void increment();
 
     bool equal(const Iterator& other) const
     {

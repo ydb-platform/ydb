@@ -12,20 +12,35 @@ struct TCpuConsumptionInfo {
     float Cpu;
     float LastSecondElapsed;
     float LastSecondCpu;
+    float NeedyWindowCpu;
 
     void Clear();
 }; // struct TCpuConsumptionInfo
 
+struct TPoolForeignConsumptionInfo {
+    float Elapsed;
+    float Cpu;
+    float PrevElapsedValue;
+    float PrevCpuValue;
+}; // struct TPoolForeignConsumptionInfo
+
 struct THarmonizerCpuConsumption {
     std::vector<TCpuConsumptionInfo> PoolConsumption;
+    std::vector<TCpuConsumptionInfo> PoolFullThreadConsumption;
+    std::vector<TPoolForeignConsumptionInfo> PoolForeignConsumption;
 
     float TotalCores = 0;
     i16 AdditionalThreads = 0;
     i16 StoppingThreads = 0;
     bool IsStarvedPresent = false;
+
     float Budget = 0.0;
-    i16 BudgetInt = 0;
+    float BudgetLS = 0.0;
+    float BudgetWithoutSharedCpu = 0.0;
+    float BudgetLSWithoutSharedCpu = 0.0;
+
     float Overbooked = 0.0;
+    float LostCpu = 0.0;
 
     float Elapsed = 0.0;
     float Cpu = 0.0;
@@ -34,7 +49,7 @@ struct THarmonizerCpuConsumption {
     TStackVec<i16, 8> NeedyPools;
     TStackVec<std::pair<i16, float>, 8> HoggishPools;
     TStackVec<bool, 8> IsNeedyByPool;
-    std::vector<i16> FreeHalfThread;
+    TStackVec<i16, 8> FreeHalfSharedThreads;
 
     void Init(i16 poolCount);
 

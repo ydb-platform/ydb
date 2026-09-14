@@ -16,6 +16,8 @@ struct TLightweightColumnarStatistics
     std::optional<i64> TimestampTotalWeight;
     //! Total data weight of legacy chunks whose meta misses columnar statistics.
     i64 LegacyChunkDataWeight = 0;
+    //! Data size expected to be read from disk.
+    std::optional<i64> ReadDataSizeEstimate;
 };
 
 struct TNamedColumnarStatistics
@@ -27,7 +29,7 @@ struct TNamedColumnarStatistics
     //! Total data weight of legacy chunks whose meta misses columnar statistics.
     i64 LegacyChunkDataWeight = 0;
 
-    TNamedColumnarStatistics& operator +=(const TNamedColumnarStatistics& other);
+    TNamedColumnarStatistics& operator+=(const TNamedColumnarStatistics& other);
 };
 
 using TColumnarHyperLogLogDigest = THyperLogLog<
@@ -52,6 +54,8 @@ struct TLargeColumnarStatistics
 //! TColumnarStatistics stores per-column statistics of data stored in a chunk/table.
 struct TColumnarStatistics
 {
+    static constexpr size_t MaxStringValueLength = 100;
+
     //! Per-column total data weight for chunks whose meta contains columnar statistics.
     std::vector<i64> ColumnDataWeights;
     //! Total weight of all write and delete timestamps.
@@ -88,6 +92,12 @@ struct TColumnarStatistics
 
     //! Large per-column statistics, including columnar HLL.
     TLargeColumnarStatistics LargeStatistics;
+
+    //! This field provides an estimate, in bytes, of the data size expected to be read from disk.
+    //! It is calculated on nodes for specified columns set and cannot be recalculated on-the-fly.
+    //! To prevent errors, this field is set to null whenever the set of columns is modified or
+    //! when new rows are added to statistics.
+    std::optional<i64> ReadDataSizeEstimate;
 
     TColumnarStatistics& operator+=(const TColumnarStatistics& other);
     bool operator==(const TColumnarStatistics& other) const = default;

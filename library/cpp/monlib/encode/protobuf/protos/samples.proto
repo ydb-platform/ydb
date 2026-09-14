@@ -59,7 +59,7 @@ message TPoint {
 message TSingleSample {
     repeated TLabel Labels = 1;
     EMetricType MetricType = 2;
-
+    bool IsMemOnly = 10;
     // inlined TPoint
     uint64 Time = 3;
     oneof Value {
@@ -76,6 +76,7 @@ message TMultiSample {
     repeated TLabel Labels = 1;
     EMetricType MetricType = 2;
     repeated TPoint Points = 3;
+    bool IsMemOnly = 4;
 }
 
 message TSingleSamplesList {

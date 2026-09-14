@@ -31,6 +31,7 @@
 #include "constants.h"
 #include "batch_request.h"
 #include "cypress.h"
+#include "distributed_session.h"
 #include "init.h"
 #include "io.h"
 #include "node.h"
@@ -149,6 +150,24 @@ public:
         const TStartTransactionOptions& options = TStartTransactionOptions()) = 0;
 
     ///
+    /// @brief Initialize distributed file session and request cookies for participants.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands#start_distributed_write_file_session)
+    virtual TDistributedWriteFileSessionWithCookies StartDistributedWriteFileSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteFileOptions& options = {}) = 0;
+
+    ///
+    /// @brief Initialize distributed table session and request cookies for participants.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#start_distributed_write_session)
+    virtual TDistributedWriteTableSessionWithCookies StartDistributedWriteTableSession(
+        const TRichYPath& richPath,
+        i64 cookieCount,
+        const TStartDistributedWriteTableOptions& options = {}) = 0;
+
+    ///
     /// @brief Change properties of table.
     ///
     /// Allows to:
@@ -165,8 +184,15 @@ public:
     /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#execute_batch)
     virtual TBatchRequestPtr CreateBatchRequest() = 0;
 
-    /// @brief Get root client outside of all transactions.
-    virtual IClientPtr GetParentClient() = 0;
+    ///
+    /// @brief Get root client.
+    ///
+    /// @param ignoreGlobalTx root client could be created already attached to some global transaction, @ref NYT::TConfig::GlobalTx.
+    ///     when ignoreGlobalTx = false original client (attached to GlobalTx) is returned
+    ///     when ignoreGlobalTx = true, returned client is not attached to any transaction.
+    ///
+    /// TODO: rename to GetRootClient()
+    virtual IClientPtr GetParentClient(bool ignoreGlobalTx = false) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -223,7 +249,7 @@ public:
     /// All changes that are made by transactions become visible globally or to parent transaction.
     ///
     /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#commit_tx)
-    virtual void Commit() = 0;
+    virtual void Commit(const TCommitTransactionOptions& options = {}) = 0;
 
     ///
     /// @brief Abort transaction.
@@ -500,8 +526,9 @@ public:
     /// @note YT doesn't store all job traces.
     ///
     /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#get_job_trace)
-    virtual std::vector<TJobTraceEvent> GetJobTrace(
+    virtual IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = TGetJobTraceOptions()) = 0;
 
     ///
@@ -544,6 +571,22 @@ public:
         const TGetTabletInfosOptions& options = TGetTabletInfosOptions()) = 0;
 
     ///
+    /// @brief Get cluster configuration stored in Cypress by profile name (e.g. "default").
+    ///
+    /// Cluster configs location is defined in |TConfig::ConfigRemotePatchPath|.
+    ///
+    virtual const TNode::TMapType& GetDynamicConfiguration(const TString& configProfile);
+
+    ///
+    /// @brief Check cluster liveness.
+    ///
+    /// Throws if any requested liveness check fails. At least one check must be requested.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#check_cluster_liveness)
+    virtual void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = TCheckClusterLivenessOptions()) = 0;
+
+    ///
     /// @brief Suspend operation.
     ///
     /// Jobs will be aborted.
@@ -561,6 +604,48 @@ public:
         const TResumeOperationOptions& options = TResumeOperationOptions()) = 0;
 
     ///
+    /// Distributed table write API
+    /// @{
+
+    /// @brief Ping distributed session to prolong its main transaction lifetime.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#ping_distributed_write_session)
+    virtual void PingDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TPingDistributedWriteTableOptions& options = {}) = 0;
+
+    /// @brief Merge all write fragments results into table and close distributed session.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#finish_distributed_write_session)
+    virtual void FinishDistributedWriteTableSession(
+        const TDistributedWriteTableSession& session,
+        const TVector<TWriteTableFragmentResult>& results,
+        const TFinishDistributedWriteTableOptions& options = {}) = 0;
+
+    /// @}
+
+    ///
+    /// Distributed file write API
+    /// @{
+
+    /// @brief Ping distributed session to prolong its main transaction lifetime.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#ping_distributed_write_file_session)
+    virtual void PingDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TPingDistributedWriteFileOptions& options = {}) = 0;
+
+    /// @brief Merge all write fragments results into file and close distributed session.
+    ///
+    /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#finish_distributed_write_file_session)
+    virtual void FinishDistributedWriteFileSession(
+        const TDistributedWriteFileSession& session,
+        const TVector<TWriteFileFragmentResult>& results,
+        const TFinishDistributedWriteFileOptions& options = {}) = 0;
+
+    /// @}
+
+    ///
     /// @brief Synchronously terminates all client's background activities
     ///
     /// e.g. no callbacks will be executed after the function is completed
@@ -572,16 +657,19 @@ public:
     virtual void Shutdown() = 0;
 };
 
+/// Create a rpc client for particular cluster.
+IClientPtr CreateRpcClient(
+    const TString& serverName,
+    const TCreateClientOptions& options = {});
 
 /// Create a client for particular MapReduce cluster.
 IClientPtr CreateClient(
     const TString& serverName,
-    const TCreateClientOptions& options = TCreateClientOptions());
-
+    const TCreateClientOptions& options = {});
 
 /// Create a client for mapreduce cluster specified in `YT_PROXY` environment variable.
 IClientPtr CreateClientFromEnv(
-    const TCreateClientOptions& options = TCreateClientOptions());
+    const TCreateClientOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

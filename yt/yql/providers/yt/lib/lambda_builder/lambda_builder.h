@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 #include <yql/essentials/ast/yql_expr.h>
@@ -10,6 +11,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/public/udf/udf_validate.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
@@ -34,7 +36,12 @@ public:
         const TIntrusivePtr<ITimeProvider>& timeProvider = {},
         NKikimr::NMiniKQL::IStatsRegistry* jobStats = nullptr,
         NKikimr::NUdf::ICountersProvider* counters = nullptr,
-        const NKikimr::NUdf::ISecureParamsProvider *secureParamsProvider = nullptr);
+        const NKikimr::NUdf::ISecureParamsProvider *secureParamsProvider = nullptr,
+        const NKikimr::NUdf::ILogProvider* logProvider = nullptr,
+        TLangVersion langver = UnknownLangVersion,
+        const TRuntimeSettings::TConstPtr runtimeSettings = MakeRuntimeSettings(),
+        NKikimr::NUdf::EBridgeMode bridgeMode = NKikimr::NUdf::EBridgeMode::None,
+        TString bridgeBinaryPath = {});
 
     ~TLambdaBuilder();
 
@@ -106,7 +113,11 @@ protected:
     NKikimr::NMiniKQL::IStatsRegistry* const JobStats;
     NKikimr::NUdf::ICountersProvider* const Counters;
     const NKikimr::NUdf::ISecureParamsProvider* SecureParamsProvider;
-
+    const NKikimr::NUdf::ILogProvider* LogProvider;
+    const TLangVersion LangVer;
+    const TRuntimeSettings::TConstPtr RuntimeSettings;
+    const NKikimr::NUdf::EBridgeMode BridgeMode;
+    const TString BridgeBinaryPath;
     /// TODO: remove?
     void SetExternalEnv(const NKikimr::NMiniKQL::TTypeEnvironment* env);
 private:
@@ -116,4 +127,24 @@ private:
     mutable const NKikimr::NMiniKQL::TTypeEnvironment* Env;
 };
 
-}
+class TGatewayLambdaBuilder : public TLambdaBuilder {
+public:
+    TGatewayLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        NKikimr::NMiniKQL::TScopedAlloc& alloc,
+        const NKikimr::NMiniKQL::TTypeEnvironment* env = nullptr,
+        const TIntrusivePtr<IRandomProvider>& randomProvider = {},
+        const TIntrusivePtr<ITimeProvider>& timeProvider = {},
+        NKikimr::NMiniKQL::IStatsRegistry* jobStats = nullptr,
+        NKikimr::NUdf::ICountersProvider* counters = nullptr,
+        const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
+        const NKikimr::NUdf::ILogProvider* logProvider = nullptr,
+        TLangVersion langver = UnknownLangVersion,
+        TRuntimeSettings::TConstPtr runtimeSettings = MakeRuntimeSettings(),
+        NKikimr::NUdf::EBridgeMode bridgeMode = NKikimr::NUdf::EBridgeMode::None,
+        TString bridgeBinaryPath = {});
+
+    TString BuildLambdaWithIO(const NCommon::IMkqlCallableCompiler& compiler, NNodes::TCoLambda lambda,
+        TExprContext& exprCtx, bool withNativeBlockIO = true);
+};
+
+} // namespace NYql

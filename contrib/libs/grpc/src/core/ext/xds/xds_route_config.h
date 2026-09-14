@@ -34,7 +34,7 @@
 #include "envoy/config/route/v3/route.upb.h"
 #include "envoy/config/route/v3/route.upbdefs.h"
 #include "re2/re2.h"
-#include "upb/def.h"
+#include "upb/reflection/def.h"
 
 #include "src/core/ext/xds/xds_bootstrap_grpc.h"
 #include "src/core/ext/xds/xds_client.h"
@@ -221,7 +221,7 @@ struct XdsRouteConfigResource : public XdsResourceType::ResourceData {
   }
   TString ToString() const;
 
-  static XdsRouteConfigResource Parse(
+  static std::shared_ptr<const XdsRouteConfigResource> Parse(
       const XdsResourceType::DecodeContext& context,
       const envoy_config_route_v3_RouteConfiguration* route_config,
       ValidationErrors* errors);

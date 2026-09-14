@@ -14,10 +14,6 @@ INDUCED_DEPS(
 
 VERSION(24.3.25)
 
-PEERDIR(
-    contrib/restricted/abseil-cpp/absl/base
-)
-
 ADDINCL(
     contrib/libs/flatbuffers/grpc
     contrib/libs/flatbuffers/include

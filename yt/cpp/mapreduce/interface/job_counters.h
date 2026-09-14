@@ -10,17 +10,17 @@ class TJobCounter
 {
 private:
     TNode Data_;
-    ui64 Total_ = 0;
+    i64 Total_ = 0;
 
 public:
     TJobCounter() = default;
 
     TJobCounter(TNode data);
-    TJobCounter(ui64 total);
+    TJobCounter(i64 total);
 
-    ui64 GetTotal() const;
+    i64 GetTotal() const;
 
-    ui64 GetValue(const TStringBuf key) const;
+    i64 GetValue(const TStringBuf key) const;
 };
 
 /// Class representing a collection of job counters.
@@ -49,10 +49,10 @@ public:
     const TJobCounter& GetPending() const;
     const TJobCounter& GetBlocked() const;
 
-    ui64 GetTotal() const;
+    i64 GetTotal() const;
 
 private:
-    ui64 Total_ = 0;
+    i64 Total_ = 0;
 
     TJobCounter Aborted_;
     TJobCounter AbortedScheduled_;

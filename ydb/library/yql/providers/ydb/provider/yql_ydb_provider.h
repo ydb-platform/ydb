@@ -4,7 +4,7 @@
 #include "yql_ydb_settings.h"
 
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 
@@ -32,15 +32,15 @@ struct TYdbState : public TThrRefBase
     TTypeAnnotationContext* Types = nullptr;
     TYdbConfiguration::TPtr Configuration = MakeIntrusive<TYdbConfiguration>();
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
-    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     THashMap<std::pair<TString, NYql::EDatabaseType>, NYql::TDatabaseAuth> DatabaseIds;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
 };
 
 TDataProviderInitializer GetYdbDataProviderInitializer(
     NYdb::TDriver driver,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr,
-    const std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory = CreateStructuredTokenCredentialsFactory(),
+    std::shared_ptr<NYql::IDatabaseAsyncResolver> dbResolver = nullptr
 );
 
 TIntrusivePtr<IDataProvider> CreateYdbDataSource(

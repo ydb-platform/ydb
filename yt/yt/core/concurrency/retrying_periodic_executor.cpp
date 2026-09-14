@@ -25,7 +25,7 @@ TRetryingInvocationTimePolicy::TRetryingInvocationTimePolicy(
     , Backoff_(options)
 {
     CachedBackoffDuration_.store(options.MinBackoff, std::memory_order::relaxed);
-    CachedBackoffMultiplier_.store(options.BackoffJitter, std::memory_order::relaxed);
+    CachedBackoffMultiplier_.store(options.BackoffMultiplier, std::memory_order::relaxed);
     CachedBackoffJitter_.store(options.BackoffJitter,std::memory_order::relaxed);
 }
 
@@ -89,13 +89,13 @@ void TRetryingInvocationTimePolicy::SetOptions(
     }
 }
 
-TInstant TRetryingInvocationTimePolicy::NextDeadline()
+TInstant TRetryingInvocationTimePolicy::GenerateNextDeadline()
 {
     if (IsInBackoffMode()) {
         return TInstant::Now() + Backoff_.GetBackoff();
     }
 
-    return TDefaultInvocationTimePolicy::NextDeadline();
+    return TDefaultInvocationTimePolicy::GenerateNextDeadline();
 }
 
 bool TRetryingInvocationTimePolicy::IsOutOfBandProhibited()

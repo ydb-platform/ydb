@@ -8,8 +8,8 @@ import operator
 import time
 import types
 import warnings
-
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 import more_itertools
 
@@ -291,6 +291,28 @@ def invoke(f, /, *args, **kwargs):
     return f
 
 
+_T = TypeVar('_T')
+
+
+def passthrough(func: Callable[..., object]) -> Callable[[_T], _T]:
+    """
+    Wrap the function to always return the first parameter.
+
+    Useful for wrapping functions called for their side effects.
+
+    >>> passthrough(print)('3')
+    3
+    '3'
+    """
+
+    @functools.wraps(func)
+    def wrapper(first: _T, *args, **kwargs) -> _T:
+        func(first, *args, **kwargs)
+        return first
+
+    return wrapper
+
+
 class Throttler:
     """Rate-limit a function (or other callable)."""
 
@@ -422,6 +444,42 @@ def pass_none(func):
     return wrapper
 
 
+def signed(func):
+    """
+    Wrap a formatting function so a positive first argument is rendered
+    with an explicit leading ``+``.
+
+    A negative argument already carries a ``-`` from the wrapped
+    function, and zero is left unsigned. The sign is inferred by
+    comparing the argument to a zero of its own type.
+
+    >>> fixed = '{:.1f}'.format
+    >>> signed(fixed)(3.9)
+    '+3.9'
+    >>> signed(fixed)(-3.9)
+    '-3.9'
+    >>> signed(fixed)(0)
+    '0.0'
+    """
+
+    @functools.wraps(func)
+    def wrapper(value, /, *args, **kwargs):
+        sign = '+' if value > type(value)() else ''
+        return sign + func(value, *args, **kwargs)
+
+    return wrapper
+
+
+def none_as(value, replacement=None):
+    """
+    >>> none_as(None, 'foo')
+    'foo'
+    >>> none_as('bar', 'foo')
+    'bar'
+    """
+    return replacement if value is None else value
+
+
 def assign_params(func, namespace):
     """
     Assign parameters from namespace where func solicits.
@@ -488,7 +546,7 @@ def save_method_args(method):
     >>> my_ob._saved_method.args
     ()
     """
-    args_and_kwargs = collections.namedtuple('args_and_kwargs', 'args kwargs')
+    args_and_kwargs = collections.namedtuple('args_and_kwargs', 'args kwargs')  # noqa: PYI024 # Internal; stubs used for typing
 
     @functools.wraps(method)
     def wrapper(self, /, *args, **kwargs):
@@ -551,6 +609,16 @@ def identity(x):
     return x
 
 
+@functools.singledispatch
+def _as_invocable(check):
+    return lambda: check
+
+
+@_as_invocable.register(collections.abc.Callable)
+def _(check):
+    return check
+
+
 def bypass_when(check, *, _op=identity):
     """
     Decorate a function to return its parameter when ``check``.
@@ -565,12 +633,24 @@ def bypass_when(check, *, _op=identity):
     >>> bypassed[:] = [object()]  # True
     >>> double(2)
     2
+
+    ``check`` may also be a callable returning the condition.
+
+    >>> enabled = False
+    >>> @bypass_when(lambda: enabled)
+    ... def double(x):
+    ...     return x * 2
+    >>> double(2)
+    4
+    >>> enabled = True
+    >>> double(2)
+    2
     """
 
     def decorate(func):
         @functools.wraps(func)
         def wrapper(param, /):
-            return param if _op(check) else func(param)
+            return param if _op(_as_invocable(check)()) else func(param)
 
         return wrapper
 
@@ -683,3 +763,11 @@ def chainable(method: Callable[[_T, ...], None]) -> Callable[[_T, ...], _T]:
         return self
 
     return wrapper
+
+
+def noop(*args, **kwargs):
+    """
+    A no-operation function that does nothing.
+
+    >>> noop(1, 2, three=3)
+    """

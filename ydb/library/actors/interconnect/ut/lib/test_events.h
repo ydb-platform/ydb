@@ -15,6 +15,10 @@ namespace NActors {
     struct TEvTest : TEventPB<TEvTest, NInterconnectTest::TEvTest, EvTest> {
         TEvTest() = default;
 
+        explicit TEvTest(ui64 sequenceNumber) {
+            Record.SetSequenceNumber(sequenceNumber);
+        }
+
         TEvTest(ui64 sequenceNumber, const TString& payload) {
             Record.SetSequenceNumber(sequenceNumber);
             Record.SetPayload(payload);

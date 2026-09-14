@@ -70,7 +70,7 @@ const TTypeAnnotationNode* MakeInputType(const TTypeAnnotationNode* itemType, co
             const auto& items = structType->GetItems();
             types.reserve(items.size());
 
-            std::transform(items.cbegin(), items.cend(), std::back_inserter(types), std::bind(&TItemExprType::GetItemType, std::placeholders::_1));
+            std::transform(items.cbegin(), items.cend(), std::back_inserter(types), std::bind_front(&TItemExprType::GetItemType));
             if (blockInputAppliedSetting) {
                 std::transform(types.begin(), types.end(), types.begin(), [&](auto type) {
                     return ctx.MakeType<TBlockExprType>(type);
@@ -104,7 +104,10 @@ public:
         AddHandler({TYtWriteTable::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleWriteTable));
         AddHandler({TYtFill::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleFill));
         AddHandler({TYtTouch::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleTouch));
-        AddHandler({TYtDropTable::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDropTable));
+        AddHandler({TYtCreateTable::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleCreateTable));
+        AddHandler({TYtDropTable::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDrop));
+        AddHandler({TYtCreateView::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleCreateView));
+        AddHandler({TYtDropView::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDrop));
         AddHandler({TCoCommit::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleCommit));
         AddHandler({TYtPublish::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandlePublish));
         AddHandler({TYtEquiJoin::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleEquiJoin));
@@ -115,6 +118,7 @@ public:
         AddHandler({TYtDqWideWrite::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDqWrite<true>));
         AddHandler({TYtTryFirst::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleTryFirst));
         AddHandler({TYtMaterialize::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleMaterialize));
+        AddHandler({TYtPersist::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandlePersist));
         AddHandler({TYtQLFilter::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleQLFilter));
     }
 
@@ -146,6 +150,15 @@ private:
             }
         }
 
+        return true;
+    }
+
+    static bool EnsureDataSinkClusterMatchesTable(const TYtDSink& sink, const TYtTable& table, TExprContext& ctx) {
+        if (sink.Cluster().Value() != table.Cluster().Value()) {
+            ctx.AddError(TIssue(ctx.GetPosition(sink.Pos()), TStringBuilder() << "Datasink cluster doesn't match table cluster: '"
+                << sink.Cluster().Value() << "' != '" << table.Cluster().Value() << "'"));
+            return false;
+        }
         return true;
     }
 
@@ -198,14 +211,15 @@ private:
                 if (auto maybeTable = path.Table().Maybe<TYtTable>()) {
                     auto table = maybeTable.Cast();
                     auto tableName = table.Name().Value();
+                    TString tableCluster{table.Cluster().Value()};
                     if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::UserSchema)) {
                         // Don't validate already substituted anonymous tables
                         if (!TYtTableInfo::HasSubstAnonymousLabel(table)) {
-                            const TYtTableDescription& tableDesc = State_->TablesData->GetTable(clusterName,
+                            const TYtTableDescription& tableDesc = State_->TablesData->GetTable(tableCluster,
                                 TString{tableName},
                                 TEpochInfo::Parse(table.Epoch().Ref()));
 
-                            if (!tableDesc.Validate(ctx.GetPosition(table.Pos()), clusterName, tableName,
+                            if (!tableDesc.Validate(ctx.GetPosition(table.Pos()), tableCluster, tableName,
                                 NYql::HasSetting(table.Settings().Ref(), EYtSettingType::WithQB), State_->AnonymousLabels, ctx)) {
                                 return TStatus::Error;
                             }
@@ -239,7 +253,12 @@ private:
         }
 
         auto opInput = input->ChildPtr(TYtTransientOpBase::idx_Input);
-        auto newInput = ValidateAndUpdateTablesMeta(opInput, clusterName, State_->TablesData, State_->Types->UseTableMetaFromGraph, ctx);
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        const bool useNativeYtDefaultColumnOrder =
+            State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+        auto newInput = ValidateAndUpdateTablesMeta(opInput, clusterName, State_->TablesData,
+            State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, selectionMode, ctx);
         if (!newInput) {
             return TStatus::Error;
         }
@@ -281,8 +300,7 @@ private:
                         return false;
                     }
                     if (tableItemType->HasBareYson() && 0 != rowSpec.GetNativeYtTypeFlags()) {
-                        ctx.AddError(TIssue(pos, TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                            << *tableItemType));
+                        ReportNonWritableBareYsonError(pos, *tableItemType->Cast<TStructExprType>(), ctx);
                         return false;
                     }
 
@@ -310,8 +328,7 @@ private:
                     }
 
                     if (tableItemType->HasBareYson() && 0 != rowSpec.GetNativeYtTypeFlags()) {
-                        ctx.AddError(TIssue(pos, TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                            << *tableItemType));
+                        ReportNonWritableBareYsonError(pos, *tableItemType->Cast<TStructExprType>(), ctx);
                         return false;
                     }
 
@@ -338,8 +355,7 @@ private:
             }
 
             if (tableItemType->HasBareYson() && 0 != rowSpec.GetNativeYtTypeFlags()) {
-                ctx.AddError(TIssue(pos, TStringBuilder() << "Strict Yson type is not allowed to write, please use Optional<Yson>, item type: "
-                    << *tableItemType));
+                ReportNonWritableBareYsonError(pos, *tableItemType->Cast<TStructExprType>(), ctx);
                 return false;
             }
 
@@ -428,13 +444,6 @@ private:
         }
         const bool initialWrite = NYql::HasSetting(settings, EYtSettingType::Initial);
         const bool monotonicKeys = NYql::HasSetting(settings, EYtSettingType::MonotonicKeys);
-        TString columnGroups;
-        if (auto setting = NYql::GetSetting(settings, EYtSettingType::ColumnGroups)) {
-            if (!ValidateColumnGroups(*setting, *itemType->Cast<TStructExprType>(), ctx)) {
-                return TStatus::Error;
-            }
-            columnGroups.assign(setting->Tail().Content());
-        }
 
         if (!initialWrite && mode != EYtWriteMode::Append) {
             ctx.AddError(TIssue(pos, TStringBuilder() <<
@@ -443,6 +452,12 @@ private:
         }
 
         auto outTableInfo = TYtTableInfo(table);
+        if (outTableInfo.Meta && outTableInfo.Meta->IsDynamic && outTableInfo.Epoch && *outTableInfo.Epoch > 0) {
+            ctx.AddError(TIssue(pos, TStringBuilder() << "Multiple modification of dynamic table is not supported yet. Table " <<
+                outTableInfo.Cluster << "." << TString{table->Child(TYtTable::idx_Name)->Content()}.Quote()));
+            return TStatus::Error;
+        }
+
         TYtTableDescription& description = State_->TablesData->GetModifTable(cluster, outTableInfo.Name, outTableInfo.Epoch);
 
         auto meta = description.Meta;
@@ -454,29 +469,65 @@ private:
             return TStatus::Error;
         }
 
-        if (meta->IsDynamic) {
+        const bool enableDynamicTablesWrite = State_->Configuration->_EnableDynamicTablesWrite.Get(cluster).GetOrElse(false);
+        bool notFlowDynamic = meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow;
+        if (notFlowDynamic) {
+            if (!enableDynamicTablesWrite) {
+                ctx.AddError(TIssue(pos, TStringBuilder() <<
+                    "Modification of dynamic tables is disabled on cluster " << cluster << ". Table " << outTableInfo.Name.Quote()));
+                return TStatus::Error;
+            }
+
+            if (mode != EYtWriteMode::Replace && mode != EYtWriteMode::Renew) {
+                ctx.AddError(TIssue(pos, TStringBuilder() <<
+                    "Modification of dynamic table " << outTableInfo.Name.Quote() << " is supported only by REPLACE or INSERT WITH TRUNCATE"));
+                return TStatus::Error;
+            }
+
+            static const EYtSettingTypes unsupportedSettings = EYtSettingType::CompressionCodec
+                | EYtSettingType::ErasureCodec
+                | EYtSettingType::ReplicationFactor
+                | EYtSettingType::Media
+                | EYtSettingType::PrimaryMedium
+                | EYtSettingType::Expiration
+                | EYtSettingType::KeepMeta
+                | EYtSettingType::MonotonicKeys
+                | EYtSettingType::ColumnGroups
+                | EYtSettingType::SecurityTags;
+
+            for (const auto& setting : settings.Children()) {
+                if (setting->ChildrenSize() != 0) {
+                    auto parsedSetting = FromString<EYtSettingType>(setting->Child(0)->Content());
+                    if (unsupportedSettings.HasFlags(parsedSetting)) {
+                        ctx.AddError(TIssue(pos, TStringBuilder() <<
+                            "Setting " << parsedSetting << " is not supported for dynamic tables"));
+                        return TStatus::Error;
+                    }
+                }
+            }
+        }
+        if (mode == EYtWriteMode::Replace && !meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow) {
             ctx.AddError(TIssue(pos, TStringBuilder() <<
-                "Modification of dynamic table " << outTableInfo.Name.Quote() << " is not supported"));
+                "Modification of static table " << outTableInfo.Name.Quote() << " is supported only by INSERT"));
             return TStatus::Error;
         }
 
-        bool replaceMeta = !meta->DoesExist || (mode != EYtWriteMode::Append && mode != EYtWriteMode::RenewKeepMeta);
-        bool checkLayout = meta->DoesExist && (mode == EYtWriteMode::Append || mode == EYtWriteMode::RenewKeepMeta || description.IsReplaced);
+        bool insertWithTruncateIntoDynamicTable = (mode == EYtWriteMode::Renew && notFlowDynamic);
+        bool replaceMeta = !meta->DoesExist || (mode != EYtWriteMode::Append
+            && mode != EYtWriteMode::Replace
+            && !insertWithTruncateIntoDynamicTable
+            && mode != EYtWriteMode::RenewKeepMeta);
+        bool checkLayout = meta->DoesExist && (mode == EYtWriteMode::Append
+            || mode == EYtWriteMode::RenewKeepMeta
+            || mode == EYtWriteMode::Replace
+            || insertWithTruncateIntoDynamicTable
+            || description.IsReplaced);
 
         if (monotonicKeys && initialWrite && replaceMeta) {
             ctx.AddError(TIssue(pos, TStringBuilder()
                 << "Insert with "
                 << ToString(EYtSettingType::MonotonicKeys).Quote()
                 << " setting cannot be used with a non-existent table"));
-            return TStatus::Error;
-        }
-
-        if (initialWrite && !replaceMeta && columnGroups != description.ColumnGroupSpec) {
-            ctx.AddError(TIssue(pos, TStringBuilder()
-                << "Insert with "
-                << (outTableInfo.Epoch.GetOrElse(0) ? "different " : "")
-                << ToString(EYtSettingType::ColumnGroups).Quote()
-                << " to existing table is not allowed"));
             return TStatus::Error;
         }
 
@@ -563,10 +614,15 @@ private:
                 return TStatus::Error;
             }
 
-            if (!IsSameAnnotation(*description.RowType, *itemType)) {
+            const TTypeAnnotationNode* targetRowType = description.RowType;
+            if (State_->Types->EngineType == EEngineType::Ytflow) {
+                targetRowType = MakeTypeForDynamicTableWrite(description, ctx);
+            }
+
+            if (!IsSameAnnotation(*targetRowType, *itemType)) {
                 if (content) {
-                    auto expectedType = ctx.MakeType<TListExprType>(description.RowType);
-                    auto status = TryConvertTo(content, *expectedType, ctx);
+                    auto expectedType = ctx.MakeType<TListExprType>(targetRowType);
+                    auto status = TryConvertTo(content, *expectedType, ctx, *State_->Types);
                     if (status.Level != TStatus::Error) {
                         return status;
                     }
@@ -574,7 +630,29 @@ private:
 
                 ctx.AddError(TIssue(pos, TStringBuilder()
                     << "Table " << outTableInfo.Name.Quote() << " row type differs from the written row type: "
-                    << GetTypeDiff(*description.RowType, *itemType)));
+                    << GetTypeDiff(*targetRowType, *itemType)));
+                return TStatus::Error;
+            }
+        }
+
+        TString columnGroup;
+        TSet<TString> columnGroupAlts;
+        // Check and expand column groups _after_ type alignment (TryConvertTo)
+        if (auto setting = NYql::GetSetting(settings, EYtSettingType::ColumnGroups)) {
+            if (!ValidateColumnGroups(*setting, *itemType->Cast<TStructExprType>(), ctx)) {
+                return TStatus::Error;
+            }
+            columnGroup = setting->Tail().Content();
+            columnGroupAlts.insert(columnGroup);
+            TString exandedSpec;
+            if (ExpandDefaultColumnGroup(setting->Tail().Content(), *itemType->Cast<TStructExprType>(), exandedSpec)) {
+                columnGroupAlts.insert(std::move(exandedSpec));
+            }
+            if (checkLayout && !AnyOf(columnGroupAlts, [&](const auto& grp) { return description.ColumnGroupSpecAlts.contains(grp); })) {
+                ctx.AddError(TIssue(pos, TStringBuilder()
+                    << "Insert with different "
+                    << ToString(EYtSettingType::ColumnGroups).Quote()
+                    << " to existing table is not allowed"));
                 return TStatus::Error;
             }
         }
@@ -590,26 +668,39 @@ private:
                 TYtTableMetaInfo::TPtr nextMetadata = (nextDescription.Meta = MakeIntrusive<TYtTableMetaInfo>());
                 nextMetadata->DoesExist = true;
                 nextMetadata->YqlCompatibleScheme = true;
+                nextMetadata->IsDynamic = meta->IsDynamic;
 
                 TYqlRowSpecInfo::TPtr nextRowSpec = (nextDescription.RowSpec = MakeIntrusive<TYqlRowSpecInfo>());
                 if (replaceMeta) {
-                    nextRowSpec->SetType(itemType->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
-                    YQL_CLOG(INFO, ProviderYt) << "Saving column order: " << FormatColumnOrder(contentColumnOrder, 10);
-                    nextRowSpec->SetColumnOrder(contentColumnOrder);
+                    nextRowSpec->SetType(itemType->Cast<TStructExprType>(), GetNativeYtTypeCompatibility(cluster, *State_->Configuration));
+                    if (State_->Types->OrderedColumns) {
+                        YQL_CLOG(INFO, ProviderYt) << "Saving column order: " << FormatColumnOrder(contentColumnOrder, 10);
+                        nextRowSpec->SetColumnOrder(contentColumnOrder);
+                    }
+
+                    nextDescription.ColumnGroupSpec = columnGroup;
+                    nextDescription.ColumnGroupSpecAlts = columnGroupAlts;
                 } else {
                     nextRowSpec->CopyType(*description.RowSpec);
-                }
-
-                if (!replaceMeta) {
                     nextRowSpec->StrictSchema = !description.RowSpec || description.RowSpec->StrictSchema;
+
                     nextMetadata->Attrs = meta->Attrs;
+
+                    nextDescription.ColumnGroupSpec = description.ColumnGroupSpec;
+                    nextDescription.ColumnGroupSpecAlts = description.ColumnGroupSpecAlts;
+                    nextDescription.ColumnGroupSpecInherited = true;
                 }
             }
             else {
-                if (!IsSameAnnotation(*nextDescription.RowType, *itemType)) {
+                const TTypeAnnotationNode* targetRowType = nextDescription.RowType;
+                if (State_->Types->EngineType == EEngineType::Ytflow) {
+                    targetRowType = MakeTypeForDynamicTableWrite(nextDescription, ctx);
+                }
+
+                if (!IsSameAnnotation(*targetRowType, *itemType)) {
                     if (content) {
-                        auto expectedType = ctx.MakeType<TListExprType>(nextDescription.RowType);
-                        auto status = TryConvertTo(content, *expectedType, ctx);
+                        auto expectedType = ctx.MakeType<TListExprType>(targetRowType);
+                        auto status = TryConvertTo(content, *expectedType, ctx, *State_->Types);
                         if (status.Level != TStatus::Error) {
                             return status;
                         }
@@ -617,14 +708,22 @@ private:
 
                     ctx.AddError(TIssue(pos, TStringBuilder()
                         << "Table " << outTableInfo.Name.Quote() << " row type differs from the appended row type: "
-                        << GetTypeDiff(*nextDescription.RowType, *itemType)));
+                        << GetTypeDiff(*targetRowType, *itemType)));
                     return TStatus::Error;
                 }
             }
 
-            if (initialWrite) {
-                nextDescription.ColumnGroupSpec = columnGroups;
-            } else if (columnGroups != nextDescription.ColumnGroupSpec) {
+            if (!columnGroupAlts.empty()) {
+                nextDescription.ColumnGroupSpecInherited = false;
+                if (!AnyOf(columnGroupAlts, [&](const auto& grp) { return nextDescription.ColumnGroupSpecAlts.contains(grp); })) {
+                    ctx.AddError(TIssue(pos, TStringBuilder()
+                        << "All appends within the same commit should have the equal "
+                        << ToString(EYtSettingType::ColumnGroups).Quote()
+                        << " value"));
+                    return TStatus::Error;
+                }
+                nextDescription.ColumnGroupSpecAlts.insert(columnGroupAlts.begin(), columnGroupAlts.end());
+            } else if (!nextDescription.ColumnGroupSpecInherited && !nextDescription.ColumnGroupSpecAlts.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder()
                     << "All appends within the same commit should have the equal "
                     << ToString(EYtSettingType::ColumnGroups).Quote()
@@ -633,23 +732,31 @@ private:
             }
 
             YQL_ENSURE(nextDescription.RowSpec);
+            // Strict Yson cannot be represented in native YT types. Reject it right here to avoid internal erros later
+            if (!nextDescription.RowSpec->HasPersistableYson()) {
+                ReportNonWritableBareYsonError(pos, *nextDescription.RowSpec->GetType(), ctx);
+                return TStatus::Error;
+            }
+
             if (contentRowSpecs) {
                 size_t from = 0;
                 if (initialWrite) {
+                    const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
                     nextDescription.RowSpecSortReady = true;
                     if (nextDescription.IsReplaced) {
-                        nextDescription.RowSpec->CopySortness(ctx, *contentRowSpecs.front(), TYqlRowSpecInfo::ECopySort::Exact);
+                        nextDescription.RowSpec->CopySortness(ctx, *contentRowSpecs.front(), useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::Exact);
                         if (auto contentNativeType = contentRowSpecs.front()->GetNativeYtType()) {
-                            nextDescription.RowSpec->CopyTypeOrders(*contentNativeType);
+                            nextDescription.RowSpec->CopyTypeOrders(*contentNativeType, useNativeYtDefaultColumnOrder);
                         }
                         from = 1;
                     } else {
                         nextDescription.MonotonicKeys = monotonicKeys;
                         if (description.RowSpec) {
-                            nextDescription.RowSpec->CopySortness(ctx, *description.RowSpec, TYqlRowSpecInfo::ECopySort::Exact);
+                            nextDescription.RowSpec->CopySortness(ctx, *description.RowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::Exact);
                             const auto currNativeType = description.RowSpec->GetNativeYtType();
                             if (currNativeType && nextDescription.RowSpec->GetNativeYtType() != currNativeType) {
-                                nextDescription.RowSpec->CopyTypeOrders(*currNativeType);
+                                nextDescription.RowSpec->CopyTypeOrders(*currNativeType, useNativeYtDefaultColumnOrder);
                             }
                         }
                     }
@@ -675,8 +782,9 @@ private:
                 if (nextDescription.RowSpecSortReady) {
                     const bool uniqueKeys = nextDescription.RowSpec->UniqueKeys;
                     for (size_t s = from; s < contentRowSpecs.size(); ++s) {
-                        const bool hasSortChanges = nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
-                        const bool breaksSorting = hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false);
+                        const bool hasSortChanges = notFlowDynamic ? false : nextDescription.RowSpec->MakeCommonSortness(ctx, *contentRowSpecs[s]);
+                        const bool breaksSorting = !notFlowDynamic && (hasSortChanges || !nextDescription.RowSpec->CompareSortness(*contentRowSpecs[s], false));
+
                         if (monotonicKeys) {
                             if (breaksSorting) {
                                 ctx.AddError(TIssue(pos, TStringBuilder()
@@ -710,7 +818,12 @@ private:
                                     warning << "unordered";
                                 }
                             } else if (uniqueKeys && !nextDescription.RowSpec->UniqueKeys) {
-                                warning << "Result table content will have non unique keys";
+                                if (meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow) {
+                                    nextDescription.RowSpec->UniqueKeys = true;
+                                    warning << "Result write to dynamic table " << outTableInfo.Name.Quote() << " may fail because of non unique keys";
+                                } else {
+                                    warning << "Result table content will have non unique keys";
+                                }
                             }
 
                             if (warning && !ctx.AddWarning(YqlIssue(pos, EYqlIssueCode::TIssuesIds_EIssueCode_YT_SORT_ORDER_CHANGE, warning))) {
@@ -732,8 +845,10 @@ private:
                 description.RowSpec = MakeIntrusive<TYqlRowSpecInfo>();
             }
             description.RowSpec->SetType(itemType->Cast<TStructExprType>());
-            YQL_CLOG(INFO, ProviderYt) << "Saving column order: " << FormatColumnOrder(contentColumnOrder, 10);
-            description.RowSpec->SetColumnOrder(contentColumnOrder);
+            if (State_->Types->OrderedColumns) {
+                YQL_CLOG(INFO, ProviderYt) << "Saving column order: " << FormatColumnOrder(contentColumnOrder, 10);
+                description.RowSpec->SetColumnOrder(contentColumnOrder);
+            }
         }
 
         return TStatus::Ok;
@@ -828,6 +943,8 @@ private:
 
         auto sort = TYtSort(input);
 
+        const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(sort.DataSink().Cluster().StringValue(), *State_->Configuration);
+
         TYtOutTableInfo outTableInfo(sort.Output().Item(0));
         if (!outTableInfo.RowSpec) {
             ctx.AddError(TIssue(ctx.GetPosition(sort.Output().Item(0).Pos()),
@@ -851,6 +968,12 @@ private:
             }
         }
 
+        ui64 auxColumnsNativeTypeFlags = 0ul;
+        for (auto& [_, type]: outTableInfo.RowSpec->GetAuxColumns()) {
+            auxColumnsNativeTypeFlags |= GetItemNativeYtTypeFlags(*type);
+        }
+        auxColumnsNativeTypeFlags &= nativeTypeCompatibility;
+
         if (!ValidateSettings(sort.Settings().Ref(), EYtSettingType::Limit | EYtSettingType::NoDq, ctx)) {
             return TStatus::Error;
         }
@@ -863,7 +986,9 @@ private:
                         << " cannot be applied to tables with QB2 premapper, inferred, yamred_dsv, or non-strict schemas"));
                     return TStatus::Error;
                 }
-                if (pathInfo.Table->RowSpec && pathInfo.GetNativeYtTypeFlags() != outTableInfo.RowSpec->GetNativeYtTypeFlags()) {
+
+                // Handle possible nativeness of aux columns introduced by sort keys extractor
+                if (pathInfo.Table->RowSpec && pathInfo.GetNativeYtTypeFlags() != (outTableInfo.RowSpec->GetNativeYtTypeFlags() | auxColumnsNativeTypeFlags)) {
                     ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtSort::CallableName()
                         << " has different input/output native YT types"));
                     return TStatus::Error;
@@ -927,6 +1052,10 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtCopy::CallableName() << " cannot be used with range selection"));
                     return TStatus::Error;
                 }
+                if (!path.QLFilter().Maybe<TCoVoid>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtCopy::CallableName() << " cannot be used with QLFilter"));
+                    return TStatus::Error;
+                }
                 auto tableInfo = TYtTableBaseInfo::Parse(path.Table());
                 if (!tableInfo->IsTemp) {
                     ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtCopy::CallableName() << " cannot be used with non-temporary tables"));
@@ -975,25 +1104,35 @@ private:
             outGroup = setting->Tail().Content();
         }
 
-        TStringBuf inputColGroupSpec;
+        bool diffGroups = false;
         const auto& path = copy.Input().Item(0).Paths().Item(0);
         if (auto table = path.Table().Maybe<TYtTable>()) {
             if (auto tableDesc = State_->TablesData->FindTable(copy.DataSink().Cluster().StringValue(), TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
-                inputColGroupSpec = tableDesc->ColumnGroupSpec;
+                diffGroups = tableDesc->ColumnGroupSpecAlts.empty() != outGroup.empty() || (!outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.contains(outGroup));
+                if (diffGroups && !outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.empty()) {
+                    TString expanded;
+                    if (ExpandDefaultColumnGroup(outGroup, *GetSeqItemType(*copy.Output().Item(0).Ref().GetTypeAnn()).Cast<TStructExprType>(), expanded)) {
+                        diffGroups = !tableDesc->ColumnGroupSpecAlts.contains(expanded);
+                    }
+                }
             }
         } else if (auto out = path.Table().Maybe<TYtOutput>()) {
+            TStringBuf inGroup;
             if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
-                inputColGroupSpec = setting->Tail().Content();
+                inGroup = setting->Tail().Content();
             }
+            diffGroups = inGroup != outGroup;
         } else if (auto outTable = path.Table().Maybe<TYtOutTable>()) {
+            TStringBuf inGroup;
             if (auto setting = NYql::GetSetting(outTable.Cast().Settings().Ref(), EYtSettingType::ColumnGroups)) {
-                inputColGroupSpec = setting->Tail().Content();
+                inGroup = setting->Tail().Content();
             }
+            diffGroups = inGroup != outGroup;
         }
 
-        if (outGroup != inputColGroupSpec) {
+        if (diffGroups) {
             ctx.AddError(TIssue(ctx.GetPosition(copy.Output().Item(0).Settings().Pos()), TStringBuilder() << TYtCopy::CallableName()
-                << "has input/output tables with different " << EYtSettingType::ColumnGroups << " values"));
+                << " has input/output tables with different " << EYtSettingType::ColumnGroups << " values"));
             return TStatus::Error;
         }
 
@@ -1014,7 +1153,7 @@ private:
 
         auto merge = TYtMerge(input);
 
-        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq | EYtSettingType::QLFilter, ctx)) {
+        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq | EYtSettingType::ReplaceParentCache, ctx)) {
             return TStatus::Error;
         }
 
@@ -1098,8 +1237,7 @@ private:
             | EYtSettingType::BlockInputReady
             | EYtSettingType::BlockInputApplied
             | EYtSettingType::BlockOutputReady
-            | EYtSettingType::BlockOutputApplied
-            | EYtSettingType::QLFilter;
+            | EYtSettingType::BlockOutputApplied;
         if (!ValidateSettings(map.Settings().Ref(), accpeted, ctx)) {
             return TStatus::Error;
         }
@@ -1289,7 +1427,7 @@ private:
 
         auto mapReduce = TYtMapReduce(input);
 
-        const auto acceptedSettings = EYtSettingType::ReduceBy
+        auto acceptedSettings = EYtSettingType::ReduceBy
             | EYtSettingType::ReduceFilterBy
             | EYtSettingType::SortBy
             | EYtSettingType::Limit
@@ -1300,7 +1438,11 @@ private:
             | EYtSettingType::MapOutputType
             | EYtSettingType::ReduceInputType
             | EYtSettingType::NoDq
-            | EYtSettingType::QLFilter;
+            | EYtSettingType::ForceApplyMaxJobCount;
+
+        if (hasMapLambda) {
+            acceptedSettings |= EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied;
+        }
         if (!ValidateSettings(mapReduce.Settings().Ref(), acceptedSettings, ctx)) {
             return TStatus::Error;
         }
@@ -1338,11 +1480,12 @@ private:
 
         auto itemType = GetInputItemType(mapReduce.Input(), ctx);
         const auto useFlow = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::Flow);
+        const auto blockInputApplied = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::BlockInputApplied);
 
         auto& mapLambda = input->ChildRef(TYtMapReduce::idx_Mapper);
         TTypeAnnotationNode::TListType mapDirectOutputTypes;
         if (hasMapLambda) {
-            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, TExprNode::TPtr(), ctx);
+            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, blockInputApplied, ctx);
 
             if (!UpdateLambdaAllArgumentsTypes(mapLambda, {mapLambdaInputType}, ctx)) {
                 return TStatus::Error;
@@ -1510,7 +1653,8 @@ private:
             return TStatus::Repeat;
         }
 
-        if (input->Child(TYtWriteTable::idx_Content)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList) {
+        if (input->Child(TYtWriteTable::idx_Content)->GetTypeAnn() &&
+            input->Child(TYtWriteTable::idx_Content)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList) {
             output = ctx.ChangeChild(*input, TYtWriteTable::idx_Content,
                 Build<TCoList>(ctx, input->Pos())
                    .ListType<TCoListType>()
@@ -1536,6 +1680,10 @@ private:
             return TStatus::Error;
         }
 
+        if (!EnsureDataSinkClusterMatchesTable(TYtDSink(input->ChildPtr(TYtWriteTable::idx_DataSink)), TYtTable(table), ctx)) {
+            return TStatus::Error;
+        }
+
         auto settings = input->Child(TYtWriteTable::idx_Settings);
         if (!EnsureTuple(*settings, ctx)) {
             return TStatus::Error;
@@ -1554,13 +1702,16 @@ private:
             | EYtSettingType::MutationId
             | EYtSettingType::ColumnGroups
             | EYtSettingType::SecurityTags
+            | EYtSettingType::Columns
             , ctx))
         {
             return TStatus::Error;
         }
 
+        const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
         TExprNode::TPtr newTable;
-        auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, ctx);
+        auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx);
         if (TStatus::Ok != status.Level) {
             if (TStatus::Error != status.Level && newTable != table) {
                 output = ctx.ChangeChild(*input, TYtWriteTable::idx_Table, std::move(newTable));
@@ -1573,6 +1724,13 @@ private:
 
         const TTypeAnnotationNode* itemType = nullptr;
         if (!GetSequenceItemType(writeTable.Content().Ref(), itemType, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (auto reserved = FindReservedColumnName(*itemType, *State_)) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                << "Cannot write column " << TString{*reserved}.Quote() << " with reserved prefix "
+                << TString{SystemMemberPrefix}.Quote()));
             return TStatus::Error;
         }
 
@@ -1664,8 +1822,9 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus HandleDropTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 3, ctx)) {
+
+    TStatus HandleCreateTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (!EnsureArgsCount(*input, 6U, ctx)) {
             return TStatus::Error;
         }
 
@@ -1673,7 +1832,7 @@ private:
             return TStatus::Error;
         }
 
-        auto table = input->ChildPtr(TYtDropTable::idx_Table);
+        const auto table = input->ChildPtr(TYtCreateTable::idx_Table);
         if (!EnsureCallable(*table, ctx)) {
             return TStatus::Error;
         }
@@ -1683,54 +1842,387 @@ private:
             return TStatus::Error;
         }
 
-        auto dropTable = TYtDropTable(input);
-        if (!TYtTableInfo::HasSubstAnonymousLabel(dropTable.Table())) {
+        if (!EnsureDataSinkClusterMatchesTable(TYtDSink(input->ChildPtr(TYtCreateTable::idx_DataSink)), TYtTable(table), ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto columns = input->ChildPtr(TYtCreateTable::idx_Columns);
+        if (!EnsureTuple(*columns, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto keys = input->ChildPtr(TYtCreateTable::idx_OrderBy);
+        if (!EnsureTuple(*keys, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto settings = input->Child(TYtCreateTable::idx_Settings);
+        if (!EnsureTuple(*settings, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateSettings(*settings, EYtSettingType::Initial
+            | EYtSettingType::Mode
+            | EYtSettingType::CompressionCodec
+            | EYtSettingType::ErasureCodec
+            | EYtSettingType::ReplicationFactor
+            | EYtSettingType::UserAttrs
+            | EYtSettingType::Expiration
+            , ctx))
+        {
+            return TStatus::Error;
+        }
+
+        const TYtCreateTable create(input);
+        if (!TYtTableInfo::HasSubstAnonymousLabel(create.Table())) {
+            const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
             TExprNode::TPtr newTable;
-            auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, ctx);
-            if (TStatus::Ok != status.Level) {
+            if (const auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx); TStatus::Ok != status.Level) {
+                if (TStatus::Error != status.Level && newTable != table) {
+                    output = ctx.ChangeChild(*input, TYtCreateTable::idx_Table, std::move(newTable));
+                }
+                return status.Combine(TStatus::Repeat);
+            }
+
+            const bool initial = NYql::HasSetting(create.Settings().Ref(), EYtSettingType::Initial);
+            const TYtTableInfo tableInfo(create.Table());
+            YQL_ENSURE(tableInfo.Meta);
+            if (tableInfo.Meta->DoesExist || !initial) {
+                if (const auto m = NYql::GetSetting(*settings, EYtSettingType::Mode)) {
+                    if (EYtWriteMode::CreateIfNotExists == FromString<EYtWriteMode>(m->Tail().Content())) {
+                        YQL_CLOG(INFO, ProviderYt) <<
+                            (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name <<
+                            " already exists. 'CREATE TABLE IF NOT EXISTS' statement will do nothing.";
+
+                        output = create.World().Ptr();
+                        return TStatus::Repeat;
+                    }
+                }
+
+                ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), TStringBuilder() <<
+                    (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name << " already exists."));
+                return TStatus::Error;
+            }
+
+            if (const auto commitEpoch = tableInfo.CommitEpoch) {
+                auto& next = State_->TablesData->GetOrAddTable(create.DataSink().Cluster().StringValue(), tableInfo.Name, commitEpoch);
+                if (!next.Meta) {
+                    next.Meta = MakeIntrusive<TYtTableMetaInfo>();
+                    next.Meta->DoesExist = true;
+                }
+
+                TVector<const TItemExprType*> items(create.Columns().Size());
+                TMaybe<TColumnOrder> columnOrder;
+                if (State_->Types->OrderedColumns) {
+                    columnOrder.ConstructInPlace();
+                    columnOrder->Reserve(items.size());
+                }
+                for (auto i = 0U; i < items.size(); ++i) {
+                    const auto& node = create.Columns().Item(i).Ref();
+                    const auto type = node.Child(1U)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                    if (!EnsurePersistableType(node.Child(1U)->Pos(), *type, ctx)) {
+                        return TStatus::Error;
+                    }
+                    items[i] = ctx.MakeType<TItemExprType>(node.Head().Content(), type);
+                    if (columnOrder) {
+                        columnOrder->AddColumn(TString(node.Head().Content()));
+                    }
+                }
+
+                const auto rowType = ctx.MakeType<TStructExprType>(std::move(items));
+                next.RowType = rowType;
+                next.IsReplaced = true;
+
+                const TYtOutTableInfo outTable(rowType, GetNativeYtTypeCompatibility(create.DataSink().Cluster().StringValue(), *State_->Configuration), columnOrder);
+
+                // Strict Yson cannot be represented in native YT types. Reject it right here to avoid internal erros later
+                if (!outTable.RowSpec->HasPersistableYson()) {
+                    ReportNonWritableBareYsonError(ctx.GetPosition(create.Pos()), *rowType, ctx);
+                    return TStatus::Error;
+                }
+
+                const auto orderBySize = create.OrderBy().Size();
+                outTable.RowSpec->SortedBy.reserve(orderBySize);
+                outTable.RowSpec->SortMembers.reserve(orderBySize);
+                outTable.RowSpec->SortDirections.reserve(orderBySize);
+                outTable.RowSpec->SortedByTypes.reserve(orderBySize);
+
+                const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+                for (auto i = 0U; i < orderBySize; ++i) {
+                    const auto& node = create.OrderBy().Item(i);
+                    if (!EnsureArgsCount(node.Ref(), 2U, ctx)) {
+                        return TStatus::Error;
+                    }
+
+                    outTable.RowSpec->SortedBy.emplace_back(node.Name().StringValue());
+                    outTable.RowSpec->SortMembers.emplace_back(outTable.RowSpec->SortedBy.back());
+                    outTable.RowSpec->SortDirections.emplace_back(!FromString<bool>(node.Value().Cast<TCoAtom>().Value()));
+                    if (!(useNativeDescSort || outTable.RowSpec->SortDirections.back())) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Value().Cast().Pos()), TStringBuilder() <<
+                            "Descending order for the `" << node.Name().Value() << "` column is only supported when YT's native descending sort is enabled."));
+                        return TStatus::Error;
+                    }
+                    const auto keyType = rowType->FindItemType(node.Name().Value());
+                    if (!keyType) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Value().Cast().Pos()), TStringBuilder() <<
+                            "Invalid sort column `" << node.Name().Value() << "`."));
+                        return TStatus::Error;
+                    }
+                    if (!EnsureComparableKey(node.Name().Pos(), keyType, ctx)) {
+                        return TStatus::Error;
+                    }
+                    outTable.RowSpec->SortedByTypes.emplace_back(keyType);
+                }
+                next.RowSpec = outTable.RowSpec;
+            }
+        }
+
+        input->SetTypeAnn(create.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDrop(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (!EnsureMinMaxArgsCount(*input, 3U, 4U, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateOpBase(input, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (input->ChildrenSize() < 4U) {// Add empty settings.
+            auto children = input->ChildrenList();
+            children.emplace_back(ctx.NewList(input->Pos(), {}));
+            output = ctx.ChangeChildren(*input, std::move(children));
+            return TStatus::Repeat;
+        }
+
+        const auto table = input->ChildPtr(TYtIsolatedOpBase::idx_Table);
+        if (!EnsureCallable(*table, ctx)) {
+            return TStatus::Error;
+        }
+        if (!table->IsCallable(TYtTable::CallableName())) {
+            ctx.AddError(TIssue(ctx.GetPosition(table->Pos()), TStringBuilder() << "Expected " << TYtTable::CallableName()
+                << " callable, but got " << table->Content()));
+            return TStatus::Error;
+        }
+        if (!EnsureDataSinkClusterMatchesTable(TYtDSink(input->ChildPtr(TYtIsolatedOpBase::idx_DataSink)), TYtTable(table), ctx)) {
+            return TStatus::Error;
+        }
+
+        const bool isDropTable = input->IsCallable(TYtDropTable::CallableName());
+        const auto settings = input->Child(isDropTable ? TYtDropTable::idx_Settings : TYtDropView::idx_Settings);
+        if (!EnsureTuple(*settings, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateSettings(*settings, EYtSettingType::Mode, ctx)) {
+            return TStatus::Error;
+        }
+
+        bool ifExists = false;
+        if (const auto m = NYql::GetSetting(*settings, EYtSettingType::Mode)) {
+            ifExists = (isDropTable ? EYtWriteMode::DropIfExists : EYtWriteMode::DropObjectIfExists) == FromString<EYtWriteMode>(m->Tail().Content());
+        }
+
+        const TYtIsolatedOpBase drop(input);
+        if (!TYtTableInfo::HasSubstAnonymousLabel(drop.Table())) {
+            const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
+            TExprNode::TPtr newTable;
+            if (auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx); TStatus::Ok != status.Level) {
                 if (TStatus::Error != status.Level && newTable != table) {
                     output = ctx.ChangeChild(*input, TYtWriteTable::idx_Table, std::move(newTable));
                 }
                 return status.Combine(TStatus::Repeat);
             }
-            auto tableInfo = TYtTableInfo(dropTable.Table());
+            const TYtTableInfo tableInfo(drop.Table());
             YQL_ENSURE(tableInfo.Meta);
-            if (tableInfo.Meta->SqlView) {
-                ctx.AddError(TIssue(ctx.GetPosition(dropTable.Table().Pos()), TStringBuilder()
-                    << "Drop of " << tableInfo.Name.Quote() << " view is not supported"));
-                return TStatus::Error;
-            }
 
-            if (tableInfo.Meta->IsDynamic) {
-                ctx.AddError(TIssue(ctx.GetPosition(dropTable.Table().Pos()), TStringBuilder() <<
-                    "Drop of dynamic table " << tableInfo.Name.Quote() << " is not supported"));
-                return TStatus::Error;
-            }
+            const bool fixLoop =  State_->Configuration->_FixEndlessLoopInDropIfExists.Get().GetOrElse(DEFAULT_FIX_ENDLESS_LOOP_IN_DROP_IF_EXISTS);
+            if (fixLoop) {
+                // Make sure we register the table state for the next epoch
+                if (const auto commitEpoch = tableInfo.CommitEpoch) {
+                    auto& nextDescription = State_->TablesData->GetOrAddTable(drop.DataSink().Cluster().StringValue(), tableInfo.Name, commitEpoch);
 
-            if (auto commitEpoch = tableInfo.CommitEpoch) {
-                TYtTableDescription& nextDescription = State_->TablesData->GetOrAddTable(
-                    TString{dropTable.DataSink().Cluster().Value()},
-                    tableInfo.Name,
-                    commitEpoch
-                );
+                    auto& nextMetadata = nextDescription.Meta;
+                    if (!nextMetadata) {
+                        nextDescription.RowType = nullptr;
+                        nextDescription.RawRowType = nullptr;
 
-                TYtTableMetaInfo::TPtr nextMetadata = nextDescription.Meta;
-                if (!nextMetadata) {
-                    nextDescription.RowType = nullptr;
-                    nextDescription.RawRowType = nullptr;
-
-                    nextMetadata = nextDescription.Meta = MakeIntrusive<TYtTableMetaInfo>();
-                    nextMetadata->DoesExist = false;
+                        nextMetadata = MakeIntrusive<TYtTableMetaInfo>();
+                        nextMetadata->DoesExist = false;
+                    }
+                    else if (nextMetadata->DoesExist) {
+                        ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
+                            (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name << " is modified and dropped in the same transaction"));
+                        return TStatus::Error;
+                    }
                 }
-                else if (nextMetadata->DoesExist) {
-                    ctx.AddError(TIssue(ctx.GetPosition(dropTable.Table().Pos()), TStringBuilder() <<
-                        "Table " << tableInfo.Name << " is modified and dropped in the same transaction"));
+            }
+
+            if (!tableInfo.Meta->DoesExist && ifExists) {
+                YQL_CLOG(INFO, ProviderYt) <<
+                    (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name <<
+                    " does not exist. 'DROP " << (isDropTable ? "TABLE" : "VIEW") << " IF EXISTS' statement will do nothing.";
+
+                if (fixLoop) {
+                    // TODO: the object we are dropping is missing, but we cannot remove DropTable from graph
+                    // (via output = drop.World().Ptr(); return TStatus::Repeat; )
+                    // this will break epoch assigmnent and fail RunOnOpt test.
+                    // Bot we can actually detect this situation later in exec transformer and don't even issue YT call
+                    input->SetTypeAnn(drop.World().Ref().GetTypeAnn());
+                    return TStatus::Ok;
+                } else {
+                    output = drop.World().Ptr();
+                    return TStatus::Repeat;
+                }
+            }
+
+            if (isDropTable) {
+                if (tableInfo.Meta->IsDynamic) {
+                    ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
+                        "Drop of dynamic table " << tableInfo.Name.Quote() << " is not supported"));
                     return TStatus::Error;
+                }
+            } else {
+                if (!tableInfo.Meta->DoesExist) {
+                    ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
+                        "View " << tableInfo.Name.Quote() << " does not exists."));
+                    return TStatus::Error;
+                }
+            }
+
+            if (const bool isTable = tableInfo.Meta->SqlView.empty(); isTable != isDropTable) {
+                ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder()
+                    << "Drop of " << tableInfo.Name.Quote() << ' ' << (isTable ? "table" : "view")
+                    << " can not be done via DROP " << (isDropTable ? "TABLE" : "VIEW") << " statement."));
+                return TStatus::Error;
+            }
+
+            if (!fixLoop) {
+                if (const auto commitEpoch = tableInfo.CommitEpoch) {
+                    auto& nextDescription = State_->TablesData->GetOrAddTable(drop.DataSink().Cluster().StringValue(), tableInfo.Name, commitEpoch);
+
+                    auto& nextMetadata = nextDescription.Meta;
+                    if (!nextMetadata) {
+                        nextDescription.RowType = nullptr;
+                        nextDescription.RawRowType = nullptr;
+
+                        nextMetadata = MakeIntrusive<TYtTableMetaInfo>();
+                        nextMetadata->DoesExist = false;
+                    }
+                    else if (nextMetadata->DoesExist) {
+                        ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
+                            (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name << " is modified and dropped in the same transaction"));
+                        return TStatus::Error;
+                    }
                 }
             }
         }
 
-        input->SetTypeAnn(dropTable.World().Ref().GetTypeAnn());
+        input->SetTypeAnn(drop.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    TStatus HandleCreateView(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (!EnsureArgsCount(*input, 6U, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateOpBase(input, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto table = input->ChildPtr(TYtCreateView::idx_Table);
+        if (!EnsureCallable(*table, ctx)) {
+            return TStatus::Error;
+        }
+        if (!table->IsCallable(TYtTable::CallableName())) {
+            ctx.AddError(TIssue(ctx.GetPosition(table->Pos()), TStringBuilder() << "Expected " << TYtTable::CallableName()
+                << " callable, but got " << table->Content()));
+            return TStatus::Error;
+        }
+        if (!EnsureDataSinkClusterMatchesTable(TYtDSink(input->ChildPtr(TYtCreateView::idx_DataSink)), TYtTable(table), ctx)) {
+            return TStatus::Error;
+        }
+        if (!EnsureAtom(*input->Child(TYtCreateView::idx_Original), ctx)) {
+            return TStatus::Error;
+        }
+        if (!EnsureListType(*input->Child(TYtCreateView::idx_Compiled), ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto settings = input->Child(TYtCreateView::idx_Settings);
+        if (!EnsureTuple(*settings, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!ValidateSettings(*settings, EYtSettingType::Initial
+            | EYtSettingType::Mode
+            | EYtSettingType::UserAttrs
+            | EYtSettingType::Expiration
+            , ctx))
+        {
+            return TStatus::Error;
+        }
+
+        const TYtCreateView create(input);
+        const auto rowType = create.Compiled().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        if (!(EnsurePersistableType(create.Compiled().Pos(), *rowType, ctx) && EnsureStructType(create.Compiled().Pos(), *rowType, ctx))) {
+            return TStatus::Error;
+        }
+
+        if (!TYtTableInfo::HasSubstAnonymousLabel(create.Table())) {
+            const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
+            TExprNode::TPtr newTable;
+            if (auto status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx); TStatus::Ok != status.Level) {
+                if (TStatus::Error != status.Level && newTable != table) {
+                    output = ctx.ChangeChild(*input, TYtWriteTable::idx_Table, std::move(newTable));
+                }
+                return status.Combine(TStatus::Repeat);
+            }
+            TYtTableInfo tableInfo(create.Table());
+            YQL_ENSURE(tableInfo.Meta);
+            if (tableInfo.Meta->DoesExist) {
+                if (const auto m = NYql::GetSetting(*settings, EYtSettingType::Mode)) {
+                    if (EYtWriteMode::CreateObjectIfNotExists == FromString<EYtWriteMode>(m->Tail().Content())) {
+                        YQL_CLOG(INFO, ProviderYt) <<
+                            (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name <<
+                            " already exists. 'CREATE VIEW IF NOT EXISTS' statement will do nothing.";
+
+                        output = create.World().Ptr();
+                        return TStatus::Repeat;
+                    }
+                }
+
+                ctx.AddError(TIssue(ctx.GetPosition(create.Table().Pos()), TStringBuilder() <<
+                    (tableInfo.Meta->SqlView.empty() ? "Table" : "View") << ' ' << tableInfo.Name << " already exists."));
+                return TStatus::Error;
+            }
+
+           if (const auto commitEpoch = tableInfo.CommitEpoch) {
+                auto& next = State_->TablesData->GetOrAddTable(create.DataSink().Cluster().StringValue(), tableInfo.Name, commitEpoch);
+                next.View.ConstructInPlace();
+                next.View->Sql = create.Original().StringValue();
+                TNodeOnNodeOwnedMap map;
+                next.View->CompiledSql = ctx.DeepCopy(create.Compiled().Ref(), ctx, map, false, false);
+
+                next.RowType = rowType;
+                next.IsReplaced = true;
+
+                if (!next.Meta) {
+                    next.Meta = MakeIntrusive<TYtTableMetaInfo>();
+                    next.Meta->DoesExist = true;
+                    next.Meta->SqlView = create.Original().StringValue();
+                    next.Meta->CanWrite = false;
+                }
+           }
+        }
+
+        input->SetTypeAnn(create.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
 
@@ -1809,6 +2301,10 @@ private:
             return TStatus::Error;
         }
 
+        if (!EnsureDataSinkClusterMatchesTable(TYtDSink(input->ChildPtr(TYtWriteTable::idx_DataSink)), TYtTable(table), ctx)) {
+            return TStatus::Error;
+        }
+
         auto settings = input->Child(TYtPublish::idx_Settings);
         if (!EnsureTuple(*settings, ctx)) {
             return TStatus::Error;
@@ -1850,8 +2346,10 @@ private:
                 return status;
             }
 
+            const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
             TExprNode::TPtr newTable;
-            status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, ctx);
+            status = UpdateTableMeta(table, newTable, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx);
             if (TStatus::Ok != status.Level) {
                 if (TStatus::Error != status.Level && newTable != table) {
                     output = ctx.ChangeChild(*input, TYtPublish::idx_Publish, std::move(newTable));
@@ -1899,8 +2397,13 @@ private:
                 }
 
                 if (auto& lambda = input->ChildRef(i + 7U); lambda->IsLambda()) {
-                    if (!UpdateLambdaAllArgumentsTypes(lambda, {GetSequenceItemType(section, false, ctx)}, ctx))
+                    if (auto status = ConvertToLambda(lambda, ctx, 1); status != IGraphTransformer::TStatus::Ok) {
+                        return status;
+                    }
+
+                    if (!UpdateLambdaAllArgumentsTypes(lambda, {GetSequenceItemType(section, false, ctx)}, ctx)) {
                         return TStatus::Error;
+                    }
 
                     if (!lambda->GetTypeAnn()) {
                         return TStatus::Repeat;
@@ -1937,7 +2440,7 @@ private:
 
         const TStructExprType* resultType = nullptr;
         status = EquiJoinAnnotation(input->Pos(), resultType, labels,
-            *input->Child(TYtEquiJoin::idx_Joins), joinOptions, ctx);
+            *input->Child(TYtEquiJoin::idx_Joins), joinOptions, ctx, *State_->Types);
         if (status != TStatus::Ok) {
             return status;
         }
@@ -2033,11 +2536,11 @@ private:
     }
 
     TStatus HandleYtDqProcessWrite(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!ValidateOutputOpBase(input, ctx, false)) {
+        if (!EnsureMinMaxArgsCount(*input, 4, 5, ctx)) {
             return TStatus::Error;
         }
 
-        if (!EnsureMinMaxArgsCount(*input, 4, 5, ctx)) {
+        if (!ValidateOutputOpBase(input, ctx, false)) {
             return TStatus::Error;
         }
 
@@ -2107,7 +2610,7 @@ private:
         }
 
         if (!IsSameAnnotation(*input.Ref().Child(TYtTryFirst::idx_First)->GetTypeAnn(), *input.Ref().Child(TYtTryFirst::idx_Second)->GetTypeAnn())) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Both argumensts must be same type."));
+            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Both arguments must be same type."));
             return TStatus::Error;
         }
 
@@ -2128,7 +2631,11 @@ private:
             return IGraphTransformer::TStatus::Error;
         }
         const auto& itemType = GetSeqItemType(*input.Ref().Child(TYtMaterialize::idx_Input)->GetTypeAnn());
-        if (!EnsurePersistableType(input.Ref().Head().Pos(), itemType, ctx)) {
+        if (!EnsurePersistableType(input.Ref().Child(TYtMaterialize::idx_Input)->Pos(), itemType, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureStructType(input.Ref().Child(TYtMaterialize::idx_Input)->Pos(), itemType, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -2137,11 +2644,102 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateSettings(*input.Ref().Child(TYtMaterialize::idx_Settings), EYtSettingTypes{}, ctx)) {
+        const auto acceptedSettings = EYtSettingType::Unordered | EYtSettingType::Transparent | EYtSettingType::PruneUnusedColumns;
+        if (!ValidateSettings(*input.Ref().Child(TYtMaterialize::idx_Settings), acceptedSettings, ctx)) {
             return TStatus::Error;
         }
 
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(&itemType));
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
+            input.Ptr()->Child(TYtMaterialize::idx_World)->GetTypeAnn(),
+            ctx.MakeType<TListExprType>(&itemType)
+        }));
+
+        return TStatus::Ok;
+    }
+
+    TStatus HandlePersist(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (!EnsureArgsCount(*input, 5, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto status = ValidateAndUpdateTransientOpBase(input, output, ctx, false, {});
+        if (status.Level != TStatus::Ok) {
+            return status;
+        }
+
+        // Basic Settings validation
+        if (!EnsureTuple(*input->Child(TYtPersist::idx_Settings), ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto acceptedSettings = EYtSettingType::Unordered | EYtSettingType::Transparent | EYtSettingType::PruneUnusedColumns;
+        if (!ValidateSettings(*input->Child(TYtPersist::idx_Settings), acceptedSettings, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto persist = TYtPersist(input);
+        // YtPersist! has exactly one input table
+        if (!EnsureArgsCount(persist.Input().Item(0).Paths().Ref(), 1, ctx)) {
+            return TStatus::Error;
+        }
+        TYtPath path = persist.Input().Item(0).Paths().Item(0);
+
+        auto tableInfo = TYtTableBaseInfo::Parse(path.Table());
+        if (!tableInfo->IsTemp) {
+            ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtPersist::CallableName() << " cannot be used with non-temporary tables"));
+            return TStatus::Error;
+        }
+
+        if (!path.Ranges().Maybe<TCoVoid>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtPersist::CallableName() << " cannot be used with range selection"));
+            return TStatus::Error;
+        }
+        if (!path.QLFilter().Maybe<TCoVoid>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtPersist::CallableName() << " cannot be used with QLFilter"));
+            return TStatus::Error;
+        }
+        if (!path.Columns().Maybe<TCoVoid>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(path.Pos()), TStringBuilder() << TYtPersist::CallableName() << " cannot be used column selection"));
+            return TStatus::Error;
+        }
+
+        TYqlRowSpecInfo outRowSpec(persist.Output().Item(0).RowSpec());
+        if (tableInfo->RowSpec->GetNativeYtTypeFlags() != outRowSpec.GetNativeYtTypeFlags()) {
+            ctx.AddError(TIssue(ctx.GetPosition(persist.Output().Item(0).RowSpec().Pos()), TStringBuilder() << TYtPersist::CallableName()
+                << " has different input/output native YT types"));
+            return TStatus::Error;
+        }
+        if (!tableInfo->RowSpec->CompareSortness(outRowSpec)) {
+            ctx.AddError(TIssue(ctx.GetPosition(persist.Output().Item(0).Pos()), TStringBuilder()
+                << "Input/output tables have different sort order"));
+            return TStatus::Error;
+        }
+
+        if (NYql::HasSetting(persist.Output().Item(0).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+            ctx.AddError(TIssue(ctx.GetPosition(persist.Output().Item(0).Settings().Pos()), TStringBuilder()
+                << TYtPersist::CallableName() << " output cannot have column groups"));
+            return TStatus::Error;
+        }
+
+        if (auto out = path.Table().Maybe<TYtOutput>()) {
+            if (NYql::HasSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                ctx.AddError(TIssue(ctx.GetPosition(path.Table().Pos()), TStringBuilder()
+                    << TYtPersist::CallableName() << " input cannot have column groups"));
+                return TStatus::Error;
+            }
+        } else if (auto outTable = path.Table().Maybe<TYtOutTable>()) {
+            if (NYql::HasSetting(outTable.Cast().Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                ctx.AddError(TIssue(ctx.GetPosition(path.Table().Pos()), TStringBuilder()
+                    << TYtPersist::CallableName() << " input cannot have column groups"));
+                return TStatus::Error;
+            }
+        }
+
+        if (!ValidateOutputType(path.Ref(), persist.Output(), ctx)) {
+            return TStatus::Error;
+        }
+
+        input->SetTypeAnn(MakeOutputOperationType(persist, ctx));
         return TStatus::Ok;
     }
 
@@ -2175,6 +2773,25 @@ private:
 
         input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
         return TStatus::Ok;
+    }
+
+    const TTypeAnnotationNode* MakeTypeForDynamicTableWrite(const TYtTableDescription& description, TExprContext& ctx) const {
+        auto* targetRowType = description.RowType;
+        if (description.Meta->IsDynamic) {
+            TVector<const TItemExprType*> items;
+            for (const auto* item : description.RowType->Cast<TStructExprType>()->GetItems()) {
+                const auto& name = item->GetName();
+                if (description.RowSpec->ExpressionColumns.contains(TString(name))) {
+                    continue;
+                }
+                if (Find(ORDERED_TABLE_READ_ONLY_FIELDS, name) != ORDERED_TABLE_READ_ONLY_FIELDS.end()) {
+                    continue;
+                }
+                items.push_back(item);
+            }
+            targetRowType = ctx.MakeType<TStructExprType>(items);
+        }
+        return targetRowType;
     }
 
 private:

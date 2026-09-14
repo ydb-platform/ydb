@@ -5,10 +5,10 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <ydb-cpp-sdk/client/params/params.h>
-#include <ydb-cpp-sdk/client/params/params.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -194,7 +194,7 @@ private:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
-            << " tablet recieved PoisonPill, going to die");
+            << " tablet received PoisonPill, going to die");
         CloseSession(ctx);
         Die(ctx);
     }
@@ -408,7 +408,7 @@ private:
 
     void HandlePoison(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
-            << " tablet recieved PoisonPill, going to die");
+            << " tablet received PoisonPill, going to die");
         Stop(ctx);
     }
 

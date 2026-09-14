@@ -1,12 +1,12 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
     out.cpp
     proto_accessor.cpp
     result.cpp
 )
+
+GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h)
 
 PEERDIR(
     ydb/public/api/protos

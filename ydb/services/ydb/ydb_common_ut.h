@@ -4,13 +4,12 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
+#include <ydb/core/security/certificate_check/test_utils/test_cert_auth_utils.h>
 #include <ydb/services/ydb/ydb_dummy.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <util/system/tempfile.h>
-
-#include "ydb_keys_ut.h"
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/csv/api.h> // for WriteCSV()
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
@@ -18,6 +17,7 @@
 #include <functional>
 
 using namespace NKikimr;
+using namespace NKikimr::NCertTestUtils;
 namespace NYdb {
 
 using namespace Tests;
@@ -27,11 +27,6 @@ struct TKikimrTestSettings {
     static constexpr bool SSL = false;
     static constexpr bool AUTH = false;
     static constexpr bool PrecreatePools = true;
-    static constexpr bool EnableSystemViews = true;
-
-    static TString GetCaCrt() { return NYdbSslTestData::CaCrt; }
-    static TString GetServerCrt() { return NYdbSslTestData::ServerCrt; }
-    static TString GetServerKey() { return NYdbSslTestData::ServerKey; }
 
     static NKikimr::TCertificateAuthorizationParams GetCertAuthParams() {return {}; }
 };
@@ -41,10 +36,6 @@ struct TKikimrTestWithAuth : TKikimrTestSettings {
 };
 
 struct TKikimrTestWithAuthAndSsl : TKikimrTestWithAuth {
-    static constexpr bool SSL = true;
-};
-
-struct TKikimrTestWithServerCert : TKikimrTestWithAuthAndSsl {
     static constexpr bool SSL = true;
 
     static const TCertAndKey& GetCACertAndKey() {
@@ -68,10 +59,6 @@ struct TKikimrTestWithServerCert : TKikimrTestWithAuthAndSsl {
     static TString GetServerKey() {
         return GetServerCert().PrivateKey.c_str();
     }
-};
-
-struct TKikimrTestNoSystemViews : TKikimrTestSettings {
-    static constexpr bool EnableSystemViews = false;
 };
 
 template <typename TestSettings = TKikimrTestSettings>
@@ -98,7 +85,7 @@ public:
         ServerSettings->SetDynamicNodeCount(dynamicNodeCount);
         if (nodeCount > 0)
             ServerSettings->SetNodeCount(nodeCount);
-        if (TestSettings::PrecreatePools) {
+        if constexpr (TestSettings::PrecreatePools) {
             ServerSettings->AddStoragePool("ssd");
             ServerSettings->AddStoragePool("hdd");
             ServerSettings->AddStoragePool("hdd1");
@@ -114,11 +101,14 @@ public:
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableDataColumnForIndexTable(true);
         ServerSettings->SetEnableNotNullColumns(true);
+        ServerSettings->SetEnableTopicMessageLevelParallelism(true);
         ServerSettings->SetEnableParameterizedDecimal(true);
-        ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->PQConfig = appConfig.GetPQConfig();
+        ServerSettings->AppConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        ServerSettings->AppConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+
         if (appConfig.HasMeteringConfig() && appConfig.GetMeteringConfig().HasMeteringFilePath()) {
             ServerSettings->SetMeteringFilePath(appConfig.GetMeteringConfig().GetMeteringFilePath());
         }
@@ -130,18 +120,23 @@ public:
             builder(*ServerSettings);;
         }
 
-        ServerCertificateFile.Write(TestSettings::GetServerCrt().data(), TestSettings::GetServerCrt().size());
-        ServerSettings->ServerCertFilePath = ServerCertificateFile.Name();
+        if constexpr (TestSettings::SSL) {
+            ServerCertificateFile.Write(TestSettings::GetServerCrt().data(), TestSettings::GetServerCrt().size());
+            ServerSettings->ServerCertFilePath = ServerCertificateFile.Name();
+        }
 
         Server_.Reset(new TServer(*ServerSettings));
         Tenants_.Reset(new Tests::TTenants(Server_));
 
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
-        Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::SASL_AUTH, NActors::NLog::PRI_INFO);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG);
         //Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_DEBUG);
+        //Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         if (enableYq) {
             Server_->GetRuntime()->SetLogPriority(NKikimrServices::YQL_PROXY, NActors::NLog::PRI_DEBUG);
             Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
@@ -150,16 +145,18 @@ public:
         }
 
         NYdbGrpc::TServerOptions grpcOption;
-        if (TestSettings::AUTH) {
+        if constexpr (TestSettings::AUTH) {
             grpcOption.SetUseAuth(appConfig.GetDomainsConfig().GetSecurityConfig().GetEnforceUserTokenRequirement()); // In real life UseAuth is initialized with EnforceUserTokenRequirement. To avoid incorrect tests we must do the same.
         }
-        grpcOption.SetPort(grpc);
-        if (TestSettings::SSL) {
+        grpcOption.SetHost("localhost").SetPort(grpc);
+        if constexpr (TestSettings::SSL) {
             NYdbGrpc::TSslData sslData;
             sslData.Cert = TestSettings::GetServerCrt();
             sslData.Key = TestSettings::GetServerKey();
-            sslData.Root =TestSettings::GetCaCrt();
-            sslData.DoRequestClientCertificate = appConfig.GetClientCertificateAuthorization().GetRequestClientCertificate();
+            sslData.Root = TestSettings::GetCaCrt();
+            const auto& clientCertificateAuthorization = appConfig.GetClientCertificateAuthorization();
+            sslData.DoRequestClientCertificate = clientCertificateAuthorization.GetRequestClientCertificate();
+            sslData.ClientCertificateRequired = clientCertificateAuthorization.GetClientCertificateRequired();
 
             grpcOption.SetSslData(sslData);
         }
@@ -173,7 +170,7 @@ public:
         GRpcPort_ = grpc;
     }
 
-    ui16 GetPort() {
+    ui16 GetPort() const {
         return GRpcPort_;
     }
 
@@ -223,7 +220,9 @@ struct TTestOlap {
                 arrow::field("json_payload", arrow::binary()),
                 arrow::field("ingested_at", tsType),
                 arrow::field("saved_at", tsType),
-                arrow::field("request_id", arrow::utf8())
+                arrow::field("request_id", arrow::utf8()),
+                arrow::field("flt", arrow::float32()),
+                arrow::field("dbl", arrow::float64())
             });
     }
 
@@ -238,7 +237,9 @@ struct TTestOlap {
             { "json_payload", NYdb::EPrimitiveType::JsonDocument },
             { "ingested_at", NYdb::EPrimitiveType::Timestamp },
             { "saved_at", NYdb::EPrimitiveType::Timestamp },
-            { "request_id", NYdb::EPrimitiveType::Utf8 }
+            { "request_id", NYdb::EPrimitiveType::Utf8 },
+            { "flt", NYdb::EPrimitiveType::Float },
+            { "dbl", NYdb::EPrimitiveType::Double }
         };
 
         if (sort) {
@@ -269,6 +270,8 @@ struct TTestOlap {
                     Columns { Name: "ingested_at" Type: "Timestamp" }
                     Columns { Name: "saved_at" Type: "Timestamp" }
                     Columns { Name: "request_id" Type: "Utf8" }
+                    Columns { Name: "flt" Type: "Float" }
+                    Columns { Name: "dbl" Type: "Double" }
                     KeyColumnNames: "timestamp"
                     KeyColumnNames: "uid"
                 }
@@ -326,6 +329,8 @@ struct TTestOlap {
             Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[5], s + "str"));
             Y_ABORT_UNLESS(NArrow::Append<arrow::BinaryType>(*builders[6], "{ \"value\": " + s + " }"));
             Y_ABORT_UNLESS(NArrow::Append<arrow::StringType>(*builders[9], s + "str"));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::FloatType>(*builders[10], i * 1.5f));
+            Y_ABORT_UNLESS(NArrow::Append<arrow::DoubleType>(*builders[11], i * 2.5));
         }
 
         return arrow::RecordBatch::Make(schema, rowsCount, NArrow::Finish(std::move(builders)));
@@ -355,11 +360,11 @@ struct TTestOlap {
 using TKikimrWithGrpcAndRootSchema = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestSettings>;
 using TKikimrWithGrpcAndRootSchemaWithAuth = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuth>;
 using TKikimrWithGrpcAndRootSchemaWithAuthAndSsl = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestWithAuthAndSsl>;
-using TKikimrWithGrpcAndRootSchemaNoSystemViews = TBasicKikimrWithGrpcAndRootSchema<TKikimrTestNoSystemViews>;
 
 Ydb::StatusIds::StatusCode WaitForStatus(
     std::shared_ptr<grpc::Channel> channel, const TString& opId,
     TString* error = nullptr,
+    const TString& database = "/Root",
     int retries = 10,
     TDuration sleepDuration = NYdb::ITERATION_DURATION
 );

@@ -125,6 +125,21 @@ def wrap_describe_table_response(rpc_state, response_pb, sesssion_state, scheme_
     )
 
 
+def wrap_describe_system_view_response(rpc_state, response_pb, scheme_entry_cls):
+    issues._process_response(response_pb.operation)
+    message = _apis.ydb_table.DescribeSystemViewResult()
+    response_pb.operation.result.Unpack(message)
+    return scheme._wrap_scheme_entry(
+        message.self,
+        scheme_entry_cls,
+        message.sys_view_id,
+        message.sys_view_name,
+        message.columns,
+        message.primary_key,
+        message.attributes,
+    )
+
+
 def explicit_partitions_factory(primary_key, columns, split_points):
     column_types = {}
     pk = set(primary_key)
@@ -251,6 +266,12 @@ def describe_table_request_factory(session_state, path, settings=None):
     return request
 
 
+def describe_system_view_request_factory(path, settings=None):
+    request = _apis.ydb_table.DescribeSystemViewRequest()
+    request.path = path
+    return request
+
+
 def alter_table_request_factory(
     session_state,
     path,
@@ -268,6 +289,7 @@ def alter_table_request_factory(
     alter_partitioning_settings,
     set_key_bloom_filter,
     set_read_replicas_settings,
+    rename_indexes,
 ):
     request = session_state.attach_request(_apis.ydb_table.AlterTableRequest(path=path))
     if add_columns is not None:
@@ -316,6 +338,10 @@ def alter_table_request_factory(
     if set_read_replicas_settings is not None:
         request.set_read_replicas_settings.MergeFrom(set_read_replicas_settings.to_pb())
 
+    if rename_indexes is not None:
+        for rename_index in rename_indexes:
+            request.rename_indexes.add().MergeFrom(rename_index.to_pb())
+
     return request
 
 
@@ -327,6 +353,7 @@ def read_table_request_factory(
     ordered=False,
     row_limit=None,
     use_snapshot=None,
+    return_not_null_data_as_optional=None,
 ):
     request = _apis.ydb_table.ReadTableRequest()
     request.path = path
@@ -357,6 +384,14 @@ def read_table_request_factory(
                 request.use_snapshot = _apis.FeatureFlag.DISABLED
         else:
             request.use_snapshot = use_snapshot
+    if return_not_null_data_as_optional is not None:
+        if isinstance(return_not_null_data_as_optional, bool):
+            if return_not_null_data_as_optional:
+                request.return_not_null_data_as_optional = _apis.FeatureFlag.ENABLED
+            else:
+                request.return_not_null_data_as_optional = _apis.FeatureFlag.DISABLED
+        else:
+            request.return_not_null_data_as_optional = return_not_null_data_as_optional
     return session_state.attach_request(request)
 
 

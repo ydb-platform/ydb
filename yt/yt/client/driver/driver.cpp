@@ -8,6 +8,7 @@
 #include "config.h"
 #include "cypress_commands.h"
 #include "distributed_table_commands.h"
+#include "distributed_file_commands.h"
 #include "etc_commands.h"
 #include "file_commands.h"
 #include "flow_commands.h"
@@ -21,8 +22,6 @@
 #include "table_commands.h"
 #include "transaction_commands.h"
 
-#include <yt/yt/library/formats/format.h>
-
 #include <yt/yt/client/api/client_cache.h>
 #include <yt/yt/client/api/connection.h>
 #include <yt/yt/client/api/sticky_transaction_pool.h>
@@ -30,6 +29,10 @@
 #include <yt/yt/core/yson/null_consumer.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <yt/yt/core/concurrency/async_stream_helpers.h>
+
+#include <yt/yt/library/formats/format.h>
 
 #include <yt/yt/library/tvm/tvm_base.h>
 
@@ -55,9 +58,17 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr auto& Logger = DriverLogger;
+constinit const auto Logger = DriverLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
+
+static TClientOptions GetRootClientOptions(const TDriverConfigPtr& config)
+{
+    auto result = TClientOptions::Root();
+    result.MultiproxyTargetCluster = config->MultiproxyTargetCluster;
+    result.AbandonMasterTransactionsOnFailedCommit = config->AbandonMasterTransactionsOnFailedCommit;
+    return result;
+}
 
 void Serialize(const TCommandDescriptor& descriptor, NYson::IYsonConsumer* consumer)
 {
@@ -89,14 +100,14 @@ void TDriverRequest::Reset()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCommandDescriptor IDriver::GetCommandDescriptor(const TString& commandName) const
+TCommandDescriptor IDriver::GetCommandDescriptor(const std::string& commandName) const
 {
     auto descriptor = FindCommandDescriptor(commandName);
     YT_VERIFY(descriptor);
     return *descriptor;
 }
 
-TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const TString& commandName) const
+TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const std::string& commandName) const
 {
     auto descriptor = FindCommandDescriptor(commandName);
     if (!descriptor) {
@@ -107,7 +118,6 @@ TCommandDescriptor IDriver::GetCommandDescriptorOrThrow(const TString& commandNa
 
 ////////////////////////////////////////////////////////////////////////////////
 
-
 class TDriver
     : public IDriver
 {
@@ -115,18 +125,16 @@ public:
     TDriver(
         TDriverConfigPtr config,
         IConnectionPtr connection,
-        TSignatureGeneratorBasePtr signatureGenerator,
-        TSignatureValidatorBasePtr signatureValidator)
+        ISignatureValidatorPtr signatureValidator)
         : Config_(std::move(config))
         , Connection_(std::move(connection))
         , ClientCache_(New<TClientCache>(Config_->ClientCache, Connection_))
         , RootClient_(ClientCache_->Get(
             GetRootAuthenticationIdentity(),
-            TClientOptions::FromAuthenticationIdentity(GetRootAuthenticationIdentity())))
+            GetRootClientOptions(Config_)))
         , ProxyDiscoveryCache_(CreateProxyDiscoveryCache(
             Config_->ProxyDiscoveryCache,
             RootClient_))
-        , SignatureGenerator_(std::move(signatureGenerator))
         , SignatureValidator_(std::move(signatureValidator))
         , StickyTransactionPool_(CreateStickyTransactionPool(Logger()))
     {
@@ -183,14 +191,20 @@ public:
         REGISTER_ALL(TGetFileFromCacheCommand,             "get_file_from_cache",             Null,       Structured, false, false);
         REGISTER_ALL(TPutFileToCacheCommand,               "put_file_to_cache",               Null,       Structured, true,  false);
 
+        REGISTER_ALL(TPartitionFileCommand,                "partition_file",                  Null,       Structured, false, false);
+
+        REGISTER    (TReadFilePartitionCommand,            "read_file_partition",             Null,       Binary,     false, true , ApiVersion4);
+
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TWriteTableCommand,                   "write_table",                     Tabular,    Structured, true,  true , ApiVersion4);
-        REGISTER_ALL(TGetTableColumnarStatisticsCommand,   "get_table_columnar_statistics",   Null,       Structured, false, false);
+        REGISTER_ALL(TGetTableColumnarStatisticsCommand,   "get_table_columnar_statistics",   Null,       Structured, false, true);
         REGISTER_ALL(TReadTableCommand,                    "read_table",                      Null,       Tabular,    false, true );
         REGISTER_ALL(TReadBlobTableCommand,                "read_blob_table",                 Null,       Binary,     false, true );
         REGISTER_ALL(TLocateSkynetShareCommand,            "locate_skynet_share",             Null,       Structured, false, true );
 
         REGISTER_ALL(TPartitionTablesCommand,              "partition_tables",                Null,       Structured, false, false);
+
+        REGISTER    (TReadTablePartitionCommand,           "read_table_partition",            Null,       Tabular,    false, true , ApiVersion4);
 
         REGISTER    (TInsertRowsCommand,                   "insert_rows",                     Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TLockRowsCommand,                     "lock_rows",                       Tabular,    Null,       true,  true , ApiVersion3);
@@ -250,6 +264,7 @@ public:
 
         REGISTER    (TUpdateChaosTableReplicaProgressCommand, "update_replication_progress",  Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TAlterReplicationCardCommand,         "alter_replication_card",          Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TPingChaosLeaseCommand,               "ping_chaos_lease",                Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER    (TMergeCommand,                        "merge",                           Null,       Structured, true,  false, ApiVersion3);
         REGISTER    (TEraseCommand,                        "erase",                           Null,       Structured, true,  false, ApiVersion3);
@@ -289,6 +304,7 @@ public:
 
         REGISTER    (TTransferAccountResourcesCommand,     "transfer_account_resources",      Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TTransferPoolResourcesCommand,        "transfer_pool_resources",         Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TTransferBundleResourcesCommand,      "transfer_bundle_resources",       Null,       Structured, true,  false, ApiVersion4);
 
         REGISTER    (TWriteJournalCommand,                 "write_journal",                   Tabular,    Null,       true,  true,  ApiVersion3);
         REGISTER    (TWriteJournalCommand,                 "write_journal",                   Tabular,    Structured, true,  true,  ApiVersion4);
@@ -298,13 +314,17 @@ public:
         REGISTER_ALL(TGetJobInputCommand,                  "get_job_input",                   Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobInputPathsCommand,             "get_job_input_paths",             Null,       Structured, false, true );
         REGISTER_ALL(TGetJobStderrCommand,                 "get_job_stderr",                  Null,       Binary,     false, true );
-        REGISTER_ALL(TGetJobTraceCommand,                  "get_job_trace",                   Null,       Structured, false, true );
+        REGISTER_ALL(TGetJobTraceCommand,                  "get_job_trace",                   Null,       Binary,     false, true );
+        REGISTER_ALL(TListJobTracesCommand,                "list_job_traces",                 Null,       Structured, false, false );
+        REGISTER_ALL(TCheckOperationPermissionCommand,     "check_operation_permission",      Null,       Structured, false, false );
         REGISTER_ALL(TGetJobFailContextCommand,            "get_job_fail_context",            Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobSpecCommand,                   "get_job_spec",                    Null,       Structured, false, true );
+        REGISTER_ALL(TListOperationEventsCommand,          "list_operation_events",           Null,       Structured, false, false);
         REGISTER_ALL(TListOperationsCommand,               "list_operations",                 Null,       Structured, false, false);
         REGISTER_ALL(TListJobsCommand,                     "list_jobs",                       Null,       Structured, false, false);
         REGISTER_ALL(TGetJobCommand,                       "get_job",                         Null,       Structured, false, false);
         REGISTER_ALL(TPollJobShellCommand,                 "poll_job_shell",                  Null,       Structured, true,  false);
+        REGISTER_ALL(TRunJobShellCommandCommand,           "run_job_shell_command",           Null,       Binary,     true,  true );
         REGISTER_ALL(TGetOperationCommand,                 "get_operation",                   Null,       Structured, false, false);
 
         REGISTER    (TDumpJobContextCommand,               "dump_job_context",                Null,       Null,       true,  false, ApiVersion3);
@@ -322,12 +342,14 @@ public:
         REGISTER_ALL(TExecuteBatchCommand,                 "execute_batch",                   Null,       Structured, true,  false);
 
         REGISTER    (TDiscoverProxiesCommand,              "discover_proxies",                Null,       Structured, false, false, ApiVersion4);
+        REGISTER_ALL(TCheckClusterLivenessCommand,         "check_cluster_liveness",          Null,       Structured, false, false);
 
         REGISTER_ALL(TBuildSnapshotCommand,                "build_snapshot",                  Null,       Structured, true,  false);
         REGISTER_ALL(TBuildMasterSnapshotsCommand,         "build_master_snapshots",          Null,       Structured, true,  false);
         REGISTER_ALL(TGetMasterConsistentStateCommand,     "get_master_consistent_state",     Null,       Structured, true,  false);
         REGISTER_ALL(TExitReadOnlyCommand,                 "exit_read_only",                  Null,       Structured, true,  false);
         REGISTER_ALL(TMasterExitReadOnlyCommand,           "master_exit_read_only",           Null,       Structured, true,  false);
+        REGISTER_ALL(TResetDynamicallyPropagatedMasterCellsCommand,          "reset_dynamically_propagated_master_cells",          Null,       Structured, true,  false);
         REGISTER_ALL(TDiscombobulateNonvotingPeersCommand, "discombobulate_nonvoting_peers",  Null,       Structured, true,  false);
         REGISTER_ALL(TSwitchLeaderCommand,                 "switch_leader",                   Null,       Structured, true,  false);
         REGISTER_ALL(TResetStateHashCommand,               "reset_state_hash",                Null,       Structured, true,  false);
@@ -348,6 +370,8 @@ public:
         REGISTER_ALL(TDestroyChunkLocationsCommand,        "destroy_chunk_locations",         Null,       Structured, true,  false);
         REGISTER_ALL(TResurrectChunkLocationsCommand,      "resurrect_chunk_locations",       Null,       Structured, true,  false);
         REGISTER_ALL(TRequestRestartCommand,               "request_restart",                 Null,       Structured, true,  false);
+
+        REGISTER_ALL(TGetCurrentUserCommand,               "get_current_user",                Null,       Structured, false, false);
 
         REGISTER_ALL(TSetUserPasswordCommand,              "set_user_password",               Null,       Structured, true,  false);
         REGISTER_ALL(TIssueTokenCommand,                   "issue_token",                     Null,       Structured, true,  false);
@@ -376,6 +400,7 @@ public:
         REGISTER    (TReadQueryResultCommand,              "read_query_result",               Null,       Tabular,    false, true , ApiVersion4);
         REGISTER    (TAlterQueryCommand,                   "alter_query",                     Null,       Tabular,    true,  false, ApiVersion4);
         REGISTER    (TGetQueryTrackerInfoCommand,          "get_query_tracker_info",          Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TGetQueryDeclaredParametersInfoCommand, "get_query_declared_parameters_info",    Null,       Structured, false, false, ApiVersion4);
 
         REGISTER_ALL(TGetBundleConfigCommand,              "get_bundle_config",               Null,       Structured, false, false);
         REGISTER_ALL(TSetBundleConfigCommand,              "set_bundle_config",               Structured, Null,       true,  false);
@@ -391,27 +416,38 @@ public:
         REGISTER    (TPausePipelineCommand,                "pause_pipeline",                  Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TGetPipelineStateCommand,             "get_pipeline_state",              Null,       Structured, false, false, ApiVersion4);
         REGISTER    (TGetFlowViewCommand,                  "get_flow_view",                   Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TFlowExecuteCommand,                  "flow_execute",                    Structured, Structured, true,  true,  ApiVersion4);
+        REGISTER    (TFlowExecutePlaintextCommand,         "flow_execute_plaintext",          Null,       Binary,     true,  true,  ApiVersion4);
 
         REGISTER    (TStartShuffleCommand,                 "start_shuffle",                   Null,       Structured, true,  false, ApiVersion4);
         REGISTER    (TReadShuffleDataCommand,              "read_shuffle_data",               Null,       Tabular,    false,  true, ApiVersion4);
         REGISTER    (TWriteShuffleDataCommand,             "write_shuffle_data",              Tabular,    Structured, false,  true, ApiVersion4);
 
-        if (Config_->EnableInternalCommands) {
-            REGISTER_ALL(TReadHunksCommand,                "read_hunks",                      Null,       Structured, false, true );
-            REGISTER_ALL(TWriteHunksCommand,               "write_hunks",                     Null,       Structured, true,  true );
-            REGISTER_ALL(TLockHunkStoreCommand,            "lock_hunk_store",                 Null,       Structured, true,  true );
-            REGISTER_ALL(TUnlockHunkStoreCommand,          "unlock_hunk_store",               Null,       Structured, true,  true );
-            REGISTER_ALL(TGetConnectionConfigCommand,      "get_connection_config",           Null,       Structured, false, false);
-            REGISTER_ALL(TIssueLeaseCommand,               "issue_lease",                     Null,       Structured, true,  false);
-            REGISTER_ALL(TRevokeLeaseCommand,              "revoke_lease",                    Null,       Structured, true,  false);
-            REGISTER_ALL(TReferenceLeaseCommand,           "reference_lease",                 Null,       Structured, true,  false);
-            REGISTER_ALL(TUnreferenceLeaseCommand,         "unreference_lease",               Null,       Structured, true,  false);
+        REGISTER    (TStartDistributedWriteSessionCommand, "start_distributed_write_session", Null,       Structured, true,  false, ApiVersion4);
+        REGISTER    (TPingDistributedWriteSessionCommand,  "ping_distributed_write_session",  Null,       Null,       true,  false, ApiVersion4);
+        REGISTER    (TFinishDistributedWriteSessionCommand, "finish_distributed_write_session", Null,     Null,       true,  false, ApiVersion4);
+        REGISTER    (TWriteTableFragmentCommand,           "write_table_fragment",            Tabular,    Structured, true,   true, ApiVersion4);
 
-            // TODO(arkady-e1ppa): flags past command name might be complete rubbish -- think them through later.
-            REGISTER_ALL(TStartDistributedWriteSessionCommand,    "start_distributed_write_session",      Null,    Structured, true, false);
-            REGISTER_ALL(TFinishDistributedWriteSessionCommand,   "finish_distributed_write_session",     Null,    Null,       true, false);
-            REGISTER_ALL(TWriteTableFragmentCommand,               "distributed_write_table_partition",    Tabular, Structured, true, true );
-            REGISTER_ALL(TForsakeChaosCoordinator,         "forsake_chaos_coordinator",       Null,       Null,       true,  true);
+        REGISTER    (TStartDistributedWriteFileSessionCommand, "start_distributed_write_file_session",Null,Structured,true,  false, ApiVersion4);
+        REGISTER    (TPingDistributedWriteFileSessionCommand,  "ping_distributed_write_file_session",Null, Null,      true,  false, ApiVersion4);
+        REGISTER    (TFinishDistributedWriteFileSessionCommand, "finish_distributed_write_file_session",Null,Null,    true,  false, ApiVersion4);
+        REGISTER    (TWriteFileFragmentCommand,            "write_file_fragment",             Binary,     Structured, true,   true, ApiVersion4);
+
+        if (Config_->EnableInternalCommands) {
+            REGISTER_ALL(TReadHunksCommand,                 "read_hunks",                             Null,       Structured, false, true );
+            REGISTER_ALL(TWriteHunksCommand,                "write_hunks",                            Null,       Structured, true,  true );
+            REGISTER_ALL(TLockHunkStoreCommand,             "lock_hunk_store",                        Null,       Structured, true,  true );
+            REGISTER_ALL(TUnlockHunkStoreCommand,           "unlock_hunk_store",                      Null,       Structured, true,  true );
+            REGISTER_ALL(TGetConnectionConfigCommand,       "get_connection_config",                  Null,       Structured, false, false);
+            REGISTER_ALL(TIssueLeaseCommand,                "issue_lease",                            Null,       Structured, true,  false);
+            REGISTER_ALL(TRevokeLeaseCommand,               "revoke_lease",                           Null,       Structured, true,  false);
+            REGISTER_ALL(TReferenceLeaseCommand,            "reference_lease",                        Null,       Structured, true,  false);
+            REGISTER_ALL(TUnreferenceLeaseCommand,          "unreference_lease",                      Null,       Structured, true,  false);
+            REGISTER_ALL(TForsakeChaosCoordinator,          "forsake_chaos_coordinator",              Null,       Null,       true,  true );
+            REGISTER_ALL(TForsakeChaosShortcut,             "forsake_chaos_shortcut",                 Null,       Null,       true,  true );
+            REGISTER_ALL(TRemoveChaosCellMailbox,           "remove_chaos_cell_mailbox",              Null,       Null,       true,  true );
+            REGISTER_ALL(TGetOrderedTabletSafeTrimRowCount, "get_ordered_tablet_safe_trim_row_count", Null,       Structured, false, false);
+            REGISTER_ALL(TGetConnectionOrchidValue,         "get_connection_orchid_value",            Null,       Structured, false, false);
         }
 
 #undef REGISTER
@@ -431,17 +467,18 @@ public:
         }
 
         const auto& entry = it->second;
-        TAuthenticationIdentity identity(
+        TClientAuthenticationIdentity identity(
             request.AuthenticatedUser,
-            request.UserTag.value_or(""));
+            request.UserTag.value_or(""),
+            request.ServiceTicket.value_or(""));
 
         YT_VERIFY(entry.Descriptor.InputType == EDataType::Null || request.InputStream);
         YT_VERIFY(entry.Descriptor.OutputType == EDataType::Null || request.OutputStream);
 
-        YT_LOG_DEBUG("Command received (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-            request.Id,
-            request.CommandName,
-            identity.User);
+        YT_TLOG_DEBUG("Command received")
+            .WithFormat("RequestId", "%" PRIx64, request.Id)
+            .With("Command", request.CommandName)
+            .With("User", identity.User);
 
         auto options = TClientOptions::FromAuthenticationIdentity(identity);
         options.RequirePasswordInAuthenticationCommands = Config_->RequirePasswordInAuthenticationCommands;
@@ -449,6 +486,8 @@ public:
         options.ServiceTicketAuth = request.ServiceTicket
             ? std::make_optional(New<NAuth::TServiceTicketFixedAuth>(*request.ServiceTicket))
             : std::nullopt;
+        options.MultiproxyTargetCluster = Config_->MultiproxyTargetCluster;
+        options.AbandonMasterTransactionsOnFailedCommit = Config_->AbandonMasterTransactionsOnFailedCommit;
 
         auto client = ClientCache_->Get(identity, options);
 
@@ -465,7 +504,7 @@ public:
             .Run();
     }
 
-    std::optional<TCommandDescriptor> FindCommandDescriptor(const TString& commandName) const override
+    std::optional<TCommandDescriptor> FindCommandDescriptor(const std::string& commandName) const override
     {
         auto it = CommandNameToEntry_.find(commandName);
         return it == CommandNameToEntry_.end() ? std::nullopt : std::make_optional(it->second.Descriptor);
@@ -502,12 +541,7 @@ public:
         return Connection_;
     }
 
-    TSignatureGeneratorBasePtr GetSignatureGenerator() override
-    {
-        return SignatureGenerator_;
-    }
-
-    TSignatureValidatorBasePtr GetSignatureValidator() override
+    ISignatureValidatorPtr GetSignatureValidator() override
     {
         return SignatureValidator_;
     }
@@ -535,8 +569,8 @@ private:
     TClientCachePtr ClientCache_;
     const IClientPtr RootClient_;
     IProxyDiscoveryCachePtr ProxyDiscoveryCache_;
-    TSignatureGeneratorBasePtr SignatureGenerator_;
-    TSignatureValidatorBasePtr SignatureValidator_;
+    const ISignatureGeneratorPtr SignatureGenerator_;
+    const ISignatureValidatorPtr SignatureValidator_;
 
     class TCommandContext;
     using TCommandContextPtr = TIntrusivePtr<TCommandContext>;
@@ -550,7 +584,7 @@ private:
         TExecuteCallback Execute;
     };
 
-    THashMap<TString, TCommandEntry> CommandNameToEntry_;
+    THashMap<std::string, TCommandEntry> CommandNameToEntry_;
 
 
     template <class TCommand>
@@ -569,9 +603,7 @@ private:
     {
         const auto& request = context->Request();
 
-        if (request.LoggingTags) {
-            Logger().WithRawTag(*request.LoggingTags);
-        }
+        auto Logger = DriverLogger().WithTags(request.LoggingTags);
 
         NTracing::TChildTraceContextGuard commandSpan(ConcatToString(TStringBuf("Driver:"), request.CommandName));
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
@@ -579,10 +611,10 @@ private:
             traceContext->AddTag("request_id", request.Id);
         });
 
-        YT_LOG_DEBUG("Command started (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-            request.Id,
-            request.CommandName,
-            request.AuthenticatedUser);
+        YT_TLOG_DEBUG("Command started")
+            .WithFormat("RequestId", "%" PRIx64, request.Id)
+            .With("Command", request.CommandName)
+            .With("User", request.AuthenticatedUser);
 
         TError result;
         try {
@@ -592,15 +624,16 @@ private:
         }
 
         if (result.IsOK()) {
-            YT_LOG_DEBUG("Command completed (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-                request.Id,
-                request.CommandName,
-                request.AuthenticatedUser);
+            YT_TLOG_DEBUG("Command completed")
+                .WithFormat("RequestId", "%" PRIx64, request.Id)
+                .With("Command", request.CommandName)
+                .With("User", request.AuthenticatedUser);
         } else {
-            YT_LOG_DEBUG(result, "Command failed (RequestId: %" PRIx64 ", Command: %v, User: %v)",
-                request.Id,
-                request.CommandName,
-                request.AuthenticatedUser);
+            YT_TLOG_DEBUG("Command failed")
+                .WithFormat("RequestId", "%" PRIx64, request.Id)
+                .With("Command", request.CommandName)
+                .With("User", request.AuthenticatedUser)
+                .With(result);
         }
 
         context->Finish();
@@ -703,7 +736,7 @@ private:
             Serialize(yson, consumer.get());
 
             consumer->Flush();
-            syncOutputStream->Flush();
+            syncOutputStream->Finish();
         }
 
         void Finish()
@@ -730,18 +763,15 @@ private:
 IDriverPtr CreateDriver(
     IConnectionPtr connection,
     TDriverConfigPtr config,
-    TSignatureGeneratorBasePtr signatureGenerator,
-    TSignatureValidatorBasePtr signatureValidator)
+    ISignatureValidatorPtr signatureValidator)
 {
     YT_VERIFY(connection);
     YT_VERIFY(config);
-    YT_VERIFY(signatureGenerator);
     YT_VERIFY(signatureValidator);
 
     return New<TDriver>(
         std::move(config),
         std::move(connection),
-        std::move(signatureGenerator),
         std::move(signatureValidator));
 }
 

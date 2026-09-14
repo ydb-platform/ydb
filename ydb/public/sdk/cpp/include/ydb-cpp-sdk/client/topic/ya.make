@@ -1,17 +1,17 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h)
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h)
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h)
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_events.h)
+GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/producer.h)
 
 SRCS(
     client.h
     codecs.h
     control_plane.h
     counters.h
+    deferred_publication_limits.h
     errors.h
     events_common.h
     executor.h
@@ -20,6 +20,8 @@ SRCS(
     retry_policy.h
     write_events.h
     write_session.h
+    producer.h
+    deferred_publications.h
 )
 
 PEERDIR(

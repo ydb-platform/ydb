@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import functools
-from asyncio import get_running_loop
-from typing import Any, Callable, Sequence, TypeVar
+from collections.abc import Callable, Sequence
+from typing import Any, TypeVar
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.application.current import get_app
@@ -113,7 +113,7 @@ def input_dialog(
     password: FilterOrBool = False,
     style: BaseStyle | None = None,
     default: str = "",
-) -> Application[str]:
+) -> Application[str | None]:
     """
     Display a text input box.
     Return the given text, or None when cancelled.
@@ -182,7 +182,7 @@ def radiolist_dialog(
     values: Sequence[tuple[_T, AnyFormattedText]] | None = None,
     default: _T | None = None,
     style: BaseStyle | None = None,
-) -> Application[_T]:
+) -> Application[_T | None]:
     """
     Display a simple list of element the user can choose amongst.
 
@@ -221,7 +221,7 @@ def checkboxlist_dialog(
     values: Sequence[tuple[_T, AnyFormattedText]] | None = None,
     default_values: Sequence[_T] | None = None,
     style: BaseStyle | None = None,
-) -> Application[list[_T]]:
+) -> Application[list[_T] | None]:
     """
     Display a simple list of element the user can choose multiple values amongst.
 
@@ -264,7 +264,6 @@ def progress_dialog(
     :param run_callback: A function that receives as input a `set_percentage`
         function and it does the work.
     """
-    loop = get_running_loop()
     progressbar = ProgressBar()
     text_area = TextArea(
         focusable=False,
@@ -291,8 +290,10 @@ def progress_dialog(
         app.invalidate()
 
     def log_text(text: str) -> None:
-        loop.call_soon_threadsafe(text_area.buffer.insert_text, text)
-        app.invalidate()
+        loop = app.loop
+        if loop is not None:
+            loop.call_soon_threadsafe(text_area.buffer.insert_text, text)
+            app.invalidate()
 
     # Run the callback in the executor. When done, set a return value for the
     # UI, so that it quits.

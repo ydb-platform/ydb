@@ -6,6 +6,8 @@ namespace NYT {
 
 class IProxyOutput;
 class TNodeTableWriter;
+class TNodeTableFragmentWriter;
+class IOutputStreamWithResponse;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -80,6 +82,48 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 void LenvalEncodeProto(IZeroCopyOutput* output, const ::google::protobuf::Message& message);
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TProtoTableFragmentWriter
+    : public ITableFragmentWriter<Message>
+{
+public:
+    TProtoTableFragmentWriter(
+        std::unique_ptr<IOutputStreamWithResponse> output,
+        TVector<const ::google::protobuf::Descriptor*>&& descriptors);
+
+    TWriteTableFragmentResult GetWriteFragmentResult() const override;
+
+    void AddRow(const Message& row) override;
+
+    void Finish() override;
+
+private:
+    std::unique_ptr<TNodeTableFragmentWriter> NodeWriter_;
+    TVector<const ::google::protobuf::Descriptor*> Descriptors_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TLenvalProtoTableFragmentWriter
+    : public ITableFragmentWriter<Message>
+{
+public:
+    TLenvalProtoTableFragmentWriter(
+        std::unique_ptr<IOutputStreamWithResponse> output,
+        TVector<const ::google::protobuf::Descriptor*>&& descriptors);
+
+    TWriteTableFragmentResult GetWriteFragmentResult() const override;
+
+    void AddRow(const Message& row) override;
+
+    void Finish() override;
+
+protected:
+    std::unique_ptr<IOutputStreamWithResponse> Output_;
+    TVector<const ::google::protobuf::Descriptor*> Descriptors_;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

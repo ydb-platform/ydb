@@ -152,7 +152,7 @@ static int test_buffers_update(void)
 	struct io_uring ring;
 	const int nr = 5;
 	int buf_idx = 1, i, ret;
-	int pipes[2];
+	int fds[2];
 	char tmp_buf[1024];
 	char tmp_buf2[1024];
 	struct iovec vecs[nr];
@@ -173,7 +173,7 @@ static int test_buffers_update(void)
 		printf("ring setup failed\n");
 		return 1;
 	}
-	if (pipe(pipes) < 0) {
+	if (pipe(fds) < 0) {
 		perror("pipe");
 		return 1;
 	}
@@ -185,7 +185,7 @@ static int test_buffers_update(void)
 
 	/* test that CQE is not emitted before we're done with a buffer */
 	sqe = io_uring_get_sqe(&ring);
-	io_uring_prep_read_fixed(sqe, pipes[0], tmp_buf, 10, 0, 0);
+	io_uring_prep_read_fixed(sqe, fds[0], tmp_buf, 10, 0, 1);
 	sqe->user_data = 100;
 	ret = io_uring_submit(&ring);
 	if (ret != 1) {
@@ -205,8 +205,8 @@ static int test_buffers_update(void)
 
 	ret = io_uring_peek_cqe(&ring, &cqe); /* nothing should be there */
 	assert(ret == -EAGAIN);
-	close(pipes[0]);
-	close(pipes[1]);
+	close(fds[0]);
+	close(fds[1]);
 
 	ret = io_uring_wait_cqe(&ring, &cqe);
 	assert(!ret && cqe->user_data == 100);
@@ -313,7 +313,6 @@ static int test_buffers_empty_buffers(void)
 	return 0;
 }
 
-
 static int test_files(int ring_flags)
 {
 	struct io_uring_cqe *cqe = NULL;
@@ -409,6 +408,53 @@ static int test_notag(void)
 	return 0;
 }
 
+static char buffer[16];
+
+static int test_tagged_register_partial_fail(void)
+{
+	__u64 tags[2] = { 1, 2 };
+	int fds[2] = { pipes[0], -1 };
+	struct iovec iovec[2];
+	struct io_uring ring;
+	int ret;
+
+	iovec[0].iov_base = buffer;
+	iovec[0].iov_len = 1;
+	iovec[1].iov_base = (void *)1UL;
+	iovec[1].iov_len = 1;
+
+	ret = io_uring_queue_init(1, &ring, 0);
+	if (ret) {
+		printf("ring setup failed\n");
+		return 1;
+	}
+
+	ret = io_uring_register_buffers_tags(&ring, iovec, tags, 2);
+	if (ret >= 0) {
+		fprintf(stderr, "io_uring_register_buffers_tags returned %i\n", ret);
+		return -EFAULT;
+	}
+
+	if (!check_cq_empty(&ring)) {
+		fprintf(stderr, "stray buffer CQEs found\n");
+		return -EFAULT;
+	}
+
+	ret = io_uring_register_files_tags(&ring, fds, tags, 2);
+	if (ret >= 0) {
+		fprintf(stderr, "io_uring_register_files_tags returned %i\n", ret);
+		return -EFAULT;
+	}
+
+	if (!check_cq_empty(&ring)) {
+		fprintf(stderr, "stray file CQEs found\n");
+		return -EFAULT;
+	}
+
+	io_uring_queue_exit(&ring);
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int ring_flags[] = {0, IORING_SETUP_IOPOLL, IORING_SETUP_SQPOLL,
@@ -416,21 +462,28 @@ int main(int argc, char *argv[])
 	int i, ret;
 
 	if (argc > 1)
-		return 0;
+		return T_EXIT_SKIP;
+
 	if (!has_rsrc_update()) {
 		fprintf(stderr, "doesn't support rsrc tags, skip\n");
-		return 0;
+		return T_EXIT_SKIP;
 	}
 
 	if (pipe(pipes) < 0) {
 		perror("pipe");
-		return 1;
+		return T_EXIT_FAIL;
+	}
+
+	ret = test_tagged_register_partial_fail();
+	if (ret) {
+		printf("test_tagged_register_partial_fail() failed\n");
+		return T_EXIT_FAIL;
 	}
 
 	ret = test_notag();
 	if (ret) {
 		printf("test_notag failed\n");
-		return ret;
+		return T_EXIT_FAIL;
 	}
 
 	for (i = 0; i < sizeof(ring_flags) / sizeof(ring_flags[0]); i++) {
@@ -442,21 +495,21 @@ int main(int argc, char *argv[])
 		ret = test_files(flag);
 		if (ret) {
 			printf("test_tag failed, type %i\n", i);
-			return ret;
+			return T_EXIT_FAIL;
 		}
 	}
 
 	ret = test_buffers_update();
 	if (ret) {
 		printf("test_buffers_update failed\n");
-		return ret;
+		return T_EXIT_FAIL;
 	}
 
 	ret = test_buffers_empty_buffers();
 	if (ret) {
 		printf("test_buffers_empty_buffers failed\n");
-		return ret;
+		return T_EXIT_FAIL;
 	}
 
-	return 0;
+	return T_EXIT_PASS;
 }

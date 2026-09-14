@@ -10,13 +10,7 @@
 
 #include <util/generic/map.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BOARD_PUBLISH, stream)
-#define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BOARD_PUBLISH, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BOARD_PUBLISH, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BOARD_PUBLISH
 
 namespace NKikimr {
 
@@ -25,11 +19,13 @@ class TBoardReplicaPublishActor : public TActorBootstrapped<TBoardReplicaPublish
     TString Payload;
     const TActorId Replica;
     const TActorId PublishActor;
+    const ui64 ClusterStateGeneration;
+    const ui64 ClusterStateGuid;
 
     ui64 Round;
 
     void Cleanup() {
-        Send(Replica, new TEvStateStorage::TEvReplicaBoardCleanup());
+        Send(Replica, new TEvStateStorage::TEvReplicaBoardCleanup(ClusterStateGeneration, ClusterStateGuid));
         if (Replica.NodeId() != SelfId().NodeId())
             Send(TActivationContext::InterconnectProxy(Replica.NodeId()), new TEvents::TEvUnsubscribe());
         PassAway();
@@ -52,11 +48,13 @@ public:
         return NKikimrServices::TActivity::BOARD_REPLICA_PUBLISH_ACTOR;
     }
 
-    TBoardReplicaPublishActor(const TString &path, const TString &payload, TActorId replica, TActorId publishActor)
+    TBoardReplicaPublishActor(const TString &path, const TString &payload, TActorId replica, TActorId publishActor, ui64 clusterStateGeneration, ui64 clusterStateGuid)
         : Path(path)
         , Payload(payload)
         , Replica(replica)
         , PublishActor(publishActor)
+        , ClusterStateGeneration(clusterStateGeneration)
+        , ClusterStateGuid(clusterStateGuid)
         , Round(0)
     {}
 
@@ -65,7 +63,7 @@ public:
         // form of silent "permanent" failure, waiting for disconnection. On
         // disconnection we assume the node may be restarted with a new
         // configuration and the actor become valid.
-        Send(Replica, new TEvStateStorage::TEvReplicaBoardPublish(Path, Payload, 0, true, PublishActor), IEventHandle::FlagSubscribeOnSession, ++Round);
+        Send(Replica, new TEvStateStorage::TEvReplicaBoardPublish(Path, Payload, 0, true, PublishActor, ClusterStateGeneration, ClusterStateGuid), IEventHandle::FlagSubscribeOnSession, ++Round);
 
         Become(&TThis::StatePublish);
     }
@@ -100,6 +98,8 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     const ui32 TtlMs;
     const bool Register;
     const TBoardRetrySettings BoardRetrySettings;
+    ui64 ClusterStateGeneration;
+    ui64 ClusterStateGuid;
 
     struct TRetryState {
         NMonotonic::TMonotonic LastRetryAt = TMonotonic::Zero();
@@ -145,28 +145,32 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
     }
 
     void HandleUndelivered() {
-        BLOG_ERROR("publish on unavailable statestorage board service");
+        YDB_LOG_ERROR("Publish on unavailable statestorage board service");
         Become(&TThis::StateCalm);
     }
 
     void Handle(TEvStateStorage::TEvResolveReplicasList::TPtr &ev) {
         auto *msg = ev->Get();
 
-        if (msg->Replicas.empty()) {
+        if (msg->ReplicaGroups.empty() || msg->ReplicaGroups[0].Replicas.empty()) {
             Y_ABORT_UNLESS(ReplicaPublishActors.empty());
-            BLOG_ERROR("publish on unconfigured statestorage board service");
+            YDB_LOG_ERROR("Publish on unconfigured statestorage board service");
         } else {
+            ClusterStateGeneration = msg->ClusterStateGeneration;
+            ClusterStateGuid = msg->ClusterStateGuid;
             auto now = TlsActivationContext->Monotonic();
 
-            for (auto &replicaId : msg->Replicas) {
+            for (auto &replicaId : msg->GetPlainReplicas()) {
                 auto& publishActorState = ReplicaPublishActors[replicaId];
                 if (publishActorState.RetryState.LastRetryAt == TMonotonic::Zero()) {
                     publishActorState.PublishActor =
-                        RegisterWithSameMailbox(new TBoardReplicaPublishActor(Path, Payload, replicaId, SelfId()));
+                        RegisterWithSameMailbox(new TBoardReplicaPublishActor(Path, Payload, replicaId, SelfId(), ClusterStateGeneration, ClusterStateGuid));
                     publishActorState.RetryState.LastRetryAt = now;
                 }
             }
-            THashSet<TActorId> usedReplicas(msg->Replicas.begin(), msg->Replicas.end());
+            THashSet<TActorId> usedReplicas;
+            for (auto &rg : msg->ReplicaGroups)
+                usedReplicas.insert(rg.Replicas.begin(), rg.Replicas.end());
             for (auto it = ReplicaPublishActors.begin(); it != ReplicaPublishActors.end(); ) {
                 if (usedReplicas.contains(it->first)) {
                     ++it;
@@ -243,7 +247,7 @@ class TBoardPublishActor : public TActorBootstrapped<TBoardPublishActor> {
         auto now = TlsActivationContext->Monotonic();
         replicaPublishActorsIt->second.RetryState.LastRetryAt = now;
         replicaPublishActorsIt->second.PublishActor =
-            RegisterWithSameMailbox(new TBoardReplicaPublishActor(Path, Payload, replica, SelfId()));
+            RegisterWithSameMailbox(new TBoardReplicaPublishActor(Path, Payload, replica, SelfId(), ClusterStateGeneration, ClusterStateGuid));
     }
 
 public:

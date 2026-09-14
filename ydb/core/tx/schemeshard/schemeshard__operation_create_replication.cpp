@@ -1,5 +1,6 @@
-#include "schemeshard__operation_part.h"
+#include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/mind/hive/hive.h>
@@ -16,7 +17,8 @@ namespace {
 
 struct IStrategy {
     virtual TPathElement::EPathType GetPathType() const = 0;
-    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const = 0;
+    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const = 0;
+    virtual void Proccess(NKikimrReplication::TReplicationConfig& config, const TString& owner) const = 0;
 };
 
 struct TReplicationStrategy : public IStrategy {
@@ -24,7 +26,11 @@ struct TReplicationStrategy : public IStrategy {
         return TPathElement::EPathType::EPathTypeReplication;
     };
 
-    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext&) const override {
+        if (!AppData()->FeatureFlags.GetEnableReplication()) {
+            result.SetError(NKikimrScheme::StatusPreconditionFailed, "Asynchronous replication is disabled");
+            return true;
+        }
         if (desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong replication configuration");
             return true;
@@ -36,6 +42,9 @@ struct TReplicationStrategy : public IStrategy {
 
         return false;
     }
+
+    void Proccess(NKikimrReplication::TReplicationConfig&, const TString&) const override {
+    }
 };
 
 struct TTransferStrategy : public IStrategy {
@@ -43,11 +52,7 @@ struct TTransferStrategy : public IStrategy {
         return TPathElement::EPathType::EPathTypeTransfer;
     };
 
-    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
-        if (!AppData()->FeatureFlags.GetEnableTopicTransfer()) {
-            result.SetError(NKikimrScheme::StatusInvalidParameter, "Topic transfer creation is disabled");
-            return true;
-        }
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
         if (!desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong transfer configuration");
             return true;
@@ -57,7 +62,49 @@ struct TTransferStrategy : public IStrategy {
             return true;
         }
 
+        const auto& batching = desc.GetConfig().GetTransferSpecific().GetBatching();
+        if (batching.HasBatchSizeBytes() && batching.GetBatchSizeBytes() > 1_GB) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Batch size must be less than or equal to 1Gb");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() < TDuration::Seconds(1).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be greater than or equal to 1 second");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() > TDuration::Hours(24).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be less than or equal to 24 hours");
+            return true;
+        }
+
+        const auto& target = desc.GetConfig().GetTransferSpecific().GetTarget();
+        auto targetPath = TPath::Resolve(target.GetDstPath(), context.SS);
+        if (!targetPath.IsResolved() || targetPath.IsUnderDeleting() || targetPath->IsUnderMoving() || targetPath.IsDeleted()) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' not found");
+            return true;
+        }
+        if (!targetPath->IsColumnTable() && !targetPath->IsTable()) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' isn`t a table");
+            return true;
+        }
+
+        if (target.HasDirectoryPath()) {
+            auto directoryPath = TPath::Resolve(target.GetDirectoryPath(), context.SS);
+            if (!directoryPath.IsResolved() || directoryPath.IsUnderDeleting() || directoryPath->IsUnderMoving() || directoryPath.IsDeleted()) {
+                result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination directory path '" << target.GetDirectoryPath() << "' not found");
+                return true;
+            }
+        }
+
+        if (!AppData()->TransferWriterFactory) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, "The transfer is only available in the Enterprise version");
+            return true;
+        }
+
         return false;
+    }
+
+    void Proccess(NKikimrReplication::TReplicationConfig& config, const TString& owner) const override {
+        config.MutableTransferSpecific()->SetRunAsUser(owner);
     }
 };
 
@@ -110,6 +157,23 @@ public:
                 ev->Record.MutableOperationId()->SetTxId(ui64(OperationId.GetTxId()));
                 ev->Record.MutableOperationId()->SetPartId(ui32(OperationId.GetSubTxId()));
                 ev->Record.MutableConfig()->CopyFrom(alterData->Description.GetConfig());
+                ev->Record.SetDatabase(TPath::Init(context.SS->RootPathId(), context.SS).PathString());
+                auto& location = *ev->Record.MutableLocation();
+                location.SetPath(TPath::Init(pathId, context.SS).PathString());
+
+                const auto& attrs = context.SS->PathsById.at(context.SS->RootPathId())->UserAttrs->Attrs;
+                if (auto it = attrs.find("cloud_id"); it != attrs.end()) {
+                    location.SetYcCloudId(it->second);
+                }
+                if (auto it = attrs.find("folder_id"); it != attrs.end()) {
+                    location.SetYcFolderId(it->second);
+                }
+                if (auto it = attrs.find("database_id"); it != attrs.end()) {
+                    location.SetYcResourceId(it->second);
+                }
+                if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
+                    location.SetMonitoringProjectId(it->second);
+                }
 
                 LOG_D(DebugHint() << "Send TEvCreateReplication to controller"
                     << ": tabletId# " << tabletId
@@ -222,7 +286,7 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        context.SS->Replications[pathId] = alterData;
+        context.SS->Replications.Set(pathId, alterData);
         context.SS->PersistReplicationAlterRemove(db, pathId);
         context.SS->PersistReplication(db, pathId, *alterData);
 
@@ -330,11 +394,11 @@ public:
             }
         }
 
-        if (Strategy->Validate(*result, desc)) {
+        if (Strategy->Validate(*result, desc, context)) {
             return result;
         }
 
-        auto path = parentPath.Child(name);
+        auto path = parentPath.Child(name, TPath::TSplitChildTag{});
         {
             const auto checks = path.Check();
             checks
@@ -344,7 +408,7 @@ public:
                 checks
                     .IsResolved()
                     .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeReplication, acceptExisted);
+                    .FailOnExist(Strategy->GetPathType(), acceptExisted);
             } else {
                 checks
                     .NotEmpty()
@@ -353,7 +417,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()
@@ -372,10 +436,6 @@ public:
             }
         }
 
-        if (Strategy->Validate(*result.Get(), desc)) {
-            return result;
-        }
-
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
@@ -389,6 +449,12 @@ public:
             return result;
         }
 
+        const auto& connectionParams = desc.GetConfig().GetSrcConnectionParams();
+        if (connectionParams.HasCaCert() && !connectionParams.GetEnableSsl()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "CA_CERT has no effect in non-secure mode");
+            return result;
+        }
+
         path.MaterializeLeaf(owner);
         path->CreateTxId = OperationId.GetTxId();
         path->LastTxId = OperationId.GetTxId();
@@ -396,11 +462,10 @@ public:
         path->PathType = Strategy->GetPathType();
         result->SetPathId(path->PathId.LocalPathId);
 
-        context.SS->IncrementPathDbRefCount(path->PathId);
         IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
         parentPath.DomainInfo()->IncPathsInside(context.SS);
 
-        if (desc.GetConfig().GetSrcConnectionParams().GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
+        if (connectionParams.GetCredentialsCase() == NKikimrReplication::TConnectionParams::CREDENTIALS_NOT_SET) {
             desc.MutableConfig()->MutableSrcConnectionParams()->MutableOAuthToken()->SetToken(BUILTIN_ACL_ROOT);
         }
 
@@ -408,9 +473,11 @@ public:
             desc.MutableConfig()->MutableConsistencySettings()->MutableRow();
         }
 
+        Strategy->Proccess(*desc.MutableConfig(), owner);
+
         desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));
-        context.SS->Replications[path->PathId] = replication;
+        context.SS->Replications.Set(path->PathId, replication);
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);
 
         replication->AlterData->ControllerShardIdx = context.SS->RegisterShardInfo(
@@ -490,6 +557,35 @@ private:
 }; // TCreateReplication
 
 } // anonymous
+
+using TReplicationTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication>;
+using TTransferTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpCreateTransfer>;
+
+namespace NOperation {
+
+template <>
+std::optional<TString> GetTargetName<TReplicationTag>(TReplicationTag, const TTxTransaction& tx) {
+    return tx.GetReplication().GetName();
+}
+
+template <>
+bool SetName<TReplicationTag>(TReplicationTag, TTxTransaction& tx, const TString& name) {
+    tx.MutableReplication()->SetName(name);
+    return true;
+}
+
+template <>
+std::optional<TString> GetTargetName<TTransferTag>(TTransferTag, const TTxTransaction& tx) {
+    return tx.GetReplication().GetName();
+}
+
+template <>
+bool SetName<TTransferTag>(TTransferTag, TTxTransaction& tx, const TString& name) {
+    tx.MutableReplication()->SetName(name);
+    return true;
+}
+
+} // namespace NOperation
 
 ISubOperation::TPtr CreateNewReplication(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TCreateReplication>(id, tx, &ReplicationStrategy);

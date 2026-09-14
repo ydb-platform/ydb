@@ -2,26 +2,34 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/library/yverify_stream
+    ydb/library/actors/core
+    ydb/library/actors/util
+    ydb/library/formats/arrow/hash
     ydb/library/mkql_proto
-    yql/essentials/minikql/comp_nodes
-    yql/essentials/parser/pg_wrapper/interface
-    yql/essentials/public/udf
+    ydb/library/yql/dq/actors/compute/events
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/common
+    ydb/library/yql/dq/comp_nodes
     ydb/library/yql/dq/expr_nodes
+    ydb/library/yql/dq/runtime/streaming
     ydb/library/yql/dq/type_ann
+    ydb/library/yverify_stream
+    yql/essentials/minikql
+    yql/essentials/minikql/arrow
+    yql/essentials/minikql/comp_nodes
+    yql/essentials/minikql/computation
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/providers/common/comp_nodes
     yql/essentials/providers/common/schema/mkql
     yql/essentials/public/udf
-    ydb/library/actors/util
 )
 
 SRCS(
     dq_arrow_helpers.cpp
     dq_async_input.cpp
     dq_async_output.cpp
+    dq_channel_service.cpp
+    dq_channel_service_pack.cpp
     dq_columns_resolve.cpp
     dq_compute.cpp
     dq_input_channel.cpp

@@ -3,7 +3,6 @@ PROGRAM(kqprun)
 IF (PROFILE_MEMORY_ALLOCATIONS)
     MESSAGE("Enabled profile memory allocations")
     ALLOCATOR(LF_DBG)
-    CFLAGS(-D PROFILE_MEMORY_ALLOCATIONS)
 ENDIF()
 
 SRCS(
@@ -13,18 +12,28 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
 
+    ydb/core/protos
+    ydb/library/testlib/common
+    ydb/library/yql/providers/pq/gateway/dummy
+    ydb/tests/tools/kqprun/runlib
+    ydb/tests/tools/kqprun/src
+
     yql/essentials/parser/pg_wrapper
-    yt/yql/providers/yt/gateway/file
     yql/essentials/sql/pg
 
-    ydb/tests/tools/kqprun/src
+    yt/yql/providers/yt/gateway/file
 )
 
 PEERDIR(
+    yql/essentials/udfs/common/compress_base
     yql/essentials/udfs/common/datetime2
+    yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/re2
     yql/essentials/udfs/common/string
+    ydb/core/formats/arrow/program/olap_kernels
     yql/essentials/udfs/common/yson2
+    yql/essentials/udfs/common/json2
+    ydb/apps/ydbd/export
 )
 
 YQL_LAST_ABI_VERSION()

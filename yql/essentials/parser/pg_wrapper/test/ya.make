@@ -22,7 +22,7 @@ REQUIREMENTS(
 )
 
 DATA(
-    arcadia/contrib/ydb/docs/ru/core/postgresql/_includes/functions.md
+    arcadia/yql/essentials/docs/ru/_includes/pg_functions.md
     arcadia/yql/essentials/cfg/udf_test
     arcadia/yql/essentials/mount
 )
@@ -35,10 +35,6 @@ DEPENDS(
     yql/tools/yqlrun
     yql/essentials/udfs/common/re2
 )
-
-IF (SANITIZER_TYPE == "memory")
-    TAG(ya:not_autocheck) # YQL-15385
-ENDIF()
 
 END()
 

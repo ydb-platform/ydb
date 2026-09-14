@@ -35,13 +35,13 @@ namespace NPageCollection {
                 && left.Cookie() != TLogoBlobID::MaxCookie - way;
         }
 
-        static TLargeGlobId ToLargeGlobId(TArray logo, ui32 group = TLargeGlobId::InvalidGroup) noexcept
+        static TLargeGlobId ToLargeGlobId(TArray logo, ui32 group = TLargeGlobId::InvalidGroup)
         {
             if (logo) {
                 for (auto num : xrange(logo.size())) {
                     auto &base = logo[logo.size() - 1 == num ? num : 0];
 
-                    Y_ABORT_UNLESS(logo[num].BlobSize() == base.BlobSize());
+                    Y_ENSURE(logo[num].BlobSize() == base.BlobSize());
                 }
 
                 const ui32 bulk = (logo.size() - 1) * logo[0].BlobSize();

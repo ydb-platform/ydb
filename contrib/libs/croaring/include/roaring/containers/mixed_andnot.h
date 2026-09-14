@@ -1,5 +1,15 @@
 /*
  * mixed_andnot.h
+ *
+ * This header declares mixed-container difference operations of the form
+ * `A \ B` (also called andnot) between Roaring container types such as array,
+ * bitset, and run containers. These helpers are used when the operands have
+ * different internal representations and the result may need to change
+ * representation depending on density.
+ *
+ * The file includes both allocating and inplace-oriented variants so callers
+ * can either materialize a fresh result or reuse storage when that is
+ * efficient and semantically allowed.
  */
 #ifndef INCLUDE_CONTAINERS_MIXED_ANDNOT_H_
 #define INCLUDE_CONTAINERS_MIXED_ANDNOT_H_

@@ -3,6 +3,8 @@
 #include "scheme_type_id.h"
 #include "scheme_type_info.h"
 
+#include <util/generic/yexception.h>
+
 namespace NKikimr {
 namespace NScheme {
 
@@ -21,14 +23,14 @@ public:
     /**
      * This allows implicit conversions from TTypeId
      */
-    TTypeIdOrder(TTypeId typeId, EOrder order = EOrder::Ascending) noexcept {
+    TTypeIdOrder(TTypeId typeId, EOrder order = EOrder::Ascending) {
         Set(typeId, order);
     }
 
     /**
      * This allows implicit conversions from TTypeId
      */
-    TTypeIdOrder& operator=(TTypeId typeId) noexcept {
+    TTypeIdOrder& operator=(TTypeId typeId) {
         return Set(typeId);
     }
 
@@ -37,8 +39,8 @@ public:
     bool IsAscending() const noexcept { return !Descending_; }
     bool IsDescending() const noexcept { return Descending_; }
 
-    TTypeIdOrder& Set(TTypeId typeId, EOrder order = EOrder::Ascending) noexcept {
-        Y_ABORT_UNLESS(typeId <= 0x7FFF, "Type id is out of bounds");
+    TTypeIdOrder& Set(TTypeId typeId, EOrder order = EOrder::Ascending) {
+        Y_ENSURE(typeId <= 0x7FFF, "Type id " << typeId << " is out of bounds");
 
         TypeId_ = typeId;
         Descending_ = ui16(order);

@@ -50,45 +50,51 @@ bool THelpers::ExtractKeyParts(const TString &key, TString &arbitraryPart, TKeyH
     return true;
 }
 
-void THelpers::DbUpdateState(TKeyValueStoredStateData &state, ISimpleDb &db, const TActorContext &ctx) {
+void THelpers::DbUpdateState(TKeyValueStoredStateData &state, ISimpleDb &db) {
     TString empty;
     TString key = THelpers::GenerateKeyFor(EIT_STATE, empty);
     state.UpdateChecksum();
     TString value = TString::Uninitialized(sizeof(state));
     memcpy(const_cast<char*>(value.data()), &state, sizeof(state));
-    db.Update(key, value, ctx);
+    db.Update(key, value);
 }
 
-void THelpers::DbEraseUserKey(const TString &userKey, ISimpleDb &db, const TActorContext &ctx) {
+void THelpers::DbEraseUserKey(const TString &userKey, ISimpleDb &db) {
     TString key = THelpers::GenerateKeyFor(EIT_KEYVALUE_1, userKey);
-    db.Erase(key, ctx);
+    db.Erase(key);
 }
 
-void THelpers::DbUpdateUserKeyValue(const TString &userKey, const TString& value, ISimpleDb &db,
-        const TActorContext &ctx) {
+void THelpers::DbUpdateUserKeyValue(const TString &userKey, const TString& value, ISimpleDb &db) {
     TString key = THelpers::GenerateKeyFor(EIT_KEYVALUE_1, userKey);
-    db.Update(key, value, ctx);
+    db.Update(key, value);
 }
 
-void THelpers::DbEraseTrash(const TLogoBlobID &id, ISimpleDb &db, const TActorContext &ctx) {
+void THelpers::DbEraseTrash(const TLogoBlobID &id, ISimpleDb &db) {
     TTrashKeyArbitrary arbitrary;
     arbitrary.LogoBlobId = id;
     TString key = THelpers::GenerateKeyFor(EIT_TRASH, (ui8*)&arbitrary, sizeof(TTrashKeyArbitrary));
-    db.Erase(key, ctx);
+    db.Erase(key);
 }
 
-void THelpers::DbUpdateTrash(const TLogoBlobID &id, ISimpleDb &db, const TActorContext &ctx) {
+void THelpers::DbUpdateTrash(const TLogoBlobID &id, ISimpleDb &db) {
     TTrashKeyArbitrary arbitrary;
     arbitrary.LogoBlobId = id;
     TString key = THelpers::GenerateKeyFor(EIT_TRASH, (ui8*)&arbitrary, sizeof(TTrashKeyArbitrary));
     TString value;
-    db.Update(key, value, ctx);
+    db.Update(key, value);
 }
 
-void THelpers::DbEraseCollect(ISimpleDb &db, const TActorContext &ctx) {
+void THelpers::DbEraseCollect(ISimpleDb &db) {
     TString empty;
     TString key = THelpers::GenerateKeyFor(EIT_COLLECT, empty);
-    db.Erase(key, ctx);
+    db.Erase(key);
+}
+
+void THelpers::DbUpdateVacuumGeneration(ui64 generation, ISimpleDb &db) {
+    TString key = THelpers::GenerateKeyFor(EIT_VACUUM_GENERATION, nullptr, 0);
+    TString value = TString::Uninitialized(sizeof(generation));
+    memcpy(const_cast<char*>(value.data()), &generation, sizeof(generation));
+    db.Update(key, value);
 }
 
 THelpers::TGenerationStep THelpers::GenerationStep(const TLogoBlobID &id) {

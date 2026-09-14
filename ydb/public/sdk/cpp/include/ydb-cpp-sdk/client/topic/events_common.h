@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 template <typename TEvent>
 class TPrintable {

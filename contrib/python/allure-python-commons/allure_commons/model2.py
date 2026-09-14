@@ -4,7 +4,8 @@ from attr import Factory
 
 TEST_GROUP_PATTERN = "{prefix}-container.json"
 TEST_CASE_PATTERN = "{prefix}-result.json"
-ATTACHMENT_PATTERN = '{prefix}-attachment.{ext}'
+ATTACHMENT_PATTERN = "{prefix}-attachment.{ext}"
+GLOBALS_PATTERN = "{prefix}-globals.json"
 INDENT = 4
 
 
@@ -49,6 +50,7 @@ class TestResult(ExecutableItem):
     fullName = attrib(default=None)
     labels = attrib(default=Factory(list))
     links = attrib(default=Factory(list))
+    titlePath = attrib(default=Factory(list))
 
 
 @attrs
@@ -102,9 +104,27 @@ class Attachment:
     type = attrib(default=None)
 
 
+@attrs
+class GlobalAttachment(Attachment):
+    timestamp = attrib(default=None)
+
+
+@attrs
+class GlobalError(StatusDetails):
+    timestamp = attrib(default=None)
+
+
+@attrs
+class Globals:
+    file_pattern = GLOBALS_PATTERN
+
+    attachments = attrib(default=Factory(list))
+    errors = attrib(default=Factory(list))
+
+
 class Status:
-    FAILED = 'failed'
-    BROKEN = 'broken'
-    PASSED = 'passed'
-    SKIPPED = 'skipped'
-    UNKNOWN = 'unknown'
+    FAILED = "failed"
+    BROKEN = "broken"
+    PASSED = "passed"
+    SKIPPED = "skipped"
+    UNKNOWN = "unknown"

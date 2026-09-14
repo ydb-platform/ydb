@@ -31,6 +31,8 @@
 // `__has_attribute()` first. If the check fails, we check if we are on GCC and
 // assume the attribute exists on GCC (which is verified on GCC 4.7).
 
+// SKIP_ABSL_INLINE_NAMESPACE_CHECK
+
 #ifndef ABSL_BASE_ATTRIBUTES_H_
 #define ABSL_BASE_ATTRIBUTES_H_
 
@@ -133,12 +135,14 @@
 // Tags a function as weak for the purposes of compilation and linking.
 // Weak attributes did not work properly in LLVM's Windows backend before
 // 9.0.0, so disable them there. See https://bugs.llvm.org/show_bug.cgi?id=37598
-// for further information.
+// for further information. Weak attributes do not work across DLL boundary.
 // The MinGW compiler doesn't complain about the weak attribute until the link
 // step, presumably because Windows doesn't use ELF binaries.
-#if (ABSL_HAVE_ATTRIBUTE(weak) ||                                         \
-     (defined(__GNUC__) && !defined(__clang__))) &&                       \
-    (!defined(_WIN32) || (defined(__clang__) && __clang_major__ >= 9)) && \
+#if (ABSL_HAVE_ATTRIBUTE(weak) ||                                 \
+     (defined(__GNUC__) && !defined(__clang__))) &&               \
+    (!defined(_WIN32) ||                                          \
+     (defined(__clang__) && __clang_major__ >= 9 &&               \
+      !defined(ABSL_BUILD_DLL) && !defined(ABSL_CONSUME_DLL))) && \
     !defined(__MINGW32__)
 #undef ABSL_ATTRIBUTE_WEAK
 #define ABSL_ATTRIBUTE_WEAK __attribute__((weak))
@@ -335,9 +339,9 @@
 #ifndef ABSL_ATTRIBUTE_SECTION_VARIABLE
 #ifdef _AIX
 // __attribute__((section(#name))) on AIX is achieved by using the `.csect`
-// psudo op which includes an additional integer as part of its syntax indcating
-// alignment. If data fall under different alignments then you might get a
-// compilation error indicating a `Section type conflict`.
+// pseudo op which includes an additional integer as part of its syntax
+// indicating alignment. If data fall under different alignments then you might
+// get a compilation error indicating a `Section type conflict`.
 #define ABSL_ATTRIBUTE_SECTION_VARIABLE(name)
 #else
 #define ABSL_ATTRIBUTE_SECTION_VARIABLE(name) __attribute__((section(#name)))
@@ -490,8 +494,8 @@
 //
 // These attributes only take effect when the following conditions are met:
 //
-//   * The file/target is built in at least C++11 mode, with a Clang compiler
-//     that supports XRay attributes.
+//   * The file/target is built with a Clang compiler that supports XRay
+//     attributes.
 //   * The file/target is built with the -fxray-instrument flag set for the
 //     Clang/LLVM compiler.
 //   * The function is defined in the translation unit (the compiler honors the
@@ -527,6 +531,25 @@
 #define ABSL_XRAY_LOG_ARGS(N)
 #endif
 
+// ABSL_ATTRIBUTE_NULL_AFTER_MOVE
+//
+// Indicates that a user-defined smart-pointer-like type makes guarantees on the
+// state of a moved-from object, leaving it in a null state, where it can be
+// used as long as it is not dereferenced. In other words, these are the same
+// semantics that smart pointers from the standard library provide.
+//
+// The clang-tidy check bugprone-use-after-move allows member functions of types
+// marked with this attribute to be called on objects that have been moved from;
+// without the attribute, this would result in a use-after-move warning.
+#if ABSL_HAVE_CPP_ATTRIBUTE(clang::annotate) && defined(__clang__) && \
+    __clang_major__ >= 12
+#define ABSL_ATTRIBUTE_NULL_AFTER_MOVE                       \
+  [[clang::annotate("clang-tidy", "bugprone-use-after-move", \
+                    "null_after_move")]]
+#else
+#define ABSL_ATTRIBUTE_NULL_AFTER_MOVE
+#endif
+
 // ABSL_ATTRIBUTE_REINITIALIZES
 //
 // Indicates that a member function reinitializes the entire object to a known
@@ -549,12 +572,11 @@
 //
 // Prevents the compiler from complaining about variables that appear unused.
 //
-// For code or headers that are assured to only build with C++17 and up, prefer
-// just using the standard '[[maybe_unused]]' directly over this macro.
+// Deprecated: Use the standard C++17 `[[maybe_unused]]` instead.
 //
 // Due to differences in positioning requirements between the old, compiler
-// specific __attribute__ syntax and the now standard [[maybe_unused]], this
-// macro does not attempt to take advantage of '[[maybe_unused]]'.
+// specific __attribute__ syntax and the now standard `[[maybe_unused]]`, this
+// macro does not attempt to take advantage of `[[maybe_unused]]`.
 #if ABSL_HAVE_ATTRIBUTE(unused) || (defined(__GNUC__) && !defined(__clang__))
 #undef ABSL_ATTRIBUTE_UNUSED
 #define ABSL_ATTRIBUTE_UNUSED __attribute__((__unused__))
@@ -577,7 +599,11 @@
 // Instructs the compiler not to use natural alignment for a tagged data
 // structure, but instead to reduce its alignment to 1.
 //
-// Therefore, DO NOT APPLY THIS ATTRIBUTE TO STRUCTS CONTAINING ATOMICS. Doing
+// Use of this attribute is HIGHLY DISCOURAGED. Taking the address of or
+// binding a reference to any unaligned member is UB, and it is very easy to
+// do so unintentionally when passing such members as function arguments.
+//
+// DO NOT APPLY THIS ATTRIBUTE TO STRUCTS CONTAINING ATOMICS. Doing
 // so can cause atomic variables to be mis-aligned and silently violate
 // atomicity on x86.
 //
@@ -715,6 +741,76 @@
 #define ABSL_INTERNAL_RESTORE_DEPRECATED_DECLARATION_WARNING
 #endif  // defined(__GNUC__) || defined(__clang__)
 
+// ABSL_REQUIRE_EXPLICIT_INIT
+//
+// ABSL_REQUIRE_EXPLICIT_INIT is placed *after* the data members of an aggregate
+// type to indicate that the annotated member must be explicitly initialized by
+// the user whenever the aggregate is constructed. For example:
+//
+//   struct Coord {
+//     int x ABSL_REQUIRE_EXPLICIT_INIT;
+//     int y ABSL_REQUIRE_EXPLICIT_INIT;
+//   };
+//   Coord coord = {1};  // warning: field 'y' is not explicitly initialized
+//
+// Note that usage on C arrays is not supported in C++.
+// Use a struct (such as std::array) to wrap the array member instead.
+//
+// Avoid applying this attribute to the members of non-aggregate types.
+// The behavior within non-aggregates is unspecified and subject to change.
+//
+// Do NOT attempt to suppress or demote the error generated by this attribute.
+// Just like with a missing function argument, it is a hard error by design.
+//
+// See the upstream documentation for more details:
+// https://clang.llvm.org/docs/AttributeReference.html#require-explicit-initialization
+#ifdef __cplusplus
+#if ABSL_HAVE_CPP_ATTRIBUTE(clang::require_explicit_initialization)
+// clang-format off
+#define ABSL_REQUIRE_EXPLICIT_INIT \
+  [[clang::require_explicit_initialization]] = \
+    AbslInternal_YouForgotToExplicitlyInitializeAField::v
+#else
+#define ABSL_REQUIRE_EXPLICIT_INIT \
+  = AbslInternal_YouForgotToExplicitlyInitializeAField::v
+#endif
+// clang-format on
+#else
+// clang-format off
+#if ABSL_HAVE_ATTRIBUTE(require_explicit_initialization)
+#define ABSL_REQUIRE_EXPLICIT_INIT \
+  __attribute__((require_explicit_initialization))
+#else
+#define ABSL_REQUIRE_EXPLICIT_INIT \
+  /* No portable fallback for C is available */
+#endif
+// clang-format on
+#endif
+
+#ifdef __cplusplus
+struct AbslInternal_YouForgotToExplicitlyInitializeAField {
+  // A portable version of [[clang::require_explicit_initialization]] that
+  // never builds, as a last resort for all toolchains.
+  // The error messages are poor, so we don't rely on this unless we have to.
+  template <class T>
+#if !defined(SWIG)
+  constexpr
+#endif
+  operator T() const /* NOLINT */ {
+    const void *volatile deliberately_volatile_ptr = nullptr;
+    // Infinite loop to prevent constexpr compilation
+    for (;;) {
+      // This assignment ensures the 'this' pointer is not optimized away, so
+      // that linking always fails.
+      deliberately_volatile_ptr = this;  // Deliberately not constexpr
+      (void)deliberately_volatile_ptr;
+    }
+  }
+  // This is deliberately left undefined to prevent linking
+  static AbslInternal_YouForgotToExplicitlyInitializeAField v;
+};
+#endif
+
 // ABSL_CONST_INIT
 //
 // A variable declaration annotated with the `ABSL_CONST_INIT` attribute will
@@ -827,30 +923,93 @@
 #define ABSL_ATTRIBUTE_LIFETIME_BOUND
 #endif
 
-// ABSL_INTERNAL_ATTRIBUTE_VIEW indicates that a type acts like a view i.e. a
-// raw (non-owning) pointer. This enables diagnoses similar to those enabled by
-// ABSL_ATTRIBUTE_LIFETIME_BOUND.
+// Internal attribute; name and documentation TBD.
 //
-// See the following links for details:
-// https://reviews.llvm.org/D64448
-// https://lists.llvm.org/pipermail/cfe-dev/2018-November/060355.html
-#if ABSL_HAVE_CPP_ATTRIBUTE(gsl::Pointer)
-#define ABSL_INTERNAL_ATTRIBUTE_VIEW [[gsl::Pointer]]
+// See the upstream documentation:
+// https://clang.llvm.org/docs/AttributeReference.html#lifetime_capture_by
+#if ABSL_HAVE_CPP_ATTRIBUTE(clang::lifetime_capture_by)
+#define ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY(Owner) \
+  [[clang::lifetime_capture_by(Owner)]]
 #else
-#define ABSL_INTERNAL_ATTRIBUTE_VIEW
+#define ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY(Owner)
 #endif
 
-// ABSL_INTERNAL_ATTRIBUTE_OWNER indicates that a type acts like a smart
-// (owning) pointer. This enables diagnoses similar to those enabled by
-// ABSL_ATTRIBUTE_LIFETIME_BOUND.
+// Internal attribute; name and documentation TBD.
+//
+// See the upstream documentation:
+// https://clang.llvm.org/docs/AttributeReference.html#lifetime_capture_by_this
+//
+// Note: ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY(this) is deprecated. Use
+// ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY_THIS instead.
+#if ABSL_HAVE_CPP_ATTRIBUTE(clang::lifetime_capture_by_this)
+#define ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY_THIS \
+  [[clang::lifetime_capture_by_this]]
+#elif ABSL_HAVE_CPP_ATTRIBUTE(clang::lifetime_capture_by)
+#define ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY_THIS \
+  ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY(this)
+#else
+#define ABSL_INTERNAL_ATTRIBUTE_CAPTURED_BY_THIS
+#endif
+
+// ABSL_ATTRIBUTE_VIEW indicates that a type is solely a "view" of data that it
+// points to, similarly to a span, string_view, or other non-owning reference
+// type.
+// This enables diagnosing certain lifetime issues similar to those enabled by
+// ABSL_ATTRIBUTE_LIFETIME_BOUND, such as:
+//
+//   struct ABSL_ATTRIBUTE_VIEW StringView {
+//     template<class R>
+//     StringView(const R&);
+//   };
+//
+//   StringView f(std::string s) {
+//     return s;  // warning: address of stack memory returned
+//   }
+//
+// We disable this on Clang versions < 13 because of the following
+// false-positive:
+//
+//   absl::string_view f(std::optional<absl::string_view> sv) { return *sv; }
 //
 // See the following links for details:
 // https://reviews.llvm.org/D64448
 // https://lists.llvm.org/pipermail/cfe-dev/2018-November/060355.html
-#if ABSL_HAVE_CPP_ATTRIBUTE(gsl::Owner)
-#define ABSL_INTERNAL_ATTRIBUTE_OWNER [[gsl::Owner]]
+#if ABSL_HAVE_CPP_ATTRIBUTE(gsl::Pointer) && \
+    (!defined(__clang_major__) || __clang_major__ >= 13)
+#define ABSL_ATTRIBUTE_VIEW [[gsl::Pointer]]
 #else
-#define ABSL_INTERNAL_ATTRIBUTE_OWNER
+#define ABSL_ATTRIBUTE_VIEW
+#endif
+
+// ABSL_ATTRIBUTE_OWNER indicates that a type is a container, smart pointer, or
+// similar class that owns all the data that it points to.
+// This enables diagnosing certain lifetime issues similar to those enabled by
+// ABSL_ATTRIBUTE_LIFETIME_BOUND, such as:
+//
+//   struct ABSL_ATTRIBUTE_VIEW StringView {
+//     template<class R>
+//     StringView(const R&);
+//   };
+//
+//   struct ABSL_ATTRIBUTE_OWNER String {};
+//
+//   StringView f(String s) {
+//     return s;  // warning: address of stack memory returned
+//   }
+//
+// We disable this on Clang versions < 13 because of the following
+// false-positive:
+//
+//   absl::string_view f(std::optional<absl::string_view> sv) { return *sv; }
+//
+// See the following links for details:
+// https://reviews.llvm.org/D64448
+// https://lists.llvm.org/pipermail/cfe-dev/2018-November/060355.html
+#if ABSL_HAVE_CPP_ATTRIBUTE(gsl::Owner) && \
+    (!defined(__clang_major__) || __clang_major__ >= 13)
+#define ABSL_ATTRIBUTE_OWNER [[gsl::Owner]]
+#else
+#define ABSL_ATTRIBUTE_OWNER
 #endif
 
 // ABSL_ATTRIBUTE_TRIVIAL_ABI

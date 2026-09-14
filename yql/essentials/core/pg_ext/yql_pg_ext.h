@@ -6,6 +6,6 @@
 namespace NYql {
 
 void PgExtensionsFromProto(const NYql::NProto::TPgExtensions& proto,
-    TVector<NPg::TExtensionDesc>& extensions);
+                           TVector<NPg::TExtensionDesc>& extensions);
 
 } // namespace NYql

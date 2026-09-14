@@ -10,17 +10,19 @@ using namespace NApi;
 
 void TClientsCacheConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("default_config", &TThis::DefaultConfig)
+    registrar.Parameter("default_connection", &TThis::DefaultConnection)
+        .Alias("default_config")
         .DefaultNew();
-    registrar.Parameter("cluster_configs", &TThis::ClusterConfigs)
+    registrar.Parameter("per_cluster_connection", &TThis::PerClusterConnection)
+        .Alias("cluster_configs")
         .Default();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TClientsCacheAuthentificationOptionsPtr TClientsCacheAuthentificationOptions::GetFromEnvStatic()
+TClientsCacheAuthenticationOptionsPtr TClientsCacheAuthenticationOptions::GetFromEnvStatic()
 {
-    auto options = New<TClientsCacheAuthentificationOptions>();
+    auto options = New<TClientsCacheAuthenticationOptions>();
     options->DefaultOptions = GetClientOptionsFromEnvStatic();
     return options;
 }

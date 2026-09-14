@@ -8,6 +8,9 @@
 #include <ydb/public/api/protos/ydb_debug.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/executor_thread.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
 
 namespace NKikimr::NGRpcService {
 
@@ -51,15 +54,18 @@ private:
     }
 
     void Proceed(const TActorContext &ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " sending ping to KQP proxy");
+        YDB_LOG_TRACE_CTX(ctx, "Sending ping to KQP proxy",
+            {"selfId", this->SelfId()});
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), new NKqp::TEvKqp::TEvProxyPingRequest())) {
-            LOG_ERROR_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " failed to send ping");
+            YDB_LOG_ERROR_CTX(ctx, "Failed to send ping",
+                {"selfId", this->SelfId()});
             ReplyWithResult(StatusIds::INTERNAL_ERROR, ctx);
         }
     }
 
     void Handle(NKqp::TEvKqp::TEvProxyPingResponse::TPtr&, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " got ping response");
+        YDB_LOG_TRACE_CTX(ctx, "Got ping response",
+            {"selfId", this->SelfId()});
         ReplyWithResult(StatusIds::SUCCESS, ctx);
     }
 
@@ -70,7 +76,8 @@ private:
     }
 
     void InternalError(const TString& message) {
-        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+        YDB_LOG_ERROR("Internal error",
+            {"message", message});
         ReplyWithResult(StatusIds::INTERNAL_ERROR, TActivationContext::AsActorContext());
     }
 
@@ -117,17 +124,20 @@ private:
     }
 
     void Proceed(const TActorContext &ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " sending ping to SchemeCache");
+        YDB_LOG_TRACE_CTX(ctx, "Sending ping to SchemeCache",
+            {"selfId", this->SelfId()});
 
         auto* request = new TEvTxProxySchemeCache::TEvNavigateKeySet(new NSchemeCache::TSchemeCacheNavigate());
         if (!ctx.Send(MakeSchemeCacheID(), request)) {
-            LOG_ERROR_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " failed to send ping to SchemeCache");
+            YDB_LOG_ERROR_CTX(ctx, "Failed to send ping to SchemeCache",
+                {"selfId", this->SelfId()});
             ReplyWithResult(StatusIds::INTERNAL_ERROR, ctx);
         }
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " got ping response from SchemeCache");
+        YDB_LOG_TRACE_CTX(ctx, "Got ping response from SchemeCache",
+            {"selfId", this->SelfId()});
         ReplyWithResult(StatusIds::SUCCESS, ctx);
     }
 
@@ -138,7 +148,8 @@ private:
     }
 
     void InternalError(const TString& message) {
-        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+        YDB_LOG_ERROR("Internal error",
+            {"message", message});
         ReplyWithResult(StatusIds::INTERNAL_ERROR, TActivationContext::AsActorContext());
     }
 
@@ -185,15 +196,18 @@ private:
     }
 
     void Proceed(const TActorContext &ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " sending ping to TxProxy");
+        YDB_LOG_TRACE_CTX(ctx, "Sending ping to TxProxy",
+            {"selfId", this->SelfId()});
         if (!ctx.Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId)) {
-            LOG_ERROR_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " failed to send ping to TxProxy");
+            YDB_LOG_ERROR_CTX(ctx, "Failed to send ping to TxProxy",
+                {"selfId", this->SelfId()});
             ReplyWithResult(StatusIds::INTERNAL_ERROR, ctx);
         }
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr&, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " got ping response from TxProxy");
+        YDB_LOG_TRACE_CTX(ctx, "Got ping response from TxProxy",
+            {"selfId", this->SelfId()});
         ReplyWithResult(StatusIds::SUCCESS, ctx);
     }
 
@@ -204,7 +218,8 @@ private:
     }
 
     void InternalError(const TString& message) {
-        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+        YDB_LOG_ERROR("Internal error",
+            {"message", message});
         ReplyWithResult(StatusIds::INTERNAL_ERROR, TActivationContext::AsActorContext());
     }
 
@@ -267,8 +282,10 @@ private:
         }
 
         void Proceed(const TActorContext &ctx) {
-            LOG_TRACE_S(ctx, NKikimrServices::RPC_REQUEST, SelfId() << " chain worker with "
-                << ChainsLeft << " next chains and " << ReplyTo << " prev actor bootstrapped");
+            YDB_LOG_TRACE_CTX(ctx, "Chain worker with next chains and prev actor bootstrapped",
+                {"selfId", SelfId()},
+                {"chainsLeft", ChainsLeft},
+                {"replyTo", ReplyTo});
 
             if (ChainsLeft == 0) {
                 WorkAndDie();
@@ -305,14 +322,17 @@ private:
         }
 
         void Handle(TEvPrivate::TEvChainItemComplete::TPtr&, const TActorContext& ctx) {
-            LOG_TRACE_S(ctx, NKikimrServices::RPC_REQUEST, SelfId() << " chain worker with "
-                << ChainsLeft << " next chains and " << ReplyTo << " prev actor got chain reply");
+            YDB_LOG_TRACE_CTX(ctx, "Chain worker with next chains and prev actor got chain reply",
+                {"selfId", SelfId()},
+                {"chainsLeft", ChainsLeft},
+                {"replyTo", ReplyTo});
 
             WorkAndDie();
         }
 
         void InternalError(const TString& message) {
-            ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+            YDB_LOG_ERROR("Internal error",
+                {"message", message});
             Send<ESendingType::Tail>(ReplyTo, new TEvPrivate::TEvChainItemComplete());
             PassAway();
         }
@@ -370,8 +390,10 @@ private:
 
         bool noTailChain = req->GetNoTailChain();
 
-        LOG_TRACE_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId()
-            << " sending ping to ActorChain of length " << chainLength << " with work " << workUsec << " usec");
+        YDB_LOG_TRACE_CTX(ctx, "Sending ping to ActorChain of length with work usec",
+            {"selfId", this->SelfId()},
+            {"chainLength", chainLength},
+            {"workUsec", workUsec});
 
         auto* nextChainActor = new TChainWorkerActor(this->SelfId(), chainLength, workUsec, noTailChain);
         TActorId nextChainActorId;
@@ -386,13 +408,15 @@ private:
         }
 
         if (!nextChainActorId) {
-            LOG_ERROR_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " failed to send ping to ActorChain");
+            YDB_LOG_ERROR_CTX(ctx, "Failed to send ping to ActorChain",
+                {"selfId", this->SelfId()});
             ReplyWithResult(StatusIds::INTERNAL_ERROR, ctx);
         }
     }
 
     void Handle(TEvPrivate::TEvChainItemComplete::TPtr&, const TActorContext& ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " got ping response from full ActorChain");
+        YDB_LOG_TRACE_CTX(ctx, "Got ping response from full ActorChain",
+            {"selfId", this->SelfId()});
         ReplyWithResult(StatusIds::SUCCESS, ctx);
     }
 
@@ -403,7 +427,8 @@ private:
     }
 
     void InternalError(const TString& message) {
-        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+        YDB_LOG_ERROR("Internal error",
+            {"message", message});
         ReplyWithResult(StatusIds::INTERNAL_ERROR, TActivationContext::AsActorContext());
     }
 

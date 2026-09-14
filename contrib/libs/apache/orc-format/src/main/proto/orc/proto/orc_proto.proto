@@ -84,6 +84,27 @@ message CollectionStatistics {
   optional uint64 total_children = 3;
 }
 
+// Bounding box for Geometry or Geography type in the representation of min/max
+// value pair of coordinates from each axis.
+message BoundingBox {
+  optional double xmin = 1;
+  optional double xmax = 2;
+  optional double ymin = 3;
+  optional double ymax = 4;
+  optional double zmin = 5;
+  optional double zmax = 6;
+  optional double mmin = 7;
+  optional double mmax = 8;
+}
+
+// Statistics specific to Geometry or Geography type
+message GeospatialStatistics {
+  // A bounding box of geospatial instances
+  optional BoundingBox bbox = 1;
+  // Geospatial type codes of all instances, or an empty list if not known
+  repeated int32 geospatial_types = 2;
+}
+
 message ColumnStatistics {
   optional uint64 number_of_values = 1;
   optional IntegerStatistics int_statistics = 2;
@@ -97,6 +118,7 @@ message ColumnStatistics {
   optional bool has_null = 10;
   optional uint64 bytes_on_disk = 11;
   optional CollectionStatistics collection_statistics = 12;
+  optional GeospatialStatistics geospatial_statistics = 13;
 }
 
 message RowIndexEntry {
@@ -216,6 +238,8 @@ message Type {
     VARCHAR = 16;
     CHAR = 17;
     TIMESTAMP_INSTANT = 18;
+    GEOMETRY = 19;
+    GEOGRAPHY = 20;
   }
   optional Kind kind = 1;
   repeated uint32 subtypes = 2 [packed=true];
@@ -224,6 +248,18 @@ message Type {
   optional uint32 precision = 5;
   optional uint32 scale = 6;
   repeated StringPair attributes = 7;
+
+  // Coordinate Reference System (CRS) for Geometry and Geography types
+  optional string crs = 8;
+  // Edge interpolation algorithm for Geography type
+  enum EdgeInterpolationAlgorithm {
+    SPHERICAL = 0;
+    VINCENTY = 1;
+    THOMAS = 2;
+    ANDOYER = 3;
+    KARNEY = 4;
+  }
+  optional EdgeInterpolationAlgorithm algorithm = 9;
 }
 
 message StripeInformation {

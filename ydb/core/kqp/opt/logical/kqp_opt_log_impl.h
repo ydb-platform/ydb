@@ -47,7 +47,10 @@ struct TPrefixLookup {
 // Try to rewrite arbitrary table read to (ExtractMembers (Filter (Lookup LookupColumns) ResultColumns)
 TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(NYql::NNodes::TExprBase read, NYql::TExprContext& ctx, const TKqpOptimizeContext& kqpCtx, TMaybe<size_t> maxKeys);
 
+TMaybe<TString> ChooseIndexForLookupJoin(const NYql::TKikimrTableDescription& mainTableDesc, const THashSet<TString>& rightJoinKeys);
+
+NYql::NNodes::TExprBase RedirectReadToIndex(NYql::NNodes::TExprBase read, const TString& indexName, NYql::TExprContext& ctx);
+
+void TryExtractPrefixValues(const NYql::TExprNode::TPtr& expr, const THashSet<TString>& prefixColumnsSet, TVector<std::pair<TString, NYql::TExprNode::TPtr>>& prefixValues);
+
 } // NKikimr::NKqp::NOpt
-
-
-

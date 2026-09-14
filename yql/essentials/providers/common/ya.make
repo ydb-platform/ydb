@@ -6,6 +6,7 @@ RECURSE(
     config
     dq
     gateway
+    gateways_utils
     metrics
     mkql
     mkql_simple_file

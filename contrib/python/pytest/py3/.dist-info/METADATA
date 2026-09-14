@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pytest
-Version: 7.4.4
+Version: 8.0.2
 Summary: pytest: simple powerful testing with Python
 Home-page: https://docs.pytest.org/en/latest/
 Author: Holger Krekel, Bruno Oliveira, Ronny Pfannschmidt, Floris Bruynooghe, Brianna Laugher, Florian Bruhin and others
@@ -23,7 +23,6 @@ Classifier: Operating System :: Microsoft :: Windows
 Classifier: Operating System :: POSIX
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
@@ -32,15 +31,14 @@ Classifier: Programming Language :: Python :: 3.12
 Classifier: Topic :: Software Development :: Libraries
 Classifier: Topic :: Software Development :: Testing
 Classifier: Topic :: Utilities
-Requires-Python: >=3.7
+Requires-Python: >=3.8
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 Requires-Dist: iniconfig
 Requires-Dist: packaging
-Requires-Dist: pluggy <2.0,>=0.12
+Requires-Dist: pluggy <2.0,>=1.3.0
 Requires-Dist: exceptiongroup >=1.0.0rc8 ; python_version < "3.11"
 Requires-Dist: tomli >=1.0.0 ; python_version < "3.11"
-Requires-Dist: importlib-metadata >=0.12 ; python_version < "3.8"
 Requires-Dist: colorama ; sys_platform == "win32"
 Provides-Extra: testing
 Requires-Dist: argcomplete ; extra == 'testing'
@@ -75,15 +73,12 @@ Requires-Dist: xmlschema ; extra == 'testing'
     :target: https://codecov.io/gh/pytest-dev/pytest
     :alt: Code coverage Status
 
-.. image:: https://github.com/pytest-dev/pytest/workflows/test/badge.svg
+.. image:: https://github.com/pytest-dev/pytest/actions/workflows/test.yml/badge.svg
     :target: https://github.com/pytest-dev/pytest/actions?query=workflow%3Atest
 
 .. image:: https://results.pre-commit.ci/badge/github/pytest-dev/pytest/main.svg
    :target: https://results.pre-commit.ci/latest/github/pytest-dev/pytest/main
    :alt: pre-commit.ci status
-
-.. image:: https://img.shields.io/badge/code%20style-black-000000.svg
-    :target: https://github.com/psf/black
 
 .. image:: https://www.codetriage.com/pytest-dev/pytest/badges/users.svg
     :target: https://www.codetriage.com/pytest-dev/pytest
@@ -155,7 +150,7 @@ Features
 - Can run `unittest <https://docs.pytest.org/en/stable/how-to/unittest.html>`_ (or trial),
   `nose <https://docs.pytest.org/en/stable/how-to/nose.html>`_ test suites out of the box
 
-- Python 3.7+ or PyPy3
+- Python 3.8+ or PyPy3
 
 - Rich plugin architecture, with over 850+ `external plugins <https://docs.pytest.org/en/latest/reference/plugin_list.html>`_ and thriving community
 

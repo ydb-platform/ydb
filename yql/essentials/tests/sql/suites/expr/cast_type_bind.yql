@@ -1,0 +1,2 @@
+$t = List<Uint32>;
+select cast([1] as $t);

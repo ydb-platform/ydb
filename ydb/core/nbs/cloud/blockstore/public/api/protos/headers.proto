@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/cloud/storage/core/protos/request_source.proto";
+import "library/cpp/lwtrace/protos/lwtrace.proto";
+
+package NYdb.NBS.NProto;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/core/nbs/cloud/blockstore/public/api/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Control plane request source.
+
+enum EControlRequestSource
+{
+    SOURCE_CLIENT = 0;
+    SOURCE_SERVICE_MONITORING = 1;
+}
+
+enum EOptimizeNetworkTransfer
+{
+    // No optimization enabled
+    NO_OPTIMIZATION = 0;
+
+    // When the block contains only zeros, then pass it with a size of 0.
+    SKIP_VOID_BLOCKS = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Common message headers.
+
+message THeaders
+{
+    // Trace identifier for logging.
+    string TraceId = 1;
+
+    // Idempotence identifier for retries.
+    string IdempotenceId = 2;
+
+    // Client identifier for client detection.
+    string ClientId = 3;
+
+    // Request timestamp.
+    uint64 Timestamp = 4;
+
+    // Request identifier.
+    uint64 RequestId = 5;
+
+    // Request timeout (in milliseconds).
+    uint32 RequestTimeout = 6;
+
+    // Request generation number.
+    uint32 RequestGeneration = 7;
+
+    message TInternal
+    {
+        // IAM auth token.
+        string AuthToken = 1;
+
+        // From which channel this request comes from.
+        NYdb.NBS.NProto.ERequestSource RequestSource = 2;
+
+        // NLWTrace.TTraceRequest Trace = 3;
+
+        // // Ts when request tracing actually started.
+        // uint64 TraceTs = 4;
+
+        // // Source of control plane request.
+        // EControlRequestSource ControlSource = 5;
+    }
+
+    // These headers must not be set by end clients. They will be overwritten
+    // internally.
+    TInternal Internal = 8;
+
+    // True for requests that originate from blockstore-server itself
+    // e.g. NRD migration-related reads and writes.
+    bool IsBackgroundRequest = 9;
+
+    // This flag controls the optimization of data transmission over the network.
+    EOptimizeNetworkTransfer OptimizeNetworkTransfer = 10;
+
+    // For which replica this request will be performed.
+    // Only for STORAGE_MEDIA_SSD_MIRROR* disks.
+    uint32 ReplicaIndex = 11;
+
+    // For how many replicas will this read request be executed.
+    // Only for STORAGE_MEDIA_SSD_MIRROR* disks.
+    uint32 ReplicaCount = 12;
+
+    // Monotonously increasing request ID counter needed by the disk agent to
+    // order write requests.
+    uint64 VolumeRequestId = 13;
+
+    // Attempt number of the request.
+    uint32 RetryNumber = 14;
+}

@@ -21,8 +21,8 @@ class IDirectTx {
 public:
     virtual ~IDirectTx() = default;
     virtual bool Execute(TDataShard* self, TTransactionContext& txc,
-        const TRowVersion& readVersion, const TRowVersion& writeVersion,
-        ui64 globalTxId, absl::flat_hash_set<ui64>& volatileReadDependencies) = 0;
+        const TRowVersion& mvccVersion, ui64 globalTxId,
+        absl::flat_hash_set<ui64>& volatileReadDependencies) = 0;
     virtual TDirectTxResult GetResult(TDataShard* self) = 0;
     virtual TVector<IDataShardChangeCollector::TChange> GetCollectedChanges() const = 0;
 };

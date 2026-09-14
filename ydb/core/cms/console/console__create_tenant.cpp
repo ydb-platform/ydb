@@ -1,5 +1,7 @@
 #include "console_tenants_manager.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
+
 namespace NKikimr::NConsole {
 
 using namespace NOperationId;
@@ -27,7 +29,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Cannot create tenant: " << error);
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot create tenant",
+            {"error", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -65,8 +68,10 @@ public:
 
         auto &rec = Request->Get()->Record.GetRequest();
         auto &token = Request->Get()->Record.GetUserToken();
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxCreateTenant: "
-                    << Request->Get()->Record.ShortDebugString());
+        auto &peer = Request->Get()->Record.GetPeerName();
+
+        YDB_LOG_DEBUG_CTX(ctx, "TTxCreateTenant",
+            {"ev", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvCreateTenantResponse;
 
@@ -98,9 +103,9 @@ public:
 
         if (Self->Config.TenantsQuota
             && Self->Tenants.size() >= Self->Config.TenantsQuota) {
-            LOG_NOTICE_S(ctx, NKikimrServices::CMS_TENANTS,
-                         "Tenants quota is exceeded (" << Self->Tenants.size()
-                         << "/" << Self->Config.TenantsQuota << ")");
+            YDB_LOG_NOTICE_CTX(ctx, "Tenants quota is exceeded",
+                {"tenants", Self->Tenants.size()},
+                {"tenantsQuota", Self->Config.TenantsQuota});
             Self->Counters.Inc(COUNTER_TENANTS_QUOTA_EXCEEDED);
             return Error(Ydb::StatusIds::UNAVAILABLE,
                          "Tenants quota is exceeded", ctx);
@@ -121,13 +126,13 @@ public:
             attrNames.insert(key);
         }
 
-        Tenant = new TTenant(path, TTenant::CREATING_POOLS, token);
+        Tenant = new TTenant(path, TTenant::CREATING_POOLS, token, peer);
 
         Tenant->IsExternalSubdomain = Self->FeatureFlags.GetEnableExternalSubdomains();
         Tenant->IsExternalHive = Self->FeatureFlags.GetEnableExternalHive();
-        Tenant->IsExternalSysViewProcessor = Self->FeatureFlags.GetEnableSystemViews();
+        Tenant->IsExternalSysViewProcessor = true;
         Tenant->IsExternalStatisticsAggregator = Self->FeatureFlags.GetEnableStatistics();
-        Tenant->IsExternalBackupController = Self->FeatureFlags.GetEnableBackupService();
+        Tenant->IsExternalBackupController = false;
         Tenant->IsGraphShardEnabled = Self->FeatureFlags.GetEnableGraphShard();
 
         if (rec.options().disable_external_subdomain()) {
@@ -136,6 +141,16 @@ public:
 
         if (rec.options().plan_resolution()) {
             Tenant->PlanResolution = rec.options().plan_resolution();
+        }
+
+        if (rec.options().coordinators()) {
+            Tenant->Coordinators = rec.options().coordinators();
+        } else if (rec.resources_kind_case() == Ydb::Cms::CreateDatabaseRequest::kServerlessResources) {
+            Tenant->Coordinators = 1;
+        }
+
+        if (rec.options().mediators()) {
+            Tenant->Mediators = rec.options().mediators();
         }
 
         if (rec.options().disable_tx_service()) {
@@ -182,7 +197,7 @@ public:
 
                 if (Tenant->StoragePools.contains(kind)) {
                     auto pool = Tenant->StoragePools.at(kind);
-                    pool->AddRequiredGroups(size);
+                    pool->ChangeRequiredGroups(size);
                 } else {
                     if (!Self->MakeBasicPoolCheck(kind, size, code, error))
                         return Error(code, error, ctx);
@@ -251,7 +266,6 @@ public:
 
                     Tenant->IsExternalHive = false;
                     Tenant->IsGraphShardEnabled = false;
-                    Tenant->Coordinators = 1;
                     Tenant->SlotsAllocationConfirmed = true;
                 } else {
                     return Error(Ydb::StatusIds::BAD_REQUEST,
@@ -350,8 +364,9 @@ public:
         Tenant->TxId = ctx.Now().GetValue();
         Tenant->Generation = 1;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS,
-                    "Add tenant " << path << " (txid = " << Tenant->TxId << ")");
+        YDB_LOG_DEBUG_CTX(ctx, "Add tenant",
+            {"tenantPath", path},
+            {"txId", Tenant->TxId});
 
         Self->DbAddTenant(Tenant, txc, ctx);
 
@@ -361,7 +376,7 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG(ctx, NKikimrServices::CMS_TENANTS, "TTxCreateTenant Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxCreateTenant Complete");
 
         Y_ABORT_UNLESS(Response);
 
@@ -369,7 +384,8 @@ public:
             Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                                COUNTER_CREATE_RESPONSES);
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, "Send: " << Response->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "Send",
+            {"ev", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         if (Tenant) {

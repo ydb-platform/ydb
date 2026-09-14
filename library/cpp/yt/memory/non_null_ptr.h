@@ -1,6 +1,8 @@
 #pragma once
 
-#include <library/cpp/yt/misc/concepts.h>
+#include "public.h"
+
+#include <library/cpp/yt/mpl/concepts.h>
 
 namespace NYT {
 
@@ -17,10 +19,11 @@ class TNonNullPtrBase
 {
 public:
     TNonNullPtrBase(T* ptr) noexcept;
+    TNonNullPtrBase(TIntrusivePtr<T> ptr) noexcept;
     TNonNullPtrBase(const TNonNullPtrBase& other) = default;
 
     TNonNullPtrBase(std::nullptr_t) = delete;
-    TNonNullPtrBase operator=(const TNonNullPtrBase&) = delete;
+    TNonNullPtrBase& operator=(const TNonNullPtrBase&) = default;
 
     T* operator->() const noexcept;
     T& operator*() const noexcept;
@@ -48,7 +51,7 @@ class TNonNullPtr
 
 // NB(pogorelov): Method definitions placed in .h file (instead of -inl.h) because of clang16 bug.
 // TODO(pogorelov): Move method definitions to helpers-inl.h when new clang will be used.
-template <CConst T>
+template <NMpl::CConst T>
 class TNonNullPtr<T>
     : public TNonNullPtrBase<T>
 {
@@ -63,6 +66,12 @@ public:
         : TNonNullPtrBase<T>()
     {
         TNonNullPtrBase<T>::Ptr_ = mutPtr.Ptr_;
+    }
+
+    TNonNullPtr(TIntrusivePtr<std::remove_pointer_t<TMutablePtr>> ptr) noexcept
+        : TNonNullPtrBase<T>()
+    {
+        TNonNullPtrBase<T>::Ptr_ = ptr.Get();
     }
 };
 

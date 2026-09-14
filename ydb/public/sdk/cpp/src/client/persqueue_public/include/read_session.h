@@ -3,15 +3,15 @@
 #include "aliases.h"
 #include "read_events.h"
 
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
-#include <ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <library/cpp/logger/log.h>
 
 #include <util/generic/size_literals.h>
 
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 //! Read settings for single topic.
 struct TTopicReadSettings {

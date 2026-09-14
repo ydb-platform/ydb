@@ -22,8 +22,7 @@ namespace numpy
                 types::str const &sep, types::str const &format)
     {
       if (sep.size() != 0)
-        throw types::NotImplementedError(
-            "Sep input is not implemented yet, should be left empty");
+        throw types::NotImplementedError("Sep input is not implemented yet, should be left empty");
       if (format.size() != 0)
         throw types::NotImplementedError(
             "Format input is not implemented yet, should be left empty");

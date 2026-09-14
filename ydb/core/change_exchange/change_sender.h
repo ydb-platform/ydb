@@ -1,8 +1,8 @@
 #pragma once
 
 #include "change_exchange.h"
+#include "visitor.h"
 
-#include <ydb/core/change_exchange/visitor.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/mon.h>
 
@@ -122,7 +122,7 @@ class TChangeSender {
     bool RequestRecords();
     void SendRecords();
     void SendPreparedRecords(ui64 partitionId);
-    void ReEnqueueRecords(const TSender& sender);
+    void ReEnqueueRecords(ui64 partitionId, const TSender& sender);
 
     TBroadcast& EnsureBroadcast(IChangeRecord::TPtr record);
     bool AddBroadcastPartition(ui64 order, ui64 partitionId);
@@ -178,6 +178,10 @@ protected:
 
     inline bool IsAllSendersReadyOrUninit() {
         return ReadySenders + UninitSenders == Senders.size();
+    }
+
+    inline bool HasPendingRecords() const {
+        return !Enqueued.empty() || !PendingBody.empty() || !PendingSent.empty();
     }
 
     void SetPartitionResolver(IPartitionResolverVisitor* partitionResolver) {

@@ -10,6 +10,8 @@ void TDialerConfig::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_aggressive_reconnect", &TThis::EnableAggressiveReconnect)
         .Default(false);
+    registrar.Parameter("allow_bypass_tls", &TThis::AllowBypassTls)
+        .Default(false);
     registrar.Parameter("min_rto", &TThis::MinRto)
         .Default(TDuration::MilliSeconds(100));
     registrar.Parameter("max_rto", &TThis::MaxRto)
@@ -43,6 +45,7 @@ void TAddressResolverConfig::Register(TRegistrar registrar)
 
     registrar.Preprocessor([] (TThis* config) {
         config->RefreshTime = TDuration::Seconds(60);
+        config->ExpirationPeriod = TDuration::Seconds(60);
         config->ExpireAfterSuccessfulUpdateTime = TDuration::Seconds(120);
         config->ExpireAfterFailedUpdateTime = TDuration::Seconds(30);
     });

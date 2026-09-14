@@ -20,6 +20,7 @@ SRCS(
     service_account_service.h
     user_account_service.cpp
     user_account_service.h
+    util.cpp
 )
 
 PEERDIR(
@@ -27,6 +28,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/grpc/actor_client
     library/cpp/json
+    library/cpp/svnversion
     ydb/core/base
     ydb/library/services
     ydb/public/lib/deprecated/client

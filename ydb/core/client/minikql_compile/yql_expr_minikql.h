@@ -10,7 +10,7 @@
 
 #include <library/cpp/threading/future/future.h>
 
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 
 
 namespace NKikimr {

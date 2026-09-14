@@ -1,0 +1,26 @@
+/* sort outputs */
+
+use plato;
+
+pragma Engine = "ytflow";
+
+pragma Ytflow.Cluster = "plato";
+pragma Ytflow.PipelineDirectory = "pipelines";
+pragma Ytflow.PipelineName = "test";
+
+pragma Ytflow.YtConsumerName = "main_consumer";
+pragma Ytflow.YtProducerName = "main_producer";
+
+insert into Output
+select 
+    HOP_START() as window_start,
+    HOP_END() as window_end,
+    key,
+    sum(value) as sum_values,
+    sum_if(value, value > 10) as sum_if_values,
+    count(*) as count_values,
+    count_if(value > 10) as count_if_values
+from Input
+group by
+    key,
+    HOP(Datetime::FromSeconds(Unwrap(ts)), "PT5S", "PT10S", "PT10S");

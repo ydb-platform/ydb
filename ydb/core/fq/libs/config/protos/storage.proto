@@ -19,6 +19,7 @@ message TYdbStorageConfig {
     uint32 OperationTimeoutSec = 11;
     uint32 CancelAfterSec = 12;
     bool UseSsl = 13;
+    uint32 TableClientMaxActiveSessions = 14;
 
     // alternative to OAuthFile to simplify tests
     string Token = 5;

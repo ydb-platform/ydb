@@ -1,6 +1,5 @@
-#include "schemeshard_info_types.h"
-
 #include "common/validation.h"
+#include "schemeshard_info_types.h"
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
@@ -19,8 +18,8 @@ static inline NScheme::TTypeInfo GetType(const TTableInfo::TColumn& col) {
 }
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
-    const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
-    const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
+    const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
+    const TMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr)
 {
@@ -39,17 +38,52 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
 
         const TTableInfo::TColumn* column = nullptr;
         const ui32 colId = it->second;
-        if (alterColumns.contains(colId)) {
-            column = &alterColumns.at(colId);
-        } else if (sourceColumns.contains(colId)) {
-            column = &sourceColumns.at(colId);
+        if (auto x = alterColumns.find(colId); x != alterColumns.end()) {
+            column = &x->second;
+        } else if (auto x = sourceColumns.find(colId); x != sourceColumns.end()) {
+            column = &x->second;
         } else {
-            Y_ABORT_UNLESS("Unknown column");
+            Y_ABORT("Unknown column");
         }
 
         if (IsDropped(*column)) {
             errStr = Sprintf("Cannot enable TTL on dropped column: '%s'", colName.data());
             return false;
+        }
+
+        if (column->DefaultKind == ETableColumnDefaultKind::FromExpression) {
+            errStr = Sprintf("Cannot enable TTL on generated column: '%s'", colName.data());
+            return false;
+        }
+
+        auto effectiveColumn = [&](ui32 id) -> const TTableInfo::TColumn* {
+            if (auto x = alterColumns.find(id); x != alterColumns.end()) {
+                return &x->second;
+            }
+            if (auto x = sourceColumns.find(id); x != sourceColumns.end()) {
+                return &x->second;
+            }
+            return nullptr;
+        };
+
+        for (const auto& [_, id] : colName2Id) {
+            const auto* candidate = effectiveColumn(id);
+            if (!candidate || candidate->DefaultKind != ETableColumnDefaultKind::FromExpression || IsDropped(*candidate)) {
+                continue;
+            }
+
+            NKikimrSchemeOp::TDefaultExpressionColumnDescription generatedDesc;
+            if (!generatedDesc.ParseFromString(candidate->DefaultValue)) {
+                continue;
+            }
+
+            for (const auto& dependency : generatedDesc.GetDependencyColumnNames()) {
+                if (dependency == colName) {
+                    errStr = Sprintf("Cannot enable TTL on column '%s': it is used by generated column '%s'",
+                        colName.data(), candidate->Name.data());
+                    return false;
+                }
+            }
         }
 
         const auto unit = enabled.GetColumnUnit();
@@ -70,7 +104,7 @@ bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
         const TInstant now = TInstant::Now();
         if (expireAfter->Seconds() > now.Seconds()) {
             errStr = Sprintf("TTL should be less than %" PRIu64 " seconds (%" PRIu64 " days, %" PRIu64 " years). The ttl behaviour is undefined before 1970.", now.Seconds(), now.Days(), now.Days() / 365);
-            return false;            
+            return false;
         }
 
         if (enabled.HasSysSettings()) {

@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "flat_exec_seat.h"
 #include "flat_table_misc.h"
 #include "flat_part_store.h"
 #include "flat_store_hotdog.h"
@@ -7,6 +8,7 @@
 #include "flat_sausagecache.h"
 #include "tablet_flat_executor.h"
 #include "flat_executor_snapshot.h"
+#include "flat_direct_part_writer.h"
 #include <ydb/core/util/pb.h>
 #include <util/generic/hash_set.h>
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
@@ -15,21 +17,34 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
     struct TPageCollectionReadEnv : public NTable::IPages {
-        TPageCollectionReadEnv(TPrivatePageCache& cache)
+        TPageCollectionReadEnv(TPrivatePageCache& cache, TSeat& seat)
             : Cache(cache)
+            , Seat(seat)
         { }
 
+        using TPageCollection = TPrivatePageCache::TPageCollection;
+
+        struct TStats {
+            size_t NewlyPinnedPages = 0;
+            ui64 NewlyPinnedBytes = 0;
+    
+            size_t ToLoadPages = 0;
+            ui64 ToLoadBytes = 0;
+        };
+
+        const TStats& GetStats() const { return Stats; }
+
     protected: /* NTable::IPages, page collection backend implementation */
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) override
         {
             return NTable::MemTableRefLookup(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            const TSharedData* page = Lookup(partStore->Locate(lob, ref), ref);
+            const TSharedData* page = TryGetPage(ref, partStore->Locate(lob, ref));
 
             if (!page && ReadMissingReferences) {
                 MissingReferencesSize_ += Max<ui64>(1, part->GetPageSize(lob, ref));
@@ -42,41 +57,88 @@ namespace NTabletFlatExecutor {
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            return Lookup(partStore->PageCollections.at(groupId.Index).Get(), pageId);
+            return TryGetPage(pageId, partStore->PageCollections.at(groupId.Index).Get());
         }
 
-        void EnableReadMissingReferences() noexcept {
+        void EnableReadMissingReferences() {
             ReadMissingReferences = true;
         }
 
-        void DisableReadMissingReferences() noexcept {
+        void DisableReadMissingReferences() {
             ReadMissingReferences = false;
             MissingReferencesSize_ = 0;
         }
 
-        ui64 MissingReferencesSize() const noexcept
+        ui64 MissingReferencesSize() const
         { 
             return MissingReferencesSize_;
         }
 
     private:
-        const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId pageId) noexcept
+        void ToLoadPage(TPageId pageId, TPageCollection *pageCollection) {
+            if (ToLoad[pageCollection->Id].insert(pageId).second) {
+                Stats.ToLoadPages++;
+                Y_ASSERT(!pageCollection->IsStickyPage(pageId));
+                Stats.ToLoadBytes += pageCollection->GetPageSize(pageId);
+            }
+        }
+
+        const TSharedData* TryGetPage(TPageId pageId, TPageCollection *pageCollection)
         {
-            return Cache.Lookup(pageId, info);
+            auto& pinnedCollection = Seat.Pinned[pageCollection->Id];
+            auto* pinnedPage = pinnedCollection.FindPtr(pageId);
+            if (pinnedPage) {
+                // pinned pages do not need to be counted again
+                return &pinnedPage->PinnedBody;
+            }
+
+            auto sharedBody = Cache.TryGetPage(pageId, pageCollection);
+
+            if (!sharedBody) {
+                ToLoadPage(pageId, pageCollection);
+                return nullptr;
+            }
+
+            sharedBody.IncrementFrequency();
+            auto emplaced = pinnedCollection.emplace(pageId, TPrivatePageCache::TPinnedPage(std::move(sharedBody)));
+            Y_ENSURE(emplaced.second);
+            auto& pinnedBody = emplaced.first->second.PinnedBody;
+
+            Stats.NewlyPinnedPages++;
+            if (!pageCollection->IsStickyPage(pageId)) {
+                Stats.NewlyPinnedBytes += pinnedBody.size();
+            }
+            
+            return &pinnedBody;
         }
 
     public:
-        TPrivatePageCache& Cache;
-    
-    private:
-        bool ReadMissingReferences = false;
+        auto ObtainToLoad() {
+            THashMap<TLogoBlobID, TVector<TPageId>> result;
+            for (auto& [pageCollectionId, pages_] : ToLoad) {
+                TVector<TPageId> pages(pages_.begin(), pages_.end());
+                std::sort(pages.begin(), pages.end());
+                result.emplace(pageCollectionId, std::move(pages));
+            }
+            ToLoad.clear();
+            return result;
+        }
 
+    private:
+        TPrivatePageCache& Cache;
+        TSeat& Seat;
+
+        THashMap<TLogoBlobID, THashSet<TPageId>> ToLoad;
+    
+        bool ReadMissingReferences = false;
         ui64 MissingReferencesSize_ = 0;
+
+        TStats Stats;
     };
 
     struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public IExecuting {
-        TPageCollectionTxEnv(NTable::TDatabase& db, TPrivatePageCache& cache)
-            : TPageCollectionReadEnv(cache)
+        TPageCollectionTxEnv(NTable::TDatabase& db, TPrivatePageCache& cache, TSeat& seat)
+            : TPageCollectionReadEnv(cache, seat)
             , DB(db)
         { }
 
@@ -136,7 +198,7 @@ namespace NTabletFlatExecutor {
 
         using TPageCollectionReadEnv::TPageCollectionReadEnv;
 
-        bool HasChanges() const noexcept
+        bool HasChanges() const
         {
             return
                 DropSnap
@@ -144,17 +206,19 @@ namespace NTabletFlatExecutor {
                 || LoanBundle
                 || LoanTxStatus
                 || BorrowUpdates
-                || LoanConfirmation;
+                || LoanConfirmation
+                || AttachedParts;
         }
 
     protected:
-        void OnRollbackChanges() noexcept override {
+        void OnRollbackChanges() override {
             MakeSnap.clear();
             DropSnap.Reset();
             BorrowUpdates.clear();
             LoanBundle.clear();
             LoanTxStatus.clear();
             LoanConfirmation.clear();
+            AttachedParts.clear();
         }
 
     protected: /* IExecuting, tx stage func implementation */
@@ -162,7 +226,7 @@ namespace NTabletFlatExecutor {
 
         void DropSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override
         {
-            Y_ABORT_UNLESS(!DropSnap, "only one snapshot per transaction");
+            Y_ENSURE(!DropSnap, "only one snapshot per transaction");
 
             DropSnap.Reset(new TBorrowSnap{ snap });
         }
@@ -186,7 +250,7 @@ namespace NTabletFlatExecutor {
             const ui32 source = proto.GetSourceTable();
 
             for (auto &part : proto.GetParts()) {
-                Y_ABORT_UNLESS(part.HasBundle(), "Cannot find attached hotdogs in borrow");
+                Y_ENSURE(part.HasBundle(), "Cannot find attached hotdogs in borrow");
 
                 LoanBundle.emplace_back(new TLoanBundle(source, tableId, lender,
                         TPageCollectionProtoHelper::MakePageCollectionComponents(part.GetBundle(), /* unsplit */ true)));
@@ -201,9 +265,15 @@ namespace NTabletFlatExecutor {
             }
         }
 
+        void AttachPart(ui32 tableId, THolder<TDirectPartResult> result) override
+        {
+            Y_ENSURE(result, "AttachPart called with an empty result");
+            AttachedParts.emplace_back(TAttachedPart{ tableId, std::move(result) });
+        }
+
         void CleanupLoan(const TLogoId &bundle, ui64 from) override
         {
-            Y_ABORT_UNLESS(!DropSnap, "must not drop snapshot and update loan in same transaction");
+            Y_ENSURE(!DropSnap, "must not drop snapshot and update loan in same transaction");
             BorrowUpdates[bundle].StoppedLoans.push_back(from);
         }
 
@@ -212,17 +282,17 @@ namespace NTabletFlatExecutor {
             LoanConfirmation.insert(std::make_pair(bundle, TLoanConfirmation{borrow}));
         }
 
-        void EnableReadMissingReferences() noexcept override
+        void EnableReadMissingReferences() override
         {
             TPageCollectionReadEnv::EnableReadMissingReferences();
         }
 
-        void DisableReadMissingReferences() noexcept override
+        void DisableReadMissingReferences() override
         {
             TPageCollectionReadEnv::DisableReadMissingReferences();
         }
 
-        ui64 MissingReferencesSize() const noexcept override
+        ui64 MissingReferencesSize() const override
         {
             return TPageCollectionReadEnv::MissingReferencesSize();
         }
@@ -230,7 +300,7 @@ namespace NTabletFlatExecutor {
         NTable::TDatabase& DB;
 
     public:
-        /*_ Pending database shanshots      */
+        /*_ Pending database snapshots      */
 
         TMap<ui32, TSnapshot> MakeSnap;
 
@@ -241,6 +311,14 @@ namespace NTabletFlatExecutor {
         TVector<THolder<TLoanBundle>> LoanBundle;
         TVector<THolder<TLoanTxStatus>> LoanTxStatus;
         THashMap<TLogoId, TLoanConfirmation> LoanConfirmation;
+
+        /*_ Directly written parts to attach as bottom layers */
+
+        struct TAttachedPart {
+            ui32 TableId;
+            THolder<TDirectPartResult> Result;
+        };
+        TVector<TAttachedPart> AttachedParts;
     };
 
 }

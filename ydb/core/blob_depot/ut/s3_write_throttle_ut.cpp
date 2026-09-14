@@ -40,21 +40,23 @@ namespace {
 
     struct TFakeAgent {
         TTestBasicRuntime& Runtime;
+        const ui32 NodeIndex;
         const TActorId Edge;
         const ui64 AgentInstanceId;
         TActorId PipeClient;
         ui64 NextRequestId = 1;
 
-        TFakeAgent(TTestBasicRuntime& runtime, ui64 agentInstanceId)
+        TFakeAgent(TTestBasicRuntime& runtime, ui64 agentInstanceId, ui32 nodeIndex = 0)
             : Runtime(runtime)
-            , Edge(runtime.AllocateEdgeActor())
+            , NodeIndex(nodeIndex)
+            , Edge(runtime.AllocateEdgeActor(nodeIndex))
             , AgentInstanceId(agentInstanceId)
-            , PipeClient(runtime.ConnectToPipe(TabletId, Edge, 0, GetPipeConfigWithRetries()))
+            , PipeClient(runtime.ConnectToPipe(TabletId, Edge, nodeIndex, GetPipeConfigWithRetries()))
         {}
 
         template<typename TRequest>
         void Send(std::unique_ptr<TRequest> ev) {
-            Runtime.SendToPipe(PipeClient, Edge, ev.release(), 0, NextRequestId++);
+            Runtime.SendToPipe(PipeClient, Edge, ev.release(), NodeIndex, NextRequestId++);
         }
 
         template<typename TResponse>
@@ -105,7 +107,7 @@ namespace {
         }
 
         void Disconnect() {
-            Runtime.ClosePipe(PipeClient, Edge, 0);
+            Runtime.ClosePipe(PipeClient, Edge, NodeIndex);
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TEvTabletPipe::EvServerDisconnected);
             Runtime.DispatchEvents(options);
@@ -204,5 +206,32 @@ Y_UNIT_TEST_SUITE(BlobDepotS3WriteThrottle) {
 
         agent.SendPrepareWriteS3(/*cookie=*/2);
         UNIT_ASSERT(agent.GrabPrepareWriteS3Result(TDuration::Seconds(60)));
+    }
+
+    Y_UNIT_TEST(ParkedRequestOfDisconnectingAgentDoesNotLeakSlot) {
+        TTestBasicRuntime runtime(2);
+        StartBlobDepotWithS3(runtime);
+
+        // Agent A brings the gate down to CurrentMaxWritesInFlight == 1 and lets the backoff expire.
+        TFakeAgent agentA(runtime, /*agentInstanceId=*/1, /*nodeIndex=*/0);
+        agentA.Register();
+        agentA.DiscardWithSlowDown(agentA.PrepareWriteS3(/*cookie=*/1));
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        // Agent B (another node) takes the only slot, then parks a second request behind the closed gate and dies.
+        {
+            TFakeAgent agentB(runtime, /*agentInstanceId=*/2, /*nodeIndex=*/1);
+            agentB.Register();
+            agentB.PrepareWriteS3(/*cookie=*/2);
+            agentB.SendPrepareWriteS3(/*cookie=*/3);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            agentB.Disconnect();
+        }
+
+        // B's slot must be released and B's parked request must be gone, so A's write goes through. If the release
+        // drains the queue while B still looks connected, B's parked request grabs the freed slot and leaks it.
+        agentA.SendPrepareWriteS3(/*cookie=*/4);
+        UNIT_ASSERT_C(agentA.GrabPrepareWriteS3Result(TDuration::Seconds(60)),
+            "slot leaked through a parked request of the disconnecting agent");
     }
 }

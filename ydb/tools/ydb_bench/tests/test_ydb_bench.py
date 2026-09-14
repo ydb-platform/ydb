@@ -2576,8 +2576,19 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
         script += web._JS[web._JS.index("function localField") : web._JS.index("function localNumber")]
         script += "console.log(localYdbProfileEditor(editor.model.profiles[0]));"
         html = subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10)
-        for heading in ("Workload", "Load &amp; objective", "Measurement", "Cluster", "CPU placement"):
-            self.assertIn("<h3>" + heading + "</h3>", html)
+        for heading in ("Cluster", "Storage", "Compute", "Load generator", "CPU placement", "Run policy"):
+            self.assertIn('data-local-view="' + heading + '"', html)
+            self.assertIn('data-local-panel="' + heading + '"', html)
+        self.assertIn('data-local-panel="Cluster" >', html)
+        self.assertIn('data-local-panel="Storage" hidden', html)
+        self.assertIn("Actor system (shared by static and dynamic nodes)", html)
+        switched = script.replace(
+            "console.log(localYdbProfileEditor",
+            "localEditorViews.set(editor.model.profiles[0].key,'Compute');console.log(localYdbProfileEditor",
+        )
+        switched_html = subprocess.check_output([shutil.which("node"), "-e", switched], text=True, timeout=10)
+        self.assertIn('data-local-panel="Compute" >', switched_html)
+        self.assertIn('data-local-panel="Cluster" hidden', switched_html)
         self.assertNotIn("class=card", html)
         for field in (
             "local-ydbd-binary",

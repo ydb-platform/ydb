@@ -773,6 +773,7 @@ function localYdbBinaryFields(config){
     localField('local-ydbd-binary','Executable path',path,
       'Absolute path on the benchmark host. Empty uses bundled ydbd.')+'</details>'+notice
 }
+const localEditorViews=new Map();
 function localYdbProfileEditor(profile){
   const config=profile.local_ydb,workload=config.workload,geometry=config.geometry,load=config.load,measurement=config.measurement;
   const definition=localYdbWorkloadDefinition(workload.type);
@@ -793,12 +794,12 @@ function localYdbProfileEditor(profile){
     .map(key=>localField('local-geometry-'+key,geometryLabels[key],geometry[key],'','type=number min=1')).join('');
   const actorSystemFields=Object.keys(localYdbActorSystemKeys)
     .map(key=>actorSystemFlag(key,Boolean(config.actor_system?.[key]??(key==='use_ring_queue')))).join('');
-  const actorCpuFields=['static_nodes','dynamic_nodes'].map(role=>localField(
+  const actorCpuField=role=>localField(
     'local-actor-cpu-'+role,(role==='static_nodes'?'Static':'Dynamic')+' node vCPUs',
     config.actor_system?.[role]?.cpu_count??'',
     'Per-node actor-system capacity; independent of CPU placement. Empty: automatic.',
     'type=number min=1 max=32767'
-  )).join('');
+  );
   const loadCommon=
     localSelect('local-load-mode','Objective',loadMode,objectiveChoices)+
     localSelect('local-load-parameter','Parameter',load.parameter,definition.load_parameters)+
@@ -853,19 +854,22 @@ function localYdbProfileEditor(profile){
         'local-affinity-'+key+'-cpus','CPUs',role.cpus??'','integer, one-chiplet, or remaining',disabled
       )+'</div>'
   }).join('');
-  return '<div id=local-editor><div class=editor-grid><section><h3>Workload</h3>'+
-    '<div class=form-grid>'+localSelect(
-      'benchmark','Benchmark',profile.benchmark,editor.model.benchmarks.map(item=>item.name)
-    )+'</div>'+
-    '<div class=form-grid>'+localSelect(
+  const panels={};
+  panels.Cluster='<div class=form-grid>'+localYdbBinaryFields(config)+
+    localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
+    '</div><h3>Actor system (shared by static and dynamic nodes)</h3><div class=actor-flags>'+actorSystemFields+'</div>';
+  panels.Storage='<div class=form-grid>'+actorCpuField('static_nodes')+'</div>';
+  panels.Compute='<div class=form-grid>'+actorCpuField('dynamic_nodes')+'</div>';
+  panels['Load generator']='<div class=form-grid>'+localSelect(
       'local-workload-type','Type',workload.type,editor.model.local_ydb_workloads.map(item=>item.type)
     )+localSelect(
       'local-workload-operation','Operation',workload.operation,definition.operations
-    )+'</div><div class=form-grid>'+localYdbBinaryFields(config)+
-    '</div><details class=editor-options data-editor-detail=dataset><summary>Dataset settings</summary><div class=form-grid>'+options+
-    '</div></details></section><section><h3>Load &amp; objective</h3><div class=form-grid>'+
+    )+'</div><details class=editor-options data-editor-detail=dataset><summary>Dataset settings</summary><div class=form-grid>'+options+
+    '</div></details><h3>Load &amp; objective</h3><div class=form-grid>'+
     loadCommon+localField('local-client-threads','YDB CLI threads',config.client.threads,clientThreadsHelp,'type=number min=1')+
-    loadFields+'</div>'+slo+'</section><section><h3>Measurement</h3><div class=form-grid>'+
+    loadFields+'</div>'+slo;
+  panels['CPU placement']=affinity;
+  panels['Run policy']='<div class=form-grid>'+
     localField('local-measurement-warmup','Warmup (seconds)',measurement.warmup,warmupHelp,'type=number min=0')+
     localField(
       'local-measurement-duration','Duration (seconds)',measurement.duration,durationHelp,
@@ -881,11 +885,14 @@ function localYdbProfileEditor(profile){
     )+
     localField(
       'local-timeout','Timeout (seconds)',profile.timeout??'','empty selects the computed timeout','type=number min=1'
-    )+'</div></section><section><h3>Cluster</h3><div class=form-grid>'+
-    localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
-    '</div><h3>Actor system (static and dynamic nodes)</h3><div class=actor-flags>'+actorSystemFields+
-    '</div><div class=form-grid>'+actorCpuFields+'</div></section><section class=editor-wide><h3>CPU placement</h3>'+affinity+'</section></div>'+
-    '</div>'
+    )+'</div>';
+  const selected=localEditorViews.get(profile.key)||'Cluster';
+  return '<div id=local-editor><div class=form-grid>'+localSelect(
+    'benchmark','Benchmark',profile.benchmark,editor.model.benchmarks.map(item=>item.name)
+  )+'</div><div class=tabs aria-label="Local YDB settings">'+Object.keys(panels).map(name=>
+    '<button type=button data-local-view="'+name+'" class="'+(name===selected?'active':'')+'" aria-pressed="'+
+    (name===selected)+'">'+name+'</button>').join('')+'</div>'+Object.entries(panels).map(([name,html])=>
+    '<section data-local-panel="'+name+'" '+(name===selected?'':'hidden')+'>'+html+'</section>').join('')+'</div>';
 }
 function localNumber(id,minimum=1){
   const value=Number(document.querySelector('#'+id).value);
@@ -909,6 +916,13 @@ function localCpu(id,mode){
   return value
 }
 function bindLocalYdbEditor(profile){
+  document.querySelectorAll('[data-local-view]').forEach(button=>button.onclick=()=>{
+    const selected=button.dataset.localView;localEditorViews.set(profile.key,selected);
+    document.querySelectorAll('[data-local-view]').forEach(tab=>{
+      tab.classList.toggle('active',tab===button);tab.setAttribute('aria-pressed',tab===button);
+    });
+    document.querySelectorAll('[data-local-panel]').forEach(panel=>{panel.hidden=panel.dataset.localPanel!==selected});
+  });
   const message=()=>document.querySelector('#editor-message');
   const update=event=>{try{
     const benchmarkName=document.querySelector('#benchmark').value,name=profile.name;

@@ -1,4 +1,5 @@
 #include "cms_impl.h"
+#include "erasure_checkers.h"
 #include "info_collector.h"
 #include "ut_helpers.h"
 #include "walle.h"
@@ -1747,9 +1748,11 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
     }
 
-    Y_UNIT_TEST(TestTwoOrMoreDisksFromGroupAtTheSameRequestBlock42)
+    void TestBlockErasurePermissions(bool wide)
     {
-        TCmsTestEnv env(8);
+        TTestEnvOpts options(wide ? 12 : 8);
+        options.ErasureSpecies = wide ? TErasureType::Erasure8Plus2Block : TErasureType::Erasure4Plus2Block;
+        TCmsTestEnv env(options);
 
         // It is impossible to get two or more permissions for one group in one request
         env.CheckPermissionRequest("user", true, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ALLOW_PARTIAL,
@@ -1780,6 +1783,52 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
                                     MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(Block82HighDomainFailureAndRestartPermissions) {
+        for (ui32 failed = 0; failed <= 3; ++failed) {
+            TTestEnvOpts options(12);
+            options.ErasureSpecies = TErasureType::Erasure8Plus2Block;
+            TCmsTestEnv env(options);
+            env.SetLimits(0, 0, 0, 0);
+            for (ui32 node = 12 - failed; node != 12; ++node) {
+                TFakeNodeWhiteboardService::Info[env.GetNodeId(node)].Connected = false;
+            }
+            env.RestartCms();
+            for (auto mode : {MODE_MAX_AVAILABILITY, MODE_KEEP_AVAILABLE}) {
+                const ui32 budget = mode == MODE_MAX_AVAILABILITY ? 1 : 2;
+                env.CheckPermissionRequest("user", false, true, false, true, mode,
+                    failed < budget ? TStatus::ALLOW : TStatus::DISALLOW_TEMP,
+                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(8), 60000000, "storage"));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(Block82UnknownErasureRequestReturnsError) {
+        TTestEnvOpts options(12);
+        options.ErasureSpecies = TErasureType::Erasure8Plus2Block;
+        TCmsTestEnv env(options);
+        auto* config = TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig();
+        for (auto& group : *config->MutableGroup()) {
+            group.SetErasureSpecies("unknown-erasure");
+        }
+        env.RestartCms();
+        env.CheckPermissionRequest("user", false, true, false, true, MODE_KEEP_AVAILABLE, TStatus::ERROR,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"));
+    }
+
+    Y_UNIT_TEST(TestTwoOrMoreDisksFromGroupAtTheSameRequestBlock42) {
+        TestBlockErasurePermissions(false);
+    }
+
+    Y_UNIT_TEST(TestTwoOrMoreDisksFromGroupAtTheSameRequestBlock82) {
+        TestBlockErasurePermissions(true);
+    }
+
+    Y_UNIT_TEST(UnknownErasureCounterRefusesWithoutAbort) {
+        TVDiskInfo vdisk;
+        UNIT_ASSERT(!CreateErasureCounter(TErasureType::ErasureSpeciesCount, vdisk, 0, nullptr));
+        UNIT_ASSERT(!CreateErasureCounter(static_cast<TErasureType::EErasureSpecies>(255), vdisk, 0, nullptr));
     }
 
     Y_UNIT_TEST(TestTwoOrMoreDisksFromGroupAtTheSameRequestMirror3dc)

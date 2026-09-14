@@ -29,9 +29,7 @@ void SetLogPriorities(TTestBasicRuntime &runtime) {
 
 
 Y_UNIT_TEST_SUITE(DSProxyCounters) {
-
-Y_UNIT_TEST(PutGeneratedSubrequestBytes) {
-    NKikimr::TBlobStorageGroupType erasure = TErasureType::Erasure4Plus2Block;
+void RunPutGeneratedSubrequestBytes(TBlobStorageGroupType erasure) {
     TTestBasicRuntime runtime(1, false);
     SetLogPriorities(runtime);
     SetupRuntime(runtime);
@@ -79,9 +77,12 @@ Y_UNIT_TEST(PutGeneratedSubrequestBytes) {
     testState.ReceivePutResults(expectedStatus.size(), expectedStatus);
 
     UNIT_ASSERT_VALUES_EQUAL(requestMonItem.RequestBytes->Val(), 254);
-    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.GeneratedSubrequests->Val(), 6);
-    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.GeneratedSubrequestBytes->Val(), 64 * 6);
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.GeneratedSubrequests->Val(), erasure.TotalPartCount());
+    UNIT_ASSERT_VALUES_EQUAL(requestMonItem.GeneratedSubrequestBytes->Val(), erasure.PartSize(blobId) * erasure.TotalPartCount());
 }
+
+Y_UNIT_TEST(PutGeneratedSubrequestBytes) { RunPutGeneratedSubrequestBytes(TErasureType::Erasure4Plus2Block); }
+Y_UNIT_TEST(PutGeneratedSubrequestBytesBlock82) { RunPutGeneratedSubrequestBytes(TErasureType::Erasure8Plus2Block); }
 
 Y_UNIT_TEST(MultiPutGeneratedSubrequestBytes) {
     return; // KIKIMR-9016

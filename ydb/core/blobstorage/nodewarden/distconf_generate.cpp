@@ -295,7 +295,8 @@ namespace NKikimr::NStorage {
 
             for (const auto& vdisk : ss.GetVDisks()) {
                 const TVDiskID vdiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
-                if (vdiskId.GroupID.GetRawId() == groupId) {
+                if (vdiskId.GroupID.GetRawId() == groupId && !vdisk.HasDonorMode() &&
+                        vdisk.GetEntityStatus() != NKikimrBlobStorage::EEntityStatus::DESTROY) {
                     vdiskLocations.emplace(vdiskId, vdisk.GetVDiskLocation());
                 }
             }
@@ -526,7 +527,7 @@ namespace NKikimr::NStorage {
                 auto *donor = donors[vdiskId].Add();
                 donor->MutableVDiskId()->CopyFrom(m->GetVDiskID());
                 donor->MutableVDiskLocation()->CopyFrom(m->GetVDiskLocation());
-            } else {
+            } else if (!m->HasDonorMode()) {
                 m->MutableVDiskID()->SetGroupGeneration(groupGeneration);
             }
         }

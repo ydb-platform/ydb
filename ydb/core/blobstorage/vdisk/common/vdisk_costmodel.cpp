@@ -1,4 +1,5 @@
 #include "vdisk_costmodel.h"
+#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_handle_class.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 
@@ -95,7 +96,7 @@ namespace NKikimr {
     }
 
     TCostModel::TCostModel(ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize,
-                           ui64 writeBlockSize, ui32 minHugeBlobInBytes, TBlobStorageGroupType gType)
+                           ui64 writeBlockSize, ui32 minHugeBlobInBytes, TBlobStorageGroupType gType, bool addHeader)
         : SeekTimeUs(seekTimeUs)
         , ReadSpeedBps(readSpeedBps)
         , WriteSpeedBps(writeSpeedBps)
@@ -103,7 +104,10 @@ namespace NKikimr {
         , WriteBlockSize(writeBlockSize)
         , MinHugeBlobInBytes(minHugeBlobInBytes)
         , GType(gType)
-    {}
+    {
+        const ui32 overhead = addHeader && GType.CanUseLegacyHeader() ? TDiskBlob::HeaderSize : 0;
+        MinHugeBlobInBytes -= Min(MinHugeBlobInBytes, overhead);
+    }
 
     TCostModel::TCostModel(const NKikimrBlobStorage::TVDiskCostSettings &settings, TBlobStorageGroupType gType)
         : SeekTimeUs(settings.GetSeekTimeUs())
@@ -181,7 +185,7 @@ namespace NKikimr {
         const NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
         const ui64 bufSize = record.HasBuffer() ? record.GetBuffer().size() : ev.GetPayload(0).GetSize();
 
-        NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, bufSize, true);
+        NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, bufSize, false);
         if (handleType == NPriPut::Log) {
             *logPutInternalQueue = true;
             return SmallWriteCost(bufSize);
@@ -198,7 +202,7 @@ namespace NKikimr {
         ui64 cost = 0;
         for (ui64 idx = 0; idx < record.ItemsSize(); ++idx) {
             const ui64 size = ev.GetBufferBytes(idx);
-            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, size, true);
+            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, handleClass, size, false);
             if (handleType == NPriPut::Log) {
                 cost += SmallWriteCost(size);
             } else {
@@ -265,7 +269,7 @@ namespace NKikimr {
             cost += MovedPatchCostBySize(essence.MovedPatchBlobSize);
         }
         for (ui64 size : essence.PutBufferSizes) {
-            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, essence.HandleClass, size, true);
+            NPriPut::EHandleType handleType = NPriPut::HandleType(MinHugeBlobInBytes, essence.HandleClass, size, false);
             if (handleType == NPriPut::Log) {
                 cost += SmallWriteCost(size);
             } else {

@@ -159,7 +159,7 @@ namespace NKikimr::NPrivate {
         {
             NKikimrBlobStorage::TEvVPatchStart &record = ev->Get()->Record;
             if (record.HasMsgQoS() && record.GetMsgQoS().HasDeadlineSeconds()) {
-                Deadline = TInstant::Seconds(record.GetMsgQoS().HasDeadlineSeconds());
+                Deadline = TInstant::Seconds(record.GetMsgQoS().GetDeadlineSeconds());
             }
             if (!Deadline) {
                 Deadline = now + CommonLiveTime;
@@ -194,6 +194,14 @@ namespace NKikimr::NPrivate {
             if (Deadline != TInstant::Zero() && Deadline < now) {
                 ErrorReason = "DEADLINE";
                 AddMark("Error: DEADLINE");
+                SendVPatchFoundParts(NKikimrProto::ERROR);
+                NotifySkeletonAboutDying();
+                Become(&TThis::ErrorState);
+                return;
+            }
+
+            if (GType.ErasureFamily() != TErasureType::ErasureMirror && !GType.SupportsXorDiff()) {
+                ErrorReason = "erasure type does not support distributed XOR patches";
                 SendVPatchFoundParts(NKikimrProto::ERROR);
                 NotifySkeletonAboutDying();
                 Become(&TThis::ErrorState);
@@ -658,6 +666,10 @@ namespace NKikimr::NPrivate {
         }
 
         void Handle(TEvBlobStorage::TEvVPatchXorDiff::TPtr &ev) {
+            if (!GType.SupportsXorDiff()) {
+                HandleError(ev);
+                return;
+            }
             NKikimrBlobStorage::TEvVPatchXorDiff &record = ev->Get()->Record;
             Y_ABORT_UNLESS(record.HasFromPartId());
             ui8 fromPart = record.GetFromPartId();

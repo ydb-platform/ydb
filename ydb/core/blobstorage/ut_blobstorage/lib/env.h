@@ -192,6 +192,7 @@ struct TEnvironmentSetup {
 
     TEnvironmentSetup(bool vdiskReplPausedAtStart, TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureNone)
         : TEnvironmentSetup(TSettings{
+            .NodeCount = Max(9u, erasure.BlobSubgroupSize()),
             .VDiskReplPausedAtStart = vdiskReplPausedAtStart,
             .Erasure = erasure
         })

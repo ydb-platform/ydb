@@ -319,7 +319,7 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
                     for (ui32 vIdx = 0; vIdx < blobSubgroups[bIdx].size(); ++vIdx) {
                         TVDiskState &state = blobSubgroups[bIdx][vIdx];
                         if (state.ActorId == request.ActorId) {
-                            partIdx = vIdx % 6;
+                            partIdx = vIdx % DSProxyEnv.Info->Type.TotalPartCount();
                             ui32 size = state.Data.size() - it->Shift;
                             if (it->Size && it->Size < size) {
                                 size = it->Size;
@@ -419,10 +419,7 @@ struct TGeneralDecorator : public TDecorator {
         return Action(ev, ctx);
     }
 };
-
-
-Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
-    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
+void RunTestParityBlockPutWithChangingSlowDisk(TBlobStorageGroupType type) {
     TTestBasicRuntime runtime(1, false);
     Setup(runtime, type);
     TTestState testState(runtime, type, DSProxyEnv.Info);
@@ -446,7 +443,7 @@ Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
 
     TGroupMock &groupMock = testState.GetGroupMock();
     groupMock.SetError(0, NKikimrProto::ERROR);
-    groupMock.SetError(5, NKikimrProto::ERROR);
+    groupMock.SetError(type.TotalPartCount() - 1, NKikimrProto::ERROR);
 
     THashMap<TVDiskID, ui32> latencies = testState.MakePredictedDelaysForVDisks(blobId);
     for (auto &[vDiskId, latency] : latencies) {
@@ -477,7 +474,7 @@ Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
 
     runtime.Register(new TGeneralDecorator(THolder<IActor>(putActor.release()), action));
 
-    for (ui64 idx = 0; idx < 8; ++idx) {
+    for (ui64 idx = 0; idx < type.BlobSubgroupSize(); ++idx) {
         TEvBlobStorage::TEvVPut::TPtr ev = testState.GrabEventPtr<TEvBlobStorage::TEvVPut>();
         TLogoBlobID part = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetBlobID());
         TVDiskID vDiskId = VDiskIDFromVDiskID(ev->Get()->Record.GetVDiskID());
@@ -496,6 +493,9 @@ Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) {
     };
     testState.ReceivePutResults(1, expectedStatus);
 }
+
+Y_UNIT_TEST(TestBlock42PutWithChangingSlowDisk) { RunTestParityBlockPutWithChangingSlowDisk(TErasureType::Erasure4Plus2Block); }
+Y_UNIT_TEST(TestBlock82PutWithChangingSlowDisk) { RunTestParityBlockPutWithChangingSlowDisk(TErasureType::Erasure8Plus2Block); }
 
 void MakeTestMultiPutItemStatuses(TTestBasicRuntime &runtime, const TBlobStorageGroupType &type,
                                   const TBatchedVec<NKikimrProto::EReplyStatus> &statuses) {
@@ -767,9 +767,7 @@ void CheckOldGenerationRaceResult(TTestBasicRuntime& runtime, const TActorId& ac
     CheckOldGenerationRaceResult(runtime, actorId, edgeActor, name, std::move(event),
         [](const TEvGenerationRaceProbeResult&) {});
 }
-
-Y_UNIT_TEST(TestOldVDiskGenerationRaceIsHandledForAllCommonResultTypes) {
-    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
+void RunTestOldVDiskGenerationRaceIsHandledForAllCommonResultTypes(TBlobStorageGroupType type) {
     TTestBasicRuntime runtime(1, false);
     Setup(runtime, type);
     DSProxyEnv.SetGroupGeneration(2);
@@ -838,6 +836,9 @@ Y_UNIT_TEST(TestOldVDiskGenerationRaceIsHandledForAllCommonResultTypes) {
         MakeOldGenerationRaceResult<TEvBlobStorage::TEvVAssimilateResult>(oldVDiskId));
 }
 
+Y_UNIT_TEST(TestOldVDiskGenerationRaceIsHandledForAllCommonResultTypes) { RunTestOldVDiskGenerationRaceIsHandledForAllCommonResultTypes(TErasureType::Erasure4Plus2Block); }
+Y_UNIT_TEST(TestOldVDiskGenerationRaceIsHandledForAllCommonResultTypesBlock82) { RunTestOldVDiskGenerationRaceIsHandledForAllCommonResultTypes(TErasureType::Erasure8Plus2Block); }
+
 Y_UNIT_TEST(TestGivenBlock42GroupGenerationGreaterThanVDiskGenerations) {
     return; // KIKIMR-9016
 
@@ -905,16 +906,17 @@ Y_UNIT_TEST(TestGivenMirror3DCGetWithFirstSlowDisk) {
     testState.GrabEventPtr<TEvBlobStorage::TEvVGet>();
     TEvBlobStorage::TEvVGet::TPtr vget = testState.GrabEventPtr<TEvBlobStorage::TEvVGet>();
 }
-
-Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) {
+void RunTestGivenParityBlockGetThenVGetResponseParts2523Nodata4ThenGetOk(TBlobStorageGroupType type) {
     TTestBasicRuntime runtime(1, false);
-    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 
     TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
     TActorId sender = runtime.AllocateEdgeActor(0);
 
     TString data("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+    if (type.GetErasure() == TErasureType::Erasure8Plus2Block) {
+        data.resize(1024, 'x');
+    }
     TLogoBlobID logoblobid(1, 0, 0, 0, (ui32)data.size(), 0);
 
     TVector<TVDiskState> subgroup;
@@ -922,7 +924,7 @@ Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) {
 
     runtime.Send(new IEventHandle(proxy, sender, new TEvBlobStorage::TEvGet(logoblobid, 0, 0, TInstant::Max(),
             NKikimrBlobStorage::EGetHandleClass::FastRead)));
-    for (ui32 i = 0; i < 6; ++i) {
+    for (ui32 i = 0; i < type.DataParts() + type.Handoff(); ++i) {
         TAutoPtr<IEventHandle> handle;
         auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
         UNIT_ASSERT(vget);
@@ -933,13 +935,15 @@ Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) {
         }
     }
 
-    SendVGetResult(6, NKikimrProto::OK, 2, subgroup, runtime);
-    SendVGetResult(4, NKikimrProto::OK, 5, subgroup, runtime);
+    SendVGetResult(type.TotalPartCount(), NKikimrProto::OK, 2, subgroup, runtime);
+    SendVGetResult(type.DataParts(), NKikimrProto::OK, type.DataParts() + 1, subgroup, runtime);
     SendVGetResult(1, NKikimrProto::OK, 2, subgroup, runtime);
     SendVGetResult(2, NKikimrProto::OK, 3, subgroup, runtime);
-    SendVGetResult(7, NKikimrProto::NODATA, 1, subgroup, runtime);
-    SendVGetResult(3, NKikimrProto::OK, 4, subgroup, runtime);
-    SendVGetResult(5, NKikimrProto::OK, 6, subgroup, runtime);
+    SendVGetResult(type.TotalPartCount() + 1, NKikimrProto::NODATA, 1, subgroup, runtime);
+    for (ui32 part = 3; part < type.DataParts(); ++part) {
+        SendVGetResult(part, NKikimrProto::OK, part + 1, subgroup, runtime);
+    }
+    SendVGetResult(type.DataParts() + 1, NKikimrProto::OK, type.TotalPartCount(), subgroup, runtime);
     SendVGetResult(0, NKikimrProto::OK, 1, subgroup, runtime);
 
     TAutoPtr<IEventHandle> handle;
@@ -949,6 +953,9 @@ Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) {
     UNIT_ASSERT(getResult->ResponseSz == 1);
     UNIT_ASSERT(getResult->Responses[0].Status == NKikimrProto::OK);
 }
+
+Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) { RunTestGivenParityBlockGetThenVGetResponseParts2523Nodata4ThenGetOk(TErasureType::Erasure4Plus2Block); }
+Y_UNIT_TEST(TestGivenBlock82GetThenVGetResponseParts2523Nodata4ThenGetOk) { RunTestGivenParityBlockGetThenVGetResponseParts2523Nodata4ThenGetOk(TErasureType::Erasure8Plus2Block); }
 
 struct TBlobPack {
     ui32 Count;
@@ -1243,10 +1250,8 @@ Y_UNIT_TEST(TestGivenStripe42WhenGet2PartsOfBlobThenGetOk) {
             NKikimrProto::EReplyStatus_Name(getResult->Responses[idx].Status) << " idx# " << idx);
     }
 }
-
-Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
+void RunTestGivenParityBlockIntersectingPutWhenNodataOkThenOk(TBlobStorageGroupType type) {
     TTestBasicRuntime runtime(1, false);
-    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 
     TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
@@ -1281,7 +1286,10 @@ Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
         queries, (ui32)logoblobids.size(), TInstant::Max(),
         NKikimrBlobStorage::EGetHandleClass::AsyncRead, false)));
 
-    for (ui32 i = 0; i < 4; ++i) {
+    TBlockSplitRange readRange;
+    type.BlockSplitRange(TErasureType::CrcModeNone, data.size(), offsets.front(), offsets.back() + sizes.back(), &readRange);
+    const ui32 initialRequests = readRange.EndPartIdx - readRange.BeginPartIdx + type.Handoff();
+    for (ui32 i = 0; i < initialRequests; ++i) {
         TAutoPtr<IEventHandle> handle;
         auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
         UNIT_ASSERT(vget);
@@ -1290,7 +1298,7 @@ Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
     runtime.EnableScheduleForActor(lastRequest.begin()->second.Sender, true);
 
     SendVGetResult(0, 0, NKikimrProto::NODATA, blobSubgroups, lastRequest, runtime);
-    for (ui32 vDiskIdx = 1; vDiskIdx < 8; ++vDiskIdx) {
+    for (ui32 vDiskIdx = 1; vDiskIdx < type.BlobSubgroupSize(); ++vDiskIdx) {
         SendVGetResult(0, vDiskIdx, NKikimrProto::OK, blobSubgroups, lastRequest, runtime);
     }
     TAutoPtr<IEventHandle> handle;
@@ -1304,16 +1312,17 @@ Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
     }
 }
 
-Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
+Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) { RunTestGivenParityBlockIntersectingPutWhenNodataOkThenOk(TErasureType::Erasure4Plus2Block); }
+Y_UNIT_TEST(TestGivenBlock82IntersectingPutWhenNodataOkThenOk) { RunTestGivenParityBlockIntersectingPutWhenNodataOkThenOk(TErasureType::Erasure8Plus2Block); }
+void RunTestGivenParityBlockPutWhenPartialGetThenSingleDiskRequestOk(TBlobStorageGroupType type) {
     TTestBasicRuntime runtime(1, false);
-    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 
     TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
     TActorId sender = runtime.AllocateEdgeActor(0);
 
     TString data;
-    data.resize(400 << 10);
+    data.resize(type.DataParts() * (100 << 10));
     for (ui64 i = 0; i < data.size(); ++i) {
         *const_cast<char *>(data.data() + i) = (char)(i % 251);
     }
@@ -1322,7 +1331,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
     PrepareBlobSubgroup(logoblobid, data, blobSubgroup, runtime, type);
 
     for (ui32 step = 0; step < 32; ++step) {
-        for (ui32 part = 0; part < 4; ++part) {
+        for (ui32 part = 0; part < type.DataParts(); ++part) {
             for (ui32 disk = 0; disk < 3; ++disk) {
                 TMap<TActorId, TGetRequest> lastRequest;
                 // Send Get
@@ -1412,9 +1421,10 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
     }
 }
 
-Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
+Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) { RunTestGivenParityBlockPutWhenPartialGetThenSingleDiskRequestOk(TErasureType::Erasure4Plus2Block); }
+Y_UNIT_TEST(TestGivenBlock82PutWhenPartialGetThenSingleDiskRequestOk) { RunTestGivenParityBlockPutWhenPartialGetThenSingleDiskRequestOk(TErasureType::Erasure8Plus2Block); }
+void RunTestGivenParityBlockPut6PartsOnOneVDiskWhenDiscoverThenRecoverFirst(TBlobStorageGroupType type) {
     TTestBasicRuntime runtime(1, false);
-    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 
     TActorId proxy = MakeBlobStorageProxyID(GROUP_ID);
@@ -1439,7 +1449,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
 
     // Receive VGet
     TMap<TActorId, TGetRequest> lastRequest;
-    for (ui32 i = 0; i < 8; ++i) {
+    for (ui32 i = 0; i < type.BlobSubgroupSize(); ++i) {
         TAutoPtr<IEventHandle> handle;
         auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
         UNIT_ASSERT(vget);
@@ -1451,7 +1461,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
     }
     runtime.EnableScheduleForActor(lastRequest.begin()->second.Sender, true);
 
-    TActorId firstHandoffActorId = blobSubgroups[0][6].ActorId;
+    TActorId firstHandoffActorId = blobSubgroups[0][type.TotalPartCount()].ActorId;
 
     {
         // Send 6 part VGetResult from the first handoff vDiskIdx# 6
@@ -1461,7 +1471,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
                 NKikimrProto::OK, req.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr, nullptr, nullptr,
                 nullptr, {}, 0U, 0U));
         TIngress ingress;
-        for (ui32 partIdx = 0; partIdx < 6; ++partIdx) {
+        for (ui32 partIdx = 0; partIdx < type.TotalPartCount(); ++partIdx) {
             TLogoBlobID blobPartId(logoblobid, partIdx + 1);
             TIngress partIngress(*TIngress::CreateIngressWithLocal(&DSProxyEnv.Info->GetTopology(), req.VDiskId, blobPartId));
             ingress.Merge(partIngress);
@@ -1493,7 +1503,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
 
     /*
     // Receive "full" VGet request set
-    for (ui32 i = 0; i < 8; ++i) {
+    for (ui32 i = 0; i < type.BlobSubgroupSize(); ++i) {
         TAutoPtr<IEventHandle> handle;
         auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
         UNIT_ASSERT(vget);
@@ -1530,7 +1540,9 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
     }
 }
 
-Y_UNIT_TEST(TestBlock42CheckLwtrack) {
+Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) { RunTestGivenParityBlockPut6PartsOnOneVDiskWhenDiscoverThenRecoverFirst(TErasureType::Erasure4Plus2Block); }
+Y_UNIT_TEST(TestGivenBlock82Put10PartsOnOneVDiskWhenDiscoverThenRecoverFirst) { RunTestGivenParityBlockPut6PartsOnOneVDiskWhenDiscoverThenRecoverFirst(TErasureType::Erasure8Plus2Block); }
+void RunTestParityBlockCheckLwtrack(TBlobStorageGroupType type) {
     NLWTrace::TManager mngr(*Singleton<NLWTrace::TProbeRegistry>(), true);
     NLWTrace::TOrbit orbit;
     NLWTrace::TTraceRequest req;
@@ -1539,7 +1551,6 @@ Y_UNIT_TEST(TestBlock42CheckLwtrack) {
 
 
     TTestBasicRuntime runtime(1, false);
-    TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
     runtime.SetLogPriority(NKikimrServices::BS_PROXY_GET, NLog::PRI_DEBUG);
 
@@ -1547,6 +1558,9 @@ Y_UNIT_TEST(TestBlock42CheckLwtrack) {
     TActorId sender = runtime.AllocateEdgeActor(0);
 
     TString data("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+    if (type.GetErasure() == TErasureType::Erasure8Plus2Block) {
+        data.resize(1024, 'x');
+    }
     TLogoBlobID logoblobid(1, 0, 0, 0, (ui32)data.size(), 0);
 
     TVector<TVDiskState> subgroup;
@@ -1557,7 +1571,7 @@ Y_UNIT_TEST(TestBlock42CheckLwtrack) {
     ev->Orbit = std::move(orbit);
 
     runtime.Send(new IEventHandle(proxy, sender, ev));
-    for (ui32 i = 0; i < 6; ++i) {
+    for (ui32 i = 0; i < type.DataParts() + type.Handoff(); ++i) {
         TAutoPtr<IEventHandle> handle;
         auto vget = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
         UNIT_ASSERT(vget);
@@ -1568,13 +1582,15 @@ Y_UNIT_TEST(TestBlock42CheckLwtrack) {
         }
     }
 
-    SendVGetResult(6, NKikimrProto::OK, 2, subgroup, runtime);
-    SendVGetResult(4, NKikimrProto::OK, 5, subgroup, runtime);
+    SendVGetResult(type.TotalPartCount(), NKikimrProto::OK, 2, subgroup, runtime);
+    SendVGetResult(type.DataParts(), NKikimrProto::OK, type.DataParts() + 1, subgroup, runtime);
     SendVGetResult(1, NKikimrProto::OK, 2, subgroup, runtime);
     SendVGetResult(2, NKikimrProto::OK, 3, subgroup, runtime);
-    SendVGetResult(7, NKikimrProto::NODATA, 1, subgroup, runtime);
-    SendVGetResult(3, NKikimrProto::OK, 4, subgroup, runtime);
-    SendVGetResult(5, NKikimrProto::OK, 6, subgroup, runtime);
+    SendVGetResult(type.TotalPartCount() + 1, NKikimrProto::NODATA, 1, subgroup, runtime);
+    for (ui32 part = 3; part < type.DataParts(); ++part) {
+        SendVGetResult(part, NKikimrProto::OK, part + 1, subgroup, runtime);
+    }
+    SendVGetResult(type.DataParts() + 1, NKikimrProto::OK, type.TotalPartCount(), subgroup, runtime);
     SendVGetResult(0, NKikimrProto::OK, 1, subgroup, runtime);
 
     TAutoPtr<IEventHandle> handle;
@@ -1587,6 +1603,25 @@ Y_UNIT_TEST(TestBlock42CheckLwtrack) {
     NLWTrace::TTraceResponse resp;
     getResult->Orbit.Serialize(0, *resp.MutableTrace());
     auto& r = resp.GetTrace();
+    if (type.GetErasure() == TErasureType::Erasure8Plus2Block) {
+        UNIT_ASSERT_VALUES_EQUAL(r.GetEvents(0).GetName(), "DSProxyGetHandle");
+        UNIT_ASSERT_VALUES_EQUAL(r.GetEvents(1).GetName(), "DSProxyGetBootstrap");
+        UNIT_ASSERT_VALUES_EQUAL(r.GetEvents(r.EventsSize() - 1).GetName(), "DSProxyGetReply");
+        ui32 sent = 0;
+        ui32 durations = 0;
+        for (const auto& event : r.GetEvents()) {
+            if (event.GetName() == "DSProxyVGetSent") {
+                UNIT_ASSERT_VALUES_EQUAL(event.GetParams(2).GetUintValue(), 10);
+                ++sent;
+            } else if (event.GetName() == "DSProxyVDiskRequestDuration") {
+                ++durations;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(sent, 10);
+        UNIT_ASSERT(durations);
+        UNIT_ASSERT_VALUES_EQUAL(getResult->Responses[0].Buffer.ConvertToString(), data);
+        return;
+    }
     UNIT_ASSERT_VALUES_EQUAL(21, r.EventsSize());
 
     {
@@ -1665,6 +1700,9 @@ Y_UNIT_TEST(TestBlock42CheckLwtrack) {
         UNIT_ASSERT_VALUES_EQUAL(0 , p.ParamsSize());
     }
 }
+
+Y_UNIT_TEST(TestBlock42CheckLwtrack) { RunTestParityBlockCheckLwtrack(TErasureType::Erasure4Plus2Block); }
+Y_UNIT_TEST(TestBlock82CheckLwtrack) { RunTestParityBlockCheckLwtrack(TErasureType::Erasure8Plus2Block); }
 
 } // Y_UNIT_TEST_SUITE TBlobStorageProxySequenceTest
 } // namespace NBlobStorageProxySequenceTest

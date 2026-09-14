@@ -474,7 +474,7 @@ public:
     }
 
     bool WithXorDiffs() const {
-        return Info->Type.ErasureFamily() != TErasureType::ErasureMirror;
+        return Info->Type.SupportsXorDiff();
     }
 
     void SendDiffs(const TStackVec<TPartPlacement, TypicalPartsInBlob> &placement) {
@@ -892,7 +892,9 @@ public:
 
         TLogoBlobID truePatchedBlobId = PatchedId;
         bool result = true;
-        if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock) {
+        // Reed-Solomon patches use a full Get/Put and do not need EVENODD's placement constraint.
+        if (Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock &&
+                Info->Type.GetErasure() != TErasureType::Erasure8Plus2Block) {
             result = TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(OriginalId, &truePatchedBlobId,
                     MaskForCookieBruteForcing, OriginalGroupId.GetRawId(), Info->GroupID.GetRawId());
             if (result && PatchedId != truePatchedBlobId) {
@@ -915,7 +917,7 @@ public:
         IsSecured = (Info->GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE);
 
         IsGoodPatchedBlobId = result;
-        IsAllowedErasure = Info->Type.ErasureFamily() == TErasureType::ErasureParityBlock
+        IsAllowedErasure = Info->Type.SupportsXorDiff()
                 || Info->Type.GetErasure() == TErasureType::ErasureNone
                 || Info->Type.GetErasure() == TErasureType::ErasureMirror3dc;
         if (false && IsGoodPatchedBlobId && IsAllowedErasure && UseVPatch && OriginalGroupId == Info->GroupID && !IsSecured) {

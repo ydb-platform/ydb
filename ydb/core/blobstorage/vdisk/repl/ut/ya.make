@@ -13,6 +13,7 @@ PEERDIR(
 )
 
 SRCS(
+    blobstorage_replrecoverymachine_block82_ut.cpp
     blobstorage_hullreplwritesst_ut.cpp
     blobstorage_replrecoverymachine_ut.cpp
 )

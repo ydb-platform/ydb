@@ -83,6 +83,25 @@ namespace NKikimr {
             }
         }
 
+        void CheckWideQuorum(bool includeSelf) {
+            TBlobStorageGroupInfo info(TBlobStorageGroupType::Erasure8Plus2Block, 2, 12);
+            const auto disks = GetDisks(&info);
+            TQuorumTracker tracker(disks.front(), info.PickTopology(), includeSelf);
+            for (size_t i = 0; i < disks.size(); ++i) {
+                tracker.Update(disks[i]);
+                const size_t needed = 2 * (info.Type.TotalPartCount() + !includeSelf);
+                UNIT_ASSERT_VALUES_EQUAL(tracker.HasQuorum(), i + 1 >= needed);
+            }
+        }
+
+        Y_UNIT_TEST(IncludingMyFailDomainBlock82) {
+            CheckWideQuorum(true);
+        }
+
+        Y_UNIT_TEST(NotIncludingMyFailDomainBlock82) {
+            CheckWideQuorum(false);
+        }
+
         Y_UNIT_TEST(ErasureMirror3IncludingMyFailDomain_4_2) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
             auto vdisks = GetDisks(&groupInfo);

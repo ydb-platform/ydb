@@ -58,11 +58,12 @@ namespace NKikimr {
         ui64 WriteSpeedBps;
         ui64 ReadBlockSize;
         ui64 WriteBlockSize;
+        // Payload threshold, excluding any on-disk header; also used on the wire.
         ui32 MinHugeBlobInBytes;
         TBlobStorageGroupType GType;
 
         TCostModel(ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize, ui64 writeBlockSize,
-                   ui32 minHugeBlobInBytes, TBlobStorageGroupType gType);
+                   ui32 minHugeBlobInBytes, TBlobStorageGroupType gType, bool addHeader = true);
         TCostModel(const NKikimrBlobStorage::TVDiskCostSettings &settings, TBlobStorageGroupType gType);
 
         /// SETTINGS

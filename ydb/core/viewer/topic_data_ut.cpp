@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 .SetDomainName("Root")
                 .SetMonitoringPortOffset(monPort, true);
 
-        auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
+        auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("localhost").SetPort(grpcPort);
         TServer server{settings};
         server.EnableGRpc(grpcSettings);
 

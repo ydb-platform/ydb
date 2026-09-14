@@ -22,6 +22,11 @@ struct TBlobStorageGroupType : public TErasureType {
         : TErasureType(s)
     {}
 
+    // The persistent legacy TDiskBlob header has a one-byte parts mask.
+    bool CanUseLegacyHeader() const {
+        return TotalPartCount() <= 8;
+    }
+
     struct TPartLayout {
         TStackVec<ui32, 32> VDiskPartMask;
         ui32 VDiskMask;
@@ -38,7 +43,7 @@ struct TBlobStorageGroupType : public TErasureType {
             str << " Sessions {";
             bool isFirst = true;
             for (ui32 i = 0; i < 32; ++i) {
-                bool isPresent = (VDiskMask & (1 << i));
+                bool isPresent = (VDiskMask & (1u << i));
                 if (isPresent) {
                     str << (isFirst ? "" : ", ") << i;
                 }
@@ -48,16 +53,16 @@ struct TBlobStorageGroupType : public TErasureType {
 
             isFirst = true;
             for (ui32 i = 0; i < 32; ++i) {
-                bool isPresent = (VDiskMask & (1 << i));
+                bool isPresent = (VDiskMask & (1u << i));
                 if (isPresent) {
                     str << (isFirst ? "" : ", ") << "VDiskPartMask[" << i << "]# {";
-                    bool isSlow = (SlowVDiskMask & (1 << i));
+                    bool isSlow = (SlowVDiskMask & (1u << i));
                     if (isSlow) {
                         str << "SlowDisk ";
                     }
                     bool isFirstPart = true;
                     for (ui32 partIdx = 0; partIdx < 32; ++partIdx) {
-                        bool isPartPresent = (VDiskPartMask[i] & (1 << partIdx));
+                        bool isPartPresent = (VDiskPartMask[i] & (1u << partIdx));
                         if (isPartPresent) {
                             str << (isFirstPart ? "" : ", ") << partIdx;
                             isFirstPart = false;
@@ -91,7 +96,7 @@ struct TBlobStorageGroupType : public TErasureType {
             }
         };
 
-        TStackVec<TVDiskPart, 8> Records;
+        TStackVec<TVDiskPart, 16> Records;
 
         TString ToString() const {
             TStringStream str;

@@ -56,6 +56,7 @@ static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpec
     ,{2} // 16 = ErasureSpicies::Erasure2Plus2Block
     ,{2} // 17 = ErasureSpicies::Erasure2Plus2Stripe
     ,{5} // 18 = ErasureSpicies::ErasureMirror3of4
+    ,{2} // 19 = ErasureSpicies::Erasure8Plus2Block
 }};
 
 
@@ -83,7 +84,7 @@ struct TReorderablePartLayout {
             , VDiskIdx(vDiskIdx)
         {}
     };
-    TStackVec<TVDiskParts, 8> Records;
+    TStackVec<TVDiskParts, 16> Records;
 };
 
 ui32 ReverseMask(ui32 mask) {
@@ -99,7 +100,7 @@ bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacem
     VERBOSE_COUT("Start CorrectLayout" << Endl);
     // TODO: produce 'properly hosted part idx' for each VDisk available
     TReorderablePartLayout remaining;
-    TStackVec<ui8, 8> missingParts;
+    TStackVec<ui8, 16> missingParts;
 
     ui32 totalPartCount = TotalPartCount();
     ui32 blobSubgroupSize = BlobSubgroupSize();
@@ -113,10 +114,10 @@ bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacem
 
     ui32 handoffDestinedPartMaskInv = 0;
     for (ui32 i = 0; i < totalPartCount; ++i) {
-        ui32 bit = (1 << i);
+        ui32 bit = (1u << i);
         if (vDiskMask & bit) {
             VERBOSE_COUT("layout.VDiskPartMask[" << i << "]# " << DebugFormatBits(layout.VDiskPartMask[i]) << Endl);
-            if (!(layout.VDiskPartMask[i] & (1 << i))) {
+            if (!(layout.VDiskPartMask[i] & (1u << i))) {
                 if (slowVDiskMask & bit) {
                     missingParts.push_back(i);
                     handoffDestinedPartMaskInv |= (lastBit >> i);
@@ -132,7 +133,7 @@ bool TBlobStorageGroupType::CorrectLayout(const TPartLayout &layout, TPartPlacem
     VERBOSE_COUT("handoffDestinedPartMaskInv# " << DebugFormatBits(ReverseMask(handoffDestinedPartMaskInv)) << Endl);
 
     for (ui32 i = totalPartCount; i < blobSubgroupSize; ++i) {
-        if (vDiskMask & ~slowVDiskMask & (1 << i)) {
+        if (vDiskMask & ~slowVDiskMask & (1u << i)) {
             VERBOSE_COUT("layout.VDiskPartMask[" << i << "]# " << DebugFormatBits(layout.VDiskPartMask[i]) << Endl);
             remaining.Records.push_back(TReorderablePartLayout::TVDiskParts(i, handoffDestinedPartMaskInv &
                 ReverseMask(layout.VDiskPartMask[i]) ));

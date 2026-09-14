@@ -10,6 +10,7 @@ SIZE(MEDIUM)
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    wide_erasure_ut.cpp
     viewer_ut.cpp
     topic_data_ut.cpp
     ut/ut_utils.cpp

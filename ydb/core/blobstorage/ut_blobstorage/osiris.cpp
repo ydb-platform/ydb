@@ -71,6 +71,7 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
 
     // collect blob info from cluster
     TSubgroupPartLayout layout;
+    ui32 readableParts = 0;
     std::vector<std::tuple<TVDiskID, TLogoBlobID, NKikimrProto::EReplyStatus>> v;
     for (ui32 i = 0; i < numDisks; ++i) {
         const TActorId& queueId = env.CreateQueueActor(info->GetVDiskId(i), NKikimrBlobStorage::GetFastRead, 0);
@@ -86,6 +87,11 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
         for (const auto& blob : record.GetResult()) {
             const auto& id = LogoBlobIDFromLogoBlobID(blob.GetBlobID());
             v.emplace_back(vdiskId, id, blob.GetStatus());
+            if (erasure == TBlobStorageGroupType::Erasure8Plus2Block && blob.GetStatus() == NKikimrProto::OK) {
+                UNIT_ASSERT(id.PartId());
+                UNIT_ASSERT_EQUAL(res->Get()->GetBlobData(blob), parts.Parts[id.PartId() - 1].OwnedString);
+                readableParts |= 1u << (id.PartId() - 1);
+            }
             if (blob.GetStatus() == NKikimrProto::OK || blob.GetStatus() == NKikimrProto::NOT_YET) {
                 layout.AddItem(info->GetIdxInSubgroup(vdiskId, id.FullID().Hash()), id.PartId() - 1, info->Type);
             }
@@ -106,7 +112,21 @@ bool DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::set<s
         }
     }
 
-    if (error || doNotNeedToRestore) {
+    ui32 initialParts = 0;
+    for (const auto& [orderNum, part] : orderNumToPart) {
+        Y_UNUSED(orderNum);
+        initialParts |= 1u << part;
+    }
+    // Full initial layouts must preserve readable data even when no resurrection
+    // was needed. Partial layouts exercise Osiris metadata resurrection: the
+    // fixture wipes every VDisk in turn, and NOT_YET still contributes to that
+    // metadata layout, as in the existing erasure cases below.
+    const bool wideFull = erasure == TBlobStorageGroupType::Erasure8Plus2Block &&
+        initialParts == (1u << type.TotalPartCount()) - 1;
+    if (wideFull && readableParts != (1u << type.TotalPartCount()) - 1) {
+        error = "Full Block82 layout did not retain ten readable, payload-verified parts";
+    }
+    if (error || (doNotNeedToRestore && !wideFull)) {
         // skip checking
     } else if (info->GetQuorumChecker().GetBlobState(layout, {&info->GetTopology()}) != TBlobStorageGroupInfo::EBS_FULL) {
         error = "Blob is not in EBS_FULL state";
@@ -338,6 +358,69 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
     UNIT_ASSERT_VALUES_EQUAL(badCases, 0);
 }
 
+
+void DoBlock82Test() {
+    const auto erasure = TBlobStorageGroupType::Erasure8Plus2Block;
+    const TBlobStorageGroupType type(erasure);
+    TBlobStorageGroupInfo info(type, 1, type.BlobSubgroupSize(), 1);
+    const TString data = "Block82 Osiris parts nine and ten survive local recovery";
+    const TLogoBlobID id(1, 1, 1, 0, data.size(), 0);
+    TBlobStorageGroupInfo::TOrderNums orderNums;
+    info.GetTopology().PickSubgroup(id.Hash(), orderNums);
+    using TPlacement = std::set<std::pair<ui32, ui32>>;
+    std::map<TPlacement, bool> cases;
+    auto add = [&](ui32 missingMask, ui32 handoffMask) {
+        TPlacement placement;
+        TSubgroupPartLayout layout;
+        ui32 handoff = type.TotalPartCount();
+        ui32 distinctParts = 0;
+        for (ui32 part = 0; part < type.TotalPartCount(); ++part) {
+            if (missingMask & (1u << part)) {
+                continue;
+            }
+            const ui32 disk = (handoffMask & (1u << part)) ? handoff++ : part;
+            UNIT_ASSERT(disk < type.BlobSubgroupSize());
+            placement.emplace(orderNums[disk], part);
+            layout.AddItem(disk, part, type);
+            ++distinctParts;
+        }
+        const bool noRestore = distinctParts < type.MinimalRestorablePartCount() ||
+            (distinctParts == type.TotalPartCount() && layout.CountEffectiveReplicas(type) == distinctParts);
+        cases.emplace(std::move(placement), noRestore);
+    };
+    add(0, 0);
+    // Every single and double main loss, including data/data, data/parity,
+    // parity/parity. Empty handoff failures add no distinct stored layout.
+    for (ui32 first = 0; first < type.TotalPartCount(); ++first) {
+        add(1u << first, 0);
+        for (ui32 second = first + 1; second < type.TotalPartCount(); ++second) {
+            add((1u << first) | (1u << second), 0);
+        }
+    }
+    for (ui32 missing : {0u, 1u, 1u << 7, (1u << 0) | (1u << 7)}) {
+        add(missing, (1u << 8) | (1u << 9));
+    }
+    for (ui32 lost : {7u, (1u << 0) | (1u << 8) | (1u << 9),
+            (1u << 0) | (1u << 7) | (1u << 9)}) {
+        add(lost, 0);
+    }
+    TReallyFastRng32 random(8202);
+    for (ui32 n = 0; n < 16; ++n) {
+        ui32 missing = 0;
+        for (ui32 count = 0; count < n % 4; ++count) {
+            missing |= 1u << (random() % type.TotalPartCount());
+        }
+        ui32 handoffs = 0;
+        for (ui32 count = 0; count < 2; ++count) {
+            handoffs |= (1u << (random() % type.TotalPartCount())) & ~missing;
+        }
+        add(missing, handoffs);
+    }
+    for (const auto& [placement, noRestore] : cases) {
+        UNIT_ASSERT(DoTestCase(erasure, placement, noRestore, id, data, &Cerr));
+    }
+}
+
 }
 
 Y_UNIT_TEST_SUITE(Osiris) {
@@ -345,5 +428,6 @@ Y_UNIT_TEST_SUITE(Osiris) {
     Y_UNIT_TEST(mirror3dc) { DoTest(TBlobStorageGroupType::ErasureMirror3dc); }
     Y_UNIT_TEST(mirror3of4) { DoTest(TBlobStorageGroupType::ErasureMirror3of4); }
     Y_UNIT_TEST(block42) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(Block82) { DoBlock82Test(); }
 
 }

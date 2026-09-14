@@ -22,6 +22,7 @@ SRCS(
     diff.h
     disk_metrics.cpp
     drop_donor.cpp
+    erasure_counters.h
     error.h
     get_group.cpp
     grouper.cpp

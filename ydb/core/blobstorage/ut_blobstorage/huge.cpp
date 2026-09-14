@@ -1,5 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/lifecycle_checks.h>
 #include <ydb/core/util/lz4_data_generator.h>
 #include <ydb/core/erasure/erasure.h>
 
@@ -24,15 +25,16 @@ namespace {
 
     public:
 
-        static THugeBlobTest CreateHugeBlobTest() {
+        static THugeBlobTest CreateHugeBlobTest(TBlobStorageGroupType erasure = TBlobStorageGroupType::Erasure4Plus2Block) {
             TFeatureFlags ff;
             ff.SetForceDistconfDisable(true);
-            return THugeBlobTest(std::move(ff));
+            return THugeBlobTest(std::move(ff), erasure);
         }
 
-        THugeBlobTest(TFeatureFlags&& featureFlags)
+        THugeBlobTest(TFeatureFlags&& featureFlags, TBlobStorageGroupType erasure)
             : Env{{
-                    .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+                    .NodeCount = Max(9u, erasure.BlobSubgroupSize()),
+                    .Erasure = erasure,
                     .FeatureFlags = std::move(featureFlags),
                     .UseFakeConfigDispatcher = true,
                 }}
@@ -46,6 +48,7 @@ namespace {
 
             Info = Env.GetGroupInfo(GroupId);
             GType = Info->Type;
+            TestSubgroupNodeId = GType.TotalPartCount();
 
             Info->PickSubgroup(BlobId.Hash(), &VDiskIds, &ServiceIds);
 
@@ -95,6 +98,8 @@ namespace {
                 UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
             }
             Env.Runtime->DestroyActor(edge);
+            NBlobStorageLifecycle::CheckGroupBlob(Env, Info, blobId1, data1);
+            NBlobStorageLifecycle::CheckGroupBlob(Env, Info, blobId2, data2);
         }
 
         void CreateDSProxy() {
@@ -257,6 +262,10 @@ namespace {
                 SwitchHugeBlobSize(targetHuge3);
                 CompactLevels();
                 CheckPartsInPlace(baseMask | extraMask, 1);
+                if (GType.TotalPartCount() > 8) {
+                    NBlobStorageLifecycle::CheckHeaderlessRecords(Env, Info, TestSubgroupNodeId,
+                        BlobId, baseMask | extraMask);
+                }
             }
         }
 
@@ -304,6 +313,30 @@ Y_UNIT_TEST_SUITE(HugeBlobOnlineSizeChange) {
         test.MultiplePutViaDsProxy(114561 /* PartSize=28672 */, 1024);
         // In a fixed version 28672 + max header size (8) = 28680, so DSProxy knows that blob is huge
         // and will not try to batch it in MultiPut
+    }
+
+    Y_UNIT_TEST(CompactionBlock82) {
+        // Bounded combinations exercise overlapping records, all high bits, and
+        // both directions of the physical inline/Huge transition.
+        for (bool firstHuge : {false, true}) {
+            for (bool secondHuge : {false, true}) {
+                for (bool finalHuge : {false, true}) {
+                    auto test = THugeBlobTest::CreateHugeBlobTest(TBlobStorageGroupType::Erasure8Plus2Block);
+                    test.RunTest(1u | (1u << 7), 1u << 8, 1u << 9, 1u << 8, firstHuge,
+                        (1u << 8) | (1u << 9), 1u, secondHuge, finalHuge);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SendHugeViaDSProxyBlock82) {
+        auto test = THugeBlobTest::CreateHugeBlobTest(TBlobStorageGroupType::Erasure8Plus2Block);
+        test.SetHugeBlobSizeOnAllVDisks(32513);
+        test.CreateDSProxy();
+        // MockPDisk rounds the threshold to 28673 bytes. Headerless parts of
+        // 28672 and 28704 bytes straddle it without the legacy five-byte header.
+        test.MultiplePutViaDsProxy(28672 * 8, 1024);
+        test.MultiplePutViaDsProxy(28704 * 8, 1024);
     }
 
 }

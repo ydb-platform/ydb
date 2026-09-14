@@ -1,4 +1,5 @@
 #include "erasure.h"
+#include "erasure_block82.h"
 
 static const char ZeroData[4096] = {0};
 
@@ -180,6 +181,9 @@ namespace NKikimr {
     bool ErasureSplit(TErasureType::ECrcMode crcMode, TErasureType erasure, const TRope& whole, std::span<TRope> parts,
             TErasureSplitContext *context, IRcBufAllocator* allocator) {
         Y_ABORT_UNLESS(parts.size() == erasure.TotalPartCount());
+        if (erasure.GetErasure() == TErasureType::Erasure8Plus2Block) {
+            return ErasureSplitBlock82(crcMode, whole, parts, context, allocator);
+        }
 
         if (erasure.GetErasure() == TErasureType::Erasure4Plus2Block && crcMode == TErasureType::CrcModeNone) {
             ErasureSplitBlock42Prepare(whole, parts, allocator);

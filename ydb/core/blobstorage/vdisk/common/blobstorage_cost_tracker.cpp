@@ -28,9 +28,9 @@ public:
     {}
 };
 
-class TBsCostModel4Plus2Block : public TBsCostModelBase {
+class TBsCostModelBlock : public TBsCostModelBase {
 public:
-    TBsCostModel4Plus2Block(NPDisk::EDeviceType deviceType)
+    TBsCostModelBlock(NPDisk::EDeviceType deviceType)
         : TBsCostModelBase(deviceType)
     {}
 };
@@ -59,7 +59,8 @@ TBsCostTracker::TBsCostTracker(const TBlobStorageGroupType& groupType, NPDisk::E
         CostModel = std::make_unique<TBsCostModelMirror3dc>(diskType);
         break;
     case TBlobStorageGroupType::Erasure4Plus2Block:
-        CostModel = std::make_unique<TBsCostModel4Plus2Block>(diskType);
+    case TBlobStorageGroupType::Erasure8Plus2Block:
+        CostModel = std::make_unique<TBsCostModelBlock>(diskType);
         break;
     case TBlobStorageGroupType::ErasureMirror3of4:
         CostModel = std::make_unique<TBsCostModelMirror3of4>(diskType);

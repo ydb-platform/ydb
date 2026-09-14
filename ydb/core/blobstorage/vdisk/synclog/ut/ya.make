@@ -13,6 +13,7 @@ PEERDIR(
 )
 
 SRCS(
+    blobstorage_synclog_block82_ut.cpp
     blobstorage_synclogdata_ut.cpp
     blobstorage_synclogdsk_ut.cpp
     blobstorage_synclogkeeper_ut.cpp

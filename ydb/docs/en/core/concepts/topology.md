@@ -1,6 +1,6 @@
 # {{ ydb-short-name }} cluster topology
 
-A {{ ydb-short-name }} cluster consists of [storage](glossary.md#storage-node) and [database](glossary.md#database-node) nodes. As the data stored in {{ ydb-short-name }} is available only via queries and API calls, both types of nodes are essential for [database availability](#database-availability). However, [distributed storage](glossary.md#distributed-storage) consisting of storage nodes has the most impact on the cluster's fault tolerance and ability to persist data reliably. During the initial cluster deployment, an appropriate distributed storage [operating mode](#cluster-config) needs to be chosen according to the expected workload and [database availability](#database-availability) requirements. The operation mode cannot be changed after the initial cluster setup, making it one of the key decisions to consider when planning a new {{ ydb-short-name }} deployment.
+A {{ ydb-short-name }} cluster consists of [storage](glossary.md#storage-node) and [database](glossary.md#database-node) nodes. As the data stored in {{ ydb-short-name }} is available only via queries and API calls, both types of nodes are essential for [database availability](#database-availability). However, [distributed storage](glossary.md#distributed-storage) consisting of storage nodes has the most impact on the cluster's fault tolerance and ability to persist data reliably. During the initial cluster deployment, an appropriate distributed storage [operating mode](#cluster-config) needs to be chosen according to the expected workload and [database availability](#database-availability) requirements. The static group's species and geometry are immutable. Dynamic pools select their own erasure species and can coexist; see [block-8-2](block-8-2.md).
 
 ## Cluster operating modes {#cluster-config}
 
@@ -15,6 +15,8 @@ The following {{ ydb-short-name }} distributed storage operating modes are avail
 - `block-4-2`. [Erasure coding](https://en.wikipedia.org/wiki/Erasure_code) is applied with two blocks of redundancy added to the four blocks of source data. Storage nodes are placed in at least 8 failure domains (usually racks). {{ ydb-short-name }} cluster remains available if any two domains fail, continuing to record all 6 data parts in the remaining domains. This mode is recommended for clusters deployed within a single availability zone or data center.
 
   ![block-4-2 topology](./_assets/block-4-2.drawio.png)
+
+- `block-8-2`. Eight data parts, two parity parts and two handoff VDisks occupy twelve independent failure domains. The group tolerates two failed domains with ideal coding overhead 1.25. Choose spare domains for your recovery requirements. See [configuration and version prerequisites](block-8-2.md).
 
 - `none`. There is no redundancy. Any hardware failure causes data to become unavailable or permanently lost. This mode is only recommended for development and functional testing.
 
@@ -33,6 +35,7 @@ Fault-tolerant operation modes of distributed storage require a significant amou
 | `mirror-3-dc` *(3 nodes)*, can stand a failure of a single server, or a failure of a data center | 3 | 3 | Server | Data center | 3 | Doesn't matter |
 | `block-4-2`, can stand a failure of 2 racks | 1.5 | 8 ([10 recommended](*recommended-node-count)) | Rack | Data center | 1 | 8 |
 | `block-4-2` *(reduced)*, can stand a failure of 1 rack | 1.5 | 10 | ½ a rack | Data center | 1 | 5 |
+| `block-8-2`, can stand a failure of 2 racks | 1.25 | 12 (plus deployment-specific spares) | Rack | Data center | 1 | 12 |
 | `none`, no fault tolerance | 1 | 1 | Node | Node | 1 | 1 |
 
 {% note info %}

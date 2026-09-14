@@ -87,6 +87,7 @@ struct TTestEnvOpts {
     ui32 DataCenterCount;
     TNodeTenantsMap Tenants;
     bool UseMirror3dcErasure;
+    std::optional<TErasureType::EErasureSpecies> ErasureSpecies;
     bool AdvanceCurrentTime;
     bool EnableSentinel;
     bool EnableCMSRequestPriorities;

@@ -26,7 +26,7 @@ class AbstractKiKiMRTest(object):
 
     @classmethod
     def setup_class(cls):
-        nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+        nodes_count = cls.erasure.min_fail_domains * (3 if cls.erasure == Erasure.MIRROR_3_DC else 1)
         configurator = KikimrConfigGenerator(cls.erasure,
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
@@ -70,7 +70,7 @@ class TestGenerateDynamicConfigFromConfigDir(AbstractKiKiMRTest):
 
     @classmethod
     def setup_class(cls):
-        nodes_count = 8
+        nodes_count = cls.erasure.min_fail_domains
         configurator = KikimrConfigGenerator(
             erasure=cls.erasure,
             nodes=nodes_count,
@@ -101,3 +101,11 @@ class TestGenerateDynamicConfigFromConfigDir(AbstractKiKiMRTest):
             yaml.dump(yaml.safe_load(config), sort_keys=True) ==
             yaml.dump(yaml.safe_load(yaml.dump(node_config)), sort_keys=True)
         )
+
+
+class TestGenerateDynamicConfigBlock82(TestGenerateDynamicConfig):
+    erasure = Erasure.BLOCK_8_2
+
+
+class TestGenerateDynamicConfigFromConfigDirBlock82(TestGenerateDynamicConfigFromConfigDir):
+    erasure = Erasure.BLOCK_8_2

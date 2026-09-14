@@ -1,12 +1,13 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/ut_blobstorage/lib/lifecycle_checks.h>
 
 Y_UNIT_TEST_SUITE(Donor) {
 
-    Y_UNIT_TEST(SlayAfterWiping) {
+    void RunSlayAfterWiping(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env{{
-            .NodeCount = 8,
+            .NodeCount = erasure.BlobSubgroupSize(),
             .VDiskReplPausedAtStart = true,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Erasure = erasure,
         }};
         auto& runtime = env.Runtime;
 
@@ -83,10 +84,13 @@ Y_UNIT_TEST_SUITE(Donor) {
         UNIT_ASSERT(found);
     }
 
-    Y_UNIT_TEST(ConsistentWritesWhenSwitchingToDonorMode) {
+    Y_UNIT_TEST(SlayAfterWiping) { RunSlayAfterWiping(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(SlayAfterWipingBlock82) { RunSlayAfterWiping(TBlobStorageGroupType::Erasure8Plus2Block); }
+
+    void RunConsistentWritesWhenSwitchingToDonorMode(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env{{
-            .NodeCount = 9,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .NodeCount = erasure.BlobSubgroupSize() + 1,
+            .Erasure = erasure,
         }};
         auto& runtime = *env.Runtime;
 
@@ -102,6 +106,8 @@ Y_UNIT_TEST_SUITE(Donor) {
             const ui32 GroupId;
             bool *Stopped;
             THashSet<TLogoBlobID> Data;
+            THashMap<TLogoBlobID, TString> Payloads;
+            const ui32 BatchSize;
             std::pair<ui32, ui32> CurrentBarrier;
             ui64 TabletId = 1;
             ui32 CurrentGeneration = 0;
@@ -109,9 +115,10 @@ Y_UNIT_TEST_SUITE(Donor) {
             ui32 PutsInFlight = 0;
 
         public:
-            TWriterActor(ui32 groupId, bool *stopped)
+            TWriterActor(ui32 groupId, bool *stopped, ui32 batchSize)
                 : GroupId(groupId)
                 , Stopped(stopped)
+                , BatchSize(batchSize)
             {}
 
             void Bootstrap() {
@@ -119,6 +126,7 @@ Y_UNIT_TEST_SUITE(Donor) {
                 ++CurrentGeneration;
                 CurrentStep = 1;
                 Data.clear();
+                Payloads.clear();
                 SendToBSProxy(SelfId(), GroupId, new TEvBlobStorage::TEvCollectGarbage(TabletId, CurrentGeneration, 0, 0,
                     true, CurrentGeneration - 1, Max<ui32>(), nullptr, nullptr, TInstant::Max(), false));
             }
@@ -131,7 +139,7 @@ Y_UNIT_TEST_SUITE(Donor) {
             }
 
             void IssuePut() {
-                if (Data.size() == 10000) {
+                if (Data.size() == BatchSize) {
                     if (!PutsInFlight) {
                         *Stopped = true;
                     }
@@ -155,6 +163,7 @@ Y_UNIT_TEST_SUITE(Donor) {
                 SendToBSProxy(SelfId(), GroupId, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
                 Cerr << "Put# " << id << Endl;
                 Data.emplace(id);
+                Payloads.emplace(id, data);
 
                 ++CurrentStep;
                 ++PutsInFlight;
@@ -176,11 +185,15 @@ Y_UNIT_TEST_SUITE(Donor) {
 
         bool stopped = false;
         bool resumePending = false;
-        TWriterActor *writer = new TWriterActor(groupId, &stopped);
+        const bool wide = erasure.TotalPartCount() > 8;
+        TWriterActor *writer = new TWriterActor(groupId, &stopped, wide ? 128 : 10000);
         const TActorId writerId = runtime.Register(writer, 1);
         const TActorId edge = runtime.AllocateEdgeActor(1, __FILE__, __LINE__);
 
-        for (THPTimer timer; TDuration::Seconds(timer.Passed()) <= TDuration::Minutes(3); ) {
+        ui32 checkedBatches = 0;
+        ui32 reassignments = 0;
+        for (THPTimer timer; TDuration::Seconds(timer.Passed()) <= TDuration::Minutes(3) &&
+                (!wide || checkedBatches < 2); ) {
             NKikimrBlobStorage::TConfigRequest request;
             request.AddCommand()->MutableQueryBaseConfig();
             auto response = env.Invoke(request);
@@ -215,16 +228,28 @@ Y_UNIT_TEST_SUITE(Donor) {
                         UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
                         for (const auto& item : res->Get()->Record.GetResult()) {
                             if (item.GetStatus() == NKikimrProto::OK) {
-                                ++parts[id];
-                                break;
+                                if (wide) {
+                                    const auto partId = LogoBlobIDFromLogoBlobID(item.GetBlobID()).PartId();
+                                    UNIT_ASSERT(partId && partId <= erasure.TotalPartCount());
+                                    parts[id] |= 1u << (partId - 1);
+                                } else {
+                                    ++parts[id];
+                                    break;
+                                }
                             }
                         }
                     }
                     runtime.Send(new IEventHandle(TEvents::TSystem::Poison, 0, queueId, {}, nullptr, 0), queueId.NodeId());
                 }
                 for (const auto& id : writer->Data) {
-                    UNIT_ASSERT(parts[id] >= 6);
+                    if (wide) {
+                        UNIT_ASSERT_VALUES_EQUAL(parts[id], (1u << erasure.TotalPartCount()) - 1);
+                        NBlobStorageLifecycle::CheckGroupBlob(env, info, id, writer->Payloads.at(id));
+                    } else {
+                        UNIT_ASSERT(parts[id] >= erasure.TotalPartCount());
+                    }
                 }
+                ++checkedBatches;
 
                 stopped = false;
                 resumePending = true;
@@ -247,9 +272,17 @@ Y_UNIT_TEST_SUITE(Donor) {
                 cmd->SetVDiskIdx(vslot.GetVDiskIdx());
                 auto response = env.Invoke(request);
                 UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+                ++reassignments;
             }
         }
+        if (wide) {
+            UNIT_ASSERT_VALUES_EQUAL(checkedBatches, 2);
+            UNIT_ASSERT(reassignments);
+        }
     }
+
+    Y_UNIT_TEST(ConsistentWritesWhenSwitchingToDonorMode) { RunConsistentWritesWhenSwitchingToDonorMode(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(ConsistentWritesWhenSwitchingToDonorModeBlock82) { RunConsistentWritesWhenSwitchingToDonorMode(TBlobStorageGroupType::Erasure8Plus2Block); }
 
     Y_UNIT_TEST(MultipleEvicts) {
         ui32 numDCs = 4;
@@ -352,11 +385,11 @@ Y_UNIT_TEST_SUITE(Donor) {
         return result;
     }
 
-    Y_UNIT_TEST(CheckOnlineReadRequestToDonor) {
+    void RunCheckOnlineReadRequestToDonor(TBlobStorageGroupType erasure) {
         TEnvironmentSetup env{TEnvironmentSetup::TSettings{
-            .NodeCount = 8,
+            .NodeCount = erasure.BlobSubgroupSize(),
             .VDiskReplPausedAtStart = true,
-            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .Erasure = erasure,
         }};
         auto& runtime = env.Runtime;
 
@@ -461,6 +494,9 @@ Y_UNIT_TEST_SUITE(Donor) {
             auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge, false);
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
             UNIT_ASSERT(requestVdiskNotYet);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.ConvertToString(), buffer);
             UNIT_ASSERT(fastRequestToDonor);
         }
 
@@ -477,4 +513,7 @@ Y_UNIT_TEST_SUITE(Donor) {
         env.CommenceReplication();
         UNIT_ASSERT(asyncRequestToDonor);
     }
+
+    Y_UNIT_TEST(CheckOnlineReadRequestToDonor) { RunCheckOnlineReadRequestToDonor(TBlobStorageGroupType::Erasure4Plus2Block); }
+    Y_UNIT_TEST(CheckOnlineReadRequestToDonorBlock82) { RunCheckOnlineReadRequestToDonor(TBlobStorageGroupType::Erasure8Plus2Block); }
 }

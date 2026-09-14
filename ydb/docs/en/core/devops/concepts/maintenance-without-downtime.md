@@ -1,5 +1,7 @@
 # Maintenance without downtime
 
+For `block-8-2`, CMS maximum-availability mode allows at most one unavailable or locked VDisk per affected group; keep-available mode allows two. Existing failures count against this limit. Wait for recovery before the next operation. See [Block82 maintenance and status](../../concepts/block-8-2.md).
+
 A {{ ydb-short-name }} cluster periodically needs maintenance, such as upgrading its version or replacing broken disks. Maintenance can cause a cluster or its databases to become unavailable due to:
 
 - Going beyond the expectations of the affected [storage groups](../../concepts/glossary.md#storage-groups) failure model.

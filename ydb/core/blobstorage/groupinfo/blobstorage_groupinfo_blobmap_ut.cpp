@@ -98,19 +98,19 @@ namespace {
 Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
 
     void MakeBelongsToSubgroupBenchmark(TBlobStorageGroupType::EErasureSpecies erasure, ui32 numFailDomains,
-            NUnitTest::TTestContext& ut_context) {
+            NUnitTest::TTestContext& ut_context, ui32 outerIterations = 10000) {
         auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(erasure, 1, numFailDomains, 1);
         const ui32 blobSubgroupSize = groupInfo->Type.BlobSubgroupSize();
         TOriginalBlobStorageGroupInfo orig(blobSubgroupSize, *groupInfo);
 
         TVector<TLogoBlobID> ids;
-        for (ui32 i = 0; i < 10000; ++i) {
+        for (ui32 i = 0; i < outerIterations; ++i) {
             for (ui32 j = 0; j < 1000; ++j) {
                 ids.emplace_back(i, 1, j, 1, 1000, 1);
             }
         }
 
-        constexpr ui64 blobCount = 10'000'000;
+        const ui64 blobCount = ui64(outerIterations) * 1000;
         UNIT_ASSERT(blobCount == ids.size());
         ui64 iterationCount = numFailDomains * blobCount;
 
@@ -162,8 +162,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
 
     void BasicCheck(const std::unique_ptr<TBlobStorageGroupInfo> &groupInfo, TOriginalBlobStorageGroupInfo &orig,
             TLogoBlobID id, ui32 blobSubgroupSize) {
-        std::array<TVDiskID, 8> vdisks;
-        std::array<TActorId, 8> services;
+        std::array<TVDiskID, MaxNodesPerBlob> vdisks;
+        std::array<TActorId, MaxNodesPerBlob> services;
         orig.PickSubgroup(id.Hash(), blobSubgroupSize, vdisks.data(), services.data());
 
         TBlobStorageGroupInfo::TVDiskIds vdisks2;
@@ -222,6 +222,26 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoBlobMapTest) {
                     BasicCheck(groupInfo, orig, id, blobSubgroupSize);
                 }
             }
+        }
+    }
+
+    Y_UNIT_TEST(BasicChecksBlock82) {
+        for (ui32 domains : {12u, 17u}) {
+            auto groupInfo = std::make_unique<TBlobStorageGroupInfo>(TErasureType::Erasure8Plus2Block, 2u, domains, 1u);
+            TOriginalBlobStorageGroupInfo orig(12, *groupInfo);
+            for (ui32 i = 0; i < 100; ++i) {
+                for (ui32 j = 0; j < 10; ++j) {
+                    BasicCheck(groupInfo, orig, TLogoBlobID(i, 1, j, 1, 1000, 1), 12);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(BelongsToSubgroupBenchmarkBlock82) {
+        // Keep the wider geometry corpus bounded; compare every result with the
+        // original independent mapper, including domains outside the subgroup.
+        for (ui32 domains : {12u, 17u}) {
+            MakeBelongsToSubgroupBenchmark(TErasureType::Erasure8Plus2Block, domains, ut_context, 100);
         }
     }
 

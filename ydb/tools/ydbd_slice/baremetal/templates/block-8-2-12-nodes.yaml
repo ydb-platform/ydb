@@ -1,0 +1,225 @@
+# New clusters only: all YDB processes must run a version supporting block-8-2.
+# 8 data + 2 parity + 2 handoff VDisks in 12 independent failure domains.
+# StateStorage membership is independent of BlobStorage geometry.
+use_new_style_kikimr_cfg: true
+yaml_config_enabled: true
+log:
+  cluster_name: default_devslice
+  sys_log: true
+  uaclient_config:
+    uri: '[fd53::1]:16400'
+    grpc_max_message_size: 4194304
+host_configs:
+- drive:
+  - path: /dev/disk/by-partlabel/kikimr_nvme_01
+    type: SSD
+  - path: /dev/disk/by-partlabel/kikimr_nvme_02
+    type: SSD
+  host_config_id: 1
+hosts:
+- host: CHANGE_ME_HOST_1
+  host_config_id: 1
+  location:
+    body: 1
+    data_center: DCA
+    rack: '1'
+- host: CHANGE_ME_HOST_2
+  host_config_id: 1
+  location:
+    body: 2
+    data_center: DCA
+    rack: '2'
+- host: CHANGE_ME_HOST_3
+  host_config_id: 1
+  location:
+    body: 3
+    data_center: DCA
+    rack: '3'
+- host: CHANGE_ME_HOST_4
+  host_config_id: 1
+  location:
+    body: 4
+    data_center: DCA
+    rack: '4'
+- host: CHANGE_ME_HOST_5
+  host_config_id: 1
+  location:
+    body: 5
+    data_center: DCA
+    rack: '5'
+- host: CHANGE_ME_HOST_6
+  host_config_id: 1
+  location:
+    body: 6
+    data_center: DCA
+    rack: '6'
+- host: CHANGE_ME_HOST_7
+  host_config_id: 1
+  location:
+    body: 7
+    data_center: DCA
+    rack: '7'
+- host: CHANGE_ME_HOST_8
+  host_config_id: 1
+  location:
+    body: 8
+    data_center: DCA
+    rack: '8'
+- host: CHANGE_ME_HOST_9
+  host_config_id: 1
+  location:
+    body: 9
+    data_center: DCA
+    rack: '9'
+- host: CHANGE_ME_HOST_10
+  host_config_id: 1
+  location:
+    body: 10
+    data_center: DCA
+    rack: '10'
+- host: CHANGE_ME_HOST_11
+  host_config_id: 1
+  location:
+    body: 11
+    data_center: DCA
+    rack: '11'
+- host: CHANGE_ME_HOST_12
+  host_config_id: 1
+  location:
+    body: 12
+    data_center: DCA
+    rack: '12'
+static_erasure: block-8-2
+state_storage:
+  allow_incorrect: true
+  node_ids:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+fail_domain_type: rack
+domains:
+- domain_name: Root
+  dynamic_slots: 8
+  databases:
+  - name: testdb
+    storage_units:
+    - count: 1
+      kind: ssd
+    compute_units:
+    - count: 1
+      kind: slot
+      zone: any
+  storage_pools:
+  - kind: ssd
+    num_groups: 1
+  storage_pool_kinds:
+  - kind: ssd
+    erasure: block-8-2
+    fail_domain_type: rack
+    filter_properties:
+      type: SSD
+table_service_config:
+  sql_version: 1
+sys:
+  executors:
+    system:
+      threads: 9
+      spin_threshold: 1
+    user:
+      spin_threshold: 1
+      threads: 16
+    batch:
+      threads: 7
+      spin_threshold: 1
+    io:
+      threads: 1
+    ic:
+      threads: 3
+      max_threads: 5
+      max_avg_ping_deviation: 500
+      spin_threshold: 10
+      time_per_mailbox_micro_secs: 100
+      priority: 40
+  scheduler:
+    resolution: 64
+    spin_threshold: 0
+    progress_threshold: 10000
+blob_storage_config:
+  service_set:
+    groups:
+    - erasure_species: block-8-2
+      rings:
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_1
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 1
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_2
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 2
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_3
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 3
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_4
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 4
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_5
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 5
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_6
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 6
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_7
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 7
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_8
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 8
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_9
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 9
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_10
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 10
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_11
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 11
+        - vdisk_locations:
+          - node_id: CHANGE_ME_HOST_12
+            pdisk_category: CHANGE_PDISK_CATEGORY
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+            pdisk_guid: 12
+profiles:
+- channels:
+  - storage_pool_kind: ssd
+  - storage_pool_kind: ssd
+  - storage_pool_kind: ssd
+interconnect_config:
+  start_tcp: true
+grpc_config: null

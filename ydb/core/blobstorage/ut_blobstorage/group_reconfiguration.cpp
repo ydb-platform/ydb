@@ -501,4 +501,7 @@ Y_UNIT_TEST_SUITE(GroupReconfiguration) {
     Y_UNIT_TEST(ReassignsDoNotCauseErrorMessagesBlock4Plus2) {
         TestReassignsDoNotCauseErrorMessages(TBlobStorageGroupType::Erasure4Plus2Block, 1, 12);
     }
+    Y_UNIT_TEST(ReassignsDoNotCauseErrorMessagesBlock82) {
+        TestReassignsDoNotCauseErrorMessages(TBlobStorageGroupType::Erasure8Plus2Block, 1, 16);
+    }
 }

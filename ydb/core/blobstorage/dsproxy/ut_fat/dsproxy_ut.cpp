@@ -3516,10 +3516,13 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestHugeCollectGarbage);
         PROXY_UNIT_TEST(TestCollectGarbageAfterLargeData);
         PROXY_UNIT_TEST(TestNormal);
+        PROXY_UNIT_TEST(TestNormalBlock82);
         PROXY_UNIT_TEST(TestDoubleGroups);
         PROXY_UNIT_TEST(TestQuadrupleGroups);
         PROXY_UNIT_TEST(TestSingleFailure);
+        PROXY_UNIT_TEST(TestSingleFailureBlock82);
         PROXY_UNIT_TEST(TestDoubleFailure);
+        PROXY_UNIT_TEST(TestDoubleFailureBlock82);
         PROXY_UNIT_TEST(TestNormalMirror);
         PROXY_UNIT_TEST(TestSingleFailureMirror);
         PROXY_UNIT_TEST(TestDoubleFailureMirror3Plus2);
@@ -3533,11 +3536,13 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestProxyDiscoverSingleTimeout);
         PROXY_UNIT_TEST(TestEmptyRange);
         PROXY_UNIT_TEST(TestPutGetMany);
+        PROXY_UNIT_TEST(TestPutGetManyBlock82);
 
         PROXY_UNIT_TEST(TestPutGetStatusErasureMirror3);
         PROXY_UNIT_TEST(TestPutGetStatusErasure3Plus1Block);
         PROXY_UNIT_TEST(TestPutGetStatusErasure3Plus1Stripe);
         PROXY_UNIT_TEST(TestPutGetStatusErasure4Plus2Block);
+        PROXY_UNIT_TEST(TestPutGetStatusBlock82);
         PROXY_UNIT_TEST(TestPutGetStatusErasure3Plus2Block);
         PROXY_UNIT_TEST(TestPutGetStatusErasure4Plus2Stripe);
         PROXY_UNIT_TEST(TestPutGetStatusErasure3Plus2Stripe);
@@ -3965,15 +3970,33 @@ public:
         SectorMapByPath.clear();
     }
 
+    void TestNormalBlock82() {
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(0, TBlobStorageGroupType::Erasure8Plus2Block,
+            nullptr, 0, true, 12, 1);
+        SectorMapByPath.clear();
+    }
+
     void TestSingleFailure() {
         TestBlobStorage<TTestBlobStorageProxyBasic1>(1, TBlobStorageGroupType::Erasure4Plus2Block,
             nullptr);
         SectorMapByPath.clear();
     }
 
+    void TestSingleFailureBlock82() {
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(1, TBlobStorageGroupType::Erasure8Plus2Block,
+            nullptr, 0, true, 12, 1);
+        SectorMapByPath.clear();
+    }
+
     void TestDoubleFailure() {
         TestBlobStorage<TTestBlobStorageProxyBasic1>(3, TBlobStorageGroupType::Erasure4Plus2Block,
             nullptr);
+        SectorMapByPath.clear();
+    }
+
+    void TestDoubleFailureBlock82() {
+        TestBlobStorage<TTestBlobStorageProxyBasic1>(3, TBlobStorageGroupType::Erasure8Plus2Block,
+            nullptr, 0, true, 12, 1);
         SectorMapByPath.clear();
     }
 
@@ -4050,6 +4073,11 @@ public:
         SectorMapByPath.clear();
     }
 
+    void TestPutGetManyBlock82() {
+        TestBlobStorage<TTestBlobStorageProxyPutGetMany>(0, TBlobStorageGroupType::Erasure8Plus2Block, nullptr, 0, true, 12, 1);
+        SectorMapByPath.clear();
+    }
+
     void TestPutGetStatusErasureMirror3() {
         TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::ErasureMirror3, nullptr);
         SectorMapByPath.clear();
@@ -4067,6 +4095,11 @@ public:
 
     void TestPutGetStatusErasure4Plus2Block() {
         TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure4Plus2Block, nullptr);
+        SectorMapByPath.clear();
+    }
+
+    void TestPutGetStatusBlock82() {
+        TestBlobStorage<TTestBlobStorageProxyPutGetStatus>(0, TBlobStorageGroupType::Erasure8Plus2Block, nullptr, 0, true, 12, 1);
         SectorMapByPath.clear();
     }
 

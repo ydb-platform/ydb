@@ -265,6 +265,10 @@ namespace NKikimr {
             TAutoPtr<IEventHandle> handle;
             auto evVGetRange = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVGet>(handle);
 
+            if (testData.Deadline) {
+                UNIT_ASSERT_VALUES_EQUAL(evVGetRange->Record.GetMsgQoS().GetDeadlineSeconds(),
+                    testData.Deadline.Seconds());
+            }
             UNIT_ASSERT(evVGetRange->Record.HasCookie());
             UNIT_ASSERT(evVGetRange->Record.HasIndexOnly() && evVGetRange->Record.GetIndexOnly());
             std::unique_ptr<TEvBlobStorage::TEvVGetResult> evVGetRangeResult = std::make_unique<TEvBlobStorage::TEvVGetResult>(
@@ -301,10 +305,13 @@ namespace NKikimr {
         }
 
         void MakeVPatchFindingPartsTest(NKikimrProto::EReplyStatus vGetStatus, const TVector<ui8> &foundParts,
-                TVector<ui64> &&receivingEvents, TVector<ui64> &&sendingEvents)
+                TVector<ui64> &&receivingEvents, TVector<ui64> &&sendingEvents, bool finiteDeadline = false)
         {
             TBlobStorageGroupType type(TErasureType::Erasure4Plus2Block);
             TVPatchTestGeneralData testData(type, 10);
+            if (finiteDeadline) {
+                testData.Deadline = testData.Now + TDuration::Minutes(1);
+            }
             TActorId edgeActor = testData.EdgeActors[0];
 
             testData.IsCheckingEventsByDecorator = true;
@@ -336,6 +343,40 @@ namespace NKikimr {
             }
 
             testData.WaitEndTest();
+        }
+
+        Y_UNIT_TEST(FindingPartsWithFiniteDeadline) {
+            MakeVPatchFindingPartsTest(NKikimrProto::OK, {},
+                {TEvents::TSystem::Bootstrap, TEvBlobStorage::EvVGetResult, TEvBlobStorage::EvVPatchDyingConfirm},
+                {TEvBlobStorage::EvVGet, TEvBlobStorage::EvVPatchFoundParts, TEvBlobStorage::EvVPatchDyingRequest},
+                true);
+        }
+
+        Y_UNIT_TEST(DistributedPatchRejectedBlock82) {
+            TVPatchTestGeneralData data(TBlobStorageGroupType(TErasureType::Erasure8Plus2Block), 8193);
+            data.Deadline = data.Now + TDuration::Minutes(1);
+            data.IsCheckingEventsByDecorator = true;
+            data.SequenceOfReceivingEvents = {TEvents::TSystem::Bootstrap, TEvBlobStorage::EvVPatchXorDiff,
+                TEvBlobStorage::EvVPatchDyingConfirm};
+            data.SequenceOfSendingEvents = {TEvBlobStorage::EvVPatchFoundParts, TEvBlobStorage::EvVPatchDyingRequest,
+                TEvBlobStorage::EvVPatchXorDiffResult};
+            const auto edge = data.EdgeActors[0];
+            auto event = CreateEventHandle(edge, edge, data.CreateVPatchStart(0));
+            const auto actor = data.CreateTVPatchActor<TVPatchDecorator>(std::move(event));
+            TAutoPtr<IEventHandle> handle;
+            const auto* result = data.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchFoundParts>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrProto::ERROR);
+            UNIT_ASSERT(TString(result->Record.GetErrorReason()).Contains("does not support"));
+            data.Runtime.GrabEdgeEventRethrow<TEvVPatchDyingRequest>(handle);
+            auto xorDiff = std::make_unique<TEvBlobStorage::TEvVPatchXorDiff>(
+                TLogoBlobID(data.OriginalBlobId, 9), TLogoBlobID(data.PatchedBlobId, 9),
+                data.VDiskIds[0], 1, data.Deadline, 0);
+            xorDiff->AddDiff(0, TRcBuf::Copy("x", 1));
+            data.Runtime.Send(new IEventHandle(actor, edge, xorDiff.release()));
+            auto* xorResult = data.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchXorDiffResult>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(xorResult->Record.GetStatus(), NKikimrProto::ERROR);
+            data.Runtime.Send(new IEventHandle(actor, edge, new TEvVPatchDyingConfirm));
+            data.WaitEndTest();
         }
 
         Y_UNIT_TEST(FindingPartsWhenPartsAreDontExist) {
@@ -611,6 +652,32 @@ namespace NKikimr {
 
             std::unique_ptr<IEventHandle> handle = std::make_unique<IEventHandle>(vPatchActorId, edgeActor, xorDiff.release());
             runtime.Send(handle.release());
+        }
+
+        Y_UNIT_TEST(XorDiffRejectedMirror) {
+            TVPatchTestGeneralData data(TBlobStorageGroupType(TErasureType::ErasureMirror3dc), 8193);
+            data.Deadline = data.Now + TDuration::Minutes(1);
+            data.IsCheckingEventsByDecorator = true;
+            data.SequenceOfReceivingEvents = {TEvents::TSystem::Bootstrap, TEvBlobStorage::EvVGetResult,
+                TEvBlobStorage::EvVPatchXorDiff, TEvBlobStorage::EvVPatchDiff,
+                TEvBlobStorage::EvVPatchDyingConfirm};
+            data.SequenceOfSendingEvents = {TEvBlobStorage::EvVGet, TEvBlobStorage::EvVPatchFoundParts,
+                TEvBlobStorage::EvVPatchXorDiffResult, TEvBlobStorage::EvVPatchResult,
+                TEvBlobStorage::EvVPatchDyingRequest};
+            const auto edge = data.EdgeActors[0];
+            auto event = CreateEventHandle(edge, edge, data.CreateVPatchStart(0));
+            const auto actor = data.CreateTVPatchActor<TVPatchDecorator>(std::move(event));
+            UNIT_ASSERT(!PassFindingParts(data, NKikimrProto::OK, {1}));
+            SendXorDiff(data, {TDiff("x", 0, true, false)}, 1);
+            TAutoPtr<IEventHandle> handle;
+            auto* result = data.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchXorDiffResult>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), NKikimrProto::ERROR);
+            data.Runtime.Send(new IEventHandle(actor, edge, data.CreateForceEndVPatchDiff(1, 0).release()));
+            auto* patchResult = data.Runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvVPatchResult>(handle);
+            UNIT_ASSERT_VALUES_EQUAL(patchResult->Record.GetStatus(), NKikimrProto::OK);
+            data.Runtime.GrabEdgeEventRethrow<TEvVPatchDyingRequest>(handle);
+            data.Runtime.Send(new IEventHandle(actor, edge, new TEvVPatchDyingConfirm));
+            data.WaitEndTest();
         }
 
         void ReceiveVPatchResult(TVPatchTestGeneralData &testData, NKikimrProto::EReplyStatus status) {

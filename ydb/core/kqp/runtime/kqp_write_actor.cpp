@@ -1353,20 +1353,15 @@ public:
         // (AttachWriteSeqNum) or when the write is inconsistent.
         YQL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
         if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
-            // The resend budget for this shard is exhausted. Inconsistent writes re-resolve
-            // straight away; consistent (WriteSeqNum) writes go through RetryShard so the
-            // number of consecutive re-resolves per shard stays bounded before failing.
+            // The resend budget for this shard is exhausted: re-resolve through RetryShard
+            // so the number of consecutive re-resolves per shard stays bounded before
+            // failing with UNAVAILABLE (the per-shard counter is cleared on a successful ack).
             YDB_LOG_WARN("Write retry limit exceeded for table.",
                 {"logPrefix", this->LogPrefix},
                 {"shardId", shardId},
                 {"tablePath", TablePath},
                 {"sink", this->SelfId()});
-            if (InconsistentTx) {
-                RetryResolve();
-            } else {
-                AFL_ENSURE(AttachWriteSeqNum);
-                RetryShard(shardId, metadata->Cookie);
-            }
+            RetryShard(shardId, metadata->Cookie);
             return false;
         }
 

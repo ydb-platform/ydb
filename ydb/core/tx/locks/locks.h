@@ -1361,6 +1361,7 @@ public:
     }
 
     bool RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& row, ILocksDb& db);
+    void RestoreConflictFromSplitSrc(ui64 lockId, ui64 conflictId, ILocksDb& db);
 
 private:
     THolder<TLocksDataShard> Self;

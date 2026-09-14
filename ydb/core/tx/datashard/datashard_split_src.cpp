@@ -237,6 +237,12 @@ public:
                 for (const auto& pathId : lock.GetWriteTables()) {
                     pathId.ToProto(srcLockInfo.AddWriteTables());
                 }
+
+                lock.ForAllConflicts([&](TLockInfo* otherLock) {
+                    if (Self->SysLocksTable().GetLocks().contains(otherLock->GetLockId())) {
+                        srcLockInfo.AddConflicts(otherLock->GetLockId());
+                    }
+                }, ELockConflictFlags::BreakThemOnOurCommit);
             }
         } else {
             Self->SrcLocksToTransfer.clear();

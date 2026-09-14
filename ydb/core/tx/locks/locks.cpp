@@ -2050,4 +2050,13 @@ bool TSysLocks::RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& r
     return true;
 }
 
+void TSysLocks::RestoreConflictFromSplitSrc(ui64 lockId, ui64 conflictId, ILocksDb& locksDb) {
+    auto* lock = Locker.FindLockPtr(lockId);
+    auto* otherLock = Locker.FindLockPtr(conflictId);
+    if (lock && otherLock) {
+        lock->RestorePersistentConflict(otherLock);
+        locksDb.PersistAddConflict(lockId, conflictId);
+    }
+}
+
 }}

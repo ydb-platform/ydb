@@ -256,6 +256,7 @@ public:
                 ->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
         if (lockTransferEnabled && record.LocksSize() > 0) {
             TDataShardLocksDb locksDb(*Self, txc);
+            TVector<std::pair<ui64, ui64>> pendingConflicts; // (lockId, conflictId)
             for (const auto& srcLockInfo : record.GetLocks()) {
                 if (!srcLockInfo.GetReadTables().empty()) {
                     // Skip if someone sent us a read lock.
@@ -308,6 +309,10 @@ public:
                     row.WriteTables.push_back(TPathId::FromProto(pathProto));
                 }
 
+                for (ui64 conflictId : srcLockInfo.GetConflicts()) {
+                    pendingConflicts.emplace_back(row.LockId, conflictId);
+                }
+
                 if (!Self->SysLocksTable().RestoreLockFromSplitSrc(
                         srcTabletId, std::move(row), locksDb)) {
                     YDB_LOG_WARN_CTX(ctx, "Too many locks, couldn't restore all",
@@ -316,6 +321,9 @@ public:
                         {"srcTabletId", srcTabletId});
                     break;
                 }
+            }
+            for (auto [lockId, conflictId] : pendingConflicts) {
+                Self->SysLocksTable().RestoreConflictFromSplitSrc(lockId, conflictId, locksDb);
             }
         }
 

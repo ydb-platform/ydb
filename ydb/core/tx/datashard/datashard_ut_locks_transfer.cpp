@@ -279,6 +279,87 @@ Y_UNIT_TEST(RollbackSimple) {
     UNIT_ASSERT(ev->Get()->OpenTxs.empty());
 }
 
+Y_UNIT_TEST_TWIN(ConflictsSimple, CommitInWriteOrder) {
+    TTestEnv env({});
+    auto [server, runtime, sender, tableId, shards] = env.GetAll();
+
+    // Start with a table with 2 shards
+    env.Split(0, 10);
+
+    TTransactionState tx1(runtime, NKikimrDataEvents::PESSIMISTIC_NONE);
+    tx1.WriterIndex = 123;
+    TTransactionState tx2(runtime, NKikimrDataEvents::OPTIMISTIC);
+    tx2.WriterIndex = 234;
+
+    // Tx1: lock and upsert a row to each of the shards.
+    UNIT_ASSERT_VALUES_EQUAL(tx1.LockRows(tableId, shards.at(0), {1}), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.Write(tableId, shards.at(0), TWriteOperation::Upsert(1, 100)),
+        "OK");
+
+    UNIT_ASSERT_VALUES_EQUAL(tx1.LockRows(tableId, shards.at(1), {15}), "OK");
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx1.Write(tableId, shards.at(1), TWriteOperation::Upsert(15, 1500)),
+        "OK");
+
+    // Tx2: upsert the same key on the second shard.
+    UNIT_ASSERT_VALUES_EQUAL(
+        tx2.Write(tableId, shards.at(1), TWriteOperation::Upsert(15, 1501)),
+        "OK");
+
+    // Merge into a single shard.
+    auto oldShards = shards;
+    env.Merge(0, 1);
+
+    for (auto tx : {&tx1, &tx2}) {
+        tx->MapAncestorShard(shards.at(0), oldShards.at(0));
+        tx->MapAncestorShard(shards.at(0), oldShards.at(1));
+    }
+
+    if (CommitInWriteOrder) {
+        // Commit tx1 first, tx2 should still be live.
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx1.WriteCommit(tableId, shards.at(0)),
+            "OK");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx2.Write(tableId, shards.at(0), TWriteOperation::Upsert(15, 1502)),
+            "OK");
+
+        // Commit tx2 and observe the results.
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx2.WriteCommit(tableId, shards.at(0)),
+            "OK");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { uint32_value: 1 } items { int32_value: 100 } }, "
+            "{ items { uint32_value: 15 } items { int32_value: 1502 } }");
+    } else {
+        // Commit tx2 first, this should abort tx1.
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx2.WriteCommit(tableId, shards.at(0)),
+            "OK");
+
+        // tx1 should be aborted, so additional updates should fail.
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx1.Write(tableId, shards.at(0), TWriteOperation::Upsert(1, 101)),
+            "ERROR: STATUS_LOCKS_BROKEN");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx1.WriteCommit(tableId, shards.at(0)),
+            "ERROR: STATUS_LOCKS_BROKEN");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` ORDER BY key;
+            )"),
+            "{ items { uint32_value: 15 } items { int32_value: 1501 } }");
+    }
+}
+
 } // Y_UNIT_TEST_SUITE(DataShardLocksTransfer)
 
 } // namespace NKikimr

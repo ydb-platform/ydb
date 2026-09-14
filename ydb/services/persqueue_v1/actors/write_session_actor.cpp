@@ -50,43 +50,6 @@ static constexpr ui64 MAX_METADATA_SIZE_PER_MESSAGE = 4096;
 
 static constexpr auto PARTITION_KEY_META_KEY = "__partition_key";
 
-template <EProtocol Protocol>
-ECodec<Protocol> CodecByName(const TString& codec) {
-    THashMap<TString, ECodec<Protocol>> codecsByName;
-    if constexpr (Protocol == EProtocol::PQv1) {
-        codecsByName = {
-            { "raw",  Ydb::PersQueue::V1::CODEC_RAW  },
-            { "gzip", Ydb::PersQueue::V1::CODEC_GZIP },
-            { "lzop", Ydb::PersQueue::V1::CODEC_LZOP },
-            { "zstd", Ydb::PersQueue::V1::CODEC_ZSTD },
-        };
-    }
-    if constexpr (Protocol == EProtocol::Topic) {
-        codecsByName = {
-            { "raw",  (i32)Ydb::Topic::CODEC_RAW  },
-            { "gzip", (i32)Ydb::Topic::CODEC_GZIP },
-            { "lzop", (i32)Ydb::Topic::CODEC_LZOP },
-            { "zstd", (i32)Ydb::Topic::CODEC_ZSTD },
-        };
-    }
-
-    auto codecIt = codecsByName.find(codec);
-    if (codecIt == codecsByName.end()) {
-        if constexpr (Protocol == EProtocol::PQv1) {
-            return Ydb::PersQueue::V1::CODEC_UNSPECIFIED;
-        }
-        if constexpr (Protocol == EProtocol::Topic) {
-            return (i32)Ydb::Topic::CODEC_UNSPECIFIED;
-        }
-        AFL_ENSURE(false)("reason", "Unsupported codec enum")("codec", codec);
-    }
-    return codecIt->second;
-}
-
-//explicit instantation
-template Ydb::PersQueue::V1::Codec CodecByName<EProtocol::PQv1>(const TString& codec);
-template i32 CodecByName<EProtocol::Topic>(const TString& codec);
-
 template <>
 inline void FillExtraFieldsForDataChunk(
     const Ydb::PersQueue::V1::StreamingWriteClientMessage::InitRequest& init,

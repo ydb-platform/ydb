@@ -110,13 +110,13 @@ class _PoolCounterMaxPoller:
     def _loop(self) -> None:
         while not self._stop.wait(self._interval):
             try:
-                u, t, w, d = self._read()
+                usage, throttle, waiting, demand = self._read()
             except Exception:
                 continue
-            self.max_usage_us = max(self.max_usage_us, u)
-            self.max_throttle_us = max(self.max_throttle_us, t)
-            self.max_waiting = max(self.max_waiting, w)
-            self.max_demand = max(self.max_demand, d)
+            self.max_usage_us = max(self.max_usage_us, usage)
+            self.max_throttle_us = max(self.max_throttle_us, throttle)
+            self.max_waiting = max(self.max_waiting, waiting)
+            self.max_demand = max(self.max_demand, demand)
 
     def _read(self) -> tuple[float, float, float, float]:
         metrics = YdbCluster.get_metrics(db_only=True, counters='kqp', metrics={
@@ -189,8 +189,8 @@ class TestS3CpuThrottleVerdict(S3WorkloadManagerFunctionalBase):
     # Minimum throttle CPU accounted to the pool in Phase C
     min_throttle_us: float = 100_000.0
 
-    # Seconds to wait after a query for the scheduler snapshot (default
-    # 500 ms) to capture the query's CPU.
+    # Seconds to wait after a query for the scheduler snapshot (scheduler
+    # default interval is 500 ms) to capture the query's CPU.
     snapshot_settle_sec: float = 2.0
 
     # -- Setup --------------------------------------------------------------
@@ -207,25 +207,27 @@ class TestS3CpuThrottleVerdict(S3WorkloadManagerFunctionalBase):
         classifier is needed (SDK routing bypasses the classifier)."""
         endpoint = get_external_param('s3-endpoint', 'https://storage.yandexcloud.net')
         bucket = get_external_param('s3-bucket', 'tpc')
-        sessions_pool = ydb.QuerySessionPool(YdbCluster.get_ydb_driver())
+        with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as sessions_pool:
+            try:
+                sessions_pool.execute_with_retries(f'''
+                    CREATE RESOURCE POOL {cls.pool_name} WITH (
+                        TOTAL_CPU_LIMIT_PERCENT_PER_NODE = {cls.cap_percent}
+                    );
+                ''')
+            except Exception as e:
+                if 'path exist' not in str(e).lower():
+                    raise
 
-        sessions_pool.execute_with_retries(f'''
-            CREATE RESOURCE POOL {cls.pool_name} WITH (
-                TOTAL_CPU_LIMIT_PERCENT_PER_NODE = {cls.cap_percent},
-                RESOURCE_WEIGHT = 4
-            );
-        ''')
-
-        # EDS: name = <_tables_path>/tpch_s3/s<scale> so it exists as a
-        # scheme entry at the expected path
-        eds_path = f'{YdbCluster.get_tables_path()}/tpch_s3/s{cls.scale}'
-        sessions_pool.execute_with_retries(f'''
-            CREATE OR REPLACE EXTERNAL DATA SOURCE `{eds_path}` WITH (
-                SOURCE_TYPE="ObjectStorage",
-                LOCATION="{endpoint}/{bucket}/",
-                AUTH_METHOD="NONE"
-            );
-        ''')
+            # EDS: name = <_tables_path>/tpch_s3/s<scale> so it exists as a
+            # scheme entry at the expected path
+            eds_path = f'{YdbCluster.get_tables_path()}/tpch_s3/s{cls.scale}'
+            sessions_pool.execute_with_retries(f'''
+                CREATE OR REPLACE EXTERNAL DATA SOURCE `{eds_path}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{endpoint}/{bucket}/",
+                    AUTH_METHOD="NONE"
+                );
+            ''')
 
     # -- Test ---------------------------------------------------------------
 
@@ -256,7 +258,7 @@ class TestS3CpuThrottleVerdict(S3WorkloadManagerFunctionalBase):
             f'demand_peak {c.pool_demand:.0f})'
         )
         # Visible in the test log even when all assertions pass.
-        print(report, flush=True)
+        # print(report, flush=True)
 
         # (0) Baseline: check that the query ran and consumed CPU on the node
         assert a.user_pool_cpu_us >= self.min_user_pool_cpu_us, (

@@ -1,5 +1,7 @@
 PY3TEST()
 
+# the test queries yandex storage bucket
+# like olap tests do
 TAG(ya:manual)
 
 TEST_SRCS(

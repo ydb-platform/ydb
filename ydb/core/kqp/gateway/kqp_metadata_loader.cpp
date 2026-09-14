@@ -1333,16 +1333,22 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         }
 
                         const bool useNewRouting = HasDatabaseNamesConfigured(federatedQuerySetup);
-                        if (useNewRouting &&
-                            resolveEntityInsideDataSource &&
+                        if (resolveEntityInsideDataSource &&
                             externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb))
                         {
-                            const auto& props = externalDataSourceMetadata.Metadata->ExternalSource.Properties.GetProperties();
-                            auto it = props.find("database_name");
-                            const TString databaseName = (it != props.end()) ? it->second : TString();
-                            if (!IsYdbDataSourceRoutedToConnector(databaseName, federatedQuerySetup)) {
-                                // Route to PQ provider (topic access).
-                                externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NYql::EDatabaseType::YdbTopics);
+                            // Temporary assertion: all YDB EDS resolution must have DatabaseNames configured.
+                            // This ensures the new DatabaseNames-based routing is used instead of the
+                            // deprecated GetSchemeEntryType heuristic. Remove after full rollout.
+                            AFL_VERIFY(useNewRouting)("DatabaseNames must be configured for YDB connector routing");
+
+                            if (useNewRouting) {
+                                const auto& props = externalDataSourceMetadata.Metadata->ExternalSource.Properties.GetProperties();
+                                auto it = props.find("database_name");
+                                const TString databaseName = (it != props.end()) ? it->second : TString();
+                                if (!IsYdbDataSourceRoutedToConnector(databaseName, federatedQuerySetup)) {
+                                    // Route to PQ provider (topic access).
+                                    externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NYql::EDatabaseType::YdbTopics);
+                                }
                             }
                         }
 

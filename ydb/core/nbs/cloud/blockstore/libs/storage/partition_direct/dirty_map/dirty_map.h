@@ -5,7 +5,8 @@
 #include "inflight_info.h"
 #include "range_locker.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_std_containers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/count_size.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
@@ -57,9 +58,10 @@ public:
     };
 
     TBlocksDirtyMap(
+        IArenaAllocatorPtr arenaAllocator,
         const TVChunkConfig& vChunkConfig,
         ui32 blockSize,
-        ui64 blockCount);
+        ui16 blockCount);
     ~TBlocksDirtyMap() override;
 
     void Load(const TDirtyMapStateProto& proto);
@@ -127,8 +129,8 @@ public:
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
         THostIndex host) const;
     [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex host) const;
-    [[nodiscard]] TCountAndSize GetAheadBlocks(THostIndex host) const;
-    [[nodiscard]] TCountAndSize GetBehindBlocks(THostIndex host) const;
+    [[nodiscard]] ui64 GetFreshTotalBytes(THostIndex host) const;
+    [[nodiscard]] ui64 GetRottenTotalBytes(THostIndex host) const;
 
     // ILockableRanges implementation
     void LockPBuffer(TPBufferKey pBufferKey) override;
@@ -141,6 +143,9 @@ public:
     // IReadyQueue implementation
     void Register(TPBufferKey pBufferKey, EQueueType queueType) override;
     void UnRegister(TPBufferKey pBufferKey, EQueueType queueType) override;
+    void InflightFlushFinished(
+        TPBufferKey pBufferKey,
+        THostIndex host) override;
     void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) override;
     void DataToPBufferAdded(
         THostIndex host,
@@ -163,6 +168,10 @@ public:
     void StatePersisted(ui32 persistGeneration);
     [[nodiscard]] ui32 GetCurrentGeneration() const;
 
+    // Memory usage.
+    [[nodiscard]] size_t GetAllocatedSize() const;
+    [[nodiscard]] size_t GetUsedSize() const;
+
     // Debug purposes
     [[nodiscard]] TString DebugPrintPBuffers();
     [[nodiscard]] TString DebugPrintPBuffersUsage() const;
@@ -177,7 +186,8 @@ public:
     [[nodiscard]] TString DebugPrintInflightSync();
 
 private:
-    using TInflightMap = TBlockRangeMap<TPBufferKey, TInflightInfo>;
+    using TPBufferKeySet = TArenaSet<TPBufferKey>;
+    using TInflightMap = TBlockRangeMap<TPBufferKey, TInflightInfo, true>;
     using TInflightDDiskReadsMap =
         TBlockRangeMap<ILockableRanges::TLockRangeHandle, THostMask>;
 
@@ -188,6 +198,8 @@ private:
 
         bool operator<(const TInfoEraseBelated& other) const;
     };
+
+    using TInfoEraseBelatedSet = TArenaSet<TInfoEraseBelated>;
 
     struct TInflightDDiskSync
     {
@@ -216,7 +228,6 @@ private:
         THostMask ddisks);
 
     [[nodiscard]] bool HasInflightFlush(THostIndex host, TBlockRange64 range);
-    void InflightFlushFinished(TBlockRange64 range);
 
     [[nodiscard]] bool HasOlderUnflushedOverlap(
         TPBufferKey pBufferKey,
@@ -226,9 +237,13 @@ private:
         TBlockRange64 range,
         TInflightInfo& inflightInfo);
 
-    const ui32 BlockSize;
-    const ui64 BlockCount;
+    void RemovePBuffer(TPBufferKey pBufferKey);
 
+    const IArenaAllocatorPtr ArenaAllocator;
+    const ui32 BlockSize;
+    const ui16 BlockCount;
+
+    TArenaAllocatorPool ArenaAllocatorPool{ArenaAllocator};
     THostMask DesiredDDisks;
     THostMask DisabledHosts;
 
@@ -241,13 +256,13 @@ private:
 
     // Ranges that are written PBuffers with quorum and ready to be flushed to
     // DDisk. Using TSet for O(1) min LSN access.
-    TSet<TPBufferKey> ReadyToFlush;
+    TPBufferKeySet ReadyToFlush{&ArenaAllocatorPool};
 
     // Ranges that are fully transferred to DDisk and can be erased.
     // Using TSet for O(1) min LSN access.
-    TSet<TPBufferKey> ReadyToErase;
+    TPBufferKeySet ReadyToErase{&ArenaAllocatorPool};
 
-    TSet<TInfoEraseBelated> ReadyToEraseBelated;
+    TInfoEraseBelatedSet ReadyToEraseBelated{&ArenaAllocatorPool};
 
     // In-flight reads and the locks they create.
     ILockableRanges::TLockRangeHandle InflightDDiskReadsGenerator = 0;

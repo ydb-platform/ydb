@@ -515,6 +515,13 @@ public:
         CurrentQuerySpanId = querySpanId;
     }
 
+    // Set collect_affected_rows for the current batch. The write actor may be
+    // reused across statements of an interactive tx (via the buffer actor),
+    // where each statement may have its own CollectAffectedRows setting.
+    void SetCollectAffectedRows(bool collectAffectedRows) {
+        CollectAffectedRows = collectAffectedRows;
+    }
+
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
         try {
@@ -1743,7 +1750,7 @@ private:
     const std::optional<NKikimrDataEvents::TMvccSnapshot> CommitMvccSnapshot;
 
     const NKikimrDataEvents::ELockMode LockMode;
-    const bool CollectAffectedRows;
+    bool CollectAffectedRows;
 
     const TString Database;
     const TTableId TableId;
@@ -3661,6 +3668,7 @@ public:
             if (!CheckSchemaVersion(actor, tableId, tablePath)) {
                 return nullptr;
             }
+            actor->SetCollectAffectedRows(settings.TransactionSettings.CollectAffectedRows);
             return actor;
         }
 
@@ -4262,6 +4270,8 @@ public:
                     settings.TablePath)) {
                 return std::nullopt;
             }
+            writeInfo.Actors.at(settings.TableId.PathId).WriteActor
+                ->SetCollectAffectedRows(settings.TransactionSettings.CollectAffectedRows);
         }
 
         // Ensure lock actor for main table (pessimistic_none only)

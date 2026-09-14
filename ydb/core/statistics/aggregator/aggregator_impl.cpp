@@ -569,6 +569,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse
         {"tabletId", TabletID()},
         {"success", ev->Get()->Success});
 
+    if (!SaveQueryActorId || ev->Sender != SaveQueryActorId) {
+        return;
+    }
+
     SaveQueryActorId = {};
 
     if (ev->Get()->Success) {
@@ -627,13 +631,20 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& e
     case EStatus::TableNotFound:
         DeleteStatisticsFromTable();
         return;
-    case EStatus::InternalError:
+    case EStatus::InternalError: {
+        const auto* table = CurrentForceTraversalTable();
         YDB_LOG_WARN("EvAnalyzeActorResult InternalError",
             {"tabletId", TabletID()},
-            {"pathId", TraversalPathId});
+            {"operationId", ForceTraversalOperationId.Quote()},
+            {"database", TraversalDatabase},
+            {"pathId", TraversalPathId},
+            {"tablePath", table ? table->Path : TString()},
+            {"analyzeActorId", ev->Sender},
+            {"issues", ev->Get()->Issues.ToOneLineString()});
         DispatchFinishTraversalTx(
             NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, std::move(ev->Get()->Issues));
         return;
+    }
     }
 }
 
@@ -703,8 +714,9 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
     };
 
     if (items.empty()) {
-        Send(SelfId(), new TEvStatistics::TEvSaveStatisticsQueryResponse(
-            Ydb::StatusIds::SUCCESS, {}, TraversalPathId));
+        if (!AnalyzeActorId) {
+            DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        }
         return;
     }
     size_t itemsSize = items.size();
@@ -1200,7 +1212,8 @@ void TStatisticsAggregator::StartAnalyzeActor(const TActorContext& ctx, const TS
     auto analyzeActorConfig = TAnalyzeActor::TConfig{
         .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
         .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
-        .WholeTableScanMaxBytes = StatisticsConfig.GetAnalyzeWholeTableScanMaxBytes(),
+        .ColumnTableWholeTableScanMaxBytes = StatisticsConfig.GetAnalyzeColumnTableWholeTableScanMaxBytes(),
+        .RowTableWholeTableScanMaxBytes = StatisticsConfig.GetAnalyzeRowTableWholeTableScanMaxBytes(),
         .TableBytesSize = GetTableBytesSize(pathId),
         .CollectPrimaryKeyHistogram = StatisticsConfig.GetAnalyzeCollectPrimaryKeyHistogram(),
         .HistogramOversampleFactor = oversampleFactor,
@@ -1221,6 +1234,8 @@ void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
         AnalyzeActorId = {};
     }
     SaveQueryActorId = {};
+    PendingSaveStatistics = false;
+    FinishingTraversal = false;
     PersistTraversal(db);
 
     StatisticsToSave.clear();

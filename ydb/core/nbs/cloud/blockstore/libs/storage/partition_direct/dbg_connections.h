@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
@@ -67,8 +67,12 @@ public:
         const NKikimr::NBsController::TDDiskId& pbufferId,
         ui32 dbgConnectionsConfigGeneration);
 
+    void MarkSlotDead(THostIndex host, ui32 dbgConnectionsConfigGeneration);
+
     [[nodiscard]] ui32 GetGeneration() const;
     [[nodiscard]] size_t GetSlotCount() const;
+    [[nodiscard]] size_t GetLiveSlotCount() const;
+    [[nodiscard]] bool IsSlotDead(THostIndex host) const;
 
     [[nodiscard]] const TVector<TDDiskConnection>& GetDDisks() const;
     [[nodiscard]] const TVector<TDDiskConnection>& GetPBuffers() const;
@@ -91,7 +95,7 @@ public:
 
 private:
     using TDDiskIdToHostIndex =
-        TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;
+        TMap<NKikimr::NBsController::TDDiskId, THostIndex>;
 
     const ui64 TabletId;
     const ui32 TabletGeneration;
@@ -102,6 +106,8 @@ private:
     TVector<TDDiskConnection> DDisks;
     TVector<TDDiskConnection> PBuffers;
     TDDiskIdToHostIndex PBufferIdToHostIndex;
+
+    THostMask DeadSlots;
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

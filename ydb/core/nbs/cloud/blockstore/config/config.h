@@ -44,6 +44,8 @@ public:
     [[nodiscard]] bool GetEnableChecksums() const;
     [[nodiscard]] bool GetCheckChecksumBeforeWrite() const;
     [[nodiscard]] bool GetCheckChecksumWhenRead() const;
+    [[nodiscard]] ui32 GetIdleSpinUs() const;
+    [[nodiscard]] ui64 GetIntegrityChecksumCacheBytes() const;
     [[nodiscard]] ui32 GetCopyRangeBandwidthMbs() const;
     [[nodiscard]] TDuration GetVChunkCountersUpdateInterval() const;
 

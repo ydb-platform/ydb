@@ -62,6 +62,13 @@ namespace NKikimr {
                 if ((local & Item->Needed).Empty()) {
                     return; // no useful parts here
                 }
+                // Metadata-only parts have no payload to read from PDisk.
+                for (ui32 i = local.FirstPosition(); i != local.GetSize(); i = local.NextPosition(i)) {
+                    const TLogoBlobID partId(key.LogoBlobID(), i + 1);
+                    if (Item->Needed.Get(i) && !GType.PartSize(partId)) {
+                        Item->SetPartData(partId, TRope());
+                    }
+                }
                 TDiskDataExtractor extr;
                 memRec.GetDiskData(&extr, outbound);
                 switch (extr.BlobType) {

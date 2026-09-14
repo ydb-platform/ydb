@@ -305,13 +305,13 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 if (indexPath.IsResolved() && indexPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
                     TPathId indexPathId = indexPath.Base()->PathId;
                     if (context.SS->Indexes.contains(indexPathId)) {
-                        auto oldVersion = context.SS->Indexes[indexPathId]->AlterVersion;
+                        auto oldVersion = context.SS->Indexes.at(indexPathId)->AlterVersion;
 
                         // Use the coordinated version stored before FinishAlter
                         ui64 targetVersion = coordVersion;
 
-                        if (context.SS->Indexes[indexPathId]->AlterVersion < targetVersion) {
-                            auto index = context.SS->Indexes[indexPathId];
+                        if (context.SS->Indexes.at(indexPathId)->AlterVersion < targetVersion) {
+                            auto index = context.SS->Indexes.at(indexPathId);
                             index->AlterVersion = targetVersion;
                             if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
                                 index->AlterData->AlterVersion = targetVersion;
@@ -320,7 +320,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
 
                             LOG_I("SyncIndexSchemaVersions: Index AlterVersion updated from "
-                                  << oldVersion << " to " << context.SS->Indexes[indexPathId]->AlterVersion);
+                                  << oldVersion << " to " << context.SS->Indexes.at(indexPathId)->AlterVersion);
 
                             context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
 

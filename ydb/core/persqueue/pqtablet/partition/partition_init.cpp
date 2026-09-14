@@ -1310,10 +1310,11 @@ void TPartition::Initialize(const TActorContext& ctx) {
             Config.GetYdbDatabasePath(), Config.GetOffloadConfig()));
     }
 
-    YDB_LOG_INFO_COMP(Service, "Bootstrapping",
-        {"logPrefix", NPQ_LOG_PREFIX},
+    LOG_I(
+        "Bootstrapping",
         {"partition", Partition},
-        {"selfId", ctx.SelfID});
+        {"selfId", ctx.SelfID}
+    );
 
     if (AppData(ctx)->Counters) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {

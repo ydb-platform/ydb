@@ -1,6 +1,7 @@
 #include "agent_impl.h"
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/blob_depot/s3_error.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
@@ -9,12 +10,6 @@
 #define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
 
 namespace NKikimr::NBlobDepot {
-
-    static bool IsSlowDown(const Aws::S3::S3Error& error) {
-        return error.GetErrorType() == Aws::S3::S3Errors::SLOW_DOWN
-            || error.GetExceptionName() == "SlowDown"
-            || error.GetExceptionName() == "TooManyRequests";
-    }
 
     void TBlobDepotAgent::InitS3(const TString& name) {
         if (S3BackendSettings) {
@@ -114,7 +109,7 @@ namespace NKikimr::NBlobDepot {
                 const auto& error = msg.GetError();
                 Agent.IncS3HttpErrorCounter("Gets", static_cast<int>(error.GetResponseCode()));
 
-                if (IsSlowDown(error)) {
+                if (IsS3SlowDown(error)) {
                     ++*Agent.S3GetsSlowDown;
                     YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "S3_get_slow_down",
                         {"marker", "BDEV43"},
@@ -297,7 +292,7 @@ namespace NKikimr::NBlobDepot {
                     Finish(std::nullopt, false);
                 } else {
                     const auto& error = msg.GetError();
-                    Finish(std::make_optional<TString>(error.GetMessage()), IsSlowDown(error),
+                    Finish(std::make_optional<TString>(error.GetMessage()), IsS3SlowDown(error),
                         static_cast<int>(error.GetResponseCode()));
                 }
             }

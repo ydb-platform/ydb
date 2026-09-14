@@ -8,7 +8,9 @@ DDisk shares PDisk and slot-management infrastructure with VDisk, but implements
 
 [NodeWarden](node-warden.md) creates a DDisk actor for a slot configured as DDisk. The actor initializes its PDisk owner, restores chunk-map snapshots and log increments, restores integrity mappings, and creates its [PersistentBuffer](persistent-buffer.md) child. The child has its own service ID and event handlers but shares the parent's PDisk ownership and PB resource lifecycle.
 
-Data I/O uses `TUringRouter` when the device handle, platform, and probe allow it. `ForcePDiskFallback` selects the PDisk raw-event path, and unavailable io_uring support also falls back. In that path, `TEvChunkReadRaw` and `TEvChunkWriteRaw` carry PDisk owner and owner round. Logging and chunk management continue to use PDisk services with either data-I/O backend.
+Unless `ForcePDiskFallback` is set, DDisk asks for a submit-only io_uring client in `TEvYardInit` and passes its configured `IdleSpinUs`. On the first such request, PDisk duplicates its device handle and creates and starts one `TUringRouter` shared by the DDisk slots and their PB children. The first requester therefore selects `IdleSpinUs` for the shared router for that PDisk incarnation; later requesters use the existing setting. DDisk and PB hold shared `IUringRouterClient` references and cannot control the router lifecycle.
+
+`ForcePDiskFallback` opts out of the shared router and selects the PDisk raw-event path. An unavailable device handle, unsupported platform, or failed io_uring probe also falls back. In that path, `TEvChunkReadRaw` and `TEvChunkWriteRaw` carry PDisk owner and owner round. Logging and chunk management continue to use PDisk services with either data-I/O backend.
 
 ## Sessions {#sessions}
 
@@ -24,7 +26,9 @@ Internal DDisk/PB forwarding uses `TQueryCredentials::ForInternal`. This has dif
 
 `TBlockSelector` contains `VChunkIndex`, `OffsetInBytes`, and `Size`. Data chunk mappings are keyed by `(TabletId, VChunkIndex)`. The direct block group index separates sessions and PB namespaces; it does not add another dimension to the DDisk data chunk map. Clients sharing a DDisk under one tablet must therefore assign virtual chunk indexes consistently across their DBGs.
 
-Reads and writes operate on nonempty ranges aligned to the 4 KiB integrity unit and contained within a PDisk chunk. The direct write handler additionally requires a contiguous payload aligned to the device sector size. Use the event payload helpers and an appropriate aligned buffer; the payload ID is an event-local reference, not a persistent data identifier.
+Reads and writes operate on nonempty ranges aligned to the 4 KiB integrity unit and contained within a PDisk chunk. Write payloads may be fragmented or have unaligned buffer addresses: direct I/O preparation copies them into aligned storage when needed, while suitably aligned rope chunks can use scatter/gather I/O. Use the event payload helpers; the payload ID is an event-local reference, not a persistent data identifier.
+
+The `interface/UnalignedWritePayloads` counter counts incoming writes with fragmented payloads or buffer addresses not aligned to the device sector size. Each request is counted once, including when chunk allocation or write serialization delays its execution.
 
 The first write to a virtual chunk can park while data and integrity resources are allocated. With checksums enabled, a write acknowledgment waits for both the data write and the integrity update. Writes to the same integrity extent are serialized through that path; independent extents can proceed concurrently.
 
@@ -50,7 +54,79 @@ The operation reports `TEvSyncResult` after processing its destination work. It 
 
 Chunk-map snapshots and PDisk log increments restore ownership and integrity-extent mappings. PB then performs its own chunk scan and record recovery. Connection state must be re-established by clients after service replacement.
 
-Fatal PDisk or integrity failures can put the actor into its broken/termination path and fail parked work. Review failure handling alongside normal completions: pending chunk allocation, serialized writes, sync reads, and PB operations can all outlive the event that initiated shutdown.
+## Shutdown and Restart {#shutdown-and-restart}
+
+DDisk and PB must always wait for their accepted asynchronous router I/O and
+callbacks before acknowledging shutdown. Neither actor may publish Gone while
+those callbacks still own its state. The PDisk fallback path instead cancels
+actor-owned requests and processes their terminal results before Gone; the
+PDisk stop barrier below drains the underlying device I/O.
+
+PDisk session loss starts the same idempotent Stopping state as poison, but
+only poison authorizes actor death and the shutdown acknowledgement. Stopping
+rejects new requests with `SESSION_MISMATCH`, cancels actor-owned fallback I/O
+and parked retries, and continues processing submitted I/O results. Cancellation
+balances counters and publishes results before the final mailbox barrier.
+Existing completions may finish writes only when their integrity and allocation
+log durability conditions are satisfied; shutdown starts no further I/O.
+
+DDisk and PB drain their own I/O concurrently. PB releases its router reference
+before sending `TEvGone` to its concrete parent actor. The parent waits for both
+drains, releases its router reference, then notifies Warden. Tracked child poison
+handles an already absent PB; duplicate poison and notifications are harmless.
+After 60 seconds each actor with outstanding callbacks contributes one to
+`ddisks/io_stalled`, cleared as soon as its own drain finishes. Waiting for PB is
+reported separately. Normal shutdown waits indefinitely for stalled I/O.
+
+The callback retirement count and stopping flag share one atomic state. Callback
+cleanup and result publication precede retirement; completion and retry
+cancellation events finish before actor destruction. Forced actor destruction
+retains all members while waiting up to 10 seconds using monotonic time, then
+aborts if callbacks still own actor state. This forced-destruction deadline is
+separate from the 60-second stalled-I/O diagnostic and does not bound normal
+shutdown waits.
+
+Critical integrity/formatting overload errors permit 20 resubmissions, delayed
+by `min(1 ms × 2^(retry−1), 100 ms)`. The immediate callback event transfers the
+operation to an actor-owned map; timers contain only IDs. Broken/Stopping cancels
+parked operations and stale timers do nothing. Exhaustion returns `ERROR` with
+attempt count and last errno; ordinary-I/O error mapping is unchanged.
+
+PB restore consumes payloads only after successful reads. The first failed read
+enters Broken and fails queued requests with `ERROR`; late completions only
+retire accounting and cannot parse data, resume recovery or publish readiness.
+The restore set continues to mean chunks already scheduled.
+
+For a NodeWarden-requested PDisk restart, NodeWarden first requests shutdown of
+all affected DDisk actor incarnations. Each DDisk requests shutdown of its PB
+and waits for its own drain and the concrete child's `TEvGone`. Only after the
+last DDisk's Gone does NodeWarden send PDisk restart permission. Replacement
+DDisk/PB startup remains fenced while waiting for these actors and while the
+PDisk restart is in flight. The order is therefore PB drain/Gone and DDisk drain,
+then DDisk Gone, then PDisk restart permission; the two drains may finish in
+either order.
+
+A replacement PDisk cannot begin device I/O until the previous PDisk's I/O has
+retired. `TPDisk::Stop()` always calls the shared router's `StopSync()`, even if
+DDisk/PB or retained initialization results still hold router clients. This
+closes admission, waits for publishers and terminal callbacks, joins the issuer,
+retires the ring, and closes the router's duplicated device descriptor. PDisk
+then stops its source block device before replacement bootstrap. An old client
+can outlive this barrier, but it rejects new work and no longer owns an active
+ring or device descriptor. Healthy draining has no timeout; failure to retire
+kernel ownership on a broken ring aborts the process instead of permitting
+replacement startup with old I/O still live.
+
+The same synchronous I/O barrier applies when PDisk stops or restarts
+independently of the NodeWarden-requested sequence. DDisk and PB observe the
+stopped router on a rejected submission and enter Stopping; PDisk session loss
+also enters Stopping. There is no unsolicited router notification to an idle
+actor. PDisk waits for accepted router operations and their callbacks to retire,
+which protects actor state while those callbacks run. This barrier does not wait
+for the actors' final mailbox processing or Gone notifications. Those actors
+still drain their results, and poison remains required before actor death and
+notification to Warden. Do not equate this independent I/O barrier with the
+additional actor-Gone ordering of a requested restart.
 
 `TEvDeleteTabletChunks` retires a tablet's data chunk mappings. While deletion is in flight, writes and sync requests for that tablet can return `BUSY`. Controller claim removal and local chunk deletion are separate operations; callers must arrange their order and retire outstanding client work.
 

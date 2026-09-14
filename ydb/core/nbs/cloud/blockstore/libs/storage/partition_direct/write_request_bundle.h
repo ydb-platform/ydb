@@ -2,7 +2,7 @@
 
 #include "public.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>

@@ -20,6 +20,13 @@ public:
     void Bootstrap();
     void PassAway() override;
 
+protected:
+    TLogPrefix BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "MLPWriter"},
+            {"topic", Settings.TopicName});
+    }
+
 private:
 
     void DoDescribe();
@@ -58,7 +65,7 @@ private:
         ui64 Offset = 0;
     };
     std::vector<TPendingMessage> PendingMessages;
-    NDescriber::EStatus DescribeStatus = NDescriber::EStatus::UNKNOWN_ERROR;
+    NDescriber::EStatus DescribeStatus = NDescriber::EStatus::UnknownError;
 };
 
 } // namespace NKikimr::NPQ::NMLP

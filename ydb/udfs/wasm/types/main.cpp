@@ -1,0 +1,523 @@
+#include <ydb/services/udf_store/wasm/abi/bridge.h>
+#include <ydb/services/udf_store/wasm/abi/bridge_abi.h>
+#include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
+
+#include <cstdlib>
+#include <cstring>
+
+using namespace NYdb::NUdfStore::NAbi;
+
+namespace {
+
+void SetNull(uint64_t* result) {
+    *result = MakeNull().Release();
+}
+
+void SetInt64(uint64_t* result, int64_t value) {
+    *result = MakeInt64(value).Release();
+}
+
+void SetUint64(uint64_t* result, uint64_t value) {
+    *result = MakeUint64(value).Release();
+}
+
+void SetInt32(uint64_t* result, int32_t value) {
+    *result = BridgeMakeInt32(value);
+}
+
+void SetUint32(uint64_t* result, uint32_t value) {
+    *result = BridgeMakeUint32(value);
+}
+
+void SetFloat(uint64_t* result, float value) {
+    *result = BridgeMakeFloat(value);
+}
+
+void SetDouble(uint64_t* result, double value) {
+    *result = MakeDouble(value).Release();
+}
+
+void SetBool(uint64_t* result, bool value) {
+    *result = MakeBool(value).Release();
+}
+
+int64_t DecimalChecksum(uint64_t handle) {
+    alignas(16) unsigned char bytes[16];
+    BridgeCopyDecimal(handle, reinterpret_cast<uint64_t>(bytes));
+    int64_t sum = 0;
+    for (unsigned char byte : bytes) {
+        sum += byte;
+    }
+    return sum;
+}
+
+uint64_t* AllocHandles(size_t count) {
+    auto* handles = static_cast<uint64_t*>(malloc(count * sizeof(uint64_t)));
+    if (!handles) {
+        ThrowException("BridgeTypes: malloc failed");
+    }
+    return handles;
+}
+
+//! Sum of every Int64 in a List<List<Int64>>. Each item of the outer list is a
+//! list itself, read through the same range as the outer one: the item handle
+//! needs no unwrapping, only a non-owning view, since the range still owns it.
+int64_t SumNestedIntLists(uint64_t listH) {
+    TBridgeList outer(listH, /*owned*/ false);
+    int64_t sum = 0;
+    for (auto row : outer.Items()) {
+        TBridgeList inner(row.Get(), /*owned*/ false);
+        for (auto item : inner.Items()) {
+            sum += BridgeGetInt64(item.Get());
+            item.Reset();
+        }
+        row.Reset();
+    }
+    return sum;
+}
+
+//! Two-item Int64 list, typed from the declared result type: the items name a
+//! List<Int64> and nothing else, so the host has one candidate to pick.
+uint64_t MakeIntListInferred(int64_t first, int64_t second) {
+    uint64_t* items = AllocHandles(2);
+    items[0] = MakeInt64(first).Release();
+    items[1] = MakeInt64(second).Release();
+    const uint64_t list = BridgeMakeList(reinterpret_cast<uint64_t>(items), 2);
+    free(items);
+    return list;
+}
+
+//! Same list, but of the type `listType` names. Needed wherever the result
+//! declares several Lists the items cannot be told apart by.
+uint64_t MakeIntListOfType(uint64_t listType, int64_t first, int64_t second) {
+    uint64_t* items = AllocHandles(2);
+    items[0] = MakeInt64(first).Release();
+    items[1] = MakeInt64(second).Release();
+    const uint64_t list = BridgeMakeListTyped(listType, reinterpret_cast<uint64_t>(items), 2);
+    free(items);
+    return list;
+}
+
+} // namespace
+
+extern "C" {
+
+// ---- leaf scalars (echo where BridgeMake* exists) ----
+
+__attribute__((visibility("default"))) void echo_bool(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    SetBool(result, BridgeGetBool(arg) != 0);
+}
+
+__attribute__((visibility("default"))) void echo_int32(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    SetInt32(result, BridgeGetInt32(arg));
+}
+
+__attribute__((visibility("default"))) void echo_uint32(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    SetUint32(result, BridgeGetUint32(arg));
+}
+
+__attribute__((visibility("default"))) void echo_int64(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    SetInt64(result, BridgeGetInt64(arg));
+}
+
+__attribute__((visibility("default"))) void echo_uint64(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    SetUint64(result, BridgeGetUint64(arg));
+}
+
+__attribute__((visibility("default"))) void echo_float(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    SetFloat(result, BridgeGetFloat(arg));
+}
+
+__attribute__((visibility("default"))) void echo_double(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    SetDouble(result, BridgeGetDouble(arg));
+}
+
+__attribute__((visibility("default"))) void echo_string(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    TBridgeString value(arg, /*owned*/ false);
+    const int64_t len = value.Len();
+    if (len == 0) {
+        *result = MakeString("", 0).Release();
+        return;
+    }
+    char* buf = static_cast<char*>(malloc(static_cast<size_t>(len)));
+    if (!buf) {
+        ThrowException("echo_string: malloc failed");
+    }
+    value.CopyTo(buf, len);
+    *result = MakeString(buf, len).Release();
+    free(buf);
+}
+
+//! Utf8 is read with string intrinsics; BridgeMakeString returns String bytes.
+__attribute__((visibility("default"))) void echo_utf8(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    echo_string(/*ctx*/ nullptr, result, arg);
+}
+
+// ---- leaf scalars (read-only makers: widen to Uint64 / checksum) ----
+
+__attribute__((visibility("default"))) void read_date_as_uint64(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    SetUint64(result, BridgeGetUint64(arg));
+}
+
+__attribute__((visibility("default"))) void read_datetime_as_uint32(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    SetUint32(result, BridgeGetUint32(arg));
+}
+
+__attribute__((visibility("default"))) void read_timestamp_as_uint64(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    SetUint64(result, BridgeGetUint64(arg));
+}
+
+__attribute__((visibility("default"))) void read_decimal_checksum(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t arg)
+{
+    if (BridgeIsNull(arg)) {
+        SetNull(result);
+        return;
+    }
+    SetInt64(result, DecimalChecksum(arg));
+}
+
+// ---- containers ----
+
+__attribute__((visibility("default"))) void list_sum_int64(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t listH)
+{
+    TBridgeList list(listH, /*owned*/ false);
+    int64_t sum = 0;
+    for (auto item : list.Items()) {
+        sum += BridgeGetInt64(item.Get());
+        item.Reset();
+    }
+    SetInt64(result, sum);
+}
+
+//! A nested container on the way in: List<List<Int64>> folded to one number.
+__attribute__((visibility("default"))) void nested_list_sum_int64(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t listH)
+{
+    SetInt64(result, SumNestedIntLists(listH));
+}
+
+//! Dict<String, List<List<Int64>>> -> Dict<String, Int64>: every key keeps its
+//! payload's total. The dict is walked with an iterator, and the pairs are
+//! collected before the call because BridgeMakeDict takes them all at once --
+//! which is also why the keys the iterator handed over are released only after
+//! that call has copied them.
+__attribute__((visibility("default"))) void dict_nested_list_sums(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t dictH)
+{
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    const int64_t length = BridgeDictLength(dictH);
+    if (length == 0) {
+        *result = BridgeMakeDict(resultType.Get(), /*pairsOff*/ 0, 0);
+        return;
+    }
+
+    uint64_t* pairs = AllocHandles(static_cast<size_t>(length) * 2);
+    TBridgeValue iter(BridgeDictMakeIterator(dictH), /*owned*/ true);
+    int64_t pairCount = 0;
+    uint64_t keyHandle = 0;
+    uint64_t payloadHandle = 0;
+    while (pairCount < length
+        && BridgeDictIterNext(iter.Get(), &keyHandle, &payloadHandle) != 0)
+    {
+        TBridgeValue payload(payloadHandle, /*owned*/ true);
+        pairs[pairCount * 2] = keyHandle;
+        pairs[pairCount * 2 + 1] = MakeInt64(SumNestedIntLists(payload.Get())).Release();
+        ++pairCount;
+    }
+
+    *result = BridgeMakeDict(
+        resultType.Get(),
+        reinterpret_cast<uint64_t>(pairs),
+        static_cast<int32_t>(pairCount));
+    for (int64_t i = 0; i < pairCount; ++i) {
+        BridgeUnref(pairs[i * 2]);
+    }
+    free(pairs);
+}
+
+__attribute__((visibility("default"))) void dict_get_int64(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t dictH, uint64_t keyH)
+{
+    TBridgeDict dict(dictH, /*owned*/ false);
+    TBridgeString key(keyH, /*owned*/ false);
+    auto payload = dict.Lookup(key);
+    if (!payload) {
+        SetNull(result);
+        return;
+    }
+    *result = MakeOptional(MakeInt64(BridgeGetInt64(payload.Get()))).Release();
+    payload.Reset();
+}
+
+__attribute__((visibility("default"))) void tuple_kind_sum(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t tupleH)
+{
+    int64_t sum = 0;
+    const int32_t count = BridgeGetMemberCount(tupleH);
+    for (int32_t i = 0; i < count; ++i) {
+        TBridgeValue element(BridgeGetElement(tupleH, i), /*owned*/ true);
+        sum += BridgeGetKind(element.Get());
+        element.Reset();
+    }
+    SetInt64(result, sum);
+}
+
+__attribute__((visibility("default"))) void struct_get_score(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t structH)
+{
+    const int32_t index = BridgeGetMemberIndex(
+        structH,
+        reinterpret_cast<uint64_t>("score"),
+        5);
+    if (index < 0) {
+        SetNull(result);
+        return;
+    }
+    TBridgeValue score(BridgeGetElement(structH, index), /*owned*/ true);
+    if (!score) {
+        SetNull(result);
+        return;
+    }
+    SetFloat(result, BridgeGetFloat(score.Get()));
+    score.Reset();
+}
+
+__attribute__((visibility("default"))) void variant_index(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t variantH)
+{
+    SetInt64(result, BridgeGetVariantIndex(variantH));
+}
+
+__attribute__((visibility("default"))) void optional_list_present_count(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t listH)
+{
+    TBridgeList list(listH, /*owned*/ false);
+    int64_t present = 0;
+    for (auto item : list.Items()) {
+        // Optional<Int64> is marker-represented: the item is the payload
+        // itself, reported with the payload's kind, so there is no Optional
+        // node to unwrap and a null check is the whole test.
+        if (item) {
+            ++present;
+        }
+        item.Reset();
+    }
+    SetInt64(result, present);
+}
+
+__attribute__((visibility("default"))) void resource_tag_len(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t resourceH)
+{
+    if (BridgeIsNull(resourceH)) {
+        SetNull(result);
+        return;
+    }
+    SetInt64(result, BridgeGetResourceTagLen(resourceH));
+}
+
+// ---- makers ----
+
+__attribute__((visibility("default"))) void make_greeting_struct(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    static const char kMsg[] = "hello";
+    uint64_t* members = AllocHandles(2);
+    members[0] = MakeString(kMsg, static_cast<int64_t>(sizeof(kMsg) - 1)).Release();
+    members[1] = MakeInt64(42).Release();
+    *result = BridgeMakeStruct(reinterpret_cast<uint64_t>(members), 2);
+    free(members);
+}
+
+__attribute__((visibility("default"))) void make_int_list(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    uint64_t* items = AllocHandles(3);
+    items[0] = MakeInt64(1).Release();
+    items[1] = MakeInt64(2).Release();
+    items[2] = MakeInt64(3).Release();
+    *result = BridgeMakeList(reinterpret_cast<uint64_t>(items), 3);
+    free(items);
+}
+
+__attribute__((visibility("default"))) void make_name_dict(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    static const char kKey[] = "answer";
+    uint64_t* pairs = AllocHandles(2);
+    pairs[0] = MakeString(kKey, static_cast<int64_t>(sizeof(kKey) - 1)).Release();
+    pairs[1] = MakeInt64(42).Release();
+    *result = BridgeMakeDict(BridgeGetResultType(), reinterpret_cast<uint64_t>(pairs), 1);
+    free(pairs);
+}
+
+__attribute__((visibility("default"))) void make_variant_uint32(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    *result = MakeVariant(0, TBridgeValue(BridgeMakeUint32(5))).Release();
+}
+
+// ---- makers: nested and repeated containers ----
+
+//! Nesting the declared result type resolves on its own. The guest builds
+//! bottom-up, so BridgeMakeList is called twice with the same result type in
+//! scope: Int64 items name the inner List<Int64>, and lists of them name the
+//! outer List<List<Int64>>.
+__attribute__((visibility("default"))) void make_nested_int_lists(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    uint64_t* inner = AllocHandles(2);
+    inner[0] = MakeIntListInferred(1, 2);
+    inner[1] = MakeIntListInferred(3, 4);
+    *result = BridgeMakeList(reinterpret_cast<uint64_t>(inner), 2);
+    free(inner);
+}
+
+//! Two members of the same type: nothing about two Int64 items says which of
+//! the declared Lists they belong to, so each is named with BridgeTypeMember
+//! and built with BridgeMakeListTyped. The outer Tuple is the only two-member
+//! Tuple declared, which leaves BridgeMakeArray one candidate.
+__attribute__((visibility("default"))) void make_int_list_pair(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    TBridgeValue firstType(BridgeTypeMember(resultType.Get(), 0), /*owned*/ true);
+    TBridgeValue secondType(BridgeTypeMember(resultType.Get(), 1), /*owned*/ true);
+
+    uint64_t* members = AllocHandles(2);
+    members[0] = MakeIntListOfType(firstType.Get(), 1, 2);
+    members[1] = MakeIntListOfType(secondType.Get(), 3, 4);
+    *result = BridgeMakeArray(reinterpret_cast<uint64_t>(members), 2);
+    free(members);
+}
+
+//! A Struct inside a Struct of the same member count: the inner one is named
+//! explicitly, while the outer is picked by its own members (a string and a
+//! struct fit no other declaration). Members go in declared order.
+__attribute__((visibility("default"))) void make_labelled_point(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    static const char kLabel[] = "origin";
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    TBridgeValue pointType(BridgeTypeMember(resultType.Get(), 1), /*owned*/ true);
+
+    uint64_t* coords = AllocHandles(2);
+    coords[0] = MakeInt64(3).Release();
+    coords[1] = MakeInt64(4).Release();
+    const uint64_t point =
+        BridgeMakeStructTyped(pointType.Get(), reinterpret_cast<uint64_t>(coords), 2);
+    free(coords);
+
+    uint64_t* members = AllocHandles(2);
+    members[0] = MakeString(kLabel, static_cast<int64_t>(sizeof(kLabel) - 1)).Release();
+    members[1] = point;
+    *result = BridgeMakeStruct(reinterpret_cast<uint64_t>(members), 2);
+    free(members);
+}
+
+//! An Optional result: what the guest has to build sits under the wrapper, and
+//! BridgeTypeOptionalItem is what peels it before the members are named.
+__attribute__((visibility("default"))) void make_optional_int_list_pair(
+    TExpressionContext* /*ctx*/, uint64_t* result)
+{
+    TBridgeValue resultType(BridgeGetResultType(), /*owned*/ true);
+    TBridgeValue pairType(BridgeTypeOptionalItem(resultType.Get()), /*owned*/ true);
+    TBridgeValue firstType(BridgeTypeMember(pairType.Get(), 0), /*owned*/ true);
+    TBridgeValue secondType(BridgeTypeMember(pairType.Get(), 1), /*owned*/ true);
+
+    uint64_t* members = AllocHandles(2);
+    members[0] = MakeIntListOfType(firstType.Get(), 5, 6);
+    members[1] = MakeIntListOfType(secondType.Get(), 7, 8);
+    *result = BridgeMakeArrayTyped(pairType.Get(), reinterpret_cast<uint64_t>(members), 2);
+    free(members);
+}
+
+// ---- callable ----
+
+__attribute__((visibility("default"))) void run_callable_int64(
+    TExpressionContext* /*ctx*/, uint64_t* result, uint64_t callableH, uint64_t argH)
+{
+    if (BridgeIsNull(callableH)) {
+        SetNull(result);
+        return;
+    }
+    uint64_t args[1] = {argH};
+    const uint64_t out = BridgeRun(callableH, reinterpret_cast<uint64_t>(args), 1);
+    if (BridgeIsNull(out)) {
+        SetNull(result);
+        return;
+    }
+    SetInt64(result, BridgeGetInt64(out));
+    BridgeUnref(out);
+}
+
+} // extern "C"

@@ -1,4 +1,5 @@
 #include "s3.h"
+#include "s3_error.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/wrappers/abstract.h>
@@ -37,11 +38,6 @@ namespace NKikimr::NBlobDepot {
             ->GetCounter("", true) += count;
     }
 
-    static bool IsSlowDown(const Aws::S3::S3Error& error) {
-        return error.GetErrorType() == Aws::S3::S3Errors::SLOW_DOWN
-            || error.GetExceptionName() == "SlowDown";
-    }
-
     class TS3Manager::TDeleterActor : public TActor<TDeleterActor> {
         TActorId ParentId;
         THashMap<TString, TS3Locator> Locators;
@@ -63,7 +59,7 @@ namespace NKikimr::NBlobDepot {
                 Finish(std::nullopt);
             } else if (const auto& error = msg.GetError(); error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY) {
                 Finish(std::nullopt);
-            } else if (IsSlowDown(error)) {
+            } else if (IsS3SlowDown(error)) {
                 Finish(error.GetMessage().c_str(), /*throttled=*/true);
             } else {
                 Finish(error.GetMessage().c_str(), /*throttled=*/false,
@@ -113,12 +109,13 @@ namespace NKikimr::NBlobDepot {
                             locatorsOk.push_back(it->second);
                             Locators.erase(it);
                         }
-                    } else if (error.KeyHasBeenSet() && error.GetCode() == "SlowDown") {
+                    } else if (error.KeyHasBeenSet() && IsS3SlowDownCode(error.GetCode())) {
                         if (const auto it = Locators.find(error.GetKey().c_str()); it != Locators.end()) {
                             YDB_LOG_WARN("S3 SlowDown for object",
                                 {"marker", "BDTS19"},
                                 {"id", LogId},
                                 {"locator", it->second},
+                                {"code", error.GetCode().c_str()},
                                 {"error", error.GetMessage().c_str()});
                             YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Deleted_from_S3:SlowDown",
                                 {"marker", "BDEV39"},
@@ -135,7 +132,7 @@ namespace NKikimr::NBlobDepot {
                             {"error", error.GetMessage().c_str()});
                     }
                 }
-            } else if (IsSlowDown(msg.GetError())) {
+            } else if (IsS3SlowDown(msg.GetError())) {
                 requestThrottled = true;
                 YDB_LOG_WARN("S3 SlowDown for batch delete",
                     {"marker", "BDTS20"},

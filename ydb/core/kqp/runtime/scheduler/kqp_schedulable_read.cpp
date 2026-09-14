@@ -130,9 +130,9 @@ TSchedulableReadFactory::TSchedulableReadFactory(TComputeSchedulerPtr scheduler)
 }
 
 TSchedulableReadPtr TSchedulableReadFactory::Get(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId) const {
-    const auto databaseAndPoolId = std::make_pair(databaseId, poolId);
+    const NHdrf::TFullPoolId fullPoolId{databaseId, poolId};
 
-    if (auto readIt = ReadsCache.find(databaseAndPoolId); readIt != ReadsCache.end()) {
+    if (auto readIt = ReadsCache.find(fullPoolId); readIt != ReadsCache.end()) {
         if (auto result = readIt->second.lock()) {
             return result;
         }
@@ -141,7 +141,7 @@ TSchedulableReadPtr TSchedulableReadFactory::Get(const NHdrf::TDatabaseId& datab
 
     if (auto query = Scheduler->GetReadQuery(databaseId, poolId)) {
         auto result = std::make_shared<TSchedulableRead>(query);
-        ReadsCache.emplace(databaseAndPoolId, result);
+        ReadsCache.emplace(fullPoolId, result);
         return result;
     }
 
@@ -152,7 +152,7 @@ TSchedulableReadPtr TSchedulableReadFactory::Get(const NHdrf::TDatabaseId& datab
 }
 
 void TSchedulableReadFactory::CleanupReadsCache() const {
-    std::list<std::pair<NHdrf::TDatabaseId, NHdrf::TPoolId>> toRemove;
+    std::list<NHdrf::TFullPoolId> toRemove;
 
     for (const auto& read : ReadsCache) {
         if (read.second.expired()) {

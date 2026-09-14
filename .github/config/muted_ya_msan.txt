@@ -2,7 +2,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAll
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
-ydb/core/kqp/ut/indexes/json KqpJsonIndexes.NoMultipleColumnsWithoutFeatureFlag
+ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
@@ -11,10 +11,13 @@ ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldSwitchHostToOfflineAndBack
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
 ydb/core/persqueue/public/fetcher/ut TFetchRequestTests.QuotaNoResourceThenAllowed
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_metrics unittest.[*/*] chunk
+ydb/core/wrappers/ut unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
 ydb/library/actors/interconnect/ut Interconnect.RdmaSimultaneousReconnectDoesNotLoop
 ydb/library/actors/interconnect/ut Interconnect.RdmaXdcCatchReplayAfterPartialPayloadRead
@@ -39,13 +42,16 @@ ydb/library/actors/interconnect/ut OutgoingStream.PublicMethodsLatencyBenchmark
 ydb/library/actors/interconnect/ut OutgoingStream.RdmaMemory
 ydb/library/actors/interconnect/ut OutgoingStream.RdmaMemoryPreallocateNoAlloc
 ydb/library/wasm/unittests TWebAssemblyTest.PureVirtualFunctionCall
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.WithoutPartitionWithRestart
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
+ydb/public/lib/ydb_cli/commands/sqs_workload/ut SqsWorkloadScenario.InitSqsClientJsonApiPath
+ydb/public/lib/ydb_cli/commands/sqs_workload/ut SqsWorkloadScenario.InitSqsClientUsesCreatedConfiguration
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionWasmDwarfMapsToMainCpp
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[30]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/node_broker/tests test_workload.py.TestDeltaProtocol.test
@@ -56,6 +62,14 @@ ydb/tests/stress/simple_queue/tests py3test.sole chunk
 ydb/tests/stress/simple_queue/tests test_workload.py.TestYdbWorkload.test[light-column]
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_commit_reread[old_sdk]
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_commit_reread[scale_aware_sdk]
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_read[old_sdk]
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningPreferredWorkload.test_read[scale_aware_sdk]
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_commit_reread[old_sdk]
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_commit_reread[scale_aware_sdk]
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[old_sdk]
+ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingAutoPartitioningWorkload.test_read[scale_aware_sdk]
 ydb/tests/stress/topic_balancing/tests test_workload.py.TestTopicBalancingWorkload.test
 ydb/tools/pdisktool/ut TPDiskToolOracle.DamagedDataSectorReportsGap
 ydb/tools/pdisktool/ut TPDiskToolOracle.DamagedFormatReplicaStillReadsDisk

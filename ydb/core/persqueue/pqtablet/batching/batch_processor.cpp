@@ -21,6 +21,12 @@ void TBatchProcessor::Bootstrap(const NActors::TActorContext&) {
     Become(&TThis::StateWork);
 }
 
+TLogPrefix TBatchProcessor::BuildLogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "BatchProcessor"},
+        {"selfId", SelfId()});
+}
+
 NActors::TActorId TBatchProcessor::GetOrCreateConsumerProcessor(const TString& user) {
     auto [it, inserted] = ConsumerProcessors.emplace(user, NActors::TActorId{});
     if (inserted) {
@@ -65,9 +71,10 @@ STFUNC(TBatchProcessor::StateWork) {
         HFunc(TEvPQ::TEvConsumerRemoved, HandleConsumerRemoved);
         HFunc(NActors::TEvents::TEvPoisonPill, Handle);
     default:
-        YDB_LOG_WARN("Unexpected event",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"inTBatchProcessor", ev->GetTypeRewrite()});
+        LOG_W(
+            "Unexpected event",
+            {"inTBatchProcessor", ev->GetTypeRewrite()}
+        );
         break;
     }
 }

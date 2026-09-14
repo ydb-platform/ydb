@@ -539,8 +539,8 @@ private:
     void ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus);
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
 
-    TString LogPrefix() const;
-    const TString& GetLogPrefix() const override;
+    TLogPrefix LogPrefix() const;
+    const TLogPrefix& GetLogPrefix() const override;
 
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
@@ -624,7 +624,7 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Handle event",
+        LOG_T("Handle event",
             {"actorState", "StateInit"},
             {"event", EventStr("StateIdle", ev)});
 
@@ -673,7 +673,7 @@ private:
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
-                YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
+                LOG_E("Unexpected",
                     {"event", EventStr("StateInit", ev)});
             }
             break;
@@ -684,7 +684,7 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Handle event",
+        LOG_T("Handle event",
             {"actorState", "StateIdle"},
             {"event", EventStr("StateIdle", ev)});
 
@@ -758,7 +758,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
-            YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
+            LOG_E("Unexpected",
                 {"event", EventStr("StateIdle", ev)});
             break;
         };
@@ -871,9 +871,9 @@ private:
 
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
 
-    mutable TMaybe<TString> IdleLogPrefix;
-    mutable TMaybe<TString> InitLogPrefix;
-    mutable TMaybe<TString> UnknownLogPrefix;
+    mutable TMaybe<TLogPrefix> IdleLogPrefix;
+    mutable TMaybe<TLogPrefix> InitLogPrefix;
+    mutable TMaybe<TLogPrefix> UnknownLogPrefix;
 
     struct TAffectedSourceIdsAndConsumers {
         TVector<TString> TxWriteSourcesIds;

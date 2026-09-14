@@ -31,6 +31,7 @@ PEERDIR(
     library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/protobuf/json
+    library/cpp/threading/hot_swap
     ydb/core/base
     ydb/core/engine
     ydb/core/grpc_services/cancelation

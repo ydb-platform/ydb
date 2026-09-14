@@ -194,7 +194,7 @@ public:
 
         for (auto& [topicPath, info] : ev->Get()->Topics) {
             switch (info.Status) {
-                case NDescriber::EStatus::SUCCESS: {
+                case NDescriber::EStatus::Success: {
                     // Describer keys responses by the original request path; TopicInfo is keyed by CanonizePath.
                     auto& topicInfo = TopicInfo[CanonizePath(topicPath)];
                     topicInfo.PQInfo = info.Info;
@@ -204,9 +204,9 @@ public:
                 default:
                     return SendReplyAndDie(
                         CreateErrorReply(
-                            info.Status == NDescriber::EStatus::UNAUTHORIZED
+                            info.Status == NDescriber::EStatus::Unauthorized
                                 ? Ydb::StatusIds::UNAUTHORIZED
-                                : (info.Status == NDescriber::EStatus::BAD_REQUEST
+                                : (info.Status == NDescriber::EStatus::BadRequest
                                     ? Ydb::StatusIds::BAD_REQUEST
                                     : Ydb::StatusIds::SCHEME_ERROR),
                             NDescriber::Description(topicPath, info.Status)

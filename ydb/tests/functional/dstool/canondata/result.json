@@ -17,6 +17,18 @@
         null,
         {
             "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.0"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.1"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.2"
+        },
+        null,
+        {
+            "uri": "file://test_canonical_requests.Test.test_cluster_balance/results.txt.3"
         }
     ],
     "test_canonical_requests.Test.test_cluster_balance_mismatching_size_in_units": [
@@ -173,17 +185,6 @@
             "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots/results.txt.1"
         }
     ],
-    "test_canonical_requests.Test.test_pdisk_populate": [
-        {
-            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt"
-        },
-        {
-            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/pdisk-populate-snapshot.json"
-        },
-        {
-            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt.0"
-        }
-    ],
     "test_canonical_requests.Test.test_pdisk_check_leaked_slots_legacy_api": [
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots_legacy_api/results.txt"
@@ -195,6 +196,17 @@
         null,
         {
             "uri": "file://test_canonical_requests.Test.test_pdisk_check_leaked_slots_legacy_api/results.txt.1"
+        }
+    ],
+    "test_canonical_requests.Test.test_pdisk_populate": [
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/pdisk-populate-snapshot.json"
+        },
+        {
+            "uri": "file://test_canonical_requests.Test.test_pdisk_populate/results.txt.0"
         }
     ],
     "test_canonical_requests.Test.test_pdisk_set_status_inactive": [

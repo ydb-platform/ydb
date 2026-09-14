@@ -822,6 +822,8 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
                 // If the body of input stage is `FromBlocks` propagate it through connection.
                 if (body->IsCallable("WideFromBlocks")) {
                     body = body->ChildPtr(0);
+                    const TTypeAnnotationNode* blockType = body->GetTypeAnn();
+                    Y_ENSURE(blockType);
 
                     // New arg for the current stage has a `Blocks` type, so we need to add `FromBlocks` here.
                     // clang-format off
@@ -844,11 +846,8 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
                     .Done().Ptr();
                     // clang-format on
 
-                    // Update the type to `Blocks`, which should be easy since it only works on the lambda and not the entire graph.
-                    newProgram = PeepHoleOptimize(newProgram, GetArgsType(program.Ptr()));
-                    Y_ENSURE(newProgram->GetTypeAnn());
-
-                    newStageArg->SetTypeAnn(newProgram->GetTypeAnn());
+                    // Update the type to `Blocks`.
+                    newStageArg->SetTypeAnn(blockType);
                     // Update map, since stage body was updated.
                     programsMap[inputStage.Program().Raw()] = newProgram;
                 }
@@ -963,7 +962,6 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
     .Done();
     // clang-format on
 
-    // auto &ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr newProgram;
     auto status =
         ::NKikimr::NKqp::NOpt::PeepHoleOptimize(program, newProgram, ctx, RBOCtx.TypeCtx, RBOCtx.KqpCtx.Config, false, withFinalStageRules, {});
@@ -985,8 +983,8 @@ void TPhysicalQueryBuilder::TypeAnnotate(TExprNode::TPtr& input) {
 
     if (status != IGraphTransformer::TStatus::Ok) {
         RBOCtx.ExprCtx.AddError(TIssue(RBOCtx.ExprCtx.GetPosition(input->Pos()), "Type inference failed for stage in NEW RBO"));
+        Y_ENSURE(false);
     }
-    Y_ENSURE(status == IGraphTransformer::TStatus::Ok);
 
     input = output;
 }

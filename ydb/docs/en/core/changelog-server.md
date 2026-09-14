@@ -30,7 +30,7 @@ Release date: September 16, 2026.
 * QueryService can return query results in [Apache Arrow format](./reference/ydb-sdk/data-formats/format-arrow.md?version=v26.2); this capability is enabled by default.
 * Added forced [compaction](./yql/reference/syntax/alter_table/compact.md?version=v26.2) for row-oriented tables using `ALTER TABLE ... COMPACT`.
 * Added automatic storage balancing between groups and background validation of disk placement.
-* Table partitioning schema changes are faster.
+* [Table split and merge operations are faster](https://github.com/ydb-platform/ydb/pull/38803) for tables with many partitions: SchemeShard updates only the affected partitions instead of rebuilding the entire partition list.
 * [Transactions between topics and tables can use optimized conflict checking](https://github.com/ydb-platform/ydb/pull/36706). This capability is disabled by default and can be enabled by the cluster administrator.
 * Added [audit logging](./security/audit-log.md?version=v26.2) for topic operations.
 * Added [built-in minidump collection based on Google Breakpad](./devops/observability/minidumps.md?version=v26.2) for Linux nodes.

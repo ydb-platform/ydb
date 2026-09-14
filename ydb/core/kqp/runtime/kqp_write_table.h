@@ -235,7 +235,7 @@ public:
         TVector<ui64> PayloadIndexes;
     };
 
-    virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite) = 0;
+    virtual TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) = 0;
 
     struct TMessageAcknowledgedResult {
         ui64 DataSize = 0;
@@ -263,6 +263,8 @@ struct TShardedWriteControllerSettings {
     i64 MemoryLimitTotal = 0;
     i64 ColumnShardMaxOperationBytes = 0;
     bool Inconsistent = false;
+    bool EnableWriteSeqNum = false;
+    ui64 WriterIndex = 0;
 };
 
 IShardedWriteControllerPtr CreateShardedWriteController(

@@ -1398,7 +1398,7 @@ TString TPath::GetDomainPathString() const {
     return Init(GetPathIdForDomain(), SS).PathString();
 }
 
-TSubDomainInfo::TPtr TPath::DomainInfo() const {
+TIntrusivePtr<TSubDomainInfo> TPath::DomainInfo() const {
     Y_ABORT_UNLESS(!IsEmpty());
     Y_ABORT_UNLESS(Elements.size());
 

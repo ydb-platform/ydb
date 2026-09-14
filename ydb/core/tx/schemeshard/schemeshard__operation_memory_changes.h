@@ -2,7 +2,7 @@
 
 #include "schemeshard_identificators.h"
 #include "schemeshard_info_types_backup_collection.h"
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_info_types_core.h"
 #include "schemeshard_info_types_cdc_stream.h"
 #include "schemeshard_info_types_external_data_source.h"
 #include "schemeshard_info_types_external_table.h"

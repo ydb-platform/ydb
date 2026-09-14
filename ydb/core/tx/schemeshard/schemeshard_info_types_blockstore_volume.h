@@ -1,6 +1,7 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_info_types_core.h" // for TShardInfo
+#include "schemeshard_path_element.h"
 
 #include <ydb/core/protos/blockstore_config.pb.h>
 

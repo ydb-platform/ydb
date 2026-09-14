@@ -1,6 +1,12 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_identificators.h"
+
+#include <util/datetime/base.h>
+#include <util/generic/hash.h>
+#include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
+#include <util/generic/string.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

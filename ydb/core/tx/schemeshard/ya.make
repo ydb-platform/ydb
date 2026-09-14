@@ -94,6 +94,7 @@ LIBRARY()
 
 SRCS(
     defs.h
+    operation_queue_timer.cpp
     operation_queue_timer.h
     schemeshard.cpp
     schemeshard__background_cleaning.cpp
@@ -300,7 +301,7 @@ SRCS(
     schemeshard_import_scheme_query_executor.cpp
     schemeshard_info_types.cpp
     schemeshard_info_types_backup_collection.h
-    schemeshard_info_types_base.h
+    schemeshard_info_types_core.h
     schemeshard_info_types_blob_depot.h
     schemeshard_info_types_blockstore_volume.h
     schemeshard_info_types_cdc_stream.h

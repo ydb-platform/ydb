@@ -1,21 +1,17 @@
 #pragma once
 
 #include "schemeshard_identificators.h"
-#include "schemeshard_info_types_helpers.h"
-#include "schemeshard_path_element.h"
-#include "schemeshard_tx_infly.h"
-#include "schemeshard_types.h"
 
 #include <ydb/core/base/storage_pools.h>
-#include <ydb/core/base/tx_processing.h>
+#include <ydb/core/base/tablet_types.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/tx/message_seqno.h>
+
+#include <google/protobuf/timestamp.pb.h>
 
 #include <util/generic/ptr.h>
-#include <util/generic/queue.h>
-#include <util/generic/set.h>
-#include <util/generic/vector.h>
+
+#include <utility>
 
 namespace NKikimr {
 
@@ -169,7 +165,7 @@ struct TShardInfo {
     TTabletId TabletID = InvalidTabletId;
     TTxId CurrentTxId = InvalidTxId; ///< @note we support only one modifying transaction on shard at time
     TPathId PathId = InvalidPathId;
-    TTabletTypes::EType TabletType = ETabletType::TypeInvalid;
+    TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
     TChannelsBindings BindedChannels;
 
     TShardInfo(TTxId txId, TPathId pathId, TTabletTypes::EType type)
@@ -216,71 +212,71 @@ struct TShardInfo {
     }
 
     static TShardInfo RtmrPartitionInfo(TTxId txId, TPathId pathId) {
-         return TShardInfo(txId, pathId, ETabletType::RTMRPartition);
+         return TShardInfo(txId, pathId, TTabletTypes::RTMRPartition);
     }
 
     static TShardInfo SolomonPartitionInfo(TTxId txId, TPathId pathId) {
-         return TShardInfo(txId, pathId, ETabletType::KeyValue);
+         return TShardInfo(txId, pathId, TTabletTypes::KeyValue);
     }
 
     static TShardInfo DataShardInfo(TTxId txId, TPathId pathId) {
-         return TShardInfo(txId, pathId, ETabletType::DataShard);
+         return TShardInfo(txId, pathId, TTabletTypes::DataShard);
     }
 
     static TShardInfo PersQShardInfo(TTxId txId, TPathId pathId) {
-         return TShardInfo(txId, pathId, ETabletType::PersQueue);
+         return TShardInfo(txId, pathId, TTabletTypes::PersQueue);
     }
 
     static TShardInfo PQBalancerShardInfo(TTxId txId, TPathId pathId) {
-         return TShardInfo(txId, pathId, ETabletType::PersQueueReadBalancer);
+         return TShardInfo(txId, pathId, TTabletTypes::PersQueueReadBalancer);
     }
 
     static TShardInfo BlockStoreVolumeInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::BlockStoreVolume);
+        return TShardInfo(txId, pathId, TTabletTypes::BlockStoreVolume);
     }
 
     static TShardInfo BlockStorePartitionInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::BlockStorePartition);
+        return TShardInfo(txId, pathId, TTabletTypes::BlockStorePartition);
     }
 
     static TShardInfo BlockStorePartition2Info(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::BlockStorePartition2);
+        return TShardInfo(txId, pathId, TTabletTypes::BlockStorePartition2);
     }
 
     static TShardInfo BlockStoreVolumeDirectInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::BlockStoreVolumeDirect);
+        return TShardInfo(txId, pathId, TTabletTypes::BlockStoreVolumeDirect);
     }
 
     static TShardInfo BlockStorePartitionDirectInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::BlockStorePartitionDirect);
+        return TShardInfo(txId, pathId, TTabletTypes::BlockStorePartitionDirect);
     }
 
     static TShardInfo FileStoreInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::FileStore);
+        return TShardInfo(txId, pathId, TTabletTypes::FileStore);
     }
 
     static TShardInfo KesusInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::Kesus);
+        return TShardInfo(txId, pathId, TTabletTypes::Kesus);
     }
 
     static TShardInfo ColumnShardInfo(TTxId txId, TPathId pathId) {
-         return TShardInfo(txId, pathId, ETabletType::ColumnShard);
+         return TShardInfo(txId, pathId, TTabletTypes::ColumnShard);
     }
 
     static TShardInfo SequenceShardInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::SequenceShard);
+        return TShardInfo(txId, pathId, TTabletTypes::SequenceShard);
     }
 
     static TShardInfo ReplicationControllerInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::ReplicationController);
+        return TShardInfo(txId, pathId, TTabletTypes::ReplicationController);
     }
 
     static TShardInfo BlobDepotInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::BlobDepot);
+        return TShardInfo(txId, pathId, TTabletTypes::BlobDepot);
     }
 
     static TShardInfo TestShardSetInfo(TTxId txId, TPathId pathId) {
-        return TShardInfo(txId, pathId, ETabletType::TestShard);
+        return TShardInfo(txId, pathId, TTabletTypes::TestShard);
     }
 };
 

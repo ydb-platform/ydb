@@ -1,8 +1,8 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
-
 #include <ydb/core/protos/sys_view_types.pb.h>
+
+#include <util/generic/ptr.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

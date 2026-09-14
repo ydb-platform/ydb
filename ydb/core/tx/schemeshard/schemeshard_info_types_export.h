@@ -1,7 +1,24 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_identificators.h"
 #include "schemeshard_path_db_ref.h"
+
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#include <ydb/library/actors/core/actorid.h>
+
+#include <util/datetime/base.h>
+#include <util/generic/deque.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/map.h>
+#include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
+#include <util/generic/set.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/system/yassert.h>
+
+#include <utility>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -15,6 +32,15 @@ struct TPublicationInfo {
 struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     using TPtr = TIntrusivePtr<TExportInfo>;
 
+private:
+    template <typename TSettingsPB>
+    static TString SerializeSettings(const TSettingsPB& settings) {
+        TString serialized;
+        Y_ABORT_UNLESS(settings.SerializeToString(&serialized));
+        return serialized;
+    }
+
+public:
     enum class EState: ui8 {
         Invalid = 0,
         Waiting = 1,

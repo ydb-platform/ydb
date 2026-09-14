@@ -1,8 +1,12 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <ydb/core/scheme/scheme_type_registry.h>
+
+#include <util/generic/ptr.h>
+#include <util/generic/string.h>
+#include <util/system/yassert.h>
 
 #include <optional>
 

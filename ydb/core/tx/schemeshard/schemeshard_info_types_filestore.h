@@ -1,8 +1,13 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_identificators.h"
+#include "schemeshard_path_element.h"
 
 #include <ydb/core/protos/filestore_config.pb.h>
+
+#include <util/generic/ptr.h>
+#include <util/string/builder.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

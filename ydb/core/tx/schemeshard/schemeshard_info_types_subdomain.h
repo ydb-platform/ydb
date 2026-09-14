@@ -1,17 +1,21 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_info_types_core.h" // for TShardInfo
 #include "schemeshard_info_types_table.h"
 #include "schemeshard_info_types_topic.h"
+#include "schemeshard_types.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/tx_processing.h>
 #include <ydb/core/util/counted_leaky_bucket.h>
 
 #include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/public/api/protos/ydb_cms.pb.h>
+
+#include <utility>
 
 namespace NKikimr {
 namespace NSchemeShard {

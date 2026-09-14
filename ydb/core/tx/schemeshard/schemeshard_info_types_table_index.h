@@ -1,10 +1,16 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
-
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#include <util/generic/ptr.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/string/builder.h>
+#include <util/system/yassert.h>
 
 #include <string_view>
+#include <utility>
 #include <variant>
 
 namespace NKikimr {

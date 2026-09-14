@@ -1,8 +1,11 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_identificators.h"
 
 #include <ydb/core/protos/test_shard_control.pb.h>
+
+#include <util/generic/hash.h>
+#include <util/generic/ptr.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

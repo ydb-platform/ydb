@@ -1,6 +1,11 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_identificators.h"
+
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+
+#include <util/generic/ptr.h>
+#include <util/system/yassert.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

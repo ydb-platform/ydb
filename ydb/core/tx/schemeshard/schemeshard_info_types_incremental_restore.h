@@ -1,8 +1,16 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_identificators.h"
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
+#include <util/datetime/base.h>
+#include <util/generic/deque.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/ptr.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

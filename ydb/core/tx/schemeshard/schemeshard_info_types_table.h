@@ -1,10 +1,14 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_info_types_core.h" // for TSplitSettings and TForceShardSplitSettings
+#include "schemeshard_path_element.h"
+#include "schemeshard_tx_infly.h"
+#include "schemeshard_types.h"
 
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/follower_group.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
@@ -19,6 +23,7 @@
 #include <array>
 #include <cctype>
 #include <optional>
+#include <utility>
 
 namespace NKikimr {
 namespace NSchemeShard {

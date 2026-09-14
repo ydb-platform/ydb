@@ -1,5 +1,5 @@
 #include "schemeshard_info_types_backup_collection.h"
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_info_types_core.h"
 #include "schemeshard_info_types_blob_depot.h"
 #include "schemeshard_info_types_blockstore_volume.h"
 #include "schemeshard_info_types_cdc_stream.h"

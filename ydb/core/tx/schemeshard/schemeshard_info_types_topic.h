@@ -1,14 +1,27 @@
 #pragma once
 
-#include "schemeshard_info_types_base.h"
+#include "schemeshard_identificators.h"
 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/core/tx/message_seqno.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <util/generic/guid.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/generic/maybe.h>
+#include <util/generic/ptr.h>
+#include <util/generic/set.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/string/builder.h>
+
+#include <utility>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -152,7 +165,7 @@ struct TTopicInfo : TSimpleRefCount<TTopicInfo> {
         for (const auto parent : partition.ParentPartitionIds) {
             auto it = Partitions.find(parent);
             Y_ENSURE(it != Partitions.end(),
-                     "Partition " << partition.GroupId << " has parent partition " << parent << " which doesn't exists");
+                     "Partition " << partition.PqId << " has parent partition " << parent << " which doesn't exist");
             it->second->ChildPartitionIds.emplace(partition.PqId);
         }
     }

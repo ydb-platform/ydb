@@ -158,7 +158,8 @@ TOracleHostStat::TOracleHostStat(
 >>>>>>> de632e86bb4 (NBS-7513: Add return-to-online delay in TOracle (#52538))
 TOracle::TOracle(
     TStorageConfigPtr storageConfig,
-    IHostStateController* hostStateController)
+    IHostStateController* hostStateController,
+    const TVector<EHostHealth>& hostHealths)
     : StorageConfig(std::move(storageConfig))
     , OracleConfig(std::make_shared<TOracleConfig>(StorageConfig))
     , HostStateController(hostStateController)
@@ -171,10 +172,11 @@ TOracle::TOracle(
     , DefaultFlushRequestTimeout(StorageConfig->GetFlushRequestTimeout())
     , DefaultEraseRequestTimeout(StorageConfig->GetEraseRequestTimeout())
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
-    , HostStatistics(DirectBlockGroupHostCount)
-    , HostStates(DirectBlockGroupHostCount)
+    , HostStatistics(hostHealths.size())
+    , HostStates(hostHealths.size())
+    , HostsHealths(hostHealths)
     , HostsReconnectDelays(
-          DirectBlockGroupHostCount,
+          hostHealths.size(),
           TBackoffDelayProvider(MinReconnectDelay, MaxReconnectDelay))
     , TimePredictors(
           OperationCount,
@@ -183,9 +185,8 @@ TOracle::TOracle(
               OracleConfig->GetTimePredictionNthFromEnd()))
     , HealthPolicy(CreateDefaultHostHealthPolicy(OracleConfig))
 {
-    HostsHealths.resize(HostStates.size());
-    for (auto& healths: HostsHealths) {
-        healths = EHostHealth::Online;
+    for (size_t hostIndex = 0; hostIndex < hostHealths.size(); ++hostIndex) {
+        HostStates[hostIndex].State = HealthToState(hostHealths[hostIndex]);
     }
 }
 

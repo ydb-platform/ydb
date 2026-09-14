@@ -124,7 +124,14 @@ TDirectBlockGroup::TDirectBlockGroup(
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
+<<<<<<< HEAD
     std::unique_ptr<NTransport::IStorageTransport> storageTransport)
+=======
+    const TVector<EHostHealth>& hostHealths,
+    ui32 dbgConnectionsConfigGeneration,
+    NTransport::TStorageTransportPtr storageTransport,
+    NMonitoring::TDynamicCounterPtr counters)
+>>>>>>> f5807c51a12 (NBS-7513: Add oracle's initial health load (#52831))
     : ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
     , Executor(std::move(executor))
@@ -135,12 +142,30 @@ TDirectBlockGroup::TDirectBlockGroup(
     , LogTitle(
           GetCycleCount(),
           TLogTitle::TDirectBlockGroup{
+<<<<<<< HEAD
               .DiskId = diskId,
               .DBGIndex = DirectBlockGroupIndex,
               .TabletId = TabletId,
               .Generation = TabletGeneration})
     , Oracle(StorageConfig, this)
 {
+=======
+              .DiskId = diskDescription.DiskId,
+              .TabletId = diskDescription.TabletId,
+              .Generation = diskDescription.Generation,
+              .DBGIndex = DirectBlockGroupIndex})
+    , Connections(
+          TabletId,
+          TabletGeneration,
+          static_cast<ui32>(DirectBlockGroupIndex),
+          dbgConnectionsConfigGeneration)
+    , Oracle(StorageConfig, this, hostHealths)
+    , Counters(std::move(counters))
+{
+    Y_ABORT_UNLESS(IsSupportedBlockSize(BlockSize));
+    Y_ASSERT(pbufferIds.size() == ddisksIds.size());
+    Y_ASSERT(hostHealths.size() == ddisksIds.size());
+>>>>>>> f5807c51a12 (NBS-7513: Add oracle's initial health load (#52831))
     Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
     Y_ASSERT(ddisksIds.size() >= DirectBlockGroupHostCount);
 

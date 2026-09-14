@@ -1712,7 +1712,7 @@ namespace Tests {
 
             TString endpoint = TStringBuilder() << "localhost:" << Settings->GrpcPort;
             TString prefix = "Root/yq";
-            auto port = Runtime->GetPortManager().GetPort();
+            auto port = Runtime->GetPort();
             TString ydbMvpEndpoint = TStringBuilder()
                 << "http://localhost:"
                 << port

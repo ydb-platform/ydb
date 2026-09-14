@@ -106,7 +106,8 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
         i64 freeSpace,
-        bool enableStreamingQueriesCounters)
+        bool enableStreamingQueriesCounters,
+        bool enableCountersPerTask)
         : TActor<TDqSolomonWriteActor>(&TDqSolomonWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
@@ -114,7 +115,7 @@ public:
         , WriteParams(std::move(writeParams))
         , Url(GetUrl())
         , Callbacks(callbacks)
-        , Metrics(counters, TxId, taskId, enableStreamingQueriesCounters)
+        , Metrics(counters, TxId, taskId, enableStreamingQueriesCounters, enableCountersPerTask)
         , FreeSpace(freeSpace)
         , UserMetricsEncoder(
             WriteParams.Shard.GetScheme(),
@@ -584,7 +585,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     const ::NMonitoring::TDynamicCounterPtr& counters,
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     i64 freeSpace,
-    bool enableStreamingQueriesCounters)
+    bool enableStreamingQueriesCounters,
+    bool enableCountersPerTask)
 {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -606,7 +608,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
         counters,
         credentialsProvider,
         freeSpace,
-        enableStreamingQueriesCounters);
+        enableStreamingQueriesCounters,
+        enableCountersPerTask);
     return {actor, actor};
 }
 
@@ -621,6 +624,7 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredT
             if (taskParamsIt != args.TaskParams.end()) {
                 txId = taskParamsIt->second;
             }
+            bool enableCountersPerTask = args.StatsLevel == TCollectStatsLevel::Profile;
 
             return CreateDqSolomonWriteActor(
                 std::move(settings),
@@ -633,7 +637,8 @@ void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, IStructuredT
                 counters,
                 credentialsFactory,
                 DqSolomonDefaultFreeSpace,
-                enableStreamingQueriesCounters);
+                enableStreamingQueriesCounters,
+                enableCountersPerTask);
         });
 }
 

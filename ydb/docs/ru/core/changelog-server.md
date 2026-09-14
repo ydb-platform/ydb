@@ -36,15 +36,14 @@
 
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/46747) некорректные результаты некоторых сканирующих запросов к колоночным таблицам.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/50358) обработка повреждённых Kafka-запросов, которая могла приводить к избыточному потреблению памяти или выходу за границы буфера.
-* [Исправлено](https://github.com/ydb-platform/ydb/pull/49929) зависание чтения из топика после перезапуска балансировщика чтения топика.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/49929) зависание чтения из топика после перезапуска балансировщика чтения.
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/35470) состояния гонки в серверной сессии чтения топика и в [Topic SDK](https://github.com/ydb-platform/ydb/pull/42213).
-* [Исправлено](https://github.com/ydb-platform/ydb/pull/50675) формирование `QueueUrl` в SQS API поверх топиков при работе через HTTP.
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/50897) падение и [зависание](https://github.com/ydb-platform/ydb/pull/50621) потоковых запросов при создании контрольных точек.
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/50379) состояния гонки при отмене и планировании распределённых транзакций.
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/49469) обработка слишком больших блоков при зашифрованном экспорте и [ложная ошибка повреждения данных](https://github.com/ydb-platform/ydb/pull/48986) при зашифрованном восстановлении.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/49460) состояние гонки при сборе статистики командой `ydb workload topic`.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/48174) повторное освобождение памяти при завершении `DqHashCombine` с spilling.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/40912) потеря подтверждений `ReadSet`, которая могла препятствовать завершению транзакции.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/40912) потеря подтверждений `ReadSet`, которая могла препятствовать завершению транзакции с топиками.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/40801) обработка ответа `NODATA` в KeyValue API: вместо падения процесса возвращается ошибка `NOT_FOUND` или `INTERNAL_ERROR`.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/41895) IAM-аутентификация для внешних источников данных в Generic Provider и [обработка возвращаемых им ошибок](https://github.com/ydb-platform/ydb/pull/40761).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/41411) утечка памяти при загрузке метаданных внешних источников данных.

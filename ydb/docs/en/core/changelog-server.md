@@ -36,15 +36,14 @@ Release date: September 16, 2026.
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/46747) incorrect results from some scan queries over column-oriented tables.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/50358) handling of malformed Kafka requests that could cause excessive memory use or out-of-bounds access.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/49929) topic reads hanging after a topic read balancer restart.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/49929) topic reads hanging after a read balancer restart.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35470) race conditions in the server-side topic read session and in the [Topic SDK](https://github.com/ydb-platform/ydb/pull/42213).
-* [Fixed](https://github.com/ydb-platform/ydb/pull/50675) `QueueUrl` generation in the SQS API over topics when using HTTP.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/50897) a crash and a [hang](https://github.com/ydb-platform/ydb/pull/50621) in streaming query checkpointing.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/50379) race conditions when cancelling and planning distributed transactions.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/49469) handling of oversized blocks during encrypted export and a [false data corruption error](https://github.com/ydb-platform/ydb/pull/48986) during encrypted restore.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/49460) a race condition when collecting statistics with `ydb workload topic`.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/48174) a double free during `DqHashCombine` spilling teardown.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/40912) lost `ReadSet` acknowledgements that could prevent a transaction from completing.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/40912) lost `ReadSet` acknowledgements that could prevent a transaction involving topics from completing.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/40801) handling of `NODATA` responses in the KeyValue API: `NOT_FOUND` or `INTERNAL_ERROR` is returned instead of terminating the process.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41895) IAM authentication for external data sources in Generic Provider and [error handling](https://github.com/ydb-platform/ydb/pull/40761) for provider responses.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41411) a memory leak when loading external data source metadata.

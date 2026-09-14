@@ -444,9 +444,6 @@ public:
 
     void Compress(TKafkaVersion version = MessageMeta::PresentVersions.Max);
     void Decompress(TKafkaVersion version = MessageMeta::PresentVersions.Max);
-
-private:
-    void ValidateTimestampDelta(TKafkaRecord::TimestampDeltaMeta::Type delta) const;
 };
 
 
@@ -690,6 +687,8 @@ TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion vers
 
 std::pair<EKafkaErrors, ui64> GetBatchBaseSeqNo(const TKafkaBatchHeader& header);
 std::pair<EKafkaErrors, ui64> GetBatchMaxSeqNo(const TKafkaBatchHeader& header, ui64 baseSeqNo);
+// Reconstruct a record timestamp with Kafka's wrapping 64-bit arithmetic.
+i64 GetRecordTimestamp(i64 baseTimestamp, i64 timestampDelta);
 ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record);
 
 } // namespace NKafka

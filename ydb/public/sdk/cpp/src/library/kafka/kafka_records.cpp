@@ -3,6 +3,7 @@
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <array>
+#include <bit>
 #include <limits>
 
 #include <util/stream/mem.h>
@@ -655,7 +656,6 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
         NPrivate::Read<RecordsMeta>(body, _version, Records);
         for (auto& record : Records) {
             record.OwnPayload();
-            ValidateTimestampDelta(record.TimestampDelta);
         }
     } else {
         const TKafkaInt32 recordsCount = NPrivate::ReadArraySize<RecordsMeta>(body, _version);
@@ -677,7 +677,6 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
         }
         for (auto& record : Records) {
             record.OwnPayload();
-            ValidateTimestampDelta(record.TimestampDelta);
         }
     }
 }
@@ -736,12 +735,10 @@ i32 TKafkaRecordBatch::Size(TKafkaVersion _version) const {
     return _collector.Size;
 }
 
-void TKafkaRecordBatch::ValidateTimestampDelta(TKafkaRecord::TimestampDeltaMeta::Type delta) const {
-    if ((delta > 0 && BaseTimestamp > std::numeric_limits<i64>::max() - delta) ||
-        (delta < 0 && BaseTimestamp < std::numeric_limits<i64>::min() - delta))
-    {
-        ythrow yexception() << "Kafka record timestamp overflow";
-    }
+i64 GetRecordTimestamp(i64 baseTimestamp, i64 timestampDelta) {
+    // Kafka uses Java long addition, which wraps modulo 2^64. Add unsigned
+    // values to avoid C++ signed overflow, then interpret the resulting bits.
+    return std::bit_cast<i64>(static_cast<ui64>(baseTimestamp) + static_cast<ui64>(timestampDelta));
 }
 
 

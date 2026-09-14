@@ -5,6 +5,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <limits>
+#include <tuple>
 
 namespace NKafka {
 namespace {
@@ -470,48 +471,45 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
         AssertRecordBatchRoundTrip(ECompressionType::ZSTD);
     }
 
-    Y_UNIT_TEST(RecordBatchReadRejectsTimestampOverflow) {
+    Y_UNIT_TEST(RecordBatchTimestampsWrapLikeKafka) {
         constexpr auto minTimestamp = std::numeric_limits<i64>::min();
         constexpr auto maxTimestamp = std::numeric_limits<i64>::max();
         for (const auto compressionType : {ECompressionType::NONE, ECompressionType::GZIP, ECompressionType::ZSTD}) {
-            for (const auto [baseTimestamp, timestampDelta] : {
-                     std::pair<i64, i64>{maxTimestamp, 1},
-                     {minTimestamp, -1},
-                     {1, maxTimestamp},
-                     {-1, minTimestamp}})
+            for (const auto [baseTimestamp, timestampDelta, expectedTimestamp] : {
+                     std::tuple<i64, i64, i64>{maxTimestamp, 1, minTimestamp},
+                     {minTimestamp, -1, maxTimestamp},
+                     {1, maxTimestamp, minTimestamp},
+                     {-1, minTimestamp, maxTimestamp},
+                     {maxTimestamp, maxTimestamp, -2},
+                     {minTimestamp, minTimestamp, 0},
+                     {maxTimestamp, 0, maxTimestamp},
+                     {minTimestamp, 0, minTimestamp},
+                     {maxTimestamp - 1, 1, maxTimestamp},
+                     {minTimestamp + 1, -1, minTimestamp},
+                     {-1, maxTimestamp, maxTimestamp - 1},
+                     {0, minTimestamp, minTimestamp},
+                     {maxTimestamp, minTimestamp, -1},
+                     {minTimestamp, maxTimestamp, -1},
+                     {1000, 25, 1025},
+                     {1000, -25, 975},
+                     {-1, 0, -1}})
             {
                 auto batch = MakeRecordBatch(compressionType);
                 batch.BaseTimestamp = baseTimestamp;
+                batch.MaxTimestamp = expectedTimestamp;
                 batch.Records = {MakeRecord(timestampDelta, 0, "key", "value")};
                 const auto serialized = WriteKafkaRecordBatch(batch);
-
-                UNIT_ASSERT_EXCEPTION_CONTAINS(ReadKafkaRecordBatch(serialized), yexception, "Kafka record timestamp overflow");
-            }
-        }
-    }
-
-    Y_UNIT_TEST(RecordBatchReadAcceptsTimestampBoundaries) {
-        constexpr auto minTimestamp = std::numeric_limits<i64>::min();
-        constexpr auto maxTimestamp = std::numeric_limits<i64>::max();
-        for (const auto compressionType : {ECompressionType::NONE, ECompressionType::GZIP, ECompressionType::ZSTD}) {
-            for (const auto [baseTimestamp, timestampDelta] : {
-                     std::pair<i64, i64>{maxTimestamp, 0},
-                     {minTimestamp, 0},
-                     {maxTimestamp - 1, 1},
-                     {minTimestamp + 1, -1},
-                     {-1, maxTimestamp},
-                     {0, minTimestamp},
-                     {maxTimestamp, minTimestamp},
-                     {minTimestamp, maxTimestamp}})
-            {
-                auto batch = MakeRecordBatch(compressionType);
-                batch.BaseTimestamp = baseTimestamp;
-                batch.Records = {MakeRecord(timestampDelta, 0, "key", "value")};
-                const auto parsed = ReadKafkaRecordBatch(WriteKafkaRecordBatch(batch));
+                const auto header = ReadKafkaBatchHeader(serialized);
+                UNIT_ASSERT(header);
+                UNIT_ASSERT_VALUES_EQUAL(header->BaseTimestamp, baseTimestamp);
+                const auto parsed = ReadKafkaRecordBatch(serialized);
 
                 UNIT_ASSERT_VALUES_EQUAL(parsed.BaseTimestamp, baseTimestamp);
                 UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(parsed.Records.front().TimestampDelta, timestampDelta);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    GetRecordTimestamp(parsed.BaseTimestamp, parsed.Records.front().TimestampDelta), expectedTimestamp);
+                UNIT_ASSERT(KafkaBytesEqual(parsed.Records.front().Value, batch.Records.front().Value));
             }
         }
     }

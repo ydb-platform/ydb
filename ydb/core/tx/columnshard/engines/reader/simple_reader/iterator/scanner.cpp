@@ -1,9 +1,9 @@
 #include "plain_read_data.h"
 #include "scanner.h"
 
-#include "collections/full_scan_sorted.h"
-#include "collections/limit_sorted.h"
-#include "collections/not_sorted.h"
+#include "collections/ordered_result_no_limit.h"
+#include "collections/ordered_result_with_limit.h"
+#include "collections/unordered_result.h"
 #include "sync_points/aggr.h"
 #include "sync_points/distinct_limit.h"
 #include "sync_points/limit.h"
@@ -36,18 +36,18 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
         distinctKeyColumnId && robustLimit && *robustLimit > 0 ? std::optional<ui64>(static_cast<ui64>(*robustLimit)) : std::nullopt;
     if (auto script = Context->GetSourcesAggregationScript()) {
         SourcesCollection =
-            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
+            std::make_shared<TUnorderedResultCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
         SyncPoints.emplace_back(std::make_shared<TSyncPointResultsAggregationControl>(
             SourcesCollection, Context->GetSourcesAggregationScript(), Context->GetRestoreResultScript(), SyncPoints.size(), context));
     } else if (readMetadataContext->IsSorted()) {
         if (readMetadataContext->HasLimit() && readMetadataContext->OrderByLimitAllowed()) {
-            auto collection = std::make_shared<TScanWithLimitCollection>(Context, std::move(sourcesConstructor));
+            auto collection = std::make_shared<TOrderedResultWithLimitCollection>(Context, std::move(sourcesConstructor));
             SourcesCollection = collection;
             SyncPoints.emplace_back(std::make_shared<TSyncPointLimitControl>(
                 (ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust(), SyncPoints.size(), context, collection));
         } else {
-            SourcesCollection = std::make_shared<TSortedFullScanCollection>(Context, std::move(sourcesConstructor));
+            SourcesCollection = std::make_shared<TOrderedResultNoLimitCollection>(Context, std::move(sourcesConstructor));
         }
         if (distinctLimit) {
             SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(
@@ -56,7 +56,7 @@ TScanHead::TScanHead(std::unique_ptr<NCommon::ISourcesConstructor>&& sourcesCons
         SyncPoints.emplace_back(std::make_shared<TSyncPointResult>(SyncPoints.size(), context, SourcesCollection));
     } else {
         SourcesCollection =
-            std::make_shared<TNotSortedCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
+            std::make_shared<TUnorderedResultCollection>(Context, std::move(sourcesConstructor), readMetadataContext->GetLimitRobustOptional());
         if (distinctLimit) {
             SyncPoints.emplace_back(std::make_shared<TSyncPointDistinctLimitControl>(
                 *distinctLimit, *distinctKeyColumnId, SyncPoints.size(), context, SourcesCollection));

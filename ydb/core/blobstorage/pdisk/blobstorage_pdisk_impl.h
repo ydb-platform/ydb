@@ -36,6 +36,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <list>
 #include <queue>
 
 #if defined(__linux__)
@@ -101,7 +102,8 @@ public:
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
     TDeque<TRequestBase*> PausedQueue;
-    std::set<std::unique_ptr<TYardInit>> PendingYardInits;
+    // Preserve arrival order among ready owners; busy owners may still be skipped.
+    std::list<std::unique_ptr<TYardInit>> PendingYardInits;
     ui64 LastFlushId = 0;
     bool IsQueuePaused = false;
     bool IsQueueStep = false;
@@ -454,7 +456,7 @@ public:
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
     void ProcessLogReadQueue();
-    void ProcessYardInitSet();
+    void ProcessPendingYardInits();
     void TrimAllUntrimmedChunks();
     void ProcessChunkTrimQueue();
     void ClearQuarantineChunks();

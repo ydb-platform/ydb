@@ -110,10 +110,28 @@ Y_UNIT_TEST_SUITE(ResourcePoolTest) {
             UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold");
         }
 
-        {  // QueryMemoryLimitPercentPerNode not supported yet
+        {  // QueryMemoryLimitPercentPerNode not supported
             TPoolSettings settings;
             settings.QueryMemoryLimitPercentPerNode = 50;
-            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "query_memory_limit_percent_per_node is not supported yet. Use total_memory_limit_percent_per_node for pool-wide memory limit");
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "query_memory_limit_percent_per_node is not supported");
+        }
+
+        {  // TotalMemoryLimitPercentPerNode not supported
+            TPoolSettings settings;
+            settings.TotalMemoryLimitPercentPerNode = 50;
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "total_memory_limit_percent_per_node is not supported");
+        }
+
+        {  // QueryCpuLimitPercentPerNode not supported
+            TPoolSettings settings;
+            settings.QueryCpuLimitPercentPerNode = 50;
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "query_cpu_limit_percent_per_node is not supported");
+        }
+
+        {  // ResourceWeight not supported
+            TPoolSettings settings;
+            settings.ResourceWeight = 100;
+            UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "resource_weight is not supported");
         }
     }
 }

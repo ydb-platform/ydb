@@ -138,6 +138,8 @@ namespace NYql::NDqs {
 
         CpuSystem = cpuSystemCur;
         CpuUser = cpuUserCur;
+        MaxRss = request.GetRusage().GetMaxRss();
+        CurrentRss = request.GetRusage().GetCurrentRss();
 
         auto pageFaultsDelta = (request.GetRusage().GetMajorPageFaults() - MajorPageFaults);
         MajorPageFaults = request.GetRusage().GetMajorPageFaults();

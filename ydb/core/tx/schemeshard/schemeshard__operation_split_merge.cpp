@@ -1086,10 +1086,16 @@ public:
         TTableInfo::TPtr mutableTableInfo = context.SS->Tables.at(path->PathId);
 
         mutableTableInfo->RegisterSplitMergeOp(OperationId, op);
-        context.SS->CreateTx(OperationId, TTxState::TxSplitTablePartition, path->PathId) = op;
+
+        // CreateTx acquires the path refs; move the prepared fields instead of
+        // the whole state so the refs are acquired exactly once.
+        auto& txState = context.SS->CreateTx(OperationId, TTxState::TxSplitTablePartition, path->PathId);
+        txState.State = op.State;
+        txState.Shards = std::move(op.Shards);
+        txState.SplitDescription = std::move(op.SplitDescription);
         context.OnComplete.ActivateTx(OperationId);
 
-        for (const auto& shard : op.Shards) {
+        for (const auto& shard : txState.Shards) {
             Y_ABORT_UNLESS(shard.Operation == TTxState::TransferData || shard.Operation == TTxState::CreateParts);
             // Add new (DST) shards to the list of all shards and update LastTxId for the old (SRC) shards
             Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.Idx));
@@ -1103,7 +1109,7 @@ public:
             }
         }
 
-        path.DomainInfo()->AddInternalShards(op, context.SS); //allow over commit for merge
+        path.DomainInfo()->AddInternalShards(txState, context.SS); //allow over commit for merge
         path->IncShardsInside(dstCount);
 
         SetState(NextState());
@@ -1114,7 +1120,7 @@ public:
             << ", tableId: " << pathId
             << ", opId: " << OperationId
             << ", at schemeshard: " << ssId
-            << ", op: " << op.SplitDescription->ShortDebugString()
+            << ", op: " << txState.SplitDescription->ShortDebugString()
             << ", request: " << info.ShortDebugString());
 
         return result;

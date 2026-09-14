@@ -205,6 +205,17 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         result = block(14, 3);
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
         UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvBlock(tabletId, 16,
+                TInstant::Max(), issuerGuid));
+        });
+        result = CaptureTEvBlockResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(17, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
     }
 
     Y_UNIT_TEST(BasicCollectGarbage) {

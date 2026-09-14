@@ -61,10 +61,8 @@ public:
         Become(&TThis::StateFunc);
     }
 
-    TLogPrefix BuildLogPrefix() const override {
-        return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "ReadProxy"},
-            {"selfId", SelfId()});
+    TStructuredMessage BuildLogPrefix() const override {
+        return {};
     }
 
 private:

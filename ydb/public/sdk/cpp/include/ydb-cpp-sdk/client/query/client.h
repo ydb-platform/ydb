@@ -16,11 +16,11 @@ namespace NYdb::inline Dev {
     class TProtoAccessor;
 
     namespace NRetry::Async {
-        template <typename TClient, typename TAsyncStatusType>
+        template <typename TClient, typename TOperation, bool WithSession>
         class TRetryContext;
     } // namespace NRetry::Async
     namespace NRetry::Sync {
-        template <typename TClient, typename TStatusType>
+        template <typename TClient, typename TOperation, bool WithSession>
         class TRetryContext;
     } // namespace NRetry::Sync
     namespace NRetry {
@@ -73,11 +73,10 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
 
 class TQueryClient {
     friend class TSession;
-    friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncExecuteQueryResult>;
-    friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncStatus>;
-    friend class NRetry::Async::TRetryContext<TQueryClient, NThreading::TFuture<TScriptExecutionOperation>>;
-    friend class NRetry::Async::TRetryContext<TQueryClient, TAsyncFetchScriptResultsResult>;
-    friend class NRetry::Sync::TRetryContext<TQueryClient, TStatus>;
+    template <typename, typename, bool>
+    friend class NRetry::Async::TRetryContext;
+    template <typename, typename, bool>
+    friend class NRetry::Sync::TRetryContext;
 
 public:
     using TQueryResultFunc = std::function<TAsyncExecuteQueryResult(TSession session)>;

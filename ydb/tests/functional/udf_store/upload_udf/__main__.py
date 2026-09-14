@@ -3,14 +3,20 @@
 """
 Standalone helper: upload or delete a UDF / WASM library in YDB UDF store tables.
 
+A module is identified by `name` (for a WASM UDF that is the manifest's
+`module_name`, i.e. the name YQL queries call it by). Re-uploading the same
+name replaces the row. `uid` is generated on each upload and can be used as a
+handle to delete that row. `md5` is only a checksum of the uploaded body,
+checked when the chunks are joined back together.
+
 Upload:
-  NATIVE_UNSAFE: KV volume + modules row (chunk_count=0)
+  NATIVE_UNSAFE: KV volume (key=name) + modules row (chunk_count=0)
   WASM udf / library: modules row + module_chunks
 
 Delete:
-  Prefer --uid (modules PK). Also supports --md5 / --udf-file for UDF and --library-name for library.
-  WASM: modules + module_chunks + best-effort AOT artifacts (kind=module)
-  library: modules + module_chunks + best-effort AOT artifacts (kind=library)
+  --uid or --name. Also --library-name for library.
+  WASM: modules + module_chunks + best-effort AOT artifacts (kind=module, id=name)
+  library: modules + module_chunks + best-effort AOT artifacts (kind=library, id=name)
   NATIVE_UNSAFE: modules (KV orphan left; service removes on-disk copy on snapshot)
 """
 
@@ -74,7 +80,7 @@ def _split_blob(data: bytes, chunk_size: int = WASM_BLOB_CHUNK_SIZE) -> list:
     return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
 
 
-def _upload_to_kv(endpoint: str, database: str, udf_file: str, md5: str) -> None:
+def _upload_to_kv(endpoint: str, database: str, udf_file: str, key: str) -> None:
     full_volume_path = "{}/{}".format(database, UDF_KV_BINARIES_PATH)
     cmd = [
         _kv_tool(), "upload",
@@ -83,7 +89,7 @@ def _upload_to_kv(endpoint: str, database: str, udf_file: str, md5: str) -> None
         "-p", full_volume_path,
         "-v",
         "--partition-id", "0",
-        "--key", md5,
+        "--key", key,
         "--file", udf_file,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -114,23 +120,16 @@ def _upsert_source_chunks(pool, database: str, owner_key: str, chunks: list) -> 
         )
 
 
-def _find_uid(pool, database: str, *, md5: str = "", name: str = "", module_type: str = "") -> str:
-    full_table = "{}/{}".format(database, UDF_TABLE_MODULES_PATH)
-    if md5:
-        query = (
-            "DECLARE $md5 AS Utf8; "
-            "SELECT uid FROM `{}` WHERE md5 = $md5 LIMIT 1;"
-        ).format(full_table)
-        result = pool.execute_with_retries(query, {"$md5": md5})
-    elif name:
-        query = (
-            "DECLARE $name AS Utf8; "
-            "DECLARE $type AS Utf8; "
-            "SELECT uid FROM `{}` WHERE name = $name AND type = $type LIMIT 1;"
-        ).format(full_table)
-        result = pool.execute_with_retries(query, {"$name": name, "$type": module_type or "LIBRARY"})
-    else:
+def _find_uid(pool, database: str, *, name: str = "", module_type: str = "") -> str:
+    if not name:
         return ""
+    full_table = "{}/{}".format(database, UDF_TABLE_MODULES_PATH)
+    query = (
+        "DECLARE $name AS Utf8; "
+        "DECLARE $type AS Utf8; "
+        "SELECT uid FROM `{}` WHERE name = $name AND type = $type LIMIT 1;"
+    ).format(full_table)
+    result = pool.execute_with_retries(query, {"$name": name, "$type": module_type})
     if not result or not result[0].rows:
         return ""
     return list(result[0].rows[0].values())[0]
@@ -205,17 +204,10 @@ def _upsert_wasm_or_library(
     body: bytes,
     manifest: str = "",
 ) -> str:
-    uid = _find_uid(
-        pool,
-        database,
-        md5=md5 if module_type == "WASM" else "",
-        name=name if module_type == "LIBRARY" else "",
-        module_type=module_type,
-    )
-    if not uid:
-        uid = str(uuid.uuid4())
-    else:
-        _delete_chunks(pool, database, uid)
+    existing_uid = _find_uid(pool, database, name=name, module_type=module_type)
+    if existing_uid:
+        _delete_chunks(pool, database, existing_uid)
+    uid = str(uuid.uuid4())
 
     chunks = _split_blob(body)
     _upsert_source_chunks(pool, database, uid, chunks)
@@ -284,7 +276,7 @@ def _delete_artifacts(driver, pool, database: str, artifact_id: str, kind: str) 
                 )
 
 
-def _select_module_row(pool, database: str, *, uid: str = "", md5: str = "") -> dict:
+def _select_module_row(pool, database: str, *, uid: str = "", name: str = "", module_type: str = "") -> dict:
     """Return {uid, md5, name, type} for a modules row, or {} if missing."""
     full_table = "{}/{}".format(database, UDF_TABLE_MODULES_PATH)
     if uid:
@@ -293,12 +285,18 @@ def _select_module_row(pool, database: str, *, uid: str = "", md5: str = "") -> 
             "SELECT uid, md5, name, type FROM `{}` WHERE uid = $uid LIMIT 1;"
         ).format(full_table)
         result = pool.execute_with_retries(query, {"$uid": uid})
-    elif md5:
+    elif name:
+        decls = "DECLARE $name AS Utf8; "
+        where = "name = $name"
+        params = {"$name": name}
+        if module_type:
+            decls += "DECLARE $type AS Utf8; "
+            where += " AND type = $type"
+            params["$type"] = module_type
         query = (
-            "DECLARE $md5 AS Utf8; "
-            "SELECT uid, md5, name, type FROM `{}` WHERE md5 = $md5 LIMIT 1;"
-        ).format(full_table)
-        result = pool.execute_with_retries(query, {"$md5": md5})
+            decls + "SELECT uid, md5, name, type FROM `{}` WHERE {} LIMIT 1;"
+        ).format(full_table, where)
+        result = pool.execute_with_retries(query, params)
     else:
         return {}
     if not result or not result[0].rows:
@@ -328,31 +326,30 @@ def _delete_module_by_uid(driver, pool, database: str, uid: str, udf_type: str =
         file=sys.stderr,
     )
     _delete_chunks(pool, database, uid)
-    _delete_by_key(pool, database, UDF_TABLE_MODULES_PATH, "uid", uid)
+    _delete_by_key(pool, database, UDF_TABLE_MODULES_PATH, "name", name)
     if _select_module_row(pool, database, uid=uid):
         raise RuntimeError("delete failed: modules row still present for uid={}".format(uid))
-    if module_type == "WASM" and md5:
-        _delete_artifacts(driver, pool, database, md5, "module")
-    elif module_type == "LIBRARY" and name:
-        _delete_artifacts(driver, pool, database, name, "library")
+    if module_type in ("WASM", "LIBRARY") and name:
+        kind = "library" if module_type == "LIBRARY" else "module"
+        _delete_artifacts(driver, pool, database, name, kind)
     print(
-        "[upload_udf] deleted from tables: uid={}. "
-        "In-memory unload waits for UDF store metadata refresh (~10s)".format(uid),
+        "[upload_udf] deleted from tables: name={} uid={}. "
+        "In-memory unload waits for UDF store metadata refresh (~10s)".format(name, uid),
         file=sys.stderr,
     )
-    return uid
+    return name
 
 
-def _delete_udf(driver, pool, database: str, md5: str, udf_type: str) -> None:
-    row = _select_module_row(pool, database, md5=md5)
+def _delete_udf(driver, pool, database: str, name: str) -> None:
+    row = _select_module_row(pool, database, name=name)
     if not row:
         raise RuntimeError(
-            "no modules row with md5={} (already deleted, wrong --database, or wrong md5). "
-            "Prefer --uid. List rows: SELECT uid, md5, name, type FROM `{}/{}`".format(
-                md5, database, UDF_TABLE_MODULES_PATH
+            "no modules row with name={} (already deleted or wrong --database). "
+            "List rows: SELECT uid, name, type FROM `{}/{}`".format(
+                name, database, UDF_TABLE_MODULES_PATH
             )
         )
-    _delete_module_by_uid(driver, pool, database, row["uid"], udf_type or row["type"])
+    _delete_module_by_uid(driver, pool, database, row["uid"], row["type"])
 
 
 def _delete_library(driver, pool, database: str, name: str) -> None:
@@ -362,6 +359,17 @@ def _delete_library(driver, pool, database: str, name: str) -> None:
             "no LIBRARY modules row with name={} (already deleted or wrong --database)".format(name)
         )
     _delete_module_by_uid(driver, pool, database, uid, "LIBRARY")
+
+
+def _module_name_from_manifest(manifest_text: str) -> str:
+    try:
+        obj = json.loads(manifest_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("manifest is not valid JSON: {}".format(exc)) from exc
+    name = obj.get("module_name") if isinstance(obj, dict) else None
+    if not isinstance(name, str) or not name.strip():
+        raise RuntimeError("manifest must contain a non-empty module_name")
+    return name.strip()
 
 
 def _do_upload(args) -> str:
@@ -374,10 +382,7 @@ def _do_upload(args) -> str:
             raise RuntimeError("--manifest is required for WASM uploads")
         with open(args.manifest, "r", encoding="utf-8") as manifest_file:
             manifest_text = manifest_file.read().strip()
-        try:
-            json.loads(manifest_text)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError("manifest is not valid JSON: {}".format(exc)) from exc
+        udf_name = _module_name_from_manifest(manifest_text)
 
     if args.kind == "library" and not args.library_name:
         raise RuntimeError("--library-name is required for library uploads")
@@ -391,7 +396,7 @@ def _do_upload(args) -> str:
         driver.wait(timeout=30, fail_fast=True)
         with ydb.QuerySessionPool(driver, size=1) as pool:
             if args.kind == "library":
-                _upsert_wasm_or_library(
+                uid = _upsert_wasm_or_library(
                     pool,
                     args.database,
                     module_type="LIBRARY",
@@ -400,10 +405,11 @@ def _do_upload(args) -> str:
                     version=args.version,
                     body=body,
                 )
-                print("[upload_udf] library uploaded: name={} md5={}".format(
-                    args.library_name, md5), file=sys.stderr)
-            elif args.type == "WASM":
-                _upsert_wasm_or_library(
+                print("[upload_udf] library uploaded: name={} uid={} md5={}".format(
+                    args.library_name, uid, md5), file=sys.stderr)
+                return args.library_name
+            if args.type == "WASM":
+                uid = _upsert_wasm_or_library(
                     pool,
                     args.database,
                     module_type="WASM",
@@ -413,25 +419,26 @@ def _do_upload(args) -> str:
                     body=body,
                     manifest=manifest_text,
                 )
-                print("[upload_udf] WASM module uploaded: md5={}".format(md5), file=sys.stderr)
-            else:
-                uid = _find_uid(pool, args.database, md5=md5)
-                if not uid:
-                    uid = str(uuid.uuid4())
-                _upload_to_kv(args.endpoint, args.database, args.udf_file, md5)
-                _upsert_module_row(
-                    pool,
-                    args.database,
-                    uid=uid,
-                    md5=md5,
-                    name=udf_name,
-                    size=size,
-                    module_type="NATIVE_UNSAFE",
-                    chunk_count=0,
-                    version=args.version,
-                )
-                print("[upload_udf] native binary uploaded to KV, module row inserted", file=sys.stderr)
-    return md5
+                print("[upload_udf] WASM module uploaded: name={} uid={} md5={}".format(
+                    udf_name, uid, md5), file=sys.stderr)
+                return udf_name
+
+            uid = str(uuid.uuid4())
+            _upload_to_kv(args.endpoint, args.database, args.udf_file, udf_name)
+            _upsert_module_row(
+                pool,
+                args.database,
+                uid=uid,
+                md5=md5,
+                name=udf_name,
+                size=size,
+                module_type="NATIVE_UNSAFE",
+                chunk_count=0,
+                version=args.version,
+            )
+            print("[upload_udf] native binary uploaded to KV: name={} uid={} md5={}".format(
+                udf_name, uid, md5), file=sys.stderr)
+            return udf_name
 
 
 def _do_delete(args) -> str:
@@ -442,18 +449,20 @@ def _do_delete(args) -> str:
                 return _delete_module_by_uid(driver, pool, args.database, args.uid, args.type)
 
             if args.kind == "library":
-                if not args.library_name:
-                    raise RuntimeError("--library-name is required for library delete (or pass --uid)")
-                _delete_library(driver, pool, args.database, args.library_name)
-                return args.library_name
+                name = args.library_name or args.name
+                if not name:
+                    raise RuntimeError("--library-name or --name is required for library delete (or pass --uid)")
+                _delete_library(driver, pool, args.database, name)
+                return name
 
-            md5 = args.md5
-            if not md5:
-                if not args.udf_file:
-                    raise RuntimeError("delete udf requires --uid, --md5, or --udf-file")
-                md5, _ = _compute_md5(args.udf_file)
-            _delete_udf(driver, pool, args.database, md5, args.type)
-            return md5
+            name = args.name
+            if not name and args.manifest:
+                with open(args.manifest, "r", encoding="utf-8") as manifest_file:
+                    name = _module_name_from_manifest(manifest_file.read().strip())
+            if not name:
+                raise RuntimeError("delete udf requires --uid, --name, or --manifest")
+            _delete_udf(driver, pool, args.database, name)
+            return name
 
 
 def main() -> int:
@@ -465,9 +474,13 @@ def main() -> int:
     parser.add_argument(
         "--uid",
         default="",
-        help="modules.uid (PK) for --action delete; preferred over --md5/--udf-file",
+        help="modules.uid generated at upload, for --action delete",
     )
-    parser.add_argument("--md5", default="", help="UDF md5 for --action delete (optional if --uid/--udf-file given)")
+    parser.add_argument(
+        "--name",
+        default="",
+        help="modules.name (PK): manifest module_name for a WASM UDF, library name, or native basename",
+    )
     parser.add_argument("--type", default="NATIVE_UNSAFE", choices=["NATIVE_UNSAFE", "WASM"])
     parser.add_argument("--manifest", default="")
     parser.add_argument("--kind", default="udf", choices=["udf", "library"])

@@ -142,8 +142,8 @@ namespace NProtoBuf {
     }
 
     // Binary serialization compatible conversion
-    inline bool TryBinaryCast(const Message* from, Message* to, TString* buffer = nullptr) {
-        TString tmpbuf;
+    inline bool TryBinaryCast(const Message* from, Message* to, TProtoStringType* buffer = nullptr) {
+        TProtoStringType tmpbuf;
         if (!buffer)
             buffer = &tmpbuf;
 

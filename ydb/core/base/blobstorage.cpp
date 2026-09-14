@@ -121,8 +121,10 @@ std::unique_ptr<TEvBlobStorage::TEvCheckIntegrityResult> TEvBlobStorage::TEvChec
 void TEvBlobStorage::TEvBlock::ToSpan(NWilson::TSpan& span) const {
     span
         .Attribute("TabletId", ::ToString(TabletId))
-        .Attribute("Generation", Generation)
-        .Attribute("Version", Version);
+        .Attribute("Generation", Generation);
+    if (Version) {
+        span.Attribute("Version", *Version);
+    }
 }
 
 std::unique_ptr<TEvBlobStorage::TEvBlockResult> TEvBlobStorage::TEvBlock::MakeErrorResponse(

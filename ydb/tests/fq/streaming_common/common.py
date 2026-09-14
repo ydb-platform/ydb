@@ -4,7 +4,6 @@ import logging
 import os
 import tempfile
 import time
-from typing import Optional, Self
 import yatest.common
 import yaml
 import ydb
@@ -12,8 +11,13 @@ import pytest
 import random
 import requests
 
+from collections import defaultdict
+from typing import List, Dict, Optional, Self
+
+from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.tools.datastreams_helpers.data_plane import read_stream
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 from ydb.tests.tools.datastreams_helpers.control_plane import create_stream
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
@@ -432,6 +436,151 @@ def _wait_cms_config_applied(cluster: KiKiMR, full_yaml_config, timeout: int = 3
     raise AssertionError("CMS configuration was not applied to all dynamic nodes")
 
 
+def get_streaming_query_diagnostics(context, path: str) -> str:
+    try:
+        query = f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
+        if hasattr(context, "kikimr"):
+            result_sets = context.kikimr.ydb_client.query(query)
+        elif hasattr(context, "driver"):
+            with ydb.QuerySessionPool(context.driver) as session_pool:
+                result_sets = session_pool.execute_with_retries(query)
+        else:
+            raise AttributeError("Context must provide either 'kikimr' or 'driver'")
+        return (
+            "\n".join(
+                "Status: {status}\nIssues:\n{issues}".format(
+                    status=row["Status"],
+                    issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
+                )
+                for row in result_sets[0].rows
+            )
+            if result_sets
+            else []
+        )
+    except Exception as error:
+        return f"failed to retrieve Status / Issues: {error}"
+
+
+class MessageAcceptor:
+    class MessageGroup:
+        def __init__(self):
+            self.messages: List[str] = []
+            self.messages_index: Dict[str, int] = {}
+            self.unaccepted_count = 0
+            self.receive_idx: Optional[int] = None
+            self.start_idx = 0
+
+        def accept(self, messages: List[str]):
+            for message in messages:
+                idx = len(self.messages_index)
+                self.messages_index[message] = idx
+
+            self.messages.extend(messages)
+            self.unaccepted_count += len(messages)
+
+        def reset(self):
+            self.receive_idx = None
+
+        def advance(self, data: str):
+            data_idx = self.messages_index[data]
+
+            if self.receive_idx is not None:
+                assert self.receive_idx + 1 < len(self.messages), (
+                    f"All messages in order group already received, got unexpected message: '{data}' "
+                    f"(index {data_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
+                assert data_idx == self.receive_idx + 1, (
+                    f"Expected message '{self.messages[self.receive_idx + 1]}' "
+                    f"(index {self.receive_idx + 1} / {len(self.messages) - 1}), "
+                    f"but got '{data}' (index {data_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
+                self.receive_idx += 1
+            else:
+                if self.unaccepted_count > 0:
+                    max_expected_idx = len(self.messages) - self.unaccepted_count
+                    assert data_idx <= max_expected_idx, (
+                        f"Unexpected message: '{data}' (index {data_idx} / {len(self.messages) - 1}), "
+                        f"{data_idx - max_expected_idx} unseen messages were skipped, {self.debug_info()}"
+                    )
+                assert data_idx >= self.start_idx, (
+                    f"Unexpected starting message: '{data}' (index {data_idx} / {len(self.messages) - 1}), "
+                    f"previous query start was on newer message {self.messages[self.start_idx]} "
+                    f"(index {self.start_idx} / {len(self.messages) - 1}), {self.debug_info()}"
+                )
+                self.receive_idx = data_idx
+                self.start_idx = data_idx
+
+            if data_idx == len(self.messages) - self.unaccepted_count:
+                self.unaccepted_count -= 1
+
+        def __len__(self) -> int:
+            if self.receive_idx is not None:
+                return len(self.messages) - self.receive_idx - 1
+            return self.unaccepted_count
+
+        def debug_info(self) -> str:
+            return (
+                f"full expected messages order: {self.messages}, start_idx: {self.start_idx}, "
+                f"receive_idx: {self.receive_idx}, unaccepted_count: {self.unaccepted_count}"
+            )
+
+    def __init__(self):
+        self.all_messages: Dict[str, int] = {}
+        self.groups = defaultdict(MessageAcceptor.MessageGroup)
+
+    def accept(self, messages: List[str], ordered_group: int = 0):
+        for message in messages:
+            assert message not in self.all_messages, (
+                f"All test messages must be unique, got validation set: {self.all_messages} "
+                f"(failed after adding duplicated '{message}')"
+            )
+            self.all_messages[message] = ordered_group
+
+        self.groups[ordered_group].accept(messages)
+
+    # Must be called on query restart, when may occur duplicates
+    def reset(self):
+        for group in self.groups.values():
+            group.reset()
+
+    def advance(self, read_data: List[str]):
+        for data in read_data:
+            group_id = self.all_messages.get(data)
+            assert group_id is not None, f"Unexpected message: {data}, only expected messages are: {self.all_messages}"
+            self.groups[group_id].advance(data)
+
+    def debug_info(self) -> str:
+        return ";\n".join(f"{idx}: {group.debug_info()}" for idx, group in self.groups.items())
+
+    def __len__(self) -> int:
+        return sum(len(group) for group in self.groups.values())
+
+
+def read_and_check_data(
+    context, query_path, acceptor: MessageAcceptor, endpoint, database_path, consumer_name, topic_name
+):
+    try:
+        logger.debug("read data from stream")
+        deadline = time.time() + plain_or_under_sanitizer_wrapper(60, 300)
+
+        while len(acceptor) != 0:
+            remaining_timeout = deadline - time.time()
+            assert remaining_timeout > 0, f"Timed out waiting for expected data: {acceptor.debug_info()}"
+
+            acceptor.advance(
+                read_stream(
+                    path=topic_name,
+                    messages_count=len(acceptor),
+                    consumer_name=consumer_name,
+                    database=database_path,
+                    endpoint=endpoint,
+                    timeout=remaining_timeout,
+                )
+            )
+    except AssertionError as error:
+        raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(context, query_path)}") from error
+
+
 class Kikimr:
     def __init__(
         self,
@@ -542,25 +691,7 @@ class StreamingTestBase(TestYdsBase):
                 kikimr.cluster, path, timeout=timeout, checkpoints_count=checkpoints_count, wait_delta=True
             )
         except AssertionError as error:
-            diagnostics = "failed to retrieve Status / Issues"
-            try:
-                result_sets = kikimr.ydb_client.query(
-                    f'SELECT Status, Issues FROM `.sys/streaming_queries` WHERE Path = "{path}";'
-                )
-                diagnostics = (
-                    "\n".join(
-                        "Status: {status}\nIssues:\n{issues}".format(
-                            status=row["Status"],
-                            issues=json.dumps(json.loads(row["Issues"]), indent=2, ensure_ascii=False),
-                        )
-                        for row in result_sets[0].rows
-                    )
-                    if result_sets
-                    else []
-                )
-            except Exception as diagnostics_error:
-                diagnostics = f"failed to retrieve Status / Issues: {diagnostics_error}"
-            raise AssertionError(f"{error}\n{diagnostics}") from error
+            raise AssertionError(f"{error}\n{get_streaming_query_diagnostics(self, path)}") from error
 
     def get_actor_count(self, kikimr: Kikimr, node_id: int, activity: str) -> int:
         result = get_sensors(kikimr.cluster, node_id, "utils").find_sensor(
@@ -579,12 +710,19 @@ class StreamingTestBase(TestYdsBase):
     def restart_streaming_node(self, kikimr: Kikimr) -> int:
         """Find and restart the node hosting the streaming query (DQ_PQ_READ_ACTOR).
         Returns the restarted node ID."""
-        restart_node_id = None
-        for node_id in kikimr.cluster.slots:
-            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
-            if count:
-                restart_node_id = node_id
-                break
+
+        def _find_node():
+            for node_id in kikimr.cluster.slots:
+                if self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR"):
+                    return node_id
+            return None
+
+        wait_for(
+            lambda: _find_node() is not None,
+            timeout_seconds=30,
+            step_seconds=1,
+        )
+        restart_node_id = _find_node()
         assert restart_node_id is not None, "No node found with DQ_PQ_READ_ACTOR"
         self.restart_node(kikimr, restart_node_id)
         return restart_node_id

@@ -134,6 +134,24 @@ void CheckSerializeThenDeserialize(bool withPayload, bool buffer, ui32 metaLengt
 
 Y_UNIT_TEST_SUITE(EventSerializerV2) {
 
+    Y_UNIT_TEST(UnusedNonAlignedScratchIsNotTrimmed) {
+        TEventSerializer ser(false);
+        TRcBuf buffer = TRcBuf::Uninitialized(5000);
+        std::vector<TContiguousSpan> spans;
+        UNIT_ASSERT_VALUES_EQUAL(ser.ProduceOutputStream(buffer, &spans), 0);
+        UNIT_ASSERT_VALUES_EQUAL(buffer.size(), 5000);
+        UNIT_ASSERT(spans.empty());
+
+        TEventSerializer xdcSer(false, true);
+        TRcBuf main = TRcBuf::Uninitialized(5000);
+        TRcBuf xdc = TRcBuf::Uninitialized(5000);
+        std::vector<TContiguousSpan> mainSpans;
+        std::vector<TContiguousSpan> xdcSpans;
+        UNIT_ASSERT_VALUES_EQUAL(xdcSer.ProduceOutputStream(main, &mainSpans, &xdc, &xdcSpans, 5000, 5000), 0);
+        UNIT_ASSERT_VALUES_EQUAL(main.size(), 5000);
+        UNIT_ASSERT_VALUES_EQUAL(xdc.size(), 5000);
+    }
+
     Y_UNIT_TEST(CheckSerializeThenDeserializeProtoWithoutPayload) {
         CheckSerializeThenDeserialize(false, false, 10);
     }
@@ -1119,6 +1137,45 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         CheckXdcWithBuffers(/*bufSize=*/64, /*maxPerCall=*/64, /*payloadLen=*/8192, /*numEvents=*/5, false);
         CheckXdcWithBuffers(64, 64, 8192, 5, /*preserialize=*/true);
         CheckXdcWithBuffers(/*bufSize=*/128, /*maxPerCall=*/37, /*payloadLen=*/5000, /*numEvents=*/8, false);
+    }
+
+    Y_UNIT_TEST(XdcNonAlignedBuffersAndBudgets) {
+        CheckXdcWithBuffers(5000, 4097, 20000, 8, false);
+        CheckXdcWithBuffers(5000, 4097, 20000, 8, /*preserialize=*/true);
+    }
+
+    Y_UNIT_TEST(DroppedScratchTailsKeepUncommittedBytesAlive) {
+        TEventSerializer ser(true, true);
+        constexpr size_t NumEvents = 32;
+        for (size_t i = 0; i < NumEvents; ++i) {
+            ser.Push(MakeIndexedEvent(1, i, 32, true));
+        }
+
+        std::vector<TContiguousSpan> mainSpans;
+        std::vector<TContiguousSpan> xdcSpans;
+        for (size_t batch = 0; ser.IsTrafficPending(); ++batch) {
+            UNIT_ASSERT_LT(batch, NumEvents);
+            TRcBuf main = TRcBuf::Uninitialized(5000);
+            TRcBuf xdc = TRcBuf::Uninitialized(5000);
+            UNIT_ASSERT(ser.ProduceOutputStream(main, &mainSpans, &xdc, &xdcSpans, 1024, 1024));
+            // Both tails go out of scope before any completion. Only the serializer
+            // retains the scratch slabs, as when the engine lowers a scratch target.
+        }
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        const TString xdc = ConcatSpans(xdcSpans);
+        size_t xdcPos = 0;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(ConcatSpans(mainSpans))), &processor, {});
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, xdc.size());
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), NumEvents);
+        for (size_t i = 0; i < NumEvents; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(processor.Events[i]->Cookie, i);
+            CheckIndexedEvent(*processor.Events[i], 1, 32, true);
+        }
+        ser.CommitProducedBytes(ser.GetCumulativeProducedMain(), ser.GetCumulativeProducedXdc());
+        UNIT_ASSERT_VALUES_EQUAL(ser.GetNumBytesInScratchBuffers(), 0);
     }
 
     // A payload well past the ui16 PUSH limit has to be split across many PUSH commands.

@@ -194,7 +194,7 @@ public:
             // shared lock), then builds the fulltext index in rowid mode. See the provisioning prefix
             // in build_index__progress.cpp.
             const auto classification = NTableIndex::ClassifyFulltextRowId(
-                tableInfo, tablePath.Base()->GetChildren(), Self->Indexes, indexDesc, explain);
+                tableInfo, tablePath.Base()->GetChildren(), Self->Indexes.AsMap(), indexDesc, explain);
             auto enableRowIdMode = [&]() {
                 indexDesc.MutableFulltextIndexDescription()->SetUseRowIdAsDocId(true);
                 // Fulltext index builds always carry a TFulltextIndexDescription. JSON index builds

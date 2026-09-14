@@ -226,6 +226,10 @@ private:
 
         ~TDqSolomonWriteActorMetrics() {
             if (CountersRoot) {
+                // XXX Group will be removed by each task of query (repeatedly);
+                // Should be mostly harmless (as all of them removed at once at query termination);
+                // Though, there are some racing potential on query restart;
+                // This is common problem with solomon sink, pq source, pq sink and dq slj actor
                 CountersRoot->RemoveSubgroup("tx_id", TxId);
             }
         }

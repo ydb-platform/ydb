@@ -316,6 +316,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
             backupSettings.SetObjectKeyPattern(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
 
+            if (exportInfo.EnableTableBackupAsSql && item.ParentIdx == Max<ui32>()) {
+                backupSettings.SetSourceTablePath(item.SourcePathName);
+            }
+
             switch (exportSettings.scheme()) {
             case Ydb::Export::ExportToS3Settings::HTTP:
                 backupSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);

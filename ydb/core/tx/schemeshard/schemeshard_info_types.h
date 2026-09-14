@@ -3635,6 +3635,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     bool EnableChecksums = false;
     bool EnablePermissions = false;
     bool IncludeIndexData = false;
+    bool EnableTableBackupAsSql = false;
 
     NKikimrSchemeOp::TExportMetadata ExportMetadata;
     TActorId ExportMetadataUploader;

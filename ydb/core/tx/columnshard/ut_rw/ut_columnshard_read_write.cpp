@@ -1759,8 +1759,8 @@ void TestScanResumedByCursorOnOtherReader(const TString& interruptedReader, cons
     AssertResumedScanReadsEveryKeyOnce(interrupted, resumed, portionsCount);
 }
 
-// Sys-view sources are extracted in scan direction, so a cursor taken from a DESC scan must resume it without gaps or repeats
-void TestSysViewScanResumedByCursorDesc(const TString& readerClassName) {
+template <class TCheck>
+void WithSysViewPortions(const TString& readerClassName, TCheck&& check) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
     runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName(readerClassName);
@@ -1781,9 +1781,8 @@ void TestSysViewScanResumedByCursorDesc(const TString& readerClassName) {
     const auto ydbSchema = table.Schema;
     auto planStep = SetupSchema(runtime, sender, tableId);
 
-    // sys-view sources hold up to 10 portions each, so this makes three of them
+    // Sys-view sources hold up to 10 portions each: 25 portions make groups of 10, 10, and 5.
     constexpr ui64 portionsCount = 25;
-    constexpr ui32 chunksBeforeInterruption = 1;
 
     ui64 writeId = 0;
     ui64 txId = 100;
@@ -1798,57 +1797,63 @@ void TestSysViewScanResumedByCursorDesc(const TString& readerClassName) {
     UNIT_ASSERT_VALUES_EQUAL(csControllerGuard->GetCompactionStartedCounter().Val(), 0);
 
     const NOlap::TSnapshot snapshot(planStep, Max<ui64>());
-    using TStats = NKikimr::NSysView::Schema::PrimaryIndexPortionStats;
-    const std::vector<ui32> columnIds = { TStats::PathId::ColumnId, TStats::TabletId::ColumnId, TStats::PortionId::ColumnId };
-    const TString sysViewPath = "/.sys/store_primary_index_portion_stats";
-
-    const auto portionIds = [](const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
-        std::vector<ui64> result;
-        for (const auto& batch : batches) {
-            auto array = std::dynamic_pointer_cast<arrow::UInt64Array>(batch->GetColumnByName("PortionId"));
-            UNIT_ASSERT_C(array, batch->schema()->ToString());
-            for (i64 i = 0; i < array->length(); ++i) {
-                result.push_back(array->Value(i));
-            }
-        }
-        return result;
-    };
-
-    TShardReader reference(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
-    reference.SetTablePath(sysViewPath);
-    reference.SetReverse(true);
-    reference.SetReplyColumnIds(columnIds);
-    reference.ReadAll();
-    UNIT_ASSERT(reference.IsCorrectlyFinished());
-    const std::vector<ui64> expected = portionIds(reference.GetReceivedBatches());
-    UNIT_ASSERT_VALUES_EQUAL(expected.size(), portionsCount);
-    // rows keep source-local key order, so DESC shows up as the last source being extracted first
-    UNIT_ASSERT_C(expected.front() > expected.back(), JoinSeq(",", expected));
-
-    TShardReader interrupted(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
-    interrupted.SetTablePath(sysViewPath);
-    interrupted.SetReverse(true);
-    interrupted.SetReplyColumnIds(columnIds);
-    UNIT_ASSERT(interrupted.InitializeScanner());
-    for (ui32 i = 0; i < chunksBeforeInterruption; ++i) {
-        interrupted.Ack();
-        UNIT_ASSERT_C(interrupted.Receive(), "scan finished after " << i << " chunks, too early to resume it from a cursor");
-    }
-
-    TShardReader resumed(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
-    resumed.SetTablePath(sysViewPath);
-    resumed.SetReverse(true);
-    resumed.SetReplyColumnIds(columnIds);
-    resumed.SetScanCursor(interrupted.GetLastCursor());
-    resumed.ReadAll();
-    UNIT_ASSERT(resumed.IsCorrectlyFinished());
-
-    std::vector<ui64> actual = portionIds(interrupted.GetReceivedBatches());
-    const std::vector<ui64> tail = portionIds(resumed.GetReceivedBatches());
-    UNIT_ASSERT_C(!tail.empty(), "resumed scan returned nothing");
-    actual.insert(actual.end(), tail.begin(), tail.end());
-    UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", actual), JoinSeq(",", expected));
+    check(runtime, tableId, snapshot, portionsCount);
 }
+
+// DESC source order must survive resuming from a cursor without gaps or repeats.
+void TestSysViewScanResumedByCursorDesc(const TString& readerClassName) {
+    WithSysViewPortions(readerClassName, [](TTestBasicRuntime& runtime, ui64 tableId, const NOlap::TSnapshot& snapshot, ui64 portionsCount) {
+        using TStats = NKikimr::NSysView::Schema::PrimaryIndexPortionStats;
+        const std::vector<ui32> columnIds = { TStats::PathId::ColumnId, TStats::TabletId::ColumnId, TStats::PortionId::ColumnId };
+        const TString sysViewPath = "/.sys/store_primary_index_portion_stats";
+
+        const auto getPortionIds = [](const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
+            std::vector<ui64> result;
+            for (const auto& batch : batches) {
+                auto array = std::dynamic_pointer_cast<arrow::UInt64Array>(batch->GetColumnByName("PortionId"));
+                UNIT_ASSERT_C(array, batch->schema()->ToString());
+                for (i64 i = 0; i < array->length(); ++i) {
+                    result.push_back(array->Value(i));
+                }
+            }
+            return result;
+        };
+
+        TShardReader reference(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+        reference.SetTablePath(sysViewPath);
+        reference.SetReverse(true);
+        reference.SetReplyColumnIds(columnIds);
+        reference.ReadAll();
+        UNIT_ASSERT(reference.IsCorrectlyFinished());
+        const std::vector<ui64> expected = getPortionIds(reference.GetReceivedBatches());
+        UNIT_ASSERT_VALUES_EQUAL(expected.size(), portionsCount);
+        // rows keep source-local key order, so DESC shows up as the last source being extracted first
+        UNIT_ASSERT_C(expected.front() > expected.back(), JoinSeq(",", expected));
+
+        TShardReader interrupted(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+        interrupted.SetTablePath(sysViewPath);
+        interrupted.SetReverse(true);
+        interrupted.SetReplyColumnIds(columnIds);
+        UNIT_ASSERT(interrupted.InitializeScanner());
+        interrupted.Ack();
+        UNIT_ASSERT_C(interrupted.Receive(), "scan finished too early to resume it from a cursor");
+
+        TShardReader resumed(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+        resumed.SetTablePath(sysViewPath);
+        resumed.SetReverse(true);
+        resumed.SetReplyColumnIds(columnIds);
+        resumed.SetScanCursor(interrupted.GetLastCursor());
+        resumed.ReadAll();
+        UNIT_ASSERT(resumed.IsCorrectlyFinished());
+
+        std::vector<ui64> actual = getPortionIds(interrupted.GetReceivedBatches());
+        const std::vector<ui64> tail = getPortionIds(resumed.GetReceivedBatches());
+        UNIT_ASSERT_C(!tail.empty(), "resumed scan returned nothing");
+        actual.insert(actual.end(), tail.begin(), tail.end());
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", actual), JoinSeq(",", expected));
+    });
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TColumnShardInit) {
@@ -2497,11 +2502,31 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
     }
 
     Y_UNIT_TEST(SysViewScanResumedByCursorDesc) {
-        TestSysViewScanResumedByCursorDesc("TRIVIAL");
+        for (const TString reader : { "SIMPLE", "TRIVIAL" }) {
+            TestSysViewScanResumedByCursorDesc(reader);
+        }
     }
 
-    Y_UNIT_TEST(SysViewScanResumedByCursorDescSimpleReader) {
-        TestSysViewScanResumedByCursorDesc("SIMPLE");
+    Y_UNIT_TEST(SysViewLimitDrainsEqualPrefixes) {
+        using TStats = NKikimr::NSysView::Schema::PrimaryIndexPortionStats;
+        for (const TString reader : { "SIMPLE", "TRIVIAL" }) {
+            WithSysViewPortions(reader, [&](TTestBasicRuntime& runtime, ui64 tableId, const NOlap::TSnapshot& snapshot, ui64 portionsCount) {
+                for (const bool reverse : { false, true }) {
+                    for (const ui32 limit : { 0u, 3u }) {
+                        TShardReader scan(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+                        scan.SetTablePath("/.sys/store_primary_index_portion_stats");
+                        scan.SetReverse(reverse);
+                        // Equal (PathId, TabletId) prefixes require <= in DrainToLimit; using < returns more than the limit.
+                        scan.SetReplyColumnIds({ TStats::PathId::ColumnId, TStats::TabletId::ColumnId });
+                        scan.SetLimit(limit);
+                        scan.ReadAll();
+                        UNIT_ASSERT_C(scan.IsCorrectlyFinished(), reader);
+                        UNIT_ASSERT_VALUES_EQUAL_C(
+                            scan.GetRecordsCount(), limit ? limit : portionsCount, reader << ", reverse=" << reverse << ", limit=" << limit);
+                    }
+                }
+            });
+        }
     }
 
     Y_UNIT_TEST(WriteRead) {

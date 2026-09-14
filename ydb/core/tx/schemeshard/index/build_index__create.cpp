@@ -7,6 +7,7 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 namespace NKikimr::NSchemeShard {
 
@@ -38,7 +39,7 @@ public:
                 << "Another long-running operation with id '" << BuildId << "' already exists");
         }
 
-        const TString& uid = GetUid(request.GetOperationParams());
+        const TString& uid = GetUid(Ydb::TOperationId::BUILD_INDEX, request.GetOperationParams());
         if (uid && Self->IndexBuildsByUid.contains(uid)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
                 << "Index build with uid '" << uid << "' already exists");

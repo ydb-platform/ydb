@@ -5,7 +5,6 @@
 #include "schemeshard_import_getters.h"
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_import_scheme_query_executor.h"
-#include "common/operation_idempotency.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
@@ -21,12 +20,14 @@
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path_describer.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/core/backup/common/feature_flags.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/maybe.h>
@@ -235,7 +236,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             );
         }
 
-        const TString& uid = GetUid(request.GetRequest().GetOperationParams());
+        const TString& uid = GetUid(Ydb::TOperationId::IMPORT, request.GetRequest().GetOperationParams());
         if (uid) {
             if (const auto* existing = FindOperationByUid(Self->ImportsByUid, uid)) {
                 const auto domain = DomainPathId(request.GetDatabaseName());

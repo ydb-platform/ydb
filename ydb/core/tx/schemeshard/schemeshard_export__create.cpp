@@ -4,11 +4,11 @@
 #include "schemeshard_export_helpers.h"
 #include "schemeshard_export_uploaders.h"
 #include "schemeshard_impl.h"
-#include "common/operation_idempotency.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/core/tx/datashard/export_data_format.h>
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
@@ -17,6 +17,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>
@@ -136,7 +137,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             );
         }
 
-        const TString& uid = GetUid(request.GetRequest().GetOperationParams());
+        const TString& uid = GetUid(Ydb::TOperationId::EXPORT, request.GetRequest().GetOperationParams());
         if (uid) {
             if (const auto* existing = FindOperationByUid(Self->ExportsByUid, uid)) {
                 const auto domain = DomainPathId(request.GetDatabaseName());

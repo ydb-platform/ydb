@@ -188,6 +188,10 @@ namespace NKikimr::NDDisk {
     ui64 TDDiskActor::CalculateChecksum(const TRope::TIterator begin, size_t numBytes) {
         Y_ABORT_UNLESS(PersistentBufferUniqueId != 0);
 
+        if (begin.Valid() && begin.ContiguousSize() >= numBytes) {
+            return XXH3_64bits(begin.ContiguousData(), numBytes) ^ PersistentBufferUniqueId;
+        }
+
         // XXH3_64bits_reset() does not zero the whole state (buffer, customSecret, reserved64,
         // trailing alignment padding — see XXH3_reset_internal). Digest then reads those fields,
         // which MSAN reports as use-of-uninitialized-value. xxHash documents value-init / memset
@@ -199,8 +203,8 @@ namespace NKikimr::NDDisk {
             XXH3_64bits_update(&state, it.ContiguousData(), n);
             numBytes -= n;
         }
-        XXH3_64bits_update(&state, &PersistentBufferUniqueId, sizeof(PersistentBufferUniqueId));
-        return XXH3_64bits_digest(&state);
+        Y_ABORT_UNLESS(numBytes == 0);
+        return XXH3_64bits_digest(&state) ^ PersistentBufferUniqueId;
     }
 
     void TDDiskActor::StartRestorePersistentBuffer() {
@@ -276,6 +280,7 @@ namespace NKikimr::NDDisk {
         const std::vector<ui64>& payloadChecksums, ui8 directBlockGroupIndex, ui64 headerUniqueId)
     {
         TRope fullData(std::move(payloadWithHeader));
+        Y_ABORT_UNLESS(payloadChecksums.empty() || payloadChecksums.size() == sectors.size() - 1);
 
         // Phase 1: signature correction. A data sector whose first byte equals the header signature byte
         // would be misread as a record header during chunk restore, so we zero that byte on disk and remember
@@ -341,8 +346,11 @@ namespace NKikimr::NDDisk {
             auto& loc = locations[i - 1];
             loc = sectors[i]; // carries signature correction and first 8 bytes of data from Phase 1
             if (PersistentBufferFormat.EnableChecksums) {
-                auto it = fullData.Begin() + SectorSize * i;
-                loc.ChecksumOrData = CalculateChecksum(it);
+                // Sender checksums cover the original bytes. Signature correction changes
+                // the on-disk sector, so only unchanged sectors can reuse them.
+                loc.ChecksumOrData = hasPayloadChecksums && !loc.HasSignatureCorrection
+                    ? payloadChecksums[i - 1] ^ PersistentBufferUniqueId
+                    : CalculateChecksum(fullData.Begin() + SectorSize * i);
                 sectors[i].ChecksumOrData = loc.ChecksumOrData;
             }
         }
@@ -1351,7 +1359,9 @@ namespace NKikimr::NDDisk {
                     sectorsIt->HasSignatureCorrection = true;
                     *it.ContiguousDataMut() = 0;
                 }
-                r.Sectors[i + 1].ChecksumOrData = CalculateChecksum(it);
+                r.Sectors[i + 1].ChecksumOrData = !r.PayloadChecksums.empty() && !r.Sectors[i + 1].HasSignatureCorrection
+                    ? r.PayloadChecksums[i] ^ PersistentBufferUniqueId
+                    : CalculateChecksum(it);
                 sectorsIt->ChecksumOrData = r.Sectors[i + 1].ChecksumOrData;
             } else {
                 ui64 originalPrefix;

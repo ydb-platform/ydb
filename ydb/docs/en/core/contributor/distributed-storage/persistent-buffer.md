@@ -51,8 +51,12 @@ The client decides which records are safe to erase. For example, a partition may
 
 There are two related settings with different responsibilities:
 
-- `TDDiskConfig::EnableChecksums` controls payload checksum validation and forwarding through the DDisk/PB interface. Wire checksums are pure XXH3-64 values per 4 KiB block.
+- `TDDiskConfig::EnableChecksums` enables payload checksum handling and forwarding through the DDisk/PB interface; `CheckChecksumBeforeWrite` additionally controls validation before writes. Wire checksums are pure XXH3-64 values per 4 KiB block.
 - `TPersistentBufferFormat::EnableChecksums` controls the PB on-disk integrity format. Checksummed records store sector/header integrity information. The checksum-free format stores a record header unique ID in data sectors and preserves their original prefix bytes in metadata.
+
+With PB checksums enabled, sector and header checksums are `XXH3-64(data) XOR PersistentBufferUniqueId`. For both individual and batched writes, PB reuses a supplied payload checksum by XORing it with the PB unique ID when the sector needs no signature correction. It hashes the sector again if signature correction changes its bytes or no payload checksum is supplied. Incoming payload checksums are validated only when both `TDDiskConfig::EnableChecksums` and `TDDiskConfig::CheckChecksumBeforeWrite` are enabled.
+
+This checksum calculation replaces `XXH3-64(data || PersistentBufferUniqueId)` and is incompatible with existing checksummed PB records. There is no compatibility reader or migration for that older checksum format; recreate PB storage before using the new format.
 
 The on-disk header flags identify the format of each record, so recovery and reads interpret an existing record according to its persisted format rather than the current setting alone. Sender payload checksums are an additional optional metadata array identified by `HAS_PAYLOAD_CHECKSUMS`; do not confuse them with the PB sector checksums or with DDisk's separate integrity chunks.
 

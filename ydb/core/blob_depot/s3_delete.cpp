@@ -288,6 +288,8 @@ namespace NKikimr::NBlobDepot {
             return;
         }
 
+        ApplyMaxDeletesInFlight();
+
         while (NumDeleteTxInFlight + ActiveDeleters.size() < CurrentMaxDeletesInFlight) {
             if (DeleteQueue.empty()) {
                 break;
@@ -295,7 +297,8 @@ namespace NKikimr::NBlobDepot {
 
             // create list of locators we are going to delete during this operation
             THashMap<TString, TS3Locator> locators;
-            while (!DeleteQueue.empty() && locators.size() < MaxObjectsToDeleteAtOnce) {
+            const ui32 maxObjectsToDeleteAtOnce = MaxObjectsToDeleteAtOnce();
+            while (!DeleteQueue.empty() && locators.size() < maxObjectsToDeleteAtOnce) {
                 const TS3Locator& locator = DeleteQueue.front();
                 locators.emplace(locator.MakeObjectName(BasePath), locator);
                 DeleteQueue.pop_front();
@@ -383,14 +386,16 @@ namespace NKikimr::NBlobDepot {
                         {"throttled", msg.LocatorsThrottled.size()});
                 } else if (!msg.LocatorsOk.empty()) {
                     // Pure success: gradually restore concurrency.
-                    if (CurrentMaxDeletesInFlight < MaxDeletesInFlight) {
+                    const ui32 maxDeletesInFlight = MaxDeletesInFlight();
+                    if (CurrentMaxDeletesInFlight < maxDeletesInFlight) {
                         if (++ConsecutiveSuccessfulDeleteBatches >= SuccessesPerConcurrencyStepUp) {
                             ConsecutiveSuccessfulDeleteBatches = 0;
                             ++CurrentMaxDeletesInFlight;
-                            if (CurrentMaxDeletesInFlight >= MaxDeletesInFlight) {
-                                CurrentMaxDeletesInFlight = MaxDeletesInFlight;
+                            if (CurrentMaxDeletesInFlight >= maxDeletesInFlight) {
+                                CurrentMaxDeletesInFlight = maxDeletesInFlight;
                                 DeleteBackoff.Reset();
                             }
+
                             Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
                         }
                     }

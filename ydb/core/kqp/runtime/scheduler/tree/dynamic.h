@@ -58,6 +58,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         NSnapshot::TQuery* TakeSnapshot() override;
 
+        TFullPoolId GetFullPoolId() const;
+
         TSchedulableTaskList::iterator AddTask(const TSchedulableTaskPtr& task);
         ui32 ResumeTasks(ui32 count);
 

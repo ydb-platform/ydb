@@ -2242,6 +2242,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         securityConfig.SetEnforceUserTokenCheckRequirement(true);
         securityConfig.AddAdministrationAllowedSIDs(ROOT_TOKEN);
         securityConfig.AddViewerAllowedSIDs("username");
+        securityConfig.AddRegisterDynamicNodeAllowedSIDs(ROOT_TOKEN);
 
         auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
         TServer server{settings};

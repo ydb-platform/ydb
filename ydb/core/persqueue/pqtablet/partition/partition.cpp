@@ -1462,14 +1462,19 @@ const TPartitionBlobEncoder& TPartition::GetBlobEncoder(ui64 offset) const
         offset = BlobEncoder.StartOffset;
     }
 
-    if (BlobEncoder.DataKeysBody.empty()) {
-        return CompactionBlobEncoder;
+    // Fast-write body may be empty after compaction while HeadKeys still hold data.
+    // Falling back to the compacted zone in that case picks an empty container and
+    // crashes GetWriteTimeEstimate (YDBBUGS-824).
+    std::tuple<ui64, ui16> fastWriteStart{Max<ui64>(), 0};
+    if (!BlobEncoder.DataKeysBody.empty()) {
+        const auto& key = BlobEncoder.DataKeysBody.front().Key;
+        fastWriteStart = {key.GetOffset(), key.GetPartNo()};
+    } else if (!BlobEncoder.HeadKeys.empty()) {
+        const auto& key = BlobEncoder.HeadKeys.front().Key;
+        fastWriteStart = {key.GetOffset(), key.GetPartNo()};
     }
 
-    const auto required = std::make_tuple(offset, 0);
-    const auto& key = BlobEncoder.DataKeysBody.front().Key;
-    const auto fastWriteStart = std::make_tuple(key.GetOffset(), key.GetPartNo());
-
+    const auto required = std::make_tuple(offset, ui16(0));
     if (required < fastWriteStart) {
         return CompactionBlobEncoder;
     }
@@ -1479,7 +1484,13 @@ const TPartitionBlobEncoder& TPartition::GetBlobEncoder(ui64 offset) const
 
 const std::deque<TDataKey>& GetContainer(const TPartitionBlobEncoder& zone, ui64 offset)
 {
-    return zone.PositionInBody(offset, 0) ? zone.DataKeysBody : zone.HeadKeys;
+    if (zone.PositionInBody(offset, 0) && !zone.DataKeysBody.empty()) {
+        return zone.DataKeysBody;
+    }
+    if (!zone.HeadKeys.empty()) {
+        return zone.HeadKeys;
+    }
+    return zone.DataKeysBody;
 }
 
 //zero means no such record
@@ -1491,26 +1502,39 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
         return TInstant::Zero();
     }
 
-    const TPartitionBlobEncoder& blobEncoder = GetBlobEncoder(offset);
-    offset = Max(offset, blobEncoder.StartOffset);
-    const std::deque<TDataKey>& container = GetContainer(blobEncoder, offset);
-    PQ_ENSURE(!container.empty())
-        ("offset", offset)
-        ("cz.StartOffset", CompactionBlobEncoder.StartOffset)("cz.EndOffset", CompactionBlobEncoder.EndOffset)
-        ("fwz.StartOffset", BlobEncoder.StartOffset)("fwz.EndOffset", BlobEncoder.EndOffset)
-        ;
+    const TPartitionBlobEncoder* blobEncoder = &GetBlobEncoder(offset);
+    if (blobEncoder->IsEmpty()) {
+        blobEncoder = (blobEncoder == &CompactionBlobEncoder) ? &BlobEncoder : &CompactionBlobEncoder;
+    }
+    offset = Max(offset, blobEncoder->StartOffset);
+    if (blobEncoder->IsEmpty()) {
+        return TInstant::Zero();
+    }
+
+    // Mirroring / retention can leave a hole before the first key while StartOffset
+    // still points at the beginning of the zone. Snap to the first actual blob so
+    // upper_bound has a key at or before the requested offset (YDBBUGS-824).
+    const ui64 firstKeyOffset = !blobEncoder->DataKeysBody.empty()
+        ? blobEncoder->DataKeysBody.front().Key.GetOffset()
+        : blobEncoder->HeadKeys.front().Key.GetOffset();
+    offset = Max(offset, firstKeyOffset);
+    if (offset >= GetEndOffset()) {
+        return TInstant::Zero();
+    }
+
+    const std::deque<TDataKey>& container = GetContainer(*blobEncoder, offset);
+    if (container.empty()) {
+        return TInstant::Zero();
+    }
 
     auto it = std::upper_bound(container.begin(), container.end(), offset,
                     [](const ui64 offset, const TDataKey& p) {
                         return offset < p.Key.GetOffset() ||
                                         offset == p.Key.GetOffset() && p.Key.GetPartNo() > 0;
                     });
-    // Always greater
-    PQ_ENSURE(it != container.begin())
-        ("StartOffset", blobEncoder.StartOffset)("HeadOffset", blobEncoder.Head.Offset)
-        ("offset", offset)
-        ("containter size", container.size())("first-elem", container.front().Key.ToString())
-        ("is-fast-write", blobEncoder.ForFastWrite);
+    if (it == container.begin()) {
+        return it->Timestamp;
+    }
     PQ_ENSURE(it == container.end() ||
                    offset < it->Key.GetOffset() ||
                    it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0);

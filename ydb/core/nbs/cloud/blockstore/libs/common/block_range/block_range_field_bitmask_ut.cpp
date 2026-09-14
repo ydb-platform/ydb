@@ -533,6 +533,31 @@ Y_UNIT_TEST_SUITE(TBlockRangeFieldBitMaskTest)
         UNIT_ASSERT_VALUES_EQUAL(9, range->End);
     }
 
+    Y_UNIT_TEST(ShouldPrintAllRanges)
+    {
+        auto allocator = CreateArenaAllocator();
+        TBlockRangeFieldBitMask field(allocator, 256 * 8);
+
+        bool changed = false;
+        UNIT_ASSERT(
+            field.TryAdd(TBlockRange16::MakeClosedInterval(2, 5), &changed));
+        UNIT_ASSERT(
+            field.TryAdd(TBlockRange16::MakeClosedInterval(63, 66), &changed));
+        UNIT_ASSERT(field.TryAdd(
+            TBlockRange16::MakeClosedInterval(2040, 2047),
+            &changed));
+
+        UNIT_ASSERT_VALUES_EQUAL("[2..5][63..66][2040..2047]", field.Print());
+    }
+
+    Y_UNIT_TEST(ShouldPrintEmptyField)
+    {
+        auto allocator = CreateArenaAllocator();
+        TBlockRangeFieldBitMask field(allocator, 256 * 8);
+
+        UNIT_ASSERT(field.Print().empty());
+    }
+
     Y_UNIT_TEST(ShouldReleaseMaskMemoryOnDestruction)
     {
         auto allocator = std::make_shared<TTrackingAllocator>();

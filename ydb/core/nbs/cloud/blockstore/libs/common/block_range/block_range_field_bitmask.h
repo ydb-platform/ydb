@@ -7,6 +7,7 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 
+#include <util/generic/function_ref.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -57,6 +58,13 @@ private:
     const size_t MaxBlockCount;
     TArenaArrayUniquePtr<ui8> Mask;
     size_t BlockCount = 0;   // Cached count of set bits
+
+    // Returns the first range starting at or after the specified block.
+    [[nodiscard]] std::optional<TBlockRange16> FindNextRange(
+        size_t firstBlock) const;
+
+    // Enumerates all ranges in ascending order.
+    void Enumerate(TFunctionRef<void(TBlockRange16)> func) const;
 
     [[nodiscard]] size_t GetMaskSize() const;
 

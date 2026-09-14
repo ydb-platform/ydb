@@ -43,7 +43,7 @@ public:
 
         auto& state = stateIt->second;
 
-        if (state.State == TIncrementalRestoreState::EState::Finalizing ||
+        if (state.AwaitingInitialRestore || state.State == TIncrementalRestoreState::EState::Finalizing ||
             state.State == TIncrementalRestoreState::EState::Completed ||
             state.State == TIncrementalRestoreState::EState::Failed) {
             YDB_LOG_INFO_CTX(ctx, "Incremental restore already in state, skipping progress check",
@@ -56,6 +56,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::IncrementalRestoreState>().Key(OperationId).Update(
             NIceDb::TUpdate<Schema::IncrementalRestoreState::State>(static_cast<ui32>(TIncrementalRestoreState::EState::Running)),
+            NIceDb::TUpdate<Schema::IncrementalRestoreState::AwaitingInitialRestore>(state.AwaitingInitialRestore),
             NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentIncrementalIdx>(state.CurrentIncrementalIdx),
             NIceDb::TUpdate<Schema::IncrementalRestoreState::RestoreStartedAt>(state.RestoreStartedAt.MicroSeconds()),
             NIceDb::TUpdate<Schema::IncrementalRestoreState::CurrentStageStartedAt>(state.CurrentStageStartedAt.MicroSeconds())
@@ -694,6 +695,14 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunIncrementalRestore::TPtr& ev, const 
     }
 
     TIncrementalRestoreState state;
+    if (const auto* admitted = IncrementalRestoreStates.FindPtr(ui64(operationId.GetTxId())); admitted && admitted->Uid) {
+        if (!admitted->AwaitingInitialRestore) {
+            return; // A duplicate activation must not reset an existing UID's progress.
+        }
+        state.Uid = admitted->Uid;
+        state.OriginalDdl = admitted->OriginalDdl;
+        state.UserSID = admitted->UserSID;
+    }
     state.BackupCollectionPathId = backupCollectionPathId;
     state.OriginalOperationId = ui64(operationId.GetTxId());
     state.CurrentIncrementalIdx = 0;

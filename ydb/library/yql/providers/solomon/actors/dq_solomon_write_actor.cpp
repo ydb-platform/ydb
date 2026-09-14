@@ -208,7 +208,7 @@ private:
             auto subgroup = counters->GetSubgroup("sink", "SolomonSink");;
 
             if (enableStreamingQueriesCounters) {
-                Subgroup = subgroup;
+                CountersRoot = subgroup;
                 subgroup = subgroup->GetSubgroup("tx_id", TxId);
                 if (enableCountersPerTask) {
                     subgroup = subgroup->GetSubgroup("task_id", ToString(taskId));
@@ -225,8 +225,8 @@ private:
         }
 
         ~TDqSolomonWriteActorMetrics() {
-            if (Subgroup) {
-                Subgroup->RemoveSubgroup("tx_id", TxId);
+            if (CountersRoot) {
+                CountersRoot->RemoveSubgroup("tx_id", TxId);
             }
         }
 
@@ -238,7 +238,7 @@ private:
         ::NMonitoring::TDynamicCounters::TCounterPtr SentMetrics;
         ::NMonitoring::TDynamicCounters::TCounterPtr ConfirmedMetrics;
         ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
-        ::NMonitoring::TDynamicCounterPtr Subgroup;
+        ::NMonitoring::TDynamicCounterPtr CountersRoot;
 
     public:
         void ReportSendingBufferSize(size_t size) {

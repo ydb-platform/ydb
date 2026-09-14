@@ -164,7 +164,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
         const auto& cfg = GetS3StorageConfig()->GetConfig();
         YDB_LOG_NOTICE("[Export] Using proxy:",
-            {"proxy", (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")},
+            {"proxyScheme", (cfg.proxyScheme == Aws::Http::Scheme::HTTPS ? "https://" : "http://")},
             {"proxyHost", cfg.proxyHost},
             {"proxyPort", cfg.proxyPort});
 

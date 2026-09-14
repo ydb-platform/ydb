@@ -141,7 +141,7 @@ void TTokenManager::Handle(TEvTokenManager::TEvSubscribeUpdateToken::TPtr& ev) {
         Send(ev->Sender, new TEvTokenManager::TEvUpdateToken(id, it->second->GetToken(), it->second->GetStatus()));
     } else {
         const TString errorMessage = "Token provider " + id + " was not found";
-        YDB_LOG_ERROR("Handle TEvTokenManager::TEvSubscribeUpdateToken: token provider not found",
+        YDB_LOG_ERROR("Handle TEvSTokenManager::TEvSubscribeUpdateToken: token provider not found",
             {"provider", id}
         );
         Send(ev->Sender, new TEvTokenManager::TEvUpdateToken(id, "", {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = errorMessage}));

@@ -5,6 +5,7 @@ UNITTEST_FOR(ydb/core/blob_depot)
     IF (NOT OS_WINDOWS)
         SRCS(
             s3_router_ut.cpp
+            s3_write_throttle_ut.cpp
         )
 
         PEERDIR(

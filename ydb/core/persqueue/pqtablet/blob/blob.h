@@ -126,6 +126,23 @@ struct TBatch {
 void Serialize(const TClientBlob& blob, TBuffer& res);
 TClientBlob DeserializeClientBlob(const char *data, ui32 size);
 
+// First offset of a client blob with WriteTimestamp >= timestamp.
+// Kafka batches (IsBatch / LogicalMessageCount > 1) are atomic: either the
+// first offset of the batch or the first offset after it. Multipart messages
+// are decided on PartNo == 0.
+// Offsets inside one TBatch are contiguous by LogicalMessageCount from startOffset.
+// Gaps between batches (different TBatch::GetOffset()) are mapped via
+// HeaderOffsetToKeySpace in the TVector<TBatch> overload.
+TMaybe<ui64> FindFirstOffsetAtOrAfterTimestamp(
+    TInstant timestamp,
+    ui64 startOffset,
+    const TVector<TClientBlob>& blobs);
+
+TMaybe<ui64> FindFirstOffsetAtOrAfterTimestamp(
+    TInstant timestamp,
+    ui64 blobKeyOffset,
+    const TVector<TBatch>& unpackedBatches);
+
 class TBlobIterator {
 public:
     TBlobIterator(const TKey& key, const TString& blob);

@@ -1,3 +1,5 @@
+* Added `TTopicClient::ResetOffset` / `TResetOffsetSettings` to rewind a consumer's committed offsets on all topic partitions.
+
 * Added optional `TRetryOperationSettings::StopToken` for cooperative cancellation between retry attempts.
 
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.

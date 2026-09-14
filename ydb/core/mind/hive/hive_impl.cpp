@@ -835,6 +835,7 @@ void THive::BuildLocalConfig() {
 }
 
 void THive::BuildCurrentConfig() {
+    const bool previousLockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
     CurrentConfig = ClusterConfig;
     CurrentConfig.MergeFrom(DatabaseConfig);
     TabletLimit.clear();
@@ -902,6 +903,23 @@ void THive::BuildCurrentConfig() {
         ObjectDistributions.Disable();
     }
     BootQueue.UpdateTabletBootQueuePriorities(CurrentConfig);
+
+    const bool lockedTabletsSendMetrics = CurrentConfig.GetLockedTabletsSendMetrics();
+    if (previousLockedTabletsSendMetrics != lockedTabletsSendMetrics) {
+        for (auto& [_, node] : Nodes) {
+            for (TLeaderTabletInfo* tablet : node.LockedTablets) {
+                if (tablet->IsDeleting()) {
+                    continue;
+                }
+                // Change accounting without stopping external execution or changing the lock.
+                if (lockedTabletsSendMetrics) {
+                    tablet->BecomeUnknown(&node);
+                } else {
+                    tablet->BecomeStopped();
+                }
+            }
+        }
+    }
 }
 
 void THive::Cleanup() {

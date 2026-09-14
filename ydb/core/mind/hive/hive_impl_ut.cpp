@@ -329,6 +329,378 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             UNIT_ASSERT_VALUES_EQUAL(bootQueue.Size(), 0);
         }
     }
+
+    struct TTabletStateTest {
+        class THive : public TTestHive {
+        public:
+            using TTestHive::TTestHive;
+            using NHive::THive::FindBestNode;
+        };
+
+        TActorSystemStub ActorSystem;
+        TIntrusivePtr<TTabletStorageInfo> Storage = [] {
+            auto storage = MakeIntrusive<TTabletStorageInfo>();
+            storage->TabletType = TTabletTypes::Hive;
+            return storage;
+        }();
+        THive Hive{Storage.Get(), TActorId()};
+
+        explicit TTabletStateTest(ui32 nodeCount, bool metricsEnabled = false) {
+            Hive.UpdateConfig([&](NKikimrConfig::THiveConfig& config) {
+                config.SetLockedTabletsSendMetrics(metricsEnabled);
+                // Exercise accounting without scheduling background balancing in the actor stub.
+                config.SetResourceChangeReactionPeriod(TDuration::Max().Seconds());
+            });
+            Hive.MakeNodes(nodeCount);
+        }
+
+        TLeaderTabletInfo& CreateStoppedTablet(TTabletId tabletId) {
+            auto& tablet = Hive.GetTablet(tabletId);
+            tablet.SetType(TTabletTypes::Dummy);
+            tablet.State = ETabletState::ReadyToWork;
+            tablet.AssignDomains({1, 2}, {});
+            tablet.BecomeStopped();
+            return tablet;
+        }
+    };
+
+    Y_UNIT_TEST(BecomeStartingRemovesLockedTabletFromPreviousNode) {
+        TTabletStateTest test(2, true);
+        auto& hive = test.Hive;
+        auto& ownerNode = hive.Node(1);
+        auto& reportingNode = hive.Node(2);
+
+        TLeaderTabletInfo tablet(1, hive);
+        tablet.SetType(TTabletTypes::Dummy);
+        tablet.AssignDomains({1, 2}, {});
+        tablet.SetLockedToActor(TActorId(ownerNode.Id, "owner"), TDuration::Seconds(60));
+        tablet.GetMutableResourceValues().CPU = 100;
+        tablet.BecomeUnknown(&ownerNode);
+        UNIT_ASSERT_VALUES_EQUAL(ownerNode.GetTabletsTotal(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(ownerNode.ResourceValues), 100);
+
+        // A late InbootTablets report must detach the old node before registering the new one.
+        UNIT_ASSERT(tablet.BecomeStarting(reportingNode.Id));
+        UNIT_ASSERT_EQUAL(tablet.GetVolatileState(), NKikimrHive::TABLET_VOLATILE_STATE_STARTING);
+        UNIT_ASSERT(tablet.Node == &reportingNode);
+        UNIT_ASSERT_VALUES_EQUAL(ownerNode.GetTabletsTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(ownerNode.ResourceValues), 0);
+        UNIT_ASSERT_VALUES_EQUAL(reportingNode.GetTabletsTotal(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reportingNode.GetTabletsScheduled(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(reportingNode.ResourceValues), 100);
+
+        UNIT_ASSERT(tablet.BecomeStopped());
+        UNIT_ASSERT_VALUES_EQUAL(ownerNode.GetTabletsTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(reportingNode.GetTabletsTotal(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(reportingNode.ResourceValues), 0);
+        // There must be no stale tablet left to trip BecomeDisconnected's empty-node assertion.
+        UNIT_ASSERT(ownerNode.BecomeDisconnected());
+        UNIT_ASSERT(ownerNode.IsDisconnected());
+    }
+
+    Y_UNIT_TEST(ConfigChangePreservesDeletingLockedTabletsAndPendingUnlock) {
+        TTabletStateTest test(1);
+        auto& hive = test.Hive;
+        auto& node = hive.Node(1);
+        const TActorId owner(node.Id, "owner");
+
+        TLeaderTabletInfo deletingTablet(1, hive);
+        deletingTablet.SetType(TTabletTypes::Dummy);
+        deletingTablet.State = ETabletState::Deleting;
+        deletingTablet.SetLockedToActor(owner, TDuration::Seconds(60));
+        deletingTablet.GetMutableResourceValues().CPU = 100;
+        deletingTablet.BecomeStopped();
+
+        TLeaderTabletInfo lockedTablet(2, hive);
+        lockedTablet.SetType(TTabletTypes::Dummy);
+        lockedTablet.State = ETabletState::ReadyToWork;
+        lockedTablet.SetLockedToActor(owner, TDuration::Seconds(60));
+        lockedTablet.PendingUnlockSeqNo = 42;
+        lockedTablet.GetMutableResourceValues().CPU = 200;
+        lockedTablet.BecomeStopped();
+
+        for (bool enabled : {true, false, true}) {
+            hive.UpdateConfig([&](NKikimrConfig::THiveConfig& config) {
+                config.SetLockedTabletsSendMetrics(enabled);
+            });
+            UNIT_ASSERT(deletingTablet.IsDeleting());
+            UNIT_ASSERT_EQUAL(deletingTablet.GetVolatileState(), NKikimrHive::TABLET_VOLATILE_STATE_STOPPED);
+            UNIT_ASSERT(deletingTablet.Node == nullptr);
+            UNIT_ASSERT_VALUES_EQUAL(deletingTablet.LockedToActor, owner);
+            UNIT_ASSERT_EQUAL(lockedTablet.GetVolatileState(), enabled
+                ? NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN
+                : NKikimrHive::TABLET_VOLATILE_STATE_STOPPED);
+            UNIT_ASSERT_VALUES_EQUAL(lockedTablet.LockedToActor, owner);
+            UNIT_ASSERT_VALUES_EQUAL(lockedTablet.LockedReconnectTimeout, TDuration::Seconds(60));
+            UNIT_ASSERT_VALUES_EQUAL(lockedTablet.PendingUnlockSeqNo, 42);
+            UNIT_ASSERT_VALUES_EQUAL(node.LockedTablets.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsTotal(), enabled ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), enabled ? 200 : 0);
+        }
+    }
+
+    Y_UNIT_TEST(LockedTabletMetricsDoNotChangeFrozenPlacement) {
+        for (ui32 preferredNodeId : {0, 1}) {
+            TTabletStateTest test(2);
+            auto& hive = test.Hive;
+            auto& ownerNode = hive.Node(2);
+            auto& tablet = test.CreateStoppedTablet(1);
+            tablet.NodeFilter.AllowedNodes = {1};
+            tablet.PreferredNodeId = preferredNodeId;
+            tablet.SetLockedToActor(TActorId(ownerNode.Id, "owner"), TDuration::Seconds(60));
+            tablet.GetMutableResourceValues().CPU = 100;
+
+            ownerNode.SetFreeze(true);
+            for (bool enabled : {true, false, true}) {
+                hive.UpdateConfig([&](NKikimrConfig::THiveConfig& config) {
+                    config.SetLockedTabletsSendMetrics(enabled);
+                });
+                UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, preferredNodeId);
+                UNIT_ASSERT(ownerNode.FrozenTablets.empty());
+                UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(ownerNode.ResourceValues), enabled ? 100 : 0);
+            }
+
+            // Freezing an already registered metrics owner must also leave placement intact.
+            ownerNode.SetFreeze(false);
+            ownerNode.SetFreeze(true);
+            UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, preferredNodeId);
+            UNIT_ASSERT(ownerNode.FrozenTablets.empty());
+
+            // Unlock clears the lock before removing the metrics association.
+            tablet.ClearLockedToActor();
+            UNIT_ASSERT(tablet.BecomeStopped());
+            UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, preferredNodeId);
+            UNIT_ASSERT(ownerNode.FrozenTablets.empty());
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(ownerNode.ResourceValues), 0);
+            UNIT_ASSERT(tablet.IsReadyToBoot());
+            const auto bestNode = hive.FindBestNode(tablet);
+            UNIT_ASSERT(std::holds_alternative<TNodeInfo*>(bestNode));
+            UNIT_ASSERT(std::get<TNodeInfo*>(bestNode) == &hive.Node(1));
+        }
+    }
+
+    Y_UNIT_TEST(FreezePreservesLocalTabletPlacement) {
+        for (auto state : {NKikimrHive::TABLET_VOLATILE_STATE_STARTING,
+                           NKikimrHive::TABLET_VOLATILE_STATE_RUNNING,
+                           NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN}) {
+            TTabletStateTest test(1);
+            auto& hive = test.Hive;
+            auto& node = hive.Node(1);
+            auto& tablet = test.CreateStoppedTablet(1);
+            node.SetFreeze(true);
+            if (state == NKikimrHive::TABLET_VOLATILE_STATE_STARTING) {
+                tablet.BecomeStarting(node.Id);
+            } else if (state == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING) {
+                tablet.BecomeRunning(node.Id);
+            } else {
+                // UNKNOWN with a persisted NodeId is real placement recovered from storage.
+                tablet.NodeId = node.Id;
+                tablet.BecomeUnknown(&node);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, node.Id);
+            UNIT_ASSERT(!node.FrozenTablets.empty());
+            tablet.BecomeStopped();
+            UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, node.Id);
+            node.SetFreeze(false);
+            UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, 0);
+        }
+    }
+
+    Y_UNIT_TEST(BecomeStartingMovesAlreadyStartingTabletToAnotherNode) {
+        TTabletStateTest test(2);
+        auto& hive = test.Hive;
+        auto& tablet = test.CreateStoppedTablet(1);
+        tablet.GetMutableResourceValues().CPU = 100;
+
+        const auto checkStartingNode = [&](TNodeId nodeId) {
+            UNIT_ASSERT_EQUAL(tablet.GetVolatileState(), NKikimrHive::TABLET_VOLATILE_STATE_STARTING);
+            UNIT_ASSERT_VALUES_EQUAL(tablet.NodeId, 0);
+            UNIT_ASSERT(tablet.Node == &hive.Node(nodeId));
+            for (TNodeId id : {1, 2}) {
+                const auto& node = hive.Node(id);
+                UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsTotal(), id == nodeId ? 1 : 0);
+                UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsScheduled(), id == nodeId ? 1 : 0);
+                UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), id == nodeId ? 100 : 0);
+                // Boot failure handling must recognize the new Local and reject the old one.
+                UNIT_ASSERT_VALUES_EQUAL(tablet.IsAliveOnLocal(node.Local), id == nodeId);
+            }
+        };
+
+        UNIT_ASSERT(tablet.BecomeStarting(1));
+        checkStartingNode(1);
+        UNIT_ASSERT(!tablet.BecomeStarting(1));
+        checkStartingNode(1);
+        UNIT_ASSERT(tablet.BecomeStarting(2));
+        checkStartingNode(2);
+        UNIT_ASSERT(!tablet.BecomeStarting(2));
+        checkStartingNode(2);
+
+        UNIT_ASSERT(tablet.BecomeStopped());
+        for (TNodeId id : {1, 2}) {
+            UNIT_ASSERT_VALUES_EQUAL(hive.Node(id).GetTabletsTotal(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(hive.Node(id).GetTabletsScheduled(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(hive.Node(id).ResourceValues), 0);
+        }
+    }
+
+    Y_UNIT_TEST(LockedTabletMetricsPreserveTabletUsageMeasurement) {
+        TTabletStateTest test(1);
+        auto& hive = test.Hive;
+        auto& node = hive.Node(1);
+        node.NodeTotalUsage = 0.25;
+
+        auto& localTablet = test.CreateStoppedTablet(1);
+        localTablet.GetMutableResourceValues().CPU = 100;
+        localTablet.SetUsageImpact(0.125);
+        UNIT_ASSERT(localTablet.BecomeStarting(node.Id));
+        UNIT_ASSERT(localTablet.BecomeRunning(node.Id));
+        UNIT_ASSERT(node.LastScheduledTablet);
+        node.LastScheduledTablet->UsageSince.Push(0.5);
+        node.LastScheduledTablet->UsageSince.Push(0.5);
+
+        const auto checkMeasurement = [&] {
+            UNIT_ASSERT(node.LastScheduledTablet);
+            const auto& measurement = *node.LastScheduledTablet;
+            UNIT_ASSERT(measurement.TabletId == localTablet.GetFullTabletId());
+            UNIT_ASSERT_VALUES_EQUAL(measurement.UsageBefore, 0.25);
+            UNIT_ASSERT_VALUES_EQUAL(measurement.PriorImpact, 0.125);
+            UNIT_ASSERT(measurement.UsageSince.IsValueStable());
+            UNIT_ASSERT_VALUES_EQUAL(measurement.UsageSince.GetValue(), 0.5);
+        };
+        checkMeasurement();
+
+        auto& lockedTablet = test.CreateStoppedTablet(2);
+        lockedTablet.GetMutableResourceValues().CPU = 200;
+        lockedTablet.SetLockedToActor(TActorId(node.Id, "owner"), TDuration::Seconds(60));
+
+        for (bool enabled : {true, false, true}) {
+            hive.UpdateConfig([&](NKikimrConfig::THiveConfig& config) {
+                config.SetLockedTabletsSendMetrics(enabled);
+            });
+            checkMeasurement();
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), enabled ? 300 : 100);
+        }
+
+        // Unlock clears the lock before removing the metrics association.
+        lockedTablet.ClearLockedToActor();
+        UNIT_ASSERT(lockedTablet.BecomeStopped());
+        checkMeasurement();
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), 100);
+        UNIT_ASSERT(localTablet.BecomeStopped());
+    }
+
+    Y_UNIT_TEST(LockedTabletMetricsDoNotStartUsageMeasurement) {
+        TTabletStateTest test(1);
+        auto& hive = test.Hive;
+        auto& node = hive.Node(1);
+        auto& tablet = test.CreateStoppedTablet(1);
+        tablet.GetMutableResourceValues().CPU = 100;
+        tablet.SetLockedToActor(TActorId(node.Id, "owner"), TDuration::Seconds(60));
+        UNIT_ASSERT(!node.LastScheduledTablet);
+
+        for (bool enabled : {true, false, true, false}) {
+            hive.UpdateConfig([&](NKikimrConfig::THiveConfig& config) {
+                config.SetLockedTabletsSendMetrics(enabled);
+            });
+            UNIT_ASSERT(!node.LastScheduledTablet);
+            UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsTotal(), enabled ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), enabled ? 100 : 0);
+        }
+    }
+
+    Y_UNIT_TEST(LocalTabletStateChangesUpdateUsageMeasurement) {
+        for (auto state : {NKikimrHive::TABLET_VOLATILE_STATE_STARTING,
+                           NKikimrHive::TABLET_VOLATILE_STATE_RUNNING,
+                           NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN}) {
+            TTabletStateTest test(1);
+            auto& hive = test.Hive;
+            auto& node = hive.Node(1);
+            auto& firstTablet = test.CreateStoppedTablet(1);
+            if (state == NKikimrHive::TABLET_VOLATILE_STATE_STARTING) {
+                UNIT_ASSERT(firstTablet.BecomeStarting(node.Id));
+            } else if (state == NKikimrHive::TABLET_VOLATILE_STATE_RUNNING) {
+                UNIT_ASSERT(firstTablet.BecomeRunning(node.Id));
+            } else {
+                // UNKNOWN with a persisted NodeId is recovered local placement.
+                firstTablet.NodeId = node.Id;
+                firstTablet.BecomeUnknown(&node);
+            }
+            UNIT_ASSERT(node.LastScheduledTablet);
+            UNIT_ASSERT(node.LastScheduledTablet->TabletId == firstTablet.GetFullTabletId());
+
+            auto& secondTablet = test.CreateStoppedTablet(2);
+            UNIT_ASSERT(secondTablet.BecomeStarting(node.Id));
+            UNIT_ASSERT(node.LastScheduledTablet);
+            UNIT_ASSERT(node.LastScheduledTablet->TabletId == secondTablet.GetFullTabletId());
+
+            // Stopping another local tablet changes the load being measured.
+            UNIT_ASSERT(firstTablet.BecomeStopped());
+            UNIT_ASSERT(!node.LastScheduledTablet);
+            UNIT_ASSERT(secondTablet.BecomeStopped());
+
+            UNIT_ASSERT(secondTablet.BecomeStarting(node.Id));
+            UNIT_ASSERT(node.LastScheduledTablet);
+            UNIT_ASSERT(node.LastScheduledTablet->TabletId == secondTablet.GetFullTabletId());
+            UNIT_ASSERT(secondTablet.BecomeStopped());
+            UNIT_ASSERT(!node.LastScheduledTablet);
+            UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsTotal(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(BecomeRunningPreservesFrozenNodeAccounting) {
+        for (bool locked : {false, true}) {
+            TTabletStateTest test(2, true);
+            auto& hive = test.Hive;
+            auto& oldNode = hive.Node(1);
+            auto& newNode = hive.Node(2);
+
+            auto& tablet = test.CreateStoppedTablet(1);
+            tablet.GetMutableResourceValues().CPU = 100;
+            if (locked) {
+                tablet.SetLockedToActor(TActorId(oldNode.Id, "owner"), TDuration::Seconds(60));
+                tablet.BecomeUnknown(&oldNode);
+            } else {
+                UNIT_ASSERT(tablet.BecomeRunning(oldNode.Id));
+            }
+
+            // A different local tablet is being measured on the old node.
+            auto& measuredTablet = test.CreateStoppedTablet(2);
+            measuredTablet.GetMutableResourceValues().CPU = 200;
+            measuredTablet.SetUsageImpact(0.125);
+            oldNode.NodeTotalUsage = 0.25;
+            UNIT_ASSERT(measuredTablet.BecomeStarting(oldNode.Id));
+            UNIT_ASSERT(oldNode.LastScheduledTablet);
+            oldNode.LastScheduledTablet->UsageSince.Push(0.5);
+            oldNode.LastScheduledTablet->UsageSince.Push(0.5);
+            oldNode.SetFreeze(true);
+            const auto frozenTablets = oldNode.FrozenTablets;
+
+            UNIT_ASSERT(tablet.BecomeRunning(newNode.Id));
+            UNIT_ASSERT(tablet.Node == &newNode);
+            UNIT_ASSERT_VALUES_EQUAL(tablet.NodeId, newNode.Id);
+            UNIT_ASSERT_VALUES_EQUAL(tablet.PreferredNodeId, locked ? 0 : oldNode.Id);
+            UNIT_ASSERT_VALUES_EQUAL(oldNode.GetTabletsTotal(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(newNode.GetTabletsTotal(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(oldNode.ResourceValues), 200);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(newNode.ResourceValues), 100);
+            if (locked) {
+                UNIT_ASSERT(oldNode.FrozenTablets == frozenTablets);
+                UNIT_ASSERT(oldNode.LastScheduledTablet);
+                const auto& measurement = *oldNode.LastScheduledTablet;
+                UNIT_ASSERT(measurement.TabletId == measuredTablet.GetFullTabletId());
+                UNIT_ASSERT_VALUES_EQUAL(measurement.UsageBefore, 0.25);
+                UNIT_ASSERT_VALUES_EQUAL(measurement.PriorImpact, 0.125);
+                UNIT_ASSERT(measurement.UsageSince.IsValueStable());
+                UNIT_ASSERT_VALUES_EQUAL(measurement.UsageSince.GetValue(), 0.5);
+            } else {
+                // Moving real execution changes the old node's measured load.
+                UNIT_ASSERT(!oldNode.LastScheduledTablet);
+            }
+            UNIT_ASSERT(tablet.BecomeStopped());
+            UNIT_ASSERT(measuredTablet.BecomeStopped());
+        }
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TCutHistoryRestrictions) {

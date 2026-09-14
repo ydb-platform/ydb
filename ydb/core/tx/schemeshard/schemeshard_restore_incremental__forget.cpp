@@ -117,6 +117,9 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
+        if (incrementalRestore.Uid) {
+            Self->BackupOperationsByUid.erase({NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, incrementalRestore.Uid});
+        }
         Self->CleanupIncrementalRestoreItems(restoreId, db,
             Self->IncrementalRestoreStates.FindPtr(restoreId));
 

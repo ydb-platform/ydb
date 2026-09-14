@@ -36,7 +36,7 @@ Release date: September 16, 2026.
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/46747) incorrect results from some scan queries over column-oriented tables.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/50358) handling of malformed Kafka requests that could cause excessive memory use or out-of-bounds access.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/49929) `DirectRead` hanging after a topic read balancer restart.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/49929) topic reads hanging after a topic read balancer restart.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35470) race conditions in the server-side topic read session and in the [Topic SDK](https://github.com/ydb-platform/ydb/pull/42213).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/50675) `QueueUrl` generation in the SQS API over topics when using HTTP.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/50897) a crash and a [hang](https://github.com/ydb-platform/ydb/pull/50621) in streaming query checkpointing.

@@ -36,7 +36,7 @@
 
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/46747) некорректные результаты некоторых сканирующих запросов к колоночным таблицам.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/50358) обработка повреждённых Kafka-запросов, которая могла приводить к избыточному потреблению памяти или выходу за границы буфера.
-* [Исправлено](https://github.com/ydb-platform/ydb/pull/49929) зависание `DirectRead` после перезапуска балансировщика чтения топика.
+* [Исправлено](https://github.com/ydb-platform/ydb/pull/49929) зависание чтения из топика после перезапуска балансировщика чтения топика.
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/35470) состояния гонки в серверной сессии чтения топика и в [Topic SDK](https://github.com/ydb-platform/ydb/pull/42213).
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/50675) формирование `QueueUrl` в SQS API поверх топиков при работе через HTTP.
 * [Исправлены](https://github.com/ydb-platform/ydb/pull/50897) падение и [зависание](https://github.com/ydb-platform/ydb/pull/50621) потоковых запросов при создании контрольных точек.

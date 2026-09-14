@@ -507,6 +507,12 @@ private:
             }
         }
 
+        // same as FinishInternal - do not issue gRPC operations
+        // on a completion queue that is (or is about to be) shut down.
+        if (Server->IsShuttingDown()) {
+            return;
+        }
+
         if (next && nextStatus) {
             Stream.WriteAndFinish(next->Message, next->Options, *nextStatus, OnWriteDoneTag.Prepare());
         } else if (next) {
@@ -547,7 +553,14 @@ private:
             finish = !(flags & FlagWriteActive);
         } while (!Flags.compare_exchange_weak(flags, flags | FlagFinishCalled, std::memory_order_acq_rel));
 
-        if (finish) {
+        // when the server is shutting down its completion queues are (or are about to be) dead.
+        // Issuing Stream.Finish() on a dead CQ fails with "grpc_cq_begin_op(cq_, notify_tag) failed"
+        // and crashes the process. This happens when an actor holding the IStreamCtx
+        // (TFacade) is force-destroyed after the gRPC server has been stopped
+        // (e.g. ActorSystem::Stop() destroys the request proxy and its deferred
+        // streaming requests). Skip the gRPC finish in that case; the stream is
+        // being torn down anyway.
+        if (finish && !Server->IsShuttingDown()) {
             Stream.Finish(status, OnFinishDoneTag.Prepare());
         }
 

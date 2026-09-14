@@ -708,9 +708,8 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
-        if (!sessionCtx.Config().GetEnableStreamWrite()) {
-            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()),
-                "Generated columns require EnableStreamWrite"));
+        if (!sessionCtx.Config().GetEnableIndexStreamWrite()) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), "Generated columns require EnableIndexStreamWrite"));
             return IGraphTransformer::TStatus::Error;
         }
 

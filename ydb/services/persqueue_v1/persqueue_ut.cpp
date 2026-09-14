@@ -31,6 +31,7 @@
 
 #include <util/string/join.h>
 #include <util/system/sanitizers.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/guid.h>
 
 #include <grpcpp/client_context.h>

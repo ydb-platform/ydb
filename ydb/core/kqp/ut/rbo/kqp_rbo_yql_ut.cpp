@@ -2,7 +2,7 @@
 #include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
-#include <ydb/core/kqp/ut/olap/helpers/aggregation.h>
+#include <ydb/core/kqp/ut/olap/helpers/test_case.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/query_id.h>
 #include <ydb/core/kqp/common/simple/services.h>

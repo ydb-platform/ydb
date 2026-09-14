@@ -47,10 +47,8 @@ TLocalTopicClientFixture::~TLocalTopicClientFixture() = default;
 void TLocalTopicClientFixture::SetUp(NUnitTest::TTestContext&) {
     Kikimr = std::make_unique<TKikimrRunner>(TKikimrSettings()
         .SetWithSampleTables(false)
-        .SetAuthToken(BUILTIN_ACL_ROOT)
-        .SetEnableTopicDeferredPublish(true));
+        .SetAuthToken(BUILTIN_ACL_ROOT));
     TopicClient = std::make_unique<TTopicClient>(Kikimr->GetDriver());
-    DeferredClient = std::make_unique<TDeferredPublishClient>(Kikimr->GetDriver());
     CreateTopic(TOPIC_PATH);
 }
 

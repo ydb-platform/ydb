@@ -7,7 +7,6 @@ SIZE(MEDIUM)
 
 SRCS(
     common.cpp
-    local_deferred_publish_client_ut.cpp
     local_federated_topic_client_ut.cpp
     local_topic_client_factory_ut.cpp
     local_topic_client_ut.cpp

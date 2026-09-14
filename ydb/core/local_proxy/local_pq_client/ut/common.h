@@ -3,7 +3,6 @@
 #include <ydb/core/local_proxy/local_pq_client/local_topic_client_settings.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/deferred_publications.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -95,7 +94,6 @@ public:
 protected:
     std::unique_ptr<TKikimrRunner> Kikimr;
     std::unique_ptr<TTopicClient> TopicClient;
-    std::unique_ptr<TDeferredPublishClient> DeferredClient;
 };
 
 } // namespace NKikimr::NKqp::NLocalTopicTests

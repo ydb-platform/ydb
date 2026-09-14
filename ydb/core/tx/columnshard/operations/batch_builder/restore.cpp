@@ -38,8 +38,8 @@ TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<
     return TConclusionStatus::Success();
 }
 
-void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
-    OnError(errorMessage, EErrorClass::Internal);
+void TModificationRestoreTask::DoOnError(const Ydb::StatusIds::StatusCode status, const TString& errorMessage) {
+    OnError(errorMessage, status == Ydb::StatusIds::ABORTED ? EErrorClass::LocksBroken : EErrorClass::Internal);
 }
 
 void TModificationRestoreTask::OnError(const TString& errorMessage, const EErrorClass errorClass) {

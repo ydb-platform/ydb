@@ -24,6 +24,12 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TDqSourceWatermarkTrackerTest) {
 
+    Y_UNIT_TEST(ZeroGranularityIsRejected) {
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            TDqSourceWatermarkTracker<ui32>(TDuration::Zero(), true, TDuration::Zero(), TDuration::Seconds(1), "Test "),
+            yexception, "Watermark granularity must be positive");
+    }
+
     auto WatermarkMovementCommon(bool idleness, TInstant systemTime) {
         auto tracker = InitTracker(idleness);
 

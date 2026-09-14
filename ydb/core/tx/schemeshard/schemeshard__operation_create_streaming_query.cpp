@@ -202,12 +202,7 @@ class TCreateStreamingQuery : public TSubOperation {
             streamingQuery->ApplyACL(acl);
         }
 
-        const auto [it, inserted] = context.SS->StreamingQueries.emplace(dstPath.Base()->PathId, streamingQueryInfo);
-        if (inserted) {
-            context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId);
-        } else {
-            it->second = streamingQueryInfo;
-        }
+        context.SS->StreamingQueries.Set(dstPath.Base()->PathId, streamingQueryInfo);
     }
 
     TStreamingQueryInfo::TPtr GetQueryInfo(const TString& owner, const TOperationContext& context) const {

@@ -8,15 +8,14 @@ using namespace NYdb::NTable;
 namespace {
 
 void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitionsByKeys) {
-    TKikimrRunner kikimr;
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(useSortForPartitionsByKeys);
+    TKikimrRunner kikimr(appConfig);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
 
     TStringBuilder query;
-    query << "--!syntax_v1\n"
-          << "PRAGMA ydb.WindowFunctionsV2 = \""
-          << (useSortForPartitionsByKeys ? "true" : "false") << "\";\n\n"
-          << selectBody;
+    query << "--!syntax_v1\n" << selectBody;
 
     auto result = session.ExplainDataQuery(query).GetValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

@@ -262,7 +262,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
     return s.Str();
 }
 
-void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
+void DoTest(TBlobStorageGroupType::EErasureSpecies erasure, std::optional<ui32> formattedNodeId = {}) {
     TMutex mutex, logMutex;
     std::vector<std::pair<TBlobStorageGroupType::EErasureSpecies, std::vector<EState>>> queue;
     size_t queueIndex = 0;
@@ -307,6 +307,9 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
             Y_ABORT_UNLESS(states.size() == type.BlobSubgroupSize());
             std::sort(states.begin(), states.end());
             do {
+                if (formattedNodeId && states[*formattedNodeId - 1] != EState::FORMAT) {
+                    continue;
+                }
 #if SINGLE_THREAD
                 DoTestCase(erasure, states);
 #else
@@ -344,7 +347,15 @@ void DoTest(TBlobStorageGroupType::EErasureSpecies erasure) {
 
 Y_UNIT_TEST_SUITE(Replication) {
     Y_UNIT_TEST(Phantoms_mirror3dc) { DoTest(TBlobStorageGroupType::ErasureMirror3dc); }
-    Y_UNIT_TEST(Phantoms_block4_2) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block); }
+    // Fork the 168 placements by formatted disk to keep each test below the timeout.
+    Y_UNIT_TEST(Phantoms_block4_2_disk1) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block, 1); }
+    Y_UNIT_TEST(Phantoms_block4_2_disk2) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block, 2); }
+    Y_UNIT_TEST(Phantoms_block4_2_disk3) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block, 3); }
+    Y_UNIT_TEST(Phantoms_block4_2_disk4) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block, 4); }
+    Y_UNIT_TEST(Phantoms_block4_2_disk5) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block, 5); }
+    Y_UNIT_TEST(Phantoms_block4_2_disk6) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block, 6); }
+    Y_UNIT_TEST(Phantoms_block4_2_disk7) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block, 7); }
+    Y_UNIT_TEST(Phantoms_block4_2_disk8) { DoTest(TBlobStorageGroupType::Erasure4Plus2Block, 8); }
     Y_UNIT_TEST(Phantoms_mirror3of4) { DoTest(TBlobStorageGroupType::ErasureMirror3of4); }
 
     using E = EState;

@@ -220,8 +220,7 @@ public:
         externalDataSource->PathState = TPathElement::EPathState::EPathStateCreate;
         externalDataSource->LastTxId  = OperationId.GetTxId();
 
-        context.SS->ExternalDataSources[newPathId] = externalDataSourceInfo;
-        context.SS->IncrementPathDbRefCount(newPathId);
+        context.SS->ExternalDataSources.Set(newPathId, externalDataSourceInfo);
         if (!acl.empty()) {
             externalDataSource->ApplyACL(acl);
         }

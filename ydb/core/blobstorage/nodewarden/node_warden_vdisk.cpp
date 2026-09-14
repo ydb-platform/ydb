@@ -236,6 +236,10 @@ namespace NKikimr::NStorage {
                 if (Cfg->DDiskConfig->HasIdleSpinUs()) {
                     ddiskConfig.IdleSpinUs = Cfg->DDiskConfig->GetIdleSpinUs();
                 }
+                if (Cfg->DDiskConfig->HasIntegrityChecksumCacheBytes()) {
+                    ddiskConfig.IntegrityChecksumCacheBytes =
+                        Cfg->DDiskConfig->GetIntegrityChecksumCacheBytes();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {
@@ -282,6 +286,9 @@ namespace NKikimr::NStorage {
                 }
                 if (Cfg->PBufferConfig->HasEnableChecksums()) {
                     pbufferFormat.EnableChecksums = Cfg->PBufferConfig->GetEnableChecksums();
+                }
+                if (Cfg->PBufferConfig->HasRegistrationTimeoutMilliseconds()) {
+                    pbufferFormat.RegistrationTimeoutMilliseconds = Cfg->PBufferConfig->GetRegistrationTimeoutMilliseconds();
                 }
                 if (Cfg->PBufferConfig->HasPreallocateFreeSpaceThresholdPercent()) {
                     auto newValue = Cfg->PBufferConfig->GetPreallocateFreeSpaceThresholdPercent();

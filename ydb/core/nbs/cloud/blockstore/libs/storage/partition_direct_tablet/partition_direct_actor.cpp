@@ -145,6 +145,12 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
             AddHostInFlight->BSPipeClient);
         AddHostInFlight.reset();
     }
+    if (RemoveHostInFlight) {
+        NTabletPipe::CloseAndForgetClient(
+            SelfId(),
+            RemoveHostInFlight->BSPipeClient);
+        RemoveHostInFlight.reset();
+    }
 
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
@@ -337,6 +343,8 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             persistentBufferDDiskIds.push_back(NBsController::TDDiskId(
                 connection.GetPersistentBufferDDiskId()));
         }
+        // Temporarily preserving original behavior
+        TVector<EHostHealth> hostHealths(ddiskIds.size(), EHostHealth::Online);
 
         const bool enableChecksums =
             nbsService->StorageConfig->GetEnableChecksums();
@@ -363,6 +371,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
+            std::move(hostHealths),
             conn.GetDBGConnectionsConfigGeneration(),
             std::move(transport),
             dbgCountersRoot);
@@ -482,20 +491,28 @@ void TPartitionActor::HandleFastPathServiceReady(
         "%s All DBGs reached initial locked quorum, opening endpoint",
         LogTitle.GetWithTime().c_str());
 
-    // Re-send the BSC request for an add-host in flight at the last restart
-    // (no live add can be in flight this early). BSController is idempotent.
+    // Re-send the BSC request for a membership op in flight at the last
+    // restart (no live op can be in flight this early). Both are idempotent.
     if (AddHostInFlight.has_value()) {
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s Replaying in-flight AddHost dbgId=%lu newHostIndex=%s",
+            "%s Replaying in-flight AddHost dbgId=%lu liveHostCount=%u",
             LogTitle.GetWithTime().c_str(),
             AddHostInFlight->DirectBlockGroupId,
-            PrintHostIndex(AddHostInFlight->NewHostIndex).c_str());
-        SendAllocateDDiskForAddHost(
+            AddHostInFlight->LiveHostCount);
+        SendAllocateDDiskForAddHost(ctx, AddHostInFlight->DirectBlockGroupId);
+    }
+
+    if (RemoveHostInFlight.has_value()) {
+        LOG_INFO(
             ctx,
-            AddHostInFlight->DirectBlockGroupId,
-            AddHostInFlight->NewHostIndex);
+            NKikimrServices::NBS_PARTITION,
+            "%s Replaying in-flight RemoveHost dbgId=%lu ddisk=%s",
+            LogTitle.GetWithTime().c_str(),
+            RemoveHostInFlight->DirectBlockGroupId,
+            RemoveHostInFlight->DDiskId.ShortDebugString().c_str());
+        SendRemoveHostRequest(ctx);
     }
 
     LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
@@ -627,8 +644,10 @@ void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
         ev->Get()->Record.DebugString().data());
 
     // The first allocation response sets up the group; any later one is the
-    // result of an add-host request.
-    if (DDiskBlockGroupAllocated) {
+    // result of the single in-flight membership op (add xor remove).
+    if (RemoveHostInFlight.has_value()) {
+        HandleRemoveHostAllocationResult(ev, ctx);
+    } else if (DDiskBlockGroupAllocated) {
         HandleAddHostAllocationResult(ev, ctx);
     } else {
         HandleInitialAllocationResult(ev, ctx);
@@ -722,29 +741,25 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         msg->Record.GetVolumeConfig().GetVersion());
 
     if (DDiskBlockGroupAllocated) {
-        // The config is already applied and the partition cannot be
-        // reconfigured while it serves IO. Schemeshard aborts on any status
-        // other than OK or ERROR_UPDATE_IN_PROGRESS, so answer a repeated
-        // delivery of the applied config idempotently and report a newer one
-        // as not applied yet.
+        // The config is already applied. SchemeShard aborts on any status
+        // other than OK or ERROR_UPDATE_IN_PROGRESS. Answer a repeated
+        // delivery of the applied config and a newer alter (resize) with OK.
+        // Capacity is not grown yet: do not persist or reallocate, so IO
+        // bounds stay at the original size until grow is implemented.
         const ui64 appliedVersion = VolumeConfig.GetVersion();
         const ui64 requestedVersion =
             msg->Record.GetVolumeConfig().GetVersion();
-        const auto status = requestedVersion <= appliedVersion
-                                ? NKikimrBlockStore::OK
-                                : NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS;
 
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
             "%s Already has ddisk connections, applied version %lu, "
-            "requested version %lu, status %s",
+            "requested version %lu, status OK",
             LogTitle.GetWithTime().c_str(),
             appliedVersion,
-            requestedVersion,
-            NKikimrBlockStore::EStatus_Name(status).c_str());
+            requestedVersion);
 
-        ReplyUpdateVolumeConfig(ctx, ev, status);
+        ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
         return;
     }
 
@@ -899,6 +914,9 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvPersistHostHealth,
             HandlePersistHostHealth);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvRemoveHostFromDBG,
+            HandleRemoveHostFromDBG);
 
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceShutdown,
@@ -967,6 +985,19 @@ TAllocationResponse ValidateAllocationResponse(
     }
 
     return {.Group = &allocated};
+}
+
+size_t LiveHostCount(
+    const ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupConnections&
+        connections)
+{
+    size_t liveCount = 0;
+    for (const auto& connection: connections.GetConnections()) {
+        if (!connection.GetRemovedFromBSC()) {
+            ++liveCount;
+        }
+    }
+    return liveCount;
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

@@ -5468,6 +5468,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 c Int64,
                 d Int64,
                 e Int64,
+                f Decimal(22,9),
                 PRIMARY KEY (a)
             )
         )" << (columnStore ? " WITH (Store = Column);" : ";");
@@ -5517,6 +5518,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 addCell(rows, "c", c);
                 addCell(rows, "d", d);
                 addCell(rows, "e", e);
+                rows.AddMember("f");
+                if (e) {
+                    rows.BeginOptional().Decimal(NYdb::TDecimalValue(TStringBuilder() << *e << ".5", 22, 9)).EndOptional();
+                } else {
+                    rows.EmptyOptional(NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(22, 9)).Build());
+                }
                 rows.EndStruct();
             }
             rows.EndList();
@@ -6003,6 +6010,129 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const TString toDecimalMax = R"($to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };)";
         return toDecimal + "\n" + toDecimalMax + "\n"
             + GetFullPath(BenchmarkQueryPath[EBenchType::TPCH], ToString(queryId) + ".yql");
+    }
+
+    Y_UNIT_TEST(PushFilterBeforeInlining) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto tableClient = kikimr.GetTableClient();
+        auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto schemeResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                id Int64 NOT NULL,
+                a Int64 NOT NULL,
+                b Int64 NOT NULL,
+                c Double,
+                d Int64,
+                PRIMARY KEY(id)
+            ) WITH (STORE = COLUMN);
+
+            CREATE TABLE `/Root/t2` (
+                a Int64 NOT NULL,
+                PRIMARY KEY(a)
+            ) WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+        struct TRow {
+            i64 Id;
+            i64 A;
+            i64 B;
+            double C;
+            i64 D;
+        };
+        const TVector<TRow> t1Rows = {
+            {1, 1, 1, 10.0, 100},
+            {2, 1, 2, 30.0, 200},
+            {3, 2, 1, 50.0, 1000},
+            {4, 2, 2, 100.0, 2000},
+        };
+
+        NYdb::TValueBuilder t1Builder;
+        t1Builder.BeginList();
+        for (const auto& row : t1Rows) {
+            t1Builder.AddListItem().BeginStruct()
+                .AddMember("id").Int64(row.Id)
+                .AddMember("a").Int64(row.A)
+                .AddMember("b").Int64(row.B)
+                .AddMember("c").Double(row.C)
+                .AddMember("d").Int64(row.D)
+                .EndStruct();
+        }
+        t1Builder.EndList();
+        auto upsertResult = tableClient.BulkUpsert("/Root/t1", t1Builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder t2Builder;
+        t2Builder.BeginList();
+        for (const auto a : {1, 2}) {
+            t2Builder.AddListItem().BeginStruct().AddMember("a").Int64(a).EndStruct();
+        }
+        t2Builder.EndList();
+        upsertResult = tableClient.BulkUpsert("/Root/t2", t2Builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto querySession = queryClient.GetSession().GetValueSync().GetSession();
+
+        const auto check = [&](const TString& name, const TString& query, const TString& expected) {
+            auto explainResult = querySession.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), name + ": " + explainResult.GetIssues().ToString());
+
+            const auto plan = TString{*explainResult.GetStats()->GetPlan()};
+            UNIT_ASSERT_C(!plan.Contains("CrossJoin"), name + ":\n" + plan);
+
+            auto result = querySession.ExecuteQuery(query,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+            ).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), name + ": " + result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, name);
+        };
+
+        check("uncorrelated scalar subquery in ==", R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT SUM(d) AS total
+            FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE t1.a == t2.a
+              AND d == (SELECT MAX(d) FROM `/Root/t1` AS t3);
+        )", R"([[[2000]]])");
+
+        check("correlated scalar subquery with non-eliminable domain", R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT SUM(d) AS total
+            FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE t1.a == t2.a
+              AND c < (SELECT AVG(t3.c) FROM `/Root/t1` AS t3
+                       WHERE t3.a == t2.a AND t3.b != t1.b);
+        )", R"([[[1100]]])");
+
+        check("correlated exists and not exists with non-eliminable domains", R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT SUM(d) AS total
+            FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE t1.a == t2.a
+              AND EXISTS (SELECT * FROM `/Root/t1` AS t3
+                          WHERE t3.a == t1.a AND t3.b != t1.b AND t3.c > t1.c)
+              AND NOT EXISTS (SELECT * FROM `/Root/t1` AS t4
+                              WHERE t4.a == t1.a AND t4.b != t1.b AND t4.d > 1500);
+        )", R"([[[100]]])");
     }
 
     Y_UNIT_TEST(CorrelatedScalarSubqueryCBO4KeepsOuterJoinKey) {
@@ -9297,18 +9427,20 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(TPCH_YQL) {
         // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
-        RunPerf_YqlTest(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}, {},
-                        /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
+        RunPerf_YqlTest(EBenchType::TPCH, /*columnstore=*/true, {
+                        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
+                        /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                         /*queriesWithoutCboCheck=*/{13});
     }
 
     // Compiled 79 from 99.
     Y_UNIT_TEST(TPCDS_YQL) {
         RunPerf_YqlTest(EBenchType::TPCDS, /*columnstore=*/true,
-                        {1,  2,  3,  4,  5,  6,  7,  8,  10, 11, 13, 15, 16, 18, 19, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33,
-                         34, 35, 37, 38, 40, 41, 42, 43, 45, 46, 48, 49, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 69, 71,
-                         72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 87, 88, 90, 91, 92, 93, 94, 95, 96, 97, 99},
+                        {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, /*12,*/ 13, 15, 16, /*14,*/ /*17,*/ 18, 19, /*20,*/
+                        21, 22, /*23,*/ 24, 25, 26, /*27,*/ 28, 29, 30, 31, 32, 33, 34, 35, /*36,*/ 37, 38, /*39,*/ 40,
+                        41, 42, 43, /*44,*/ 45, 46, /*47,*/ 48, 49, 50, /*51,*/ 52, /*53,*/ 54, 55, 56, /*57,*/ 58, 59, 60,
+                        61, 62, /*63,*/ 64, 65, 66, /*67,*/ 68, 69, /*70,*/ 71, 72, 73, 74, 75, 76, 77, 78, 79, 80,
+                        81, 82, 83, 84, 85, /*86,*/ 87, 88, /*89,*/ 90, 91, 92, 93, 94, 95, 96, 97, /*98,*/ 99},
                         /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                         // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
                         // in the query or until the known gaps are fixed.

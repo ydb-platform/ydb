@@ -171,6 +171,7 @@ YT_DEFINE_ERROR_ENUM(
     ((MaxAttributeSizeViolation)           (504))
     ((MaxKeyLengthViolation)               (505))
     ((CannotRemoveNonemptyCompositeNode)   (506))
+    ((NoSuchYPathMethod)                   (507))
 );
 
 ////////////////////////////////////////////////////////////////////////////////

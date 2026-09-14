@@ -2918,14 +2918,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         CustomOnly,
     };
 
-    static void TopicServiceCustomCodecsInInitResponse(const ECustomCodecsMode customCodecsMode) {
-        NPersQueue::TTestServer server;
-        server.EnableLogs({NKikimrServices::PQ_READ_PROXY});
-
-        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
-        auto topicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
-
-        const TString topicShortName = "acc/custom-codecs-topic";
+    static  TVector<i32> GetCustomCodecs(ECustomCodecsMode customCodecsMode) {
         TVector<i32> customCodecs;
         switch (customCodecsMode) {
             case ECustomCodecsMode::None:
@@ -2940,6 +2933,18 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 customCodecs = {Ydb::Topic::CODEC_CUSTOM, Ydb::Topic::CODEC_CUSTOM + 1};
                 break;
         }
+        return customCodecs;
+    }
+
+    static void TopicServiceCustomCodecsInInitResponse(const ECustomCodecsMode customCodecsMode) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY});
+
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+        auto topicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
+
+        const TString topicShortName = "acc/custom-codecs-topic";
+        TVector<i32> customCodecs = GetCustomCodecs(customCodecsMode);
         {
             Ydb::Topic::CreateTopicRequest request;
             Ydb::Topic::CreateTopicResponse response;
@@ -3007,20 +3012,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         auto pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
 
         const TString topicShortName = "acc/custom-codecs-topic-pqv1";
-        TVector<i32> customCodecs;
-        switch (customCodecsMode) {
-            case ECustomCodecsMode::None:
-                break;
-            case ECustomCodecsMode::Known:
-                customCodecs = {Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_ZSTD};
-                break;
-            case ECustomCodecsMode::Mixed:
-                customCodecs = {Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_CUSTOM + 5, Ydb::Topic::CODEC_ZSTD, Ydb::Topic::CODEC_CUSTOM + 7};
-                break;
-            case ECustomCodecsMode::CustomOnly:
-                customCodecs = {Ydb::Topic::CODEC_CUSTOM, Ydb::Topic::CODEC_CUSTOM + 1};
-                break;
-        }
+        TVector<i32> customCodecs = GetCustomCodecs(customCodecsMode);
         {
             Ydb::Topic::CreateTopicRequest request;
             Ydb::Topic::CreateTopicResponse response;

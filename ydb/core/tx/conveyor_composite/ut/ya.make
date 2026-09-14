@@ -37,6 +37,7 @@ SRCS(
     ut_config_subscription.cpp
     ut_runtime_update.cpp
     ut_simple.cpp
+    ut_workload_manager.cpp
 )
 
 END()

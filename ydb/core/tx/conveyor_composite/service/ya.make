@@ -16,9 +16,11 @@ SRCS(
 PEERDIR(
     ydb/core/cms/console
     ydb/core/config/validation
+    ydb/core/kqp/runtime
     ydb/core/protos
     ydb/core/tx/conveyor_composite/tracing
     ydb/core/tx/conveyor_composite/usage
+    ydb/library/yql/dq/actors/compute
 )
 
 END()

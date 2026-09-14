@@ -2,6 +2,10 @@
 #include "service.h"
 
 #include <ydb/core/config/validation/validators.h>
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_work_factory.h>
+#include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/tx/conveyor_composite/tracing/probes.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 
@@ -179,14 +183,47 @@ void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {
     LWPROBE(RegisterProcess, ConveyorName, ToString(event.GetCategory()), event.GetScopeId(), event.GetInternalProcessId());
     auto& cat = Manager->MutableCategoryVerified(event.GetCategory());
     std::shared_ptr<TProcessScope> scope = cat.UpsertScope(event.GetScopeId(), event.GetCPULimits());
-    cat.RegisterProcess(event.GetInternalProcessId(), std::move(scope));
+    const auto identity = Manager->RegisterProcess(
+        event.GetCategory(), event.GetInternalProcessId(), std::move(scope), event.GetWorkloadManagerQueryIdentity());
+    if (!identity) {
+        return;
+    }
+
+    const auto schedulerServiceId = NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId());
+    Send(schedulerServiceId, new NKqp::NScheduler::TEvAddDatabase(identity->GetDatabaseId()));
+    Send(schedulerServiceId, new NKqp::NScheduler::TEvAddPool(identity->GetDatabaseId(), identity->GetPoolId()));
+
+    auto addQuery = MakeHolder<NKqp::NScheduler::TEvAddQuery>();
+    addQuery->DatabaseId = identity->GetDatabaseId();
+    addQuery->PoolId = identity->GetPoolId();
+    addQuery->QueryId = identity->GetQueryId();
+    Send(schedulerServiceId, addQuery.Release(), 0, identity->GetQueryId());
+}
+
+void TDistributor::HandleMain(NKqp::NScheduler::TEvQueryResponse::TPtr& ev) {
+    const auto& query = ev->Get()->Query;
+    if (!query) {
+        return;
+    }
+
+    const auto& fullPoolId = query->GetFullPoolId();
+    TWorkloadManagerQueryIdentity identity(fullPoolId.DatabaseId, fullPoolId.PoolId, ev->Cookie);
+    auto context = std::make_shared<NKqp::NScheduler::TSchedulableWorkFactory>(
+        query, fullPoolId.PoolId != NResourcePool::DEFAULT_POOL_ID);
+    Manager->SetWorkloadManagerQueryContext(identity, std::move(context));
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
     auto& event = *ev->Get();
     LWPROBE(UnregisterProcess, ConveyorName, ToString(event.GetCategory()), event.GetInternalProcessId());
-    auto* evData = ev->Get();
-    Manager->MutableCategoryVerified(evData->GetCategory()).UnregisterProcess(evData->GetInternalProcessId());
+    const auto identity = Manager->UnregisterProcess(event.GetCategory(), event.GetInternalProcessId());
+    if (!identity) {
+        return;
+    }
+
+    auto removeQuery = MakeHolder<NKqp::NScheduler::TEvRemoveQuery>();
+    removeQuery->QueryId = identity->GetQueryId();
+    Send(NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQuery.Release());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {

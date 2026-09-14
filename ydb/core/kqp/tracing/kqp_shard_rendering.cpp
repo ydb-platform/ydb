@@ -1,6 +1,6 @@
-#include "kqp_shard_tracing.h"
+#include "kqp_shard_rendering.h"
 
-#include "kqp_query_tracing.h"
+#include "kqp_query_rendering.h"
 #include "kqp_trace_settings.h"
 
 #include <ydb/library/actors/core/actorsystem.h>

@@ -1,6 +1,6 @@
 #include "kqp_table_resolver.h"
 
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>

@@ -3,7 +3,7 @@
 #include "kqp_executer_stats.h"
 #include "kqp_planner_strategy.h"
 
-#include <ydb/core/kqp/tracing/kqp_execution_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>

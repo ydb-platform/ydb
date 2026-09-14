@@ -1,6 +1,6 @@
-#include "kqp_scan_tracing.h"
+#include "kqp_scan_rendering.h"
 
-#include "kqp_query_tracing.h"
+#include "kqp_query_rendering.h"
 
 #include <ydb/library/wilson_ids/wilson.h>
 

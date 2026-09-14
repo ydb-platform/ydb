@@ -1,11 +1,11 @@
 LIBRARY()
 
 SRCS(
-    kqp_execution_tracing.cpp
-    kqp_scan_tracing.cpp
-    kqp_shard_tracing.cpp
-    kqp_query_tracing.cpp
-    kqp_task_tracing.cpp
+    kqp_execution_rendering.cpp
+    kqp_scan_rendering.cpp
+    kqp_shard_rendering.cpp
+    kqp_query_rendering.cpp
+    kqp_task_rendering.cpp
 )
 
 PEERDIR(

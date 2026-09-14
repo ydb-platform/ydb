@@ -1,6 +1,6 @@
 #pragma once
 
-#include "kqp_task_tracing.h"
+#include "kqp_task_rendering.h"
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
@@ -58,6 +58,7 @@ private:
         ui64 Id = 0;
         ui32 Node = 0;
         ui64 DurationUs = 0;
+        bool DurationMeasured = false;
         ui64 CpuUs = 0;
         ui64 InputRows = 0;
         ui64 OutputRows = 0;
@@ -88,8 +89,16 @@ private:
         ui64 UnrepresentedNodeTasks = 0;
         std::map<ui32, ui64> TasksByNode;
         std::vector<TTask> Tasks;
+
+        double MaxTaskSkew() const {
+            return SumDurationUs
+                ? static_cast<double>(MaxDurationUs) * Durations / SumDurationUs : 0;
+        }
     };
 
+    static void StartStageSpan(TStage& stage, const NWilson::TSpan& parent,
+        std::pair<ui64, ui32> stageId, const NKqpProto::TKqpPhyStage& physicalStage, ui64 taskCount);
+    static void RecordDetailedTask(TStage& stage, TTask sample, Ydb::StatusIds::StatusCode status);
     static void FinishStage(TStage& stage, Ydb::StatusIds::StatusCode status);
 
 private:
@@ -99,5 +108,8 @@ private:
     ui64 SpilledBytes_ = 0;
     ui64 UnrepresentedStageTasks_ = 0;
 };
+
+void AddExecutionTraceCpuTime(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionStats& stats, ui64 cpuUs);
+ui64 GetExecutionTraceCpuTimeUs(const NYql::NDqProto::TDqExecutionStats& stats);
 
 } // namespace NKikimr::NKqp

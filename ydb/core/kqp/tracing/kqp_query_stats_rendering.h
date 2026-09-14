@@ -1,6 +1,7 @@
 #pragma once
 
-#include "kqp_query_tracing.h"
+#include "kqp_query_rendering.h"
+#include "kqp_execution_rendering.h"
 
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>

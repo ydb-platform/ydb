@@ -7,7 +7,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/sys_view/common/resolver.h>
@@ -21,7 +21,6 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
 #include <memory>
-#include <type_traits>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
@@ -104,25 +103,20 @@ ui64 GetExpectedVersion(const TString&) {
     return 0;
 }
 
-template<typename TRequest, typename TResponse, typename TResult>
-TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& actorId, TRequest* request,
+template<typename TRequest, typename TResponse, typename TResult, typename TTraceStatus>
+TFuture<TResult> SendTracedActorRequest(TActorSystem* actorSystem, const TActorId& actorId, TRequest* request,
     typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback,
-    const NWilson::TTraceId& traceId, const TString& name, const TString& table, const char* purpose)
+    const NWilson::TTraceId& traceId, EMetadataTraceOperation operation, const TString& table,
+    const char* purpose, TTraceStatus traceStatus)
 {
     auto promise = NewPromise<TResult>();
-    auto span = MakeMetadataTraceSpan(traceId, actorSystem, name, table, purpose);
+    auto span = MakeMetadataTraceSpan(traceId, actorSystem, operation, table, purpose);
     auto requestTraceId = span.GetTraceId();
     if (span) {
-        promise.GetFuture().Subscribe([span = std::make_shared<NWilson::TSpan>(std::move(span))](const TFuture<TResult>& future) {
+        promise.GetFuture().Subscribe([span = std::make_shared<NWilson::TSpan>(std::move(span)),
+                traceStatus = std::move(traceStatus)](const TFuture<TResult>& future) {
             try {
-                const auto& result = future.GetValue();
-                bool success = result.Success() && result.Metadata && result.Metadata->DoesExist;
-                Ydb::StatusIds::StatusCode error = Ydb::StatusIds::SCHEME_ERROR;
-                if constexpr (std::is_same_v<TResponse, NStat::TEvStatistics::TEvGetStatisticsResult>) {
-                    success = success && result.Metadata->StatsLoaded;
-                    error = Ydb::StatusIds::UNAVAILABLE;
-                }
-                EndQueryTraceSpan(*span, success ? Ydb::StatusIds::SUCCESS : error);
+                EndQueryTraceSpan(*span, traceStatus(future.GetValue()));
             } catch (...) {
                 EndQueryTraceSpan(*span, Ydb::StatusIds::GENERIC_ERROR);
             }
@@ -1252,7 +1246,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     const bool enableOnlineAddUniqueIndex = Config && Config->FeatureFlags.GetEnableOnlineAddUniqueIndex();
 
     auto ptr = weak_from_base();
-    auto future = SendActorRequest<TRequest, TResponse, TResult>(
+    auto future = SendTracedActorRequest<TRequest, TResponse, TResult>(
         ActorSystem,
         schemeCacheId,
         ev.Release(),
@@ -1469,7 +1463,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
             } catch (const yexception& e) {
                 promise.SetValue(ResultFromException<TResult>(e));
             }
-        }, TraceId, "Load metadata", table, purpose
+        }, TraceId, EMetadataTraceOperation::LoadMetadata, table, purpose,
+        [](const TResult& result) {
+            return result.Success() && result.Metadata && result.Metadata->DoesExist
+                ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::SCHEME_ERROR;
+        }
     );
 
     // Create an apply for the future that will fetch table statistics and save it in the metadata
@@ -1506,7 +1504,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
         auto statServiceId = NStat::MakeStatServiceID(actorSystem->NodeId);
 
-        return SendActorRequest<NStat::TEvStatistics::TEvGetStatistics, NStat::TEvStatistics::TEvGetStatisticsResult, TResult>(
+        return SendTracedActorRequest<NStat::TEvStatistics::TEvGetStatistics, NStat::TEvStatistics::TEvGetStatisticsResult, TResult>(
             actorSystem,
             statServiceId,
             event.Release(),
@@ -1519,7 +1517,11 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     result.Metadata->StatsLoaded = resp.Success;
                 }
                 promise.SetValue(result);
-        }, loader->TraceId, "Load statistics", table, purpose);
+        }, loader->TraceId, EMetadataTraceOperation::LoadStatistics, table, purpose,
+        [](const TResult& result) {
+            return result.Success() && result.Metadata && result.Metadata->DoesExist && result.Metadata->StatsLoaded
+                ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAVAILABLE;
+        });
     });
 }
 

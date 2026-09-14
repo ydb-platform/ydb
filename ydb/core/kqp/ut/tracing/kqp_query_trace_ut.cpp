@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/tracing/test_util/kqp_trace_test_helpers.h>
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
@@ -162,7 +163,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         ExecSQL(runtime, sender, "SELECT SUM(value) FROM `/Root/table-1` WHERE key > 0u;");
         UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1u);
-        AssertDescendant(*uploader, "Query", "KQP request");
+        AssertDescendant(*uploader, "Query", "Query Proxy");
         AssertDescendant(*uploader, "Compile query", "Get query plan");
         AssertDescendant(*uploader, "Load metadata", "Compile query");
         AssertDescendant(*uploader, "Task: ", "Execute plan");
@@ -181,7 +182,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT(FindAttribute(*query, "ydb.wait_us"));
         UNIT_ASSERT(FindAttribute(*query, "ydb.spilled_bytes"));
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.code.component")->value().string_value(), "KQP");
-        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*FindSpan(*uploader, "KQP request"), "ydb.code.component")->value().string_value(), "KQP");
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*FindSpan(*uploader, "Query Proxy"), "ydb.code.component")->value().string_value(), "KQP");
         const auto* run = FindSpan(*uploader, "Run tasks");
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*run, "ydb.phase")->value().string_value(), "RunTasks");
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*run, "ydb.code.component")->value().string_value(), "DqExecution");
@@ -219,12 +220,16 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         ExecSQL(runtime, sender, sql, TComponentTracingLevels::TQueryProcessor::Basic);
         UNIT_ASSERT(uploader->BuildTraceTrees());
         UNIT_ASSERT(FindSpan(*uploader, "Execute plan"));
-        UNIT_ASSERT(!FindSpan(*uploader, "Task: "));
+        AssertDescendant(*uploader, "Task: ", "Execute plan");
+        AssertDescendant(*uploader, "Read table", "Task: ");
+        UNIT_ASSERT(!FindSpan(*uploader, "Run tasks"));
+        UNIT_ASSERT(std::ranges::empty(StageSpans(*uploader)));
         UNIT_ASSERT(!FindSpan(*uploader, "Load metadata"));
         ClearUploader(*uploader);
         ExecSQL(runtime, sender, sql, TComponentTracingLevels::TQueryProcessor::Detailed);
         UNIT_ASSERT(uploader->BuildTraceTrees());
-        UNIT_ASSERT(FindSpan(*uploader, "Task: "));
+        AssertDescendant(*uploader, "Task: ", "Stage: ");
+        AssertDescendant(*uploader, "Stage: ", "Run tasks");
         UNIT_ASSERT(FindSpan(*uploader, "Resolve tables"));
     }
 
@@ -480,7 +485,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     hasStats = result.GetStats().has_value();
                 }
                 const auto type = streaming ? NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING : NKikimrKqp::QUERY_TYPE_SQL_SCRIPT;
-                const auto snapshot = WaitForQueryTrace(runtime, sql, type, {"Query", "KQP request", "Execute plan"});
+                const auto snapshot = WaitForQueryTrace(runtime, sql, type, {"Query", "Query Proxy", "Execute plan"});
                 const auto query = std::ranges::find_if(snapshot.Spans, [&](const auto& span) {
                     const auto* queryType = FindAttribute(span, "ydb.query.type");
                     return span.name() == "Query" && queryType
@@ -557,8 +562,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         snapshot = WaitForQueryTrace(runtime, "SELECT * FROM `/Root/table-1`;", NKikimrKqp::QUERY_TYPE_SQL_DML,
-            {"Query", "KQP request", "Datashard.Read", "Read table"});
-        AssertDescendant(snapshot, "Query", "KQP request");
+            {"Query", "Query Proxy", "Datashard.Read", "Read table"});
+        AssertDescendant(snapshot, "Query", "Query Proxy");
         AssertDescendant(snapshot, "Datashard.Read", "Read table");
 
         auto iterator = tableClient.StreamExecuteScanQuery("SELECT * FROM `/Root/table-1`;").GetValueSync();
@@ -580,8 +585,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
         snapshot = WaitForQueryTrace(runtime, "SELECT * FROM `/Root/table-1`;", NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY,
-            {"Query", "KQP request", "Datashard.Read", "Read table"});
-        AssertDescendant(snapshot, "Query", "KQP request");
+            {"Query", "Query Proxy", "Datashard.Read", "Read table"});
+        AssertDescendant(snapshot, "Query", "Query Proxy");
         AssertDescendant(snapshot, "Datashard.Read", "Read table");
 
         queryResult = db.ExecuteQuery(R"(
@@ -738,9 +743,14 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 UNIT_ASSERT_VALUES_EQUAL(uploader->Traces.size(), 1u);
                 const TFakeWilsonUploader::TOtelSpan* forwarded = nullptr;
                 const TFakeWilsonUploader::TOtelSpan* local = nullptr;
+                const TFakeWilsonUploader::TOtelSpan* redirect = nullptr;
                 size_t hops = 0;
                 for (const auto& span : uploader->Spans) {
-                    if (span.name() != "KQP request") {
+                    if (span.name() == "KQP redirect") {
+                        redirect = &span;
+                        continue;
+                    }
+                    if (span.name() != "Query Proxy") {
                         continue;
                     }
                     ++hops;
@@ -756,6 +766,10 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 }
                 UNIT_ASSERT_VALUES_EQUAL(hops, 2u);
                 UNIT_ASSERT(forwarded && local);
+                UNIT_ASSERT(redirect);
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*redirect, "ydb.source_node_id")->value().int_value(), runtime.GetNodeId(1));
+                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*redirect, "ydb.target_node_id")->value().int_value(), runtime.GetNodeId(0));
+                UNIT_ASSERT_VALUES_EQUAL(redirect->parent_span_id(), forwarded->span_id());
                 UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*forwarded, "node_id")->value().int_value(), runtime.GetNodeId(1));
                 UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*local, "node_id")->value().int_value(), runtime.GetNodeId(0));
                 UNIT_ASSERT_VALUES_EQUAL(local->parent_span_id(), forwarded->span_id());
@@ -765,17 +779,19 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         ClearUploader(*uploader);
         ExecSQL(runtime, sender, "SELECT 1;", 15, Ydb::StatusIds::BAD_SESSION,
             "ydb://session/3?node_id=1&id=missing");
-        AssertStatus(*uploader, "KQP request", NTraceProto::Status::STATUS_CODE_ERROR);
-        UNIT_ASSERT(!FindAttribute(*FindSpan(*uploader, "KQP request"), "ydb.rejected"));
+        AssertStatus(*uploader, "Query Proxy", NTraceProto::Status::STATUS_CODE_ERROR);
 
         for (const auto type : {NKikimrKqp::QUERY_TYPE_SQL_DML, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY}) {
             ClearUploader(*uploader);
             ExecSQL(runtime, sender, "SELECT 1;", 15, Ydb::StatusIds::BAD_SESSION,
                 TStringBuilder() << "ydb://session/3?node_id=" << runtime.GetNodeId(0) << "&id=missing", 1, type);
             UNIT_ASSERT(uploader->BuildTraceTrees());
-            UNIT_ASSERT_VALUES_EQUAL(uploader->Spans.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(uploader->Spans.size(), 3);
             for (const auto& span : uploader->Spans) {
-                UNIT_ASSERT_VALUES_EQUAL(span.name(), "KQP request");
+                if (span.name() == "KQP redirect") {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(span.name(), "Query Proxy");
                 UNIT_ASSERT(FindAttribute(span, "ydb.rejected")->value().bool_value());
                 UNIT_ASSERT_VALUES_EQUAL(FindAttribute(span, "ydb.trace.coverage")->value().string_value(), "proxy_only");
             }
@@ -808,9 +824,12 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             ClearUploader(*uploader);
             ExecSQL(runtime, sender, "SELECT 1;", 15, Ydb::StatusIds::SESSION_BUSY, session, 1, type);
             UNIT_ASSERT(uploader->BuildTraceTrees());
-            UNIT_ASSERT_VALUES_EQUAL(uploader->Spans.size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(uploader->Spans.size(), 3);
             for (const auto& span : uploader->Spans) {
-                UNIT_ASSERT_VALUES_EQUAL(span.name(), "KQP request");
+                if (span.name() == "KQP redirect") {
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(span.name(), "Query Proxy");
                 UNIT_ASSERT(FindAttribute(span, "ydb.rejected")->value().bool_value());
                 UNIT_ASSERT_VALUES_EQUAL(FindAttribute(span, "ydb.trace.coverage")->value().string_value(),
                     "rejected_before_query_state");
@@ -845,8 +864,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             ExecRequest(runtime, sender, std::move(request), 15, Ydb::StatusIds::TIMEOUT, 1);
             runtime.SetEventFilter(std::move(previous));
             UNIT_ASSERT(forwarded);
-            AssertStatus(*uploader, "KQP request", NTraceProto::Status::STATUS_CODE_ERROR);
-            const auto* proxy = FindSpan(*uploader, "KQP request");
+            AssertStatus(*uploader, "Query Proxy", NTraceProto::Status::STATUS_CODE_ERROR);
+            const auto* proxy = FindSpan(*uploader, "Query Proxy");
             UNIT_ASSERT(!FindAttribute(*proxy, "ydb.rejected"));
             UNIT_ASSERT(!FindAttribute(*proxy, "ydb.trace.coverage"));
         }
@@ -979,8 +998,11 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 }
                 const auto* query = FindSpan(*uploader, "Query");
                 UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.wait_us")->value().int_value(), wait);
-                UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value(),
-                    taskStatsIncomplete);
+                UNIT_ASSERT(!FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value());
+                if (const auto* execution = FindSpan(*uploader, "Execute plan")) {
+                    UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*execution, "ydb.task_duration_incomplete")->value().bool_value(),
+                        taskStatsIncomplete);
+                }
                 ui64 reported = 0, stageCpu = 0, stageInput = 0, stageOutput = 0;
                 bool hasJoin = false, hasAggregate = false;
                 for (const auto& event : StageSpans(*uploader)) {
@@ -1064,8 +1086,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                     UNIT_ASSERT_C(finishedTasks, sql);
                     const auto* query = FindSpan(*uploader, "Query");
                     UNIT_ASSERT(query);
-                    UNIT_ASSERT_VALUES_EQUAL_C(FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value(),
-                        timedTasks != finishedTasks, sql);
+                    UNIT_ASSERT_C(!FindAttribute(*query, "ydb.task_stats_incomplete")->value().bool_value(), sql);
                     size_t reported = 0;
                     size_t timed = 0;
                     for (const auto& event : StageSpans(*uploader)) {

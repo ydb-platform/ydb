@@ -3,8 +3,8 @@
 #include "kqp_scan_common.h"
 #include "kqp_compute_actor_impl.h"
 
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
-#include <ydb/core/kqp/tracing/kqp_task_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_task_rendering.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
@@ -42,6 +42,9 @@ TKqpScanComputeActor::TKqpScanComputeActor(NScheduler::TSchedulableOptions sched
     YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
     YQL_ENSURE(!Meta.GetReads().empty());
     YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
+
+    TTaskTraceDescription::Annotate(ComputeActorSpan, *GetTask().GetTask());
+    ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpScanComputeActor"));
 }
 
 TKqpScanComputeActor::~TKqpScanComputeActor() {
@@ -270,8 +273,6 @@ void TKqpScanComputeActor::PollSources(ui64 prevFreeSpace) {
 }
 
 void TKqpScanComputeActor::DoBootstrap() {
-    TTaskTraceDescription::Annotate(ComputeActorSpan, *GetTask().GetTask());
-    ComputeActorSpan.Attribute("ydb.actor.type", TString("TKqpScanComputeActor"));
     YDB_LOG_DEBUG("Starting KQP scan compute actor bootstrap",
         {"logPrefix", this->LogPrefix});
 

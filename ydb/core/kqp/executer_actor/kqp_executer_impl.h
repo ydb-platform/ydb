@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/kqp/tracing/kqp_execution_tracing.h>
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 
 #include "kqp_executer.h"
 #include "kqp_executer_stats.h"

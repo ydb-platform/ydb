@@ -1,6 +1,6 @@
 #include "kqp_write_actor.h"
 
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include "kqp_buffer_lookup_actor.h"
 #include "kqp_buffer_lock_actor.h"
 #include "kqp_write_actor_settings.h"
@@ -6409,6 +6409,7 @@ private:
 
     std::optional<TAfterWaitTasksState> AfterWaitTasksState;
 
+    // The buffer actor owns this phase span and closes it at phase transitions, success, or error.
     NWilson::TSpan BufferWriteActorStateSpan;
     TCommitTracePhase CommitPhase;
     TIntrusivePtr<NACLib::TUserContext> UserCtx;

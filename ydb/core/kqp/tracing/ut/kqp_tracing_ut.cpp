@@ -1,7 +1,7 @@
-#include <ydb/core/kqp/tracing/kqp_execution_tracing.h>
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
-#include <ydb/core/kqp/tracing/kqp_shard_tracing.h>
-#include <ydb/core/kqp/tracing/kqp_task_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_shard_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_task_rendering.h>
 #include <ydb/core/kqp/tracing/kqp_trace_settings.h>
 #include <ydb/core/kqp/tracing/test_util/kqp_trace_test_helpers.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
@@ -145,8 +145,10 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         NYql::NDqProto::TDqComputeActorStats stats;
         stats.SetCpuTimeUs(90);
         auto& task = *stats.AddTasks();
+        task.SetCpuTimeUs(70);
         task.SetCreateTimeMs(100);
         task.SetStartTimeMs(120);
+        task.SetFinishTimeMs(121);
         task.SetSpillingComputeWriteBytes(30);
         task.SetSpillingChannelWriteBytes(70);
         NKqpProto::TKqpTaskExtraStats extra;
@@ -158,10 +160,11 @@ Y_UNIT_TEST_SUITE(TKqpTrace) {
         span.EndOk();
         runtime.SimulateSleep(TDuration::Seconds(1));
         const auto* compute = FindSpan(*uploader, "Task: ");
-        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.cpu_us")->value().int_value(), 90);
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.cpu_us")->value().int_value(), 70);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.read_retries")->value().int_value(), 2);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.queue_delay_us")->value().int_value(), 20000);
         UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.spilled_bytes")->value().int_value(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*compute, "ydb.duration_us")->value().int_value(), 1000);
     }
 
     Y_UNIT_TEST(StageSpansCloseWithTasksAndPreserveCompletedStagesOnCancellation) {

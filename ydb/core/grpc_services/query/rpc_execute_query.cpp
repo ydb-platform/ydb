@@ -216,10 +216,11 @@ public:
         : Request_(request)
         , FlowControl_(inflightLimitBytes)
         , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
-                "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END) {
+                "Rpc.ExecuteQuery", NWilson::EFlags::AUTO_END) {
         if (Span_ && AppData()) {
             Span_.Attribute("database", AppData()->TenantName);
         }
+        Span_.Attribute("rpc.method", TString("ExecuteQuery"));
     }
 
     void Bootstrap(const TActorContext &ctx) {

@@ -38,11 +38,9 @@ private:
     TActorId Worker;
     TActorId SchemeShardPipe;
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredMessage BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "OffloadActor"},
-            {"partition", Partition},
-            {"selfId", SelfId()});
+            {"partition", Partition});
     }
 
 public:

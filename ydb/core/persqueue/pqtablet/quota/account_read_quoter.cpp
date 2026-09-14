@@ -226,9 +226,8 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountReadQuoter::MakeCountersUpdat
     return MakeHolder<NAccountQuoterEvents::TEvCounters>(Counters, true, User);
 }
 
-TLogPrefix TAccountReadQuoter::BuildLogPrefix() const {
+TStructuredMessage TAccountReadQuoter::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "AccountReadQuoter"},
         {"topic", TopicConverter->GetClientsideName()},
         {"partition", Partition.ToString()},
         {"consumer", User});
@@ -287,9 +286,8 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountWriteQuoter::MakeCountersUpda
     return MakeHolder<NAccountQuoterEvents::TEvCounters>(Counters, false, TString{});
 }
 
-TLogPrefix TAccountWriteQuoter::BuildLogPrefix() const {
+TStructuredMessage TAccountWriteQuoter::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "AccountWriteQuoter"},
         {"topic", TopicConverter->GetClientsideName()},
         {"partition", Partition.ToString()});
 }

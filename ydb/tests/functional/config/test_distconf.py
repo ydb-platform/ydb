@@ -582,57 +582,10 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         assert_that(replace_config_response.operation.issues[0].message == "Dynamic Config V1 is disabled. Use V2 API.")
         logger.debug(replace_config_response.operation)
 
-<<<<<<< HEAD
-=======
-    def test_cluster_config_replace_rejects_tenant_database(self):
-        database_path = os.path.join('/', self.cluster.domain_name, 'config_tenant')
-        self.cluster.create_database(
-            database_path,
-            storage_pool_units_count={'rot': 1},
-            timeout_seconds=60,
-        )
-        try:
-            config_to_replace = yaml.safe_load(fetch_config(self.cluster.config_client))
-            bump_config_version(config_to_replace)
-            config_to_replace = yaml.dump(config_to_replace)
-
-            domain_response = self.cluster.config_client.replace_config(
-                config_to_replace,
-                dry_run=True,
-                database=os.path.join('/', self.cluster.domain_name),
-            )
-            assert_that(domain_response.operation.status == StatusIds.SUCCESS)
-
-            tenant_response = self.cluster.config_client.replace_config(
-                config_to_replace,
-                dry_run=True,
-                database=database_path,
-            )
-            assert_that(tenant_response.operation.status == StatusIds.BAD_REQUEST)
-            assert_that(
-                tenant_response.operation.issues[0].message
-                == "Cluster configuration replacement cannot be performed on a tenant database. "
-                   "Specify the domain database or omit the database."
-            )
-
-            bootstrap_response = self.cluster.config_client.bootstrap_cluster(
-                'test-cluster',
-                database=database_path,
-            )
-            assert_that(bootstrap_response.operation.status == StatusIds.BAD_REQUEST)
-            assert_that(
-                bootstrap_response.operation.issues[0].message
-                == "Cluster bootstrap cannot be performed on a tenant database. "
-                   "Specify the domain database or omit the database."
-            )
-        finally:
-            self.cluster.remove_database(database_path)
-
     @pytest.mark.parametrize('location', ['root', 'nested', 'selector', 'array', 'host_config'])
     def test_replace_config_unknown_fields(self, location):
         check_replace_config_unknown_fields(self.cluster, self.cluster.config_client, location)
 
->>>>>>> 3d983750398 (Support --allow-unknown-fields in distconf (#52462))
     def test_dry_run_valid_config_not_applied(self):
         fetched_config = fetch_config(self.cluster.config_client)
         dumped_config = yaml.safe_load(fetched_config)

@@ -13,10 +13,6 @@ inline bool IsApiVersionsRequestVersionSupported(TKafkaVersion version) {
         && version <= TApiVersionsRequestData::MessageMeta::PresentVersions.Max;
 }
 
-inline bool IsUnsupportedApiVersionsRequest(i16 apiKey, TKafkaVersion version) {
-    return apiKey == API_VERSIONS && !IsApiVersionsRequestVersionSupported(version);
-}
-
 // KIP-511: parse an unknown ApiVersions version as v0 (empty body, request header v1).
 static constexpr TKafkaVersion ApiVersionsFallbackRequestVersion = 0;
 static constexpr TKafkaVersion ApiVersionsFallbackRequestHeaderVersion = 1;

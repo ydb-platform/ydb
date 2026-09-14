@@ -1109,7 +1109,7 @@ protected:
 
                             TKafkaVersion headerVersion = RequestHeaderVersion(Request->ApiKey, Request->ApiVersion);
                             TKafkaVersion bodyVersion = Request->ApiVersion;
-                            if (IsUnsupportedApiVersionsRequest(Request->ApiKey, Request->ApiVersion)) {
+                            if (Request->ApiKey == API_VERSIONS && !IsApiVersionsRequestVersionSupported(Request->ApiVersion)) {
                                 // KIP-511: the client does not yet know broker versions, so an unknown
                                 // ApiVersions version is parsed as v0 instead of using the requested schema.
                                 headerVersion = ApiVersionsFallbackRequestHeaderVersion;

@@ -186,6 +186,7 @@ TFastPathService::TFastPathService(
           .VChunkSize = StorageConfig->GetVChunkSize()}))
 {
     Y_ABORT_UNLESS(DirectBlockGroups.size() == ChaosInjectorControls.size());
+    Y_ABORT_UNLESS(ArenaAllocator);
 
     const ui64 copyRangeBandwidth =
         StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;

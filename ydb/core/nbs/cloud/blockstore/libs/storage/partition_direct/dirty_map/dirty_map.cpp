@@ -13,6 +13,8 @@
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
+#include <cstddef>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -708,7 +710,7 @@ void TBlocksDirtyMap::DataToPBufferAdded(
     EPBufferCounter counter)
 {
     const auto range = TInflightMap::GetRangeByValue(inflight);
-    const size_t byteCount = range.Size() * BlockSize;
+    const size_t byteCount = static_cast<size_t>(range.Size()) * BlockSize;
     auto& counters = PBufferCounters[host];
 
     switch (counter) {
@@ -731,7 +733,7 @@ void TBlocksDirtyMap::DataFromPBufferReleased(
     EPBufferCounter counter)
 {
     const auto range = TInflightMap::GetRangeByValue(inflight);
-    const size_t byteCount = range.Size() * BlockSize;
+    const size_t byteCount = static_cast<size_t>(range.Size()) * BlockSize;
 
     auto& counters = PBufferCounters[host];
 
@@ -859,12 +861,12 @@ TCountAndSize TBlocksDirtyMap::GetPBuffersUsage(THostIndex host) const
     return PBufferCounters[host].Current;
 }
 
-TString TBlocksDirtyMap::DebugPrintPBuffers()
+TString TBlocksDirtyMap::DebugPrintPBuffers() const
 {
     TInstant now = TInstant::Now();
     TStringBuilder result;
     Inflight.Enumerate(
-        [&](TInflightMap::TFindItem& item)
+        [&](const TInflightMap::TFindItem& item)
         {
             result << "  " << item.Key.Print() << item.Range.Print()
                    << item.Value.DebugPrint(now) << "\n";
@@ -983,11 +985,11 @@ TString TBlocksDirtyMap::DebugPrintAheadBehindBrief() const
     return result;
 }
 
-TString TBlocksDirtyMap::DebugPrintInflightSync()
+TString TBlocksDirtyMap::DebugPrintInflightSync() const
 {
     TStringBuilder result;
     InflightDDiskSyncMap.Enumerate(
-        [&](TInflightDDiskSyncMap::TFindItem& item)
+        [&](const TInflightDDiskSyncMap::TFindItem& item)
         {
             result << PrintHostIndex(item.Value.DestinationHost) << item.Range
                    << (item.Value.SyncStartTrigger.IsReady() ? "ready" : "wait")

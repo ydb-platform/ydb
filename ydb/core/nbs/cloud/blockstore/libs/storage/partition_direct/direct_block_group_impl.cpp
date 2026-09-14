@@ -73,13 +73,11 @@ TListPBufferResponse MakeListPBufferResponse(
             .Generation = segment.GetGeneration(),
             .Lsn = segment.GetLsn()};
         ui32 vChunkIndex = segment.GetSelector().GetVChunkIndex();
-        const ui64 rangeStart =
+        const ui16 rangeStart =
             segment.GetSelector().GetOffsetInBytes() / blockSize;
-        const ui64 rangeSize = segment.GetSelector().GetSize() / blockSize;
+        const ui16 rangeSize = segment.GetSelector().GetSize() / blockSize;
         Y_ABORT_UNLESS(rangeSize);
-        const auto range = TBlockRange16::WithLength(
-            IntegerCast<ui16>(rangeStart),
-            IntegerCast<ui16>(rangeSize));
+        const auto range = TBlockRange16::WithLength(rangeStart, rangeSize);
         result.Meta.push_back(
             {.VChunkIndex = vChunkIndex,
              .PBufferKey = pBufferKey,

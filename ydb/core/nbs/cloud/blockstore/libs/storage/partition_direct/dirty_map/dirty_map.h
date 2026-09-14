@@ -160,7 +160,7 @@ public:
     [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex host) const;
 
     // Debug purposes
-    [[nodiscard]] TString DebugPrintPBuffers();
+    [[nodiscard]] TString DebugPrintPBuffers() const;
     [[nodiscard]] TString DebugPrintPBuffersUsage() const;
     [[nodiscard]] TString DebugPrintLockedDDiskRanges();
     [[nodiscard]] TString DebugPrintDDiskState() const;
@@ -170,7 +170,7 @@ public:
     [[nodiscard]] TString DebugPrintAhead() const;
     [[nodiscard]] TString DebugPrintBehind() const;
     [[nodiscard]] TString DebugPrintAheadBehindBrief() const;
-    [[nodiscard]] TString DebugPrintInflightSync();
+    [[nodiscard]] TString DebugPrintInflightSync() const;
 
 private:
     using TPBufferKeySet = TArenaSet<TPBufferKey>;

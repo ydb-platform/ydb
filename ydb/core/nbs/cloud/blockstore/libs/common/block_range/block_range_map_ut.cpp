@@ -122,11 +122,11 @@ class TBlockRangeMapAccessor
 {
 public:
     template <typename T>
-    static auto GetItemKey(const T& t)
+    static auto GetItem(const T& t)
     {
         Y_UNUSED(t);
 
-        return typename T::TItemKey{};
+        return typename T::TItem{};
     }
 
     template <typename T>
@@ -475,6 +475,45 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
         UNIT_ASSERT_EQUAL(nullptr, extracted->Value);
     }
 
+    Y_UNIT_TEST(ConstAccess)
+    {
+        using TMap = TBlockRangeMap<TString, ui64>;
+        using TFindItem = TMap::TFindItem;
+
+        TMap map;
+        map.AddRange("key-1", TBlockRange64::MakeClosedInterval(2, 4), 100);
+        map.AddRange("key-2", TBlockRange64::MakeClosedInterval(5, 7), 200);
+        const TMap& constMap = map;
+
+        const auto value = constMap.GetValue("key-1");
+        UNIT_ASSERT(value);
+        UNIT_ASSERT_VALUES_EQUAL(100, value->Value);
+
+        const auto overlap = constMap.FindFirstOverlapping(
+            TBlockRange64::MakeClosedInterval(3, 3));
+        UNIT_ASSERT(overlap);
+        UNIT_ASSERT_VALUES_EQUAL("key-1", overlap->Key);
+
+        TSet<TString> enumerated;
+        constMap.Enumerate(
+            [&](const TFindItem& item)
+            {
+                enumerated.insert(item.Key);
+                return TMap::EEnumerateContinuation::Continue;
+            });
+        UNIT_ASSERT_VALUES_EQUAL(2, enumerated.size());
+
+        enumerated.clear();
+        constMap.EnumerateOverlapping(
+            TBlockRange64::MakeClosedInterval(4, 5),
+            [&](const TFindItem& item)
+            {
+                enumerated.insert(item.Key);
+                return TMap::EEnumerateContinuation::Continue;
+            });
+        UNIT_ASSERT_VALUES_EQUAL(2, enumerated.size());
+    }
+
     Y_UNIT_TEST(ConstructWithArena)
     {
         TArenaAllocatorPool pool(CreateArenaAllocator());
@@ -495,13 +534,13 @@ Y_UNIT_TEST_SUITE(TBlockRangeMapTest)
         Cout << "TKey: " << sizeof(TKey) << Endl;
         Cout << "TRange: " << sizeof(TRange) << Endl;
         Cout << "TValue: " << sizeof(TValue) << Endl;
-        auto itemKey = TBlockRangeMapAccessor::GetItemKey(map);
-        Cout << "TRangeMap::TItemKey: " << sizeof(itemKey) << Endl;
+        auto item = TBlockRangeMapAccessor::GetItem(map);
+        Cout << "TRangeMap::TItem: " << sizeof(item) << Endl;
         auto* rangeIt = TBlockRangeMapAccessor::GetRangeIt(map);
         Cout << "TRangeMap::TRangeIt: " << sizeof(*rangeIt) << Endl;
 
         for (size_t i = 0, maxCount = *blockMarks.rbegin(); i < maxCount; ++i) {
-            map.AddRange(i, TRange::MakeOneBlock(i % 32768), TString());
+            map.AddRange(i, TRange::MakeOneBlock(i % 32768), TValue());
             const size_t count = i + 1;
             if (blockMarks.contains(count)) {
                 const double averageMemPerItem =

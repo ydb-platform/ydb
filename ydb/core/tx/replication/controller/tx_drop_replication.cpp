@@ -96,6 +96,10 @@ public:
                 continue;
             }
 
+            Self->CompleteWorkerSets.erase({Replication->GetId(), tid});
+            db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
+
             bool detachIndex = false;
             if (target->GetKind() == TReplication::ETargetKind::IndexTable) {
                 const TString indexPath(ExtractParent(target->GetDstPath()));

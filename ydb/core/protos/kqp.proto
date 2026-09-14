@@ -941,6 +941,7 @@ message TKqpTableSinkSettings {
     optional bool SkipMissingRows = 28;
     optional EInputRowFormat InputRowFormat = 29 [default = INPUT_ROW_FORMAT_FLAT];
     optional bool CollectAffectedRows = 30;
+    repeated uint64 TargetShardIds = 31;
 }
 
 message TReadVectorTopK {

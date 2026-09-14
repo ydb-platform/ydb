@@ -2,6 +2,11 @@
 #include "runtime.h"
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+
+#include <util/generic/scope.h>
+
+#include <atomic>
 #include <thread>
 
 namespace NYdb::inline Dev {
@@ -9,6 +14,104 @@ namespace NYdb::inline Dev {
 namespace {
 
 thread_local std::uint32_t SdkResponseCallbackDepth = 0;
+
+class TDriverResponseQueue final: public IExecutor {
+    struct TState {
+        std::atomic<std::uint32_t> Pending = 0;
+    };
+
+    class TTask final {
+    public:
+        TTask(std::shared_ptr<TState> state, TFunction callback)
+            : State_(std::move(state))
+            , Callback_(std::move(callback))
+        {
+            if (State_) {
+                State_->Pending.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+
+        TTask(const TTask& other)
+            : TTask(other.State_, other.Callback_)
+        {
+        }
+
+        TTask(TTask&& other) noexcept
+            : State_(std::move(other.State_))
+        {
+            Callback_.swap(other.Callback_);
+        }
+
+        TTask& operator=(const TTask&) = delete;
+        TTask& operator=(TTask&&) = delete;
+
+        ~TTask() {
+            if (!State_) {
+                return;
+            }
+            // Capture destruction may release the last driver owner, including
+            // when an executor rejects a submission. Defer any resulting teardown
+            // until this task has released its place in the driver's drain.
+            ++SdkResponseCallbackDepth;
+            Y_SCOPE_EXIT() {
+                --SdkResponseCallbackDepth;
+            };
+            Callback_ = nullptr;
+            // Publish capture destruction before waking drain waiters.
+            const auto pending = State_->Pending.fetch_sub(1, std::memory_order_acq_rel);
+            Y_ABORT_UNLESS(pending);
+            if (pending == 1) {
+                State_->Pending.notify_all();
+            }
+        }
+
+        void operator()() {
+            ++SdkResponseCallbackDepth;
+            Y_SCOPE_EXIT() {
+                --SdkResponseCallbackDepth;
+            };
+            // The callback may remove its own wrapper from the executor.
+            auto running = std::move(*this);
+            running.Callback_();
+        }
+
+    private:
+        std::shared_ptr<TState> State_;
+        TFunction Callback_;
+    };
+
+public:
+    explicit TDriverResponseQueue(IExecutor::TPtr executor)
+        : Executor_(std::move(executor))
+        , State_(std::make_shared<TState>())
+    {
+    }
+
+    void Post(TFunction&& callback) override {
+        // Register before Post(), which may execute inline or block on capacity.
+        Executor_->Post(TTask(State_, std::move(callback)));
+    }
+
+    void Stop() override {
+        auto pending = State_->Pending.load(std::memory_order_acquire);
+        while (pending) {
+            State_->Pending.wait(pending, std::memory_order_acquire);
+            pending = State_->Pending.load(std::memory_order_acquire);
+        }
+    }
+
+    bool IsAsync() const override {
+        return Executor_->IsAsync();
+    }
+
+private:
+    void DoStart() override {
+        // The process-wide executor is already started by the runtime.
+    }
+
+    const IExecutor::TPtr Executor_;
+    const std::shared_ptr<TState> State_;
+};
 
 } // anonymous namespace
 
@@ -172,6 +275,23 @@ TDriverScope::TCallbackGuard::~TCallbackGuard() {
 
 bool TDriverScope::TCallbackGuard::IsEntered() const noexcept {
     return Entered_;
+}
+
+IExecutor::TPtr TSdkRuntime::CreateResponseQueue(
+    IExecutor::TPtr executor,
+    std::size_t threadCount,
+    std::size_t maxQueueSize)
+{
+    static const auto* sharedExecutor = [&] {
+        auto selected = executor ? executor : CreateThreadPoolExecutor(threadCount, maxQueueSize);
+        selected->Start();
+        return new IExecutor::TPtr(std::move(selected));
+    }();
+
+    if (executor && executor != *sharedExecutor) {
+        throw TContractViolation("The process-wide YDB SDK executor has already been configured with another instance");
+    }
+    return std::make_shared<TDriverResponseQueue>(*sharedExecutor);
 }
 
 TDriverScope::TPtr TSdkRuntime::CreateDriverScope(NYdbGrpc::IQueueClientContextProvider& contextProvider) {

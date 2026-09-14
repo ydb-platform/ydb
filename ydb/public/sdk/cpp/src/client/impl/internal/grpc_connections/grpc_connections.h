@@ -884,7 +884,6 @@ private:
     }
 
     void EnqueueResponse(IObjectInQueue* action);
-    void StopResponseQueue();
 
 private:
     TCallMeta MakeCallMeta(const TRpcRequestSettings& requestSettings, const TDbDriverStatePtr& dbState) const;
@@ -894,7 +893,6 @@ private:
 
     const std::size_t ClientThreadsNum_;
     std::shared_ptr<IExecutor> ResponseQueue_;
-    std::once_flag ResponseQueueStopOnce_;
 
     const std::string DefaultDiscoveryEndpoint_;
     const TSslCredentials SslCredentials_;

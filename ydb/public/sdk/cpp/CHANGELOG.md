@@ -2,6 +2,8 @@
 
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 
+* SDK response queues now share the executor selected by the first driver. Later drivers reuse it; a different explicit executor is rejected. Driver shutdown drains its own work without stopping the shared executor.
+
 # v3.22.0
 
 * Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.

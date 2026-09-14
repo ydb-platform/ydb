@@ -3,4 +3,5 @@ RECURSE(
     kqp_query_session
     kqp_query_svc
     plan2svg
+    tpch_restarts
 )

@@ -2,182 +2,98 @@
 #include "runtime.h"
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <thread>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/src/library/runtime/runtime_impl.h>
+
+#include <grpcpp/alarm.h>
+
+#include <utility>
 
 namespace NYdb::inline Dev {
 
 namespace {
 
-thread_local std::uint32_t SdkResponseCallbackDepth = 0;
-
-} // anonymous namespace
-
-class TScopedQueueClientContext final : public NYdbGrpc::IQueueClientContext {
+class TScheduledCallback final : public TThrRefBase {
 public:
-    TScopedQueueClientContext(
-        NYdbGrpc::IQueueClientContextPtr underlying,
-        TDriverScope::TPtr scope)
-        : Underlying_(std::move(underlying))
-        , Scope_(std::move(scope))
+    explicit TScheduledCallback(std::function<void(bool)> callback)
+        : Callback_(std::move(callback))
     {
-        Y_ABORT_UNLESS(Underlying_);
-        Y_ABORT_UNLESS(Scope_);
     }
 
-    NYdbGrpc::IQueueClientContextPtr CreateContext() override {
-        return Scope_->CreateChildContext(*Underlying_);
-    }
-
-    NYdbGrpc::TQueueClientCallbackGuardFactory GetCallbackGuardFactory() override {
-        return Scope_->GetCallbackGuardFactory();
-    }
-
-    grpc::CompletionQueue* CompletionQueue() override {
-        return Underlying_->CompletionQueue();
-    }
-
-    bool IsCancelled() const override {
-        return Underlying_->IsCancelled();
-    }
-
-    bool Cancel() override {
-        return Underlying_->Cancel();
-    }
-
-    void SubscribeCancel(std::function<void()> callback) override {
-        Underlying_->SubscribeCancel(std::move(callback));
+    void Start(TDeadline deadline, NYdbGrpc::IQueueClientContextPtr context) {
+        if (context) {
+            context = context->CreateContext();
+        }
+        auto* cq = context ? context->CompletionQueue() : NRuntime::GetNetwork().CompletionQueue();
+        // Publish the cancellation context before handing the tag to the CQ.
+        Context_ = context;
+        Alarm_.Set(cq, deadline, OnAlarmTag_.Prepare());
+        if (context) {
+            context->SubscribeCancel([self = TIntrusivePtr<TScheduledCallback>(this)] {
+                self->Alarm_.Cancel();
+            });
+        }
     }
 
 private:
-    NYdbGrpc::IQueueClientContextPtr Underlying_;
-    TDriverScope::TPtr Scope_;
+    void OnAlarm(bool ok) {
+        Context_.reset();
+        auto callback = std::move(Callback_);
+        callback(ok);
+    }
+
+    NYdbGrpc::IQueueClientContextPtr Context_;
+    grpc::Alarm Alarm_;
+    std::function<void(bool)> Callback_;
+    NYdbGrpc::TQueueClientFixedEvent<TScheduledCallback> OnAlarmTag_ = {
+        this, &TScheduledCallback::OnAlarm};
 };
 
-TDriverScope::TDriverScope(NYdbGrpc::IQueueClientContextPtr rootContext)
-    : RootContext_(std::move(rootContext))
+} // namespace
+
+IExecutor::TPtr TSdkRuntime::GetExecutor(
+    IExecutor::TPtr executor,
+    std::size_t threadCount,
+    std::size_t maxQueueSize)
 {
-    Y_ABORT_UNLESS(RootContext_);
-}
-
-NYdbGrpc::IQueueClientContextPtr TDriverScope::CreateContext() {
-    std::lock_guard lock(ContextMutex_);
-    if (!RootContext_) {
-        return nullptr;
+    static const auto* sharedExecutor = [&] {
+        auto selected = executor ? executor : NRuntime::CreateExecutor(threadCount, maxQueueSize);
+        selected->Start();
+        return new IExecutor::TPtr(std::move(selected));
+    }();
+    if (executor && executor != *sharedExecutor) {
+        throw TContractViolation("The process-wide YDB SDK executor has already been configured with another instance");
     }
-    return WrapContext(RootContext_->CreateContext());
+    return *sharedExecutor;
 }
 
-NYdbGrpc::TQueueClientCallbackGuardFactory TDriverScope::GetCallbackGuardFactory() {
-    auto scope = shared_from_this();
-    return [scope = std::move(scope)] {
-        return std::make_unique<TCallbackGuard>(scope);
-    };
+NYdbGrpc::TGRpcClientLow& TSdkRuntime::GetNetwork(std::size_t threadCount) {
+    return NRuntime::GetNetwork(threadCount);
 }
 
-void TDriverScope::Cancel() {
-    NYdbGrpc::IQueueClientContextPtr rootContext;
-    {
-        std::lock_guard lock(ContextMutex_);
-        rootContext = std::move(RootContext_);
-    }
-
-    if (rootContext) {
-        rootContext->Cancel();
-    }
-}
-
-void TDriverScope::WaitCallbacksDrained() {
-    std::unique_lock lock(CallbackMutex_);
-    CallbackDrained_.wait(lock, [this] {
-        return InFlightCallbacks_ == 0;
-    });
-}
-
-void TDriverScope::CloseCallbacksAndWait() {
-    std::unique_lock lock(CallbackMutex_);
-    CallbacksClosed_ = true;
-    CallbackDrained_.wait(lock, [this] {
-        return InFlightCallbacks_ == 0;
-    });
-}
-
-void TDriverScope::DeferOrRun(std::function<void()> action) {
-    if (!IsCurrentThreadInCallback() && !NYdbGrpc::IsGRpcCompletionThread()) {
-        action();
-        return;
-    }
-
-    auto scope = shared_from_this();
-    try {
-        std::thread([scope = std::move(scope), action = std::move(action)]() mutable {
-            scope->WaitCallbacksDrained();
-            action();
-        }).detach();
-    } catch (...) {
-        Y_ABORT("Failed to defer YDB driver action from SDK callback thread");
-    }
-}
-
-bool TDriverScope::IsCurrentThreadInCallback() noexcept {
-    return SdkResponseCallbackDepth != 0;
-}
-
-bool TDriverScope::TryEnterCallback() noexcept {
-    std::unique_lock lock(CallbackMutex_);
-    if (CallbacksClosed_) {
-        return false;
-    }
-    ++InFlightCallbacks_;
-    return true;
-}
-
-void TDriverScope::LeaveCallback() noexcept {
-    std::unique_lock lock(CallbackMutex_);
-    Y_ABORT_UNLESS(InFlightCallbacks_ > 0);
-    if (--InFlightCallbacks_ == 0) {
-        CallbackDrained_.notify_all();
-    }
-}
-
-NYdbGrpc::IQueueClientContextPtr TDriverScope::CreateChildContext(
-    NYdbGrpc::IQueueClientContext& parentContext)
+void TSdkRuntime::ScheduleCallback(
+    TDuration timeout,
+    std::function<void(bool)> callback,
+    NYdbGrpc::IQueueClientContextPtr context)
 {
-    return WrapContext(parentContext.CreateContext());
+    ScheduleCallback(TDeadline::AfterDuration(timeout), std::move(callback), std::move(context));
 }
 
-NYdbGrpc::IQueueClientContextPtr TDriverScope::WrapContext(NYdbGrpc::IQueueClientContextPtr context) {
-    if (!context) {
-        return nullptr;
-    }
-    return std::make_shared<TScopedQueueClientContext>(std::move(context), shared_from_this());
-}
-
-TDriverScope::TCallbackGuard::TCallbackGuard(TPtr scope)
-    : Scope_(std::move(scope))
+void TSdkRuntime::ScheduleCallback(
+    TDeadline deadline,
+    std::function<void(bool)> callback,
+    NYdbGrpc::IQueueClientContextPtr context)
 {
-    Entered_ = Scope_ && Scope_->TryEnterCallback();
-    if (Entered_) {
-        ++SdkResponseCallbackDepth;
-    }
+    MakeIntrusive<TScheduledCallback>(std::move(callback))->Start(deadline, std::move(context));
 }
 
-TDriverScope::TCallbackGuard::~TCallbackGuard() {
-    if (!Entered_) {
-        return;
-    }
-
-    --SdkResponseCallbackDepth;
-    Scope_->LeaveCallback();
-}
-
-bool TDriverScope::TCallbackGuard::IsEntered() const noexcept {
-    return Entered_;
-}
-
-TDriverScope::TPtr TSdkRuntime::CreateDriverScope(NYdbGrpc::IQueueClientContextProvider& contextProvider) {
-    auto rootContext = contextProvider.CreateContext();
-    Y_ABORT_UNLESS(rootContext);
-    return TDriverScope::TPtr(new TDriverScope(std::move(rootContext)));
+NThreading::TFuture<bool> TSdkRuntime::ScheduleFuture(
+    TDuration timeout,
+    NYdbGrpc::IQueueClientContextPtr context)
+{
+    auto promise = NThreading::NewPromise<bool>();
+    ScheduleCallback(timeout, [promise](bool ok) mutable { promise.SetValue(ok); }, std::move(context));
+    return promise.GetFuture();
 }
 
 TSdkRuntime& GetSdkRuntime() {

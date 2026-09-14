@@ -81,29 +81,12 @@ std::shared_ptr<NObservability::TRequestSpan> TTableClient::TImpl::CreateRetryAt
 
 TTableClient::TImpl::~TImpl() {
     if (Connections_->GetDrainOnDtors()) {
-        const bool waitForDrain = !TGRpcConnectionsImpl::IsCurrentThreadInSdkCallback();
-        auto drainFuture = Drain();
-        if (waitForDrain) {
-            drainFuture.Wait(DRAIN_TIMEOUT);
-        }
+        Drain();
     }
 }
 
 bool TTableClient::TImpl::LinkObjToEndpoint(const TEndpointKey& endpoint, TEndpointObj* obj, const void* tag) {
     return DbDriverState_->EndpointPool.LinkObjToEndpoint(endpoint, obj, tag);
-}
-
-void TTableClient::TImpl::InitStopper() {
-    std::weak_ptr<TTableClient::TImpl> weak = shared_from_this();
-    auto cb = [weak]() mutable {
-        auto strong = weak.lock();
-        if (!strong) {
-            return MakeReadyFuture();
-        }
-        return strong->Drain();
-    };
-
-    DbDriverState_->AddCb(std::move(cb), TDbDriverState::ENotifyType::STOP);
 }
 
 NThreading::TFuture<void> TTableClient::TImpl::Drain() {
@@ -1120,13 +1103,7 @@ TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, co
 TAsyncStatus TTableClient::TImpl::CloseInternal(const TKqpSessionCommon* sessionImpl) {
     const auto internalCloseSessionSettings = TCloseSessionSettings().ClientTimeout(TDuration::Seconds(2));
 
-    auto driver = Connections_;
-    return Close(sessionImpl, internalCloseSessionSettings)
-        .Apply([driver{std::move(driver)}](TAsyncStatus status) mutable
-        {
-            driver.reset();
-            return status;
-        });
+    return Close(sessionImpl, internalCloseSessionSettings);
 }
 
 bool TTableClient::TImpl::ReturnSession(TKqpSessionCommon* sessionImpl) {

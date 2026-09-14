@@ -331,9 +331,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Start() {
     Y_ABORT_UNLESS(this->SelfContext);
     Settings.DecompressionExecutor_->Start();
     Settings.EventHandlers_.HandlersExecutor_->Start();
-    if (!Reconnect(TPlainStatus())) {
-        AbortSession(EStatus::ABORTED, "Driver is stopping");
-    }
+    Reconnect(TPlainStatus());
 }
 
 template<bool UseMigrationProtocol>
@@ -372,9 +370,6 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
         std::lock_guard guard(Lock);
         connectContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
-        if (!connectContext || !connectTimeoutContext) {
-            return false;
-        }
 
         if (Aborting) {
             Cancel(connectContext);
@@ -411,9 +406,6 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::Reconnect(const TPlain
             }
             delay = *nextDelay;
             delayContext = ClientContext->CreateContext();
-            if (!delayContext) {
-                return false;
-            }
         }
 
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Reconnecting session to cluster " << ClusterName << " in " << delay);
@@ -3714,15 +3706,9 @@ void TDeferredActions<UseMigrationProtocol>::DeferScheduleCallback(TDuration del
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferCallback(
-    std::function<void()> callback,
-    NYdbGrpc::TQueueClientCallbackGuardFactory callbackGuardFactory)
-{
+void TDeferredActions<UseMigrationProtocol>::DeferCallback(std::function<void()> callback) {
     Y_ASSERT(!DirectReadActions.Callback);
-    DirectReadActions.Callback = typename TDirectReadDeferredActions::TCallback{
-        std::move(callback),
-        std::move(callbackGuardFactory)
-    };
+    DirectReadActions.Callback = std::move(callback);
 }
 
 template<bool UseMigrationProtocol>
@@ -3852,9 +3838,7 @@ template<bool UseMigrationProtocol>
 void TDeferredActions<UseMigrationProtocol>::DirectReadCallback() {
     auto& callback = DirectReadActions.Callback;
     if (callback) {
-        NYdbGrpc::RunQueueClientCallback(callback->CallbackGuardFactory, [&] {
-            callback->Callback();
-        });
+        callback();
     }
 }
 

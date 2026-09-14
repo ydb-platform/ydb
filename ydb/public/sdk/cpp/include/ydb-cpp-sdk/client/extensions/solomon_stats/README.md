@@ -74,7 +74,7 @@ void AddMetricRegistry(NYdb::TDriver& driver, std::shared_ptr<NMonitoring::IMetr
 void AddMetricRegistry(NYdb::TDriver& driver, TAtomicSharedPtr<NMonitoring::IMetricRegistry> ptr);
 ```
 
-If you provide a raw pointer, it's your responsibility to delete the registry. You must shutdown the SDK driver before destroying the registry.
+A raw registry pointer must remain valid for all SDK work using it, including asynchronous client and session cleanup. `TDriver::Stop()` is a no-op. Prefer the shared-pointer overload so the SDK retains the registry while it is needed.
 
 ## Metrics Description
 

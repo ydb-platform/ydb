@@ -77,12 +77,6 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
             return;
         }
         ctx = Connections_->CreateContext();
-        if (!ctx) {
-            Stopping = true;
-            FederationDiscoveryDelayContext = nullptr;  // release any previously-held context
-            // TODO log DRIVER_IS_STOPPING_DESCRIPTION
-            return;
-        }
         FederationDiscoveryDelayContext = ctx;
     }
     // Lock is released here — before RunDeferred — to prevent the deadlock
@@ -136,11 +130,6 @@ void TFederatedDbObserverImpl::ScheduleFederationDiscoveryImpl(TDuration delay) 
     };
 
     FederationDiscoveryDelayContext = Connections_->CreateContext();
-    if (!FederationDiscoveryDelayContext) {
-        Stopping = true;
-        // TODO log DRIVER_IS_STOPPING_DESCRIPTION
-        return;
-    }
     Connections_->ScheduleCallback(delay,
                                   std::move(cb),
                                   FederationDiscoveryDelayContext);

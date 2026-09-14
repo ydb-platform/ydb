@@ -13,6 +13,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/impl/stats
     ydb/public/sdk/cpp/src/client/impl/observability/error_category
     ydb/public/sdk/cpp/src/client/impl/internal/db_driver_state
+    ydb/public/sdk/cpp/src/library/runtime
 )
 
 END()

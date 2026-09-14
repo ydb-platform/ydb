@@ -7,6 +7,11 @@
 #include <util/system/thread.h>
 #include <util/random/random.h>
 
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#include <util/system/win_undef.h>
+#endif
+
 #if !defined(_WIN32) && !defined(_WIN64)
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -18,7 +23,10 @@
 #include <contrib/libs/grpc/src/core/lib/iomgr/socket_mutator.h>
 #endif
 
+#include <algorithm>
+#include <atomic>
 #include <format>
+#include <thread>
 
 namespace NYdbGrpc::inline Dev {
 
@@ -216,44 +224,42 @@ void TChannelPool::EraseFromQueueByTime(const TInstant& lastUseTime, const std::
     LastUsedQueue_.erase(pos);
 }
 
-namespace {
-
-thread_local bool IsGrpcWorkerThread = false;
-
-class TGrpcWorkerThreadGuard {
-public:
-    TGrpcWorkerThreadGuard() {
-        IsGrpcWorkerThread = true;
-    }
-
-    ~TGrpcWorkerThreadGuard() {
-        IsGrpcWorkerThread = PreviousValue_;
-    }
-
-private:
-    const bool PreviousValue_ = IsGrpcWorkerThread;
-};
-
-} // namespace
-
-bool IsGRpcCompletionThread() {
-    return IsGrpcWorkerThread;
-}
-
 static void PullEvents(grpc::CompletionQueue* cq) {
-    TGrpcWorkerThreadGuard guard;
-    TThread::SetCurrentThreadName("grpc_client");
-    while (true) {
-        void* tag;
-        bool ok;
-
-        if (!cq->Next(&tag, &ok)) {
-            break;
+#if defined(_WIN32) || defined(_WIN64)
+    // Kernel32 outlives SDK workers; no util singleton is needed for naming.
+    using TSetThreadDescription = HRESULT (WINAPI*)(HANDLE, PCWSTR);
+    static const auto setDescription = reinterpret_cast<TSetThreadDescription>(
+        GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "SetThreadDescription"));
+    if (setDescription) {
+        Y_ABORT_UNLESS(SUCCEEDED(setDescription(GetCurrentThread(), L"grpc_client")),
+            "SetThreadDescription failed");
+    }
+#if defined(_MSC_VER)
+    else {
+#pragma pack(push, 8)
+        const struct {
+            DWORD Type;
+            LPCSTR Name;
+            DWORD ThreadId;
+            DWORD Flags;
+        } info = {0x1000, "grpc_client", DWORD(-1), 0};
+#pragma pack(pop)
+        __try {
+            RaiseException(0x406D1388, 0, sizeof(info) / sizeof(ULONG_PTR),
+                reinterpret_cast<const ULONG_PTR*>(&info));
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
         }
-
-        if (auto* ev = static_cast<IQueueClientEvent*>(tag)) {
-            if (!ev->Execute(ok)) {
-                ev->Destroy();
+    }
+#endif
+#else
+    TThread::SetCurrentThreadName("grpc_client");
+#endif
+    void* tag;
+    bool ok;
+    while (cq->Next(&tag, &ok)) {
+        if (auto* event = static_cast<IQueueClientEvent*>(tag)) {
+            if (!event->Execute(ok)) {
+                event->Destroy();
             }
         }
     }
@@ -263,390 +269,177 @@ class TGRpcClientLow::TContextImpl final
     : public std::enable_shared_from_this<TContextImpl>
     , public IQueueClientContext
 {
-    friend class TGRpcClientLow;
-
     using TCallback = std::function<void()>;
     using TContextPtr = std::shared_ptr<TContextImpl>;
 
 public:
-    ~TContextImpl() override {
-        Y_ABORT_UNLESS(CountChildren() == 0,
-                "Destructor called with non-empty children");
-
-        if (Parent) {
-            Parent->ForgetContext(this);
-        } else if (Y_LIKELY(Owner)) {
-            Owner->ForgetContext(this);
-        }
-    }
-
-    /**
-     * Helper for locking child pointer from a parent container
-     */
-    static TContextPtr LockChildPtr(TContextImpl* ptr) {
-        if (ptr) {
-            // N.B. it is safe to do as long as it's done under a mutex and
-            // pointer is among valid children. When that's the case we
-            // know that TContextImpl destructor has not finished yet, so
-            // the object is valid. The lock() method may return nullptr
-            // though, if the object is being destructed right now.
-            return ptr->weak_from_this().lock();
-        } else {
-            return nullptr;
-        }
-    }
-
-    void ForgetContext(TContextImpl* child) {
-        std::unique_lock<std::mutex> guard(Mutex);
-
-        auto removed = RemoveChild(child);
-        Y_ABORT_UNLESS(removed, "Unexpected ForgetContext(%p)", child);
+    explicit TContextImpl(grpc::CompletionQueue* cq, TContextPtr parent = {})
+        : Parent_(std::move(parent))
+        , CQ_(cq)
+    {
+        Y_ABORT_UNLESS(CQ_);
     }
 
     IQueueClientContextPtr CreateContext() override {
-        auto self = shared_from_this();
-        auto child = std::make_shared<TContextImpl>();
-
-        {
-            std::unique_lock<std::mutex> guard(Mutex);
-
-            AddChild(child.get());
-
-            // It's now safe to initialize parent and owner
-            child->Parent = std::move(self);
-            child->Owner = Owner;
-            child->CQ = CQ;
-
-            // Propagate cancellation to a child context
-            if (Cancelled.load(std::memory_order_relaxed)) {
-                child->Cancelled.store(true, std::memory_order_relaxed);
+        auto child = std::make_shared<TContextImpl>(CQ_, shared_from_this());
+        std::lock_guard guard(Mutex_);
+        if (Cancelled_.load(std::memory_order_relaxed)) {
+            child->Cancelled_.store(true, std::memory_order_relaxed);
+        } else {
+            // Amortize pruning across insertions instead of scanning all active
+            // children on each request. No destructor needs to unregister.
+            if (++AddedSincePrune_ > Children_.size() / 2) {
+                Children_.erase(std::remove_if(Children_.begin(), Children_.end(),
+                    [](const auto& entry) { return entry.expired(); }), Children_.end());
+                AddedSincePrune_ = 0;
             }
+            Children_.push_back(child);
         }
-
         return child;
     }
 
     grpc::CompletionQueue* CompletionQueue() override {
-        Y_ABORT_UNLESS(Owner, "Uninitialized context");
-        return CQ;
+        return CQ_;
     }
 
     bool IsCancelled() const override {
-        return Cancelled.load(std::memory_order_acquire);
+        return Cancelled_.load(std::memory_order_acquire);
     }
 
     bool Cancel() override {
         TStackVec<TCallback, 1> callbacks;
         TStackVec<TContextPtr, 2> children;
-
         {
-            std::unique_lock<std::mutex> guard(Mutex);
-
-            if (Cancelled.load(std::memory_order_relaxed)) {
-                // Already cancelled in another thread
+            std::lock_guard guard(Mutex_);
+            if (Cancelled_.load(std::memory_order_relaxed)) {
                 return false;
             }
-
-            callbacks.reserve(Callbacks.size());
-            children.reserve(CountChildren());
-
-            for (auto& callback : Callbacks) {
-                callbacks.emplace_back().swap(callback);
+            callbacks.reserve(Callbacks_.size());
+            children.reserve(Children_.size());
+            for (auto& callback : Callbacks_) {
+                callbacks.push_back(std::move(callback));
             }
-            Callbacks.clear();
-
-            // Collect all children we need to cancel
-            // N.B. we don't clear children links (cleared by destructors)
-            // N.B. some children may be stuck in destructors at the moment
-            for (TContextImpl* ptr : InlineChildren) {
-                if (auto child = LockChildPtr(ptr)) {
-                    children.emplace_back(std::move(child));
+            Callbacks_.clear();
+            for (auto& entry : Children_) {
+                if (auto child = entry.lock()) {
+                    children.push_back(std::move(child));
                 }
             }
-            for (auto* ptr : Children) {
-                if (auto child = LockChildPtr(ptr)) {
-                    children.emplace_back(std::move(child));
-                }
-            }
-
-            Cancelled.store(true, std::memory_order_release);
+            Children_.clear();
+            Cancelled_.store(true, std::memory_order_release);
         }
-
-        // Call directly subscribed callbacks
-        if (!callbacks.empty()) {
-            RunCallbacksNoExcept(callbacks);
-        }
-
-        // Cancel all children
+        RunCallbacks(callbacks);
         for (auto& child : children) {
             child->Cancel();
-            child.reset();
         }
-
         return true;
     }
 
     void SubscribeCancel(TCallback callback) override {
         Y_ABORT_UNLESS(callback, "SubscribeCancel called with an empty callback");
-
         {
-            std::unique_lock<std::mutex> guard(Mutex);
-
-            if (!Cancelled.load(std::memory_order_relaxed)) {
-                Callbacks.emplace_back().swap(callback);
+            std::lock_guard guard(Mutex_);
+            if (!Cancelled_.load(std::memory_order_relaxed)) {
+                Callbacks_.emplace_back().swap(callback);
                 return;
             }
         }
-
-        // Already cancelled, run immediately
         callback();
     }
 
 private:
-    void AddChild(TContextImpl* child) {
-        for (TContextImpl*& slot : InlineChildren) {
-            if (!slot) {
-                slot = child;
-                return;
-            }
-        }
-
-        Children.insert(child);
-    }
-
-    bool RemoveChild(TContextImpl* child) {
-        for (TContextImpl*& slot : InlineChildren) {
-            if (slot == child) {
-                slot = nullptr;
-                return true;
-            }
-        }
-
-        return Children.erase(child);
-    }
-
-    size_t CountChildren() {
-        size_t count = 0;
-
-        for (TContextImpl* ptr : InlineChildren) {
-            if (ptr) {
-                ++count;
-            }
-        }
-
-        return count + Children.size();
-    }
-
-    template<class TCallbacks>
-    static void RunCallbacksNoExcept(TCallbacks& callbacks) noexcept {
+    static void RunCallbacks(TStackVec<TCallback, 1>& callbacks) noexcept {
         for (auto& callback : callbacks) {
-            if (callback) {
-                callback();
-                callback = nullptr;
-            }
+            callback();
+            callback = nullptr;
         }
+    }
+
+    // Retain the explicit cancellation parent, without any lifetime registry.
+    const TContextPtr Parent_;
+    grpc::CompletionQueue* const CQ_;
+    std::mutex Mutex_;
+    TStackVec<std::weak_ptr<TContextImpl>, 2> Children_;
+    std::size_t AddedSincePrune_ = 0;
+    TStackVec<TCallback, 1> Callbacks_;
+    std::atomic<bool> Cancelled_ = false;
+};
+
+class TGRpcClientLow::TNetwork final : public IQueueClientContextProvider {
+public:
+    TNetwork(std::size_t threadCount, bool queuePerThread) {
+        if (!threadCount) {
+            threadCount = DEFAULT_NUM_THREADS;
+        }
+        const auto queueCount = queuePerThread ? threadCount : 1;
+        CQS_.reserve(queueCount);
+        WorkerThreads_.reserve(threadCount);
+        for (std::size_t i = 0; i < queueCount; ++i) {
+            CQS_.push_back(std::make_unique<grpc::CompletionQueue>());
+        }
+        try {
+            for (std::size_t i = 0; i < threadCount; ++i) {
+                AddWorker();
+            }
+        } catch (...) {
+            // Roll back a failed initialization before publishing the singleton.
+            for (auto& cq : CQS_) {
+                cq->Shutdown();
+            }
+            for (auto& thread : WorkerThreads_) {
+                thread.join();
+            }
+            throw;
+        }
+    }
+
+    grpc::CompletionQueue* CompletionQueue() {
+        return CQS_.size() == 1 ? CQS_.front().get() : CQS_[RandomNumber(CQS_.size())].get();
+    }
+
+    IQueueClientContextPtr CreateContext() override {
+        return std::make_shared<TContextImpl>(CompletionQueue());
+    }
+
+    void AddWorker() {
+        // Reserve before starting a thread so allocation failure cannot leave an
+        // unowned worker accessing completion queues during initialization rollback.
+        WorkerThreads_.reserve(WorkerThreads_.size() + 1);
+        auto* cq = CQS_[WorkerThreads_.size() % CQS_.size()].get();
+        WorkerThreads_.emplace_back([cq] {
+            PullEvents(cq);
+        });
     }
 
 private:
-    // We want a simple lock here, without extra memory allocations
-    std::mutex Mutex;
-
-    // These fields are initialized on successful registration
-    TContextPtr Parent;
-    TGRpcClientLow* Owner = nullptr;
-    grpc::CompletionQueue* CQ = nullptr;
-
-    // Some children are stored inline, others are in a set
-    std::array<TContextImpl*, 2> InlineChildren{ { nullptr, nullptr } };
-    std::unordered_set<TContextImpl*> Children;
-
-    // Single callback is stored without extra allocations
-    TStackVec<TCallback, 1> Callbacks;
-
-    // Atomic flag for a faster IsCancelled() implementation
-    std::atomic<bool> Cancelled;
+    std::vector<std::unique_ptr<grpc::CompletionQueue>> CQS_;
+    std::vector<std::thread> WorkerThreads_;
 };
 
-TGRpcClientLow::TGRpcClientLow(size_t numWorkerThread, bool useCompletionQueuePerThread)
-    : UseCompletionQueuePerThread_(useCompletionQueuePerThread)
-{
-    Init(numWorkerThread);
+TGRpcClientLow::TNetwork& TGRpcClientLow::GetNetwork(std::size_t threadCount, bool queuePerThread) {
+    static auto* network = new TNetwork(threadCount, queuePerThread);
+    return *network;
 }
 
-void TGRpcClientLow::Init(size_t numWorkerThread) {
-    SetCqState(WORKING);
-    if (UseCompletionQueuePerThread_) {
-        for (size_t i = 0; i < numWorkerThread; i++) {
-            CQS_.push_back(std::make_unique<grpc::CompletionQueue>());
-            auto* cq = CQS_.back().get();
-            WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq]() {
-                PullEvents(cq);
-            }).Release());
-        }
-    } else {
-        CQS_.push_back(std::make_unique<grpc::CompletionQueue>());
-        auto* cq = CQS_.back().get();
-        for (size_t i = 0; i < numWorkerThread; i++) {
-            WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq]() {
-                PullEvents(cq);
-            }).Release());
-        }
-    }
+TGRpcClientLow::TGRpcClientLow(size_t numWorkerThread, bool useCompletionQueuePerThread)
+    : Network_(GetNetwork(numWorkerThread, useCompletionQueuePerThread))
+{
 }
 
 void TGRpcClientLow::AddWorkerThreadForTest() {
-    if (UseCompletionQueuePerThread_) {
-        CQS_.push_back(std::make_unique<grpc::CompletionQueue>());
-        auto* cq = CQS_.back().get();
-        WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq]() {
-            PullEvents(cq);
-        }).Release());
-    } else {
-        auto* cq = CQS_.back().get();
-        WorkerThreads_.emplace_back(SystemThreadFactory()->Run([cq]() {
-            PullEvents(cq);
-        }).Release());
-    }
+    Network_.AddWorker();
 }
 
-TGRpcClientLow::~TGRpcClientLow() {
-    StopInternal(true);
-    WaitInternal();
+IQueueClientContextProvider* TGRpcClientLow::GetContextProvider() {
+    return &Network_;
 }
 
-void TGRpcClientLow::Stop(bool wait) {
-    StopInternal(false);
-
-    if (wait) {
-        WaitInternal();
-    }
+grpc::CompletionQueue* TGRpcClientLow::CompletionQueue() {
+    return Network_.CompletionQueue();
 }
 
-void TGRpcClientLow::StopInternal(bool silent) {
-    bool shutdown;
-
-    std::vector<TContextImpl::TContextPtr> cancelQueue;
-
-    {
-        std::unique_lock<std::mutex> guard(Mtx_);
-
-        auto allowStateChange = [&]() {
-            switch (GetCqState()) {
-                case WORKING:
-                    return true;
-                case STOP_SILENT:
-                    return !silent;
-                case STOP_EXPLICIT:
-                    return false;
-            }
-
-            Y_UNREACHABLE();
-        };
-
-        if (!allowStateChange()) {
-            // Completion queue is already stopping
-            return;
-        }
-
-        SetCqState(silent ? STOP_SILENT : STOP_EXPLICIT);
-
-        if (!silent && !Contexts_.empty()) {
-            cancelQueue.reserve(Contexts_.size());
-            for (auto* ptr : Contexts_) {
-                // N.B. some contexts may be stuck in destructors
-                if (auto context = TContextImpl::LockChildPtr(ptr)) {
-                    cancelQueue.emplace_back(std::move(context));
-                }
-            }
-        }
-
-        shutdown = Contexts_.empty();
-    }
-
-    for (auto& context : cancelQueue) {
-        context->Cancel();
-        context.reset();
-    }
-
-    if (shutdown) {
-        for (auto& cq : CQS_) {
-            cq->Shutdown();
-        }
-    }
-}
-
-void TGRpcClientLow::WaitInternal() {
-    std::unique_lock<std::mutex> guard(JoinMutex_);
-
-    for (auto& ti : WorkerThreads_) {
-        ti->Join();
-    }
-}
-
-void TGRpcClientLow::WaitIdle() {
-    std::unique_lock<std::mutex> guard(Mtx_);
-
-    while (!Contexts_.empty()) {
-        ContextsEmpty_.wait(guard);
-    }
-}
-
-std::shared_ptr<IQueueClientContext> TGRpcClientLow::CreateContext() {
-    std::unique_lock<std::mutex> guard(Mtx_);
-
-    auto allowCreateContext = [&]() {
-        switch (GetCqState()) {
-            case WORKING:
-                return true;
-            case STOP_SILENT:
-            case STOP_EXPLICIT:
-                return false;
-        }
-
-        Y_UNREACHABLE();
-    };
-
-    if (!allowCreateContext()) {
-        // New context creation is forbidden
-        return nullptr;
-    }
-
-    auto context = std::make_shared<TContextImpl>();
-    Contexts_.insert(context.get());
-    context->Owner = this;
-    if (UseCompletionQueuePerThread_) {
-        context->CQ = CQS_[RandomNumber(CQS_.size())].get();
-    } else {
-        context->CQ = CQS_[0].get();
-    }
-    return context;
-}
-
-void TGRpcClientLow::ForgetContext(TContextImpl* context) {
-    bool shutdown = false;
-
-    {
-        std::unique_lock<std::mutex> guard(Mtx_);
-
-        if (!Contexts_.erase(context)) {
-            Y_ABORT("Unexpected ForgetContext(%p)", context);
-        }
-
-        if (Contexts_.empty()) {
-            if (IsStopping()) {
-                shutdown = true;
-            }
-
-            ContextsEmpty_.notify_all();
-        }
-    }
-
-    if (shutdown) {
-        // This was the last context, shutdown CQ
-        for (auto& cq : CQS_) {
-            cq->Shutdown();
-        }
-    }
+IQueueClientContextPtr TGRpcClientLow::CreateContext() {
+    return Network_.CreateContext();
 }
 
 grpc_socket_mutator* NImpl::CreateGRpcSocketMutator(const TTcpKeepAliveSettings& TcpKeepAliveSettings_, bool tcpNoDelay) {

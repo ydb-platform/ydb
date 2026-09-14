@@ -1,4 +1,5 @@
 RECURSE(
+    runtime
     decimal
     grpc_client
     issue

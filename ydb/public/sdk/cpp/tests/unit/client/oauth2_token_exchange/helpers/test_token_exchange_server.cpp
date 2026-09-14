@@ -76,6 +76,13 @@ void TTestTokenExchangeServer::TCheck::Check() {
 }
 
 bool TTestTokenExchangeServer::TRequest::DoReply(const TReplyParams& params) {
+    std::function<void()> beforeReply;
+    with_lock (Server->Lock) {
+        beforeReply = Server->BeforeReply;
+    }
+    if (beforeReply) {
+        beforeReply();
+    }
     with_lock (Server->Lock) {
         const TParsedHttpFull parsed(params.Input.FirstLine());
         UNIT_ASSERT_VALUES_EQUAL(parsed.Path, "/exchange/token");

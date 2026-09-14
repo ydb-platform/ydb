@@ -1,16 +1,15 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/metrics/metric_buffer.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/runtime/runtime.h>
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cstdint>
 #include <iterator>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
-#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -75,8 +74,11 @@ public:
     }
 
     void Start() {
-        FlushThread_ = std::thread([this] {
-            Run();
+        GetRuntime().Schedule(Settings_.FlushInterval, [weak = weak_from_this()] {
+            if (auto self = weak.lock(); self && !self->Stopping_.load(std::memory_order_acquire)) {
+                self->TriggerFlush(EFlushTrigger::Interval);
+                self->Start();
+            }
         });
     }
 
@@ -89,23 +91,9 @@ public:
         if (!Stopping_.compare_exchange_strong(expected, true)) {
             return;
         }
-        {
-            std::lock_guard<std::mutex> lock(WaitMutex_);
-            Wakeup_.notify_all();
-        }
-        if (FlushThread_.joinable()) {
-            try {
-                FlushThread_.join();
-            } catch (...) {
-                // best-effort
-            }
-        }
-        try {
-            FlushAll(EFlushTrigger::Shutdown);
-        } catch (...) {
-            // best-effort: never let a misbehaving underlying registry crash the
-            // owning application during teardown.
-        }
+        // Running flushes retain their core and backend. Never wait here: a backend
+        // callback may itself release the registry. Drain the remaining local data.
+        FlushNoThrow(EFlushTrigger::Shutdown);
     }
 
     // -- Handle registration --------------------------------------------------
@@ -144,9 +132,12 @@ public:
         TThreadState& state = AcquireThreadState();
         bool dropped = false;
         bool overThreshold = false;
+        bool stopped = false;
         {
             std::lock_guard<std::mutex> lock(state.Mutex);
-            if (ShouldDropUpdate(state.PendingOps, 1)) {
+            if (Stopping_.load(std::memory_order_acquire)) {
+                stopped = true;
+            } else if (ShouldDropUpdate(state.PendingOps, 1)) {
                 dropped = true;
             } else {
                 if (state.CounterDeltas.size() <= handle) {
@@ -157,6 +148,10 @@ public:
                 overThreshold = Settings_.ThreadPendingThreshold != 0
                     && state.PendingOps >= Settings_.ThreadPendingThreshold;
             }
+        }
+        if (stopped) {
+            OnCounterAdd(handle, delta);
+            return;
         }
         if (dropped) {
             ReportDroppedCounter(delta);
@@ -185,9 +180,12 @@ public:
         TThreadState& state = AcquireThreadState();
         bool dropped = false;
         bool overThreshold = false;
+        bool stopped = false;
         {
             std::lock_guard<std::mutex> lock(state.Mutex);
-            if (ShouldDropUpdate(state.PendingOps, 1)) {
+            if (Stopping_.load(std::memory_order_acquire)) {
+                stopped = true;
+            } else if (ShouldDropUpdate(state.PendingOps, 1)) {
                 dropped = true;
             } else {
                 if (state.HistogramSamples.size() <= handle) {
@@ -202,6 +200,10 @@ public:
                 overThreshold = Settings_.ThreadPendingThreshold != 0
                     && state.PendingOps >= Settings_.ThreadPendingThreshold;
             }
+        }
+        if (stopped) {
+            OnHistogramRecord(handle, value);
+            return;
         }
         if (dropped) {
             ReportDroppedHistogram(1);
@@ -233,9 +235,12 @@ public:
         TThreadState& state = AcquireThreadState();
         bool dropped = false;
         bool overThreshold = false;
+        bool stopped = false;
         {
             std::lock_guard<std::mutex> lock(state.Mutex);
-            if (ShouldDropUpdate(state.PendingOps, values.size())) {
+            if (Stopping_.load(std::memory_order_acquire)) {
+                stopped = true;
+            } else if (ShouldDropUpdate(state.PendingOps, values.size())) {
                 dropped = true;
             } else {
                 if (state.HistogramSamples.size() <= handle) {
@@ -247,6 +252,10 @@ public:
                 overThreshold = Settings_.ThreadPendingThreshold != 0
                     && state.PendingOps >= Settings_.ThreadPendingThreshold;
             }
+        }
+        if (stopped) {
+            OnHistogramRecordMany(handle, values);
+            return;
         }
         if (dropped) {
             ReportDroppedHistogram(values.size());
@@ -325,8 +334,7 @@ private:
     }
 
     void NudgeOnThreadExit() noexcept {
-        std::lock_guard<std::mutex> lock(WaitMutex_);
-        Wakeup_.notify_all();
+        TriggerFlush(EFlushTrigger::Interval);
     }
 
     bool ShouldDropUpdate(std::size_t pending, std::size_t incomingOps) const noexcept {
@@ -358,33 +366,28 @@ private:
     }
 
     void TriggerFlush(EFlushTrigger trigger) noexcept {
-        ManualTrigger_.store(true, std::memory_order_release);
-        LastManualTrigger_.store(static_cast<int>(trigger), std::memory_order_relaxed);
-        std::lock_guard<std::mutex> lock(WaitMutex_);
-        Wakeup_.notify_all();
+        if (Stopping_.load(std::memory_order_acquire) || FlushPosted_.exchange(true, std::memory_order_acq_rel)) {
+            return;
+        }
+        try {
+            GetRuntime().Post([weak = weak_from_this(), trigger] {
+                if (auto self = weak.lock()) {
+                    if (!self->Stopping_.load(std::memory_order_acquire)) {
+                        self->FlushNoThrow(trigger);
+                    }
+                    self->FlushPosted_.store(false, std::memory_order_release);
+                }
+            });
+        } catch (...) {
+            FlushPosted_.store(false, std::memory_order_release);
+        }
     }
 
-    void Run() noexcept {
-        while (!Stopping_.load(std::memory_order_acquire)) {
-            EFlushTrigger trigger = EFlushTrigger::Interval;
-            {
-                std::unique_lock<std::mutex> lock(WaitMutex_);
-                Wakeup_.wait_for(lock, Settings_.FlushInterval, [this]{
-                    return Stopping_.load(std::memory_order_acquire)
-                        || ManualTrigger_.load(std::memory_order_acquire);
-                });
-                if (Stopping_.load(std::memory_order_acquire)) {
-                    break;
-                }
-                if (ManualTrigger_.exchange(false, std::memory_order_acq_rel)) {
-                    trigger = static_cast<EFlushTrigger>(
-                        LastManualTrigger_.load(std::memory_order_relaxed));
-                }
-            }
-            try {
-                FlushAll(trigger);
-            } catch (...) {
-            }
+    void FlushNoThrow(EFlushTrigger trigger) noexcept {
+        try {
+            FlushAll(trigger);
+        } catch (...) {
+            // A misbehaving backend must not stop maintenance or escape teardown.
         }
     }
 
@@ -612,13 +615,8 @@ private:
     mutable std::mutex ThreadsMutex_;
     std::vector<std::shared_ptr<TThreadState>> ThreadStates_;
 
-    std::mutex WaitMutex_;
-    std::condition_variable Wakeup_;
     std::atomic<bool> Stopping_{false};
-    std::atomic<bool> ManualTrigger_{false};
-    std::atomic<int> LastManualTrigger_{static_cast<int>(EFlushTrigger::Manual)};
-
-    std::thread FlushThread_;
+    std::atomic<bool> FlushPosted_{false};
 
     std::shared_ptr<IHistogram> FlushDurationHist_;
     std::shared_ptr<ICounter> EventsBufferedCounter_;

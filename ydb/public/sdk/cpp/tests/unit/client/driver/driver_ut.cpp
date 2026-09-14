@@ -10,9 +10,12 @@
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/sdk_runtime/runtime.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/api/grpc/ydb_coordination_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
 #include <grpcpp/server.h>
@@ -22,6 +25,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <util/generic/mapfindptr.h>
+#include <util/generic/scope.h>
 
 #include <array>
 #include <atomic>
@@ -127,12 +131,18 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
 
     class TCountingCredentialsProviderFactory final : public ICredentialsProviderFactory {
     public:
-        explicit TCountingCredentialsProviderFactory(std::atomic_int& providerCount)
+        explicit TCountingCredentialsProviderFactory(
+            std::atomic_int& providerCount,
+            std::function<void(int)> onCreate = {})
             : ProviderCount_(providerCount)
+            , OnCreate_(std::move(onCreate))
         {}
 
         TCredentialsProviderPtr CreateProvider() const override {
-            ++ProviderCount_;
+            const auto count = ++ProviderCount_;
+            if (OnCreate_) {
+                OnCreate_(count);
+            }
             return std::make_shared<TCountingCredentialsProvider>();
         }
 
@@ -142,6 +152,7 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
 
     private:
         std::atomic_int& ProviderCount_;
+        std::function<void(int)> OnCreate_;
     };
 
     class TDeferredAuthProvider final : public ICredentialsProvider {
@@ -188,6 +199,129 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
         std::shared_ptr<TDeferredAuthProvider> Provider_;
     };
 
+    class TDeferredOperationService final: public Ydb::Operation::V1::OperationService::Service {
+    public:
+        grpc::Status GetOperation(grpc::ServerContext* context,
+            const Ydb::Operations::GetOperationRequest* request,
+            Ydb::Operations::GetOperationResponse* response) override
+        {
+            SawAuth.store(context->client_metadata().find(YDB_AUTH_TICKET_HEADER) != context->client_metadata().end());
+            const auto call = ++Calls;
+            if (call == 1) {
+                Entered.TrySetValue();
+                if (!Release.GetFuture().Wait(TDuration::Seconds(10))) {
+                    return {grpc::StatusCode::DEADLINE_EXCEEDED, "Test did not release operation polling"};
+                }
+            }
+            auto* operation = response->mutable_operation();
+            operation->set_id(request->id());
+            operation->set_ready(call > 1);
+            operation->set_status(Ydb::StatusIds::SUCCESS);
+            context->AddInitialMetadata("poll-kind", "deferred");
+            context->AddTrailingMetadata("poll-count", std::to_string(call));
+            return grpc::Status::OK;
+        }
+
+        std::atomic_uint Calls = 0;
+        std::atomic_bool SawAuth = false;
+        NThreading::TPromise<void> Entered = NThreading::NewPromise();
+        NThreading::TPromise<void> Release = NThreading::NewPromise();
+    };
+
+    class TControlledDiscoveryService final: public Ydb::Discovery::V1::DiscoveryService::Service {
+    public:
+        grpc::Status ListEndpoints(grpc::ServerContext*,
+            const Ydb::Discovery::ListEndpointsRequest*,
+            Ydb::Discovery::ListEndpointsResponse* response) override
+        {
+            Entered.TrySetValue();
+            if (!Release.GetFuture().Wait(TDuration::Seconds(10))) {
+                return {grpc::StatusCode::DEADLINE_EXCEEDED, "Test did not release discovery"};
+            }
+            auto* operation = response->mutable_operation();
+            operation->set_ready(true);
+            operation->set_status(Status);
+            if (Status == Ydb::StatusIds::SUCCESS) {
+                Ydb::Discovery::ListEndpointsResult result;
+                auto* endpoint = result.add_endpoints();
+                endpoint->set_address("127.0.0.1");
+                endpoint->set_port(TablePort);
+                operation->mutable_result()->PackFrom(result);
+            } else {
+                operation->add_issues()->set_message("Discovery denied by mock service");
+            }
+            return grpc::Status::OK;
+        }
+
+        ui16 TablePort = 0;
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NThreading::TPromise<void> Entered = NThreading::NewPromise();
+        NThreading::TPromise<void> Release = NThreading::NewPromise();
+    };
+
+    using TRpcOutcome = std::pair<bool, TPlainStatus>;
+
+    NThreading::TFuture<TRpcOutcome> RunCreateSession(
+        const std::shared_ptr<TGRpcConnectionsImpl>& connections, TDbDriverStatePtr state)
+    {
+        auto result = NThreading::NewPromise<TRpcOutcome>();
+        TRpcRequestSettings settings;
+        settings.Deadline = TDeadline::AfterDuration(TDuration::Seconds(10));
+        connections->Run<Ydb::Table::V1::TableService,
+            Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse>(
+                Ydb::Table::CreateSessionRequest{},
+                [result](Ydb::Table::CreateSessionResponse* response, TPlainStatus status) mutable {
+                    result.SetValue({response != nullptr, std::move(status)});
+                },
+                &Ydb::Table::V1::TableService::Stub::AsyncCreateSession,
+                std::move(state), settings);
+        return result.GetFuture();
+    }
+
+    std::array<NThreading::TFuture<TRpcOutcome>, 2> StartStreams(
+        const std::shared_ptr<TGRpcConnectionsImpl>& connections, const TDbDriverStatePtr& state,
+        IQueueClientContextPtr context = {}, bool useAuth = true)
+    {
+        using TReadProcessor = NYdbGrpc::IStreamRequestReadProcessor<Ydb::Table::ReadTableResponse>;
+        using TBidiProcessor = NYdbGrpc::IStreamRequestReadWriteProcessor<
+            Ydb::Coordination::SessionRequest, Ydb::Coordination::SessionResponse>;
+        auto read = NThreading::NewPromise<TRpcOutcome>();
+        auto bidi = NThreading::NewPromise<TRpcOutcome>();
+        TRpcRequestSettings settings;
+        settings.UseAuth = useAuth;
+        settings.Deadline = TDeadline::AfterDuration(TDuration::Seconds(10));
+        connections->StartReadStream<Ydb::Table::V1::TableService,
+            Ydb::Table::ReadTableRequest, Ydb::Table::ReadTableResponse>(
+                Ydb::Table::ReadTableRequest{},
+                [read](TPlainStatus status, TReadProcessor::TPtr processor) mutable {
+                    if (processor) {
+                        processor->Cancel();
+                    }
+                    read.SetValue({bool(processor), std::move(status)});
+                }, &Ydb::Table::V1::TableService::Stub::AsyncStreamReadTable,
+                state, settings, context);
+        connections->StartBidirectionalStream<Ydb::Coordination::V1::CoordinationService,
+            Ydb::Coordination::SessionRequest, Ydb::Coordination::SessionResponse>(
+                [bidi](TPlainStatus status, TBidiProcessor::TPtr processor) {
+                    if (processor) {
+                        processor->Cancel();
+                    }
+                    auto result = bidi;
+                    result.SetValue({bool(processor), std::move(status)});
+                }, &Ydb::Coordination::V1::CoordinationService::Stub::AsyncSession,
+                state, settings, std::move(context));
+        return {read.GetFuture(), bidi.GetFuture()};
+    }
+
+    TDbDriverStatePtr MakeUndiscoveredState(const std::shared_ptr<TGRpcConnectionsImpl>& connections,
+        const std::string& endpoint, EDiscoveryMode mode = EDiscoveryMode::Async)
+    {
+        auto state = std::make_shared<TDbDriverState>("/Root/runtime", endpoint, mode,
+            TSslCredentials{}, connections);
+        state->InitCredentials(CreateInsecureCredentialsProviderFactory());
+        return state;
+    }
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
@@ -210,134 +344,17 @@ Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
         }
     }
 
-    Y_UNIT_TEST(DriverScopesCancelIndependently) {
-        NYdbGrpc::TGRpcClientLow client(1);
-        auto scopeA = GetSdkRuntime().CreateDriverScope(client);
-        auto scopeB = GetSdkRuntime().CreateDriverScope(client);
-        auto contextA = scopeA->CreateContext();
-        auto contextB = scopeB->CreateContext();
-
-        UNIT_ASSERT(contextA);
-        UNIT_ASSERT(contextB);
-        UNIT_ASSERT(!contextA->IsCancelled());
-        UNIT_ASSERT(!contextB->IsCancelled());
-
-        scopeA->Cancel();
-
+    Y_UNIT_TEST(RequestContextsCancelIndependently) {
+        auto& network = GetSdkRuntime().GetNetwork(1);
+        auto contextA = network.CreateContext();
+        auto childA = contextA->CreateContext();
+        auto contextB = network.CreateContext();
+        contextA->Cancel();
         UNIT_ASSERT(contextA->IsCancelled());
-        UNIT_ASSERT(!scopeA->CreateContext());
-        auto childContextA = contextA->CreateContext();
-        UNIT_ASSERT(childContextA);
-        UNIT_ASSERT(childContextA->IsCancelled());
+        UNIT_ASSERT(childA->IsCancelled());
+        UNIT_ASSERT(contextA->CreateContext()->IsCancelled());
         UNIT_ASSERT(!contextB->IsCancelled());
-        auto secondContextB = scopeB->CreateContext();
-        UNIT_ASSERT(secondContextB);
-
-        childContextA.reset();
-        contextA.reset();
-        contextB.reset();
-        secondContextB.reset();
-        scopeB->Cancel();
-        scopeA->CloseCallbacksAndWait();
-        scopeB->CloseCallbacksAndWait();
-        client.Stop(true);
-    }
-
-    Y_UNIT_TEST(DriverScopeWaitsForCallbacks) {
-        NYdbGrpc::TGRpcClientLow client(1);
-        auto scope = GetSdkRuntime().CreateDriverScope(client);
-        auto guard = scope->GetCallbackGuardFactory()();
-        UNIT_ASSERT(guard->IsEntered());
-
-        std::promise<void> waiterStarted;
-        auto waiterStartedFuture = waiterStarted.get_future();
-        std::atomic_bool waiterFinished = false;
-        std::thread waiter([&] {
-            waiterStarted.set_value();
-            scope->WaitCallbacksDrained();
-            waiterFinished.store(true);
-        });
-
-        waiterStartedFuture.wait();
-        UNIT_ASSERT(!waiterFinished.load());
-        guard.reset();
-        waiter.join();
-        UNIT_ASSERT(waiterFinished.load());
-
-        scope->CloseCallbacksAndWait();
-        auto rejectedGuard = scope->GetCallbackGuardFactory()();
-        UNIT_ASSERT(!rejectedGuard->IsEntered());
-
-        rejectedGuard.reset();
-        scope->Cancel();
-        client.Stop(true);
-    }
-
-    Y_UNIT_TEST(DriverScopeCancelCreateRace) {
-        constexpr size_t Iterations = 32;
-        for (size_t i = 0; i < Iterations; ++i) {
-            NYdbGrpc::TGRpcClientLow client(1);
-            auto scope = GetSdkRuntime().CreateDriverScope(client);
-            NYdbGrpc::IQueueClientContextPtr context;
-            std::promise<void> start;
-            auto startFuture = start.get_future().share();
-
-            std::thread creator([&] {
-                startFuture.wait();
-                context = scope->CreateContext();
-            });
-            std::thread canceller([&] {
-                startFuture.wait();
-                scope->Cancel();
-            });
-
-            start.set_value();
-            creator.join();
-            canceller.join();
-
-            if (context) {
-                UNIT_ASSERT(context->IsCancelled());
-            }
-            UNIT_ASSERT(!scope->CreateContext());
-
-            context.reset();
-            scope->CloseCallbacksAndWait();
-            client.Stop(true);
-        }
-    }
-
-    Y_UNIT_TEST(DriverScopeCancelCreateChildRace) {
-        constexpr size_t Iterations = 32;
-        for (size_t i = 0; i < Iterations; ++i) {
-            NYdbGrpc::TGRpcClientLow client(1);
-            auto scope = GetSdkRuntime().CreateDriverScope(client);
-            auto parentContext = scope->CreateContext();
-            NYdbGrpc::IQueueClientContextPtr childContext;
-            std::promise<void> start;
-            auto startFuture = start.get_future().share();
-
-            std::thread creator([&] {
-                startFuture.wait();
-                childContext = parentContext->CreateContext();
-            });
-            std::thread canceller([&] {
-                startFuture.wait();
-                scope->Cancel();
-            });
-
-            start.set_value();
-            creator.join();
-            canceller.join();
-
-            UNIT_ASSERT(childContext);
-            UNIT_ASSERT(childContext->IsCancelled());
-            UNIT_ASSERT(!scope->CreateContext());
-
-            childContext.reset();
-            parentContext.reset();
-            scope->CloseCallbacksAndWait();
-            client.Stop(true);
-        }
+        UNIT_ASSERT(!network.CreateContext()->IsCancelled());
     }
 }
 
@@ -366,7 +383,7 @@ Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
     }
 
-    Y_UNIT_TEST(DriverStopCancelsCredentialsWait) {
+    Y_UNIT_TEST(DriverStopDoesNotCancelCredentialsWait) {
         auto factory = std::make_shared<TDeferredCredentialsFactory>();
         auto driver = TDriver(TDriverConfig()
             .SetEndpoint("localhost:100")
@@ -374,13 +391,318 @@ Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
         auto result = TTableClient(driver).CreateSession();
 
         driver.Stop(true);
+        UNIT_ASSERT(!result.IsReady());
+        factory->SetReady();
         UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
-        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::CLIENT_CANCELLED);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
     }
 
 }
 
+Y_UNIT_TEST_SUITE(DriverAsyncLifetimeTest) {
+    Y_UNIT_TEST(DeferredOperationPollingOutlivesLastDriver) {
+        TPortManager ports;
+        TDeferredOperationService service;
+        const std::string endpoint = TStringBuilder() << "127.0.0.1:" << ports.GetPort();
+        auto server = StartGrpcServer(endpoint, service);
+        UNIT_ASSERT(server);
+        Y_SCOPE_EXIT(release = service.Release) {
+            release.TrySetValue();
+        };
+        auto driver = std::make_unique<TDriver>(TDriverConfig()
+            .SetEndpoint(endpoint).SetDiscoveryMode(EDiscoveryMode::Off));
+        auto connections = CreateInternalInterface(*driver);
+        std::weak_ptr<TGRpcConnectionsImpl> weak = connections;
+        auto state = connections->GetDriverState({}, {}, {}, {}, {});
+        auto result = NThreading::NewPromise<TRpcOutcome>();
+        TDeferredAction action("poll-operation",
+            [result](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
+                result.SetValue({operation && operation->ready() && operation->id() == "poll-operation",
+                    std::move(status)});
+            }, connections.get(), connections->CreateContext(), std::chrono::milliseconds::zero(),
+            TDeadline::AfterDuration(TDuration::Seconds(10)), state, endpoint);
+        action.Start();
+        UNIT_ASSERT(service.Entered.GetFuture().Wait(TDuration::Seconds(10)));
+        driver->Stop(true);
+        driver.reset();
+        connections.reset();
+        state.reset();
+        UNIT_ASSERT(!weak.expired());
+        service.Release.SetValue();
+        UNIT_ASSERT(result.GetFuture().Wait(TDuration::Seconds(10)));
+        const auto outcome = result.GetFuture().GetValue();
+        UNIT_ASSERT(outcome.first);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.second.Status, EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.second.Endpoint, endpoint);
+        const auto pollCount = outcome.second.Metadata.find("poll-count");
+        UNIT_ASSERT(pollCount != outcome.second.Metadata.end());
+        UNIT_ASSERT_VALUES_EQUAL(pollCount->second, "2");
+        const auto pollKind = outcome.second.Metadata.find("poll-kind");
+        UNIT_ASSERT(pollKind != outcome.second.Metadata.end());
+        UNIT_ASSERT_VALUES_EQUAL(pollKind->second, "deferred");
+        UNIT_ASSERT_VALUES_EQUAL(service.Calls.load(), 2);
+    }
+
+    Y_UNIT_TEST(DiscoveryEndpointRpcRetainsFacilityAndBypassesAuth) {
+        TPortManager ports;
+        TDeferredOperationService service;
+        const std::string endpoint = TStringBuilder() << "127.0.0.1:" << ports.GetPort();
+        auto server = StartGrpcServer(endpoint, service);
+        UNIT_ASSERT(server);
+        Y_SCOPE_EXIT(release = service.Release) {
+            release.TrySetValue();
+        };
+        auto driver = std::make_unique<TDriver>(TDriverConfig()
+            .SetEndpoint(endpoint).SetDiscoveryMode(EDiscoveryMode::Off));
+        auto connections = CreateInternalInterface(*driver);
+        auto state = MakeUndiscoveredState(connections, endpoint);
+        state->InitCredentials(CreateOAuthCredentialsProviderFactory("invalid\ntoken"));
+        std::weak_ptr<TGRpcConnectionsImpl> weak = connections;
+        auto result = NThreading::NewPromise<TRpcOutcome>();
+        Ydb::Operations::GetOperationRequest request;
+        request.set_id("discovery-operation");
+        TRpcRequestSettings settings;
+        settings.Deadline = TDeadline::AfterDuration(TDuration::Seconds(10));
+        TGRpcConnectionsImpl::RunOnDiscoveryEndpoint<Ydb::Operation::V1::OperationService,
+            Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>(
+                state, std::move(request),
+                [result](Ydb::Operations::GetOperationResponse* response, TPlainStatus status) mutable {
+                    result.SetValue({response && response->operation().id() == "discovery-operation",
+                        std::move(status)});
+                }, &Ydb::Operation::V1::OperationService::Stub::AsyncGetOperation, settings);
+        UNIT_ASSERT(service.Entered.GetFuture().Wait(TDuration::Seconds(10)));
+        driver->Stop(true);
+        driver.reset();
+        connections.reset();
+        state.reset();
+        UNIT_ASSERT(!weak.expired());
+        service.Release.SetValue();
+        UNIT_ASSERT(result.GetFuture().Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(result.GetFuture().GetValue().first);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetFuture().GetValue().second.Status, EStatus::SUCCESS);
+        UNIT_ASSERT(!service.SawAuth.load());
+    }
+
+    Y_UNIT_TEST(CancelledDeferredTimerReportsEndpointAfterDriverDestruction) {
+        const std::string endpoint = "localhost:1";
+        auto driver = std::make_unique<TDriver>(TDriverConfig()
+            .SetEndpoint(endpoint).SetDiscoveryMode(EDiscoveryMode::Off));
+        auto connections = CreateInternalInterface(*driver);
+        auto context = connections->CreateContext();
+        Y_SCOPE_EXIT(context) {
+            context->Cancel();
+        };
+        auto result = NThreading::NewPromise<TRpcOutcome>();
+        TDeferredAction action("cancelled-operation",
+            [result](Ydb::Operations::Operation* operation, TPlainStatus status) mutable {
+                result.SetValue({operation != nullptr, std::move(status)});
+            }, connections.get(), context, std::chrono::hours(1), TDeadline::Max(),
+            connections->GetDriverState({}, {}, {}, {}, {}), endpoint);
+        action.Start();
+        driver->Stop(false);
+        driver.reset();
+        connections.reset();
+        UNIT_ASSERT(!result.GetFuture().IsReady());
+        context->Cancel();
+        UNIT_ASSERT(result.GetFuture().Wait(TDuration::Seconds(10)));
+        const auto outcome = result.GetFuture().GetValue();
+        UNIT_ASSERT(!outcome.first);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.second.Status, EStatus::CLIENT_INTERNAL_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.second.Endpoint, endpoint);
+        UNIT_ASSERT_STRING_CONTAINS(outcome.second.Issues.ToString(), "Deferred timer interrupted");
+        UNIT_ASSERT_STRING_CONTAINS(outcome.second.Issues.ToString(), "Grpc error response on endpoint " + endpoint);
+    }
+
+    Y_UNIT_TEST(AsyncDiscoveryRetainsStateAndEnforcesQueueLimit) {
+        TPortManager ports;
+        TMockTableService table;
+        const auto tablePort = ports.GetPort();
+        auto tableServer = StartGrpcServer(TStringBuilder() << "127.0.0.1:" << tablePort, table);
+        UNIT_ASSERT(tableServer);
+        TControlledDiscoveryService discovery;
+        discovery.TablePort = tablePort;
+        const std::string endpoint = TStringBuilder() << "127.0.0.1:" << ports.GetPort();
+        auto server = StartGrpcServer(endpoint, discovery);
+        UNIT_ASSERT(server);
+        Y_SCOPE_EXIT(release = discovery.Release) {
+            release.TrySetValue();
+        };
+        auto driver = std::make_unique<TDriver>(TDriverConfig().SetEndpoint(endpoint)
+            .SetDiscoveryMode(EDiscoveryMode::Off).SetMaxQueuedRequests(1));
+        auto connections = CreateInternalInterface(*driver);
+        std::weak_ptr<TGRpcConnectionsImpl> weak = connections;
+        auto state = MakeUndiscoveredState(connections, endpoint);
+        auto first = RunCreateSession(connections, state);
+        UNIT_ASSERT(discovery.Entered.GetFuture().Wait(TDuration::Seconds(10)));
+        auto rejected = RunCreateSession(connections, state);
+        UNIT_ASSERT(rejected.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(!rejected.GetValue().first);
+        UNIT_ASSERT_VALUES_EQUAL(rejected.GetValue().second.Status, EStatus::CLIENT_LIMITS_REACHED);
+        driver->Stop(true);
+        driver.reset();
+        connections.reset();
+        state.reset();
+        UNIT_ASSERT(!weak.expired());
+        discovery.Release.SetValue();
+        UNIT_ASSERT(first.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(first.GetValue().first);
+        UNIT_ASSERT_VALUES_EQUAL(first.GetValue().second.Status, EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(first.GetValue().second.Endpoint,
+            std::string(TStringBuilder() << "127.0.0.1:" << tablePort));
+    }
+
+    Y_UNIT_TEST(AsyncDiscoveryErrorReachesQueuedRequest) {
+        TPortManager ports;
+        TControlledDiscoveryService discovery;
+        discovery.Status = Ydb::StatusIds::UNAUTHORIZED;
+        const std::string endpoint = TStringBuilder() << "127.0.0.1:" << ports.GetPort();
+        auto server = StartGrpcServer(endpoint, discovery);
+        UNIT_ASSERT(server);
+        Y_SCOPE_EXIT(release = discovery.Release) {
+            release.TrySetValue();
+        };
+        TDriver driver(TDriverConfig().SetEndpoint(endpoint).SetDiscoveryMode(EDiscoveryMode::Off));
+        auto connections = CreateInternalInterface(driver);
+        auto pending = RunCreateSession(connections, MakeUndiscoveredState(connections, endpoint));
+        UNIT_ASSERT(discovery.Entered.GetFuture().Wait(TDuration::Seconds(10)));
+        driver.Stop(true);
+        discovery.Release.SetValue();
+        UNIT_ASSERT(pending.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(!pending.GetValue().first);
+        UNIT_ASSERT_VALUES_EQUAL(pending.GetValue().second.Status, EStatus::UNAUTHORIZED);
+        UNIT_ASSERT_STRING_CONTAINS(pending.GetValue().second.Issues.ToString(), "Discovery denied by mock service");
+    }
+
+    Y_UNIT_TEST(StreamsRejectInvalidTlsWithoutProcessor) {
+        TDriver driver(TDriverConfig().SetEndpoint("localhost:1")
+            .SetDiscoveryMode(EDiscoveryMode::Off).UseSecureConnection("not-a-certificate"));
+        auto connections = CreateInternalInterface(driver);
+        auto state = connections->GetDriverState({}, {}, {}, {}, {});
+        driver.Stop(true);
+        for (const auto& result : StartStreams(connections, state)) {
+            UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+            UNIT_ASSERT(!result.GetValue().first);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetValue().second.Status, EStatus::TRANSPORT_UNAVAILABLE);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetValue().second.Issues.ToString(), "Client TLS credentials validation failed");
+        }
+    }
+
+    Y_UNIT_TEST(StreamsPreserveDiscoveryFailureWithoutProcessor) {
+        TDriver driver(TDriverConfig().SetEndpoint("localhost:1").SetDiscoveryMode(EDiscoveryMode::Off));
+        auto connections = CreateInternalInterface(driver);
+        auto state = MakeUndiscoveredState(connections, "localhost:1", EDiscoveryMode::Sync);
+        state->LastDiscoveryStatus = TPlainStatus(EStatus::UNAUTHORIZED, "Discovery denied by mock service");
+        driver.Stop(true);
+        for (const auto& result : StartStreams(connections, state)) {
+            UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+            UNIT_ASSERT(!result.GetValue().first);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetValue().second.Status, EStatus::UNAUTHORIZED);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetValue().second.Issues.ToString(), "Discovery denied by mock service");
+        }
+    }
+
+    Y_UNIT_TEST(StreamsRejectInvalidTokenWithoutProcessor) {
+        TDriver driver(TDriverConfig().SetEndpoint("localhost:1")
+            .SetDiscoveryMode(EDiscoveryMode::Off).SetAuthToken("invalid\ntoken"));
+        auto connections = CreateInternalInterface(driver);
+        auto state = connections->GetDriverState({}, {}, {}, {}, {});
+        driver.Stop(true);
+        for (const auto& result : StartStreams(connections, state)) {
+            UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+            UNIT_ASSERT(!result.GetValue().first);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetValue().second.Status, EStatus::CLIENT_UNAUTHENTICATED);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetValue().second.Issues.ToString(), "illegal characters");
+        }
+    }
+
+    Y_UNIT_TEST(ExplicitCancellationRejectsStreamStart) {
+        TDriver driver(TDriverConfig().SetEndpoint("127.0.0.1:0").SetDiscoveryMode(EDiscoveryMode::Off));
+        auto connections = CreateInternalInterface(driver);
+        auto state = connections->GetDriverState({}, {}, {}, {}, {});
+        auto context = connections->CreateContext();
+        context->Cancel();
+        driver.Stop(true);
+        for (const auto& result : StartStreams(connections, state, context, false)) {
+            UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+            UNIT_ASSERT(!result.GetValue().first);
+            const auto status = result.GetValue().second.Status;
+            // Transport failure may finish before the low-level cancellation subscription runs.
+            UNIT_ASSERT(status == EStatus::CLIENT_CANCELLED || status == EStatus::TRANSPORT_UNAVAILABLE);
+        }
+    }
+
+    Y_UNIT_TEST(SyncDiscoveryWithoutEndpointsPreservesFailure) {
+        TDriver driver(TDriverConfig().SetEndpoint("localhost:1").SetDiscoveryMode(EDiscoveryMode::Off));
+        auto connections = CreateInternalInterface(driver);
+        for (const auto previous : {EStatus::SUCCESS, EStatus::UNAUTHORIZED}) {
+            auto state = MakeUndiscoveredState(connections, "localhost:1", EDiscoveryMode::Sync);
+            state->LastDiscoveryStatus = TPlainStatus(previous, "Previous discovery status");
+            auto result = RunCreateSession(connections, std::move(state));
+            UNIT_ASSERT(result.Wait(TDuration::Seconds(10)));
+            UNIT_ASSERT(!result.GetValue().first);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetValue().second.Status,
+                previous == EStatus::SUCCESS ? EStatus::UNAVAILABLE : previous);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetValue().second.Issues.ToString(), "Endpoint list is empty");
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
+    Y_UNIT_TEST(ConcurrentClientsShareCredentialsInitializationAndRetryFailure) {
+        for (const bool failFirst : {false, true}) {
+            std::atomic_int providerCount = 0;
+            auto entered = NThreading::NewPromise<void>();
+            auto release = NThreading::NewPromise<void>();
+            auto factory = std::make_shared<TCountingCredentialsProviderFactory>(
+                providerCount, [entered, release, failFirst](int count) mutable {
+                    if (count == 1) {
+                        entered.SetValue();
+                        release.GetFuture().GetValueSync();
+                        if (failFirst) {
+                            ythrow yexception() << "Credentials initialization failed";
+                        }
+                    }
+                });
+            TDriver driver(TDriverConfig()
+                .SetEndpoint("localhost:1")
+                .SetDiscoveryMode(EDiscoveryMode::Off)
+                .SetSocketIdleTimeout(TDuration::Max())
+                .SetCredentialsProviderFactory(factory));
+            auto first = std::async(std::launch::async, [&] {
+                return std::make_shared<TTableClient>(driver);
+            });
+            std::future<std::shared_ptr<TTableClient>> second;
+            Y_SCOPE_EXIT(&release, &first, &second) {
+                release.TrySetValue();
+                if (first.valid()) {
+                    first.wait();
+                }
+                if (second.valid()) {
+                    second.wait();
+                }
+            };
+            UNIT_ASSERT(entered.GetFuture().Wait(TDuration::Seconds(10)));
+            auto secondStarted = std::make_shared<std::promise<void>>();
+            auto secondStartedFuture = secondStarted->get_future();
+            second = std::async(std::launch::async, [&, secondStarted] {
+                secondStarted->set_value();
+                return std::make_shared<TTableClient>(driver);
+            });
+            UNIT_ASSERT(secondStartedFuture.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+            UNIT_ASSERT(second.wait_for(std::chrono::seconds(0)) != std::future_status::ready);
+            release.SetValue();
+            std::shared_ptr<TTableClient> firstClient;
+            if (failFirst) {
+                UNIT_ASSERT_EXCEPTION_CONTAINS(first.get(), yexception, "Credentials initialization failed");
+            } else {
+                firstClient = first.get();
+            }
+            auto secondClient = second.get();
+            UNIT_ASSERT(secondClient);
+            UNIT_ASSERT_VALUES_EQUAL(providerCount.load(), failFirst ? 2 : 1);
+        }
+    }
+
     Y_UNIT_TEST(ReusesCredentialsProviderForSameIdentity) {
         std::atomic_int providerCount = 0;
         auto driver = TDriver(

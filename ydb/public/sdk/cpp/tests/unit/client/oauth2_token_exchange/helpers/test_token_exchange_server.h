@@ -52,6 +52,10 @@ public:
         HttpServer.Start();
     }
 
+    ~TTestTokenExchangeServer() override {
+        HttpServer.Stop();
+    }
+
     TClientRequest* CreateClient() override {
         return new TRequest(this);
     }
@@ -83,4 +87,5 @@ public:
     THttpServer::TOptions HttpOptions;
     THttpServer HttpServer;
     TCheck Check;
+    std::function<void()> BeforeReply;
 };

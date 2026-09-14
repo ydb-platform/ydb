@@ -7,6 +7,7 @@ SRCS(
 
 PEERDIR(
     ydb/public/sdk/cpp/src/client/types/status
+    ydb/public/sdk/cpp/src/library/runtime
     ydb/public/sdk/cpp/src/library/time
 )
 

@@ -75,6 +75,10 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
     class TSaveResultsState {
         class TResultSetMeta {
         public:
+            const Ydb::Query::Internal::ResultSetMeta& GetMeta() const {
+                return Meta;
+            }
+
             Ydb::Query::Internal::ResultSetMeta& MutableMeta() {
                 JsonMeta = std::nullopt;
                 return Meta;
@@ -298,7 +302,7 @@ private:
             {"sender", ev->Sender});
 
         if (SavePhysicalGraphState.Sender) {
-            Send(ev->Sender, new TEvSaveScriptPhysicalGraphResponse(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue(TStringBuilder() << "Can not save graph twice, previous sender was: " << SavePhysicalGraphState.Sender << ", got graph from: " << ev->Sender)}));
+            Send(ev->Sender, new TEvSaveScriptPhysicalGraphResponse(Ydb::StatusIds::INTERNAL_ERROR, {NYql::TIssue(TStringBuilder() << "Cannot save graph twice, previous sender was: " << SavePhysicalGraphState.Sender << ", got graph from: " << ev->Sender)}));
             return;
         }
 
@@ -338,7 +342,7 @@ private:
         SavePhysicalGraphState.GraphsToSave.pop();
 
         if (sendResponse) {
-            Y_VALIDATE(SavePhysicalGraphState.Sender, "Can not reply without sender");
+            Y_VALIDATE(SavePhysicalGraphState.Sender, "Cannot reply without sender");
             Forward(ev, SavePhysicalGraphState.Sender);
         } else if (saveFailed) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to update query physical graph", issues));
@@ -480,7 +484,10 @@ private:
                     meta.set_truncated(true);
                 }
             }
-            resultSetInfo.UpdateMetaOnComplete();
+
+            if (!SaveResultsState.WaitSaveResult) {
+                resultSetInfo.UpdateMetaOnComplete();
+            }
         } else {
             YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Skip truncated result part",
                 {"logPrefix", LogPrefix()},
@@ -620,7 +627,7 @@ private:
                 {"issues", issues.ToOneLineString()},
                 {"from", ev->Sender});
 
-            // We can not finish query manually, consider it is already finished
+            // We cannot finish query manually, consider it is already finished
             QueryIsRunning = false;
             Finish(status, AddRootIssue(TStringBuilder() << "Failed to cancel query (" << status << ")", issues));
             return;
@@ -772,9 +779,17 @@ private:
         });
 
         const auto& saverId = Register(CreateSaveScriptExecutionResultMetaActor(SelfId(), Ctx->UserRequestContext->Database, Ctx->UserRequestContext->CurrentExecutionId, std::move(metas), Ctx->LeaseGeneration));
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Save result meta for result sets",
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Save result meta for result sets",
             {"logPrefix", LogPrefix()},
             {"resultsCount", resultsCount},
+            {"resultSetsSizes", [infos = &SaveResultsState.ResultSetInfos]() {
+                auto results = TStringBuilder() << "|";
+                for (const auto& info : *infos) {
+                    const Ydb::Query::Internal::ResultSetMeta& meta = info.Meta.GetMeta();
+                    results << meta.truncated() << ":" << meta.finished() << ":" << meta.number_rows() << "|";
+                }
+                return results;
+            }()},
             {"saverId", saverId});
         SaveResultsState.WaitSaveMeta = true;
     }
@@ -834,7 +849,7 @@ private:
             return;
         }
 
-        if (FinishInfo.IsSuccess() && SaveResultsState.HasResultsToSave()) {
+        if (FinishInfo.IsSuccess() && (SaveResultsState.HasResultsToSave() || SaveResultsState.WaitSaveResult)) {
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Wait for results to save",
                 {"logPrefix", LogPrefix()});
             ContinueExecute();

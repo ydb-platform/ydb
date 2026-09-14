@@ -477,6 +477,9 @@
     "name": "yt.PythonCpu"
   },
   {
+    "name": "yt.QLFilterDepthLimit"
+  },
+  {
     "name": "yt.QueryCacheChunkLimit"
   },
   {
@@ -712,6 +715,9 @@
   },
   {
     "name": "dq.ChunkSizeLimit"
+  },
+  {
+    "name": "dq.Clique"
   },
   {
     "name": "dq.CollectCoreDumps"
@@ -1243,6 +1249,9 @@
   },
   {
     "name": "Udf"
+  },
+  {
+    "name": "UdfBridge"
   },
   {
     "name": "UnicodeLiterals"

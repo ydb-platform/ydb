@@ -153,6 +153,10 @@ protected:
     TMetrics ResourceValues; // current values of various metrics
     TTabletMetricsAggregates ResourceMetricsAggregates;
     TResourceNormalizedValues ResourceNormalizedValues;
+    // Estimated share of the node's total usage caused by this tablet, including load it causes
+    // indirectly in shared pools. Only ever changed through SetUsageImpact, which keeps the owning
+    // node's HighImpactTablets in sync.
+    double UsageImpact = 0;
 
 public:
     TVector<TActorId> ActorsToNotify; // ...OnCreation persistent
@@ -166,7 +170,6 @@ public:
     TInstant BootTime;
     TNodeFilter NodeFilter;
     bool InWaitQueue = false;
-    double UsageImpact = 0;
     bool UpdateMetricsEnqueued = false;
 
     TTabletInfo(ETabletRole role, THive& hive);
@@ -234,6 +237,20 @@ public:
     static bool HasAllowedMetric(const TVector<i64>& allowedMetricIds, EResourceToBalance resource);
     bool HasAllowedMetric(EResourceToBalance resource) const;
     bool HasMetric(EResourceToBalance resource) const;
+
+    double GetUsageImpact() const {
+        return UsageImpact;
+    }
+
+    void SetUsageImpact(double usageImpact);
+
+    // A tablet whose indirect load is large enough that the balancer should isolate it rather than
+    // shuffle it around like an ordinary tablet.
+    bool IsHighImpact() const;
+
+    // A high-impact tablet that accounts for most of its node's usage. Moving it elsewhere would only
+    // relocate the load, so the balancer leaves it alone and drains the rest of the node instead.
+    bool IsPinnedToNode() const;
 
     void UpdateResourceUsage(const NKikimrTabletBase::TMetrics& metrics);
     TResourceRawValues GetResourceCurrentValues() const;

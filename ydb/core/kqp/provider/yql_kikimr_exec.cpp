@@ -3015,6 +3015,8 @@ public:
                                 const auto typeName = to_upper(TString(type.Value()));
                                 if (typeName == "COUNT_MIN_SKETCH") {
                                     add_statistics->add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
+                                } else if (typeName == "EQ_HEIGHT_HISTOGRAM") {
+                                    add_statistics->add_types(Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM);
                                 } else {
                                     ctx.AddError(TIssue(ctx.GetPosition(type.Pos()),
                                         TStringBuilder() << "Unknown statistic type: " << TString(type.Value())));

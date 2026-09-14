@@ -229,7 +229,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         // json_idx must preserve UseRowIdAsDocId=true through the copy.
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx"), {
             NLs::PathExist,
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexType(ff.GetEnableCompactFulltextIndex()
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
         {
@@ -241,16 +243,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 "json_idx copy: UseRowIdAsDocId must be preserved through ConsistentCopyTables");
         }
 
-        // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
-        TestDescribeResult(DescribePrivatePath(runtime,
-                "/MyRoot/texts_copy/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx/" + TString(NTableIndex::ImplTable));
+            TestDescribeResult(d, { NLs::PathExist });
+            if (ff.GetEnableCompactFulltextIndex()) {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn, NTableIndex::NFulltext::AddedColumn, NTableIndex::NFulltext::SegmentColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn },
+                    /*strictCount=*/ true) });
+            } else {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true) });
+            }
+        }
 
         // Auto-provisioned unique index must have been copied.
         TestDescribeResult(DescribePrivatePath(runtime,
@@ -314,7 +323,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx"), {
             NLs::PathExist,
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexType(ff.GetEnableCompactFulltextIndex()
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
         {
@@ -326,15 +337,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 "json_idx copy: UseRowIdAsDocId must be preserved through ConsistentCopyTables");
         }
 
-        TestDescribeResult(DescribePrivatePath(runtime,
-                "/MyRoot/texts_copy/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx/" + TString(NTableIndex::ImplTable));
+            TestDescribeResult(d, { NLs::PathExist });
+            if (ff.GetEnableCompactFulltextIndex()) {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn, NTableIndex::NFulltext::AddedColumn, NTableIndex::NFulltext::SegmentColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn },
+                    /*strictCount=*/ true) });
+            } else {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true) });
+            }
+        }
 
         // User-created unique index must have been copied.
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_copy/uniq_rowid"), {

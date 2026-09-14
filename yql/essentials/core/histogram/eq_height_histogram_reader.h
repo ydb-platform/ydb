@@ -13,9 +13,9 @@ namespace NKikimr {
 // memcomparable byte strings, same as TEqHeightHistogramBuilder: callers encode
 // them with NMiniKQL::TPresortEncoder.
 //
-// The object owns the bucket key strings. EstimateLessOrEqual returns a lower
-// bound on the number of rows with key <= the argument and does not interpolate
-// inside a bucket.
+// The object owns the bucket key strings. Estimate* returns a lower bound on
+// the number of rows matching the predicate and does not interpolate inside a
+// bucket.
 class TEqHeightHistogram {
 public:
     struct TBucket {
@@ -30,13 +30,30 @@ public:
     bool IsExact() const;
     size_t GetNumBuckets() const;
     TBucket GetBucket(size_t i) const;
+
     ui64 EstimateLessOrEqual(TStringBuf key) const;
+    ui64 EstimateLess(TStringBuf key) const;
+    ui64 EstimateGreaterOrEqual(TStringBuf key) const;
+    ui64 EstimateGreater(TStringBuf key) const;
+    ui64 EstimateEqual(TStringBuf key) const;
+
+    ui64 EstimateRangeGreaterLess(TStringBuf left, TStringBuf right) const;
+    ui64 EstimateRangeGreaterLessOrEqual(TStringBuf left, TStringBuf right) const;
+    ui64 EstimateRangeGreaterOrEqualLess(TStringBuf left, TStringBuf right) const;
+    ui64 EstimateRangeGreaterOrEqualLessOrEqual(TStringBuf left, TStringBuf right) const;
 
 private:
     struct TBucketRecord {
         TString UpperBound;
         ui64 CumulativeCount = 0;
     };
+
+    struct TBound {
+        ui64 Less = 0;
+        ui64 LessOrEqual = 0;
+    };
+
+    TBound FindBound(TStringBuf key) const;
 
     TVector<TBucketRecord> Buckets_;
     ui64 TotalCount_ = 0;

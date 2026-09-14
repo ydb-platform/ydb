@@ -4287,9 +4287,6 @@ state: STATE_ENABLED
     }
 
     void DoTestIndexMaterializationFulltext(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, const TString& indexType) {
-        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(indexType == "EIndexTypeGlobalFulltextCompact" ||
-            indexType == "EIndexTypeGlobalFulltextCompactRelevance");
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         IndexMaterialization(env, runtime, s3Mock, s3Port, true, Sprintf(R"(
             IndexDescription {
               Name: "index"
@@ -4311,8 +4308,6 @@ state: STATE_ENABLED
     }
 
     void DoTestIndexMaterializationJson(TTestEnv& env, TTestBasicRuntime& runtime, TS3Mock& s3Mock, ui16 s3Port, bool compact) {
-        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(compact);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
         auto indexType = compact ? "EIndexTypeGlobalJsonCompact" : "EIndexTypeGlobalJson";
         IndexMaterialization(env, runtime, s3Mock, s3Port, true, Sprintf(R"(
             IndexDescription {
@@ -4410,32 +4405,32 @@ state: STATE_ENABLED
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalFulltext) {
-        EnvOptions().EnableIndexMaterialization(true);
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(false);
         DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextPlain");
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalFulltextCompact) {
-        EnvOptions().EnableIndexMaterialization(true);
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(true);
         DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextCompact");
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalFulltextRelevance) {
-        EnvOptions().EnableIndexMaterialization(true);
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(false);
         DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextRelevance");
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalFulltextCompactRelevance) {
-        EnvOptions().EnableIndexMaterialization(true);
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(true);
         DoTestIndexMaterializationFulltext(Env(), Runtime(), S3Mock(), S3Port(), "EIndexTypeGlobalFulltextCompactRelevance");
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalJson) {
-        EnvOptions().EnableIndexMaterialization(true);
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(false);
         DoTestIndexMaterializationJson(Env(), Runtime(), S3Mock(), S3Port(), false);
     }
 
     Y_UNIT_TEST(IndexMaterializationGlobalJsonCompact) {
-        EnvOptions().EnableIndexMaterialization(true);
+        EnvOptions().EnableIndexMaterialization(true).EnableCompactFulltextIndex(true);
         DoTestIndexMaterializationJson(Env(), Runtime(), S3Mock(), S3Port(), true);
     }
 

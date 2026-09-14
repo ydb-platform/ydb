@@ -48,7 +48,7 @@ TResultSet ReadIndex(NQuery::TQueryClient& db, const char* table = "indexImplTab
 Y_UNIT_TEST_SUITE(KqpFulltextCompact) {
 
 Y_UNIT_TEST(AddIndexCompact) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
     auto db = kikimr.GetQueryClient();
@@ -72,7 +72,7 @@ Y_UNIT_TEST(AddIndexCompact) {
 }
 
 Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
     auto db = kikimr.GetQueryClient();
@@ -121,7 +121,12 @@ Y_UNIT_TEST_TWIN(AddIndexCompactRelevance, Covered) {
 }
 
 Y_UNIT_TEST_TWIN(FulltextCompactUpdateRequiresStreamWrite, WithRelevance) {
-    auto kikimr = KikimrWithCompact(false);
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(false);
+    auto kikimr = TKikimrRunner(settings);
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
@@ -142,7 +147,7 @@ Y_UNIT_TEST_TWIN(FulltextCompactUpdateRequiresStreamWrite, WithRelevance) {
 
 Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
     auto settings = TKikimrSettings().SetWithSampleTables(false);
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
@@ -240,7 +245,7 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(InsertMultipleTimes, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
     const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -288,7 +293,7 @@ Y_UNIT_TEST_TWIN(InsertMultipleTimes, WithRelevance) {
 }
 
 Y_UNIT_TEST(UpsertNewRow) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
@@ -314,7 +319,7 @@ Y_UNIT_TEST(UpsertNewRow) {
 }
 
 Y_UNIT_TEST(UpsertNewRowRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
@@ -337,7 +342,7 @@ Y_UNIT_TEST(UpsertNewRowRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(UpsertModifyExisting, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
     const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -367,7 +372,7 @@ Y_UNIT_TEST_TWIN(UpsertModifyExisting, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(UpsertMixNewAndExisting, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
     const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -398,7 +403,7 @@ Y_UNIT_TEST_TWIN(UpsertMixNewAndExisting, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(DeleteRow, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
     const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -433,7 +438,7 @@ Y_UNIT_TEST_TWIN(DeleteRow, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(DeleteMultipleRows, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
     const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -468,7 +473,7 @@ Y_UNIT_TEST_TWIN(DeleteMultipleRows, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(UpdateRow, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
     const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -496,7 +501,7 @@ Y_UNIT_TEST_TWIN(UpdateRow, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(ReplaceRow, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
     const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -537,7 +542,7 @@ Y_UNIT_TEST_TWIN(ReplaceRow, WithRelevance) {
 }
 
 Y_UNIT_TEST(AddIndexCoveredCompact) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
@@ -555,7 +560,7 @@ Y_UNIT_TEST(AddIndexCoveredCompact) {
 }
 
 Y_UNIT_TEST_TWIN(Compaction, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
     const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -612,7 +617,7 @@ Y_UNIT_TEST_TWIN(Compaction, WithRelevance) {
 }
 
 Y_UNIT_TEST_TWIN(CompactionWithDelete, WithRelevance) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
     const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
@@ -705,7 +710,7 @@ Y_UNIT_TEST_TWIN(LsmCompaction, WithRelevance) {
 
     // Wait for the MVCC cleanup timer to fire and advance the watermark,
     // so that RemovedRowVersions covers all written versions.
-    // CleanupSnapshotPeriod is set to 100ms in KikimrWithCompact().
+    // CleanupSnapshotPeriod is set to 100ms in KikimrWithCompact(true).
     Sleep(TDuration::Seconds(1));
 
     // Force LSM compaction on the index impl table
@@ -808,7 +813,7 @@ Y_UNIT_TEST_TWIN(LsmCompactionWithConcurrentWrites, WithRelevance) {
 
     // Wait for the MVCC cleanup timer to fire and advance the watermark,
     // so that RemovedRowVersions covers all written versions.
-    // CleanupSnapshotPeriod is set to 100ms in KikimrWithCompact().
+    // CleanupSnapshotPeriod is set to 100ms in KikimrWithCompact(true).
     Sleep(TDuration::Seconds(1));
 
     // Force LSM compaction while the snapshot is held
@@ -878,7 +883,7 @@ Y_UNIT_TEST_TWIN(LsmCompactionWithConcurrentWrites, WithRelevance) {
 }
 
 Y_UNIT_TEST(UpsertTwoIndexes) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
 
     CreateTexts(db);
@@ -964,7 +969,7 @@ TResultSet ReadIndex(NQuery::TQueryClient& db, const char* table = "indexImplTab
 }
 
 Y_UNIT_TEST(AddJsonCompactIndex) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(
@@ -998,7 +1003,7 @@ Y_UNIT_TEST(AddJsonCompactIndex) {
 }
 
 Y_UNIT_TEST(JsonCompactInsertRow) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(
@@ -1038,7 +1043,7 @@ Y_UNIT_TEST(JsonCompactInsertRow) {
 }
 
 Y_UNIT_TEST(JsonCompactUpsertModify) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(
@@ -1075,7 +1080,7 @@ Y_UNIT_TEST(JsonCompactUpsertModify) {
 }
 
 Y_UNIT_TEST(JsonCompactDeleteRow) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(
@@ -1112,7 +1117,7 @@ Y_UNIT_TEST(JsonCompactDeleteRow) {
 }
 
 Y_UNIT_TEST(JsonCompactCompaction) {
-    auto kikimr = KikimrWithCompact();
+    auto kikimr = KikimrWithCompact(true);
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(
@@ -1162,7 +1167,13 @@ Y_UNIT_TEST(JsonCompactCompaction) {
 }
 
 Y_UNIT_TEST(JsonCompactUpdateRequiresStreamWrite) {
-    auto kikimr = KikimrWithCompact(false);
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableJsonIndex(true);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(false);
+    auto kikimr = TKikimrRunner(settings);
     auto db = kikimr.GetQueryClient();
 
     ExecuteQuery(db, R"sql(

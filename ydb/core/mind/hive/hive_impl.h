@@ -1064,6 +1064,14 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return CurrentConfig.GetUseTabletUsageEstimate();
     }
 
+    double GetTabletImpactToPin() const {
+        return CurrentConfig.GetTabletImpactToPin();
+    }
+
+    double GetTabletImpactShareToPin() const {
+        return CurrentConfig.GetTabletImpactShareToPin();
+    }
+
     TDuration GetBalanceCountersRefreshFrequency() const {
         return TDuration::MilliSeconds(CurrentConfig.GetBalanceCountersRefreshFrequency());
     }
@@ -1116,6 +1124,7 @@ protected:
         TNodeId MaxUsageNodeId;
         double Scatter;
         TResourceNormalizedValues ScatterByResource;
+        TResourceNormalizedValues MinResourceNormValues;
         std::vector<TNodeStat> Values;
     };
 

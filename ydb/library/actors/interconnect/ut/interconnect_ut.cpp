@@ -140,6 +140,45 @@ void WaitForCondition(TDuration timeout, TCallback&& callback, TStringBuf descri
     UNIT_FAIL(TStringBuilder() << "condition failed: " << description);
 }
 
+class TSessionPoolProbeActor : public TActorBootstrapped<TSessionPoolProbeActor> {
+public:
+    TSessionPoolProbeActor(TActorId proxy, NThreading::TPromise<ui32> promise)
+        : Proxy(proxy)
+        , Promise(std::move(promise))
+    {}
+
+    void Bootstrap() {
+        Send(Proxy, new TEvents::TEvSubscribe);
+        Become(&TThis::StateFunc);
+    }
+
+private:
+    void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
+        Promise.SetValue(ev->Sender.PoolID());
+        Send(Proxy, new TEvents::TEvUnsubscribe);
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvInterconnect::TEvNodeConnected, Handle);
+    )
+
+private:
+    const TActorId Proxy;
+    NThreading::TPromise<ui32> Promise;
+};
+
+ui32 GetSessionPoolId(TTestICCluster& cluster, ui32 nodeId, ui32 peerNodeId) {
+    auto promise = NThreading::NewPromise<ui32>();
+    auto future = promise.GetFuture();
+    cluster.RegisterActor(
+        new TSessionPoolProbeActor(cluster.InterconnectProxy(peerNodeId, nodeId), std::move(promise)),
+        nodeId);
+    UNIT_ASSERT_C(future.Wait(TDuration::Seconds(10)),
+        "timed out waiting for TEvNodeConnected from session on node " << nodeId << " peer " << peerNodeId);
+    return future.GetValueSync();
+}
+
 class TDropRecipientActor : public TActor<TDropRecipientActor> {
 public:
     TDropRecipientActor()
@@ -520,10 +559,15 @@ void WaitForXdcCatchReplayDelivery(
     }
 }
 
-void RunXdcCatchReplayAfterPartialPayloadRead(EXdcCatchReplayMode mode) {
+void RunXdcCatchReplayAfterPartialPayloadRead(
+        EXdcCatchReplayMode mode,
+        TVector<ui32> interconnectSessionPoolIds = {0}) {
     const bool useRdma = mode == EXdcCatchReplayMode::Rdma;
+    const bool verifyPoolPlacement = interconnectSessionPoolIds != TVector<ui32>{0};
     const TString payload(useRdma ? 4 * 1024 : 32 * 1024, 'x');
     const ui32 payloadCount = useRdma ? 1400 : 1;
+    const ui32 node1SessionPool = interconnectSessionPoolIds[2 % interconnectSessionPoolIds.size()];
+    const ui32 node2SessionPool = interconnectSessionPoolIds[1 % interconnectSessionPoolIds.size()];
 
     TTestICCluster::TTrafficInterrupterSettings interrupterSettings{
         .RejectingTrafficTimeout = TDuration::Zero(),
@@ -532,7 +576,13 @@ void RunXdcCatchReplayAfterPartialPayloadRead(EXdcCatchReplayMode mode) {
     };
     TTestICCluster cluster(2, TChannelsConfig(), &interrupterSettings, nullptr,
         useRdma ? TTestICCluster::EMPTY : TTestICCluster::DISABLE_RDMA,
-        {}, TDuration::Seconds(30), useRdma ? 16u << 20 : TNode::DefaultInflight());
+        {}, TDuration::Seconds(30), useRdma ? 16u << 20 : TNode::DefaultInflight(),
+        {}, {}, /*numThreads=*/1, interconnectSessionPoolIds);
+
+    if (verifyPoolPlacement) {
+        UNIT_ASSERT_VALUES_EQUAL(cluster.InterconnectProxy(2, 1).PoolID(), node1SessionPool);
+        UNIT_ASSERT_VALUES_EQUAL(cluster.InterconnectProxy(1, 2).PoolID(), node2SessionPool);
+    }
 
     auto* receiverPtr = new TXdcCatchReplayReceiverActor(payload, payloadCount);
     const TActorId recipient = cluster.RegisterActor(receiverPtr, 1);
@@ -545,6 +595,10 @@ void RunXdcCatchReplayAfterPartialPayloadRead(EXdcCatchReplayMode mode) {
     cluster.RegisterActor(new TXdcCatchReplaySenderActor(recipient, event), 2);
 
     WaitForXdcCatchReplayPreReconnectState(cluster, receiverPtr, mode);
+    if (verifyPoolPlacement) {
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 1, 2), node1SessionPool);
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 2, 1), node2SessionPool);
+    }
 
     if (useRdma) {
         const TString receiveSessionCreatedBefore = GetSessionTextMetric(cluster, 1, 2, "Created");
@@ -554,6 +608,10 @@ void RunXdcCatchReplayAfterPartialPayloadRead(EXdcCatchReplayMode mode) {
         ReconnectXdcCatchReplayInputSession(cluster, receiverPtr,
             "XDC input session reconnected after partial payload read");
         WaitForXdcCatchReplayDelivery(cluster, receiverPtr, false);
+        if (verifyPoolPlacement) {
+            UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 1, 2), node1SessionPool);
+            UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 2, 1), node2SessionPool);
+        }
     }
 }
 
@@ -1416,6 +1474,51 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "rack-a", "RdmaRetryWatchdogPendingSessions"), 0);
     }
 
+    Y_UNIT_TEST(StaticCrossPoolIncomingOutgoingReconnect) {
+        TTestICCluster cluster(
+            2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::DISABLE_RDMA,
+            {}, TDuration::Seconds(30), TNode::DefaultInflight(), {}, {}, /*numThreads=*/1,
+            TVector<ui32>{1});
+
+        // Pool 0 remains the listener/base IC pool in TNode; every static proxy/session is placed in pool 1.
+        UNIT_ASSERT_VALUES_EQUAL(cluster.InterconnectProxy(2, 1).PoolID(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(cluster.InterconnectProxy(1, 2).PoolID(), 1u);
+
+        auto* recipientPtr = new TRecipientActor;
+        const TActorId recipient = cluster.RegisterActor(recipientPtr, 1);
+        cluster.RegisterActor(new TSenderActor(recipient), 2);
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return recipientPtr->GetReceived() >= 10;
+        }, "initial cross-pool interconnect delivery");
+
+        // Node 2 initiated the outgoing connection; node 1 accepted it in base IC and handed it to its pool-1 session.
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 2, 1), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 1, 2), 1u);
+
+        const TString handshakeBefore = GetSessionTextMetric(cluster, 1, 2, "LastHandshakeDone");
+        const size_t receivedBefore = recipientPtr->GetReceived();
+        cluster.GetNode(1)->Send(cluster.InterconnectProxy(2, 1), new TEvInterconnect::TEvCloseInputSession);
+
+        WaitForCondition(TDuration::Seconds(20), [&] {
+            try {
+                return GetSessionTextMetric(cluster, 1, 2, "LastHandshakeDone") != handshakeBefore
+                    && GetSessionSocketFd(cluster, 1, 2) >= 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            } catch (const TFromStringException&) {
+                return false;
+            }
+        }, "cross-pool session reconnect");
+
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return recipientPtr->GetReceived() >= receivedBefore + 100;
+        }, "message delivery after cross-pool reconnect");
+
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 1, 2), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionPoolId(cluster, 2, 1), 1u);
+    }
+
     Y_UNIT_TEST(SessionContinuation) {
         TTestICCluster cluster(2);
         const TActorId recipient = cluster.RegisterActor(new TRecipientActor, 1);
@@ -1474,6 +1577,10 @@ Y_UNIT_TEST_SUITE(Interconnect) {
     // and replay must use the saved XDC catch buffer to finish the event exactly once.
     Y_UNIT_TEST(TcpXdcCatchReplayAfterPartialPayloadRead) {
         RunXdcCatchReplayAfterPartialPayloadRead(EXdcCatchReplayMode::Tcp);
+    }
+
+    Y_UNIT_TEST(TcpXdcCatchReplayAfterPartialPayloadReadShardedPools) {
+        RunXdcCatchReplayAfterPartialPayloadRead(EXdcCatchReplayMode::Tcp, {1});
     }
 
     // Scenario: RDMA section declarations are already applied to the receive context, but no RDMA_READ has been

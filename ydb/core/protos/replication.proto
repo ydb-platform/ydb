@@ -435,3 +435,18 @@ message TEvHeartbeat {
     optional TWorkerIdentity Worker = 1;
     optional NKikimrProto.TRowVersion Version = 2;
 }
+
+// A complete source-table snapshot carried by a CDC schema-change record.
+// Type is retained in YQL syntax so consumers can compare schemas without
+// depending on source column identifiers.
+message TSchemaChange {
+    message TColumn {
+        optional string Name = 1;
+        optional string Type = 2;
+    }
+
+    optional NKikimrProto.TRowVersion Version = 1;
+    optional uint64 SourceSchemaVersion = 2;
+    repeated TColumn Columns = 3;
+    repeated string PrimaryKeyColumnNames = 4;
+}

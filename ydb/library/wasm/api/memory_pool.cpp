@@ -19,6 +19,9 @@ TWebAssemblyMemoryPool::TWebAssemblyMemoryPool(IWebAssemblyCompartment* compartm
     : Compartment_(compartment)
 { }
 
+// Y_WEAK is a no-op on Windows (COFF); omitting the stub avoids duplicate
+// symbols with the strong override in library/wasm/engine.
+#if defined(__GNUC__)
 Y_WEAK TWebAssemblyMemoryPool::~TWebAssemblyMemoryPool()
 {
     try {
@@ -27,6 +30,7 @@ Y_WEAK TWebAssemblyMemoryPool::~TWebAssemblyMemoryPool()
         // FreeBytes may throw; never throw from dtor.
     }
 }
+#endif
 
 TWebAssemblyMemoryPool::TWebAssemblyMemoryPool(TWebAssemblyMemoryPool&& other) noexcept
     : Compartment_(std::exchange(other.Compartment_, nullptr))

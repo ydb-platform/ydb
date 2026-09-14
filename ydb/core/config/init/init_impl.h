@@ -11,6 +11,7 @@
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
@@ -116,6 +117,7 @@ struct TYamlConfigs {
     TString MainSource;
     std::optional<TString> StorageSource;
     bool LoadedFromStore = false;
+    bool AllowUnknownFields = false;
 };
 
 inline TString DescribeFetchConfigFailure(TStringBuf context, const IStorageConfigResult& result) {
@@ -385,6 +387,7 @@ struct TCommonAppOptions {
     ui32 Body = 0;
     ui32 GRpcPort = 0;
     ui32 GRpcsPort = 0;
+    bool IgnoreRoot = false;
     TString GRpcPublicHost = "";
     ui32 GRpcPublicPort = 0;
     ui32 GRpcsPublicPort = 0;
@@ -466,6 +469,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument().Hidden().SetFlag(&SuppressVersionCheck);
 
         opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
+        opts.AddLongOption("ignore-root", "resolve old absolute database roots against this cluster (does not rewrite resource paths)").NoArgument().SetFlag(&IgnoreRoot);
         opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT").StoreResult(&GRpcsPort);
         opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
@@ -690,6 +694,10 @@ struct TCommonAppOptions {
             auto& conf = *appConfig.MutableGRpcConfig();
             conf.SetStartGRpcProxy(true);
             conf.SetPort(GRpcPort);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+        if (IgnoreRoot) {
+            appConfig.MutableGRpcConfig()->SetIgnoreRoot(true);
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         if (GRpcsPort) {
@@ -1240,6 +1248,7 @@ public:
                     csk->VerifyMainConfig(*yamlConfigs.Main);
                 }
                 yamlConfigs.LoadedFromStore = true;
+                yamlConfigs.AllowUnknownFields = true;
             } else {
                 yamlConfigs.Storage.reset();
                 yamlConfigs.StorageSource.reset();
@@ -1263,6 +1272,7 @@ public:
                 InitConfigFromSeedNodes(yamlConfigs.Main.emplace(), yamlConfigs.Storage);
                 Y_ABORT_UNLESS(yamlConfigs.Main);
                 yamlConfigs.MainSource = "main YAML config fetched from seed nodes";
+                yamlConfigs.AllowUnknownFields = true;
                 if (yamlConfigs.Storage) {
                     yamlConfigs.StorageSource = "storage YAML config fetched from seed nodes";
                 }

@@ -193,6 +193,20 @@ BELONGS ya.make
     Files with this license:
         include/boost/spirit/home/support/detail/hold_any.hpp [2:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 13145cd6817acd13839a90307e527c9a
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001, Daniel C. Nuffer
+            Copyright (c) 2003, Hartmut Kaiser
+            Copyright (c) 2025, Joaquin M Lopez Munoz
+            http://spirit.sourceforge.net/
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/spirit/home/classic/iterator/fixed_size_queue.hpp [2:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 170ce84d9dd715becbc1467d154d34b5
 BELONGS ya.make
     License text:
@@ -382,19 +396,6 @@ BELONGS ya.make
         include/boost/spirit/home/classic/tree/parse_tree.hpp [2:4]
         include/boost/spirit/home/classic/tree/parse_tree_utils.hpp [2:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 286ee6881d6fd5e754840b518ab1c541
-BELONGS ya.make
-    License text:
-            Copyright (c) 2001, Daniel C. Nuffer
-            Copyright (c) 2003, Hartmut Kaiser
-            http://spirit.sourceforge.net/
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/spirit/home/classic/iterator/fixed_size_queue.hpp [2:4]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 2c1fc4e14b8b85ff09dea84fb89e149a
 BELONGS ya.make
     License text:
@@ -474,6 +475,20 @@ BELONGS ya.make
         include/boost/spirit/home/classic/meta/impl/parser_traits.ipp [2:5]
         include/boost/spirit/home/classic/meta/parser_traits.hpp [2:5]
         include/boost/spirit/home/classic/phoenix/tuple_helpers.hpp [3:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3aef17962b71cc9c31102f35e0236b1e
+BELONGS ya.make
+    License text:
+            Copyright (c) 2001, Daniel C. Nuffer
+            Copyright (c) 2003, Hartmut Kaiser
+            Copyright (c) 2025, Joaquin M Lopez Munoz
+            http://spirit.sourceforge.net/
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/spirit/home/classic/iterator/fixed_size_queue.hpp [2:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3c3e3f2553613569bad49297c7baa79d
 BELONGS ya.make
@@ -592,7 +607,7 @@ BELONGS ya.make
         include/boost/spirit/home/karma/stream/detail/format_manip_auto.hpp [1:1]
         include/boost/spirit/home/karma/stream/format_manip.hpp [1:1]
         include/boost/spirit/home/karma/stream/format_manip_attr.hpp [1:1]
-        include/boost/spirit/home/karma/stream/ostream_iterator.hpp [1:1]
+        include/boost/spirit/home/karma/stream/ostream_iterator.hpp [1:2]
         include/boost/spirit/home/karma/stream/stream.hpp [1:1]
         include/boost/spirit/home/karma/string.hpp [1:1]
         include/boost/spirit/home/karma/string/lit.hpp [1:2]
@@ -609,7 +624,7 @@ BELONGS ya.make
         include/boost/spirit/home/lex/lexer/lexer.hpp [1:1]
         include/boost/spirit/home/lex/lexer/lexertl/functor.hpp [1:1]
         include/boost/spirit/home/lex/lexer/lexertl/functor_data.hpp [1:1]
-        include/boost/spirit/home/lex/lexer/lexertl/iterator.hpp [1:1]
+        include/boost/spirit/home/lex/lexer/lexertl/iterator.hpp [1:2]
         include/boost/spirit/home/lex/lexer/lexertl/iterator_tokenizer.hpp [1:1]
         include/boost/spirit/home/lex/lexer/lexertl/lexer.hpp [1:1]
         include/boost/spirit/home/lex/lexer/lexertl/position_token.hpp [1:1]
@@ -722,7 +737,8 @@ BELONGS ya.make
         include/boost/spirit/home/support/iterators/detail/ref_counted_policy.hpp [1:2]
         include/boost/spirit/home/support/iterators/detail/split_functor_input_policy.hpp [1:1]
         include/boost/spirit/home/support/iterators/detail/split_std_deque_policy.hpp [1:2]
-        include/boost/spirit/home/support/iterators/istream_iterator.hpp [1:1]
+        include/boost/spirit/home/support/iterators/istream_iterator.hpp [1:2]
+        include/boost/spirit/home/support/iterators/look_ahead.hpp [1:4]
         include/boost/spirit/home/support/iterators/ostream_iterator.hpp [1:1]
         include/boost/spirit/home/support/limits.hpp [1:1]
         include/boost/spirit/home/support/multi_pass_wrapper.hpp [1:1]
@@ -1703,6 +1719,20 @@ BELONGS ya.make
     Files with this license:
         include/boost/spirit/home/support/detail/hold_any.hpp [2:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 6bd0da6c2ce18e9a763d90e855a1a798
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2001-2011 Hartmut Kaiser
+        //  Copyright (c) 2025 Joaquin M Lopez Munoz
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/spirit/home/karma/stream/ostream_iterator.hpp [1:2]
+        include/boost/spirit/home/lex/lexer/lexertl/iterator.hpp [1:2]
+        include/boost/spirit/home/support/iterators/istream_iterator.hpp [1:2]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 6d63b13de108fa5435475ab01814eafe
 BELONGS ya.make
     License text:
@@ -1774,7 +1804,6 @@ BELONGS ya.make
         include/boost/spirit/home/classic/dynamic/impl/switch.ipp [2:3]
         include/boost/spirit/home/classic/dynamic/select.hpp [2:3]
         include/boost/spirit/home/classic/dynamic/switch.hpp [2:3]
-        include/boost/spirit/home/classic/iterator/file_iterator.hpp [2:5]
         include/boost/spirit/home/classic/iterator/impl/file_iterator.ipp [2:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 77be0e4f90c30bc5049b8af1874ed858
@@ -1797,7 +1826,6 @@ BELONGS ya.make
         include/boost/spirit/home/support/detail/endian.hpp [1:2]
         include/boost/spirit/home/support/detail/pow10.hpp [2:4]
         include/boost/spirit/home/support/detail/scoped_enum_emulation.hpp [1:2]
-        include/boost/spirit/home/support/iterators/look_ahead.hpp [1:3]
         include/boost/spirit/home/support/iterators/multi_pass.hpp [1:3]
         include/boost/spirit/home/support/iterators/multi_pass_fwd.hpp [2:4]
         include/boost/spirit/home/x3/support/numeric_utils/extract_real.hpp [2:4]
@@ -2264,13 +2292,14 @@ BELONGS ya.make
             Copyright (c) 2003 Giovanni Bajo
             Copyright (c) 2003 Thomas Witt
             Copyright (c) 2003 Hartmut Kaiser
+            Copyright (c) 2025 Joaquin M Lopez Munoz
             http://spirit.sourceforge.net/
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/spirit/home/classic/iterator/file_iterator.hpp [2:5]
+        include/boost/spirit/home/classic/iterator/file_iterator.hpp [2:6]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 97e496341d3cdfa138aa5b3dd79cbe08
 BELONGS ya.make
@@ -2288,14 +2317,17 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 9914de026685f50b3db753e9eb22154a
 BELONGS ya.make
     License text:
+            Copyright (c) 2003 Giovanni Bajo
+            Copyright (c) 2003 Thomas Witt
             Copyright (c) 2003 Hartmut Kaiser
-            Copyright (c) 2003 Joel de Guzman
+            Copyright (c) 2025 Joaquin M Lopez Munoz
             http://spirit.sourceforge.net/
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
+        include/boost/spirit/home/classic/iterator/file_iterator.hpp [2:6]
         include/boost/spirit/home/classic/utility/grammar_def.hpp [2:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 99d17d19ab9b1eb6918fe74af3b2dad8
@@ -2663,7 +2695,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/spirit/home/classic.hpp [2:14]
-        include/boost/spirit/home/classic/iterator/file_iterator.hpp [2:5]
+        include/boost/spirit/home/classic/iterator/file_iterator.hpp [2:6]
         include/boost/spirit/home/classic/iterator/impl/file_iterator.ipp [2:5]
 
 KEEP     COPYRIGHT_SERVICE_LABEL b4d502c99ef9e3a6fa33d58757314d75
@@ -2844,33 +2876,23 @@ BELONGS ya.make
         include/boost/spirit/home/support/utree/detail/utree_detail2.hpp [2:4]
         include/boost/spirit/home/support/utree/operators.hpp [2:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL c2a40dd3d7fc7e08707b6696db3af8f2
-BELONGS ya.make
-    License text:
-            Copyright (c) 2001, Daniel C. Nuffer
-            http://spirit.sourceforge.net/
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        include/boost/spirit/home/classic/iterator/multi_pass.hpp [2:3]
-
 KEEP     COPYRIGHT_SERVICE_LABEL c2b774c26af57c9a8aa6c361e73bd74c
 BELONGS ya.make
     License text:
             Copyright (c) 2001, Daniel C. Nuffer
             Copyright (c) 2003, Hartmut Kaiser
+            Copyright (c) 2025, Joaquin M Lopez Munoz
             http://spirit.sourceforge.net/
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        include/boost/spirit/home/classic/iterator/fixed_size_queue.hpp [2:4]
+        include/boost/spirit/home/classic/iterator/fixed_size_queue.hpp [2:5]
+        include/boost/spirit/home/classic/iterator/multi_pass.hpp [2:4]
         include/boost/spirit/home/support/iterators/detail/buf_id_check_policy.hpp [1:2]
         include/boost/spirit/home/support/iterators/detail/first_owner_policy.hpp [1:2]
-        include/boost/spirit/home/support/iterators/look_ahead.hpp [1:3]
+        include/boost/spirit/home/support/iterators/look_ahead.hpp [1:4]
         include/boost/spirit/home/support/iterators/multi_pass.hpp [1:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL cadd4a896c84c64078dec6563a7cf410
@@ -3110,6 +3132,23 @@ BELONGS ya.make
         include/boost/spirit/repository/include/qi_keywords.hpp [2:5]
         include/boost/spirit/repository/include/qi_kwd.hpp [2:5]
         include/boost/spirit/repository/include/qi_kwd.hpp [21:24]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f0b7e9ea26ce42d688f7ac70488fdb84
+BELONGS ya.make
+    License text:
+            Copyright (c) 2003 Giovanni Bajo
+            Copyright (c) 2003 Thomas Witt
+            Copyright (c) 2003 Hartmut Kaiser
+            Copyright (c) 2025 Joaquin M Lopez Munoz
+            http://spirit.sourceforge.net/
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/boost/spirit/home/classic/iterator/file_iterator.hpp [2:6]
+        include/boost/spirit/home/classic/iterator/multi_pass.hpp [2:4]
+        include/boost/spirit/home/support/iterators/look_ahead.hpp [1:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f15f8f43993e18e16026611500a6b2f8
 BELONGS ya.make

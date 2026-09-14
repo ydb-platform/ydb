@@ -2,9 +2,13 @@ LIBRARY()
 
 SRCS(
     mon_render.cpp
+    mon_render_chaos.cpp
+    mon_render_memory.cpp
+    mon_render_overview.cpp
 )
 
 PEERDIR(
+    ydb/core/nbs/cloud/blockstore/libs/common/memory
     ydb/core/nbs/cloud/blockstore/libs/diagnostics
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/resources

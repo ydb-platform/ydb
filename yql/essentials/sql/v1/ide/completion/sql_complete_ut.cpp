@@ -1051,7 +1051,7 @@ Y_UNIT_TEST(SelectTableHintName) {
         TVector<TCandidate> expected = {
             {.Kind = Keyword, .Content = "COLUMNS"},
             {.Kind = Keyword, .Content = "SCHEMA"},
-            {.Kind = Keyword, .Content = "WATERMARK"},
+            {.Kind = Keyword, .Content = "WATERMARK ="},
             {.Kind = HintName, .Content = "XLOCK"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "REDUCE my_table WITH "), expected);
@@ -1060,7 +1060,7 @@ Y_UNIT_TEST(SelectTableHintName) {
         TVector<TCandidate> expected = {
             {.Kind = Keyword, .Content = "COLUMNS"},
             {.Kind = Keyword, .Content = "SCHEMA"},
-            {.Kind = Keyword, .Content = "WATERMARK"},
+            {.Kind = Keyword, .Content = "WATERMARK ="},
             {.Kind = HintName, .Content = "XLOCK"},
         };
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT key FROM my_table WITH "), expected);
@@ -1073,7 +1073,7 @@ Y_UNIT_TEST(InsertTableHintName) {
         {.Kind = HintName, .Content = "EXPIRATION"},
         {.Kind = Keyword, .Content = "RECURSIVE"},
         {.Kind = Keyword, .Content = "SCHEMA"},
-        {.Kind = Keyword, .Content = "WATERMARK"},
+        {.Kind = Keyword, .Content = "WATERMARK ="},
     };
 
     auto engine = MakeSqlCompletionEngineUT();

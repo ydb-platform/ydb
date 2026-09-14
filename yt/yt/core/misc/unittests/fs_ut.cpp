@@ -69,6 +69,7 @@ TEST(TFSTest, TestMakeDirRecursive)
     RemoveRecursive(dir);
 }
 
+#ifdef _linux_
 TEST(TFSTest, TestMakeDirRecursiveReportsRealError)
 {
     auto readOnlyDir = CombinePaths(NFs::CurrentWorkingDirectory(), "read_only");
@@ -85,6 +86,7 @@ TEST(TFSTest, TestMakeDirRecursiveReportsRealError)
     Chmod(readOnlyDir, 0700);
     RemoveRecursive(readOnlyDir);
 }
+#endif
 
 TEST(TFSTest, TestIsPathRelativeAndInvolvesNoTraversal)
 {

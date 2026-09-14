@@ -1,5 +1,6 @@
 #pragma once
 
+#include <util/generic/bitops.h>
 #include <util/generic/fwd.h>
 #include <util/generic/size_literals.h>
 
@@ -22,6 +23,14 @@ constexpr ui32 DefaultBlockSize = 4_KB;
 
 // The maximum possible volume block size.
 constexpr ui32 MaxBlockSize = 128_KB;
+
+// A volume block size the partition can serve: a power of two between the
+// DDisk integrity unit (DefaultBlockSize) and MaxBlockSize inclusive.
+constexpr bool IsSupportedBlockSize(ui32 blockSize)
+{
+    return blockSize >= DefaultBlockSize && blockSize <= MaxBlockSize &&
+           IsPowerOf2(blockSize);
+}
 
 // Keep the value less than MaxBufferSize in
 // cloud/blockstore/libs/rdma/iface/client.h

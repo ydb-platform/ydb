@@ -127,6 +127,7 @@ bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
 
         "String.Contains",
         "String._yql_AsciiContainsIgnoreCase",
+        "OlapKernels._yql_AsciiContainsIgnoreCase",
         "String.StartsWith",
         "String._yql_AsciiStartsWithIgnoreCase",
         "String.EndsWith",
@@ -452,11 +453,11 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
     if (predicate.Maybe<TCoNot>() || predicate.Maybe<TCoAnd>() || predicate.Maybe<TCoOr>() || predicate.Maybe<TCoXor>()) {
         CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, inputType, options);
     } else if (const auto maybeCoalesce = predicate.Maybe<TCoCoalesce>()) {
-        predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, {false, options.PushdownSubstring, options.StripAliasPrefixFromColName, options.PushdownRegexp});
-        predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, {true, options.PushdownSubstring, options.StripAliasPrefixFromColName, options.PushdownRegexp});
+        predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, options.WithAllowOlapApply(false));
+        predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, options.WithAllowOlapApply(true));
     } else if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
-        predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, {false, options.PushdownSubstring, options.StripAliasPrefixFromColName, options.PushdownRegexp});
-        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, {true, options.PushdownSubstring, options.StripAliasPrefixFromColName, options.PushdownRegexp});
+        predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, options.WithAllowOlapApply(false));
+        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, options.WithAllowOlapApply(true));
     } else if (const auto maybeExists = predicate.Maybe<TCoExists>()) {
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
         predicateTree.CanBePushedApply = predicateTree.CanBePushed;
@@ -467,7 +468,7 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
 
     if (options.AllowOlapApply && !predicateTree.CanBePushedApply){
         if (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>() || predicate.Maybe<TCoCoalesce>()) {
-            CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, inputType, {true, options.PushdownSubstring, options.StripAliasPrefixFromColName, options.PushdownRegexp});
+            CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, inputType, options.WithAllowOlapApply(true));
         }
         if (!predicateTree.CanBePushedApply) {
             predicateTree.CanBePushedApply = AbstractTreeCanBePushed(predicate, options);

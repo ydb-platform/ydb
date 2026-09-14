@@ -4,6 +4,7 @@
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
@@ -55,12 +56,20 @@ void TAnalyzeActor::Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, c
         result.SetStatus(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR);
         result.AddIssue(NYql::TIssue("ANALYZE failed: OperationId mismatch"));
     } else if (status != NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS) {
-        YDB_LOG_CRIT("TAnalyzeActor, TEvAnalyzeResponse has",
-            {"status", status});
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record.GetIssues(), issues);
+        YDB_LOG_WARN("TAnalyzeActor, TEvAnalyzeResponse has",
+            {"status", status},
+            {"operationId", OperationId.Quote()},
+            {"database", Database},
+            {"tablePath", TablePath},
+            {"pathId", PathId},
+            {"statisticsAggregatorId", StatisticsAggregatorId.value_or(0)},
+            {"issues", issues.ToOneLineString()});
         result.SetStatus(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR);
         NYql::TIssue error("Executing ANALYZE");
-        for (const auto& issue : record.GetIssues()) {
-            error.AddSubIssue(MakeIntrusive<NYql::TIssue>(NYql::IssueFromMessage(issue)));
+        for (const auto& issue : issues) {
+            error.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
         }
         result.AddIssue(error);
     } else {

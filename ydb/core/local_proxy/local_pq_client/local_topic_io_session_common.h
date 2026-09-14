@@ -231,7 +231,7 @@ protected:
             {"logPrefix", LogPrefix()},
             {"outgoingEvents", OutgoingEvents.size()});
 
-        Y_VALIDATE(!EventsPromise, "Can not handle extract event in parallel");
+        Y_VALIDATE(!EventsPromise, "Cannot handle extract event in parallel");
         EventsPromise = std::move(ev->Get()->EventsPromise);
         SendOutgoingEvents();
     }

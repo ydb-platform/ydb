@@ -54,6 +54,7 @@ namespace NKikimrStream {
 
 namespace NKikimrConfig {
     class TAppConfig;
+    class TStateStorageConfig;
     class TStreamingConfig;
     class TMeteringConfig;
     class TSqsConfig;

@@ -83,6 +83,10 @@ namespace NKikimr::NBlobDepot {
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
         TControlWrapper MaxLoadedTrashRecords = 1'000'000;
 
+        TControlWrapper S3MaxWritesInFlight = 32;
+        TControlWrapper S3MaxDeletesInFlight = 3;
+        TControlWrapper S3MaxObjectsToDeleteAtOnce = 10;
+
         struct TAgent {
             struct TConnection {
                 TActorId PipeServerId;
@@ -195,7 +199,11 @@ namespace NKikimr::NBlobDepot {
                 {"marker", "BDT24"},
                 {"id", GetLogId()});
             if (AppData()->Icb) {
-                TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, AppData()->Icb->BlobDepotControls.MaxLoadedTrashRecords);
+                auto& controls = AppData()->Icb->BlobDepotControls;
+                TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, controls.MaxLoadedTrashRecords);
+                TControlBoard::RegisterSharedControl(S3MaxWritesInFlight, controls.S3MaxWritesInFlight);
+                TControlBoard::RegisterSharedControl(S3MaxDeletesInFlight, controls.S3MaxDeletesInFlight);
+                TControlBoard::RegisterSharedControl(S3MaxObjectsToDeleteAtOnce, controls.S3MaxObjectsToDeleteAtOnce);
             }
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
@@ -455,12 +463,7 @@ namespace NKikimr::NBlobDepot {
         void DoGroupMetricsExchange();
         void Handle(TEvBlobStorage::TEvControllerGroupMetricsExchange::TPtr ev);
         void Handle(TEvBlobDepot::TEvPushMetrics::TPtr ev);
-        void Handle(TEvBlobDepot::TEvPushS3RouterMetrics::TPtr ev);
         void UpdateThroughputs(bool reschedule = true);
-
-        THashMap<ui32, bool> S3RouterIsUsingProxyByNode;
-        ui64 S3RouterNodeCount = 0;
-        ui64 S3RouterNodesWithUsingProxy = 0;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Validation

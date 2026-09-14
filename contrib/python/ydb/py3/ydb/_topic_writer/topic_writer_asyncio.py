@@ -109,7 +109,7 @@ class WriterAsyncIO:
         messages: Union[Message, List[Message]],
     ) -> Union[PublicWriteResultTypes, List[PublicWriteResultTypes]]:
         """
-        IT IS SLOWLY WAY. IT IS BAD CHOISE IN MOST CASES.
+        IT IS SLOWLY WAY. IT IS BAD CHOICE IN MOST CASES.
         It is recommended to use write with optionally flush or write_with_ack_futures and receive acks by wait futures.
 
         send one or number of messages to server and wait acks.

@@ -645,7 +645,8 @@ void TKafkaTestClient::ValidateNoDataInTopics(const std::vector<std::pair<TStrin
     UNIT_ASSERT_VALUES_EQUAL(fetchResponse->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     for (ui32 topicIndex = 0; topicIndex < topics.size(); topicIndex++) {
         for (ui32 partitionIndex = 0; partitionIndex < topics[topicIndex].second.size(); partitionIndex++) {
-            UNIT_ASSERT(!fetchResponse->Responses[topicIndex].Partitions[partitionIndex].Records.has_value());
+            UNIT_ASSERT(fetchResponse->Responses[topicIndex].Partitions[partitionIndex].Records.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(fetchResponse->Responses[topicIndex].Partitions[partitionIndex].Records->size(), 0);
         }
     }
 }

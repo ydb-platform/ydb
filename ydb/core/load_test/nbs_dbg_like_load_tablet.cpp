@@ -479,6 +479,9 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NDDisk::TEvConnectResult, HandlePeerConnect);
+            hFunc(NDDisk::TEvRegisterPersistentBufferResult, HandlePeerRegistration);
+            hFunc(NDDisk::TEvListPersistentBufferResult, HandlePeerRegistrationProbe);
+            hFunc(TEvents::TEvWakeup, HandlePeerRegistrationRetry);
             hFunc(NDDisk::TEvDisconnectResult, HandlePeerDisconnect);
 
             HFunc(TEvLoad::TEvNbsWrite, HandleNbsWrite);
@@ -521,6 +524,12 @@ private:
     void KickOffPeerConnect();
     void ConnectPeer(ui32 k, bool isPb);
     void HandlePeerConnect(NDDisk::TEvConnectResult::TPtr& ev);
+    void HandlePeerRegistration(NDDisk::TEvRegisterPersistentBufferResult::TPtr& ev);
+    void HandlePeerRegistrationProbe(NDDisk::TEvListPersistentBufferResult::TPtr& ev);
+    void HandlePeerRegistrationRetry(TEvents::TEvWakeup::TPtr& ev) {
+        ConnectPeer(ev->Get()->Tag, true);
+    }
+    void PeerConnected(ui32 k, bool isPb);
     void HandlePeerDisconnect(NDDisk::TEvDisconnectResult::TPtr& ev);
     void DisconnectAllPeers();
     void PopulateDbgState();
@@ -750,7 +759,7 @@ public:
     // shutdown path (poison vs sys-tablet-driven TEvTabletDead vs direct
     // PassAway) took us out. Idempotent so the natural chain
     // OnDetach/OnTabletDead -> HandleDie -> Die -> PassAway can call it
-    // from each step without doubling up. Spec §15.2.
+    // from each step without doubling up.
     void Cleanup() {
         if (CleanedUp_) {
             return;
@@ -1174,7 +1183,6 @@ public:
         for (const auto& d : Self->Dbgs) {
             db.Table<Schema::Dbgs>().Key(d.DbgIndex).Delete();
         }
-        // Note: keep Runs around as historical records.
         return true;
     }
 
@@ -1260,14 +1268,14 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletAllocateGroups::TPtr
 
     AllocConfig = ev->Get()->Record.GetAllocConfig();
 
-    // Storage namespace owner must be unique per load tablet; the PB dedup key
-    // is {TabletId, Generation, Lsn}. A shared/user-supplied id makes two load
+    // Storage namespace owner must be unique per load tablet. A shared id with
+    // matching generation, DBG index, and LSN makes two load
     // tablets collide ("duplicate record with incorrect data"). Always use our
     // own (Hive-assigned) TabletID() as the BSC allocation owner and PB/DD
     // credential TabletId.
     AllocConfig.SetTabletId(TabletID());
 
-    // Input validation (spec §23.10 / Phase 2.6).
+    // Validate the persisted allocation geometry.
     if (AllocConfig.GetNumDirectBlockGroups() == 0) {
         return reply(NBSLT_INTERNAL_ERROR, "NumDirectBlockGroups must be > 0");
     }
@@ -1825,24 +1833,18 @@ void TNbsDbgLikeActor::HandlePeerConnect(NDDisk::TEvConnectResult::TPtr& ev) {
         << " " << (isPb ? "PB" : "DD") << k
         << " Status# " << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(rec.GetStatus()));
     if (rec.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
-        st.Connected = true;
         st.Guid = rec.GetDDiskInstanceGuid();
         st.Token.emplace(rec.GetConnectionToken());
-        if (RootCnt.ConnectOk) {
-            RootCnt.ConnectOk->Inc();
+        if (isPb) {
+            st.ConnectInFlight = true;
+            auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
+                AllocConfig.GetTabletId(), Generation(), st.Guid, MyDbgIndex);
+            creds.ConnectionToken = st.Token;
+            Send(ev->Sender, new NDDisk::TEvRegisterPersistentBuffer(creds, TActivationContext::Now()),
+                0, ev->Cookie);
+            return;
         }
-        bool allConnected = true;
-        for (ui32 i = 0; i < HostsPerDbg(); ++i) {
-            if (!DD[i].Connected || !PB[i].Connected) {
-                allConnected = false;
-                break;
-            }
-        }
-        if (allConnected) {
-            LOG_D("Worker AllConnected DBG# " << MyDbgIndex << " — populating DbgState");
-            PopulateDbgState();
-        }
-        ReportReadiness();
+        PeerConnected(k, isPb);
     } else {
         st.Connected = false;
         st.Guid = 0;
@@ -1860,6 +1862,66 @@ void TNbsDbgLikeActor::HandlePeerConnect(NDDisk::TEvConnectResult::TPtr& ev) {
             << " " << (isPb ? "PB" : "DD") << k << ": "
             << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(rec.GetStatus())
             << " " << rec.GetErrorReason());
+    }
+}
+
+void TNbsDbgLikeActor::PeerConnected(ui32 k, bool isPb) {
+    auto& st = isPb ? PB[k] : DD[k];
+    st.ConnectInFlight = false;
+    st.Connected = true;
+    if (RootCnt.ConnectOk) {
+        RootCnt.ConnectOk->Inc();
+    }
+    bool allConnected = true;
+    for (ui32 i = 0; i < HostsPerDbg(); ++i) {
+        if (!DD[i].Connected || !PB[i].Connected) {
+            allConnected = false;
+            break;
+        }
+    }
+    if (allConnected) {
+        LOG_D("Worker AllConnected DBG# " << MyDbgIndex << " — populating DbgState");
+        PopulateDbgState();
+    }
+    ReportReadiness();
+}
+
+void TNbsDbgLikeActor::HandlePeerRegistration(NDDisk::TEvRegisterPersistentBufferResult::TPtr& ev) {
+    ui32 k = 0;
+    bool isPb = false;
+    UnpackPeerCookie(ev->Cookie, k, isPb);
+    if (!isPb || k >= HostsPerDbg() || !PB[k].ConnectInFlight) {
+        return;
+    }
+    // Probe even after a rejected duplicate registration: only a successful list
+    // proves that the existing registration is durable and is still being served.
+    auto creds = NDDisk::TQueryCredentials::ToPersistentBuffer(
+        AllocConfig.GetTabletId(), Generation(), PB[k].Guid, MyDbgIndex);
+    creds.ConnectionToken = PB[k].Token;
+    Send(ev->Sender, new NDDisk::TEvListPersistentBuffer(creds), 0, ev->Cookie);
+}
+
+void TNbsDbgLikeActor::HandlePeerRegistrationProbe(NDDisk::TEvListPersistentBufferResult::TPtr& ev) {
+    ui32 k = 0;
+    bool isPb = false;
+    UnpackPeerCookie(ev->Cookie, k, isPb);
+    if (!isPb || k >= HostsPerDbg() || !PB[k].ConnectInFlight) {
+        return;
+    }
+    if (ev->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+        PeerConnected(k, true);
+    } else {
+        PB[k].ConnectInFlight = false;
+        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+        const auto status = ev->Get()->Record.GetStatus();
+        if (status == TStatus::BUSY || status == TStatus::OVERLOADED
+                || status == TStatus::INCORRECT_REQUEST) {
+            Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup(k));
+        }
+        if (RootCnt.ConnectErr) {
+            RootCnt.ConnectErr->Inc();
+        }
+        ReportReadiness();
     }
 }
 
@@ -2229,14 +2291,10 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
     }
 
     auto& dbg = Dbg;
-    // LSNs must be unique per {TabletId, Generation}: when PB slots are scarce
-    // the BSC packs several DBGs of this tablet onto the SAME persistent-buffer
-    // slot instance (AllocatePersistentBuffer refcounts and reuses slots; there
-    // is no cross-DBG exclusion). A PB record is deduped by {TabletId,
-    // Generation, Lsn} only -- the per-DBG DDiskInstanceGuid identifies the slot
-    // instance (identical for two DBGs on one slot) and is not part of the key.
-    // Stride the per-worker sequence by DbgIndex so two DBG workers never emit
-    // the same Lsn against a shared PB slot. Single-DBG layout is unchanged
+    // Preserve unique LSNs across DBGs of this tablet generation, including
+    // DBGs placed on the same PB slot. PB record identity also includes the
+    // DBG index, but striding keeps the load's LSNs disjoint independently of
+    // placement. Single-DBG layout is unchanged
     // (stride 1, index 0 -> 1, 2, 3, ...).
     const ui64 lsnStride = Max<ui64>(1, NumDbgsTotal);
     const ui64 lsn = (SequenceGenerator++) * lsnStride + MyDbgIndex + 1;
@@ -2284,7 +2342,12 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
         creds, selector, lsn, NDDisk::TWriteInstruction(0), pbIds,
         TabletConfig.GetPBufferReplyTimeoutMicroseconds());
 
-    wireEv->AddPayloadThenChecksum(std::move(ev->Get()->Payload));
+    if (TabletConfig.GetEnableChecksums()) {
+        std::vector<ui64> checksums(msg.GetChecksums().begin(), msg.GetChecksums().end());
+        wireEv->AddPayloadWithChecksum(std::move(ev->Get()->Payload), checksums);
+    } else {
+        wireEv->AddPayload(std::move(ev->Get()->Payload));
+    }
 
     Send(dbg.PBActor[coord], wireEv.release(), 0, lsn, it->second.Span.GetTraceId().Clone());
 
@@ -3364,7 +3427,8 @@ void TNbsDbgLikeActor::HandleConfigureTablet(
         << " EraseBatchSize# " << cfg.GetEraseBatchSize()
         << " SyncRequestsBatchSize# " << cfg.GetSyncRequestsBatchSize()
         << " NumDirectBlockGroupsToUse# " << cfg.GetNumDirectBlockGroupsToUse()
-        << " IoSizeBytes# " << cfg.GetIoSizeBytes());
+        << " IoSizeBytes# " << cfg.GetIoSizeBytes()
+        << " EnableChecksums# " << cfg.GetEnableChecksums());
 
     InitWorkerCounters();
 

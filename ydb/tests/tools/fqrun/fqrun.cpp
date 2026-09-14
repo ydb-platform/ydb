@@ -139,7 +139,7 @@ private:
 
     void ValidateAsyncOptions(const TAsyncQueriesSettings& asyncQueriesSettings) const {
         if (asyncQueriesSettings.InFlightLimit && !HasExecutionCase(EExecutionCase::AsyncStream) && !HasExecutionCase(EExecutionCase::AsyncAnalytics)) {
-            ythrow yexception() << "In flight limit can not be used without async queries";
+            ythrow yexception() << "In flight limit cannot be used without async queries";
         }
 
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -151,7 +151,7 @@ private:
 
     void ValidateTraceOpt(const TRunnerOptions& runnerOptions) const {
         if (runnerOptions.TraceOptAll && !runnerOptions.TraceOptIds.empty()) {
-            ythrow yexception() << "Trace opt ids can not be used with trace opt all flag";
+            ythrow yexception() << "Trace opt ids cannot be used with trace opt all flag";
         }
 
         const auto numberOfQueries = GetNumberOfQueries();

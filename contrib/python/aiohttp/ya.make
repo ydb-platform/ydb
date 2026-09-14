@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.11.18)
+VERSION(3.12.15)
 
 LICENSE(Apache-2.0)
 
@@ -39,6 +39,7 @@ SRCS(
 PY_SRCS(
     TOP_LEVEL
     aiohttp/__init__.py
+    aiohttp/_cookie_helpers.py
     aiohttp/_websocket/__init__.py
     aiohttp/_websocket/helpers.py
     aiohttp/_websocket/models.py
@@ -50,6 +51,8 @@ PY_SRCS(
     aiohttp/base_protocol.py
     aiohttp/client.py
     aiohttp/client_exceptions.py
+    aiohttp/client_middleware_digest_auth.py
+    aiohttp/client_middlewares.py
     aiohttp/client_proto.py
     aiohttp/client_reqrep.py
     aiohttp/client_ws.py

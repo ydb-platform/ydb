@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $regs = AsList("^a","^b");
 
 $input = AsList("e","aa","et","cb","ba");

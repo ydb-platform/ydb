@@ -7,7 +7,7 @@ namespace {
 const THashSet<TString> AllowedAggFunction{"sum", "min", "max", "count", "avg", "variance_1_1", "distinct"};
 
 bool IsValidConnectionToPushAggregation(const TIntrusivePtr<TConnection>& connection) {
-    return IsConnection<TUnionAllConnection>(connection) || IsConnection<TShuffleConnection>(connection);
+    return IsConnection<TUnionAllConnection>(connection) || IsConnection<TShuffleConnection>(connection) || IsConnection<TMapConnection>(connection);
 }
 
 bool CanPushAggregateToStage(const TIntrusivePtr<TOpAggregate>& aggregate, const TIntrusivePtr<IOperator>& input, TPlanProps& props) {
@@ -91,8 +91,6 @@ bool TPropagateAggregateThroughStageRule::QuickMatch(const TIntrusivePtr<IOperat
 }
 
 TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    Y_UNUSED(ctx);
-
     if (!IsSuitableToPropagateAggregateThroughStage(input)) {
         return input;
     }
@@ -113,7 +111,9 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
         opProps.StageId = inputStageId;
 
         TIntrusivePtr<TConnection> connection;
-        if (!aggregate->GetKeyColumns().empty()) {
+        if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
+            connection = MakeIntrusive<TMapConnection>(outputIndex);
+        } else if (!aggregate->GetKeyColumns().empty()) {
             TVector<TInfoUnit> shuffleByKeys;
             if (aggregate->IsDistinctAll()) {
                 for (const auto& aggTraits : aggregate->GetAggregationTraits()) {

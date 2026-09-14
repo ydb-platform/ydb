@@ -3,8 +3,10 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 
 from .constants import (
+    LOCAL_PNPM_INSTALL_CONCURRENCY,
     LOCAL_PNPM_INSTALL_MUTEX_FILENAME,
     VIRTUAL_STORE_DIRNAME,
     NPM_REGISTRY_URL,
@@ -44,30 +46,47 @@ class PackageManagerCommandError(PackageManagerError):
 
 
 """
-Creates a decorator that synchronizes access to a function using a mutex file.
+Creates a decorator that limits concurrent access to a function using mutex files.
 
-The decorator uses file locking (fcntl.LOCK_EX) to ensure only one process can execute the decorated function at a time.
-The lock is released (fcntl.LOCK_UN) when the function completes.
+The decorator uses non-blocking file locks (fcntl.LOCK_EX) as semaphore slots.
+At most ``concurrency`` processes can execute the decorated function at a time.
+The acquired lock is released (fcntl.LOCK_UN) when the function completes.
 
 Args:
-    mutex_filename (str): Path to the file used as a mutex lock.
+    mutex_filename (str): Base path for the files used as semaphore slots.
+    concurrency (int): Maximum number of concurrent function executions.
 
 Returns:
     function: A decorator function that applies the synchronization logic.
 """
 
 
-def sync_mutex_file(mutex_filename):
+def sync_mutex_file(mutex_filename, concurrency=LOCAL_PNPM_INSTALL_CONCURRENCY):
+    if concurrency < 1:
+        raise ValueError("concurrency must be at least 1")
+
     def decorator(function):
         def wrapper(*args, **kwargs):
             import fcntl
 
-            with open(mutex_filename, "w+") as mutex:
-                fcntl.lockf(mutex, fcntl.LOCK_EX)
-                result = function(*args, **kwargs)
-                fcntl.lockf(mutex, fcntl.LOCK_UN)
+            mutexes = [open("{}.{}".format(mutex_filename, slot), "w+") for slot in range(concurrency)]
+            try:
+                while True:
+                    for mutex in mutexes:
+                        try:
+                            fcntl.lockf(mutex, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        except BlockingIOError:
+                            continue
 
-            return result
+                        try:
+                            return function(*args, **kwargs)
+                        finally:
+                            fcntl.lockf(mutex, fcntl.LOCK_UN)
+
+                    time.sleep(0.1)
+            finally:
+                for mutex in mutexes:
+                    mutex.close()
 
         return wrapper
 
@@ -253,6 +272,7 @@ class PackageManager(object):
             raise PackageManagerError("Unable to execute command: nodejs_bin_path is not configured")
 
         cmd_env = env.copy()
+        cmd_env["PNPM_MAX_WORKERS"] = os.environ.get("PNPM_MAX_WORKERS", "4")
 
         if self.ld_library_path:
             cmd_env["LD_LIBRARY_PATH"] = self.ld_library_path
@@ -334,6 +354,7 @@ class PackageManager(object):
         local_cli=False,
         node_modules_path=None,
         store_dir=None,
+        prod=False,
     ):
         """
         Creates node_modules directory according to the lockfile.
@@ -362,11 +383,32 @@ class PackageManager(object):
             virtual_store_dir,
             self.inject_peers,
             node_modules_path,
+            prod=prod,
         )
 
         self._run_apply_addons_if_need(yatool_prebuilder_path, virtual_store_dir or global_virtual_store_dir)
 
         return ws
+
+    @timeit
+    def prune_node_modules(self, yatool_prebuilder_path=None, local_cli=False):
+        """Reinstall only production dependencies before bundling injected node_modules."""
+        if not self.inject_peers:
+            raise PackageManagerError("Production-only bundling requires injected workspace dependencies")
+
+        node_modules_path = build_nm_path(self.build_path)
+        # A restored layer can live on a RAM disk behind this symlink.
+        real_node_modules_path = os.path.realpath(node_modules_path)
+        if os.path.isdir(real_node_modules_path):
+            shutil.rmtree(real_node_modules_path)
+        if os.path.islink(node_modules_path):
+            os.unlink(node_modules_path)
+
+        self.create_node_modules(
+            yatool_prebuilder_path=yatool_prebuilder_path,
+            local_cli=local_cli,
+            prod=True,
+        )
 
     """
     Runs pnpm install command with specified parameters in an exclusive and hashed manner.
@@ -393,6 +435,7 @@ class PackageManager(object):
         virtual_store_dir: str | None,
         inject_peers: bool,
         node_modules_path: str,
+        prod: bool = False,
     ):
         # Use fcntl to lock a temp file
 
@@ -418,6 +461,9 @@ class PackageManager(object):
                 store_dir,
                 "--strict-peer-dependencies",
             ]
+
+            if prod:
+                install_cmd.append("--prod")
 
             if custom_node_modules_path:
                 install_cmd.extend(["--modules-dir", os.path.relpath(node_modules_path, cwd)])

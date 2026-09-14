@@ -60,7 +60,10 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
     TVector<TString> maybeMissingColumnsToReplace;
     const auto op = GetTableOp(write);
     if (op == TYdbOperation::Replace) {
-        for(const auto&[name, _]: tableDesc.Metadata->Columns) {
+        for (const auto& [name, column] : tableDesc.Metadata->Columns) {
+            if (column.IsDefaultFromExpression() && !column.DefaultExpression->Stored) {
+                continue;
+            }
             maybeMissingColumnsToReplace.push_back(name);
         }
     }
@@ -325,6 +328,10 @@ TExprNode::TPtr GetPgNotNullColumns(
     auto pgNotNullColumns = Build<TCoAtomList>(ctx, pos);
 
     for (const auto& [column, meta] : table.Metadata->Columns) {
+        if (meta.IsDefaultFromExpression() && !meta.DefaultExpression->Stored) {
+            continue;
+        }
+
         // TODO(flown4qqqq) check correctness with SetNotNullInProgress
         if (meta.NotNull && table.GetColumnType(column)->GetKind() == ETypeAnnotationKind::Pg) {
             pgNotNullColumns.Add<TCoAtom>()

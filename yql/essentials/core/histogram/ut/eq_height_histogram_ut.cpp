@@ -1101,6 +1101,64 @@ Y_UNIT_TEST(EstimateLessOrEqual) {
     UNIT_ASSERT_VALUES_EQUAL(hist.EstimateLessOrEqual(MakeKey(200)), totalCount);
 }
 
+// Estimate* on exact histogram; cuts at keys 4/9/14/19 with cum 10/20/30/40.
+Y_UNIT_TEST(EstimateFamily) {
+    const ui32 numBuckets = 4;
+    const ui32 numKeys = 20;
+    const ui32 perKey = 2;
+    const ui64 totalCount = static_cast<ui64>(numKeys) * perKey;
+    auto params = MakeParams(numBuckets);
+    auto keys = MakeSortedStream(numKeys, perKey);
+    auto builder = BuildFromStream(keys, params);
+    auto result = builder.Finalize();
+    UNIT_ASSERT(result.Defined());
+    TEqHeightHistogram hist(*result);
+    UNIT_ASSERT(hist.IsExact());
+    UNIT_ASSERT_VALUES_EQUAL(hist.GetNumBuckets(), numBuckets);
+    UNIT_ASSERT_VALUES_EQUAL(hist.GetBucket(0).UpperBound, MakeKey(4));
+    UNIT_ASSERT_VALUES_EQUAL(hist.GetBucket(0).CumulativeCount, 10u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.GetBucket(1).UpperBound, MakeKey(9));
+    UNIT_ASSERT_VALUES_EQUAL(hist.GetBucket(1).CumulativeCount, 20u);
+
+    // before all
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateLessOrEqual(MakeKey(-1)), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateLess(MakeKey(-1)), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateEqual(MakeKey(-1)), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateGreaterOrEqual(MakeKey(-1)), totalCount);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateGreater(MakeKey(-1)), totalCount);
+
+    // between cuts
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateLessOrEqual(MakeKey(5)), 10u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateLess(MakeKey(5)), 10u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateEqual(MakeKey(5)), 0u);
+
+    // on a cut
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateLessOrEqual(MakeKey(9)), 20u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateLess(MakeKey(9)), 10u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateEqual(MakeKey(9)), 10u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateGreaterOrEqual(MakeKey(9)), totalCount - 10u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateGreater(MakeKey(9)), totalCount - 20u);
+
+    // past all
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateLessOrEqual(MakeKey(100)), totalCount);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateLess(MakeKey(100)), totalCount);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateGreaterOrEqual(MakeKey(100)), 0u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateGreater(MakeKey(100)), 0u);
+
+    for (i32 v : {-1, 4, 5, 9, 14, 19, 100}) {
+        const auto key = MakeKey(v);
+        UNIT_ASSERT_VALUES_EQUAL(hist.EstimateLess(key) + hist.EstimateGreaterOrEqual(key), totalCount);
+        UNIT_ASSERT_VALUES_EQUAL(hist.EstimateLessOrEqual(key) + hist.EstimateGreater(key), totalCount);
+    }
+
+    // ranges on [4, 14]
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateRangeGreaterLess(MakeKey(4), MakeKey(14)), 10u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateRangeGreaterLessOrEqual(MakeKey(4), MakeKey(14)), 20u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateRangeGreaterOrEqualLess(MakeKey(4), MakeKey(14)), 20u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateRangeGreaterOrEqualLessOrEqual(MakeKey(4), MakeKey(14)), 30u);
+    UNIT_ASSERT_VALUES_EQUAL(hist.EstimateRangeGreaterLess(MakeKey(14), MakeKey(4)), 0u);
+}
+
 // String keys — order preservation
 Y_UNIT_TEST(StringKeys) {
     const ui32 numBuckets = 10;

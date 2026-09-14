@@ -1,5 +1,6 @@
 #include "fulltext.h"
 #include "fulltext_query.h"
+#include "superlemmer.h"
 
 #include <contrib/libs/snowball/include/libstemmer.h>
 
@@ -492,6 +493,10 @@ namespace {
             return false;
         }
 
+        if (settings.use_filter_snowball() && settings.use_filter_superlemmer()) {
+            error = "cannot set use_filter_snowball and use_filter_superlemmer at the same time";
+            return false;
+        }
         if (settings.use_filter_snowball()) {
             if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
                 error = "cannot set use_filter_snowball with use_filter_ngram or use_filter_edge_ngram at the same time";
@@ -514,8 +519,29 @@ namespace {
                 error = "language is not supported by snowball";
                 return false;
             }
-        } else if (settings.has_language() && !settings.use_filter_stopwords()) {
-            error = "language setting is only supported with use_filter_snowball or use_filter_stopwords";
+        }
+
+        if (settings.use_filter_superlemmer()) {
+            if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
+                error = "cannot set use_filter_superlemmer with use_filter_ngram or use_filter_edge_ngram at the same time";
+                return false;
+            }
+
+            if (!settings.has_language()) {
+                error = "language required when use_filter_superlemmer is set";
+                return false;
+            }
+
+            if (!IsSuperLemmerSupportedLanguage(settings.language())) {
+                error = "language is not supported by superlemmer";
+                return false;
+            }
+        }
+
+        if (settings.has_language() && !settings.use_filter_snowball() && !settings.use_filter_superlemmer()) {
+            // Currently, language is only used for stemming (use_filter_snowball).
+            // In the future, it may be used for other language-sensitive operations (e.g., stopword filtering).
+            error = "language setting is only supported with use_filter_snowball or use_filter_superlemmer at present; other uses may be supported in the future";
             return false;
         }
 
@@ -685,6 +711,12 @@ TVector<TString> Analyze(const TStringBuf text, const Ydb::Table::FulltextIndexS
         }
     }
 
+    if (settings.use_filter_superlemmer()) {
+        for (auto& token : tokens) {
+            ApplySuperLemmerInplace(settings.language(), token);
+        }
+    }
+
     if (settings.use_filter_ngram() || settings.use_filter_edge_ngram()) {
         TVector<TString> ngrams;
         for (const auto& token : tokens) {
@@ -836,6 +868,15 @@ bool ValidateSettings(const Ydb::Table::FulltextIndexSettings& settings, TString
     return true;
 }
 
+bool HasSuperLemmer(const Ydb::Table::FulltextIndexSettings& settings) {
+    for (const auto& column : settings.columns()) {
+        if (column.has_analyzers() && column.analyzers().use_filter_superlemmer()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nameLower, const TString& value, TString& error) {
     error = "";
 
@@ -869,6 +910,8 @@ bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nam
         analyzers->set_filter_length_max(ParseInt32(nameLower, value, error));
     } else if (nameLower == "use_filter_snowball") {
         analyzers->set_use_filter_snowball(ParseBool(nameLower, value, error));
+    } else if (nameLower == "use_filter_superlemmer") {
+        analyzers->set_use_filter_superlemmer(ParseBool(nameLower, value, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;

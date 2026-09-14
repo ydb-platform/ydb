@@ -5,7 +5,35 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+namespace {
+
+// FastPathService routes a range to a single vchunk from its start block.
+// Callers (vhost via the split wrapper, the load actor adapter) must keep
+// each request inside one stripe.
+void CheckStripeContained(
+    const TVolumeConfig& volumeConfig,
+    TBlockRange64 regionRange)
+{
+    Y_ABORT_UNLESS(volumeConfig.BlockSize > 0);
+    const size_t blocksPerStripe = volumeConfig.BlocksPerStripe;
+    Y_ABORT_UNLESS(blocksPerStripe > 0);
+    Y_ABORT_UNLESS(
+        regionRange.Start / blocksPerStripe ==
+            regionRange.End / blocksPerStripe,
+        "range %s crosses a stripe boundary; the caller must split it",
+        regionRange.Print().c_str());
+}
+
+}   // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
+
+size_t GetDirectBlockGroupIndex(
+    size_t vChunkIndex,
+    size_t directBlockGroupCount)
+{
+    return vChunkIndex % directBlockGroupCount;
+}
 
 size_t GetVChunksPerRegion(ui64 vChunkSize)
 {
@@ -47,8 +75,7 @@ size_t GetVChunkIndex(
     const TVolumeConfig& volumeConfig,
     TBlockRange64 regionRange)
 {
-    Y_ABORT_UNLESS(volumeConfig.BlockSize > 0);
-    Y_ABORT_UNLESS(volumeConfig.BlocksPerStripe >= regionRange.Size());
+    CheckStripeContained(volumeConfig, regionRange);
 
     const size_t blocksPerStripe = volumeConfig.BlocksPerStripe;
     const size_t stripeIndex = regionRange.Start / blocksPerStripe;
@@ -61,8 +88,7 @@ TBlockRange64 TranslateToVChunk(
     const TVolumeConfig& volumeConfig,
     TBlockRange64 regionRange)
 {
-    Y_ABORT_UNLESS(volumeConfig.BlockSize > 0);
-    Y_ABORT_UNLESS(volumeConfig.BlocksPerStripe >= regionRange.Size());
+    CheckStripeContained(volumeConfig, regionRange);
 
     const size_t blocksPerStripe = volumeConfig.BlocksPerStripe;
     const size_t stripeIndex = regionRange.Start / blocksPerStripe;

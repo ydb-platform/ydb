@@ -282,7 +282,7 @@ public:
             tableInfo->AlterVersion += 1;
 
             // copy table info
-            context.SS->Tables[dstPath.Base()->PathId] = tableInfo;
+            context.SS->Tables.Set(dstPath.Base()->PathId, tableInfo);
             context.SS->PersistTable(db, dstPath.Base()->PathId);
             context.SS->PersistAllTablePartitionStats(db, dstPath.Base()->PathId, tableInfo);
             {
@@ -299,10 +299,10 @@ public:
             tableInfo->AlterVersion += 1;
             context.SS->PersistColumnTable(db, dstPath.Base()->PathId, *tableInfo, false);
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
+            context.SS->AcquireOwnDbRef(dstPath.Base()->PathId, "move table info");
         } else {
             Y_ABORT();
         }
-        context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "move table info");
 
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, dstPath.Base()->PathId, step);
@@ -821,20 +821,6 @@ public:
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables");
                 return result;
             }
-            if (srcPath->IsColumnTable()) {
-                if (srcPath.Parent()->IsOlapStore()) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                        "TABLESTORE tables cannot be renamed or moved");
-                    return result;
-                }
-                const auto& srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
-                if (!srcTable->GetUsedTiers().empty()) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
-                        "Cannot move a table that has tiering configured");
-                    return result;
-                }
-            }
-
             TPath::TChecker checks = srcPath.Check();
             checks
                 .NotEmpty()
@@ -852,6 +838,20 @@ public:
                 result->SetError(checks.GetStatus(), checks.GetError());
                 return result;
             }
+            if (srcPath->IsColumnTable()) {
+                if (srcPath.Parent()->IsOlapStore()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "TABLESTORE tables cannot be renamed or moved");
+                    return result;
+                }
+                const auto& srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
+                if (!srcTable->GetUsedTiers().empty()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "Cannot move a table that has tiering configured");
+                    return result;
+                }
+            }
+
         }
 
         TPath dstPath = TPath::ResolveWithInactive(OperationId, dstPathStr, context.SS);

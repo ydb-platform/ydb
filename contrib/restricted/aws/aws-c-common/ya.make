@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.14.4)
+VERSION(1.0.0)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-common/archive/v0.14.4.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-common/archive/v1.0.0.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/restricted/aws/aws-c-common/generated/include

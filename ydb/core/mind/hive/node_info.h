@@ -65,6 +65,7 @@ public:
         TFullTabletId TabletId;
         NMetrics::TFastRiseAverageValue<double, 20> UsageSince;
         double UsageBefore;
+        double PriorImpact; // estimate carried over from before the move, acts as a floor until this measurement completes
     };
 
     THive& Hive;
@@ -79,6 +80,8 @@ public:
     std::unordered_map<TTabletInfo::EVolatileState, std::unordered_set<TTabletInfo*>> Tablets;
     std::unordered_map<TTabletTypes::EType, std::unordered_set<TTabletInfo*>> TabletsRunningByType;
     std::unordered_map<TFullObjectId, std::unordered_set<TTabletInfo*>> TabletsOfObject;
+    // Resource-draining tablets with a high UsageImpact. Expected to hold zero or one elements
+    std::unordered_set<TTabletInfo*> HighImpactTablets;
     std::vector<TFullTabletId> FrozenTablets;
     TResourceRawValues ResourceValues; // accumulated resources from tablet metrics
     TResourceRawValues ResourceTotalValues; // actual used resources from the node (should be greater or equal one above)
@@ -120,6 +123,16 @@ public:
     void ChangeVolatileState(EVolatileState state);
     bool OnTabletChangeVolatileState(TTabletInfo* tablet, TTabletInfo::EVolatileState newState);
     void UpdateResourceValues(const TTabletInfo* tablet, const TMetrics& before, const TMetrics& after);
+    void UpdateHighImpactTablet(TTabletInfo* tablet);
+    void UpdateUsageImpacts(NIceDb::TNiceDb& db);
+
+    // Largest UsageImpact among the node's high-impact tablets, ignoring `exclude` if given.
+    // Used as a floor on the node's expected usage, see GetNodeUsageForTablet.
+    double GetMaxTabletImpact(const TTabletInfo* exclude = nullptr) const;
+
+    // The tablet, if any, that accounts for most of this node's usage and is therefore not moved
+    // by the balancer. Diagnostics only.
+    const TTabletInfo* GetPinnedTablet() const;
 
     ui32 GetTabletsScheduled() const {
         auto it = Tablets.find(TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING);

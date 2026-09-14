@@ -30,7 +30,6 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
     AFL_VERIFY(statRecordsCount);
     auto commonStats = TDictStats::Merge(stats, GetSettings(), statRecordsCount);
     ResultColumnStats = commonStats.SelectSeparatedColumns(GetSettings(), statRecordsCount);
-    ResultColumnStats->CreateJsonPathAccessorTrieCache();
     RemapKeyIndex.RegisterColumnStats(*ResultColumnStats);
     for (auto&& i : OrderedIterators) {
         i.Start();

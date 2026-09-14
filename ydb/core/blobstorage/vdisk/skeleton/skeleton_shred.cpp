@@ -175,7 +175,12 @@ namespace NKikimr {
 
                 for (const TChunkIdx chunkId : seg.AllChunks) {
                     if (const auto it = ChunkTypes.find(chunkId); it != ChunkTypes.end()) {
-                        it->second = EChunkType::INDEX;
+                        if (seg.HeapStripe.Empty()) {
+                            it->second = EChunkType::INDEX;
+                        } else if (it->second == EChunkType::UNKNOWN) {
+                            // Stripe-heap SSTs share the chunk with HugeKeeper.
+                            it->second = EChunkType::HUGE_CHUNK;
+                        }
                         tablesToCompact.insert(seg.AssignedSstId);
                         YDB_LOG_DEBUG("Going to compact SST",
                             {"marker", "BSSV13"},

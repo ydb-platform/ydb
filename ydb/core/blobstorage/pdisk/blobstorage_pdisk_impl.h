@@ -33,7 +33,15 @@
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 
+#include <atomic>
+#include <functional>
+#include <memory>
+#include <list>
 #include <queue>
+
+#if defined(__linux__)
+#include <ydb/library/pdisk_io/uring_router.h>
+#endif
 
 namespace NKikimr {
 namespace NPDisk {
@@ -47,6 +55,12 @@ class TCompletionEventSender;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 class TPDisk : public IPDisk {
+#if defined(__linux__)
+    friend class TPDiskTestPeer;
+    // Configured under StateMutex before the first router creation attempt.
+    std::function<void(TUringRouter&)> ConfigureRouterForTest;
+#endif
+
 public:
 #ifdef ENABLE_PDISK_SHRED
     static constexpr bool IS_SHRED_ENABLED = true;
@@ -88,7 +102,8 @@ public:
     TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
     TDeque<TRequestBase*> PausedQueue;
-    std::set<std::unique_ptr<TYardInit>> PendingYardInits;
+    // Preserve arrival order among ready owners; busy owners may still be skipped.
+    std::list<std::unique_ptr<TYardInit>> PendingYardInits;
     ui64 LastFlushId = 0;
     bool IsQueuePaused = false;
     bool IsQueueStep = false;
@@ -121,6 +136,14 @@ public:
     TControlWrapper StaticGroupChunkReservePerMille;
     i64 StaticGroupChunkReservePerMilleCached = 0;
     TControlWrapper ForcedPDiskSpaceColor;
+    std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> GetForcedPDiskSpaceColorIcb() const {
+        if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
+            if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
+                return static_cast<NKikimrBlobStorage::TPDiskSpaceColor::E>(forcedColor);
+            }
+        }
+        return std::nullopt;
+    }
     NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         switch (SemiStrictSpaceIsolation) {
@@ -216,6 +239,14 @@ public:
     // Incapsulated components
     TPDiskThread PDiskThread;
     THolder<IBlockDevice> BlockDevice;
+#if defined(__linux__)
+    // DDisk/PB hold IUringRouterClient copies of this pointer. PDisk releases
+    // it during Stop() only when no clients remain; otherwise the final owner
+    // destroys the router, drains accepted I/O, and closes the duplicated fd.
+    std::shared_ptr<TUringRouter> SharedUringRouter;
+#endif
+    bool SharedUringCreateAttempted = false;
+    bool SharedUringFailureReported = false;
     THolder<TLogWriter> CommonLogger;
     THolder<TSysLogWriter> SysLogger;
 
@@ -390,6 +421,12 @@ public:
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
+    void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);
+    void EnsureSharedUringRouter(ui32 idleSpinUs);
+#if defined(__linux__)
+    TDeviceIoSampleSink MakeUringSampleSink() const;
+#endif
+    void CheckSharedUringRouter(); // Called by the PDisk worker
     void YardResize(TYardResize &evYardResize);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
     void NormalizeExpectedSlotSettings();
@@ -419,7 +456,7 @@ public:
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
     void ProcessLogReadQueue();
-    void ProcessYardInitSet();
+    void ProcessPendingYardInits();
     void TrimAllUntrimmedChunks();
     void ProcessChunkTrimQueue();
     void ClearQuarantineChunks();

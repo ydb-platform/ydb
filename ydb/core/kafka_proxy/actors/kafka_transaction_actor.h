@@ -8,6 +8,7 @@
 #include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>
+#include <util/generic/vector.h>
 
 namespace NKafka {
     /*
@@ -39,6 +40,10 @@ namespace NKafka {
                 // This request sends to KQP a command to commit transaction
                 COMMIT
             };
+
+            // Cap in-flight EndTxn(commit) retries. When full, fail the oldest with
+            // COORDINATOR_NOT_AVAILABLE so the client's latest correlation id stays queued.
+            static constexpr size_t MaxPendingEndTxnRequests = 8;
 
             // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests
             TTransactionActor(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const TString& databasePath, ui64 txnTimeoutMs, const TString& resourceDatabasePath) :
@@ -77,9 +82,7 @@ namespace NKafka {
                     YDB_LOG_CRIT_COMP(NKikimrServices::KAFKA_PROXY, "Critical error happened",
                         {LogPrefix()},
                         {"reason", y.what()});
-                    if (EndTxnRequestPtr) {
-                        SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());
-                    }
+                    ReplyPendingEndTxn(EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());
                     Die(ActorContext());
                 }
             }
@@ -120,6 +123,10 @@ namespace NKafka {
             void HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx);
             void HandleAddKafkaOperationsResponse(const TString& kqpTransactionId, const TActorContext& ctx);
             void HandleCommitResponse(const TActorContext& ctx);
+            void ReplyPendingEndTxn(EKafkaErrors errorCode, const TString& errorMessage = {});
+            // Kafka Java treats BROKER_NOT_AVAILABLE / INVALID_TXN_STATE as fatal on EndTxn.
+            // COORDINATOR_NOT_AVAILABLE is retryable; keep the actor so a retry still sees partitions/offsets.
+            void FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage);
             TMaybe<TString> GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev);
             TMaybe<TProducerState> ParseProducerState(const NKqp::TEvKqp::TEvQueryResponse& response);
             TMaybe<TString> GetErrorInProducerState(const TMaybe<TProducerState>& producerState);
@@ -136,9 +143,9 @@ namespace NKafka {
             // helper fields
             const TString DatabasePath;
             const TString ResourceDatabasePath;
-            // This field need to preserve request details between several requests to KQP
-            // In case something goes off road, we can always send error back to client
-            TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;
+            // EndTxn is idempotent: Kafka clients retry with a new correlation id while KQP is still
+            // committing. Dropping those retries left the producer hanging until request timeout.
+            TVector<TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>>> PendingEndTxnRequests;
             bool CommitStarted = false;
             ui64 TxnTimeoutMs;
             TInstant CreatedAt;

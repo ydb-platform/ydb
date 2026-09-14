@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
@@ -22,12 +23,14 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 enum class EMonPage
 {
-    Overview,
-    Dbg,
-    LocalDb,
-    VChunk,
-    VChunkCounters,
-    Latency,
+    Overview,         // Tablet summary.
+    Dbg,              // Runtime state of direct block groups.
+    Chaos,            // Transport failure controls.
+    LocalDb,          // Persisted tablet state.
+    VChunk,           // State of one vchunk.
+    VChunkCounters,   // Vchunk operation counters.
+    Latency,          // Per-node and per-slot latency.
+    Memory,           // Memory usage by direct block group.
 };
 
 // How much per-vchunk detail GatherVChunkStats should collect.
@@ -59,6 +62,11 @@ struct TTabletInfo
     TString State;   // "INIT" / "WORK"
 };
 
+struct TArenaMemoryUsage
+{
+    TVector<TArenaAllocatorStats> Slots;
+};
+
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
@@ -67,14 +75,17 @@ struct TFastPathServiceInfo
     ui64 LastSafeBarrier = 0;
     size_t TotalVChunks = 0;
     size_t DbgCount = 0;
+
+    TArenaMemoryUsage ArenaMemoryUsage;
 };
 
 struct TConnectionSnapshot
 {
     THostIndex HostIndex = InvalidHostIndex;
     NKikimr::NBsController::TDDiskId DDiskId;
-    std::optional<NKikimr::NBsController::TDDiskId> PBufferId;
+    NKikimr::NBsController::TDDiskId PBufferId;
     TString DDiskSession;
+    bool DDiskConnected = false;
     bool PBufferConnected = false;
 };
 
@@ -85,6 +96,8 @@ struct TDbgSnapshot
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
     TVChunkConfigs VChunkConfigs;
+    size_t AllocatedMemorySize = 0;
+    size_t UsedMemorySize = 0;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;
 };
@@ -138,27 +151,33 @@ struct TMonPageData
     // When set, the page shows only the header/menu plus this message.
     std::optional<TString> RuntimeError;
     std::optional<TFastPathServiceInfo> FastPathServiceInfo;
+
     // DBG tab: all DBGs (list) or the selected one (detail).
     TVector<TDbgSnapshot> Dbgs;
     // DBG detail index (absent => list view).
     std::optional<ui32> SelectedDbg;
+
     // Local DB tab.
     std::optional<TLocalDbContents> LocalDb;
     // VChunk tab: the requested index (absent => only the input form) and the
     // snapshot (absent => no such vchunk).
     std::optional<ui32> SelectedVChunk;
     std::optional<TVChunkSnapshot> VChunk;
+
     // VChunk counters tab: disk / per-DBG totals, and optional per-vchunk
-    // rows for SelectedVChunkDbg when ShowVChunks is set. VChunkStatsLimit
+    // rows for SelectedDbg when ShowVChunks is set. VChunkStatsLimit
     // is the per-vchunk row cap (0 = dump everything).
     std::optional<TVChunkStatsGatherResult> VChunkStats;
     size_t VChunkStatsLimit = DefaultVChunkStatsLimit;
-    std::optional<ui32> SelectedVChunkDbg;
     bool ShowVChunks = false;
+
     // Latency tab: which percentile colors the heatmap / slot grid, and
     // which operation filters the slot grid (absent => worst across ops).
     ELatencyPercentile SelectedPercentile = ELatencyPercentile::P99;
     std::optional<EOperation> SelectedLatencyOperation;
+
+    // Chaos controller state.
+    TChaosConfig Chaos;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

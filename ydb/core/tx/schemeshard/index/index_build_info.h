@@ -92,6 +92,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Unlocking = 60,
         AlterSequence = 61,
         PrepareValidation = 62,
+        AlterIndexTable = 63,
         Done = 200,
 
         Cancellation_Applying = 350,
@@ -216,6 +217,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
+
+    size_t IndexPartitions = 0;
+    size_t IndexHistogramFields = 0;
+    std::shared_ptr<TEqHeightHistogram> IndexHistogram;
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
@@ -823,6 +828,11 @@ public:
         return BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
     }
 
+    bool IsBuildSimpleIndex() const {
+        return BuildKind == EBuildKind::BuildSecondaryIndex ||
+            BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
+    }
+
     bool IsBuildPrefixedVectorIndex() const {
         return BuildKind == EBuildKind::BuildPrefixedVectorIndex;
     }
@@ -1005,6 +1015,9 @@ public:
         return 0.f;
     }
 
+    std::vector<ui32> GetSecondaryIndexKeyTags(TSchemeShard* ss) const;
+    void FillIndexPresharding(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& implDesc) const;
+    bool HasPartitionSettings() const;
     void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
     void SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* to) const;
 

@@ -137,7 +137,6 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvPrivate::EvDeliver, handleDelivery);
 
                 hFunc(TEvBlobDepot::TEvPushMetrics, Handle);
-                hFunc(TEvBlobDepot::TEvPushS3RouterMetrics, Handle);
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvGetResult, Data->UncertaintyResolver->Handle);

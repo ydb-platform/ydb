@@ -85,7 +85,7 @@ struct TFeatureFlagExtractor : public NKqp::IFeatureFlagExtractor {
         };
         for (const TString& property : forbiddenProperties) {
             if (properties.contains(property)) {
-                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder() << "Can not change property " << property << " for default pool");
+                return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder() << "Cannot change property " << property << " for default pool");
             }
         }
     }

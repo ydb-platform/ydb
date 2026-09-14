@@ -33,6 +33,7 @@ RECURSE(
     nmslib
     pdisk_io
     persqueue
+    plan2svg
     planner
     pretty_types_print
     protobuf_printer

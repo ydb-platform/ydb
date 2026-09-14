@@ -1,5 +1,9 @@
 #include "mon_render.h"
 
+#include "mon_render_chaos.h"
+#include "mon_render_memory.h"
+#include "mon_render_overview.h"
+
 #include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
@@ -61,6 +65,8 @@ const char* PageParam(EMonPage page)
             return "overview";
         case EMonPage::Dbg:
             return "dbg";
+        case EMonPage::Chaos:
+            return "chaos";
         case EMonPage::LocalDb:
             return "localdb";
         case EMonPage::VChunk:
@@ -69,6 +75,8 @@ const char* PageParam(EMonPage page)
             return "vchunkcounters";
         case EMonPage::Latency:
             return "latency";
+        case EMonPage::Memory:
+            return "memory";
     }
     return "overview";
 }
@@ -80,6 +88,8 @@ const char* PageTitle(EMonPage page)
             return "Overview";
         case EMonPage::Dbg:
             return "DBGs";
+        case EMonPage::Chaos:
+            return "Chaos";
         case EMonPage::LocalDb:
             return "Local DB";
         case EMonPage::VChunk:
@@ -88,6 +98,8 @@ const char* PageTitle(EMonPage page)
             return "VChunk counters";
         case EMonPage::Latency:
             return "Latency";
+        case EMonPage::Memory:
+            return "Memory";
     }
     return "";
 }
@@ -203,10 +215,12 @@ void RenderMenu(
     static const EMonPage pages[] = {
         EMonPage::Overview,
         EMonPage::Dbg,
+        EMonPage::Chaos,
         EMonPage::LocalDb,
         EMonPage::VChunk,
         EMonPage::VChunkCounters,
         EMonPage::Latency,
+        EMonPage::Memory,
     };
     str << "<div class='pd-menu'>";
     for (EMonPage page: pages) {
@@ -219,56 +233,7 @@ void RenderMenu(
     str << "</div>";
 }
 
-void RenderOverview(IOutputStream& str, const TFastPathServiceInfo& info)
-{
-    HTML (str) {
-        TAG (TH3) {
-            str << "Overview";
-        }
-        TABLE_CLASS ("table table-condensed") {
-            TABLEBODY () {
-                TABLER () {
-                    TABLED () {
-                        str << "DirectBlockGroups";
-                    }
-                    TABLED () {
-                        str << info.DbgCount;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "VChunks (total)";
-                    }
-                    TABLED () {
-                        str << info.TotalVChunks;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "LSN counter";
-                    }
-                    TABLED () {
-                        str << info.LsnCounter;
-                    }
-                }
-                TABLER () {
-                    TABLED () {
-                        str << "Last safe barrier";
-                    }
-                    TABLED () {
-                        if (info.LastSafeBarrier != 0) {
-                            str << info.LastSafeBarrier;
-                        } else {
-                            str << "-";
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-void RenderFreshPercentage(
+void RenderWatermarks(
     IOutputStream& str,
     const TDbgSnapshot& dbg,
     ui32 blockSize)
@@ -277,6 +242,9 @@ void RenderFreshPercentage(
         TStringBuilder w;
         for (auto host: vChunkConfig.GetDDisks()) {
             if (auto watermark = vChunkConfig.GetWatermark(host)) {
+                if (!w.empty()) {
+                    w << ",";
+                }
                 w << PrintHostIndex(host) << ":" << *watermark / blockSize;
             }
         }
@@ -321,10 +289,7 @@ void RenderDbgList(
                         str << "PBuffers usage";
                     }
                     TABLEH () {
-                        str << "Ahead";
-                    }
-                    TABLEH () {
-                        str << "Behind";
+                        str << "Rotten";
                     }
                     TABLEH () {
                         str << "Fresh";
@@ -338,8 +303,8 @@ void RenderDbgList(
                     size_t consecutiveErrors = 0;
                     size_t consecutiveSuccesses = 0;
                     TCountAndSize pBuffersUsage;
-                    TCountAndSize aheadBlocks;
-                    TCountAndSize behindBlocks;
+                    ui64 freshTotalBytes = 0;
+                    ui64 rottenTotalBytes = 0;
                     for (const auto& host: dbg.Hosts) {
                         ++healthCounts[host.Health];
                         consecutiveErrors += host.Errors.ConsecutiveErrorCount;
@@ -351,8 +316,8 @@ void RenderDbgList(
                             inflight += host.InflightByOperation[operation];
                         }
                         pBuffersUsage += host.PBuffersUsage;
-                        aheadBlocks += host.AheadBlocks;
-                        behindBlocks += host.BehindBlocks;
+                        freshTotalBytes += host.FreshTotalBytes;
+                        rottenTotalBytes += host.RottenTotalBytes;
                     }
                     TABLER () {
                         TABLED () {
@@ -373,23 +338,19 @@ void RenderDbgList(
                             str << inflight;
                         }
                         TABLED () {
-                            str << consecutiveErrors << " / "
-                                << consecutiveSuccesses;
+                            str << consecutiveSuccesses << " / "
+                                << consecutiveErrors;
                         }
                         TABLED () {
                             str << pBuffersUsage.Print(true);
                         }
                         TABLED () {
-                            str << aheadBlocks.Print(true);
+                            str << FormatByteSize(rottenTotalBytes);
                         }
                         TABLED () {
-                            str << behindBlocks.Print(true);
-                        }
-                        TABLED () {
-                            RenderFreshPercentage(
-                                str,
-                                dbg,
-                                tabletInfo.BlockSize);
+                            str << FormatByteSize(freshTotalBytes);
+                            str << "<br>";
+                            RenderWatermarks(str, dbg, tabletInfo.BlockSize);
                         }
                     }
                 }
@@ -444,10 +405,10 @@ void RenderDbgDetail(
                         str << "PBuffer used";
                     }
                     TABLEH () {
-                        str << "Ahead blocks";
+                        str << "Fresh blocks";
                     }
                     TABLEH () {
-                        str << "Behind blocks";
+                        str << "Rotten blocks";
                     }
                     TABLEH () {
                         str << "Consecutive errors";
@@ -473,10 +434,10 @@ void RenderDbgDetail(
                             str << host.PBuffersUsage.Print(true);
                         }
                         TABLED () {
-                            str << host.AheadBlocks.Print(true);
+                            str << FormatByteSize(host.FreshTotalBytes);
                         }
                         TABLED () {
-                            str << host.BehindBlocks.Print(true);
+                            str << FormatByteSize(host.RottenTotalBytes);
                         }
                         TABLED () {
                             str << host.Errors.ConsecutiveErrorCount;
@@ -533,16 +494,10 @@ void RenderDbgDetail(
                         str << "Host";
                     }
                     TABLEH () {
-                        str << "DDisk id";
+                        str << "DDisk";
                     }
                     TABLEH () {
-                        str << "PBuffer id";
-                    }
-                    TABLEH () {
-                        str << "DDisk session";
-                    }
-                    TABLEH () {
-                        str << "PBuffer connected";
+                        str << "PBuffer";
                     }
                 }
             }
@@ -554,17 +509,16 @@ void RenderDbgDetail(
                         }
                         TABLED () {
                             RenderDDiskLink(str, connection.DDiskId);
-                        }
-                        TABLED () {
-                            if (connection.PBufferId) {
-                                RenderPBufferLink(str, *connection.PBufferId);
+                            if (connection.DDiskConnected) {
+                                str << " connected";
                             }
+                            str << " " << connection.DDiskSession;
                         }
                         TABLED () {
-                            str << connection.DDiskSession;
-                        }
-                        TABLED () {
-                            str << (connection.PBufferConnected ? "yes" : "no");
+                            RenderPBufferLink(str, connection.PBufferId);
+                            if (connection.PBufferConnected) {
+                                str << " connected";
+                            }
                         }
                     }
                 }
@@ -865,9 +819,7 @@ void RenderVChunkCounters(IOutputStream& str, const TMonPageData& data)
                "<option value=''>select DBG</option>";
         for (const auto& row: perDbg) {
             str << "<option value='" << row.DbgIndex << "'";
-            if (data.SelectedVChunkDbg &&
-                *data.SelectedVChunkDbg == row.DbgIndex)
-            {
+            if (data.SelectedDbg && *data.SelectedDbg == row.DbgIndex) {
                 str << " selected";
             }
             str << ">#" << row.DbgIndex << "</option>";
@@ -882,7 +834,7 @@ void RenderVChunkCounters(IOutputStream& str, const TMonPageData& data)
         const bool showBody = data.ShowVChunks;
         str << "<div id='vcVChunksBody'"
             << (showBody ? "" : " class='lat-hidden'") << ">";
-        if (!data.SelectedVChunkDbg) {
+        if (!data.SelectedDbg) {
             DIV_CLASS ("alert alert-info") {
                 str << "Select a DBG to list its vchunks.";
             }
@@ -1645,12 +1597,13 @@ TString RenderMonPage(const TMonPageData& data)
 
     switch (data.Page) {
         case EMonPage::Overview:
-            if (data.FastPathServiceInfo) {
-                RenderOverview(str, *data.FastPathServiceInfo);
-            }
+            RenderOverview(str, data);
             break;
         case EMonPage::Dbg:
             RenderDbg(str, data);
+            break;
+        case EMonPage::Chaos:
+            RenderChaos(str, data);
             break;
         case EMonPage::LocalDb:
             if (data.LocalDb) {
@@ -1665,6 +1618,9 @@ TString RenderMonPage(const TMonPageData& data)
             break;
         case EMonPage::Latency:
             RenderLatency(str, data);
+            break;
+        case EMonPage::Memory:
+            RenderMemory(str, data);
             break;
     }
     return str.Str();

@@ -293,8 +293,7 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
     };
 
     std::vector<std::pair<TSmoothMovementRedirectionHint, TTabletInfoPtr>> smoothMovementRedirectionHints;
-    TReshardRedirectionHintPtr reshardRedirectionHint;
-    TTabletInfoPtr reshardTabletInfo;
+    std::vector<std::pair<TReshardRedirectionHintPtr, TTabletInfoPtr>> reshardRedirectionHints;
     bool retryInplace = false;
 
     auto onError = [&] (const TError& error, auto&& self) {
@@ -323,8 +322,7 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
             }
 
             if (error.GetCode() == NTabletClient::EErrorCode::TabletResharded) {
-                reshardTabletInfo = tabletInfo;
-                reshardRedirectionHint = redirectionHint->ReshardRedirectionHint;
+                reshardRedirectionHints.emplace_back(redirectionHint->ReshardRedirectionHint, tabletInfo);
             } else {
                 smoothMovementRedirectionHints.emplace_back(redirectionHint->SmoothMovementRedirectionHint, tabletInfo);
             }
@@ -339,11 +337,11 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
 
     if (retryInplace) {
         YT_TLOG_ALERT_UNLESS(
-            smoothMovementRedirectionHints.empty() && !reshardRedirectionHint,
+            smoothMovementRedirectionHints.empty() && reshardRedirectionHints.empty(),
             "In-place retry is combined with tablet redirection hints within a single request; "
             "redirection hints are ignored in favor of in-place retry")
             .With("HasSmoothMovementRedirectionHints", !smoothMovementRedirectionHints.empty())
-            .With("HasReshardRedirectionHint", static_cast<bool>(reshardRedirectionHint))
+            .With("HasReshardRedirectionHints", !reshardRedirectionHints.empty())
             .With(error);
 
         return {{
@@ -351,15 +349,26 @@ auto TTableMountCacheBase::TryHandleRedirectionError(const TError& error)
             .ErrorCode = NTabletClient::EErrorCode::ReadOnlySmoothMovementStage,
             .TableInfoUpdatedFromError = true,
         }};
-    } else if (reshardRedirectionHint) {
-        // TODO(ifsmirnov, atalmenev): process multiple reshard redirection hints
-        // at once similar to smooth movement hints.
-        return TryHandleTabletReshardedError(reshardRedirectionHint, reshardTabletInfo);
-    } else if (!smoothMovementRedirectionHints.empty()) {
-        return TryHandleServantNotActiveError(std::move(smoothMovementRedirectionHints));
     }
 
-    return {};
+    std::optional<TInvalidationResult> result;
+    for (const auto& [reshardRedirectionHint, tabletInfo] : reshardRedirectionHints) {
+        auto reshardResult = TryHandleTabletReshardedError(reshardRedirectionHint, tabletInfo);
+        if (!reshardResult) {
+            return {};
+        }
+        result = std::move(reshardResult);
+    }
+
+    if (!smoothMovementRedirectionHints.empty()) {
+        auto smoothMovementResult = TryHandleServantNotActiveError(std::move(smoothMovementRedirectionHints));
+        if (!smoothMovementResult) {
+            return {};
+        }
+        result = std::move(smoothMovementResult);
+    }
+
+    return result;
 }
 
 auto TTableMountCacheBase::TryHandleServantNotActiveError(

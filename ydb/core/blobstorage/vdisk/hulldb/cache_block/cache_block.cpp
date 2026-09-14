@@ -61,6 +61,19 @@ namespace NKikimr {
         }
     }
 
+    std::tuple<ui32, ui64> TBlocksCache::FindMax(ui64 tabletId) const {
+        Y_ABORT_UNLESS(Initialized);
+
+        if (const auto it = InFlightBlocks.find(tabletId); it != InFlightBlocks.end()) {
+            Y_DEBUG_ABORT_UNLESS(!PersistentBlocks.contains(tabletId) ||
+                PersistentBlocks.at(tabletId).Generation < it->second.MaxBlockedGen.Generation);
+            return {it->second.MaxBlockedGen.Generation, it->second.LsnForMaxBlockedGen};
+        } else if (const auto it = PersistentBlocks.find(tabletId); it != PersistentBlocks.end()) {
+            return {it->second.Generation, 0};
+        } else {
+            return {};
+        }
+    }
 
     void TBlocksCache::Build(const THullDs *hullDs) {
         Y_ABORT_UNLESS(!Initialized);
@@ -159,4 +172,3 @@ namespace NKikimr {
     }
 
 } // NKikimr
-

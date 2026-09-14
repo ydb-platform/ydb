@@ -5,7 +5,7 @@ import struct
 import sys
 from collections.abc import Callable, Generator, MutableSequence, Sequence
 from io import IOBase
-from typing import Any
+from typing import Any, Literal
 
 from clickhouse_connect.driver.exceptions import DataError, ProgrammingError, StreamClosedError
 from clickhouse_connect.driver.types import Closable
@@ -26,6 +26,8 @@ array_sizes = {v: k for k, v in array_map.items()}
 array_sizes["f"] = 4
 array_sizes["d"] = 8
 np_date_types = {0: "[s]", 3: "[ms]", 6: "[us]", 9: "[ns]"}
+
+ShowClickHouseErrors = bool | Literal["scrub"]
 
 
 def array_type(size: int, signed: bool):
@@ -178,6 +180,30 @@ def coerce_bool(val: str | bool | None) -> bool:
     if not val:
         return False
     return val is True or (isinstance(val, str) and val.lower() in ("true", "1", "y", "yes"))
+
+
+def coerce_show_clickhouse_errors(val: ShowClickHouseErrors | str | None) -> ShowClickHouseErrors:
+    """
+    Normalize show_clickhouse_errors to True, False, or the string "scrub".
+
+    "scrub" keeps the SQL error text and symbolic name but strips the server
+    URL and the trailing "(version ...)" trailer from exception messages.
+    Boolean strings keep their historical behavior. Unknown strings are rejected.
+    """
+    if val is None:
+        return False
+    if isinstance(val, bool):
+        return val
+    if isinstance(val, str):
+        normalized = val.strip().lower()
+        if normalized == "scrub":
+            return "scrub"
+        if normalized in ("true", "1", "y", "yes"):
+            return True
+        if normalized in ("false", "0", "n", "no", ""):
+            return False
+        raise ProgrammingError(f'show_clickhouse_errors must be true, false, or "scrub", got "{val}"')
+    raise ProgrammingError(f'show_clickhouse_errors must be true, false, or "scrub", got {val!r}')
 
 
 def version_at_least(server_version: str | None, required_version: str) -> bool:

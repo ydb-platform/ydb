@@ -711,6 +711,15 @@ Y_UNIT_TEST(CreateTopicSimple) {
     TestQuery(R"(
                 CREATE TOPIC topic1 WITH (metrics_level = 3);
             )");
+    TestQuery(R"(
+                CREATE TOPIC topic1 WITH (metrics_level = "TOPIC");
+            )");
+    TestQuery(R"(
+                CREATE TOPIC topic1 WITH (metrics_level = "PARTITION");
+            )");
+    TestQuery(R"(
+                CREATE TOPIC topic1 WITH (metrics_level = "database");
+            )");
 }
 
 Y_UNIT_TEST(CreateTopicConsumer) {
@@ -766,6 +775,15 @@ Y_UNIT_TEST(AlterTopicSimple) {
                 ALTER TOPIC topic1 SET (metrics_level = 2);
             )");
     TestQuery(R"(
+                ALTER TOPIC topic1 SET (metrics_level = "TOPIC");
+            )");
+    TestQuery(R"(
+                ALTER TOPIC topic1 SET (metrics_level = "PARTITION");
+            )");
+    TestQuery(R"(
+                ALTER TOPIC topic1 SET (metrics_level = "database");
+            )");
+    TestQuery(R"(
                 ALTER TOPIC topic1 RESET (supported_codecs, retention_period);
             )");
     TestQuery(R"(
@@ -776,6 +794,19 @@ Y_UNIT_TEST(AlterTopicSimple) {
                      SET (partition_write_burst_bytes = 11111, min_active_partitions = 1);
             )");
 }
+
+Y_UNIT_TEST(TopicMetricsLevelStringParseCorrect) {
+    NYql::TAstParseResult res = SqlToYql(R"(
+            use plato;
+            CREATE TOPIC topic1 WITH (metrics_level = "TOPIC");
+        )", 10, "kikimr");
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRING_CONTAINS(
+        GetPrettyPrint(res),
+        R"('('setMetricsLevel (String '"TOPIC")))");
+}
+
 Y_UNIT_TEST(AlterTopicConsumer) {
     TestQuery(R"(
                 ALTER TOPIC topic1 ADD CONSUMER consumer1,
@@ -818,9 +849,9 @@ Y_UNIT_TEST(TopicBadRequests) {
         )", /*expectOk=*/false,
               {"3:58: Error: Literal of Interval type is expected for retention"});
     TestQuery(R"(
-            CREATE TOPIC topic1 WITH (metrics_level = "1");
+            CREATE TOPIC topic1 WITH (metrics_level = true);
         )", /*expectOk=*/false,
-              {"3:55: Error: METRICS_LEVEL value should be an integer"});
+              {"3:55: Error: METRICS_LEVEL value should be an integer or a string"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons1 WITH (important = false));
         )", /*expectOk=*/false,
@@ -834,9 +865,17 @@ Y_UNIT_TEST(TopicBadRequests) {
         )", /*expectOk=*/false,
               {"3:86: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
     TestQuery(R"(
-            ALTER TOPIC topic1 SET (metrics_level = "1");
+            CREATE TOPIC topic1 WITH (metrics_level = "");
         )", /*expectOk=*/false,
-              {"3:53: Error: METRICS_LEVEL value should be an integer"});
+              {"3:55: Error: METRICS_LEVEL value should be an integer or a string"});
+    TestQuery(R"(
+            ALTER TOPIC topic1 SET (metrics_level = true);
+        )", /*expectOk=*/false,
+              {"3:53: Error: METRICS_LEVEL value should be an integer or a string"});
+    TestQuery(R"(
+            ALTER TOPIC topic1 SET (metrics_level = "");
+        )", /*expectOk=*/false,
+              {"3:53: Error: METRICS_LEVEL value should be an integer or a string"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER cons1, ALTER CONSUMER cons1 RESET (important);
         )", /*expectOk=*/false,
@@ -1347,6 +1386,34 @@ Y_UNIT_TEST(AtPoint) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 } // Y_UNIT_TEST_SUITE(Restore)
+
+Y_UNIT_TEST_SUITE(Analyze) {
+Y_UNIT_TEST(ValidSyntax) {
+    for (const TString sample : {"", " SAMPLE 0.05", " SAMPLE 5e-2", " SAMPLE 1", " SAMPLE 1.0", " SAMPLE (0.1 / 2)"}) {
+        for (const TString columns : {"", "(key)", "(key, value)"}) {
+            auto result = SqlToYql("ANALYZE plato.table1 " + columns + sample + ";");
+            UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+            UNIT_ASSERT_VALUES_EQUAL(result.Root->ToString().Contains("sampleRate"), !sample.empty());
+        }
+    }
+}
+
+Y_UNIT_TEST(ValidSyntaxWithParameter) {
+    for (const TString columns : {"", "(key)", "(key, value)"}) {
+        auto result = SqlToYql("$rate = 0.05; ANALYZE plato.table1 " + columns + " SAMPLE $rate;");
+        UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+        UNIT_ASSERT(result.Root->ToString().Contains("sampleRate"));
+    }
+}
+
+Y_UNIT_TEST(InvalidExpression) {
+    for (const TString rate : {"$rate", "key", "0.1 /", "0.1 0.2"}) {
+        auto result = SqlToYql("ANALYZE plato.table1 SAMPLE " + rate + ";");
+        UNIT_ASSERT_C(!result.IsOk(), rate);
+    }
+}
+
+} // Y_UNIT_TEST_SUITE(Analyze)
 
 Y_UNIT_TEST_SUITE(Transfer) {
 

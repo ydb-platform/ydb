@@ -26,11 +26,11 @@ public:
         {}
 
         void ExpectColumnError(ui64 columnId, TStatusCode statusCode, const TString& message) {
-            UNIT_ASSERT_C(ExpectedErrors.insert({columnId, {statusCode, message}}).second, "Can not add existing column error");
+            UNIT_ASSERT_C(ExpectedErrors.insert({columnId, {statusCode, message}}).second, "Cannot add existing column error");
         }
 
         void ExpectCommonError(TStatusCode statusCode, const TString& message) {
-            UNIT_ASSERT_C(!ExpectedCommonError, "Can not add existing common error");
+            UNIT_ASSERT_C(!ExpectedCommonError, "Cannot add existing common error");
             ExpectedCommonError = {statusCode, message};
         }
 

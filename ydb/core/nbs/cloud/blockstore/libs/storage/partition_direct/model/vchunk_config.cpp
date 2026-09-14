@@ -3,6 +3,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -36,34 +37,6 @@ TVChunkConfig::EHostHumanReadableState CalcHostHumanReadableState(
                        : TVChunkConfig::EHostHumanReadableState::Disabled;
     }
     return TVChunkConfig::EHostHumanReadableState::Demoted;
-}
-
-TString PrintHostHumanReadableState(
-    TVChunkConfig::EHostHumanReadableState state,
-    bool brief)
-{
-    TStringBuilder result;
-    switch (state) {
-        case TVChunkConfig::EHostHumanReadableState::Primary:
-            result << (brief ? "P" : "Primary");
-            break;
-        case TVChunkConfig::EHostHumanReadableState::Fresh:
-            result << (brief ? "F" : "Fresh");
-            break;
-        case TVChunkConfig::EHostHumanReadableState::HandOff:
-            result << (brief ? "H" : "HandOff");
-            break;
-        case TVChunkConfig::EHostHumanReadableState::Rotten:
-            result << (brief ? "R" : "Rotten");
-            break;
-        case TVChunkConfig::EHostHumanReadableState::Disabled:
-            result << (brief ? "-" : "Disabled");
-            break;
-        case TVChunkConfig::EHostHumanReadableState::Demoted:
-            result << (brief ? "_" : "Demoted");
-            break;
-    }
-    return result;
 }
 
 THostMask
@@ -407,11 +380,34 @@ TString TVChunkConfig::DebugPrint() const
             result << ",";
         }
         const auto state = GetHostHumanReadableState(i);
-        result << PrintHostHumanReadableState(state, false);
+        result << Print(state, false);
     }
     result << "}";
 
     return result;
+}
+
+TString Print(TVChunkConfig::EHostHumanReadableState state, bool brief)
+{
+    if (!brief) {
+        return ToString(state);
+    }
+
+    switch (state) {
+        case TVChunkConfig::EHostHumanReadableState::Primary:
+            return "P";
+        case TVChunkConfig::EHostHumanReadableState::Fresh:
+            return "F";
+        case TVChunkConfig::EHostHumanReadableState::HandOff:
+            return "H";
+        case TVChunkConfig::EHostHumanReadableState::Rotten:
+            return "R";
+        case TVChunkConfig::EHostHumanReadableState::Disabled:
+            return "-";
+        case TVChunkConfig::EHostHumanReadableState::Demoted:
+            return "_";
+    }
+    return "?";
 }
 
 ////////////////////////////////////////////////////////////////////////////////

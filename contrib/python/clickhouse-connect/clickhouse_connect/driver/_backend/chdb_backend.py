@@ -37,12 +37,15 @@ import chdb
 from clickhouse_connect.driver._backend.httpcommon import columns_only_re
 from clickhouse_connect.driver._backend.models import Capabilities, CommandExecution, QueryExecution, QueryRuntime
 from clickhouse_connect.driver.binding import quote_identifier
+from clickhouse_connect.driver.common import ShowClickHouseErrors
 from clickhouse_connect.driver.exceptions import (
+    GENERIC_CLICKHOUSE_ERROR,
     DatabaseError,
     NotSupportedError,
     ProgrammingError,
     StreamFailureError,
     error_name_from_body,
+    scrub_error_details,
 )
 
 if TYPE_CHECKING:
@@ -131,6 +134,15 @@ def _format_error_message(message: str) -> str:
     if idx > 0:
         return message[idx:].strip()
     return message.strip()
+
+
+def _format_stream_error(message: str, show_clickhouse_errors: ShowClickHouseErrors) -> str:
+    message = _format_error_message(message)
+    if show_clickhouse_errors is False:
+        return GENERIC_CLICKHOUSE_ERROR
+    if show_clickhouse_errors == "scrub":
+        return scrub_error_details(message)
+    return message
 
 
 def _strip_param_prefix(bind_params: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -292,12 +304,13 @@ class _ChdbStreamSource:
     block's bytes and surfaces mid-stream engine errors as StreamFailureError,
     matching the HTTP backend's mid-stream failure type."""
 
-    __slots__ = ("_sr", "_released", "_finalizer", "last_message", "exception_tag", "__weakref__")
+    __slots__ = ("_sr", "_released", "_finalizer", "_show_clickhouse_errors", "last_message", "exception_tag", "__weakref__")
 
-    def __init__(self, streaming_result: Any, handle: _EngineHandle):
+    def __init__(self, streaming_result: Any, handle: _EngineHandle, show_clickhouse_errors: ShowClickHouseErrors):
         self._sr = streaming_result
         self._released = [False]
         self._finalizer = weakref.finalize(self, _finalize_stream, streaming_result, handle, self._released)
+        self._show_clickhouse_errors = show_clickhouse_errors
         self.last_message: bytes | None = None
         self.exception_tag: str | None = None
 
@@ -311,7 +324,7 @@ class _ChdbStreamSource:
                     except StopIteration:
                         return
                     except Exception as ex:
-                        raise StreamFailureError(_format_error_message(str(ex))) from ex
+                        raise StreamFailureError(_format_stream_error(str(ex), self._show_clickhouse_errors)) from ex
                     payload = chunk.bytes() if hasattr(chunk, "bytes") else bytes(chunk)
                     if payload:
                         yield payload
@@ -328,13 +341,14 @@ class _ChdbStreamFile(io.RawIOBase):
     """io.IOBase adapter over a chdb StreamingResult for raw_stream callers.
     Holds the handle lock for its lifetime."""
 
-    def __init__(self, streaming_result: Any, handle: _EngineHandle):
+    def __init__(self, streaming_result: Any, handle: _EngineHandle, show_clickhouse_errors: ShowClickHouseErrors):
         super().__init__()
         self._sr = streaming_result
         self._buf = bytearray()
         self._eof = False
         self._released = [False]
         self._finalizer = weakref.finalize(self, _finalize_stream, streaming_result, handle, self._released)
+        self._show_clickhouse_errors = show_clickhouse_errors
 
     def readable(self) -> bool:
         return True
@@ -348,7 +362,7 @@ class _ChdbStreamFile(io.RawIOBase):
                 return b""
             except Exception as ex:
                 self._eof = True
-                raise StreamFailureError(_format_error_message(str(ex))) from ex
+                raise StreamFailureError(_format_stream_error(str(ex), self._show_clickhouse_errors)) from ex
             payload = chunk.bytes() if hasattr(chunk, "bytes") else bytes(chunk)
             if payload:
                 return payload
@@ -393,7 +407,7 @@ class ChdbBackend:
 
     def __init__(self, *, connection_string: str):
         self.connection_string = connection_string
-        self.show_clickhouse_errors = True
+        self.show_clickhouse_errors: ShowClickHouseErrors = True
         self._handle = _open_handle(connection_string)
         self._closed = False
         self._streams: weakref.WeakSet = weakref.WeakSet()
@@ -408,8 +422,11 @@ class ChdbBackend:
         code = int(code_match.group(1)) if code_match else None
         if not self.show_clickhouse_errors or not message:
             # The numeric code is always populated, matching the HTTP path
-            return DatabaseError("The ClickHouse server returned an error.", code=code)
-        return DatabaseError(message, code=code, name=error_name_from_body(message))
+            return DatabaseError(GENERIC_CLICKHOUSE_ERROR, code=code)
+        name = error_name_from_body(message)
+        if self.show_clickhouse_errors == "scrub":
+            message = scrub_error_details(message)
+        return DatabaseError(message, code=code, name=name)
 
     def _guard(self) -> None:
         if self._closed:
@@ -566,6 +583,7 @@ class ChdbBackend:
     # ---- contract methods ----------------------------------------------
 
     def execute_query(self, context: QueryContext, runtime: QueryRuntime, prepped_query: str | bytes) -> QueryExecution:
+        context.show_clickhouse_errors = self.show_clickhouse_errors
         self._reject_external_data(context.external_data)
         params = _strip_param_prefix(context.bind_params)
         settings = self._engine_settings(runtime.settings)
@@ -593,7 +611,7 @@ class ChdbBackend:
 
         if context.streaming:
             streaming = self._open_stream(final_query, "Native", params, runtime.database)
-            source = _ChdbStreamSource(streaming, self._handle)
+            source = _ChdbStreamSource(streaming, self._handle, self.show_clickhouse_errors)
             self._streams.add(source)
             return QueryExecution(source=source)
 
@@ -755,7 +773,7 @@ class ChdbBackend:
             # holds the handle lock. Both cases materialize in one call.
             return io.BytesIO(self.execute_raw_query(final_query, bind_params, external_data, runtime, transport_settings))
         streaming = self._open_stream(final_query, fmt, params, runtime.database)
-        stream = _ChdbStreamFile(streaming, self._handle)
+        stream = _ChdbStreamFile(streaming, self._handle, self.show_clickhouse_errors)
         self._streams.add(stream)
         return stream
 

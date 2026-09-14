@@ -1,5 +1,7 @@
 #include "WAVM/Runtime/Intrinsics.h"
+#include <ctime>
 #include <initializer_list>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -12,8 +14,12 @@
 #include "WAVM/Inline/Errors.h"
 #include "WAVM/Inline/Hash.h"
 #include "WAVM/Inline/HashMap.h"
+#include "WAVM/Inline/I128.h"
 #include "WAVM/Inline/Serialization.h"
+#include "WAVM/Inline/Time.h"
 #include "WAVM/Inline/Timing.h"
+#include "WAVM/Platform/Clock.h"
+#include "WAVM/Platform/Defines.h"
 #include "WAVM/Platform/RWMutex.h"
 #include "WAVM/Runtime/Runtime.h"
 
@@ -258,11 +264,18 @@ HashMap<std::string, Intrinsics::Function*> Intrinsics::getUninstantiatedFunctio
 
 namespace WAVM { namespace Runtime {
 
-#ifdef __APPLE__
-static constexpr auto WAVM_CLOCK_TYPE = _CLOCK_MONOTONIC_RAW;
-#else
-static constexpr auto WAVM_CLOCK_TYPE = CLOCK_MONOTONIC_COARSE;
-#endif
+static timespec wavmTimeToTimespec(Time t)
+{
+	timespec result;
+	result.tv_sec = time_t(U64(t.ns / 1000000000));
+	result.tv_nsec = long(U64(t.ns % 1000000000));
+	return result;
+}
+
+static Time timespecToWavmTime(timespec t)
+{
+	return Time{I128(U64(t.tv_sec)) * 1000000000 + U64(t.tv_nsec)};
+}
 
 class Deadline {
 public:
@@ -270,15 +283,9 @@ public:
 		if (!deadline.has_value()) {
 			return false;
 		}
-	
-		struct timespec current = {};
-		if (clock_gettime(WAVM_CLOCK_TYPE, &current) != 0) {
-			// The simplest thing to do here is to assume that the deadline just hasn't arrived.
-			return false;
-		}
-	
-		return current.tv_sec > deadline->tv_sec ||
-			(current.tv_sec == deadline->tv_sec && current.tv_nsec >= deadline->tv_nsec);
+
+		const Time current = Platform::getClockTime(Platform::Clock::monotonic);
+		return current.ns >= timespecToWavmTime(*deadline).ns;
 	}
 	
 	void setDeadline(std::optional<struct timespec> newDeadline) {
@@ -291,21 +298,19 @@ private:
 
 static thread_local Deadline currentDeadline;
 
-__attribute__((__noinline__)) void setCurrentDeadline(std::optional<struct timespec> deadline)
+WAVM_FORCENOINLINE void setCurrentDeadline(std::optional<struct timespec> deadline)
 {
 	currentDeadline.setDeadline(deadline);
 }
 
-__attribute__((__noinline__)) bool isCurrentDeadlineReached()
+WAVM_FORCENOINLINE bool isCurrentDeadlineReached()
 {
 	return currentDeadline.isDeadlineReached();
 }
 
 struct timespec getInstant()
 {
-	struct timespec current = {};
-	WAVM_ASSERT(clock_gettime(WAVM_CLOCK_TYPE, &current) == 0);
-	return current;
+	return wavmTimeToTimespec(Platform::getClockTime(Platform::Clock::monotonic));
 }
 	
 }}

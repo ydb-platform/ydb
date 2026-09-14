@@ -13,7 +13,6 @@ SRCS(
     describe_partition.cpp
     describe_topic.cpp
     drop_topic.cpp
-    partitions_location.cpp
 )
 
 END()

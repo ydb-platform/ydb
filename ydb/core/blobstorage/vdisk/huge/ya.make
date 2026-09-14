@@ -16,6 +16,8 @@ SRCS(
     blobstorage_hullhugeheap.h
     blobstorage_hullhugerecovery.cpp
     blobstorage_hullhugerecovery.h
+    blobstorage_hullhugestripe.cpp
+    blobstorage_hullhugestripe.h
     booltt.h
     defs.h
 )

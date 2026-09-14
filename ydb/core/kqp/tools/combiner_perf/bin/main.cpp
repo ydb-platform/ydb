@@ -1,6 +1,8 @@
+#include <array>
 #include <filesystem>
 #include <ydb/core/kqp/tools/combiner_perf/dq_combine_vs.h>
 #include <ydb/core/kqp/tools/combiner_perf/fs_utils.h>
+#include <ydb/core/kqp/tools/combiner_perf/dq_block.h>
 #include <ydb/core/kqp/tools/combiner_perf/printout.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple.h>
 #include <ydb/core/kqp/tools/combiner_perf/simple_block.h>
@@ -16,6 +18,7 @@
 #include <util/stream/file.h>
 #include <util/stream/output.h>
 #include <util/string/cast.h>
+#include <util/string/join.h>
 #include <util/string/printf.h>
 #include <util/system/compiler.h>
 
@@ -48,17 +51,39 @@ class TPrintingResultCollector : public TTestResultCollector {
             Cout << ", " << (spilling.value() ? "+" : "-") << "spilling";
         }
         Cout << Endl;
+        const bool dqBlock = TStringBuf(testName).Contains("DqBlock");
         Cout << "Data rows total: " << runParams.RowsPerRun << " x " << runParams.NumRuns << Endl;
-        Cout << runParams.NumKeys << " distinct numeric keys" << Endl;
-        Cout << "Block size: " << runParams.BlockSize << Endl;
-        Cout << "Long strings: " << (runParams.LongStringKeys ? "yes" : "no") << Endl;
-        Cout << "Combiner mem limit: " << runParams.WideCombinerMemLimit << Endl;
-        Cout << "Hash map type: " << HashMapTypeName(runParams.ReferenceHashType) << Endl;
-        Cout << "Join overlap: " << runParams.JoinOverlap << Endl;
+        Cout << "Random seed: " << *runParams.RandomSeed << Endl;
+        if (dqBlock) {
+            if (runParams.DqBlockGenerator.empty()) {
+                Cout << "Input file: " << runParams.DqBlockFile << Endl;
+            } else {
+                Cout << "Input generator: " << runParams.DqBlockGenerator << Endl;
+                Cout << runParams.NumKeys << " distinct numeric keys" << Endl;
+            }
+            Cout << "Columns: " << JoinSeq(",", runParams.DqBlockColumns) << Endl;
+            if (runParams.DqBlockAstFile.empty()) {
+                Cout << "Keys: " << JoinSeq(",", runParams.DqBlockKeyColumns) << Endl;
+                Cout << "Aggregations: " << JoinSeq(",", runParams.DqBlockAggregations) << Endl;
+            } else {
+                Cout << "Aggregation AST: " << runParams.DqBlockAstFile << Endl;
+            }
+            Cout << "Block size: " << runParams.BlockSize << Endl;
+        } else {
+            Cout << runParams.NumKeys << " distinct numeric keys" << Endl;
+            Cout << "Block size: " << runParams.BlockSize << Endl;
+            Cout << "Long strings: " << (runParams.LongStringKeys ? "yes" : "no") << Endl;
+            Cout << "Combiner mem limit: " << runParams.WideCombinerMemLimit << Endl;
+            Cout << "Hash map type: " << HashMapTypeName(runParams.ReferenceHashType) << Endl;
+            Cout << "Join overlap: " << runParams.JoinOverlap << Endl;
+        }
         Cout << Endl;
 
-        Cout << "Graph runtime is: " << result.ResultTime
-             << " vs. reference C++ implementation: " << result.ReferenceTime << Endl;
+        Cout << "Graph runtime is: " << result.ResultTime;
+        if (!dqBlock) {
+            Cout << " vs. reference C++ implementation: " << result.ReferenceTime;
+        }
+        Cout << Endl;
 
         if (result.GeneratorTime) {
             Cout << "Input stream own iteration time: " << result.GeneratorTime << Endl;
@@ -94,23 +119,36 @@ NJson::TJsonValue MakeJsonMetrics(const TRunParams& runParams, const TRunResult&
     }
     out["rowsPerRun"] = runParams.RowsPerRun;
     out["numRuns"] = runParams.NumRuns;
-    if (TStringBuf(testName).Contains("Block")) {
+    out["randomSeed"] = *runParams.RandomSeed;
+    const bool dqBlock = TStringBuf(testName).Contains("DqBlock");
+    if (TStringBuf(testName).Contains("Block") || dqBlock) {
         out["blockSize"] = runParams.BlockSize;
     }
-    out["longStringKeys"] = runParams.LongStringKeys;
-    out["numKeys"] = runParams.NumKeys;
-    out["joinOverlap"] = runParams.JoinOverlap;
-    out["joinRightRows"] = runParams.JoinRightRows;
-    out["combinerMemLimit"] = runParams.WideCombinerMemLimit;
-    out["hashType"] = HashMapTypeName(runParams.ReferenceHashType);
+    if (dqBlock) {
+        out["dqBlockFile"] = runParams.DqBlockFile;
+        out["dqBlockGenerator"] = runParams.DqBlockGenerator;
+        if (!runParams.DqBlockGenerator.empty()) {
+            out["numKeys"] = runParams.NumKeys;
+        }
+        out["dqBlockColumns"] = JoinSeq(",", runParams.DqBlockColumns);
+        out["dqBlockKeys"] = JoinSeq(",", runParams.DqBlockKeyColumns);
+        out["dqBlockAggregations"] = JoinSeq(",", runParams.DqBlockAggregations);
+        out["dqBlockAstFile"] = runParams.DqBlockAstFile;
+    } else {
+        out["longStringKeys"] = runParams.LongStringKeys;
+        out["numKeys"] = runParams.NumKeys;
+        out["joinOverlap"] = runParams.JoinOverlap;
+        out["joinRightRows"] = runParams.JoinRightRows;
+        out["combinerMemLimit"] = runParams.WideCombinerMemLimit;
+        out["hashType"] = HashMapTypeName(runParams.ReferenceHashType);
+        out["dqTestColumns"] = runParams.CombineVsTestColumnSet;
+    }
 
     out["generatorTime"] = result.GeneratorTime.MilliSeconds();
     out["resultTime"] = result.ResultTime.MilliSeconds();
     out["refTime"] = result.ReferenceTime.MilliSeconds();
     out["maxRssDelta"] = result.MaxRSSDelta;
     out["referenceMaxRssDelta"] = result.ReferenceMaxRSSDelta;
-    out["dqTestColumns"] = runParams.CombineVsTestColumnSet;
-
     return out;
 }
 
@@ -201,6 +239,7 @@ enum class ETestType {
     SimpleLastCombiner,
     BlockCombiner,
     DqHashCombinerVs,
+    DqBlock,
     SimpleGraceJoin,
 };
 
@@ -247,6 +286,18 @@ void DoSelectedTest(TRunParams params, ETestType testType, bool llvm, bool spill
             } else {
                 NKikimr::NMiniKQL::RunTestDqHashCombineVsWideCombine<false, false>(params, printout);
             }
+        }
+    } else if (testType == ETestType::DqBlock) {
+        if (spilling) {
+            if (llvm) {
+                NKikimr::NMiniKQL::RunTestDqBlock<true, true>(params, printout);
+            } else {
+                NKikimr::NMiniKQL::RunTestDqBlock<false, true>(params, printout);
+            }
+        } else if (llvm) {
+            NKikimr::NMiniKQL::RunTestDqBlock<true, false>(params, printout);
+        } else {
+            NKikimr::NMiniKQL::RunTestDqBlock<false, false>(params, printout);
         }
     } else if (testType == ETestType::SimpleGraceJoin) {
         if (params.NumRuns != 1) {
@@ -296,7 +347,7 @@ int main(int argc, const char* argv[])
         .RequiredArgument()
         .StoreResult(&runParams.RowsPerRun)
         .DefaultValue(runParams.RowsPerRun)
-        .Help("Rows per single loop of the input stream");
+        .Help("Rows per single loop of the input stream; 0 reads all rows from a dq-block file");
     options.AddLongOption("run-count")
         .RequiredArgument()
         .StoreResult(&runParams.NumRuns)
@@ -357,7 +408,7 @@ int main(int argc, const char* argv[])
         .Help("Hash map type (std::unordered_map or absl::dense_hash_map)");
 
     options.AddLongOption('t', "test")
-        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "grace-join"})
+        .Choices({"combiner", "last-combiner", "block-combiner", "dq-hash-combiner", "dq-block", "grace-join"})
         .RequiredArgument("TEST_TYPE")
         .Handler1([&](const NLastGetopt::TOptsParser* option) {
             auto val = TStringBuf(option->CurVal());
@@ -369,6 +420,8 @@ int main(int argc, const char* argv[])
                 testType = ETestType::BlockCombiner;
             } else if (val == "dq-hash-combiner") {
                 testType = ETestType::DqHashCombinerVs;
+            } else if (val == "dq-block") {
+                testType = ETestType::DqBlock;
             } else if (val == "grace-join") {
                 testType = ETestType::SimpleGraceJoin;
             } else {
@@ -425,10 +478,82 @@ int main(int argc, const char* argv[])
         .StoreResult(&runParams.CombineVsTestColumnSet)
         .Help("Select the set of columns for the dq-hash-combiner test from a list of named configurations");
 
+    options.AddLongOption("dq-block-file")
+        .RequiredArgument("PATH")
+        .StoreResult(&runParams.DqBlockFile)
+        .Help("Input file for the dq-block test (currently Parquet)");
+    options.AddLongOption("dq-block-generator")
+        .RequiredArgument("shuffle")
+        .StoreResult(&runParams.DqBlockGenerator)
+        .Help("Generated dq-block input; shuffle produces a shuffled Uint32 column named i");
+    options.AddLongOption("dq-block-columns")
+        .RequiredArgument("NAME,...")
+        .SplitHandler(&runParams.DqBlockColumns, ',')
+        .Help("Input columns to preload, in input order");
+    options.AddLongOption("dq-block-keys")
+        .RequiredArgument("NAME,...")
+        .SplitHandler(&runParams.DqBlockKeyColumns, ',')
+        .Help("Key columns for the dq-block aggregation");
+    options.AddLongOption("dq-block-aggregations")
+        .RequiredArgument("AGG,...")
+        .SplitHandler(&runParams.DqBlockAggregations, ',')
+        .Help("Aggregations: sum:column_name or count");
+    options.AddLongOption("dq-block-ast")
+        .RequiredArgument("PATH")
+        .StoreResult(&runParams.DqBlockAstFile)
+        .Help("Textual input transform, aggregation lambdas, and output key width");
+
     NLastGetopt::TOptsParseResult parsedOptions(&options, argc, argv);
 
-    Y_ENSURE(runParams.NumKeys >= 1);
-    Y_ENSURE(runParams.NumKeys <= runParams.RowsPerRun);
+    const std::array<TString, 6> dqBlockOptions = {
+        "dq-block-file", "dq-block-generator", "dq-block-columns", "dq-block-keys",
+        "dq-block-aggregations", "dq-block-ast"};
+    if (testType != ETestType::DqBlock) {
+        for (const auto& option : dqBlockOptions) {
+            if (parsedOptions.Has(option)) {
+                ythrow yexception() << "--" << option << " is only valid with -t dq-block";
+            }
+        }
+    } else {
+        const bool hasFile = parsedOptions.Has("dq-block-file");
+        const bool hasGenerator = parsedOptions.Has("dq-block-generator");
+        Y_ENSURE(hasFile != hasGenerator,
+            "Specify exactly one of --dq-block-file and --dq-block-generator");
+        if (hasFile) {
+            Y_ENSURE(parsedOptions.Has("dq-block-columns"),
+                "--dq-block-columns is required with --dq-block-file");
+        } else {
+            Y_ENSURE(!runParams.DqBlockGenerator.empty(),
+                "--dq-block-generator cannot be empty");
+            Y_ENSURE(runParams.RowsPerRun > 0,
+                "A positive --rows-per-run is required with --dq-block-generator");
+            Y_ENSURE(runParams.NumKeys >= 1,
+                "A positive --num-keys is required with --dq-block-generator");
+            Y_ENSURE(runParams.NumKeys <= runParams.RowsPerRun,
+                "--num-keys cannot exceed --rows-per-run with --dq-block-generator");
+            if (parsedOptions.Has("dq-block-columns")) {
+                Y_ENSURE(runParams.DqBlockColumns == std::vector<std::string>{"i"},
+                    "The shuffle generator only provides column i");
+            } else {
+                runParams.DqBlockColumns = {"i"};
+            }
+        }
+        const bool hasAst = parsedOptions.Has("dq-block-ast");
+        const bool hasKeys = parsedOptions.Has("dq-block-keys");
+        const bool hasAggregations = parsedOptions.Has("dq-block-aggregations");
+        Y_ENSURE(hasAst || (hasKeys && hasAggregations),
+            "Specify either --dq-block-ast or both --dq-block-keys and --dq-block-aggregations");
+        Y_ENSURE(!hasAst || (!hasKeys && !hasAggregations),
+            "--dq-block-ast cannot be combined with --dq-block-keys or --dq-block-aggregations");
+        Y_ENSURE(runParams.TestMode == NKikimr::NMiniKQL::ETestMode::Full ||
+                runParams.TestMode == NKikimr::NMiniKQL::ETestMode::GraphOnly,
+            "The dq-block test only supports mode=all and mode=graph");
+    }
+
+    if (testType != ETestType::DqBlock) {
+        Y_ENSURE(runParams.NumKeys >= 1);
+        Y_ENSURE(runParams.NumKeys <= runParams.RowsPerRun);
+    }
     Y_ENSURE(runParams.NumRuns >= 1);
     Y_ENSURE(runParams.NumAttempts >= 1);
     Y_ENSURE(runParams.BlockSize >= 1);

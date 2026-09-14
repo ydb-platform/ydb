@@ -4,13 +4,12 @@
 
 #include "restore_request.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>
@@ -218,13 +217,21 @@ public:
     virtual NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) = 0;
 
-    // Result of the DBG's AddHost request. On success (empty error) applies the
-    // new host; on failure (e.g. rejected at MaxHostCount) logs the reason.
-    virtual void OnAddHostResult(
-        const NProto::TError& error,
+    virtual void OnAddHostSucceeded(
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
-        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId,
+        ui32 dbgConnectionsConfigGeneration) = 0;
+
+    virtual void OnAddHostFailed(const NProto::TError& error) = 0;
+
+    virtual void OnRemoveHostSucceeded(
+        THostIndex removeIndex,
+        ui32 dbgConnectionsConfigGeneration) = 0;
+
+    virtual void OnRemoveHostFailed(
+        THostIndex removeIndex,
+        const NProto::TError& error) = 0;
 
     // Reserves byteCount from the disk-wide range-copy bandwidth budget shared
     // by all DirectBlockGroups. Returns the delay before the operation may

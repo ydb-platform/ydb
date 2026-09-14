@@ -57,7 +57,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         return Finished_;
     }
 
-    int UserDataCols() const {
+    size_t UserDataCols() const {
         return Buff_.size() - 1;
     }
 
@@ -73,7 +73,18 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             }
             return Yield{};
         }
+
+        IBlockLayoutConverter::TPackResult result;
         const size_t cols = UserDataCols();
+        if (cols == 0) {
+            MKQL_ENSURE(Meta_->Kind == EJoinKind::Cross, "empty payload side is only allowed for Cross join");
+            const auto* layout = ArrowBlockToInternalConverter_->GetTupleLayout();
+            const ui64 n = GetBlockCount(Buff_[0]);
+            result.PackedTuples.resize(layout->TotalRowSize * n, 0);
+            result.NTuples = n;
+            return One{std::move(result)};
+        }
+
         TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
         if (!ColumnPermutation_.empty()) {
             TVector<arrow::Datum> permuted(cols);
@@ -83,7 +94,6 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             columns = std::move(permuted);
         }
         NormalizeScalarColumns(columns);
-        IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
         return One{std::move(result)};
     }
@@ -256,8 +266,8 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
             MKQL_ENSURE(width == expectedSize,
                         Sprintf("runtime(%i) vs compile-time(%i) tuple width mismatch", width, expectedSize));
             const auto flushSink = [&](auto flush) { WriteFlushToOutput(output, std::move(flush)); };
-            switch (RunPackedHashJoinBatch<MaxOutputRows_>(*Ctx_, Join_, Output_, flushSink,
-                                                           PairFilter_ ? &*PairFilter_ : nullptr)) {
+            switch (RunPackedHashJoinBatch(*Ctx_, Join_, Output_, flushSink,
+                                           PairFilter_ ? &*PairFilter_ : nullptr)) {
             case EFetchResult::One:
                 return NYql::NUdf::EFetchStatus::Ok;
             case EFetchResult::Yield:
@@ -277,7 +287,6 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Join> Output_;
         std::optional<TPackedTuplePairFilter> PairFilter_;
-        static constexpr i64 MaxOutputRows_ = 10000;
     };
 
     void RegisterDependencies() const final {
@@ -303,7 +312,6 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto joinStreamType = AS_TYPE(TStreamType, joinType);
     MKQL_ENSURE(joinStreamType->GetItemType()->IsMulti(), "Expected Multi as a resulting item type");
     const auto joinComponents = GetWideComponents(joinStreamType);
-    MKQL_ENSURE(joinComponents.size() > 0, "Expected at least one column");
     for (auto* blockType : joinComponents) {
         MKQL_ENSURE(blockType->IsBlock(), "Expected block types as wide components of result stream");
         meta.ResultItemTypes.push_back(AS_TYPE(TBlockType, blockType));
@@ -314,7 +322,6 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto leftStreamType = AS_TYPE(TStreamType, leftType);
     MKQL_ENSURE(leftStreamType->GetItemType()->IsMulti(), "Expected Multi as a left stream item type");
     const auto leftStreamComponents = GetWideComponents(leftStreamType);
-    MKQL_ENSURE(leftStreamComponents.size() > 0, "Expected at least one column");
     for (auto* blockType : leftStreamComponents) {
         MKQL_ENSURE(blockType->IsBlock(), "Expected block types as wide components of left stream");
         meta.InputTypes.Probe.push_back(AS_TYPE(TBlockType, blockType));
@@ -325,7 +332,6 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto rightStreamType = AS_TYPE(TStreamType, rightType);
     MKQL_ENSURE(rightStreamType->GetItemType()->IsMulti(), "Expected Multi as a right stream item type");
     const auto rightStreamComponents = GetWideComponents(rightStreamType);
-    MKQL_ENSURE(rightStreamComponents.size() > 0, "Expected at least one column");
     for (auto* blockType : rightStreamComponents) {
         MKQL_ENSURE(blockType->IsBlock(), "Expected block types as wide components of right stream");
         meta.InputTypes.Build.push_back(AS_TYPE(TBlockType, blockType));
@@ -334,6 +340,15 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto joinKind = parsed.Kind;
     meta.Kind = joinKind;
     meta.KeyColumns = parsed.KeyColumns;
+
+    MKQL_ENSURE(!joinComponents.empty(), "Expected at least block length column");
+    MKQL_ENSURE(!leftStreamComponents.empty(), "Expected at least block length column");
+    MKQL_ENSURE(!rightStreamComponents.empty(), "Expected at least block length column");
+    if (joinKind != EJoinKind::Cross) {
+        MKQL_ENSURE(joinComponents.size() > 1, "Expected at least one data column");
+        MKQL_ENSURE(leftStreamComponents.size() > 1, "Expected at least one data column");
+        MKQL_ENSURE(rightStreamComponents.size() > 1, "Expected at least one data column");
+    }
 
     const auto leftStream = LocateNode(ctx.NodeLocator, callable, 0);
     const auto rightStream = LocateNode(ctx.NodeLocator, callable, 1);

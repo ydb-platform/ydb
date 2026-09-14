@@ -939,6 +939,8 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
             .RuntimeLogLevel(state->Types->RuntimeLogLevel)
             .LangVer(state->Types->LangVer)
             .RuntimeSettings(state->Types->RuntimeSettings)
+            .BridgeMode(state->Types->BridgeMode)
+            .BridgeBinaryPath(state->Types->UdfBridgeBinaryPath)
         );
     return WrapFutureCallback(future, [state, calcNodes](const IYtGateway::TCalcResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         YQL_ENSURE(res.Data.size() == calcNodes.size());

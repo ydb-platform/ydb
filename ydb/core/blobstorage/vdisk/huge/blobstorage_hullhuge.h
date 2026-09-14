@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
@@ -87,6 +88,7 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
         const bool RewriteBlob;
+        const bool IsStripe;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,
@@ -100,7 +102,8 @@ namespace NKikimr {
                            std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
                            NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
                            TWriteSource writeSource,
-                           bool rewriteBlob = false)
+                           bool rewriteBlob = false,
+                           bool isStripe = false)
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)
             , Ingress(ingress)
@@ -113,6 +116,7 @@ namespace NKikimr {
             , WriteSource(writeSource)
             , Result(std::move(result))
             , RewriteBlob(rewriteBlob)
+            , IsStripe(isStripe)
         {
             if (extraBlockChecks) {
                 ExtraBlockChecks.Swap(extraBlockChecks);
@@ -241,9 +245,14 @@ namespace NKikimr {
 
     struct TEvHugeAllocateSlotsResult : TEventLocal<TEvHugeAllocateSlotsResult, TEvBlobStorage::EvHugeAllocateSlotsResult> {
         std::vector<TDiskPart> Locations;
+        // Heap ownership at allocation time. Do not re-read the feature flag to classify these:
+        // EnableVDiskHeapAllocator is RequireRestart, but tests (and a missed restart) can still
+        // disagree with the heap that actually produced the location.
+        std::vector<bool> IsStripe;
 
-        TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations)
+        TEvHugeAllocateSlotsResult(std::vector<TDiskPart> locations, std::vector<bool> isStripe)
             : Locations(std::move(locations))
+            , IsStripe(std::move(isStripe))
         {}
     };
 
@@ -265,6 +274,12 @@ namespace NKikimr {
         TEvHugeForbiddenChunks(THashSet<TChunkIdx> forbiddenChunks) : ForbiddenChunks(std::move(forbiddenChunks)) {}
     };
 
+    // an immutable snapshot of chunks currently owned by the stripe heap; the requester keeps it for the whole scan
+    struct TEvHugeStripeChunks : TEventLocal<TEvHugeStripeChunks, TEvBlobStorage::EvHugeStripeChunks> {
+        THashSet<TChunkIdx> StripeChunks;
+        TEvHugeStripeChunks(THashSet<TChunkIdx> stripeChunks) : StripeChunks(std::move(stripeChunks)) {}
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // THugeKeeperCtx
     ////////////////////////////////////////////////////////////////////////////
@@ -281,6 +296,7 @@ namespace NKikimr {
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TDskOutOfSpaceGroup DskOutOfSpaceGroup;
         const bool IsReadOnlyVDisk;
+        THugeBlobCtxPtr HugeBlobCtx;
 
         THugeKeeperCtx(
                 TIntrusivePtr<TVDiskContext> vctx,

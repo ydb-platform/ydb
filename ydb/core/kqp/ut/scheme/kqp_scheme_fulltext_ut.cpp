@@ -40,6 +40,28 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
         UNIT_ASSERT(analyzers.UseFilterSnowball.value_or(false));
     }
 
+    Y_UNIT_TEST(SuperLemmerAnalyzerRoundTrip) {
+        TFulltextIndexSettings settings;
+        TFulltextIndexSettings::TColumnAnalyzers column;
+        column.Column = "Text";
+        column.Analyzers = TFulltextIndexSettings::TAnalyzers::SuperLemmer("russian");
+        settings.Columns.push_back(column);
+
+        Ydb::Table::FulltextIndexSettings proto;
+        settings.SerializeTo(proto);
+        UNIT_ASSERT(proto.columns(0).analyzers().use_filter_superlemmer());
+
+        auto restored = TFulltextIndexSettings::FromProto(proto);
+        UNIT_ASSERT_VALUES_EQUAL(restored.Columns.size(), 1);
+        UNIT_ASSERT(restored.Columns[0].Analyzers.has_value());
+        const auto& analyzers = *restored.Columns[0].Analyzers;
+        UNIT_ASSERT_VALUES_EQUAL(analyzers.Language.value_or(""), "russian");
+        UNIT_ASSERT(analyzers.UseFilterLowercase.value_or(false));
+        UNIT_ASSERT(analyzers.UseFilterStopwords.value_or(false));
+        UNIT_ASSERT(analyzers.UseFilterSuperLemmer.value_or(false));
+        UNIT_ASSERT_STRING_CONTAINS(ToString(restored), "use_filter_superlemmer: true");
+    }
+
     Y_UNIT_TEST_TWIN(CreateTableWithIndex, UseQueryClient) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableFulltextIndex(true);

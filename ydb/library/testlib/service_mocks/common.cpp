@@ -28,4 +28,8 @@ TString CaptureUserAgent(grpc::ServerContext* ctx) {
     return CaptureMetadata(ctx, "user-agent");
 }
 
+TString CaptureRequestId(grpc::ServerContext* ctx) {
+    return CaptureMetadata(ctx, "x-request-id");
+}
+
 }  // namespace NTestUtils

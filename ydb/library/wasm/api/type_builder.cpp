@@ -19,12 +19,19 @@ namespace NYdb::NWasm {
     XX(unsigned int, EWebAssemblyValueType::Int32)
     XX(unsigned char, EWebAssemblyValueType::Int32)
 
+    // LLP64 (Windows): long is 32-bit; LP64 (Linux/macOS): long is 64-bit.
+#if defined(_win_)
+    XX(long, EWebAssemblyValueType::Int32)
+    XX(unsigned long, EWebAssemblyValueType::Int32)
+    XX(long long, EWebAssemblyValueType::Int64)
+    XX(unsigned long long, EWebAssemblyValueType::Int64)
+#else
     XX(long, EWebAssemblyValueType::Int64)
     XX(unsigned long, EWebAssemblyValueType::Int64)
-
-#   if defined (__APPLE__)
+#   if defined(__APPLE__)
         XX(unsigned long long, EWebAssemblyValueType::Int64)
 #   endif
+#endif
 
     XX(float, EWebAssemblyValueType::Float32)
     XX(double, EWebAssemblyValueType::Float64)
@@ -37,6 +44,10 @@ namespace NYdb::NWasm {
     XX(const uint8_t**, EWebAssemblyValueType::UintPtr)
     XX(int*, EWebAssemblyValueType::UintPtr)
     XX(unsigned long*, EWebAssemblyValueType::UintPtr)
+#if defined(_win_)
+    XX(long long*, EWebAssemblyValueType::UintPtr)
+    XX(unsigned long long*, EWebAssemblyValueType::UintPtr)
+#endif
     XX(void*, EWebAssemblyValueType::UintPtr)
     XX(void**, EWebAssemblyValueType::UintPtr)
     XX(void* const*, EWebAssemblyValueType::UintPtr)
@@ -48,6 +59,9 @@ namespace NYdb::NWasm {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Y_WEAK is a no-op on Windows (COFF); omitting the stub avoids duplicate
+// symbols with the strong override in library/wasm/engine.
+#if defined(__GNUC__)
 Y_WEAK TWebAssemblyRuntimeType GetTypeId(
     bool /*intrinsic*/,
     EWebAssemblyValueType /*returnType*/,
@@ -55,6 +69,7 @@ Y_WEAK TWebAssemblyRuntimeType GetTypeId(
 {
     YT_UNIMPLEMENTED();
 }
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 

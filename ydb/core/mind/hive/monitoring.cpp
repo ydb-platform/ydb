@@ -640,6 +640,7 @@ public:
         out << "<th>Read</th>";
         out << "<th>Write</th>";
         out << "<th>Usage impact</th>";
+        out << "<th>Isolation</th>";
         out << "</tr>";
         out << "</thead>";
 
@@ -652,7 +653,8 @@ public:
             out << "<tr>";
             out << "<td data-text='" << index << "'><a href='../tablets?TabletID=" << id << "'>" << id << "</a></td>";
             out << GetResourceValuesHtml(tablet.GetResourceValues());
-            out << "<td>" << tablet.UsageImpact << "</td>";
+            out << "<td>" << tablet.GetUsageImpact() << "</td>";
+            out << "<td>" << (tablet.IsPinnedToNode() ? "pinned" : (tablet.IsHighImpact() ? "high-impact" : "")) << "</td>";
             out << "</tr>";
         }
         out <<"</tbody>";
@@ -1120,7 +1122,7 @@ public:
             NKikimrConfig::THiveConfig defaultConfig;
             bool localOverrided = reflection->HasField(Self->DatabaseConfig, field);
 
-            TString descriptionIcon = BuildDescriptionIcon(field);
+            const TString descriptionIcon = BuildDescriptionIcon(field);
             out << "<div class='row'>";
             if (localOverrided) {
                 out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'><label for='" << param << "'>" << param << "</label>" << descriptionIcon << ":</div>";
@@ -1230,16 +1232,18 @@ public:
         auto clusterDefault = makeListString(Self->ClusterConfig);
         auto currentValue = makeListString(Self->CurrentConfig);
 
-        bool localOverrided = (currentValue != clusterDefault);
+        bool localOverridden = (currentValue != clusterDefault);
+        const auto* field = Self->DatabaseConfig.GetDescriptor()->FindFieldByName(param);
+        const TString descriptionIcon = field ? BuildDescriptionIcon(field) : TString();
 
         out << "<div class='row'>";
         {
             // mark if value is changed locally
             out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'>"
                 << "<label for='" << param << "'"
-                << (localOverrided ? "" : "' style='font-weight:normal'")
+                << (localOverridden ? "" : "' style='font-weight:normal'")
                 << ">" << param << ":</label>"
-                << "</div>";
+                 << descriptionIcon << ":</div>";
             // editable current value
             out << "<div class='col-sm-2' style='padding-top:5px'>"
                 << "<input id='" << param << "' style='max-width:170px;margin-top:7px' onkeydown='edit(this);' onchange='edit(this);'"
@@ -1248,7 +1252,7 @@ public:
             // apply button
             out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='applyVal(this, \"" << param << "\");' disabled='true'>Apply</button></div>";
             // reset button
-            out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='resetVal(this, \"" << param << "\");' " << (localOverrided ? "" : "disabled='true'") << ">Reset</button></div>";
+            out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='resetVal(this, \"" << param << "\");' " << (localOverridden ? "" : "disabled='true'") << ">Reset</button></div>";
             // show cluster default
             out << "<div id='CMS" << param << "' class='col-sm-2' style='padding-top:12px'>"
                 << clusterDefault
@@ -2814,7 +2818,19 @@ public:
                     jsonNode["Types"] = types;
                 }
                 double nodeUsage = node.GetNodeUsage();
-                jsonNode["Usage"] = GetConditionalRedString(Sprintf("%.3f", nodeUsage), nodeUsage >= 1);
+                TStringBuilder usage;
+                usage << GetConditionalRedString(Sprintf("%.3f", nodeUsage), nodeUsage >= 1);
+                double maxTabletImpact = node.GetMaxTabletImpact();
+                if (maxTabletImpact > 0) {
+                    TStringBuilder title;
+                    title << "Max tablet impact: " << Sprintf("%.3f", maxTabletImpact);
+                    const TTabletInfo* pinned = node.GetPinnedTablet();
+                    if (pinned != nullptr) {
+                        title << ", " << pinned->ToString() << " is pinned here";
+                    }
+                    usage << " <span class='glyphicon glyphicon-pushpin' title='" << title << "'></span>";
+                }
+                jsonNode["Usage"] = usage;
                 jsonNode["ResourceValues"] = GetResourceValuesJson(node.ResourceValues, node.ResourceMaximumValues);
                 jsonNode["StDevResourceValues"] = GetResourceValuesText(node.GetStDevResourceValues());
             }
@@ -4210,7 +4226,9 @@ public:
         result["ResourceMetricsAggregates"] = MakeFrom(tablet.ResourceMetricsAggregates);
         result["ActorsToNotify"] = MakeFrom(tablet.ActorsToNotify);
         result["ActorsToNotifyOnRestart"] = MakeFrom(tablet.ActorsToNotifyOnRestart);
-        result["UsageImpact"] = tablet.UsageImpact;
+        result["UsageImpact"] = tablet.GetUsageImpact();
+        result["HighImpact"] = tablet.IsHighImpact();
+        result["PinnedToNode"] = tablet.IsPinnedToNode();
         return result;
     }
 

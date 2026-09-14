@@ -38,11 +38,11 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [38:42]
+        README.md [44:48]
 
 KEEP     MIT                  6bb6514a1d779748b76a73215a89ae66
 BELONGS ya.make
-FILE_INCLUDE AUTHORS found in files: expat.h at line 39, expat_external.h at line 35, lib/ascii.h at line 30, lib/asciitab.h at line 29, lib/fallthrough.h at line 26, lib/iasciitab.h at line 29, lib/internal.h at line 52, lib/latin1tab.h at line 29, lib/memory_sanitizer.h at line 26, lib/random_arc4random.c at line 27, lib/random_arc4random.h at line 26, lib/random_arc4random_buf.c at line 27, lib/random_arc4random_buf.h at line 26, lib/random_dev_urandom.c at line 27, lib/random_dev_urandom.h at line 26, lib/random_getentropy.c at line 27, lib/random_getentropy.h at line 26, lib/random_getrandom.c at line 29, lib/random_getrandom.h at line 26, lib/random_rand_s.c at line 30, lib/random_rand_s.h at line 27, lib/utf8tab.h at line 29, lib/winconfig.h at line 30, lib/xcsinc.c at line 26, lib/xmlparse.c at line 69, lib/xmlrole.c at line 36, lib/xmlrole.h at line 30, lib/xmltok.c at line 45, lib/xmltok.h at line 31, lib/xmltok_impl.c at line 37, lib/xmltok_impl.h at line 28, lib/xmltok_ns.c at line 32
+FILE_INCLUDE AUTHORS found in files: expat.h at line 39, expat_external.h at line 35, lib/ascii.h at line 30, lib/asciitab.h at line 29, lib/fallthrough.h at line 26, lib/iasciitab.h at line 29, lib/internal.h at line 52, lib/latin1tab.h at line 29, lib/memory_sanitizer.h at line 26, lib/nametab.h at line 27, lib/random_arc4random.c at line 27, lib/random_arc4random.h at line 26, lib/random_arc4random_buf.c at line 27, lib/random_arc4random_buf.h at line 26, lib/random_dev_urandom.c at line 27, lib/random_dev_urandom.h at line 26, lib/random_getentropy.c at line 27, lib/random_getentropy.h at line 26, lib/random_getrandom.c at line 29, lib/random_getrandom.h at line 26, lib/random_rand_s.c at line 30, lib/random_rand_s.h at line 27, lib/utf8tab.h at line 29, lib/winconfig.h at line 30, lib/xcsinc.c at line 26, lib/xmlparse.c at line 70, lib/xmlrole.c at line 36, lib/xmlrole.h at line 30, lib/xmltok.c at line 46, lib/xmltok.h at line 31, lib/xmltok_impl.c at line 37, lib/xmltok_impl.h at line 28, lib/xmltok_ns.c at line 32
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: MIT
@@ -59,6 +59,7 @@ FILE_INCLUDE AUTHORS found in files: expat.h at line 39, expat_external.h at lin
         lib/internal.h [38:55]
         lib/latin1tab.h [15:32]
         lib/memory_sanitizer.h [12:29]
+        lib/nametab.h [13:30]
         lib/random_arc4random.c [13:30]
         lib/random_arc4random.h [12:29]
         lib/random_arc4random_buf.c [13:30]
@@ -74,14 +75,58 @@ FILE_INCLUDE AUTHORS found in files: expat.h at line 39, expat_external.h at lin
         lib/utf8tab.h [15:32]
         lib/winconfig.h [16:33]
         lib/xcsinc.c [12:29]
-        lib/xmlparse.c [55:72]
+        lib/xmlparse.c [56:73]
         lib/xmlrole.c [22:39]
         lib/xmlrole.h [16:33]
-        lib/xmltok.c [31:48]
+        lib/xmltok.c [32:49]
         lib/xmltok.h [17:34]
         lib/xmltok_impl.c [23:40]
         lib/xmltok_impl.h [14:31]
         lib/xmltok_ns.c [18:35]
+
+KEEP     MIT                  9b6ad526a893a8de72852d7f2484f182
+BELONGS ya.make
+    License text:
+           SPDX-License-Identifier: MIT
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        expat.h [44:44]
+        expat_external.h [40:40]
+        lib/ascii.h [35:35]
+        lib/asciitab.h [34:34]
+        lib/fallthrough.h [31:31]
+        lib/iasciitab.h [34:34]
+        lib/internal.h [57:57]
+        lib/latin1tab.h [34:34]
+        lib/memory_sanitizer.h [31:31]
+        lib/nametab.h [32:32]
+        lib/random_arc4random.c [32:32]
+        lib/random_arc4random.h [31:31]
+        lib/random_arc4random_buf.c [32:32]
+        lib/random_arc4random_buf.h [31:31]
+        lib/random_dev_urandom.c [32:32]
+        lib/random_dev_urandom.h [31:31]
+        lib/random_getentropy.c [32:32]
+        lib/random_getentropy.h [31:31]
+        lib/random_getrandom.c [34:34]
+        lib/random_getrandom.h [31:31]
+        lib/random_rand_s.c [35:35]
+        lib/random_rand_s.h [32:32]
+        lib/utf8tab.h [34:34]
+        lib/winconfig.h [35:35]
+        lib/xcsinc.c [31:31]
+        lib/xmlparse.c [75:75]
+        lib/xmlrole.c [41:41]
+        lib/xmlrole.h [35:35]
+        lib/xmltok.c [51:51]
+        lib/xmltok.h [36:36]
+        lib/xmltok_impl.c [42:42]
+        lib/xmltok_impl.h [33:33]
+        lib/xmltok_ns.c [37:37]
 
 KEEP     MIT                  a2b4ae3e37f6457dd8fb360505e869d5
 BELONGS ya.make
@@ -94,6 +139,18 @@ FILE_INCLUDE AUTHORS found in files: COPYING at line 18
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
         COPYING [4:21]
+
+KEEP     CC0-1.0              ba2bf282c90b8c5764132355f9e96f1b
+BELONGS ya.make
+    License text:
+         * SPDX-License-Identifier: CC0-1.0
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        lib/siphash.h [12:12]
 
 KEEP     MIT                  c7d85f43c58fb4164a4d07690b05a3a5
 BELONGS ya.make
@@ -130,26 +187,14 @@ BELONGS ya.make
         lib/utf8tab.h [13:13]
         lib/winconfig.h [14:14]
         lib/xcsinc.c [10:10]
-        lib/xmlparse.c [53:53]
+        lib/xmlparse.c [54:54]
         lib/xmlrole.c [20:20]
         lib/xmlrole.h [14:14]
-        lib/xmltok.c [29:29]
+        lib/xmltok.c [30:30]
         lib/xmltok.h [15:15]
         lib/xmltok_impl.c [21:21]
         lib/xmltok_impl.h [12:12]
         lib/xmltok_ns.c [16:16]
-
-KEEP     JSON                 dc190a385e90ab0e2d50fefbba4d687a
-BELONGS ya.make
-FILE_INCLUDE AUTHORS found in files: lib/nametab.h at line 27
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: JSON
-        Score           : 92.57
-        Match type      : TEXT
-        Links           : http://www.json.org/license.html, https://spdx.org/licenses/JSON
-    Files with this license:
-        lib/nametab.h [11:30]
 
 KEEP     CC0-1.0              f3b41ed259517cf1f52f5a6689b0b354
 BELONGS ya.make

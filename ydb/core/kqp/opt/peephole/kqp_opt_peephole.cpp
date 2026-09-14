@@ -318,7 +318,7 @@ struct TValidateStreamingConstraintsInfo {
             if (CheckpointCallables.contains(name)) {
                 HasErrors = true;
                 YQL_CLOG(WARN, ProviderKqp) << "Found checkpointed callable in non streaming context: " << KqpExprToPrettyString(*node, Ctx);
-                Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), TStringBuilder() << "Callable with checkpoints: '" << node->Content() << "' can not be used outside streaming context"));
+                Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), TStringBuilder() << "Callable with checkpoints: '" << node->Content() << "' cannot be used outside streaming context"));
             }
             return;
         }

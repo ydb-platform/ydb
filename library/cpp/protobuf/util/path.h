@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/protobuf/runtime/nprotobuf.h>
+
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
 

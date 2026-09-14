@@ -4,6 +4,7 @@
 #include "yql_kikimr_type_ann_pg.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/docapi/traits.h>
@@ -54,6 +55,30 @@ static const TSet<TString> REPLICATION_AND_TRANSFER_SECRETS_SETTINGS = [] {
 // Its value must never be supplied by the user, so DML may not name it explicitly.
 bool IsSystemGeneratedColumn(const std::string_view name) {
     return name == NKikimr::NTableIndex::NFulltext::RowIdColumn;
+}
+
+bool CheckEqHeightHistogramColumnTypes(
+    const TVector<TString>& columnNames,
+    const TMap<TString, TKikimrColumnMetadata>& columns,
+    TPositionHandle pos,
+    TExprContext& ctx)
+{
+    for (const auto& name : columnNames) {
+        auto it = columns.find(name);
+        if (it == columns.end()) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "Statistics column: " << name << " was not found in the table"));
+            return false;
+        }
+        const auto& col = it->second;
+        if (!NKikimr::NScheme::NTypeIds::IsPresortEncodable(col.TypeInfo.GetTypeId())) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder()
+                << "EQ_HEIGHT_HISTOGRAM is not supported for column '" << name
+                << "' of type " << col.Type));
+            return false;
+        }
+    }
+    return true;
 }
 
 void MaybeAutoBindRowIdSequence(NYql::TKikimrTableMetadata& meta) {
@@ -1892,12 +1917,17 @@ private:
             }
             for (const auto& type : statistics.Types()) {
                 const auto typeName = to_upper(TString(type.Value()));
-                if (typeName != "COUNT_MIN_SKETCH") {
+                if (typeName != "COUNT_MIN_SKETCH" && typeName != "EQ_HEIGHT_HISTOGRAM") {
                     ctx.AddError(TIssue(ctx.GetPosition(type.Pos()), TStringBuilder()
                         << "Unknown statistic type: " << TString(type.Value())));
                     return TStatus::Error;
                 }
                 statisticsDesc.Types.push_back(typeName);
+            }
+            if (IsIn(statisticsDesc.Types, "EQ_HEIGHT_HISTOGRAM")
+                    && !CheckEqHeightHistogramColumnTypes(
+                        statisticsDesc.Columns, meta->Columns, statistics.Pos(), ctx)) {
+                return TStatus::Error;
             }
 
             meta->MultiColumnStatistics.push_back(statisticsDesc);
@@ -2555,12 +2585,54 @@ private:
                         "Column FAMILY is not supported for column tables"));
                     return TStatus::Error;
                 }
+            } else if (name == "addStatistics") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableColumnStatistics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                        "Multi-column statistics support is disabled"));
+                    return TStatus::Error;
+                }
+                auto listNode = action.Value().Cast<TExprList>();
+                TVector<TString> columnNames;
+                TVector<TString> typeNames;
+                TPositionHandle columnsPos = action.Pos();
+                for (size_t i = 0; i < listNode.Size(); ++i) {
+                    auto item = listNode.Item(i).Cast<TExprList>();
+                    auto itemName = TString(item.Item(0).Cast<TCoAtom>().Value());
+                    if (itemName == "statisticsColumns") {
+                        auto columnList = item.Item(1).Cast<TCoAtomList>();
+                        columnsPos = columnList.Pos();
+                        for (auto column : columnList) {
+                            TString columnName(column.Value());
+                            if (!table->Metadata->Columns.contains(columnName)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(column.Pos()), TStringBuilder()
+                                    << "Statistics column: " << columnName << " was not found in the table"));
+                                return TStatus::Error;
+                            }
+                            columnNames.push_back(std::move(columnName));
+                        }
+                    } else if (itemName == "statisticsTypes") {
+                        auto typeList = item.Item(1).Cast<TCoAtomList>();
+                        for (auto type : typeList) {
+                            const auto typeName = to_upper(TString(type.Value()));
+                            if (typeName != "COUNT_MIN_SKETCH" && typeName != "EQ_HEIGHT_HISTOGRAM") {
+                                ctx.AddError(TIssue(ctx.GetPosition(type.Pos()), TStringBuilder()
+                                    << "Unknown statistic type: " << TString(type.Value())));
+                                return TStatus::Error;
+                            }
+                            typeNames.push_back(typeName);
+                        }
+                    }
+                }
+                if (IsIn(typeNames, "EQ_HEIGHT_HISTOGRAM")
+                        && !CheckEqHeightHistogramColumnTypes(
+                            columnNames, table->Metadata->Columns, columnsPos, ctx)) {
+                    return TStatus::Error;
+                }
             } else if (name != "setTableSettings"
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
                     && name != "renameIndexTo"
                     && name != "alterIndex"
-                    && name != "addStatistics"
                     && name != "dropStatistics"
                     && name != "rebuildIndex"
                     && name != "compact")

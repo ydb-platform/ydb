@@ -3,7 +3,13 @@ import logging
 from clickhouse_connect.datatypes import registry
 from clickhouse_connect.driver.common import write_leb128
 from clickhouse_connect.driver.compression import get_compressor
-from clickhouse_connect.driver.exceptions import OperationalError, StreamCompleteException, StreamFailureError
+from clickhouse_connect.driver.exceptions import (
+    GENERIC_CLICKHOUSE_ERROR,
+    OperationalError,
+    StreamCompleteException,
+    StreamFailureError,
+    scrub_error_details,
+)
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.npquery import NumpyResult
 from clickhouse_connect.driver.query import QueryContext, QueryResult
@@ -21,6 +27,28 @@ class NativeTransform:
         col_types = []
         block_num = 0
         renamer = context.column_renamer
+        show_clickhouse_errors = context.show_clickhouse_errors
+
+        def format_stream_error(error_msg: str) -> str:
+            if show_clickhouse_errors is False:
+                return GENERIC_CLICKHOUSE_ERROR
+            if show_clickhouse_errors == "scrub":
+                return scrub_error_details(error_msg)
+            return error_msg
+
+        def extract_source_error(tagged_only: bool = False) -> str | None:
+            if not source.last_message:
+                return None
+            exception_tag = getattr(source, "exception_tag", None)
+            if exception_tag:
+                error_msg = extract_exception_with_tag(source.last_message, exception_tag)
+                if error_msg:
+                    return error_msg
+            if tagged_only:
+                return None
+            if show_clickhouse_errors is not True and b"Code: " not in source.last_message[-1024:]:
+                return None
+            return extract_error_message(source.last_message)
 
         def get_block():
             nonlocal block_num
@@ -31,13 +59,9 @@ class NativeTransform:
                         source.read_bytes(8)
                     num_cols = source.read_leb128()
                 except StreamCompleteException:
-                    if source.last_message:
-                        error_msg = None
-                        exception_tag = getattr(source, "exception_tag", None)
-                        if exception_tag:
-                            error_msg = extract_exception_with_tag(source.last_message, exception_tag)
-                        if error_msg:
-                            raise StreamFailureError(error_msg) from None
+                    error_msg = extract_source_error(tagged_only=True)
+                    if error_msg:
+                        raise StreamFailureError(format_stream_error(error_msg)) from None
                     return None
                 num_rows = source.read_leb128()
                 for col_num in range(num_cols):
@@ -61,28 +85,18 @@ class NativeTransform:
                 if isinstance(ex, StreamCompleteException):
                     # We ran out of data before it was expected, this could be ClickHouse reporting an error
                     # in the response
-                    if source.last_message:
-                        error_msg = None
-                        exception_tag = getattr(source, "exception_tag", None)
-                        if exception_tag:
-                            error_msg = extract_exception_with_tag(source.last_message, exception_tag)
-                        if not error_msg:
-                            error_msg = extract_error_message(source.last_message)
-                        raise StreamFailureError(error_msg) from None
+                    error_msg = extract_source_error()
+                    if error_msg:
+                        raise StreamFailureError(format_stream_error(error_msg)) from None
                     raise StreamFailureError("Stream ended unexpectedly (connection closed by server)") from ex
 
                 # A read failure partway through the stream: OperationalError from the sync reader,
                 # ClientPayloadError from aiohttp. ClickHouse may have written the real error into the
                 # response body before the connection dropped, so prefer that over the transport error.
                 if isinstance(ex, OperationalError) or ex.__class__.__name__ == "ClientPayloadError":
-                    if source.last_message:
-                        error_msg = None
-                        exception_tag = getattr(source, "exception_tag", None)
-                        if exception_tag:
-                            error_msg = extract_exception_with_tag(source.last_message, exception_tag)
-                        if not error_msg:
-                            error_msg = extract_error_message(source.last_message)
-                        raise StreamFailureError(error_msg) from None
+                    error_msg = extract_source_error()
+                    if error_msg:
+                        raise StreamFailureError(format_stream_error(error_msg)) from None
                     raise StreamFailureError("Stream failed during read (connection closed by server)") from ex
 
                 raise
@@ -147,7 +161,9 @@ class NativeTransform:
 def extract_exception_with_tag(message: bytes, exception_tag: str) -> str | None:
     """Extract exception message from the new format with exception tag. Server v25.11+.
 
-    Format: __exception__<TAG>\\r\\n<error message>\\r\\n<message_length> <TAG>__exception__\\r\\n
+    Format: __exception__\\r\\n<TAG>\\r\\n<error message>\\n<message_length> <TAG>\\r\\n__exception__\\r\\n
+    The parsing below tolerates separator variations, but the tag is separated from __exception__ by a
+    CRLF on both the opening and closing markers.
     """
     if not exception_tag:
         return None

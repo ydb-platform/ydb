@@ -220,6 +220,23 @@ bool TTabletInfo::IsGoodForBalancer(TInstant now) const {
             && (now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod());
 }
 
+void TTabletInfo::SetUsageImpact(double usageImpact) {
+    UsageImpact = usageImpact;
+    if (Node != nullptr && IsResourceDrainingState(VolatileState)) {
+        Node->UpdateHighImpactTablet(this);
+    }
+}
+
+bool TTabletInfo::IsHighImpact() const {
+    return Hive.GetUseTabletUsageEstimate() && UsageImpact >= Hive.GetTabletImpactToPin();
+}
+
+bool TTabletInfo::IsPinnedToNode() const {
+    return IsHighImpact()
+            && Node != nullptr
+            && UsageImpact >= Hive.GetTabletImpactShareToPin() * Node->GetNodeUsage();
+}
+
 bool TTabletInfo::InitiateBoot(TNodeId node) {
     if (IsStopped()) {
         ChangeVolatileState(EVolatileState::TABLET_VOLATILE_STATE_BOOTING);

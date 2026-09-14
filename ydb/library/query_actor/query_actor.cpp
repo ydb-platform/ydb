@@ -343,9 +343,13 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
     NumberRequests++;
     AmountRequestsTime += TInstant::Now() - RequestStartTime;
     RunningQuery = false;
-    YDB_LOG_DEBUG("Streaming query finished",
+    auto resultSet = std::move(ev->Get()->ResultSet);
+    YDB_LOG_DEBUG("Streaming query result part fetched",
         {"logPrefix", LogPrefix()},
+        {"hasData", (StreamQueryProcessor ? ToString(StreamQueryProcessor->HasData()) : "<null>")},
         {"streamQueryResultPart", NumberRequests},
+        {"rowsCount", resultSet.rows_size()},
+        {"previouslyFetchedRows", NumberOfFetchedRows},
         {"status", ev->Get()->Status},
         {"issues", ev->Get()->Issues.ToOneLineString()});
 
@@ -358,9 +362,11 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
         AccumulatedStreamIssues.AddIssues(ev->Get()->Issues);
     }
 
-    if (ev->Get()->ResultSet.rows_size()) {
+    if (resultSet.rows_size()) {
+        NumberOfFetchedRows += resultSet.rows_size();
+
         try {
-            (this->*StreamResultHandler)(std::move(ev->Get()->ResultSet));
+            (this->*StreamResultHandler)(std::move(resultSet));
         } catch (const std::exception& ex) {
             Finish(StatusIds::INTERNAL_ERROR, AddRootIssue("Failed to process stream query result part", NYql::TIssues{NYql::TIssue{ex.what()}}) );
             return;
@@ -369,8 +375,12 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvStreamQueryResultPart::TPtr& ev)
 
     if (StreamQueryProcessor) {
         if (StreamQueryProcessor->HasData()) {
+            YDB_LOG_DEBUG("Read next stream part",
+                {"logPrefix", LogPrefix()});
             ReadNextStreamPart();
         } else {
+            YDB_LOG_DEBUG("Stream query finished",
+                {"logPrefix", LogPrefix()});
             FinishStreamRequest();
         }
     }
@@ -557,6 +567,7 @@ TQueryBase::TLogInfo TQueryBase::GetLogInfo() const {
 void TQueryBase::ClearTimeInfo() {
     AmountRequestsTime = TDuration::Zero();
     NumberRequests = 0;
+    NumberOfFetchedRows = 0;
 }
 
 TDuration TQueryBase::GetAverageTime() const {

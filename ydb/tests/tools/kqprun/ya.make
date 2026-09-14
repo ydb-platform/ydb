@@ -30,6 +30,7 @@ PEERDIR(
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/re2
     yql/essentials/udfs/common/string
+    ydb/core/formats/arrow/program/olap_kernels
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/common/json2
     ydb/apps/ydbd/export

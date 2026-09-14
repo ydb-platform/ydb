@@ -12,6 +12,9 @@
 
 #include <ydb/library/actors/util/rope.h>
 
+#include <util/generic/array_ref.h>
+
+#include <optional>
 #include <vector>
 
 namespace NKikimr::NDDisk {
@@ -127,6 +130,10 @@ namespace NKikimr::NDDisk {
             EvPersistentBufferInfo,
             EvDeleteTabletChunks,
             EvDeleteTabletChunksResult,
+            EvRegisterPersistentBuffer,
+            EvRegisterPersistentBufferResult,
+            EvUnregisterPersistentBuffer,
+            EvUnregisterPersistentBufferResult,
         };
     };
 
@@ -350,15 +357,17 @@ namespace NKikimr::NDDisk {
             && static_cast<ui64>(checksumCount) * IntegrityUnitSize == size;
     }
 
-    // Validates a sender-supplied per-block payload checksum list against the payload actually received.
-    // Callers must reject writes without HasRequiredBlockChecksums first. This function then returns
+    // Validates a per-block payload checksum list against the payload. Returns
     // std::nullopt when every checksum matches, otherwise:
     // * INCORRECT_REQUEST if the checksum count does not match the payload size
     // * CORRUPTED at the first mismatching MinSectorSize block.
-    template<typename TRecord>
+    // An empty checksum list is treated as a match (callers that require checksums
+    // must reject that case with HasRequiredBlockChecksums first).
     [[nodiscard]]
-    std::optional<TChecksumValidationResult> ValidatePayloadChecksums(const TRecord& record, const TRope& payload) {
-        const ui32 checksumCount = static_cast<ui32>(record.ChecksumsSize());
+    inline std::optional<TChecksumValidationResult> ValidatePayloadChecksums(
+            TArrayRef<const ui64> checksums, const TRope& payload)
+    {
+        const ui32 checksumCount = static_cast<ui32>(checksums.size());
         if (checksumCount == 0) {
             return std::nullopt;
         }
@@ -375,7 +384,7 @@ namespace NKikimr::NDDisk {
 
         auto it = payload.Begin();
         for (ui32 i = 0; i < checksumCount; ++i) {
-            if (record.GetChecksums(i) != CalculateBlockChecksum(it, MinSectorSize)) {
+            if (checksums[i] != CalculateBlockChecksum(it, MinSectorSize)) {
                 return TChecksumValidationResult{
                     NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED,
                     TStringBuilder() << "checksum mismatch at block " << i << " of " << checksumCount,
@@ -386,6 +395,16 @@ namespace NKikimr::NDDisk {
             it += MinSectorSize;
         }
         return std::nullopt;
+    }
+
+    // Sender-supplied checksums on a write/sync protobuf. See the TArrayRef overload.
+    template<typename TRecord>
+        requires requires(const TRecord& record) { record.GetChecksums(); }
+    [[nodiscard]]
+    std::optional<TChecksumValidationResult> ValidatePayloadChecksums(const TRecord& record, const TRope& payload) {
+        const auto& checksums = record.GetChecksums();
+        std::vector<ui64> values(checksums.begin(), checksums.end());
+        return ValidatePayloadChecksums(TArrayRef<const ui64>(values), payload);
     }
 
     struct TWriteInstruction {
@@ -480,6 +499,14 @@ struct TPersistentBufferFormat {
     // replying with an OVERLOADED error to avoid returning a potentially-stale view.
     ui32 ListPersistentBufferMaxRetries = 10;
     ui32 ListPersistentBufferRetryPeriodMilliseconds = 20;
+    // Controls persistent-buffer on-disk integrity format. When enabled, every data
+    // sector and its header use salted checksums. When disabled, a data sector starts
+    // with its record header's unique ID; its original first eight bytes
+    // are saved in the header. Existing checksum-formatted records remain readable.
+    // Kept last to preserve existing positional aggregate initialization.
+    bool EnableChecksums = true;
+    // Registration age limit. Closed registrations are retained for twice this interval.
+    ui32 RegistrationTimeoutMilliseconds = 5000;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \
@@ -511,6 +538,47 @@ struct TPersistentBufferFormat {
     struct TEvPersistentBufferInfo;
     struct TEvDeleteTabletChunks;
     struct TEvDeleteTabletChunksResult;
+    struct TEvRegisterPersistentBufferResult;
+    struct TEvUnregisterPersistentBufferResult;
+
+    DECLARE_DDISK_EVENT(RegisterPersistentBuffer) {
+        using TResult = TEvRegisterPersistentBufferResult;
+        TEvRegisterPersistentBuffer() = default;
+        TEvRegisterPersistentBuffer(const TQueryCredentials& creds, TInstant timestamp) {
+            creds.SerializeForRequest(Record.MutableCredentials());
+            Record.SetTimestampMicroseconds(timestamp.MicroSeconds());
+        }
+    };
+
+    DECLARE_DDISK_EVENT(RegisterPersistentBufferResult) {
+        TEvRegisterPersistentBufferResult() = default;
+        TEvRegisterPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
+    };
+
+    DECLARE_DDISK_EVENT(UnregisterPersistentBuffer) {
+        using TResult = TEvUnregisterPersistentBufferResult;
+        TEvUnregisterPersistentBuffer() = default;
+        TEvUnregisterPersistentBuffer(const TQueryCredentials& creds) {
+            creds.SerializeForRequest(Record.MutableCredentials());
+        }
+    };
+
+    DECLARE_DDISK_EVENT(UnregisterPersistentBufferResult) {
+        TEvUnregisterPersistentBufferResult() = default;
+        TEvUnregisterPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
+    };
 
     DECLARE_DDISK_EVENT(Connect) {
         using TResult = TEvConnectResult;
@@ -560,6 +628,9 @@ struct TPersistentBufferFormat {
 
     DECLARE_DDISK_EVENT(Write) {
         using TResult = TEvWriteResult;
+
+        // Receiver-local bookkeeping: queued requests can re-enter the write handler.
+        bool PayloadAlignmentChecked = false;
 
         TEvWrite() = default;
 

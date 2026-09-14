@@ -18,7 +18,7 @@ TMaybe<std::string> GetName(SQLv1::Bind_parameterContext* ctx) {
     }
 }
 
-TPosition GetPosition(SQLv1::Bind_parameterContext* ctx) {
+TPosition GetPosition(antlr4::ParserRuleContext* ctx) {
     if (ctx == nullptr) {
         return {};
     }

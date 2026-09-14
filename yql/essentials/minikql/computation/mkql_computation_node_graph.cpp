@@ -244,6 +244,8 @@ public:
         , FunctionRegistry_(*opts.FunctionRegistry)
         , ValidateMode_(opts.ValidateMode)
         , ValidatePolicy_(opts.ValidatePolicy)
+        , BridgeMode_(opts.BridgeMode)
+        , BridgeBinaryPath_(opts.BridgeBinaryPath)
         , GraphPerProcess_(opts.GraphPerProcess)
         , PatternNodes_(MakeIntrusive<TPatternNodes>(opts.AllocState))
         , ExternalAlloc_(opts.PatternEnv)
@@ -479,26 +481,28 @@ private:
             PatternNodes_->ValueBuilder_.Get(),
             ValidateMode_,
             ValidatePolicy_,
+            BridgeMode_,
+            BridgeBinaryPath_,
             GraphPerProcess_,
             PatternNodes_->Mutables_,
             PatternNodes_->ElementsCache_,
             std::bind(&TComputationGraphBuildingVisitor::PushBackNode, this, std::placeholders::_1),
             RuntimeSettings_);
-        const auto computationNode = Factory_(node, ctx);
+        const IComputationNode::TPtr computationNode = Factory_(node, ctx);
         const auto& name = node.GetType()->GetName();
-        if (name == "KqpWideReadTable" ||
+        if (!computationNode) {
+            THROW yexception()
+                << "Computation graph builder, unsupported function: " << name << " type: " << TypeName(Factory_.target_type());
+        }
+
+        if (!computationNode->IsSuitableForCache() ||
+            name == "KqpWideReadTable" ||
             name == "KqpWideReadTableRanges" ||
             name == "KqpBlockReadTableRanges" ||
             name == "KqpLookupTable" ||
             name == "KqpReadTable" ||
-            name == "MultiHoppingCore" ||
             name == "DqWatermarkGenerator") {
             PatternNodes_->SuitableForCache_ = false;
-        }
-
-        if (!computationNode) {
-            THROW yexception()
-                << "Computation graph builder, unsupported function: " << name << " type: " << TypeName(Factory_.target_type());
         }
 
         AddNode(node, computationNode);
@@ -579,6 +583,8 @@ private:
     THolder<TNodeFactory> NodeFactory_;
     NUdf::EValidateMode ValidateMode_;
     NUdf::EValidatePolicy ValidatePolicy_;
+    NUdf::EBridgeMode BridgeMode_;
+    const TString BridgeBinaryPath_;
     EGraphPerProcess GraphPerProcess_;
     TPatternNodes::TPtr PatternNodes_;
     const bool ExternalAlloc_; // obsolete, will be removed after YQL-13977
@@ -858,8 +864,8 @@ public:
                        : NYql::NCodegen::ICodegen::TPtr())
 #endif
     {
-        /// TODO: Enable JIT for AARCH64/Win
-#if defined(__aarch64__) || defined(_win_)
+        /// TODO: Enable JIT for AARCH64/Win/Darwin (YDBREQUESTS-7823)
+#if defined(__aarch64__) || defined(_win_) || defined(_darwin_)
         Codegen_ = {};
 #endif
 

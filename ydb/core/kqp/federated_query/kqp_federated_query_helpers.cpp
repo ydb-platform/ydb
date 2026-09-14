@@ -236,6 +236,7 @@ namespace {
         SolomonGatewayConfig = queryServiceConfig.GetSolomon();
 
         S3ReadActorFactoryConfig = NYql::NDq::CreateReadActorFactoryConfig(S3GatewayConfig);
+        S3ReadActorFactoryConfig.EnableScheduling = appConfig.GetFeatureFlags().GetEnableS3Scheduling();
 
         YtGatewayConfig = queryServiceConfig.GetYt();
         YtGateway = MakeYtGateway(appData->FunctionRegistry, queryServiceConfig);

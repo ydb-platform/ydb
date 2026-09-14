@@ -131,6 +131,7 @@ void TClusterDirectoryBase<TConnection>::Clear()
     CellTagToCluster_.clear();
     NameToCluster_.clear();
     ClusterTvmIds_.clear();
+    LastSuccessfulUpdateTime_.reset();
 
     auto Logger = HiveClientLogger;
     YT_TLOG_DEBUG("Cluster directory cleared");
@@ -245,6 +246,11 @@ TClusterDirectoryUpdateResult TClusterDirectoryBase<TConnection>::TryUpdateDirec
         result.ClusterToErrorMapping[name] = TryUpdateCluster(name, config);
     }
 
+    {
+        auto guard = Guard(Lock_);
+        LastSuccessfulUpdateTime_ = TInstant::Now();
+    }
+
     return result;
 }
 
@@ -293,6 +299,13 @@ std::optional<typename TClusterDirectoryBase<TConnection>::TCluster> TClusterDir
         return std::nullopt;
     }
     return it->second;
+}
+
+template <std::derived_from<NApi::IConnection> TConnection>
+std::optional<TInstant> TClusterDirectoryBase<TConnection>::GetLastSuccessfulUpdateTime() const
+{
+    auto guard = Guard(Lock_);
+    return LastSuccessfulUpdateTime_;
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>

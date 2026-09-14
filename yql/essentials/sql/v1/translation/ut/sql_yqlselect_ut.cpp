@@ -1093,6 +1093,56 @@ Y_UNIT_TEST(DiagnosticMandatoryAsTable) {
     UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), ":4:36: Error: Expecting mandatory AS here");
 }
 
+Y_UNIT_TEST(DefaultWarnOnAnsiAliasShadowing) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA AnsiOptionalAs;
+        SELECT 1 a, 2 b, c, d e FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT(res.IsOk());
+
+    TWordCountHive stat = {"warnShadow"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["warnShadow"], 3);
+}
+
+Y_UNIT_TEST(EnableWarnOnAnsiAliasShadowing) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA AnsiOptionalAs;
+        PRAGMA WarnOnAnsiAliasShadowing;
+        SELECT 1 a, 2 b, c, d e FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT(res.IsOk());
+
+    TWordCountHive stat = {"warnShadow"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["warnShadow"], 3);
+}
+
+Y_UNIT_TEST(DisableWarnOnAnsiAliasShadowing) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA AnsiOptionalAs;
+        PRAGMA DisableWarnOnAnsiAliasShadowing;
+        SELECT 1 a, 2 b, c, d e FROM plato.x;
+    )sql", settings);
+    UNIT_ASSERT(res.IsOk());
+
+    TWordCountHive stat = {"warnShadow"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["warnShadow"], 0);
+}
+
 Y_UNIT_TEST(NamedNodeSubqueryScalar) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
@@ -2003,10 +2053,14 @@ Y_UNIT_TEST(FromConcatKnownImplicitCluster) {
         USE plato;
         SELECT k, v FROM Concat(x, y, z);
     )sql", settings);
-    UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(
-        Err2Str(res),
-        "YqlSelect unsupported: Concat LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "MrTableConcat", "Read!", "Key"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["MrTableConcat"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Key"], 1 + 3);
 }
 
 Y_UNIT_TEST(FromConcatKnownExplicitCluster) {
@@ -2017,10 +2071,47 @@ Y_UNIT_TEST(FromConcatKnownExplicitCluster) {
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         SELECT k, v FROM plato.Concat(x, y, z);
     )sql", settings);
-    UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(
-        Err2Str(res),
-        "YqlSelect unsupported: Concat LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "MrTableConcat", "Read!", "Key"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["MrTableConcat"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Key"], 1 + 3);
+}
+
+Y_UNIT_TEST(FromEach) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $ts = ListMap(ListFromRange(0, 2), ($i) -> {
+            $s = CAST($i AS String);
+            $s = If($s == "0", "", $s);
+            RETURN "Input" || $s;
+        });
+
+        SELECT k, v FROM plato.Each($ts);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {
+        "YqlSelect",
+        "MrTableEach",
+        "Read!",
+        "Key",
+        "ignorenonexisting",
+        "warnnonexisting",
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["MrTableEach"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Key"], 1 + 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["ignorenonexisting"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["warnnonexisting"], 1);
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelectFromTableFunction)

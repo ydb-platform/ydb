@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     validators.h
     validators.cpp
+    composite_conveyor_config_validator.cpp
     auth_config_validator.cpp
     client_certificate_authorization_validator.cpp
     column_shard_config_validator.cpp
@@ -13,6 +14,7 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/protos
     ydb/core/formats/arrow/serializer
+    ydb/core/tx/conveyor_composite/common
     library/cpp/protobuf/json
 )
 

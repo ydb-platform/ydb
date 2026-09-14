@@ -302,16 +302,22 @@ inline path initial_path(system::error_code& ec)
     return detail::initial_path(&ec);
 }
 
+#if BOOST_FILESYSTEM_VERSION < 4 && !defined(BOOST_FILESYSTEM_NO_DEPRECATED)
+
 template< class Path >
+BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use the non-templated `initial_path` overload")
 path initial_path()
 {
     return initial_path();
 }
 template< class Path >
+BOOST_FILESYSTEM_DETAIL_DEPRECATED("Use the non-templated `initial_path` overload")
 path initial_path(system::error_code& ec)
 {
     return detail::initial_path(&ec);
 }
+
+#endif // BOOST_FILESYSTEM_VERSION < 4 && !defined(BOOST_FILESYSTEM_NO_DEPRECATED)
 
 inline path current_path()
 {

@@ -148,8 +148,6 @@ void TDbsControllerActor::StateInit(TAutoPtr<NActors::IEventHandle>& ev)
 STFUNC(TDbsControllerActor::StateWork)
 {
     switch (ev->GetTypeRewrite()) {
-        cFunc(TEvents::TEvPoison::EventType, PassAway);
-
         HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);
         HFunc(TEvTabletPipe::TEvServerDisconnected, HandleServerDisconnected);
         HFunc(TEvTabletPipe::TEvServerDestroyed, HandleServerDestroyed);

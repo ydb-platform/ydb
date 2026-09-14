@@ -1013,28 +1013,48 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1001);
     }
 
-    Y_UNIT_TEST(YqlSyntaxV0) {
+    Y_UNIT_TEST(YqlSyntaxV0Rejected) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
             --!syntax_v0
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        result = session.ExecuteDataQuery(R"(
-            --!syntax_v1
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(!result.IsSuccess());
 
         result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
             SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
+
+        result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+    }
+
+    Y_UNIT_TEST(LegacySqlVersionConfigIsIgnored) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetSqlVersion(0);
+        appConfig.MutableTableServiceConfig()->SetEnforceSqlVersionV1(false);
+
+        TKikimrRunner kikimr{TKikimrSettings(appConfig)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(R"(
+            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
     }
 
     Y_UNIT_TEST(YqlTableSample) {

@@ -107,12 +107,12 @@ private:
     template <typename TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
-        const auto providedDatabaseName = requestBaseCtx->GetDatabaseName();
-        if (providedDatabaseName && !providedDatabaseName->empty()) {
-            requestBaseCtx->SetDatabaseName(ResolveDatabaseName(*providedDatabaseName, RootDatabase));
-        }
-
         LogRequest(event);
+
+        if (!ResolveRequestDatabase(event->Get(), RootDatabase, AppConfig.GetGRpcConfig().GetIgnoreRoot())) {
+            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
+            return;
+        }
 
         if (IsAuthStateOK(*requestBaseCtx)) {
             Handle(event, ctx);
@@ -156,12 +156,17 @@ private:
     }
 
     const NKikimrConfig::TAppConfig AppConfig;
-    std::atomic<ui64> ChannelBufferSize;
     TString RootDatabase;
+    std::atomic<ui64> ChannelBufferSize;
     IGRpcProxyCounters::TPtr Counters;
 };
 
 void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
+    const auto domains = AppData()->DomainsInfo;
+    if (AppConfig.GetGRpcConfig().GetIgnoreRoot() || (domains && domains->Domain)) {
+        RootDatabase = DatabaseFromDomain(AppData());
+    }
+
     auto nodeID = SelfId().NodeId();
 
     YDB_LOG_NOTICE_CTX(ctx, "Grpc simple request proxy started",
@@ -169,9 +174,6 @@ void TGRpcRequestProxySimple::Bootstrap(const TActorContext& ctx) {
 
     Counters = CreateGRpcProxyCounters(AppData()->Counters);
     InitializeGRpcProxyDbCountersRegistry(ctx.ActorSystem());
-
-    RootDatabase = DatabaseFromDomain(AppData());
-    Y_ABORT_UNLESS(!RootDatabase.empty());
 
     Become(&TThis::StateFunc);
 }

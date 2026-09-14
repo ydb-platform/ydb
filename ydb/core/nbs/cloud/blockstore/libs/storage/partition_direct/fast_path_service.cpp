@@ -5,11 +5,13 @@
 #include "vchunk.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
@@ -83,7 +85,15 @@ void DumpToFile(
     }
 }
 
+ui32 CheckedBlockSize(ui32 blockSize, const TStorageConfig& storageConfig)
+{
+    Y_ABORT_UNLESS(IsSupportedBlockSize(blockSize));
+    Y_ABORT_UNLESS(storageConfig.GetStripeSize() % blockSize == 0);
+    return blockSize;
+}
+
 TVector<TRegionPtr> CreateRegions(
+    IArenaAllocatorPtr arenaAllocator,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
@@ -94,10 +104,12 @@ TVector<TRegionPtr> CreateRegions(
     const TDirtyMapStateProtos& dirtyMapStates,
     const TStorageConfig& storageConfig)
 {
+    blockSize = CheckedBlockSize(blockSize, storageConfig);
     const size_t regionCount = CalcRegionCount(blockCount, blockSize);
     TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         regions[i] = std::make_shared<TRegion>(
+            arenaAllocator,
             TActorContext::ActorSystem(),
             traceService,
             partitionDirectService,
@@ -107,6 +119,7 @@ TVector<TRegionPtr> CreateRegions(
             vChunkConfigs,
             dirtyMapStates,
             storageConfig.GetSyncRequestsBatchSize(),
+            blockSize,
             storageConfig.GetVChunkSize());
     }
 
@@ -124,6 +137,7 @@ TFastPathService::TFastPathService(
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
+    TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls,
     const TVChunkConfigs& vChunkConfigs,
     const TDirtyMapStateProtos& dirtyMapStates,
     TStorageConfigPtr storageConfig,
@@ -136,8 +150,11 @@ TFastPathService::TFastPathService(
     , DiskDescription(diskDescription)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
+    , ArenaAllocator(CreateArenaAllocator())
     , DirectBlockGroups(std::move(directBlockGroups))
+    , ChaosInjectorControls(std::move(chaosInjectorControls))
     , Regions(CreateRegions(
+          ArenaAllocator,
           this,
           this,
           DiskDescription,
@@ -170,6 +187,8 @@ TFastPathService::TFastPathService(
           .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
           .VChunkSize = StorageConfig->GetVChunkSize()}))
 {
+    Y_ABORT_UNLESS(DirectBlockGroups.size() == ChaosInjectorControls.size());
+
     const ui64 copyRangeBandwidth =
         StorageConfig->GetCopyRangeBandwidthMbs() * 1_MB;
     if (copyRangeBandwidth) {
@@ -216,6 +235,12 @@ NThreading::TFuture<void> TFastPathService::Run()
     ScheduleVChunkCountersUpdate();
 
     return NThreading::WaitAll(initialReadyFutures);
+}
+
+IDirectBlockGroupPtr TFastPathService::GetDirectBlockGroup(ui32 dbgIndex) const
+{
+    return dbgIndex >= DirectBlockGroups.size() ? nullptr
+                                                : DirectBlockGroups[dbgIndex];
 }
 
 NThreading::TFuture<void> TFastPathService::Stop()
@@ -430,11 +455,24 @@ TPersistResultFuture TFastPathService::UpdateDirtyMapState(
 
 void TFastPathService::QueryAddHost(
     size_t directBlockGroupId,
-    size_t newHostIndex)
+    ui32 dbgConnectionsConfigGeneration)
 {
     auto event = std::make_unique<TEvPartitionDirectPrivate::TEvAddHostToDBG>(
         directBlockGroupId,
-        newHostIndex);
+        dbgConnectionsConfigGeneration);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
+void TFastPathService::QueryRemoveHost(
+    size_t directBlockGroupId,
+    size_t hostIndex,
+    ui32 dbgConnectionsConfigGeneration)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvRemoveHostFromDBG>(
+            directBlockGroupId,
+            hostIndex,
+            dbgConnectionsConfigGeneration);
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
@@ -479,6 +517,21 @@ TDuration TFastPathService::TakeVolumeCopyRangeBudget(ui64 byteCount)
     return CopyRangeBucket->Register(ActorSystem->Timestamp(), byteCount);
 }
 
+void TFastPathService::PersistHostHealth(
+    size_t directBlockGroupId,
+    THostIndex hostIndex,
+    EHostHealth oldHealth,
+    EHostHealth newHealth)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvPersistHostHealth>(
+            directBlockGroupId,
+            hostIndex,
+            oldHealth,
+            newHealth);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
     return {
@@ -487,7 +540,64 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
         .TotalVChunks =
             Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
         .DbgCount = DirectBlockGroups.size(),
+        .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetStats()},
     };
+}
+
+void TFastPathService::SetNodeChaosMode(
+    ui32 nodeId,
+    std::optional<ui32> dbgIndex,
+    TChaosConfig::TChaosNodeConfig::EChaosMode mode)
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s SetChaosNodeMode %s %s %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintNodeId(nodeId).c_str(),
+        dbgIndex ? PrintDbgId(*dbgIndex).c_str() : "all",
+        ToString(mode).c_str());
+
+    auto apply = [&](TChaosConfig::TDbgAndNodeId id)
+    {
+        if (id.DbgIndex >= DirectBlockGroups.size()) {
+            return;
+        }
+        ChaosConfig.NodeConfigs[id].Mode = mode;
+
+        auto controller = id.DbgIndex < ChaosInjectorControls.size()
+                              ? ChaosInjectorControls[id.DbgIndex]
+                              : nullptr;
+        if (!controller) {
+            return;
+        }
+        switch (mode) {
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Disabled: {
+                controller->DisableNode(nodeId);
+                break;
+            }
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Enabled: {
+                controller->EnableNode(nodeId);
+                break;
+            }
+            case TChaosConfig::TChaosNodeConfig::EChaosMode::Partial: {
+                break;
+            }
+        }
+    };
+
+    if (!dbgIndex) {
+        for (ui32 i = 0; i < DirectBlockGroups.size(); ++i) {
+            const auto id =
+                TChaosConfig::TDbgAndNodeId{.NodeId = nodeId, .DbgIndex = i};
+            apply(id);
+        }
+    } else {
+        const auto id = TChaosConfig::TDbgAndNodeId{
+            .NodeId = nodeId,
+            .DbgIndex = *dbgIndex};
+        apply(id);
+    }
 }
 
 NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
@@ -512,6 +622,10 @@ NThreading::TFuture<TVector<TDbgSnapshot>> TFastPathService::GatherMonSnapshots(
             for (const auto& future: futures) {
                 snapshots.push_back(future.GetValue());
             }
+            Sort(
+                snapshots,
+                [](const TDbgSnapshot& lhs, const TDbgSnapshot& rhs)
+                { return lhs.Index < rhs.Index; });
             return snapshots;
         });
 }

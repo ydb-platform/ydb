@@ -5,7 +5,7 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/monlib/dynamic_counters/percentile
     ydb/core/blobstorage/lwtrace_probes
-    ydb/core/load_test
+    ydb/core/load_test/blobstorage
     ydb/core/protos
     ydb/tools/stress_tool/proto
     ydb/library/actors/core

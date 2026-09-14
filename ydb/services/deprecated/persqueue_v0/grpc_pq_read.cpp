@@ -48,7 +48,7 @@ void TPQReadService::TSession::OnCreated() {
 void TPQReadService::TSession::OnRead(const NPersQueue::TReadRequest& request) {
     switch (request.GetRequestCase()) {
         case TReadRequest::kInit: {
-            SendEvent(new TEvPQProxy::TEvReadInit(request, GetPeerName(), GetDatabase()));
+            SendEvent(new TEvPQProxy::TEvReadInit(request, GetPeerName(), GetDatabase(), GetRequestId()));
             break;
         }
         case TReadRequest::kRead: {

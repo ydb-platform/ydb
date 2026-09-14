@@ -416,6 +416,8 @@ struct TEvBlobStorage {
         EvRecoveryLogCutDone,
         EvFreshCompactionStarted,
         EvGetLogoBlobIndexStatResponseAck,
+        EvHugeQueryStripeChunks,
+        EvHugeStripeChunks,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -515,6 +517,7 @@ struct TEvBlobStorage {
         EvProxySessionsState,
         EvBunchOfEvents,
         EvDeadline,
+        EvSetProxyDormant,
 
         // blobstorage controller interface
         EvControllerRegisterNode                    = 0x10031602,
@@ -1483,6 +1486,7 @@ struct TEvBlobStorage {
         const TInstant Deadline;
         const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
         const TWriteSource WriteSource;
+        const std::optional<ui32> Version;
         bool IsMonitored = true;
 
         TEvBlock(TCloneEventPolicy, const TEvBlock& origin)
@@ -1492,32 +1496,38 @@ struct TEvBlobStorage {
             , Deadline(origin.Deadline)
             , IssuerGuid(origin.IssuerGuid)
             , WriteSource(origin.WriteSource)
+            , Version(origin.Version)
             , IsMonitored(origin.IsMonitored)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline,
-                TWriteSource writeSource = UnknownWriteSource())
+                TWriteSource writeSource = UnknownWriteSource(), std::optional<ui32> version = std::nullopt)
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
             , WriteSource(writeSource)
+            , Version(version)
         {}
 
         TEvBlock(ui64 tabletId, ui32 generation, TInstant deadline, ui64 issuerGuid,
-                TWriteSource writeSource = UnknownWriteSource())
+                TWriteSource writeSource = UnknownWriteSource(), std::optional<ui32> version = std::nullopt)
             : TabletId(tabletId)
             , Generation(generation)
             , Deadline(deadline)
             , IssuerGuid(issuerGuid)
             , WriteSource(writeSource)
+            , Version(version)
         {}
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvBlock {TabletId# " << TabletId
-                << " Generation# " << Generation
-                << " Deadline# " << Deadline.MilliSeconds()
+                << " Generation# " << Generation;
+            if (Version) {
+                str << " Version# " << *Version;
+            }
+            str << " Deadline# " << Deadline.MilliSeconds()
                 << " IsMonitored# " << IsMonitored
                 << "}";
             return str.Str();
@@ -1541,14 +1551,22 @@ struct TEvBlobStorage {
         : TEventLocal<TEvBlockResult, EvBlockResult>
         , TEvResultCommon
     {
-        TEvBlockResult(NKikimrProto::EReplyStatus status)
+        bool IsTabletStorageInfoVersionObsolete = false;
+        ui32 ActualGeneration = 0;
+
+        TEvBlockResult(NKikimrProto::EReplyStatus status,
+                bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0)
             : TEvResultCommon(status)
+            , IsTabletStorageInfoVersionObsolete(isTabletStorageInfoVersionObsolete)
+            , ActualGeneration(actualGeneration)
         {}
 
         TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
+            str << " IsTabletStorageInfoVersionObsolete# " << IsTabletStorageInfoVersionObsolete;
+            str << " ActualGeneration# " << ActualGeneration;
             if (ErrorReason.size()) {
                 str << " ErrorReason# \"" << ErrorReason << "\"";
             }

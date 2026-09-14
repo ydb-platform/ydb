@@ -926,7 +926,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                 }
             });
         EXPECT_CALL(*setup.MockProcessor, OnInitRequest(_))
-            .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::InitRequest& req) {
+            .WillOnce([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::InitRequest& req) {
                 UNIT_ASSERT_STRINGS_EQUAL(req.consumer(), "TestConsumer");
                 UNIT_ASSERT_VALUES_EQUAL(req.max_lag_duration_ms(), 32000);
                 UNIT_ASSERT_VALUES_EQUAL(req.start_from_written_at_ms(), 42000);
@@ -936,7 +936,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                 UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).partition_group_ids_size(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).partition_group_ids(0), 100);
                 UNIT_ASSERT_VALUES_EQUAL(req.topics_read_settings(0).partition_group_ids(1), 101);
-            }));
+            });
         setup.GetSession()->Start();
         setup.MockProcessorFactory->Wait();
 
@@ -1100,14 +1100,14 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             UNIT_ASSERT(stream);
 
             EXPECT_CALL(*setup.MockProcessor, OnStartReadRequest(_))
-                .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::StartRead& req) {
+                .WillOnce([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::StartRead& req) {
                     UNIT_ASSERT_STRINGS_EQUAL(req.topic().path(), "TestTopic");
                     UNIT_ASSERT_STRINGS_EQUAL(req.cluster(), "TestCluster");
                     UNIT_ASSERT_VALUES_EQUAL(req.partition(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(req.assign_id(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(req.read_offset(), 13);
                     UNIT_ASSERT_VALUES_EQUAL(req.commit_offset(), 31);
-                }));
+                });
 
             event.Confirm(13, 31);
         }
@@ -1140,12 +1140,12 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             UNIT_ASSERT_EQUAL(destroyEvent.GetPartitionStream(), stream);
 
             EXPECT_CALL(*setup.MockProcessor, OnReleasedRequest(_))
-                .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Released& req) {
+                .WillOnce([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Released& req) {
                     UNIT_ASSERT_STRINGS_EQUAL(req.topic().path(), "TestTopic");
                     UNIT_ASSERT_STRINGS_EQUAL(req.cluster(), "TestCluster");
                     UNIT_ASSERT_VALUES_EQUAL(req.partition(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(req.assign_id(), 1);
-                }));
+                });
 
             destroyEvent.Confirm();
         }
@@ -1319,7 +1319,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         THashSet<ui64> committedCookies;
         THashSet<ui64> committedOffsets;
         EXPECT_CALL(*setup.MockProcessor, OnCommitRequest(_))
-            .WillRepeatedly(Invoke([&committedCookies, &committedOffsets](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
+            .WillRepeatedly([&committedCookies, &committedOffsets](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
                 for (const auto& commit : req.cookies()) {
                     committedCookies.insert(commit.partition_cookie());
                 }
@@ -1329,7 +1329,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                         committedOffsets.insert(i);
                     }
                 }
-            }));
+            });
 
         for (ui64 i = 1; i <= serverBatchesCount; ++i) {
             TMockReadSessionProcessor::TServerReadInfo resp;
@@ -1512,12 +1512,12 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         setup.SuccessfulInit();
         TPartitionStream::TPtr stream = setup.CreatePartitionStream();
         EXPECT_CALL(*setup.MockProcessor, OnStatusRequest(_))
-            .WillOnce(Invoke([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Status& req) {
+            .WillOnce([](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Status& req) {
                 UNIT_ASSERT_VALUES_EQUAL(req.topic().path(), "TestTopic");
                 UNIT_ASSERT_VALUES_EQUAL(req.cluster(), "TestCluster");
                 UNIT_ASSERT_VALUES_EQUAL(req.partition(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(req.assign_id(), 1);
-            }));
+            });
         // Another assign id.
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
                                                .PartitionStreamStatus(11, 34, TInstant::Seconds(4), "TestTopic", "TestCluster", 1 /*partition*/, 13/*assign id to ignore*/));
@@ -1558,7 +1558,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         bool has1 = false;
         bool has2 = false;
         EXPECT_CALL(*setup.MockProcessor, OnCommitRequest(_))
-            .WillRepeatedly(Invoke([&](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
+            .WillRepeatedly([&](const Ydb::PersQueue::V1::MigrationStreamingReadClientMessage::Commit& req) {
                 Cerr << "Got commit req " << req << "\n";
                 for (const auto& commit : req.cookies()) {
                     if (commit.partition_cookie() == 1) {
@@ -1575,7 +1575,7 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                     else if (range.start_offset() == 0 && range.end_offset() == 3) has2 = true;
                     else UNIT_ASSERT(false);
                 }
-            }));
+            });
 
         for (int i = 0; i < 2; ) {
             std::optional<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);

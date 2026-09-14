@@ -1,46 +1,66 @@
 # auth_config
 
-{{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
+{{ ydb-short-name }} allows using various methods of user authentication in the system. Authentication and authentication provider settings are specified in the `auth_config` section of the {{ ydb-short-name }} configuration file.
 
-## Configuring Local {{ ydb-short-name }} User Authentication {#local-auth-config}
+## Local user authentication configuration {{ ydb-short-name }} {#local-auth-config}
 
-For more information about the authentication of [local {{ ydb-short-name }} users](../../concepts/glossary.md#access-user), see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by username and password, define the following parameters in the `auth_config` section:
+For more information about authentication of [local users](../../concepts/glossary.md#access-user), see the section on [login and password authentication](../../security/authentication.md#static-credentials). To configure authentication of local users by login and password, specify the following parameters in the `auth_config` section:
 
 #|
 || Parameter | Description ||
 || use_login_provider
-| Indicates whether to allow the authentication of local users with an [authentication token](../../concepts/glossary.md#auth-token) that is obtained after entering a username and password.
+| Flag enables authentication of local users by auth tokens obtained as a result of login and password entry. The login procedure in {{ ydb-short-name }} is the exchange of login and password for an authentication token.
+
+Possible values:
+
+- `true` — enables authentication of local users by authentication tokens.
+- `false` — disables authentication of local users by authentication tokens.
 
 Default value: `true`
+
+{% note info %}
+
+For the ability to create and authenticate local users, the `use_login_provider` and `enable_login_authentication` parameters must have the value `true`. Otherwise, local users will not be able to authenticate in {{ ydb-short-name }}.
+
+{% endnote %}
+
+
     ||
+
+
 || enable_login_authentication
-| Indicates whether to allow adding local users to {{ ydb-short-name }} databases and generating authentication tokens after a local user enters a username and password.
+| Flag enables creation of local users and obtaining an authentication token for them in exchange for login and password.
+
+Possible values:
+
+- `true` — enables creation of local users and obtaining an authentication token for them.
+- `false` — disables creation of local users and obtaining an authentication token for them.
 
 Default value: `true`
-    ||
+||
 || domain_login_only
-| Determines the scope of local user access rights in a {{ ydb-short-name }} cluster.
+| Flag defines the boundaries of access rights of local users in the {{ ydb-short-name }} cluster.
 
-Valid values:
+Possible values:
 
-- `true` — local users exist in a {{ ydb-short-name }} cluster and can be granted rights to access multiple [databases](../../concepts/glossary.md#database).
-
-- `false` — local users can exist either at the cluster or database level. The scope of access rights for local users created at the database level is limited to the database, in which they are created.
+- `true` — local users {{ ydb-short-name }} exist at the cluster level and can be assigned access rights to multiple [databases](../../concepts/glossary.md#database).
+- `false` — local users can exist both at the cluster level and at the level of each individual database. The access rights boundaries of local users created at the database level are limited to the database in which they were created.
 
 Default value: `true`
-    ||
+||
 || login_token_expire_time
-| Specifies the expiration time of the authentication token created when a local user logs in to {{ ydb-short-name }}.
+| Lifetime of the authentication token created in exchange for the login and password of a local user.
 
 Default value: `12h`
-    ||
+||
 |#
 
-### Configuring User Lockout
+### User lockout configuration on incorrect password {#account-lockout}
 
-You can configure {{ ydb-short-name }} to lock a user account out after a specified number of failed attempts to enter the correct password. To configure user lockout, define the `account_lockout` subsection inside the `auth_config` section.
+{{ ydb-short-name }} allows you to prevent a user from authenticating if they have made several failed password attempts. To configure user lockout conditions, fill in the `account_lockout` section.
 
 Example of the `account_lockout` section:
+
 
 ```yaml
 auth_config:
@@ -51,42 +71,42 @@ auth_config:
   #...
 ```
 
+
 #|
 || Parameter | Description ||
 || attempt_threshold
-| Specifies the number of failed attempts to enter the correct password for a user account, after which the account is blocked for a period specified by the `attempt_reset_duration` parameter.
+| The number of incorrect password attempts after which the user account is temporarily locked. If the user enters the wrong password the specified number of times in a row, they are prohibited from authenticating for the time specified in the `attempt_reset_duration` parameter.
 
-If `attempt_threshold = 0`, the number of attempts to enter the correct password is unlimited. After successful authentication (correct username and password), the counter for failed attempts is reset to 0.
+If the parameter is set to `0`, the number of incorrect password attempts is unlimited. After successful authentication (entering the correct username and password), the counter of failed attempts is reset to 0.
 
 Default value: `4`
-    ||
+||
 || attempt_reset_duration
-| Specifies the period that a locked-out account remains locked before automatically becoming unlocked. This period starts after the last failed attempt.
+| The period of time during which the user is considered locked. During this period, the user will not be able to authenticate to the system even if they enter the correct username and password. The lockout period starts from the moment of the last incorrect password attempt.
 
-During this period, the user will not be able to authenticate in the system even if the correct username and password are entered.
+If a zero value is specified (`"0s"` — a record equivalent to 0 seconds), the user will be locked for an unlimited time. In this case, the lock can be removed using the [ALTER USER ...  LOGIN](../../yql/reference/syntax/alter-user.md) command.
 
-If this parameter is set to zero ("0s" - a notation equivalent of 0 seconds), user accounts will be locked indefinitely. In this case you can unlock the account using the [ALTER USER ...  LOGIN](../../yql/reference/syntax/alter-user.md) command.
+The minimum lockout time interval is 1 second.
 
-The minimum lockout duration is 1 second.
+Supported units of measurement:
 
-Supported time units:
+- Seconds. `30s`
+- Minutes. `20m`
+- Hours. `5h`
+- Days. `3d`
 
-- Seconds: `30s`
-- Minutes: `20m`
-- Hours: `5h`
-- Days: `3d`
-
-It is not allowed to combine time units in one entry. For example, the entry `1d12h` is incorrect. It should be replaced with an equivalent, such as `36h`.
+Combining units of measurement in a single line is not allowed. For example, the following entry is incorrect: `1d12h`. Such an entry should be replaced with an equivalent one, for example `36h`.
 
 Default value: `1h`
-    ||
+||
 |#
 
-### Configuring Password Complexity Requirements {#password-complexity}
+### Configuring password complexity requirements {#password-complexity}
 
-{{ ydb-short-name }} allows local users to authenticate using a login and password. For more information, see [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }}, configure complexity requirements for the passwords of [local users](../../concepts/glossary.md#access-user) in the `password_complexity` subsection inside the `auth_config` section.
+{{ ydb-short-name }} allows you to authenticate users by login and password. For more details, see the section [login and password authentication](../../security/authentication.md#static-credentials). To enhance security, {{ ydb-short-name }} provides the ability to configure the complexity of passwords used by [local users](../../concepts/glossary.md#access-user). To configure password requirements, describe the `password_complexity` section.
 
 Example of the `password_complexity` section:
+
 
 ```yaml
 auth_config:
@@ -102,62 +122,64 @@ auth_config:
   #...
 ```
 
+
 #|
 || Parameter | Description ||
 || min_length
-| Specifies the minimum password length.
+| Minimum password length.
 
-Default value: `0` (no requirements)
-    ||
+Default value: 0 (unlimited)
+||
 || min_lower_case_count
-| Specifies the minimum number of lowercase letters that a password must contain.
+| Minimum number of lowercase letters in the password.
 
-Default value: `0` (no requirements)
-    ||
+Default value: 0 (unlimited)
+||
 || min_upper_case_count
-| Specifies the minimum number of uppercase letters that a password must contain.
+| Minimum number of uppercase letters in the password.
 
-Default value: `0` (no requirements)
-    ||
+Default value: 0 (unlimited)
+||
 || min_numbers_count
-| Specifies the minimum number of digits that a password must contain.
+| Minimum number of digits in the password.
 
-Default value: `0` (no requirements)
-    ||
+Default value: 0 (unlimited)
+||
 || min_special_chars_count
-| Specifies the minimum number of special characters from the `special_chars` list that a password must contain.
+| Minimum number of special characters in the password from those specified in the `special_chars` parameter.
 
-Default value: `0` (no requirements)
-    ||
+Default value: 0 (unlimited)
+||
 || special_chars
-| Specifies a list of special characters that are allowed in a password.
+| List of special characters allowed when setting a password.
 
 Valid values: `!@#$%^&*()_+{}\|<>?=`
 
-Default value: empty (any of the `!@#$%^&*()_+{}\|<>?=` characters are allowed)
-    ||
+Default value: empty string (allows using all valid special characters)
+||
 || can_contain_username
-| Indicates whether passwords can include a username.
+| Flag determines whether the username can be included in the password.
 
 Default value: `false`
-    ||
+||
 |#
 
 {% note info %}
 
-Any changes to the password policy do not affect existing user passwords, so it is not necessary to change current passwords; they will be accepted as they are.
+Any changes to the password policy do not affect existing user passwords, so there is no need to change existing passwords; they will be accepted as is.
 
 {% endnote %}
 
-## Configuring LDAP Authentication {#ldap-auth-config}
+## LDAP authentication configuration {#ldap-auth-config}
 
-One of the user authentication methods in {{ ydb-short-name }} is using an LDAP directory. For more details, see [Interacting with the LDAP directory](../../security/authentication.md#ldap-auth-provider). To configure LDAP authentication, define the `ldap_authentication` section inside the `auth_config` section.
+One way to authenticate users in {{ ydb-short-name }} is to use an [LDAP](https://en.wikipedia.org/wiki/Lightweight_Directory_Access_Protocol) directory. More about this type of authentication is described in the section on [using an LDAP directory](../../security/authentication.md#ldap). To configure LDAP authentication, you need to describe the `ldap_authentication` section.
 
 Example of the `ldap_authentication` section:
 
+
 ```yaml
 auth_config:
-  #...
+  ...
   ldap_authentication:
     hosts:
       - "ldap-hostname-01.example.net"
@@ -172,211 +194,247 @@ auth_config:
     requested_group_attribute: "memberOf"
     extended_settings:
       enable_nested_groups_search: true
+      enable_sasl_external_bind: true
     use_tls:
       enable: true
       ca_cert_file: "/path/to/ca.pem"
       cert_require: DEMAND
+      cert_file: "/path/to/client-cert.pem"
+      key_file: "/path/to/client-key.pem"
   ldap_authentication_domain: "ldap"
   refresh_time: "1h"
-  #...
+  ...
 ```
+
 
 #|
 || Parameter | Description ||
 || `hosts`
-| Specifies a list of hostnames where the LDAP server is running.
-    ||
+| List of host names on which the LDAP server runs
+||
 || `port`
-| Specifies the port used to connect to the LDAP server.
-    ||
+| Port for connecting to the LDAP server
+||
 || `base_dn`
-| Specifies the root of the subtree in the LDAP directory from which the user entry search begins.
-    ||
+| Root of the subtree in the LDAP directory from which the user record search will be performed
+||
 || `bind_dn`
-| Specifies the Distinguished Name (DN) of the service account used to search for the user entry.
-    ||
+| Distinguished Name (DN) of the service account on whose behalf the user record search is performed
+||
 || `bind_password`
-| Specifies the password for the service account used to search for the user entry.
-    ||
+| Password of the service account on whose behalf the user record search is performed. Not set when `extended_settings.enable_sasl_external_bind: true`
+||
 || `search_filter`
-| Specifies a filter for searching the user entry in the LDAP directory. The filter string can include the sequence *$username*, which is replaced with the username requested for authentication in the database.
-    ||
+| Filter for searching the user record in the LDAP directory. The filter string may contain the character sequence *$username*, which will be replaced with the user name requested for authentication in the database
+||
 || `use_tls`
-| Configuration settings for the TLS connection between {{ ydb-short-name }} and the LDAP server.
-    ||
+| Settings for configuring the TLS connection between {{ ydb-short-name }} and the LDAP server
+||
 || `enable`
-| Indicates whether a TLS connection [using the `StartTls` request](../../security/authentication.md#starttls) will be attempted. When set to `true`, the `ldaps` connection scheme should be disabled by setting `ldap_authentication.scheme` to `ldap`.
-    ||
+| Determines whether an attempt will be made to establish a TLS connection with [ using the request `StartTls`](../../security/authentication.md#starttls). When setting this parameter to `true`, you must disable the use of the connection scheme `ldaps` by setting the parameter `ldap_authentication.scheme` to `ldap`
+||
 || `ca_cert_file`
-| Specifies the path to the certification authority's certificate file.
-    ||
+| Path to the certificate authority file
+||
 || `cert_require`
-| Specifies the certificate requirement level for the LDAP server.
+| Level of requirements for the LDAP server certificate.
 
 Possible values:
 
-- `NEVER` - {{ ydb-short-name }} does not request a certificate or accepts any presented certificate.
-- `ALLOW` - {{ ydb-short-name }} requests a certificate from the LDAP server but will establish the TLS session even if the certificate is not trusted.
-- `TRY` - {{ ydb-short-name }} requires a certificate from the LDAP server and terminates the connection if it is not trusted.
-- `DEMAND`/`HARD` - These are equivalent to `TRY` and are the default setting, with the value set to `DEMAND`.
-    ||
-|| `ldap_authentication_domain`
-| Specifies an identifier appended to the username to distinguish LDAP directory users from those authenticated using other providers.
+- `NEVER` - {{ ydb-short-name }} does not request a certificate, or any certificate passes verification.
+- `ALLOW` - {{ ydb-short-name }} requires the LDAP server to provide a certificate. If the provided certificate cannot be trusted, the TLS session will still be established.
+- `TRY` - {{ ydb-short-name }} requires the LDAP server to provide a certificate. If the provided certificate cannot be trusted, the TLS connection is terminated.
+- `DEMAND` and `HARD` — These requirements are equivalent to the `TRY` parameter.
 
-Default value: `ldap`
-    ||
+Default value: `DEMAND`
+||
+|| `cert_file`
+| Path to the client certificate file. Used as authentication information for [service account](../../security/authentication.md#ldap-service-account-auth).
+||
+|| `key_file`
+| Path to the client certificate key file
+||
 || `scheme`
-| Specifies the connection scheme to the LDAP server.
+| LDAP server connection scheme.
 
 Possible values:
 
-- `ldap` - Connects without encryption, sending passwords in plain text.
-- `ldaps` - Connects using TLS encryption from the first request. To use `ldaps`, disable the [`StartTls` request](../../security/authentication.md#starttls) by setting `ldap_authentication.use_tls.enable` to `false`, and provide certificate details in `ldap_authentication.use_tls.ca_cert_file` and set the certificate requirement level in `ldap_authentication.use_tls.cert_require`.
-- Any other value defaults to `ldap`.
+- `ldap` — {{ ydb-short-name }} will connect to the LDAP server without any encryption. Passwords will be sent to the LDAP server in plain text.
+- `ldaps` — {{ ydb-short-name }} will establish an encrypted connection to the LDAP server over TLS from the very first request. To successfully establish a connection using the `ldaps` scheme, you need to disable the use of [query `StartTls`](../../security/authentication.md#starttls) in the `ldap_authentication.use_tls.enable: false` section and fill in the certificate information `ldap_authentication.use_tls.ca_cert_file` and the certificate requirement level `ldap_authentication.use_tls.cert_require`.
+- If any other value is used, the default value `ldap` will be taken.
 
 Default value: `ldap`
-    ||
+||
 || `requested_group_attribute`
-| Specifies the attribute used for reverse group membership. The default is `memberOf`.
-    ||
+| Attribute of reverse group membership. By default `memberOf`
+||
 || `extended_settings.enable_nested_groups_search`
-| Indicates whether to perform a request to retrieve the full hierarchy of groups to which the user's direct groups belong.
+| Flag determines whether a query will be executed to retrieve the entire tree of groups that include the user's immediate groups.
 
 Possible values:
 
-- `true` — {{ ydb-short-name }} requests information about all groups to which the user's direct groups belong. It might take a long time to traverse the entire hierarchy of nested parent groups.
-- `false` — {{ ydb-short-name }} requests a flat list of groups, to which the user belongs. This request does not traverse possible nested parent groups.
+- `true` — {{ ydb-short-name }} requests information about all groups that include the user's immediate groups. Queries about all parent groups can take a long time.
+- `false` — {{ ydb-short-name }} requests a flat list of the user's groups. Such a query does not retrieve information about possible nested parent groups.
 
 Default value: `false`
-    ||
+||
+|| `extended_settings.enable_sasl_external_bind`
+| Flag determines whether [service account authentication](../../security/authentication.md#ldap-service-account-auth) will be performed using the SASL protocol with the EXTERNAL mechanism.
+
+Possible values:
+
+- `true` - The SASL protocol with the EXTERNAL mechanism (authentication using a client TLS certificate within mTLS) will be used for service account authentication. The client certificate specified in the `use_tls.cert_file` and `use_tls.key_file` parameters is used as authentication information. The `bind_dn` and `bind_password` parameters are not set in this case.
+- `false` - The simple bind method will be used for service account authentication. The `bind_dn` and `bind_password` parameters must be specified.
+
+Default value: `false`
+||
 || `host`
-| Specifies the hostname of the LDAP server. This parameter is deprecated and should be replaced with the `hosts` parameter.
-    ||
+| Host name where the LDAP server runs. This is a deprecated parameter; the `hosts` parameter should be used instead.
+||
+|| `ldap_authentication_domain`
+| User name suffix that allows distinguishing users from the LDAP directory from users authenticated using other providers.
+
+Default value: `ldap`
+||
 |#
 
-## Configuring Third-Party IAM Authentication {#iam-auth-config}
+## Configuring client certificate authentication {#certificate-auth-config}
 
-{{ ydb-short-name }} supports Yandex Identity and Access Management (IAM) used in Yandex Cloud for user authentication. To configure IAM authentication, define the following parameters:
+{{ ydb-short-name }} supports [client certificate authentication](../../security/authentication.md#client-certificate). Certificate verification rules are set in the [client_certificate_authorization](client_certificate_authorization.md) section. Additionally, a suffix for user names of users authenticated by certificate may be specified in the `auth_config` section.
+
+#|
+|| Parameter | Description ||
+|| `certificate_authentication_domain`
+| User name suffix that allows distinguishing users authenticated by client certificate from users authenticated by other methods.
+
+Default value: `cert` (that is, the default SID suffix is `@cert`).
+||
+|#
+
+## Configuring authentication using a third-party IAM provider {#iam-auth-config}
+
+{{ ydb-short-name }} supports user authentication using the [Yandex Identity and Access Management (IAM)](https://yandex.cloud/en/services/iam) service, which is used in Yandex Cloud, or another service compatible with it via API. To configure IAM authentication, you need to define the following parameters:
 
 #|
 || Parameter | Description ||
 || use_access_service
-| Indicates whether to allow authentication in Yandex Cloud using IAM AccessService.
+| Flag enables user authentication in Yandex Cloud via IAM using AccessService.
 
 Default value: `false`
-    ||
+||
 || access_service_endpoint
-| Specifies an IAM AccessService address, to which {{ ydb-short-name }} sends requests.
+| Address to which requests are sent to AccessService (IAM).
 
 Default value: `as.private-api.cloud.yandex.net:4286`
-    ||
+||
 || use_access_service_tls
-| Indicates whether to use TLS connections between {{ ydb-short-name }} and AccessService.
+| Flag enables the use of TLS connections between {{ ydb-short-name }} and AccessService.
 
 Default value: `true`
-    ||
+||
 || access_service_domain
-| Specifies an identifier appended to the username in [SID](../../concepts/glossary.md#access-sid) to distinguish Yandex Cloud IAM users from those authenticated using other providers.
+| Suffix of the “user source” in [SID](../../concepts/glossary.md#access-sid) for users coming to {{ ydb-short-name }} from Yandex Cloud IAM.
 
 Default value: `as` ("access service")
-    ||
+||
 || path_to_root_ca
-| Specifies the path to the certification authority's certificate file that is used to interact with AccessService.
+| Path to the certificate authority file used to interact with AccessService.
 
 Default value: `/etc/ssl/certs/YandexInternalRootCA.pem`
-    ||
+||
 || access_service_grpc_keep_alive_time_ms
-| Specifies the period of time, in milliseconds, after which a keepalive ping is sent on the transport to IAM AccessService.
+| Time period, in milliseconds, after which {{ ydb-short-name }} sends a keepalive ping to the IAM server to keep the connection alive.
 
 Default value: `10000`
-    ||
+||
 || access_service_grpc_keep_alive_timeout_ms
-| Specifies the amount of time, in milliseconds, that {{ ydb-short-name }} waits for the acknowledgement of the keepalive ping from IAM AccessService. If {{ ydb-short-name }} does not receive an acknowledgment within this time, it will close the connection.
+| Time period to wait for a response from the IAM server to a keepalive ping, in milliseconds. If no response is received from the IAM server within the timeout, {{ ydb-short-name }} closes the connection.
 
 Default value: `1000`
-    ||
+||
 || use_access_service_api_key
-| Indicates whether to use IAM API keys. The API key is a secret key created in Yandex Cloud IAM for simplified authorization of service accounts with the Yandex Cloud API. Use API keys if requesting an IAM token automatically is not an option.
+| Flag enables the use of IAM API keys. An API key is a secret key issued in Yandex Cloud IAM for simplified authorization of service accounts in the Yandex Cloud API. It is used when it is not possible to automatically request an IAM token.
 
 Default value: `false`
-    ||
+||
 |#
 
-## Configuring Caching for Authentication Results
+## Authentication result caching settings
 
-During the authentication process, a user session receives an authentication token, which is transmitted along with each request to the cluster {{ydb-short-name }}. Since {{ydb-short-name }} is a distributed system, user requests will eventually be processed on one or more {{ydb-short-name }} nodes. After receiving a request from the user, a {{ydb-short-name }} node verifies the authentication token. If successful, the node generates a **user token**, which is valid only inside the current node and is used to authorize the actions requested by the user. Subsequent requests with the same authentication token to the same node do not require verification of the authentication token.
+During authentication, the user session receives an authentication token that is passed with every request to the {{ ydb-short-name }} cluster. Since {{ ydb-short-name }} is a distributed system, user requests will ultimately be processed on one or more {{ ydb-short-name }} nodes. Each {{ ydb-short-name }} node, having received a request from the user, verifies the authentication token and, if the check succeeds, generates a **user token** that is valid only within the current {{ ydb-short-name }} node and is used to authorize the actions requested by the user. Subsequent requests with the same authentication token to the same {{ ydb-short-name }} node no longer require authentication token verification and are executed under the user token.
 
-To configure the life cycle and other important aspects of managing user tokens, define the following parameters:
+The lifetime and other important aspects of the user token operation are configured in the {{ ydb-short-name }} configuration using the following parameters:
 
 #|
 || refresh_period
-| Specifies how often a {{ ydb-short-name }} node scans cached user tokens to find the ones that need to be refreshed because the `refresh_time`, `life_time` or `expire_time` interval elapses. The lower this parameter value, the higher the CPU load.
+| Determines how often the {{ ydb-short-name }} node scans user tokens in the cache for reaching the time limits specified in the `refresh_time`, `life_time`, and `expire_time` parameters, after which the token must be refreshed or deleted. The shorter the specified user token check interval, the higher the CPU load.
 
 Default value: `1s`
-    ||
+||
 || refresh_time
-| Specifies the time interval since the last user token update after which a {{ ydb-short-name }} node updates the user token again. The actual update will occur within the range from `refresh_time/2` to `refresh_time`.
+| Determines the time elapsed since the last refresh when the {{ ydb-short-name }} node will attempt to refresh the user token. The specific refresh time will fall within the range from `refresh_time/2` to `refresh_time`.
 
 Default value: `1h`
-    ||
+||
 || life_time
-| Specifies the time interval for keeping a user token in {{ ydb-short-name }} node cache since its last use. If a {{ ydb-short-name }} node does not receive queries from a user within the specified time interval, the node deletes the user token from its cache.
+| The period of storing the user token in the {{ ydb-short-name }} node cache since its last use. If requests from the user for whom the token was created have not arrived at the {{ ydb-short-name }} node within the specified period, the node removes this user token from its cache.
 
 Default value: `1h`
-    ||
+||
 || expire_time
-| Specifies the time period, after which a user token is deleted from {{ ydb-short-name }} node cache. Deletion occurs regardless of the `life_time` interval.
+| The expiration period of the user token, after which the token is removed from the {{ ydb-short-name }} node cache. The removal occurs regardless of the period specified in the `life_time` parameter.
 
 {% note warning %}
 
-If a third-party system has successfully authenticated in the {{ydb-short-name }} node and regularly (more often than the `life_time` interval) sends requests to the same node, {{ydb-short-name }} will detect the possible deletion or change in the user account privileges only after the `expire_time` interval elapses.
+If a third-party system has successfully authenticated on the {{ ydb-short-name }} node and sends requests to the same node more frequently than the `life_time` interval, {{ ydb-short-name }} will only reliably detect a possible removal or change of the user account privileges after the `expire_time` period expires.
 
 {% endnote %}
 
-The shorter this time period, the more often {{ ydb-short-name }} nodes re-authenticate users and refresh their privileges. However, excessive user re-authentication slows down {{ ydb-short-name }}, especially so for external users. Setting this parameter to seconds negates the effect of caching user tokens.
+The shorter the specified period, the more often the {{ ydb-short-name }} node re-authenticates users and updates their privileges. However, too frequent re-authentication of users slows down the {{ ydb-short-name }}, especially for external users. Setting this parameter in seconds negates the cache for user tokens.
 
 Default value: `24h`
-    ||
+||
 || min_error_refresh_time
-| Specifies minimum period of time that must elapse since a failed attempt (temporary failure) to refresh a user token before retrying the attempt.
+| The minimum period after which the attempt to refresh a user token is repeated if an error (temporary failure) occurred while obtaining it.
 
-Together with the `max_error_refresh_time`, determines the possible interval for a delay before retrying a failed attempt to refresh a user token. Each subsequent delay is increased till it reaches the `max_error_refresh_time` value. Retries continue until a user token is refreshed or the `expire_time` period elapses.
+Together with the `max_error_refresh_time` parameter, it defines the boundaries for selecting the delay before retrying to refresh a user token that was obtained with an error. Each subsequent delay increases until it reaches the value of `max_error_refresh_time`. Attempts to refresh the user token continue until a successful refresh or until the end of the `expire_time` period.
 
 {% note warning %}
 
-Setting this parameter to `0` is not recommended, because instant retries results in excessive load.
+It is not recommended to set the parameter value to `0`, as immediate retries create excessive load.
 
 {% endnote %}
 
 Default value: `1s`
-    ||
+||
 || max_error_refresh_time
-| Specifies the maximum time interval that can elapse since a failed attempt (temporary failure) to refresh a user token before retrying the attempt.
+| The maximum period before which the attempt to refresh a user token is repeated if an error (temporary failure) occurred while obtaining it.
 
-Together with the `min_error_refresh_time`, determines the possible interval for a delay before retrying a failed attempt to refresh a user token. Each subsequent delay is increased till it reaches the `max_error_refresh_time` value. Retries continue until a user token is refreshed or the `expire_time` period elapses.
+Together with the `min_error_refresh_time` parameter, it defines the boundaries for selecting the delay before retrying to refresh a user token that was obtained with an error. Each subsequent delay increases until it reaches the value of `max_error_refresh_time`. Attempts to refresh the user token continue until a successful refresh or until the end of the `expire_time` period.
 
 Default value: `1m`
-    ||
+||
 |#
 
 ## Node registration token configuration {#node-registration-token}
 
-{{ ydb-short-name }} allows you to configure the authentication method for database nodes when they register with a cluster. This is done via the `node_registration_token` parameter in the `auth_config` section.
+{{ ydb-short-name }} allows you to configure the authentication type of database nodes when they register in the cluster. This type is configured through the `node_registration_token` parameter of the `auth_config` section.
 
 #|
 || Parameter | Description ||
 || node_registration_token
-| Specifies the authentication method for database nodes registering with a cluster.
+| Defines the authentication type of database nodes when they register in the {{ ydb-short-name }} cluster.
 
 Possible values:
 
-- Empty string (`""`) — nodes authenticate using TLS certificates when registering with the cluster. In this mode, nodes must use certificates for authentication during the registration process. For details on configuring node authentication with certificates, see [Database node authentication and authorization](../../devops/configuration-management/configuration-v1/node-authorization.md).
-- `"root@builtin"` — nodes authenticate using a special debug token when registering with the cluster. This authentication method is deprecated and will be removed in future releases. To ensure cluster security, always prefer TLS certificate‑based authentication by setting this parameter to an empty string.
+- Empty string (`""`) — the authentication mode for nodes via TLS certificates is used. In this case, nodes must use certificates for authentication when registering in the cluster. For more details on configuring node authentication via certificates, see the section [Authentication and authorization of database nodes](../../devops/configuration-management/configuration-v1/node-authorization.md).
+- "root@builtin" is an authentication mode using a special debug token. This mode is planned to be removed in future releases and is not recommended for use: to ensure cluster security, it is recommended to use node authentication via TLS certificates by setting the parameter to an empty value.
 
 ||
 |#
 
-Example of an `auth_config` section with TLS certificate authentication enabled:
+Example of the `auth_config` section with certificate-based node registration configuration:
+
 
 ```yaml
 auth_config:

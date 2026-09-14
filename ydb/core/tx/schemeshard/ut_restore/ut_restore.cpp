@@ -9,6 +9,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet_flat/flat_boot_cookie.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -715,6 +716,43 @@ value {
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
+    }
+
+    Y_UNIT_TEST_FLAG(ShouldReportDataSizeWithoutCompaction, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Let the shard build stats for the still empty table, so that the restore
+        // below has to invalidate them instead of riding on the initial build.
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        TPortManager portManager;
+        THolder<TS3Mock> s3Mock;
+        RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock,
+            {GenerateTestData(ECompressionCodec::None, "", 100)});
+        env.TestWaitNotification(runtime, txId);
+
+        // A direct part import goes neither through the memtable nor through a
+        // compaction, so the shard has to notice the attached part on its own.
+        ui64 dataSize = 0;
+        for (ui32 i = 0; i < 10 && !dataSize; ++i) {
+            env.SimulateSleep(runtime, TDuration::Seconds(10));
+            const auto desc = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
+            dataSize = desc.GetPathDescription().GetTableStats().GetDataSize();
+        }
+
+        UNIT_ASSERT_GT(dataSize, 0);
     }
 
     void ShouldSucceedOnMultipleFrames(bool enableDataShardDirectPartImport, ui32 batchSize) {
@@ -7441,13 +7479,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", port));
         env.TestWaitNotification(runtime, txId);
 
-        auto issues = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
-                        .GetResponse().GetEntry().GetIssues();
+        auto issues = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED).GetResponse().GetEntry().GetIssues();
         UNIT_ASSERT(!issues.empty());
-        UNIT_ASSERT_EQUAL(issues.begin()->message(), "Unsupported scheme object type");
+        UNIT_ASSERT_STRING_CONTAINS(to_lower(issues.begin()->message()), "unsupported scheme object type");
     }
 
-    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool enableDataShardDirectPartImport, const TString& metadata = R"({"version": 1})") {
+    void MaterializedIndex(
+            Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode,
+            bool enableDataShardDirectPartImport,
+            const TString& metadata = R"({"version": 1})")
+    {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -7584,11 +7625,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         bool enableCompact)
     {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(enableIndexMaterialization));
-        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(enableCompact);
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableIndexMaterialization(enableIndexMaterialization)
+            .EnableCompactFulltextIndex(enableCompact));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        if (runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+        if (enableCompact) {
             if (expectedIndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain) {
                 expectedIndexType = NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact;
             } else if (expectedIndexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance) {
@@ -7840,9 +7881,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalJsonRowIdAutoProvisionAfterRestore, EnableDataShardDirectPartImport, Compact) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(Compact));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
-        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(Compact);
         ui64 txId = 200;
 
         auto& ff = runtime.GetAppData().FeatureFlags;
@@ -7933,9 +7973,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_QUAD(ShouldSucceedOnGlobalJsonRowIdManualInfraAfterRestore, EnableDataShardDirectPartImport, Compact) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions());
+        TTestEnv env(runtime, TTestEnvOptions().EnableCompactFulltextIndex(Compact));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
-        runtime.GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(Compact);
         ui64 txId = 200;
 
         auto& ff = runtime.GetAppData().FeatureFlags;

@@ -770,3 +770,7 @@ TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId,
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

@@ -22,6 +22,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
+#include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
@@ -572,9 +573,35 @@ private:
                     TCountMinSketch::FromString(msg->Data->data(), msg->Data->size()));
                 break;
             case EStatType::EQ_WIDTH_HISTOGRAM:
-                response.Success = true;
-                response.EqWidthHistogram.Data =
-                    std::make_shared<TEqWidthHistogram>(msg->Data->data(), msg->Data->size());
+                try {
+                    response.Success = true;
+                    response.EqWidthHistogram.Data =
+                        std::make_shared<TEqWidthHistogram>(msg->Data->data(), msg->Data->size());
+                } catch (const std::exception& ex) {
+                    YDB_LOG_ERROR("Failed to parse EQ_WIDTH_HISTOGRAM blob",
+                        {"requestId", requestId},
+                        {"error", ex.what()});
+                    response.Success = false;
+                }
+                break;
+            case EStatType::EQ_HEIGHT_HISTOGRAM:
+                try {
+                    TEqHeightHistogramResult result;
+                    Y_ENSURE(result.ParseFromArray(msg->Data->data(), msg->Data->size()));
+                    response.Success = true;
+                    response.EqHeightHistogram.Data =
+                        std::make_shared<TEqHeightHistogram>(result);
+                } catch (const std::exception& ex) {
+                    // Malformed blobs throw from TEqHeightHistogram; report failure
+                    // rather than propagating the exception out of the handler.
+                    // Protobuf unknown fields from a newer writer are skipped, not
+                    // thrown — this catch is for YQL_ENSURE validation, not version
+                    // skew.
+                    YDB_LOG_ERROR("Failed to parse EQ_HEIGHT_HISTOGRAM blob",
+                        {"requestId", requestId},
+                        {"error", ex.what()});
+                    response.Success = false;
+                }
                 break;
             case EStatType::TABLE_SUMMARY: {
                 NKikimrStat::TTableSummaryStatistics data;
@@ -784,6 +811,7 @@ private:
                     << ", SIMPLE_COLUMN: " << counts[EStatType::SIMPLE_COLUMN]
                     << ", COUNT_MIN_SKETCH: " << counts[EStatType::COUNT_MIN_SKETCH]
                     << ", EQ_WIDTH_HISTOGRAM: " << counts[EStatType::EQ_WIDTH_HISTOGRAM]
+                    << ", EQ_HEIGHT_HISTOGRAM: " << counts[EStatType::EQ_HEIGHT_HISTOGRAM]
                     << ", TABLE_SUMMARY: " << counts[EStatType::TABLE_SUMMARY]
                     << "]" << Endl;
             }

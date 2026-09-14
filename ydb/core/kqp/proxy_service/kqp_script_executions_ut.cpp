@@ -10,6 +10,7 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/util/proto_duration.h>
 #include <ydb/library/table_creator/table_creator.h>
+#include <ydb/library/yql/providers/common/http_gateway/ut_helpers/http_gateway_holder.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
@@ -93,6 +94,8 @@ struct TScriptExecutionsYdbSetup {
             signal(sig, &TScriptExecutionsYdbSetup::BackTraceSignalHandler);
         }
 
+        const auto& httpGatewayHolder = NYql::NTestHelpers::GetGlobalHttpGatewayHolder();
+
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(secureScriptExecutions);
 
@@ -105,6 +108,7 @@ struct TScriptExecutionsYdbSetup {
         ServerSettings->SetGrpcPort(GrpcPort);
         ServerSettings->SetAppConfig(appConfig);
         ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
+        ServerSettings->SetKqpLoggerScope(httpGatewayHolder.LoggerScope);
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
 

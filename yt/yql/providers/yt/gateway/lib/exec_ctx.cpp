@@ -155,6 +155,7 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
             }
 
             const bool enableQLFilter = settings->_EnableQLFilter.Get(Cluster_).GetOrElse(DEFAULT_ENABLE_QL_FILTER);
+            const ui32 qlFilterDepthLimit = settings->QLFilterDepthLimit.Get(Cluster_).GetOrElse(DEFAULT_QL_FILTER_DEPTH_LIMIT);
             TNodeMap<TMaybe<TString>> inputQueries;
 
             for (auto path: section.Paths()) {
@@ -188,7 +189,7 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
                 if (enableQLFilter && pathInfo.QLFilter) {
                     auto queryIter = inputQueries.find(pathInfo.QLFilter.Get());
                     if (queryIter == inputQueries.end()) {
-                        queryIter = inputQueries.insert({pathInfo.QLFilter.Get(), GenerateInputQuery(pathInfo.QLFilter)}).first;
+                        queryIter = inputQueries.emplace(pathInfo.QLFilter.Get(), GenerateInputQuery(pathInfo.QLFilter, qlFilterDepthLimit)).first;
                     }
                     if (queryIter->second) {
                         richYPath.InputQuery(*queryIter->second);
@@ -374,7 +375,11 @@ TString TExecContextBaseSimple::GetAuth(const TYtSettings::TConstPtr& config) co
 
     if (!auth || auth->empty()) {
         if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
-            auth = ytTokenResolver->ResolveClusterToken(Cluster_);
+            auto ytName = Clusters_->TryGetYtName(Cluster_);
+            if (!ytName) {
+                ythrow yexception() << "Unknown cluster name: " << Cluster_;
+            }
+            auth = ytTokenResolver->ResolveClusterToken(ytName, *BaseSession_->Credentials_);
         }
     }
 

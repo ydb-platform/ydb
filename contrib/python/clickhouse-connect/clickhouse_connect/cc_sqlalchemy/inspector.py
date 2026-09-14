@@ -1,12 +1,13 @@
 import ast
 import re
 from collections.abc import Collection
-from typing import Any
+from typing import Any, cast
 
 import sqlalchemy.schema as sa_schema
 from sqlalchemy import String, bindparam, text
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import NoResultFound
+from sqlalchemy.sql.elements import TextClause
 
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import sqla_type_from_name
 from clickhouse_connect.cc_sqlalchemy.ddl.tableengine import build_engine
@@ -16,19 +17,32 @@ from clickhouse_connect.cc_sqlalchemy.sql.sqlparse import (
     find_top_level_clause,
     split_top_level,
 )
+from clickhouse_connect.driver.client import _INTERNAL_QUERY_FORMATS
+
+
+def with_internal_query_formats(clause: TextClause) -> TextClause:
+    """Force String columns to decode as str for driver metadata introspection.
+
+    User-configured global read formats such as set_default_formats("String", "bytes")
+    must not affect DESCRIBE / system.tables / SHOW TABLES results used by reflection.
+    Mirrors driver.client._INTERNAL_QUERY_FORMATS on the orchestration path.
+    """
+    return clause.execution_options(query_formats=dict(_INTERNAL_QUERY_FORMATS))
 
 
 def _database_name(connection, schema: str | None) -> str:
     if schema:
         return schema
-    return connection.execute(text("SELECT currentDatabase()")).scalar()
+    return connection.execute(with_internal_query_formats(text("SELECT currentDatabase()"))).scalar()
 
 
 def get_table_metadata(connection, table_name, schema=None):
     database = _database_name(connection, schema)
     result_set = connection.execute(
-        text("SELECT engine, engine_full, comment FROM system.tables WHERE database = :database AND name = :table_name").bindparams(
-            bindparam("database", type_=String()), bindparam("table_name", type_=String())
+        with_internal_query_formats(
+            text("SELECT engine, engine_full, comment FROM system.tables WHERE database = :database AND name = :table_name").bindparams(
+                bindparam("database", type_=String()), bindparam("table_name", type_=String())
+            )
         ),
         {"database": database, "table_name": table_name},
     )
@@ -44,7 +58,7 @@ def get_engine(connection, table_name, schema=None):
 
 
 def get_dictionary_create_sql(connection, table_name: str, schema: str | None = None) -> str:
-    create_sql = connection.execute(text(f"SHOW CREATE DICTIONARY {full_table(table_name, schema)}")).scalar()
+    create_sql = connection.execute(with_internal_query_formats(text(f"SHOW CREATE DICTIONARY {full_table(table_name, schema)}"))).scalar()
     return create_sql or ""
 
 
@@ -126,7 +140,7 @@ def get_columns(connection, table_name: str, schema: str | None = None) -> list[
     if table_metadata.engine == "Dictionary":
         return get_dictionary_columns(connection, table_name, schema)
     table_id = full_table(table_name, schema)
-    result_set = connection.execute(text(f"DESCRIBE TABLE {table_id}"))
+    result_set = connection.execute(with_internal_query_formats(text(f"DESCRIBE TABLE {table_id}")))
     if not result_set:
         raise NoResultFound(f"Table {table_id} does not exist")
     columns = []
@@ -155,36 +169,41 @@ class ChInspector(Inspector):
     def reflect_table(
         self,
         table,
-        *_args,
         include_columns: Collection[str] | None = None,
         exclude_columns: Collection[str] = (),
+        resolve_fks: bool = True,
+        *_args,
         **_kwargs,
     ):
         schema = table.schema
-        table_metadata = get_table_metadata(self.bind, table.name, schema)
-        if table_metadata.engine == "Dictionary":
-            reflected_columns = get_dictionary_columns(self.bind, table.name, schema)
-        else:
-            reflected_columns = self.get_columns(table.name, schema)
+        with self._inspection_context() as inspector:
+            connection = inspector.bind
+            table_metadata = get_table_metadata(connection, table.name, schema)
+            reflected_columns: list[dict[str, Any]]
+            if table_metadata.engine == "Dictionary":
+                reflected_columns = get_dictionary_columns(connection, table.name, schema)
+            else:
+                reflected_columns = cast(list[dict[str, Any]], inspector.get_columns(table.name, schema))
 
-        for col in reflected_columns:
-            name = col.pop("name")
-            if (include_columns and name not in include_columns) or (exclude_columns and name in exclude_columns):
-                continue
-            col_type = col.pop("type")
-            col_args = {key: value for key, value in col.items() if value is not None}
-            table.append_column(sa_schema.Column(name, col_type, **col_args))
-        if table_metadata.engine == "Dictionary":
-            dictionary_metadata = get_dictionary_metadata(self.bind, table.name, schema)
-            table.comment = dictionary_metadata.pop("comment", None)
-            for key, value in dictionary_metadata.items():
-                table.kwargs[key] = value
-            return
+            for col in reflected_columns:
+                name = col.pop("name")
+                if (include_columns and name not in include_columns) or (exclude_columns and name in exclude_columns):
+                    continue
+                col_type = col.pop("type")
+                col_args = {key: value for key, value in col.items() if value is not None}
+                table.append_column(sa_schema.Column(name, col_type, **col_args))
+            if table_metadata.engine == "Dictionary":
+                dictionary_metadata = get_dictionary_metadata(connection, table.name, schema)
+                table.comment = dictionary_metadata.pop("comment", None)
+                for key, value in dictionary_metadata.items():
+                    table.kwargs[key] = value
+                return
 
-        table.engine = build_engine(table_metadata.engine_full)
-        table.comment = table_metadata.comment or None
-        if table.engine is not None:
-            table.kwargs["clickhouse_engine"] = table.engine
+            table.engine = build_engine(table_metadata.engine_full)
+            table.comment = table_metadata.comment or None
+            if table.engine is not None:
+                table.kwargs["clickhouse_engine"] = table.engine
 
     def get_columns(self, table_name, schema=None, **_kwargs):
-        return get_columns(self.bind, table_name, schema)
+        with self._operation_context() as connection:
+            return get_columns(connection, table_name, schema)

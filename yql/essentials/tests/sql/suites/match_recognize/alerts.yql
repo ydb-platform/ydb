@@ -14,7 +14,6 @@ $osquery_data = [
 <|dt:1688911001, host:"fqdn2", ev_type:"login",      ev_status:"success", user:"user1",  vpn:false, |>,
 ];
 
-pragma FeatureR010="prototype";
 pragma config.flags("MatchRecognizeStream", "disable");
 
 SELECT *

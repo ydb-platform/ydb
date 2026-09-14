@@ -3481,6 +3481,9 @@ message TNbsConfig {
     optional bool Enabled = 1;
     optional NYdb.NBS.NProto.TStorageServiceConfig NbsStorageConfig = 2;
     optional TNbsFrontendConfig NbsFrontendConfig = 3;
+    // Startup-only level for NBS2 console logs.
+    // 0=EMERG, 1=ALERT, 2=CRIT, 3=ERROR, 4=WARN, 5=NOTICE, 6=INFO, 7=DEBUG, 8=TRACE.
+    optional uint32 ConsoleLogLevel = 4 [default = 5];
 }
 
 message TTliConfig {

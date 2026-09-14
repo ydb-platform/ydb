@@ -2858,25 +2858,16 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
     };
 
     using TPrefixColumns = TVector<std::pair<TString, TExprNode::TPtr>>;
-    auto extractPrefixColumns = [&](const TIndexDescription& index, bool allowLeadingSubPrefix) -> TMaybe<TPrefixColumns> {
-        if (index.KeyColumns.size() <= 1) {
-            return TPrefixColumns{};
-        }
-
-        if (!origPred) {
-            return Nothing();
-        }
-
-        THashSet<TString> prefixColumnSet;
-        for (size_t i = 0; i + 1 < index.KeyColumns.size(); ++i) {
-            prefixColumnSet.insert(index.KeyColumns[i]);
-        }
-
+    auto extractEqualityColumns = [&](const THashSet<TString>& columns) {
         TPrefixColumns extracted;
+        if (!origPred) {
+            return extracted;
+        }
+
         static const THashSet<TString> allowedWrappers = {"And", "Just", "AssumeStrict"};
 
         TExprVisitPtrFunc extract = [&](const TExprNode::TPtr& expr) {
-            TryExtractPrefixValuesImpl(expr, prefixColumnSet, extracted, origArg.Get());
+            TryExtractPrefixValuesImpl(expr, columns, extracted, origArg.Get());
 
             if (auto optionalIf = TExprBase(expr).Maybe<TCoOptionalIf>()) {
                 VisitExpr(optionalIf.Cast().Predicate().Ptr(), extract);
@@ -2894,6 +2885,19 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             return allowedWrappers.contains(expr->Content());
         };
         VisitExpr(origPred, extract);
+        return extracted;
+    };
+
+    auto extractPrefixColumns = [&](const TIndexDescription& index, bool allowLeadingSubPrefix) -> TMaybe<TPrefixColumns> {
+        if (index.KeyColumns.size() <= 1) {
+            return TPrefixColumns{};
+        }
+
+        THashSet<TString> prefixColumnSet;
+        for (size_t i = 0; i + 1 < index.KeyColumns.size(); ++i) {
+            prefixColumnSet.insert(index.KeyColumns[i]);
+        }
+        const auto extracted = extractEqualityColumns(prefixColumnSet);
 
         TPrefixColumns ordered;
         ordered.reserve(index.KeyColumns.size() - 1);
@@ -3008,6 +3012,13 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             b.ScoredColumn = ftColumnMember.Cast().Name().StringValue();
             b.FulltextQuery = parsedFulltext.Query;
             b.FulltextNamedOptions = parsedFulltext.NamedOptions;
+
+            // A fixed text value gives every surviving row the same relevance score.
+            // Reject this degenerate branch regardless of how its index is selected.
+            if (!extractEqualityColumns({b.ScoredColumn}).empty()) {
+                return addError(TStringBuilder() << "FullTextScore column '" << b.ScoredColumn
+                    << "' is fixed by an equality predicate in WHERE; it cannot be used for hybrid ranking");
+            }
 
             if (indexOverride) {
                 const TIndexDescription* idx = nullptr;

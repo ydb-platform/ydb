@@ -1307,7 +1307,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 2u}), keys);
     }
 
-    Y_UNIT_TEST(FulltextScoreOnPrefixColumnSelectsItsOwnIndex) {
+    Y_UNIT_TEST(RejectsFulltextScoreOnEqualityFilteredColumn) {
         auto kikimr = MakeRunnerWithCompact(/*compact=*/true, /*enableFulltextPrefix=*/true);
         auto db = kikimr.GetQueryClient();
         CreateDocs(db);
@@ -1322,7 +1322,7 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         AddVectorIndex(db);
 
         const auto params = TParamsBuilder().AddParam("$category").Utf8("a").Build().Build();
-        const auto keys = RunKeys(db, TargetDeclWith(R"sql(
+        const TString query = TargetDeclWith(R"sql(
             DECLARE $category AS Utf8;
         )sql") + R"sql(
             SELECT Key FROM `/Root/Docs`
@@ -1331,9 +1331,62 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
                 FullTextScore(Category, "a"),
                 Knn::CosineDistance(Embedding, $target))
             LIMIT 4;
-        )sql", params);
-        UNIT_ASSERT_C((std::set<ui64>{keys.begin(), keys.end()} == std::set<ui64>{1u, 2u}),
-            TStringBuilder() << "unexpected keys; result count: " << keys.size());
+        )sql";
+
+        UNIT_ASSERT_STRING_CONTAINS(RunBadRequestIssues(db, query, params),
+            "FullTextScore column 'Category' is fixed by an equality predicate in WHERE");
+
+        UNIT_ASSERT_STRING_CONTAINS(RunBadRequestIssues(db, TargetDeclWith(R"sql(
+            DECLARE $category AS Utf8;
+        )sql") + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            WHERE $category = Category
+            ORDER BY HybridRank(
+                FullTextScore(Category, "a"),
+                Knn::CosineDistance(Embedding, $target),
+                ("ft_category", "vec_idx") AS Indexes)
+            LIMIT 4;
+        )sql", params),
+            "FullTextScore column 'Category' is fixed by an equality predicate in WHERE");
+
+        UNIT_ASSERT_STRING_CONTAINS(RunBadRequestIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            WHERE Category = "a" AND Key > 0
+            ORDER BY HybridRank(
+                FullTextScore(Category, "a"),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql"),
+            "FullTextScore column 'Category' is fixed by an equality predicate in WHERE");
+    }
+
+    Y_UNIT_TEST(FulltextScoreOnPrefixColumnWithoutFixedValue) {
+        auto kikimr = MakeRunnerWithCompact(/*compact=*/true, /*enableFulltextPrefix=*/true);
+        auto db = kikimr.GetQueryClient();
+        CreateDocs(db);
+        UpsertDocs(db);
+        ExecOk(db, R"sql(
+            ALTER TABLE `/Root/Docs` ADD INDEX ft_category
+                GLOBAL USING fulltext_relevance
+                ON (Category)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql");
+        AddPrefixedFulltextIndex(db, "/Root/Docs", "ft_text_prefixed");
+        AddVectorIndex(db);
+
+        // Being another index's prefix is harmless; neither predicate fixes Category.
+        for (const TString& filter : {TString{}, TString{R"sql(WHERE Category = "a" OR Category = "b")sql"}}) {
+            const auto keys = RunKeys(db, TargetDecl + Sprintf(R"sql(
+                SELECT Key FROM `/Root/Docs`
+                %s
+                ORDER BY HybridRank(
+                    FullTextScore(Category, "a"),
+                    Knn::CosineDistance(Embedding, $target))
+                LIMIT 4;
+            )sql", filter.c_str()));
+            UNIT_ASSERT_C((std::set<ui64>{keys.begin(), keys.end()} == std::set<ui64>{1u, 2u, 3u, 4u}),
+                TStringBuilder() << "unexpected keys for filter: " << filter);
+        }
     }
 
     Y_UNIT_TEST(UsesParameterizedPrefix) {

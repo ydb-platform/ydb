@@ -193,11 +193,6 @@ namespace NYql::NGenericPushDown {
                 return Triple::Unknown;
             }
 
-            auto it = columns.find(columnName);
-            if (it == columns.end()) {
-                return Triple::Unknown;
-            }
-
             Ydb::TypedValue least;
             if (!GetTypedValue(between.least(), least)) { // TODO: ArithmeticalExpression
                 return Triple::Unknown;
@@ -205,6 +200,25 @@ namespace NYql::NGenericPushDown {
 
             Ydb::TypedValue greatest;
             if (!GetTypedValue(between.greatest(), greatest)) { // TODO: ArithmeticalExpression
+                return Triple::Unknown;
+            }
+
+            if (least.type().has_type_id() && greatest.type().has_type_id() && least.type().type_id() == greatest.type().type_id()) {
+                switch (least.type().type_id()) {
+                    case Ydb::Type::TIMESTAMP:
+                    case Ydb::Type::DATETIME:
+                    case Ydb::Type::DATE:
+                        if (least.value().int64_value() > greatest.value().int64_value()) {
+                            return Triple::False;
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            auto it = columns.find(columnName);
+            if (it == columns.end()) {
                 return Triple::Unknown;
             }
 

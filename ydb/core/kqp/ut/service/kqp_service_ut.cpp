@@ -680,13 +680,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
 
         static constexpr i64 AsyncPatternCompilationUniqueRequestsSize = 5;
 
-        // Mirrors MaxCompileAttempts of the pattern cache: how many times a pattern may be compiled after its
-        // compiled code has been taken away from it.
-        static constexpr i64 MaxCompileAttemptsPerPattern = 2;
-
         // A pattern that has lost its compiled code is not queued for compilation over and over again, so waiting for
-        // more compilations than there are unique programs would never finish - see MaxCompileAttempts in the pattern
-        // cache for what bounds the total.
+        // more compilations than there are unique programs would never finish.
         auto async_compilation_condition = [&]() {
             if (useCache) {
                 if (asyncPatternCompilationStrategy == AsyncPatternCompilationStrategy::On) {
@@ -775,9 +770,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 UNIT_ASSERT_GE(codeEvictions, 1);
 
                 // ... but giving the code up is the whole point of the limit, so it is not earned back again and
-                // again: every pattern is compiled at most MaxCompileAttempts times, however long the test runs.
-                UNIT_ASSERT_GE(compilations, AsyncPatternCompilationUniqueRequestsSize);
-                UNIT_ASSERT_LE(compilations, AsyncPatternCompilationUniqueRequestsSize * MaxCompileAttemptsPerPattern);
+                // again: every pattern is compiled exactly once, however long the test runs.
+                UNIT_ASSERT_VALUES_EQUAL(compilations, AsyncPatternCompilationUniqueRequestsSize);
 
                 // Which bounds the churn as well: a pattern can only lose the code it has earned, and it earns it
                 // exactly once per compilation. Both numbers settle instead of growing with the iteration count.

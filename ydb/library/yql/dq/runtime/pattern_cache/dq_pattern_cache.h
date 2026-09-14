@@ -1,7 +1,8 @@
 #pragma once
 
-#include "mkql_computation_node.h"
-#include "mkql_computation_pattern_cache_program_key.h"
+#include <yql/essentials/minikql/computation/mkql_computation_node.h>
+#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
+#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache_program_key.h>
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <library/cpp/threading/future/future.h>
@@ -9,58 +10,14 @@
 #include <memory>
 #include <mutex>
 
-namespace NKikimr::NMiniKQL {
+namespace NYql::NDq {
 
-struct TPatternCacheEntry {
-    TScopedAlloc Alloc;
-    TTypeEnvironment Env;
-    bool UseAlloc;
+using NKikimr::NMiniKQL::TPatternCacheEntry;
+using NKikimr::NMiniKQL::TPatternCacheEntryPtr;
+using NKikimr::NMiniKQL::TPatternCacheEntryFuture;
+using NKikimr::NMiniKQL::TProgramKey;
 
-    TRuntimeNode ProgramNode;
-
-    ui32 ProgramInputsCount;
-    TRuntimeNode ProgramParams;
-    TVector<TString> InputItemTypesRaw;
-    TVector<TType*> InputItemTypes;
-    TVector<TString> OutputItemTypesRaw;
-    TVector<TType*> OutputItemTypes;
-    TVector<TNode*> EntryPoints; // last entry node stands for parameters
-
-    TStructType* ParamsStruct;
-    IComputationPattern::TPtr Pattern;
-    size_t SizeForCache = 0;             // set only by cache to lock the size, which can slightly vary when pattern is used
-    std::atomic<size_t> AccessTimes = 0; // set only by cache
-    std::atomic<bool> IsInCache = false; // set only by cache
-
-    bool CompilationIsNotRequired = false;
-
-    void UpdateSizeForCache() {
-        Y_DEBUG_ABORT_UNLESS(!SizeForCache);
-        SizeForCache = Alloc.GetAllocated();
-    }
-
-    explicit TPatternCacheEntry(bool useAlloc = true)
-        : Alloc(__LOCATION__)
-        , Env(Alloc)
-        , UseAlloc(useAlloc)
-    {
-        // Release Alloc since it was implicitly acquired in Alloc's ctor
-        Alloc.Release();
-    }
-
-    ~TPatternCacheEntry() {
-        if (UseAlloc) {
-            // If alloc was used it should be acquired so dtors of all member fields will use it to free memory
-            // Release of Alloc will be called implicitly in Alloc's dtor
-            Alloc.Acquire();
-        }
-    }
-};
-
-using TPatternCacheEntryPtr = std::shared_ptr<TPatternCacheEntry>;
-using TPatternCacheEntryFuture = NThreading::TFuture<TPatternCacheEntryPtr>;
-
-class TComputationPatternLRUCache {
+class TComputationPatternCache {
 public:
     struct TConfig {
         TConfig(size_t maxSizeBytes, size_t maxCompiledSizeBytes)
@@ -90,19 +47,16 @@ public:
         }
     };
 
-    // TODO(YQL-20086): Migrate YDB to TConfig
-    using Config = TConfig;
-
-    explicit TComputationPatternLRUCache(const TConfig& configuration,
-                                         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
-    ~TComputationPatternLRUCache();
+    explicit TComputationPatternCache(const TConfig& configuration,
+                                      NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
+    ~TComputationPatternCache();
 
     static TPatternCacheEntryPtr CreateCacheEntry(bool useAlloc = true) {
         return std::make_shared<TPatternCacheEntry>(useAlloc);
     }
 
     TPatternCacheEntryPtr Find(const TProgramKey& key);
-    TPatternCacheEntryFuture FindOrSubscribe(const TProgramKey& key);
+    std::optional<TPatternCacheEntryFuture> FindOrSubscribe(const TProgramKey& key);
 
     void EmplacePattern(const TProgramKey& key, TPatternCacheEntryPtr patternWithEnv);
 
@@ -175,4 +129,4 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr MaxCompiledSizeBytesCounter_;
 };
 
-} // namespace NKikimr::NMiniKQL
+} // namespace NYql::NDq

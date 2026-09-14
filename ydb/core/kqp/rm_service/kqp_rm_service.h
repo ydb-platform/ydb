@@ -3,7 +3,7 @@
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
+#include <ydb/library/yql/dq/runtime/pattern_cache/dq_pattern_cache.h>
 
 #include <ydb/library/actors/core/actor.h>
 
@@ -292,7 +292,7 @@ public:
     // per-peer TEvSendResources (no RTT).
     virtual TVector<ui32> GetInitialBoardNodeIds() const = 0;
 
-    virtual std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() = 0;
+    virtual std::shared_ptr<NYql::NDq::TComputationPatternCache> GetPatternCache() = 0;
 
     virtual ui32 GetNodeId() {
         return 0;

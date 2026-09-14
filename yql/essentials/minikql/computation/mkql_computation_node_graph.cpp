@@ -877,12 +877,9 @@ public:
     }
 
     void Compile(TString optLLVM, IStatsRegistry* stats) override {
-        // Serializes compilations of this pattern against each other. Note that
-        // no reader takes this mutex: a compilation runs for hundreds of
-        // milliseconds, and nobody has to wait for it - see Clone() below.
         TGuard<TMutex> lock(CompileMutex_);
 
-        if (IsCompiled()) {
+        if (GetCompileStatus() != ECompileStatus::NoCompilationStarted) {
             return;
         }
 
@@ -978,64 +975,59 @@ public:
         timerFull.Release();
         timerFull.Report(stats);
 
-        {
-            TGuard<TAdaptiveLock> codegenLock(CodegenLock_);
-            Codegen_.swap(codegen);
-        }
-        // Release the previously generated code, if any, outside of the lock.
-        codegen.reset();
-
-        CompiledCodeSize_.store(compileStats.TotalObjectSize, std::memory_order_relaxed);
+        const ECompileStatus status = codegen ? ECompileStatus::Compiled : ECompileStatus::RejectedBySize;
+        const size_t codeSize = compileStats.TotalObjectSize;
 #else
         Y_UNUSED(optLLVM);
         Y_UNUSED(stats);
-#endif
 
-        // Release store, so that whoever observes the pattern as compiled also
-        // observes both the published codegen and the function pointers stored
-        // into the nodes by FinalizeFunctions() above.
-        IsPatternCompiled_.store(true, std::memory_order_release);
+        const ECompileStatus status = ECompileStatus::RejectedBySize;
+        const size_t codeSize = 0;
+        NYql::NCodegen::ICodegen::TSharedPtr codegen;
+#endif
+        {
+            TGuard<TAdaptiveLock> stateLock(CompiledStateLock_);
+            CompileStatus_ = status;
+            CompiledCodeSize_ = codeSize;
+            Codegen_.swap(codegen);
+        }
+
+        codegen.reset();
     }
 
-    bool IsCompiled() const override {
-        return IsPatternCompiled_.load(std::memory_order_acquire);
+    ECompileStatus GetCompileStatus() const override {
+        TGuard<TAdaptiveLock> stateLock(CompiledStateLock_);
+        return CompileStatus_;
     }
 
     size_t CompiledCodeSize() const override {
-        return CompiledCodeSize_.load(std::memory_order_relaxed);
+        TGuard<TAdaptiveLock> stateLock(CompiledStateLock_);
+        return CompiledCodeSize_;
     }
 
     void RemoveCompiledCode() override {
         NYql::NCodegen::ICodegen::TSharedPtr codegen;
         {
-            TGuard<TAdaptiveLock> codegenLock(CodegenLock_);
-            if (!Codegen_) {
-                // A pattern whose codegen was rejected by the limits above is
-                // marked as compiled while holding no code at all. There is
-                // nothing to free here, and running the codegen again would only
-                // hit the very same limits, so keep the pattern as it is.
+            TGuard<TAdaptiveLock> stateLock(CompiledStateLock_);
+            if (CompileStatus_ != ECompileStatus::Compiled) {
                 return;
             }
+
+            CompileStatus_ = ECompileStatus::NoCompilationStarted;
+            CompiledCodeSize_ = 0;
             codegen.swap(Codegen_);
         }
 
-        // Stop handing the code out only after it has been taken away: a Clone()
-        // racing with us either takes a reference and keeps the code alive for
-        // its own graph, or builds an interpreted graph, and both are fine.
-        IsPatternCompiled_.store(false, std::memory_order_release);
-        CompiledCodeSize_.store(0, std::memory_order_relaxed);
-
-        // The code itself is released here, outside of the lock, and only once
-        // the last graph using it is gone.
+        codegen.reset(); // make sure the release is outside of the state lock
     }
 
     THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) override {
-        // Never waits for a compilation in progress: until the compiled code is
-        // published, cloning an interpreted graph is both correct and cheap.
         NYql::NCodegen::ICodegen::TSharedPtr codegen;
-        if (IsCompiled()) {
-            TGuard<TAdaptiveLock> codegenLock(CodegenLock_);
-            codegen = Codegen_;
+        {
+            TGuard<TAdaptiveLock> stateLock(CompiledStateLock_);
+            if (CompileStatus_ == ECompileStatus::Compiled) {
+                codegen = Codegen_;
+            }
         }
 
         return MakeHolder<TComputationGraph>(PatternNodes_, compOpts, std::move(codegen));
@@ -1080,13 +1072,10 @@ private:
 
     TMutex CompileMutex_; // held for the whole compilation, taken by Compile() only
 
-    // Published by the compiling thread once the generated code is ready to be
-    // used, so that readers never block on a compilation in progress.
-    std::atomic<bool> IsPatternCompiled_ = false;
-    std::atomic<size_t> CompiledCodeSize_ = 0;
-
-    TAdaptiveLock CodegenLock_;                    // held just long enough to copy the pointer below
-    NYql::NCodegen::ICodegen::TSharedPtr Codegen_; // protected by CodegenLock_
+    mutable TAdaptiveLock CompiledStateLock_;
+    ECompileStatus CompileStatus_ = ECompileStatus::NoCompilationStarted; // protected by CompiledStateLock_
+    size_t CompiledCodeSize_ = 0;                                         // protected by CompiledStateLock_
+    NYql::NCodegen::ICodegen::TSharedPtr Codegen_;                        // protected by CompiledStateLock_
 
     NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
 };

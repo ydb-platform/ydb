@@ -198,7 +198,7 @@ public:
     TLocalFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
         TTaskTransformFactory taskTransformFactory,
-        std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> patternCache,
+        std::shared_ptr<NYql::NDq::TComputationPatternCache> patternCache,
         bool terminateOnError)
         : DeterministicMode(!!GetEnv("YQL_DETERMINISTIC_MODE"))
         , RandomProvider(
@@ -283,7 +283,7 @@ private:
 
 IProxyFactory::TPtr CreateFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
-    TTaskTransformFactory taskTransformFactory, std::shared_ptr<NKikimr::NMiniKQL::TComputationPatternLRUCache> patternCache, bool terminateOnError)
+    TTaskTransformFactory taskTransformFactory, std::shared_ptr<NYql::NDq::TComputationPatternCache> patternCache, bool terminateOnError)
 {
     return new TLocalFactory(functionRegistry, compFactory, taskTransformFactory, patternCache, terminateOnError);
 }

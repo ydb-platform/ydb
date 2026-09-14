@@ -1,19 +1,26 @@
-#include "mkql_computation_pattern_cache.h"
+#include "dq_pattern_cache.h"
 
 #include <util/generic/intrlist.h>
 
-namespace NKikimr::NMiniKQL {
+namespace NYql::NDq {
 
-class TComputationPatternLRUCache::TLRUPatternCacheImpl {
+using NKikimr::NMiniKQL::ECompileStatus;
+
+class TComputationPatternCache::TLRUPatternCacheImpl {
 public:
     TLRUPatternCacheImpl(size_t maxPatternsSize,
                          size_t maxPatternsSizeBytes,
                          size_t maxCompiledPatternsSize,
-                         size_t maxCompiledPatternsSizeBytes)
+                         size_t maxCompiledPatternsSizeBytes,
+                         const NMonitoring::TDynamicCounterPtr& counters)
         : MaxPatternsSize_(maxPatternsSize)
         , MaxPatternsSizeBytes_(maxPatternsSizeBytes)
         , MaxCompiledPatternsSize_(maxCompiledPatternsSize)
         , MaxCompiledPatternsSizeBytes_(maxCompiledPatternsSizeBytes)
+        , Evictions_(counters->GetCounter("PatternCache/Evictions", /*derivative=*/true))
+        , EvictedUnused_(counters->GetCounter("PatternCache/EvictedUnused", /*derivative=*/true))
+        , CompiledCodeEvictions_(counters->GetCounter("PatternCache/CompiledCodeEvictions", /*derivative=*/true))
+        , WastedCompilations_(counters->GetCounter("PatternCache/WastedCompilations", /*derivative=*/true))
     {
     }
 
@@ -44,7 +51,7 @@ public:
         return it->second.Entry;
     }
 
-    void Insert(const TProgramKey& key, TPatternCacheEntryPtr entry) {
+    TPatternCacheEntryPtr Insert(const TProgramKey& key, TPatternCacheEntryPtr entry) {
         auto [it, inserted] = ProgramKeyToPatternCacheHolder_.emplace(std::piecewise_construct,
                                                                       std::forward_as_tuple(key),
                                                                       std::forward_as_tuple(key, entry));
@@ -59,28 +66,35 @@ public:
         CurrentPatternsSizeBytes_ += it->second.Entry->SizeForCache;
         LruPatternList_.PushBack(&it->second);
 
-        if (it->second.Entry->Pattern->GetCompileStatus() != ECompileStatus::NoCompilationStarted) {
+        if (it->second.Entry->Pattern->GetCompileStatus() == ECompileStatus::Compiled) {
             ++CurrentCompiledPatternsSize_;
             CurrentPatternsCompiledCodeSizeInBytes_ += it->second.Entry->Pattern->CompiledCodeSize();
             LruCompiledPatternList_.PushBack(&it->second);
         }
 
         it->second.Entry->IsInCache.store(true);
+
+        // Taken before the eviction below, which is free to drop the very holder that has just been inserted.
+        TPatternCacheEntryPtr cachedEntry = it->second.Entry;
+
         ClearIfNeeded();
+
+        return cachedEntry;
     }
 
     void NotifyPatternCompiled(const TProgramKey& key) {
         auto it = ProgramKeyToPatternCacheHolder_.find(key);
-        if (it == ProgramKeyToPatternCacheHolder_.end()) {
+
+        // Either the old entry has left the cache while being compiled, or a new entry has taken its place.
+        if (it == ProgramKeyToPatternCacheHolder_.end() ||
+            it->second.Entry->Pattern->GetCompileStatus() == ECompileStatus::NoCompilationStarted) {
+            // TODO: make this scenario more consistent - don't waste compilation result.
+            ++*WastedCompilations_;
             return;
         }
 
         const auto& entry = it->second.Entry;
-
-        if (entry->Pattern->GetCompileStatus() == ECompileStatus::NoCompilationStarted) {
-            // This is possible if the old entry got removed from cache while being compiled - and the new entry got in.
-            // TODO: add metrics for this inefficient cache usage.
-            // TODO: make this scenario more consistent - don't waste compilation result.
+        if (entry->Pattern->GetCompileStatus() == ECompileStatus::RejectedBySize) {
             return;
         }
 
@@ -90,6 +104,7 @@ public:
 
         PromoteEntry(&it->second);
 
+        Y_ASSERT(entry->Pattern->GetCompileStatus() == ECompileStatus::Compiled);
         ++CurrentCompiledPatternsSize_;
         CurrentPatternsCompiledCodeSizeInBytes_ += entry->Pattern->CompiledCodeSize();
         LruCompiledPatternList_.PushBack(&it->second);
@@ -102,13 +117,16 @@ public:
         CurrentCompiledPatternsSize_ = 0;
         CurrentPatternsCompiledCodeSizeInBytes_ = 0;
 
-        ProgramKeyToPatternCacheHolder_.clear();
+        // The holders are the values of the hash map, and both LRU lists merely point at them, so the lists have to
+        // be walked and dropped before the map is cleared.
         for (auto& holder : LruPatternList_) {
             holder.Entry->IsInCache.store(false);
         }
 
         LruPatternList_.Clear();
         LruCompiledPatternList_.Clear();
+
+        ProgramKeyToPatternCacheHolder_.clear();
     }
 
     void UpdateMaxSizes(size_t maxPatternsSizeBytes, size_t maxCompiledPatternsSizeBytes) {
@@ -164,6 +182,11 @@ private:
         Y_ASSERT(holder->Entry->SizeForCache <= CurrentPatternsSizeBytes_);
         CurrentPatternsSizeBytes_ -= holder->Entry->SizeForCache;
 
+        // The entry is leaving the cache regardless of whether it has any compiled code, and it is exactly the
+        // entries without it that may be waiting in the compilation queue - the flag is what stops them from being
+        // compiled for nothing.
+        holder->Entry->IsInCache.store(false);
+
         if (!holder->LinkedInCompiledPatternLRUList()) {
             return;
         }
@@ -176,8 +199,6 @@ private:
         CurrentPatternsCompiledCodeSizeInBytes_ -= patternCompiledCodeSize;
 
         LruCompiledPatternList_.Remove(holder);
-
-        holder->Entry->IsInCache.store(false);
     }
 
     void ClearIfNeeded() {
@@ -185,6 +206,13 @@ private:
         while (ProgramKeyToPatternCacheHolder_.size() > MaxPatternsSize_ ||
                CurrentPatternsSizeBytes_ > MaxPatternsSizeBytes_) {
             TPatternCacheHolder* holder = LruPatternList_.Front();
+
+            ++*Evictions_;
+            if (!holder->Entry->AccessTimes.load()) {
+                // Nobody has ever taken this entry out of the cache since it was put there.
+                ++*EvictedUnused_;
+            }
+
             RemoveEntryFromLists(holder);
             ProgramKeyToPatternCacheHolder_.erase(holder->Key);
         }
@@ -193,6 +221,8 @@ private:
         while (CurrentCompiledPatternsSize_ > MaxCompiledPatternsSize_ ||
                CurrentPatternsCompiledCodeSizeInBytes_ > MaxCompiledPatternsSizeBytes_) {
             TPatternCacheHolder* holder = LruCompiledPatternList_.PopFront();
+
+            ++*CompiledCodeEvictions_;
 
             Y_ASSERT(CurrentCompiledPatternsSize_ > 0);
             --CurrentCompiledPatternsSize_;
@@ -219,13 +249,21 @@ private:
     THashMap<TProgramKey, TPatternCacheHolder> ProgramKeyToPatternCacheHolder_;
     TIntrusiveList<TPatternCacheHolder, TPatternLRUListTag> LruPatternList_;
     TIntrusiveList<TPatternCacheHolder, TCompiledPatternLRUListTag> LruCompiledPatternList_;
+
+    NMonitoring::TDynamicCounters::TCounterPtr Evictions_;
+    NMonitoring::TDynamicCounters::TCounterPtr EvictedUnused_;
+    NMonitoring::TDynamicCounters::TCounterPtr CompiledCodeEvictions_;
+    NMonitoring::TDynamicCounters::TCounterPtr WastedCompilations_;
 };
 
-TComputationPatternLRUCache::TComputationPatternLRUCache(
-    const TComputationPatternLRUCache::TConfig& configuration,
+TComputationPatternCache::TComputationPatternCache(
+    const TComputationPatternCache::TConfig& configuration,
     NMonitoring::TDynamicCounterPtr counters)
-    : Cache_(std::make_unique<TLRUPatternCacheImpl>(
-          CacheMaxElementsSize, configuration.MaxSizeBytes, CacheMaxElementsSize, configuration.MaxCompiledSizeBytes))
+    : Cache_(std::make_unique<TLRUPatternCacheImpl>(CacheMaxElementsSize,
+                                                    configuration.MaxSizeBytes,
+                                                    CacheMaxElementsSize,
+                                                    configuration.MaxCompiledSizeBytes,
+                                                    counters))
     , Configuration_(configuration)
     , Hits_(counters->GetCounter("PatternCache/Hits", /*derivative=*/true))
     , HitsCompiled_(counters->GetCounter("PatternCache/HitsCompiled", /*derivative=*/true))
@@ -243,16 +281,16 @@ TComputationPatternLRUCache::TComputationPatternLRUCache(
     *MaxCompiledSizeBytesCounter_ = Configuration_.MaxCompiledSizeBytes;
 }
 
-TComputationPatternLRUCache::~TComputationPatternLRUCache() {
+TComputationPatternCache::~TComputationPatternCache() {
     CleanCache();
 }
 
-TPatternCacheEntryPtr TComputationPatternLRUCache::Find(const TProgramKey& key) {
+TPatternCacheEntryPtr TComputationPatternCache::Find(const TProgramKey& key) {
     std::lock_guard<std::mutex> lock(Mutex_);
     if (auto it = Cache_->Find(key)) {
         ++*Hits_;
 
-        if (it->Pattern->GetCompileStatus() != ECompileStatus::NoCompilationStarted) {
+        if (it->Pattern->GetCompileStatus() == ECompileStatus::Compiled) {
             ++*HitsCompiled_;
         }
 
@@ -263,7 +301,7 @@ TPatternCacheEntryPtr TComputationPatternLRUCache::Find(const TProgramKey& key) 
     return {};
 }
 
-TPatternCacheEntryFuture TComputationPatternLRUCache::FindOrSubscribe(const TProgramKey& key) {
+std::optional<TPatternCacheEntryFuture> TComputationPatternCache::FindOrSubscribe(const TProgramKey& key) {
     std::lock_guard lock(Mutex_);
     if (auto it = Cache_->Find(key)) {
         ++*Hits_;
@@ -277,8 +315,8 @@ TPatternCacheEntryFuture TComputationPatternLRUCache::FindOrSubscribe(const TPro
         std::forward_as_tuple());
     if (isNew) {
         ++*Misses_;
-        // First future is empty - so the subscriber can initiate the entry creation.
-        return {};
+        // Nothing to wait for - the caller is the one to create the entry.
+        return std::nullopt;
     }
 
     ++*Waits_;
@@ -286,17 +324,18 @@ TPatternCacheEntryFuture TComputationPatternLRUCache::FindOrSubscribe(const TPro
     auto& subscribers = notifyIt->second;
     subscribers.push_back(promise);
 
-    // Second and next futures are not empty - so subscribers can wait while first one creates the entry.
-    return promise;
+    // Somebody else is already creating the entry, so the caller just waits for them.
+    return promise.GetFuture();
 }
 
-void TComputationPatternLRUCache::EmplacePattern(const TProgramKey& key, TPatternCacheEntryPtr patternWithEnv) {
+void TComputationPatternCache::EmplacePattern(const TProgramKey& key, TPatternCacheEntryPtr patternWithEnv) {
     Y_DEBUG_ABORT_UNLESS(patternWithEnv && patternWithEnv->Pattern);
     TVector<NThreading::TPromise<TPatternCacheEntryPtr>> subscribers;
+    TPatternCacheEntryPtr cachedEntry;
 
     {
         std::lock_guard lock(Mutex_);
-        Cache_->Insert(key, patternWithEnv);
+        cachedEntry = Cache_->Insert(key, patternWithEnv);
 
         auto notifyIt = Notify_.find(key);
         if (notifyIt != Notify_.end()) {
@@ -307,24 +346,26 @@ void TComputationPatternLRUCache::EmplacePattern(const TProgramKey& key, TPatter
         UpdatePatternCurrentUsageInfo();
     }
 
+    // Subscribers get the entry the cache actually holds - the one whose access counters and compilation state it
+    // tracks - and never a duplicate that has just been dropped.
     for (auto& subscriber : subscribers) {
-        subscriber.SetValue(patternWithEnv);
+        subscriber.SetValue(cachedEntry);
     }
 }
 
-void TComputationPatternLRUCache::UpdatePatternCurrentUsageInfo() {
+void TComputationPatternCache::UpdatePatternCurrentUsageInfo() {
     *SizeItems_ = Cache_->PatternsSize();
     *SizeBytes_ = Cache_->PatternsSizeInBytes();
     *SizeCompiledItems_ = Cache_->CompiledPatternsSize();
     *SizeCompiledBytes_ = Cache_->PatternsCompiledCodeSizeInBytes();
 }
 
-void TComputationPatternLRUCache::NotifyPatternCompiled(const TProgramKey& key) {
+void TComputationPatternCache::NotifyPatternCompiled(const TProgramKey& key) {
     std::lock_guard lock(Mutex_);
     Cache_->NotifyPatternCompiled(key);
 }
 
-void TComputationPatternLRUCache::NotifyPatternMissing(const TProgramKey& key) {
+void TComputationPatternCache::NotifyPatternMissing(const TProgramKey& key) {
     TVector<NThreading::TPromise<std::shared_ptr<TPatternCacheEntry>>> subscribers;
     {
         std::lock_guard lock(Mutex_);
@@ -342,12 +383,12 @@ void TComputationPatternLRUCache::NotifyPatternMissing(const TProgramKey& key) {
     }
 }
 
-size_t TComputationPatternLRUCache::GetSize() const {
+size_t TComputationPatternCache::GetSize() const {
     std::lock_guard lock(Mutex_);
     return Cache_->PatternsSize();
 }
 
-void TComputationPatternLRUCache::CleanCache() {
+void TComputationPatternCache::CleanCache() {
     std::lock_guard lock(Mutex_);
     PatternsToCompile_.clear();
     Cache_->Clear();
@@ -358,7 +399,7 @@ void TComputationPatternLRUCache::CleanCache() {
     Y_DEBUG_ABORT_UNLESS(*SizeCompiledBytes_ == 0, "Cache is expected to be empty after the CleanCache call");
 }
 
-void TComputationPatternLRUCache::UpdateConfiguration(const TConfig& configuration) {
+void TComputationPatternCache::UpdateConfiguration(const TConfig& configuration) {
     std::lock_guard lock(Mutex_);
     Y_ABORT_UNLESS(Configuration_.PatternAccessTimesBeforeTryToCompile ==
                        configuration.PatternAccessTimesBeforeTryToCompile,
@@ -374,7 +415,7 @@ void TComputationPatternLRUCache::UpdateConfiguration(const TConfig& configurati
     UpdatePatternCurrentUsageInfo();
 }
 
-void TComputationPatternLRUCache::AccessPattern(const TProgramKey& key, TPatternCacheEntryPtr entry) {
+void TComputationPatternCache::AccessPattern(const TProgramKey& key, TPatternCacheEntryPtr entry) {
     if (!Configuration_.PatternAccessTimesBeforeTryToCompile || entry->CompilationIsNotRequired ||
         entry->Pattern->GetCompileStatus() != ECompileStatus::NoCompilationStarted) {
         return;
@@ -387,4 +428,4 @@ void TComputationPatternLRUCache::AccessPattern(const TProgramKey& key, TPattern
     }
 }
 
-} // namespace NKikimr::NMiniKQL
+} // namespace NYql::NDq

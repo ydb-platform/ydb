@@ -13,9 +13,9 @@
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_input.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/dq/runtime/pattern_cache/dq_pattern_cache.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
-#include <yql/essentials/minikql/computation/mkql_computation_pattern_cache.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
@@ -389,7 +389,7 @@ public:
     std::shared_ptr<TPatternCacheEntry> CreateComputationPattern(const TDqTaskSettings& task, const TString& rawProgram, bool forCache, bool& canBeCached) {
         canBeCached = true;
         const bool useSeparatePattern = UseSeparatePatternAlloc(task);
-        auto entry = TComputationPatternLRUCache::CreateCacheEntry(useSeparatePattern);
+        auto entry = TComputationPatternCache::CreateCacheEntry(useSeparatePattern);
         auto& patternAlloc = useSeparatePattern ? entry->Alloc : Alloc();
         auto& patternEnv = useSeparatePattern ? entry->Env : TypeEnv();
         patternAlloc.Ref().UseRefLocking = forCache;

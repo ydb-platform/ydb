@@ -710,7 +710,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         NYql::TTaskTransformFactory dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
                 NYql::CreateCommonDqTaskTransformFactory()
                 });
-        auto patternCache = std::make_shared<NKikimr::NMiniKQL::TComputationPatternLRUCache>(NKikimr::NMiniKQL::TComputationPatternLRUCache::Config(200_MB, 200_MB));
+        auto patternCache = std::make_shared<NYql::NDq::TComputationPatternCache>(NYql::NDq::TComputationPatternCache::TConfig(200_MB, 200_MB));
         auto factory = NTaskRunnerProxy::CreateFactory(
                 FunctionRegistry.Get(),
                 dqCompFactory,

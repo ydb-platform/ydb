@@ -227,7 +227,7 @@ public:
         return {};
     }
 
-    std::shared_ptr<NMiniKQL::TComputationPatternLRUCache> GetPatternCache() override {
+    std::shared_ptr<NYql::NDq::TComputationPatternCache> GetPatternCache() override {
         return nullptr;
     }
 

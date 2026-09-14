@@ -430,14 +430,9 @@ public:
         if (!InitSeqNoPromise) {
             InitSeqNoPromise = NThreading::NewPromise<uint64_t>();
 
-<<<<<<< HEAD
-            Y_VALIDATE(WriteSessionActor, "Can not get init seq no, session already closed");
-            ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvGetInitSeqNo(*InitSeqNoPromise));
-=======
             if (WriteSessionActor) {
                 ActorSystem->Send(WriteSessionActor, new TWriteEvents::TEvGetInitSeqNo(*InitSeqNoPromise));
             }
->>>>>>> 7c20f04e65f (YQ-5695 fixed local topic write session close (#52869))
         }
 
         return InitSeqNoPromise->GetFuture();
@@ -445,12 +440,6 @@ public:
 
     void Write(TContinuationToken&& continuationToken, TWriteMessage&& message, TTransactionBase* tx) final {
         Y_VALIDATE(!tx && !message.Tx_, "Transaction is not supported for local topic write session");
-<<<<<<< HEAD
-        Y_VALIDATE(WriteSessionActor, "Can not write message, session already closed");
-=======
-        Y_VALIDATE(!message.GetPartition(), "Partition is not supported for local topic write session");
-        Y_VALIDATE(!message.GetKey(), "Key is not supported for local topic write session");
->>>>>>> 7c20f04e65f (YQ-5695 fixed local topic write session close (#52869))
 
         if (message.SeqNo_) {
             UseManualSeqNo();

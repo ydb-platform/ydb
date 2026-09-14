@@ -41,8 +41,6 @@ ydb/library/actors/interconnect/ut OutgoingStream.RdmaMemoryPreallocateNoAlloc
 ydb/library/wasm/unittests TWebAssemblyTest.PureVirtualFunctionCall
 ydb/public/lib/ydb_cli/commands/sqs_workload/ut SqsWorkloadScenario.InitSqsClientJsonApiPath
 ydb/public/lib/ydb_cli/commands/sqs_workload/ut SqsWorkloadScenario.InitSqsClientUsesCreatedConfiguration
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.WithoutPartitionWithRestart
-ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionBecomesQueryFailureReason
 ydb/services/udf_store/ut TWasmUdfThrowExceptionTest.ThrowExceptionWasmDwarfMapsToMainCpp
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc

@@ -6821,17 +6821,26 @@ private:
         Callbacks->OnAsyncOutputError(OutputIndex, std::move(issues), statusCode);
     }
 
+    ~TKqpForwardWriteActor() override {
+        CleanupMiniKQLObjects();
+    }
+
     void PassAway() override {
         Counters->ForwardActorsCount->Dec();
 
-        if (TransformOutput) {
-            AFL_ENSURE(Alloc);
-            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
-            PendingResult.Reset();
-            TransformOutput.Reset();
-        }
+        CleanupMiniKQLObjects();
 
         TActorBootstrapped<TKqpForwardWriteActor>::PassAway();
+    }
+
+    void CleanupMiniKQLObjects() {
+        if (!TransformOutput && !PendingResult) {
+            return;
+        }
+        AFL_ENSURE(Alloc);
+        TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+        PendingResult.Reset();
+        TransformOutput.Reset();
     }
 
     TString LogPrefix;

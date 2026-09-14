@@ -332,4 +332,12 @@ i64 GetTotalFreeListBytes();
 
 size_t GetMemoryMapsCount();
 
+// Number of the memory mappings currently held by the page pools. Unlike GetMemoryMapsCount() it
+// only accounts for the mappings made by the pools themselves, and doesn't read the procfs.
+size_t GetMappedRegionsCount();
+
+// Size of the address space currently held by the page pools. It stays above GetTotalMmapedBytes()
+// as long as some of the released ranges are still reserved - see the comment for TMappedRegions.
+size_t GetMappedAddressSpaceSize();
+
 } // namespace NKikimr

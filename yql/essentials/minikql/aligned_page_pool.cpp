@@ -14,6 +14,10 @@
 #include <yql/essentials/public/udf/sanitizer_utils.h>
 #include <yql/essentials/utils/exception_utils.h>
 
+#include <algorithm>
+#include <map>
+#include <mutex>
+
 #if defined(_win_)
     #include <util/system/winint.h>
 #elif defined(_unix_)
@@ -127,7 +131,7 @@ private:
     void FreePage(void* addr) noexcept {
         NYql::NUdf::SanitizerMakeRegionInaccessible(addr, PageSize_);
         auto res = Provider_.Munmap(addr, PageSize_);
-        Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
+        Y_DEBUG_ABORT_UNLESS(0 == res, "Unmap failed: %s", LastSystemErrorText());
     }
 
     T& Provider_;
@@ -241,6 +245,175 @@ private:
 
 } // namespace
 
+#ifndef _win_
+namespace {
+
+/**
+    Registry of the memory regions obtained from `mmap()`.
+
+    Its only purpose is to tell whether a range being freed can be released with `munmap()` without
+    increasing the number of the process memory mappings. Unmapping a range at the beginning or at
+    the end of an owned region only shrinks (or removes) the corresponding kernel VMA, while
+    unmapping a range in the middle of it splits the VMA in two - and it is exactly that splitting
+    which used to exhaust `vm.max_map_count` when the page pools cleaned up their free lists.
+
+    So the ranges that can't be unmapped for free are released with `madvise(MADV_DONTNEED)` instead:
+    the resident memory is returned to the system right away, but the address space is retained until
+    the neighbouring ranges are freed too and the hole becomes adjacent to a region boundary. That
+    way the number of mappings never grows because of the clean-up, and yet the address space (along
+    with the page tables backing it, see `VmPTE` in `/proc/self/status`) is eventually returned to
+    the system instead of being leaked.
+
+    Every `mmap()` is tracked as a separate region even when it happens to be allocated right next to
+    another one (in which case the kernel merges the two mappings into a single VMA). That keeps the
+    address space accounting simple, and the price is bounded: a boundary unmap that turns out to be
+    interior to a merged VMA splits it, but the resulting number of mappings still stays proportional
+    to the number of the regions that are alive - never to the number of the pages carved out of them.
+ */
+class TMappedRegions {
+public:
+    void Register(void* addr, size_t size) {
+        const uintptr_t begin = reinterpret_cast<uintptr_t>(addr);
+        const uintptr_t end = begin + AlignUp<size_t>(size, SYS_PAGE_SIZE);
+
+        std::lock_guard guard(Lock_);
+
+        Y_DEBUG_ABORT_UNLESS(!Regions_.contains(begin), "Region is already registered");
+        Regions_[begin].End = end;
+        TotalSize_ += end - begin;
+    }
+
+    size_t GetCount() const {
+        std::lock_guard guard(Lock_);
+        return Regions_.size();
+    }
+
+    size_t GetTotalSize() const {
+        std::lock_guard guard(Lock_);
+        return TotalSize_;
+    }
+
+    int Release(void* addr, size_t size) noexcept {
+        uintptr_t begin = reinterpret_cast<uintptr_t>(addr);
+        uintptr_t end = begin + size;
+
+        std::lock_guard guard(Lock_);
+
+        const auto region = FindRegion(begin, end);
+        if (Y_UNLIKELY(region == Regions_.end())) {
+            // Not a memory we have mapped - drop the resident pages only, since we know nothing
+            // about the mapping this range belongs to.
+            return DontNeed(begin, end - begin);
+        }
+
+        auto& holes = region->second.Holes;
+
+        // Coalesce the range with the holes released earlier - together they may reach a boundary.
+        auto hole = holes.upper_bound(begin);
+        if (hole != holes.begin()) {
+            const auto before = std::prev(hole);
+            if (before->second >= begin) {
+                begin = before->first;
+                end = std::max(end, before->second);
+                holes.erase(before);
+            }
+        }
+        while (hole != holes.end() && hole->first <= end) {
+            end = std::max(end, hole->second);
+            hole = holes.erase(hole);
+        }
+
+        const bool atBegin = begin == region->first;
+        const bool atEnd = end == region->second.End;
+
+        if (!atBegin && !atEnd) {
+            // Unmapping the hole would split the mapping in two, so keep the address space reserved.
+            holes.emplace(begin, end);
+            return DontNeed(begin, end - begin);
+        }
+
+        if (Y_UNLIKELY(0 != ::munmap(reinterpret_cast<void*>(begin), end - begin))) {
+            // The range is still mapped - remember it, so the next neighbour to be freed retries.
+            holes.emplace(begin, end);
+            return -1;
+        }
+
+        TotalSize_ -= end - begin;
+
+        if (atBegin && atEnd) {
+            Regions_.erase(region);
+        } else if (atBegin) {
+            auto node = Regions_.extract(region);
+            node.key() = end;
+            Regions_.insert(std::move(node));
+        } else {
+            region->second.End = begin;
+        }
+
+        return 0;
+    }
+
+private:
+    struct TRegion {
+        uintptr_t End = 0;
+        // Ranges that are released, but still mapped - keyed by the first address, never adjacent.
+        std::map<uintptr_t, uintptr_t> Holes;
+    };
+
+    using TRegions = std::map<uintptr_t, TRegion>;
+
+    TRegions::iterator FindRegion(uintptr_t begin, uintptr_t end) {
+        auto it = Regions_.upper_bound(begin);
+        if (it == Regions_.begin()) {
+            return Regions_.end();
+        }
+
+        --it;
+        return end <= it->second.End ? it : Regions_.end();
+    }
+
+    static int DontNeed(uintptr_t begin, size_t size) noexcept {
+        void* addr = reinterpret_cast<void*>(begin);
+
+        // Unlock the memory in case somewhere was called `mlockall(MCL_FUTURE)` - `madvise()`
+        // refuses to drop the pages of a locked region.
+        if (::munlock(addr, size) == -1 && LastSystemError() == ENOMEM) {
+            // Unlocking a region would result in the total number of mappings with distinct
+            // attributes (e.g. locked versus unlocked) exceeding the allowed maximum.
+            // NOTE: `madvise(MADV_DONTNEED)` can't return ENOMEM, so report the failure here.
+            // The other errors either mean the region was simply not locked (EAGAIN, EPERM) or
+            // are reported by the `madvise()` call below as well (EINVAL).
+            return -1;
+        }
+
+        /**
+            There is at least a couple of drawbacks of using madvise instead of munmap:
+            - more potential for use-after-free and memory corruption since we still may access
+              unneeded regions by mistake,
+            - actual RSS memory may be freed later after kernel gets some memory-pressure, and it
+              may confuse system monitoring tools.
+
+            But also there is a huge advantage: the number of memory maps used by process doesn't
+            increase because of the "holes".
+         */
+        return ::madvise(addr, size, MADV_DONTNEED);
+    }
+
+    TRegions Regions_;
+    size_t TotalSize_ = 0;
+    mutable std::mutex Lock_;
+};
+
+TMappedRegions& MappedRegions() {
+    // Intentionally never destroyed: the global page pools release their pages at the process exit,
+    // i.e. after the singletons (i.e. this one as well) have already been destroyed.
+    static auto* regions = new TMappedRegions();
+    return *regions;
+}
+
+} // namespace
+#endif
+
 #ifdef _win_
     #define MAP_FAILED (void*)(-1)
 inline void* TSystemMmap::Mmap(size_t size)
@@ -260,54 +433,27 @@ inline int TSystemMmap::Munmap(void* addr, size_t size) noexcept {
 #else
 inline void* TSystemMmap::Mmap(size_t size)
 {
-    return ::mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, 0, 0);
+    void* res = ::mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, 0, 0);
+    if (Y_LIKELY(MAP_FAILED != res)) {
+        MappedRegions().Register(res, size);
+    }
+    return res;
 }
 
 inline int TSystemMmap::Munmap(void* addr, size_t size) noexcept {
     Y_DEBUG_ABORT_UNLESS(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
     Y_DEBUG_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
 
-    if (size > MaxMidSize) {
-        return ::munmap(addr, size);
-    }
-
-    // Unlock memory in case somewhere was called `mlockall(MCL_FUTURE)`.
-    if (::munlock(addr, size) == -1) {
-        switch (LastSystemError()) {
-            case EAGAIN:
-                [[fallthrough]];
-                // The memory region was probably not locked - skip,
-                // also since we can't distinguish from other kernel problems that may cause EAGAIN (not enough memory for structures?)
-                // we rely on the failure of the following `madvise()` call.
-
-            case EPERM:
-                [[fallthrough]];
-                // The most common case we get this error if we have no privileges, but also ignored error when called `mlockall()`
-                // somewhere earlier. So ignore this.
-
-            case EINVAL:
-                // Something wrong with `addr` and `size` - we'll see the same error from the following `madvise()` call.
-                break;
-
-            case ENOMEM:
-                // Locking or unlocking a region would result in the total number of mappings with distinct attributes
-                // (e.g., locked versus unlocked) exceeding the allowed maximum.
-                // NOTE: `madvise(MADV_DONTNEED)` can't return ENOMEM.
-                return -1;
-        }
-    }
-
     /**
-        There is at least a couple of drawbacks of using madvise instead of munmap:
-        - more potential for use-after-free and memory corruption since we still may access unneeded regions by mistake,
-        - actual RSS memory may be freed later after kernel gets some memory-pressure, and it may confuse system monitoring tools.
-
-        But also there is a huge advantage: the number of memory maps used by process doesn't increase because of the "holes".
-
-        The main source of the growth of number of memory regions is a clean-up of freed pages from page pools.
-        Now we can safely invoke `TAlignedPagePool::DoCleanupGlobalFreeList()` whenever we want it.
+        The main source of the growth of number of memory regions is a clean-up of freed pages from
+        page pools: unmapping a single page out of a larger mapping punches a hole in it and splits
+        it in two. `TMappedRegions` tracks what we have mapped, so that such a range is really
+        unmapped only when that doesn't split anything - and is merely dropped from the resident
+        memory otherwise. Thus `TAlignedPagePool::DoCleanupGlobalFreeList()` can be safely invoked
+        whenever we want it, and still the address space (and the page tables) is given back to the
+        system once the whole region gets free.
      */
-    return ::madvise(addr, size, MADV_DONTNEED);
+    return MappedRegions().Release(addr, size);
 }
 #endif
 
@@ -803,7 +949,11 @@ void* GetAlignedPage() {
         return page;
     }
 
-    auto allocSize = size * 2;
+    // Map a whole batch of pages at once and cache the rest of them: mapping the pages one by one
+    // would spend a memory mapping (and a couple of syscalls) on the alignment of every single page.
+    constexpr ui64 batchPages = TAlignedPagePool::ALLOC_AHEAD_PAGES + 1;
+    const auto allocSize = (batchPages + 1) * size; // one extra page to align the batch within
+
     void* unalignedPtr = globalPool.DoMmap(allocSize);
     if (Y_UNLIKELY(MAP_FAILED == unalignedPtr)) {
         TStringStream mmaps;
@@ -818,11 +968,16 @@ void* GetAlignedPage() {
 
     void* page = AlignUp(unalignedPtr, size);
 
-    // Unmap unaligned prefix before offset and tail after aligned page
+    // Unmap unaligned prefix before offset and tail after the batch. Both are at the boundary of
+    // the fresh mapping, so neither of them splits it in two.
     const size_t offset = (intptr_t)page - (intptr_t)unalignedPtr;
     if (Y_UNLIKELY(offset)) {
         globalPool.DoMunmap(unalignedPtr, offset);
-        globalPool.DoMunmap((ui8*)page + size, size - offset);
+    }
+    globalPool.DoMunmap((ui8*)page + batchPages * size, size - offset);
+
+    for (ui64 i = 1; i < batchPages; ++i) {
+        globalPool.PushPage(0, (ui8*)page + i * size);
     }
 
     return page;
@@ -877,6 +1032,22 @@ template void ReleaseAlignedPage<TFakeMmap>(void*, ui64);
 
 template void ReleaseAlignedPage<>(void*);
 template void ReleaseAlignedPage<TFakeMmap>(void*);
+
+size_t GetMappedRegionsCount() {
+#ifdef _win_
+    return 0;
+#else
+    return MappedRegions().GetCount();
+#endif
+}
+
+size_t GetMappedAddressSpaceSize() {
+#ifdef _win_
+    return 0;
+#else
+    return MappedRegions().GetTotalSize();
+#endif
+}
 
 size_t GetMemoryMapsCount() {
     size_t lineCount = 0;

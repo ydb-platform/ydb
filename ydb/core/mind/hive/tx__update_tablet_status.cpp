@@ -107,11 +107,9 @@ public:
                 if (tablet->IsLeader()) {
                     TLeaderTabletInfo& leader(tablet->AsLeader());
                     leader.KnownGeneration = Generation;
-                    leader.ConfirmedStorageVersion = leader.TabletStorageInfo->Version;
                     db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet->NodeId),
                                                                     NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(Generation),
-                                                                    NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics),
-                                                                    NIceDb::TUpdate<Schema::Tablet::ConfirmedStorageVersion>(leader.ConfirmedStorageVersion));
+                                                                    NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet->Statistics));
 
 
                     // tablet booted successfully, we may actually cut history now

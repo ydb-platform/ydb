@@ -1,3 +1,6 @@
+# Requires pack_num.
+NO_BUILD_IF(OS_WINDOWS)
+
 PY3TEST()
 
 SIZE(LARGE)

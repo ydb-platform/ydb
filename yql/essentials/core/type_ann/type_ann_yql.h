@@ -11,6 +11,21 @@ struct TYqlFromSettings {
     static TMaybe<TYqlFromSettings> Parse(const TExprNode::TPtr& settings, TExtContext& ctx);
 };
 
+struct TYqlColumnOrderItem {
+    TString Content;
+    bool IsSynthetic = false;
+
+    friend bool operator==(const TYqlColumnOrderItem& lhs, const TYqlColumnOrderItem& rhs) = default;
+    friend bool operator!=(const TYqlColumnOrderItem& lhs, const TYqlColumnOrderItem& rhs) = default;
+};
+
+struct TYqlResultItemLabel: TYqlColumnOrderItem {
+    TPositionHandle Position;
+    bool IsShadowingWarning = false;
+};
+
+using TYqlColumnOrder = TVector<TYqlColumnOrderItem>;
+
 IGraphTransformer::TStatus PromoteYqlAggOptions(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
@@ -35,8 +50,7 @@ IGraphTransformer::TStatus InferYqlInferUnionType(
     bool& isUniversal);
 
 /// NB: this is a light version only for a simple and sound static analysis.
-TMaybe<TVector<std::pair<TString, /*isSynthetic=*/bool>>>
-InferYqlSimpleColumnOrder(const TExprNode::TPtr& input);
+TMaybe<TYqlColumnOrder> InferYqlSimpleColumnOrder(const TExprNode::TPtr& input);
 
 IGraphTransformer::TStatus ValidateYqlExplicitColumnOrders(
     const TExprNode::TPtr& input,
@@ -45,7 +59,13 @@ IGraphTransformer::TStatus ValidateYqlExplicitColumnOrders(
     TPositionHandle position,
     const TVector<TPositionHandle>& expectedPositions,
     const TVector<TString>& expectedOrder,
-    const TVector<std::pair<TString, /*isSynthetic=*/bool>>& actualOrder);
+    const TYqlColumnOrder& actualOrder);
+
+IGraphTransformer::TStatus ValidateYqlWarnShadow(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExtContext& ctx,
+    const TInputs& inputs);
 
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);

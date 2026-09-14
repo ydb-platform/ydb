@@ -54,6 +54,8 @@ class ClusterDetails(ClusterDetailsProvider):
         self.__details = None
         self.__databases = None
         self.__dynamic_slots = None
+        self.__host_dynamic_slot_counts = None
+        self.__host_storage_enabled = None
         self._cluster_description_file = cluster_description_path
         self._walle_provider = walle_provider
 
@@ -74,6 +76,44 @@ class ClusterDetails(ClusterDetailsProvider):
     @property
     def hosts_names(self):
         return sorted(list(set(node.hostname for node in self.hosts)))
+
+    def _iter_host_yaml(self):
+        for host in self.template.get('hosts', []):
+            hostname = host.get('name') or host.get('host')
+            if hostname is not None:
+                yield hostname, host
+
+    @property
+    def host_dynamic_slot_counts(self):
+        """Per-host limit on how many dynamic slots to start.
+
+        Domain-level ``dynamic_slots`` still defines the slot types (ports).
+        If a host does not set ``dynamic_slots``, all domain slots are eligible
+        on that host (legacy round-robin behaviour).
+        """
+        if self.__host_dynamic_slot_counts is None:
+            counts = {}
+            for hostname, host in self._iter_host_yaml():
+                if 'dynamic_slots' not in host:
+                    continue
+                counts[hostname] = int(host['dynamic_slots'])
+            self.__host_dynamic_slot_counts = counts
+        return self.__host_dynamic_slot_counts
+
+    @property
+    def host_storage_enabled(self):
+        """hostname -> whether to start the static/storage process.
+
+        Omitted ``storage`` means True (legacy: start kikimr on every listed host).
+        """
+        if self.__host_storage_enabled is None:
+            enabled = {}
+            for hostname, host in self._iter_host_yaml():
+                if 'storage' not in host:
+                    continue
+                enabled[hostname] = bool(host['storage'])
+            self.__host_storage_enabled = enabled
+        return self.__host_storage_enabled
 
     @property
     def hosts_datacenters(self):

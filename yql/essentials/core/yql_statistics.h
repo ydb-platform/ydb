@@ -19,13 +19,13 @@
 
 namespace NYql {
 
-enum EStatisticsType : ui32 {
+enum EStatisticsType: ui32 {
     BaseTable,
     FilteredFactTable,
     ManyManyJoin
 };
 
-enum EStorageType : ui32 {
+enum EStorageType: ui32 {
     NA,
     RowStorage,
     ColumnStorage
@@ -39,10 +39,9 @@ public:
     }
 
     TMaybe<NDq::TOrderingsStateMachine::TLogicalOrderings> GetShufflingOrderigsByJoinLabels(
-        TVector<TString> searchingLabels
-    ) {
+        TVector<TString> searchingLabels) {
         std::sort(searchingLabels.begin(), searchingLabels.end());
-        for (const auto& [joinLabels, shufflings]: ShufflingOrderingsByJoinLabels_) {
+        for (const auto& [joinLabels, shufflings] : ShufflingOrderingsByJoinLabels_) {
             if (searchingLabels == joinLabels) {
                 return shufflings;
             }
@@ -80,11 +79,14 @@ struct TColumnStatistics {
  * recorded.
  * Cost is also included in statistics, as its updated concurrently with statistics
  * all of the time.
-*/
+ */
 struct TOptimizerStatistics {
-    struct TKeyColumns : public TSimpleRefCount<TKeyColumns> {
+    struct TKeyColumns: public TSimpleRefCount<TKeyColumns> {
         TVector<TString> Data;
-        explicit TKeyColumns(TVector<TString> data) : Data(std::move(data)) {}
+        explicit TKeyColumns(TVector<TString> data)
+            : Data(std::move(data))
+        {
+        }
 
         TVector<NDq::TJoinColumn> ToJoinColumns(const TString& alias) {
             TVector<NDq::TJoinColumn> columns;
@@ -97,29 +99,36 @@ struct TOptimizerStatistics {
         }
     };
 
-    struct TSortColumns : public TSimpleRefCount<TSortColumns> {
+    struct TSortColumns: public TSimpleRefCount<TSortColumns> {
         TVector<TString> Columns;
         TVector<TString> Aliases;
 
         TSortColumns(const TVector<TString>& cols, const TVector<TString>& aliases)
             : Columns(cols)
             , Aliases(aliases)
-        {}
+        {
+        }
     };
 
-    struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
-        THashMap<TString,TColumnStatistics> Data;
+    struct TColumnStatMap: public TSimpleRefCount<TColumnStatMap> {
+        THashMap<TString, TColumnStatistics> Data;
         TColumnStatMap() = default;
-        explicit TColumnStatMap(THashMap<TString,TColumnStatistics> data) : Data(std::move(data)) {}
+        explicit TColumnStatMap(THashMap<TString, TColumnStatistics> data)
+            : Data(std::move(data))
+        {
+        }
     };
 
-    struct TShuffledByColumns : public TSimpleRefCount<TShuffledByColumns> {
+    struct TShuffledByColumns: public TSimpleRefCount<TShuffledByColumns> {
         TVector<NDq::TJoinColumn> Data;
-        explicit TShuffledByColumns(TVector<NDq::TJoinColumn> data) : Data(std::move(data)) {}
+        explicit TShuffledByColumns(TVector<NDq::TJoinColumn> data)
+            : Data(std::move(data))
+        {
+        }
         TString ToString() {
             TString result;
 
-            for (const auto& column: Data) {
+            for (const auto& column : Data) {
                 result.append(column.RelName).append(".").append(column.AttributeName).append(", ");
             }
             if (!result.empty()) {
@@ -178,8 +187,7 @@ struct TOptimizerStatistics {
         TIntrusivePtr<TKeyColumns> keyColumns = {},
         TIntrusivePtr<TColumnStatMap> columnMap = {},
         EStorageType storageType = EStorageType::NA,
-        std::shared_ptr<IProviderStatistics> specific = nullptr
-    );
+        std::shared_ptr<IProviderStatistics> specific = nullptr);
 
     TOptimizerStatistics& operator+=(const TOptimizerStatistics& other);
     bool Empty() const;
@@ -191,4 +199,4 @@ struct TOptimizerStatistics {
 
 std::shared_ptr<TOptimizerStatistics> OverrideStatistics(const TOptimizerStatistics& s, const TStringBuf& tablePath, const std::shared_ptr<NJson::TJsonValue>& stats);
 
-}
+} // namespace NYql

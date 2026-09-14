@@ -56,10 +56,12 @@ public:
      *
      * @param[in] sourceGroupId The ID of the source group to add
      * @param[in] sourceCounterGroup The counter group where the source counters are looked up
+     * @param[in] isFollowerSource Exclude this source from LeaderOnly counters
      */
     virtual void AddSourceCountersGroup(
         const TString& sourceGroupId,
-        NMonitoring::TDynamicCounterPtr sourceCounterGroup
+        NMonitoring::TDynamicCounterPtr sourceCounterGroup,
+        bool isFollowerSource = false
     ) = 0;
 
     /**

@@ -8,7 +8,6 @@ bool operator<(const TPosition& lhs, const TPosition& rhs) {
 
 } // namespace NSQLPureAST
 
-template <>
-void Out<NSQLPureAST::TPosition>(IOutputStream& out, const NSQLPureAST::TPosition& value) {
+Y_DECLARE_OUT_SPEC(, NSQLPureAST::TPosition, out, value) {
     out << value.Line << ":" << value.Column;
 }

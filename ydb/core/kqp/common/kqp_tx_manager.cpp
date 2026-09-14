@@ -19,6 +19,28 @@ struct TKqpLock {
         return Proto.GetGeneration() != newLock.Proto.GetGeneration() || Proto.GetCounter() != newLock.Proto.GetCounter();
     }
 
+    // Merge the shard echo's per-writer WriteSeqNums into the stored lock.
+    // Returns false when an incoming WriteSeqNum for a known writer regresses
+    // below the stored one, i.e. the shard's uncommitted write chain collapsed
+    // underneath us so the stored lock is no longer consistent with the shard.
+    bool MergeWriteSeqNums(const NKikimrDataEvents::TLock& incoming) {
+        bool consistent = true;
+        for (const auto& writeSeqNum : incoming.GetWriteSeqNums()) {
+            auto* existing = FindIfPtr(*Proto.MutableWriteSeqNums(),
+                [&](const auto& entry) { return entry.GetWriterIndex() == writeSeqNum.GetWriterIndex(); });
+            if (existing) {
+                if (writeSeqNum.GetWriteSeqNum() >= existing->GetWriteSeqNum()) {
+                    existing->SetWriteSeqNum(writeSeqNum.GetWriteSeqNum());
+                } else {
+                    consistent = false;
+                }
+            } else {
+                *Proto.AddWriteSeqNums() = writeSeqNum;
+            }
+        }
+        return consistent;
+    }
+
     TKqpLock(const NKikimrDataEvents::TLock& proto)
         : Proto(proto) {}
 
@@ -112,25 +134,14 @@ public:
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
             // Merge per writer so an echo from a later write can't drop another writer's entry.
-            for (const auto& writeSeqNum : lock.Proto.GetWriteSeqNums()) {
-                auto* existing = FindIfPtr(*lockPtr->Lock.Proto.MutableWriteSeqNums(),
-                    [&](const auto& entry) { return entry.GetWriterIndex() == writeSeqNum.GetWriterIndex(); });
-                if (existing) {
-                    // Results of one writer are deduplicated and arrive in order
-                    AFL_ENSURE(existing->GetWriteSeqNum() < writeSeqNum.GetWriteSeqNum())
-                        ("shard", shardId)
-                        ("writer", writeSeqNum.GetWriterIndex())
-                        ("known", existing->GetWriteSeqNum())
-                        ("got", writeSeqNum.GetWriteSeqNum());
-                    existing->SetWriteSeqNum(writeSeqNum.GetWriteSeqNum());
-                } else {
-                    *lockPtr->Lock.Proto.AddWriteSeqNums() = writeSeqNum;
-                }
-            }
+            // A regression (incoming < stored for a known writer) means the shard's uncommitted
+            // write chain collapsed and the stored lock no longer matches the shard, so treat it
+            // as an invalidation rather than crashing.
+            const bool writeSeqNumsConsistent = lockPtr->Lock.MergeWriteSeqNums(lock.Proto);
 
             lockPtr->LocksAcquireFailure |= isLocksAcquireFailure;
             if (!lockPtr->LocksAcquireFailure) {
-                isInvalidated |= lockPtr->Lock.Invalidated(lock);
+                isInvalidated |= lockPtr->Lock.Invalidated(lock) || !writeSeqNumsConsistent;
                 lockPtr->Invalidated |= isInvalidated;
             }
             broken = lockPtr->Invalidated || lockPtr->LocksAcquireFailure;
@@ -178,11 +189,6 @@ public:
         }
 
         return true;
-    }
-
-    ui64 NextWriteSeqNum(ui64 writerIndex, ui64 shardId) override {
-        AFL_ENSURE(State == ETransactionState::COLLECTING || State == ETransactionState::ERROR);
-        return ++ShardsInfo.at(shardId).WriteSeqNums[writerIndex];
     }
 
     void BreakLock(ui64 shardId) override {
@@ -708,9 +714,6 @@ private:
         // All QuerySpanIds of queries that wrote to this shard in insertion order.
         TVector<ui64> BreakerQuerySpanIds;
         THashSet<ui64> BreakerQuerySpanIdsSet;
-
-        // Last uncommitted write seq num sent to this shard, per writer (absent = none)
-        std::map<ui64, ui64> WriteSeqNums;
     };
 
     static void AddBreakerQuerySpanId(TShardInfo& shardInfo, ui64 querySpanId) {

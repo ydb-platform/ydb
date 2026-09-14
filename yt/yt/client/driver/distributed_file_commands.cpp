@@ -1,4 +1,6 @@
 #include "distributed_file_commands.h"
+
+#include "config.h"
 #include "helpers.h"
 
 #include <yt/yt/client/api/distributed_file_session.h>
@@ -150,6 +152,8 @@ void TWriteFileFragmentCommand::DoExecute(ICommandContextPtr context)
 
     auto input = context->Request().InputStream;
 
+    i64 maxAttachmentSize = context->GetConfig()->MaxAttachmentSize;
+
     while (true) {
         auto data = WaitFor(input->Read())
             .ValueOrThrow();
@@ -158,8 +162,7 @@ void TWriteFileFragmentCommand::DoExecute(ICommandContextPtr context)
             break;
         }
 
-        WaitFor(fileWriter->Write(std::move(data)))
-            .ThrowOnError();
+        WriteFileByBatches(fileWriter, data, maxAttachmentSize);
     }
 
     WaitFor(fileWriter->Close())

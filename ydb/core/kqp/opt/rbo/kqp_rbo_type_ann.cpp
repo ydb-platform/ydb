@@ -153,6 +153,10 @@ const TStructExprType* AddSubplanTypes(const TStructExprType* itemType, TVector<
             Y_ENSURE(!resultIUs.empty(), "Scalar subplan has no result columns");
             subplanType = subplan->GetIUType(resultIUs.front());
             Y_ENSURE(subplanType, "Cannot infer scalar subplan result type for " << resultIUs.front().GetFullName());
+            // For scalar subquery sublan type will always be optional.
+            if (!subplanType->IsOptionalOrNull()) {
+                subplanType = ctx.ExprCtx.MakeType<TOptionalExprType>(subplanType);
+            }
         } else {
             if (!props.PgSyntax) {
                 subplanType = ctx.ExprCtx.MakeType<TDataExprType>(EDataSlot::Bool);
@@ -185,7 +189,6 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
         itemType = AddSubplanTypes(itemType, subplanContextIUs, ctx, props);
     }
     YQL_CLOG(TRACE, CoreDq) << "Type annotation for Filter, itemType after scalars: " << *(TTypeAnnotationNode*)itemType;
-
 
     auto filterExpression = filter->GetFilterExpression();
     auto lambda = filterExpression.Node;
@@ -233,7 +236,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpFilter> filter, TRBOContext& ctx, TPlanPro
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
+TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx, TPlanProps& props) {
     TVector<const TItemExprType*> resStructItemTypes;
     const TTypeAnnotationNode* inputType = map->GetInput()->Type;
     auto structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -257,7 +260,21 @@ TStatus ComputeTypes(TIntrusivePtr<TOpMap> map, TRBOContext& ctx) {
         // This is type annotation update inplace, which is different comparing to yql type annotation.
         auto expression = mapElement.GetExpression();
         auto lambda = expression.Node;
-        if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
+
+        auto lambdaIUs = expression.GetInputIUs(true,false);
+        TVector<TInfoUnit> subplanContextIUs;
+        for (const auto& iu : lambdaIUs) {
+            if (iu.IsSubplanContext()) {
+                subplanContextIUs.push_back(iu);
+            }
+        }
+
+        auto currStructType = structType;
+        if (!subplanContextIUs.empty()) {
+            currStructType = AddSubplanTypes(currStructType, subplanContextIUs, ctx, props);
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {currStructType}, ctx.ExprCtx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -745,7 +762,7 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
         return ComputeTypes(CastOperator<TOpFilter>(op), ctx, props);
     }
     else if(MatchOperator<TOpMap>(op)) {
-        return ComputeTypes(CastOperator<TOpMap>(op), ctx);
+        return ComputeTypes(CastOperator<TOpMap>(op), ctx, props);
     }
     else if(MatchOperator<TOpAddDependencies>(op)) {
         return ComputeTypes(CastOperator<TOpAddDependencies>(op), ctx);

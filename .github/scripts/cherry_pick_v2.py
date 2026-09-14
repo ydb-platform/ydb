@@ -54,14 +54,18 @@ class ChangesAlreadyAppliedError(Exception):
 
 def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.CompletedProcess:
     """Run git command"""
-    result = subprocess.run(
-        ['git'] + cmd,
-        cwd=repo_path,
-        capture_output=True,
-        text=True,
-        check=check
-    )
-    return result
+    try:
+        result = subprocess.run(
+            ['git'] + cmd,
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=check
+        )
+        return result
+    except subprocess.CalledProcessError as e:
+        logger.error(f'{e}, stdout: {e.stdout}, stderr: {e.stderr}')
+        raise
 
 
 def expand_sha(repo, ref: str, logger) -> str:
@@ -492,7 +496,7 @@ def process_branch(
             if output:
                 cherry_pick_logs.append(f"=== Cherry-picking {commit_sha[:7]} ===\n{output}")
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {e}")
+            raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {e}, stdout: {e.stdout}, stderr: {e.stderr}")
 
     ahead_result = run_git(
         repo_path, ['rev-list', '--count', f'{target_branch}..HEAD'], logger, check=False
@@ -812,6 +816,9 @@ def main():
         if results_path:
             with open(results_path, 'w') as f:
                 json.dump([{'pr_id': r.pr.id, 'pr_number': r.pr.number, 'branch': r.target_branch} for r in results if r.pr], f, indent=2)
+    except subprocess.CalledProcessError as e:
+        logger.error(f'{e}, stdout: {e.stdout}, stderr: {e.stderr}')
+        raise
     finally:
         if os.path.exists(repo_dir):
             shutil.rmtree(repo_dir)

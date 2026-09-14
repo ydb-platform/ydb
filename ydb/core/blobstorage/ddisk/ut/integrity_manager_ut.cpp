@@ -800,6 +800,46 @@ Y_UNIT_TEST_SUITE(TIntegrityManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(checksum, 0xE);
     }
 
+    Y_UNIT_TEST(ChecksumReadHitRefreshesBlockStateLru) {
+        TIntegrityManager manager(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid,
+            2 * TIntegrityManager::BlockStateApproxBytes);
+        const TKey key{.TabletId = 10, .VChunkIndex = 0};
+        TChunkIdx nextIntegrityChunkIdx = 790;
+        MakeReady(manager, key, 810, &nextIntegrityChunkIdx);
+
+        auto persist = [&](ui32 pairIdx, ui64 checksum) {
+            const ui64 operationId = manager.BeginBlocksWrite(key,
+                pairIdx * ChecksumsPerIntegrityBlock * IntegrityUnitSize,
+                IntegrityUnitSize, {checksum});
+            TActionLog actions = Drain(manager);
+            UNIT_ASSERT_VALUES_EQUAL(actions.Writes.size(), 1);
+            manager.OnIoCompleted(actions.Writes[0].IoId);
+            UNIT_ASSERT_VALUES_EQUAL(TakeOnlyCompletion(manager).OperationId, operationId);
+        };
+        auto readFirstBlock = [&] {
+            const ui64 operationId = manager.BeginChecksumRead(key, 0, IntegrityUnitSize);
+            UNIT_ASSERT(Drain(manager).Reads.empty());
+            const auto result = TakeOnlyCompletion(manager);
+            UNIT_ASSERT_VALUES_EQUAL(result.OperationId, operationId);
+            UNIT_ASSERT_EQUAL(result.Status, TIntegrityManager::EOperationStatus::Ok);
+            UNIT_ASSERT_VALUES_EQUAL(result.Checksums.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(result.Checksums[0], 0xA);
+        };
+
+        persist(0, 0xA);
+        persist(1, 0xB);
+        readFirstBlock();
+
+        // A third metadata block must evict the unread second block, preserving the read hit.
+        persist(2, 0xC);
+        UNIT_ASSERT_VALUES_EQUAL(manager.CachedBlockStates(), 2);
+        readFirstBlock();
+        ui64 checksum = 0;
+        UNIT_ASSERT(!manager.GetBlockChecksum(key, ChecksumsPerIntegrityBlock, &checksum));
+        UNIT_ASSERT(manager.GetBlockChecksum(key, 2 * ChecksumsPerIntegrityBlock, &checksum));
+        UNIT_ASSERT_VALUES_EQUAL(checksum, 0xC);
+    }
+
     Y_UNIT_TEST(ReadModifyWriteAfterEvictionPreservesUntouchedChecksums) {
         TIntegrityManager manager(MultiBlockChunkSize, TestDDiskId, TestPDiskGuid,
             TIntegrityManager::BlockStateApproxBytes);

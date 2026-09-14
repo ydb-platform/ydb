@@ -475,19 +475,23 @@ namespace {
 
     // ==================== Test context and table helpers ====================
 
-    struct TTliLogs : TStringStream {
-        std::shared_ptr<TMutex> Mutex = std::make_shared<TMutex>();
-
+    struct TTliLogs {
         TString Snapshot() const {
-            TGuard<TMutex> guard(*Mutex);
-            return Str();
+            TGuard<TMutex> guard(*Mutex_);
+            return Stream_.Str();
         }
+
+    private:
+        friend TKikimrSettings MakeKikimrSettings(TTliLogs&);
+
+        TStringStream Stream_;
+        std::shared_ptr<TMutex> Mutex_ = std::make_shared<TMutex>();
     };
 
     TKikimrSettings MakeKikimrSettings(TTliLogs& ss) {
         TKikimrSettings settings;
-        settings.LogStream = &ss;
-        settings.LogStreamMutex = ss.Mutex;
+        settings.LogStream = &ss.Stream_;
+        settings.LogStreamMutex = ss.Mutex_;
         settings.SetWithSampleTables(false);
         return settings;
     }
@@ -817,7 +821,7 @@ namespace {
             "VictimQuerySpanId should not be 0: " << issues);
     }
 
-    void VerifyTliIssueAndLogs(
+    TString VerifyTliIssueAndLogs(
         const TString& issues,
         TTliLogs& ss,
         const TString& breakerQueryText,
@@ -844,6 +848,7 @@ namespace {
             "VictimQuerySpanId should match between issue and victim SessionActor log");
 
         AssertTliRecordCounts(logs, patterns, expectedBreakerCount, expectedVictimCount);
+        return logs;
     }
 
     void VerifyTliIssueAndLogsWhenDisabled(
@@ -1578,10 +1583,9 @@ Y_UNIT_TEST_SUITE(KqpTli) {
             // Destroy runner to flush async logger before reading `ss`.
         }
 
-        VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
+        const TString logs = VerifyTliIssueAndLogs(issues, ss, breakerQueryText, victimQueryText, victimCommitText);
 
         // When Wilson tracing is active, SessionActor TLI logs must include TraceId
-        const TString logs = ss.Snapshot();
         const auto patterns = MakeTliLogPatterns();
         bool foundTraceIdInBreaker = false;
         bool foundTraceIdInVictim = false;
@@ -1638,13 +1642,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         // Verify the ExternalBreaker->T victim pair and record counts.
         // expectedBreakerCount=2: ExternalBreaker's session + T's session (T broke VictimOfT).
         // Without the fix, T's breaker log is missing (count would be 1 instead of 2).
-        VerifyTliIssueAndLogs(tIssues, ss, externalBreakerWrite, tSelectTable2,
+        const TString logs = VerifyTliIssueAndLogs(tIssues, ss, externalBreakerWrite, tSelectTable2,
             /* victimExtraQueryText */ std::nullopt,
             /* expectedBreakerCount */ 2, /* expectedVictimCount */ 1);
 
         // Additionally verify T's breaker log content (T broke VictimOfT's lock on table1)
         const auto patterns = MakeTliLogPatterns();
-        auto tBreakerQueryText = ExtractQueryText(ss.Snapshot(), patterns.BreakerSessionActorMessagePattern, tWriteTable1);
+        auto tBreakerQueryText = ExtractQueryText(logs, patterns.BreakerSessionActorMessagePattern, tWriteTable1);
         UNIT_ASSERT_C(tBreakerQueryText,
             "T should emit breaker TLI log for tWriteTable1 (T is both breaker and victim)");
     }

@@ -2289,8 +2289,7 @@ private:
     // shards. Only the removed shards are affected: the batches are re-partitioned
     // through the (new) payload serializers, which map them to the new shards that
     // cover exactly the removed shards' key ranges. Surviving shards keep their
-    // in-flight batches untouched. Empty covering batches of a removed shard cannot
-    // be re-partitioned and are dropped: they carry no data.
+    // in-flight batches untouched.
     void ReRouteShardsData(TVector<ui64>&& deletedShards) {
         THashSet<TWriteToken> affectedTokens;
         for (const ui64 shardId : deletedShards) {

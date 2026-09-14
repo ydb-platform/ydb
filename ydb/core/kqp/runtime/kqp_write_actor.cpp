@@ -1710,6 +1710,20 @@ public:
 
         ResolveAttempts = 0;
 
+        if (Mode != EMode::WRITE) {
+            // TODO: allow resolve during PREPARE/COMMIT,
+            // when data rerouting will be fully supported.
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder()
+                    << "Can't resolve shards during commit."
+                    << (RetryResolveByShard.empty()
+                        ? TString{}
+                        : TStringBuilder() << "Tablet: " << RetryResolveByShard.begin()->first));
+            return;
+        }
+
         if (IsOlap) {
             YQL_ENSURE(SchemeEntry);
             ShardedWriteController->OnPartitioningChanged(*SchemeEntry);

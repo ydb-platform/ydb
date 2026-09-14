@@ -1445,20 +1445,21 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
             runtime.SetObserverFunc(saveObserver);
 
             // The write phase survives the split: the removed shard's batch is re-routed to
-            // the new shards and the UPSERT+SELECT flushes and completes. (The commit of a
-            // SerializableRW transaction across a split still aborts on the distributed-tx
-            // side, because the participant set captured at plan time contains the removed
-            // shard; that is a pre-existing tx-protocol limitation, out of scope here.)
+            // the new shards and the UPSERT+SELECT flushes and completes. But the commit of a
+            // SerializableRW transaction across a split aborts on the distributed-tx side,
+            // because the participant set captured at plan time contains the removed shard.
             auto result = runtime.WaitFuture(future, TDuration::Seconds(60));
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            // The transaction must not hang or burn retries against the dead tablet; abort it
-            // so its uncommitted writes are rolled back cleanly.
-            auto rollbackResult = Kikimr->RunCall([&] { return tx.Rollback().ExtractValueSync(); });
-            UNIT_ASSERT_VALUES_EQUAL_C(rollbackResult.GetStatus(), EStatus::SUCCESS, rollbackResult.GetIssues().ToString());
+            // The distributed commit must fail (the participant set still contains the
+            // removed shard, which is unreachable after the split): it aborts on the
+            // distributed-tx side, so the uncommitted rows are never applied.
+            auto commitResult = Kikimr->RunCall([&] { return tx.Commit().ExtractValueSync(); });
+            UNIT_ASSERT_C(commitResult.GetStatus() == EStatus::ABORTED,
+                TStringBuilder() << commitResult.GetStatus() << ": " << commitResult.GetIssues().ToString());
 
-            // The cluster stays usable: a fresh session read succeeds and the rolled back
-            // rows are gone.
+            // The cluster stays usable: a fresh session read succeeds and the aborted rows
+            // are gone.
             {
                 auto check = Kikimr->RunCall([&] {
                     return session.ExecuteQuery(Q_(R"(
@@ -1474,6 +1475,110 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
 
     Y_UNIT_TEST(UncommittedWriteSeqNumPartitioningChangeReroutesOnlyDeletedShards) {
         TUncommittedWriteSeqNumPartitioningChangeReroutesOnlyDeletedShards tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // A split observed only after the first write to the shard has already succeeded must
+    // behave like the in-flight case: the next write lands on the brand-new shards through
+    // the same re-resolve + re-route path, and the transaction keeps working.
+    class TUncommittedWriteSeqNumSplitAfterFirstWrite : public TTableDataModificationTester {
+    protected:
+        void Setup(TKikimrSettings& settings) override {
+            settings.AppConfig.MutableFeatureFlags()->SetEnableDataShardUncommittedWriteSeqNum(true);
+            // Keep the paced retries short so the re-resolve + re-route rounds stay fast.
+            auto& writeActorSettings = *settings.AppConfig.MutableTableServiceConfig()->MutableWriteActorSettings();
+            writeActorSettings.SetStartRetryDelayMs(100);
+            writeActorSettings.SetMaxRetryDelayMs(1000);
+        }
+
+        void DoExecute() override {
+            auto& runtime = *Kikimr->GetTestServer().GetRuntime();
+            auto client = Kikimr->GetQueryClient();
+
+            auto create = Kikimr->RunCall([&] {
+                return client.ExecuteQuery(Q_(R"(
+                    CREATE TABLE `/Root/SplitKVSeqLocks` (
+                        Key Uint32 not null,
+                        Value String,
+                        PRIMARY KEY (Key)
+                    ) WITH (
+                        AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                        AUTO_PARTITIONING_BY_LOAD = DISABLED,
+                        UNIFORM_PARTITIONS = 2
+                    );
+                )"), TTxControl::NoTx()).GetValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+            auto edgeActor = runtime.AllocateEdgeActor();
+            const auto shards = GetTableShards(&Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVSeqLocks");
+            UNIT_ASSERT_VALUES_EQUAL_C(shards.size(), 2u, "expected /Root/SplitKVSeqLocks to have 2 shards");
+            const ui64 splitShard = shards[0];
+
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+            auto tx = Kikimr->RunCall([&] {
+                return session.BeginTransaction(TTxSettings::SerializableRW()).ExtractValueSync().GetTransaction(); });
+
+            // The first write fully succeeds: both shards acknowledge, recording the tx's
+            // lock and WriteSeqNum chain on the shard that is about to be split.
+            {
+                auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(Q_(R"(
+                    UPSERT INTO `/Root/SplitKVSeqLocks` (Key, Value) VALUES
+                        (1u, "V1"), (2u, "V2"), (3u, "V3"), (4u, "V4"), (5u, "V5"),
+                        (6u, "V6"), (7u, "V7"), (8u, "V8"), (9u, "V9"), (10u, "V10"),
+                        (11u, "V11"), (12u, "V12"), (13u, "V13"), (14u, "V14"), (15u, "V15"),
+                        (16u, "V16"), (17u, "V17"), (18u, "V18"), (19u, "V19"), (20u, "V20"),
+                        (3000000000u, "Big");
+                    SELECT Key, Value FROM `/Root/SplitKVSeqLocks` WHERE Key IN (1u, 3000000000u);
+                )"), TTxControl::Tx(tx)).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            // Disable the readiness gate that would otherwise reject a split of a
+            // freshly created table whose shards have not reported stats yet.
+            SetSplitMergePartCountLimit(&runtime, -1);
+
+            // Split the shard that owns the small keys after its write has already been
+            // acknowledged: the removed shard's lock and uncommitted chain are gone.
+            const ui64 splitTxId = AsyncSplitTable(Kikimr->GetTestServer(), edgeActor, "/Root/SplitKVSeqLocks", splitShard, 10u);
+            WaitTxNotification(Kikimr->GetTestServer(), edgeActor, splitTxId);
+
+            // The next write targets keys that now belong to the brand-new shards. It must
+            // be re-routed to them (like the in-flight case), not corrupt data or hang.
+            auto result = Kikimr->RunCall([&] { return session.ExecuteQuery(Q_(R"(
+                UPSERT INTO `/Root/SplitKVSeqLocks` (Key, Value) VALUES
+                    (21u, "V21"), (22u, "V22"), (23u, "V23"), (24u, "V24"), (25u, "V25");
+                SELECT Key, Value FROM `/Root/SplitKVSeqLocks` WHERE Key IN (21u, 22u, 23u, 24u, 25u);
+            )"), TTxControl::Tx(tx)).ExtractValueSync(); });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // The transaction must not hang or burn retries against the dead tablet; the
+            // distributed commit must fail (the participant set captured at plan time still
+            // contains the removed shard): it aborts on the distributed-tx side or surfaces
+            // UNAVAILABLE while trying to prepare the removed shard, so the uncommitted
+            // rows are never applied.
+            auto commitResult = Kikimr->RunCall([&] { return tx.Commit().ExtractValueSync(); });
+            UNIT_ASSERT_C(commitResult.GetStatus() == EStatus::UNAVAILABLE,
+                TStringBuilder() << commitResult.GetStatus() << ": " << commitResult.GetIssues().ToString());
+
+            // The cluster stays usable: a fresh session read succeeds and nothing was applied.
+            {
+                auto check = Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(Q_(R"(
+                        SELECT Key, Value FROM `/Root/SplitKVSeqLocks` WHERE Key IN (
+                            1u,2u,3u,4u,5u,6u,7u,8u,9u,10u,11u,12u,13u,14u,15u,16u,17u,18u,19u,20u,
+                            21u,22u,23u,24u,25u,3000000000u
+                        ) ORDER BY Key;
+                    )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync(); });
+                UNIT_ASSERT_VALUES_EQUAL_C(check.GetStatus(), EStatus::SUCCESS, check.GetIssues().ToString());
+                CompareYson(R"([])", FormatResultSetYson(check.GetResultSet(0)));
+            }
+        }
+    };
+
+    Y_UNIT_TEST(UncommittedWriteSeqNumSplitAfterFirstWrite) {
+        TUncommittedWriteSeqNumSplitAfterFirstWrite tester;
         tester.SetIsOlap(false);
         tester.SetUseRealThreads(false);
         tester.Execute();

@@ -1300,6 +1300,7 @@ struct Schema : NIceDb::Schema {
         struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
         struct IncludeIndexData : Column<21, NScheme::NTypeIds::Bool> {};
+        struct EnableTableBackupAsSql : Column<22, NScheme::NTypeIds::Bool> {};
 
         struct ExportMetadata : Column<19, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportMetadata; };
 
@@ -1325,7 +1326,8 @@ struct Schema : NIceDb::Schema {
             EnablePermissions,
             ExportMetadata,
             SanitizedToken,
-            IncludeIndexData
+            IncludeIndexData,
+            EnableTableBackupAsSql
         >;
     };
 

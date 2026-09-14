@@ -6968,21 +6968,23 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
     Y_UNIT_TEST(AggregateShuffleEliminationUsesAndPreservesMapConnection) {
         struct TCase {
-            bool Enabled;
+            bool ShuffleEliminationEnabled;
+            bool AggregateShuffleEliminationEnabled;
             TVector<TInfoUnit> ShuffledBy;
             TVector<TInfoUnit> GroupBy;
             bool EliminateShuffle;
         };
 
         const TVector<TCase> cases = {
-            {false, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, false},
-            {true, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, true},
-            {true, {TInfoUnit("id"), TInfoUnit("k")}, {TInfoUnit("id")}, false},
+            {false, true, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, false},
+            {true, false, {TInfoUnit("id")}, {TInfoUnit("id"), TInfoUnit("k")}, true},
+            {true, true, {TInfoUnit("id"), TInfoUnit("k")}, {TInfoUnit("id")}, false},
         };
 
         for (const auto& testCase : cases) {
             TMapRuleTestContext testContext;
-            testContext.Config->OptShuffleEliminationForAggregation = testCase.Enabled;
+            testContext.Config->OptShuffleElimination = testCase.ShuffleEliminationEnabled;
+            testContext.Config->OptShuffleEliminationForAggregation = testCase.AggregateShuffleEliminationEnabled;
             TPlanProps planProps;
             const auto pos = NYql::TPositionHandle();
 
@@ -11854,7 +11856,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         return ExplainHashCompatibilityQueryWithAst(tables, query).first;
     }
 
-    Y_UNIT_TEST(AggregationShuffleEliminationSettingEnablesTransactionLayout) {
+    Y_UNIT_TEST(AggregationShuffleEliminationSettingDoesNotEnableTransactionLayout) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         const auto preparedQuery = CompilePreparedQuery(kikimr, R"(
             PRAGMA ydb.OptShuffleElimination = "false";
@@ -11866,7 +11868,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto& transactions = preparedQuery->GetTransactions();
         UNIT_ASSERT(!transactions.empty());
         for (const auto& transaction : transactions) {
-            UNIT_ASSERT(transaction->EnableShuffleElimination());
+            UNIT_ASSERT(!transaction->EnableShuffleElimination());
         }
     }
 

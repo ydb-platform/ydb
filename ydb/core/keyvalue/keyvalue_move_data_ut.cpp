@@ -571,6 +571,111 @@ Y_UNIT_TEST(MoveDataRecordOfSameBlobs) {
     CmdRead({"key2"}, NKikimrClient::TKeyValueRequest::REALTIME, {concatValue}, {}, tc);
 }
 
+void TestMoveDataLongSharedBlobChain(bool hasUncopiedTail) {
+    struct TState : NKeyValue::TKeyValueState {
+        void Prepare(const TLogoBlobID& oldBlob, const TLogoBlobID& newBlob, ui32 references,
+                const TLogoBlobID& uncopiedBlob) {
+            // A previous transaction has copied the blob and updated its first reference.
+            Index["a"].Chain.emplace_back(newBlob, 0);
+            auto& record = Index["b"];
+            for (ui32 i = 0; i < references; ++i) {
+                record.Chain.emplace_back(oldBlob, ui64(i) * oldBlob.BlobSize());
+            }
+            RefCounts[oldBlob] = references;
+            RefCounts[newBlob] = 1;
+            CountWriteRecord(oldBlob);
+            CountWriteRecord(newBlob);
+            if (uncopiedBlob) {
+                record.Chain.emplace_back(uncopiedBlob, ui64(references) * oldBlob.BlobSize());
+                RefCounts[uncopiedBlob] = 1;
+                CountWriteRecord(uncopiedBlob);
+            }
+            StartMoveData({2181038080}, {});
+            MoveDataBlobIdToNewBlobId[oldBlob] = newBlob;
+        }
+
+        const NKeyValue::TIndexRecord& GetRecord() const {
+            return Index.at("b");
+        }
+    };
+
+    struct TCountingDb : NKeyValue::ISimpleDb {
+        ui64 Updates = 0;
+        ui64 WrittenBytes = 0;
+        TVector<TLogoBlobID> Trash;
+        THashMap<TString, TString> Values;
+
+        void Erase(const TString&) override {
+            UNIT_FAIL("Unexpected erase during MoveData");
+        }
+
+        void Update(const TString& key, const TString& value) override {
+            ++Updates;
+            WrittenBytes += key.size() + value.size();
+            Values[key] = value;
+        }
+
+        void AddTrash(const TLogoBlobID& id) override {
+            Trash.push_back(id);
+        }
+    };
+
+    TTestBasicRuntime runtime;
+    SetupTabletServices(runtime, nullptr, true);
+    runtime.SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_ERROR);
+    const ui64 tabletId = MakeTabletID(false, 1);
+    auto info = CreateReassignedTabletInfo(tabletId, TTabletTypes::KeyValue,
+        TErasureType::ErasureNone, 2181038080, 2181038081, 3);
+    NMetrics::TResourceMetrics metrics(tabletId, 0, {});
+    TState state;
+    state.SetTabletInfo(info.Get());
+    state.SetupResourceMetrics(&metrics);
+    state.SetupTabletCounters(new TProtobufTabletCounters<
+        NKeyValue::ESimpleCounters_descriptor, NKeyValue::ECumulativeCounters_descriptor,
+        NKeyValue::EPercentileCounters_descriptor, NKeyValue::ETxTypes_descriptor>());
+    constexpr ui32 references = 2048;
+    const TLogoBlobID oldBlob(tabletId, 2, 1, NKeyValue::BLOB_CHANNEL, 1024, 1);
+    const TLogoBlobID newBlob(tabletId, 3, 1, NKeyValue::BLOB_CHANNEL, 1024, 1);
+    const TLogoBlobID uncopiedBlob = hasUncopiedTail
+        ? TLogoBlobID(tabletId, 2, 1, NKeyValue::BLOB_CHANNEL, 1024, 2)
+        : TLogoBlobID();
+    TCountingDb db;
+
+    runtime.RunCall([&] {
+        state.Prepare(oldBlob, newBlob, references, uncopiedBlob);
+        auto result = state.AdvanceMoveData(db);
+        const auto expected = hasUncopiedTail
+            ? TEvKeyValue::TEvAdvanceMoveDataResult::EResult::COPY_BLOB
+            : TEvKeyValue::TEvAdvanceMoveDataResult::EResult::CHECK_TRASH;
+        UNIT_ASSERT(result->Result == expected);
+        return true;
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(state.GetRefCount(oldBlob), 0);
+    UNIT_ASSERT_VALUES_EQUAL(state.GetRefCount(newBlob), references + 1);
+    UNIT_ASSERT_VALUES_EQUAL(db.Trash.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(db.Trash.front(), oldBlob);
+    for (ui32 i = 0; i < references; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(state.GetRecord().Chain[i].LogoBlobId, newBlob);
+    }
+    if (hasUncopiedTail) {
+        UNIT_ASSERT_VALUES_EQUAL(state.GetRecord().Chain.back().LogoBlobId, uncopiedBlob);
+    }
+    const auto recordKey = NKeyValue::THelpers::GenerateKeyFor(NKeyValue::EIT_KEYVALUE_1, "b");
+    UNIT_ASSERT_VALUES_EQUAL(db.Values.at(recordKey), state.GetRecord().Serialize());
+    // One user record and one trash record, instead of references full copies of the chain.
+    UNIT_ASSERT_C(db.WrittenBytes < 2 * state.GetRecord().Serialize().size(), db.WrittenBytes);
+    UNIT_ASSERT_VALUES_EQUAL(db.Updates, 2);
+}
+
+Y_UNIT_TEST(MoveDataLongSharedBlobChainDoesNotRewriteRecordForEveryReference) {
+    TestMoveDataLongSharedBlobChain(false);
+}
+
+Y_UNIT_TEST(MoveDataLongSharedBlobChainWithUncopiedTail) {
+    TestMoveDataLongSharedBlobChain(true);
+}
+
 Y_UNIT_TEST(MoveDataBlobDeletedBeforeMove) {
     for (bool doUpdate : {true, false}) {
         TTestContext tc;

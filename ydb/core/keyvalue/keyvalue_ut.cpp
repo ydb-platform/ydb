@@ -3029,6 +3029,96 @@ Y_UNIT_TEST(TestWriteAndRenameWithoutCreationUnixTimeNewApi)
 }
 
 
+struct TRequestTrackingTestState : NKeyValue::TKeyValueState {
+    size_t GetTrackedRequestCount() const {
+        return RequestInputTime.size();
+    }
+};
+
+Y_UNIT_TEST(TestInvalidReadRangeRetriesDoNotLeakRequestTracking) {
+    TTestBasicRuntime runtime;
+    SetupTabletServices(runtime, nullptr, true);
+    SetupLogging(runtime);
+    const TActorId edge = runtime.AllocateEdgeActor();
+    NMetrics::TResourceMetrics metrics(1, 0, edge);
+    TRequestTrackingTestState state;
+    state.SetupResourceMetrics(&metrics);
+
+    constexpr ui64 retries = 128;
+    runtime.RunCall([&] {
+        const auto& ctx = TActivationContext::AsActorContext();
+        for (ui64 cookie = 0; cookie < retries; ++cookie) {
+            auto request = std::make_unique<TEvKeyValue::TEvReadRange>();
+            request->Record.set_cookie(cookie);
+            auto* range = request->Record.mutable_range();
+            if (cookie % 2) {
+                range->set_from_key_inclusive("z");
+                range->set_to_key_inclusive("a");
+            } else {
+                range->set_from_key_exclusive("key");
+                range->set_to_key_exclusive("key");
+            }
+            TEvKeyValue::TEvReadRange::TPtr event =
+                static_cast<TEventHandle<TEvKeyValue::TEvReadRange>*>(
+                    new IEventHandle(ctx.SelfID, edge, request.release()));
+            THolder<NKeyValue::TIntermediate> intermediate;
+            auto requestType = NKeyValue::TRequestType::ReadOnly;
+            UNIT_ASSERT(!state.PrepareReadRangeRequest(ctx, event, intermediate, &requestType));
+        }
+        // Client retries must not accumulate entries for requests that have already failed.
+        UNIT_ASSERT_VALUES_EQUAL(state.GetTrackedRequestCount(), 0);
+        return true;
+    });
+
+    for (ui64 cookie = 0; cookie < retries; ++cookie) {
+        auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvReadRangeResponse>(edge);
+        UNIT_ASSERT_EQUAL(response->Get()->Record.status(), NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.cookie(), cookie);
+        UNIT_ASSERT(!response->Get()->Record.msg().empty());
+    }
+}
+
+Y_UNIT_TEST(TestInvalidTransactionRetriesDoNotLeakRequestTracking) {
+    TTestBasicRuntime runtime;
+    SetupTabletServices(runtime, nullptr, true);
+    SetupLogging(runtime);
+    const TActorId edge = runtime.AllocateEdgeActor();
+    NMetrics::TResourceMetrics metrics(1, 0, edge);
+    TRequestTrackingTestState state;
+    state.SetupResourceMetrics(&metrics);
+
+    constexpr ui64 retries = 129;
+    runtime.RunCall([&] {
+        const auto& ctx = TActivationContext::AsActorContext();
+        for (ui64 cookie = 0; cookie < retries; ++cookie) {
+            auto request = std::make_unique<TEvKeyValue::TEvExecuteTransaction>();
+            request->Record.set_cookie(cookie);
+            auto* command = request->Record.add_commands();
+            if (cookie % 3 != 0) {
+                auto* range = cookie % 3 == 1
+                    ? command->mutable_copy_range()->mutable_range()
+                    : command->mutable_delete_range()->mutable_range();
+                range->set_from_key_inclusive("z");
+                range->set_to_key_inclusive("a");
+            }
+            TEvKeyValue::TEvExecuteTransaction::TPtr event =
+                static_cast<TEventHandle<TEvKeyValue::TEvExecuteTransaction>*>(
+                    new IEventHandle(ctx.SelfID, edge, request.release()));
+            THolder<NKeyValue::TIntermediate> intermediate;
+            UNIT_ASSERT(!state.PrepareExecuteTransactionRequest(ctx, event, intermediate, nullptr));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(state.GetTrackedRequestCount(), 0);
+        return true;
+    });
+
+    for (ui64 cookie = 0; cookie < retries; ++cookie) {
+        auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvExecuteTransactionResponse>(edge);
+        UNIT_ASSERT_EQUAL(response->Get()->Record.status(), NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.cookie(), cookie);
+        UNIT_ASSERT(!response->Get()->Record.msg().empty());
+    }
+}
+
 Y_UNIT_TEST(TestReadRequestInFlightLimit) {
     TTestContext tc;
     TFinalizer finalizer(tc);

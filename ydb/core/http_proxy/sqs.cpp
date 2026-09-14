@@ -205,7 +205,9 @@ namespace NKikimr::NHttpProxy {
                     ConsumerName,
                     Method,
                     std::move(labels),
-                    HttpContext.DatabaseId);
+                    HttpContext.DatabaseId,
+                    HttpContext.CloudId,
+                    HttpContext.FolderId);
             }
 
             void ReplyWithYdbError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {

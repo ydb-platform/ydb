@@ -1013,6 +1013,9 @@ ui64 TIntegrityManager::BeginChecksumRead(TDataChunkKey key, ui32 offsetInBytes,
             GetPairRuntime(extent, pairIdx).LoadWaiters.push_back(operationId);
             ++operation.PendingLoads;
             QueuePairRead(key, extent, pairIdx);
+        } else {
+            // Read hits keep hot metadata in the LRU. Fresh empty pairs have no cached state.
+            FindBlockState(extent, pairIdx);
         }
     }
     if (!operation.PendingLoads) {

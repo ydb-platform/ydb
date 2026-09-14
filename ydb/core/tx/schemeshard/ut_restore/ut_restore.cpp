@@ -7479,13 +7479,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )", port));
         env.TestWaitNotification(runtime, txId);
 
-        auto issues = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED)
-                        .GetResponse().GetEntry().GetIssues();
+        auto issues = TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED).GetResponse().GetEntry().GetIssues();
         UNIT_ASSERT(!issues.empty());
-        UNIT_ASSERT_EQUAL(issues.begin()->message(), "Unsupported scheme object type");
+        UNIT_ASSERT_STRING_CONTAINS(to_lower(issues.begin()->message()), "unsupported scheme object type");
     }
 
-    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool enableDataShardDirectPartImport, const TString& metadata = R"({"version": 1})") {
+    void MaterializedIndex(
+            Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode,
+            bool enableDataShardDirectPartImport,
+            const TString& metadata = R"({"version": 1})")
+    {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);

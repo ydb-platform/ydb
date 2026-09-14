@@ -100,6 +100,16 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
 
+        // Seeing the output only means the message was processed, not that its input offset
+        // is durable. ALTER with a changed query text cancels the running execution and the
+        // new one restores offsets from the last *completed* checkpoint, so an offset that is
+        // not checkpointed yet makes the message replay (at-least-once). Wait for two
+        // checkpoint updates: the first may belong to a checkpoint whose barrier was injected
+        // before the message was consumed, the second is guaranteed to be injected after it.
+        const auto& checkpointId = GetStreamingQueryCheckpointId(queryName);
+        WaitCheckpointUpdate(checkpointId);
+        WaitCheckpointUpdate(checkpointId);
+
         ExecQuery(fmt::format(R"(
             CREATE TABLE test_table2 (Key Int32 NOT NULL, PRIMARY KEY (Key));
             ALTER STREAMING QUERY `{query_name}` SET (

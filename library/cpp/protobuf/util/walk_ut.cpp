@@ -37,8 +37,8 @@ Y_UNIT_TEST_SUITE(ProtobufWalk) {
         TMutableField f(msg, fd);
         if (f.IsString()) {
             for (size_t i = 0; i < f.Size(); ++i)
-                if (f.Get<TString>(i).StartsWith('1'))
-                    f.Set(f.Get<TString>(i) + f.Get<TString>(i), i);
+                if (TStringBuf{f.Get<TProtoStringType>(i)}.StartsWith('1'))
+                    f.Set(f.Get<TProtoStringType>(i) + f.Get<TProtoStringType>(i), i);
         }
         return true;
     }
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(ProtobufWalk) {
 
     struct TestStruct {
         bool Ok = false;
-        
+
         TestStruct() = default;
         bool operator()(Message&, const FieldDescriptor*) {
             Ok = true;
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(ProtobufWalk) {
         };
         WalkSchema(p.GetDescriptor(), func);
 
-        TString schema = 
+        TString schema =
             "optional .NProtobufUtilUt.TWalkTestCyclic.TNested OptNested = 1;\n"
             "optional uint32 OptInt32 = 1;\n"
             "optional .NProtobufUtilUt.TWalkTestCyclic OptSubNested = 2;\n"
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(ProtobufWalk) {
             "repeated uint64 OptInt64 = 2;\n"
             "optional .NProtobufUtilUt.TWalkTestCyclic OptSub = 3;\n"
             "optional .NProtobufUtilUt.TWalkTestCyclic.TEnum OptEnum = 4;\n";
-        
+
         UNIT_ASSERT_STRINGS_EQUAL(printedSchema, schema);
     }
 }

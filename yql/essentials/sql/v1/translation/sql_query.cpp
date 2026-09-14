@@ -1,6 +1,7 @@
 #include "sql_query.h"
 
 #include "sql_ddl_backup.h"
+#include "sql_ddl_resource_pool.h"
 #include "select_yql.h"
 #include "sql_expression.h"
 #include "sql_select.h"
@@ -1603,58 +1604,27 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore45: {
-            // create_resource_pool_stmt: CREATE RESOURCE POOL object_ref with_table_settings;
-            auto& node = core.GetAlt_sql_stmt_core45().GetRule_create_resource_pool_stmt1();
-            TObjectOperatorContext context(Ctx_.Scoped);
-            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref4(), context, /* useTablePrefix = */ false);
-            if (!objectId) {
+            auto node = TResourcePoolTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core45().GetRule_create_resource_pool_stmt1());
+            if (!node) {
                 return false;
             }
-
-            std::map<TString, TDeferredAtom> kv;
-            if (!ParseResourcePoolSettings(kv, node.GetRule_with_table_settings5())) {
-                return false;
-            }
-
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL", /*existingOk=*/false, /*replaceIfExists=*/false, new TObjectFeatureNode(Ctx_.Pos(), kv), context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore46: {
-            // alter_resource_pool_stmt: ALTER RESOURCE POOL object_ref
-            //     alter_resource_pool_action (COMMA alter_resource_pool_action)*;
-            Ctx_.BodyPart();
-            const auto& node = core.GetAlt_sql_stmt_core46().GetRule_alter_resource_pool_stmt1();
-            TObjectOperatorContext context(Ctx_.Scoped);
-            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref4(), context, /* useTablePrefix = */ false);
-            if (!objectId) {
+            auto node = TResourcePoolTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core46().GetRule_alter_resource_pool_stmt1());
+            if (!node) {
                 return false;
             }
-
-            std::map<TString, TDeferredAtom> kv;
-            std::set<TString> toReset;
-            if (!ParseResourcePoolSettings(kv, toReset, node.GetRule_alter_resource_pool_action5())) {
-                return false;
-            }
-
-            for (const auto& action : node.GetBlock6()) {
-                if (!ParseResourcePoolSettings(kv, toReset, action.GetRule_alter_resource_pool_action2())) {
-                    return false;
-                }
-            }
-
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL", /*missingOk=*/false, new TObjectFeatureNode(Ctx_.Pos(), kv), std::move(toReset), context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore47: {
-            // drop_resource_pool_stmt: DROP RESOURCE POOL object_ref;
-            auto& node = core.GetAlt_sql_stmt_core47().GetRule_drop_resource_pool_stmt1();
-            TObjectOperatorContext context(Ctx_.Scoped);
-            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref4(), context, /* useTablePrefix = */ false);
-            if (!objectId) {
+            auto node = TResourcePoolTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core47().GetRule_drop_resource_pool_stmt1());
+            if (!node) {
                 return false;
             }
-
-            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL", /*missingOk=*/false, {}, context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore48: {
@@ -1711,62 +1681,39 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             auto params = TAnalyzeParams{.Table = std::make_shared<TTableRef>(tr), .Columns = std::move(columns)};
+            if (analyzeTable.HasBlock3()) {
+                const auto& sample = analyzeTable.GetBlock3().GetRule_sample_clause1();
+                TSqlExpression expr(*this);
+                params.SampleRate = Unwrap(expr.Build(sample.GetRule_expr2()));
+                if (!params.SampleRate) {
+                    return false;
+                }
+            }
             AddStatementToBlocks(blocks, BuildAnalyze(Ctx_.Pos(), tr.Service, tr.Cluster, params, Ctx_.Scoped));
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore52: {
-            // create_resource_pool_classifier_stmt: CREATE RESOURCE POOL CLASSIFIER object_ref with_table_settings;
-            auto& node = core.GetAlt_sql_stmt_core52().GetRule_create_resource_pool_classifier_stmt1();
-            TObjectOperatorContext context(Ctx_.Scoped);
-            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref5(), context, /* useTablePrefix = */ false);
-            if (!objectId) {
+            auto node = TResourcePoolTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core52().GetRule_create_resource_pool_classifier_stmt1());
+            if (!node) {
                 return false;
             }
-
-            std::map<TString, TDeferredAtom> kv;
-            if (!ParseResourcePoolClassifierSettings(kv, node.GetRule_with_table_settings6())) {
-                return false;
-            }
-
-            AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL_CLASSIFIER", /*existingOk=*/false, /*replaceIfExists=*/false, new TObjectFeatureNode(Ctx_.Pos(), kv), context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore53: {
-            // alter_resource_pool_classifier_stmt: ALTER RESOURCE POOL CLASSIFIER object_ref
-            //     alter_resource_pool_classifier_action (COMMA alter_resource_pool_classifier_action)*;
-            Ctx_.BodyPart();
-            const auto& node = core.GetAlt_sql_stmt_core53().GetRule_alter_resource_pool_classifier_stmt1();
-            TObjectOperatorContext context(Ctx_.Scoped);
-            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref5(), context, /* useTablePrefix = */ false);
-            if (!objectId) {
+            auto node = TResourcePoolTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core53().GetRule_alter_resource_pool_classifier_stmt1());
+            if (!node) {
                 return false;
             }
-
-            std::map<TString, TDeferredAtom> kv;
-            std::set<TString> toReset;
-            if (!ParseResourcePoolClassifierSettings(kv, toReset, node.GetRule_alter_resource_pool_classifier_action6())) {
-                return false;
-            }
-
-            for (const auto& action : node.GetBlock7()) {
-                if (!ParseResourcePoolClassifierSettings(kv, toReset, action.GetRule_alter_resource_pool_classifier_action2())) {
-                    return false;
-                }
-            }
-
-            AddStatementToBlocks(blocks, BuildAlterObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL_CLASSIFIER", /*missingOk=*/false, new TObjectFeatureNode(Ctx_.Pos(), kv), std::move(toReset), context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore54: {
-            // drop_resource_pool_classifier_stmt: DROP RESOURCE POOL CLASSIFIER object_ref;
-            auto& node = core.GetAlt_sql_stmt_core54().GetRule_drop_resource_pool_classifier_stmt1();
-            TObjectOperatorContext context(Ctx_.Scoped);
-            auto objectId = ParseObjectPathIgnoreAt(node.GetRule_object_ref5(), context, /* useTablePrefix = */ false);
-            if (!objectId) {
+            auto node = TResourcePoolTranslation(Ctx_, Mode_).Build(core.GetAlt_sql_stmt_core54().GetRule_drop_resource_pool_classifier_stmt1());
+            if (!node) {
                 return false;
             }
-
-            AddStatementToBlocks(blocks, BuildDropObjectOperation(Ctx_.Pos(), *objectId, "RESOURCE_POOL_CLASSIFIER", /*missingOk=*/false, {}, context));
+            AddStatementToBlocks(blocks, node);
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore55: {
@@ -4274,7 +4221,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM(
         "WarnOnAnsiAliasShadowing",
         WarnOnAnsiAliasShadowing,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/true),
     PAIRED_TABLE_ELEM(
         "OrderedColumns",
         OrderedColumns,
@@ -4312,7 +4259,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM(
         "AnsiLike",
         AnsiLike,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/true),
     PAIRED_TABLE_ELEM(
         "UnorderedResult",
         UnorderedResult,
@@ -4357,7 +4304,7 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
     PAIRED_TABLE_ELEM(
         "OptimizeSimpleILIKE",
         OptimizeSimpleIlike,
-        /*isYqlSelectCompatible=*/false),
+        /*isYqlSelectCompatible=*/true),
 };
 
 #undef PAIRED_TABLE_ELEM

@@ -4,6 +4,7 @@
 #include "file_writer.h"
 #include "helpers.h"
 #include "private.h"
+#include "request_annotations.h"
 #include "request_info.h"
 #include "row_batch_reader.h"
 #include "row_batch_writer.h"
@@ -914,7 +915,7 @@ TFuture<ITableFragmentWriterPtr> TClient::CreateTableFragmentWriter(
 
     FillRequest(req.Get(), cookie, options);
 
-    SetWriteTableFragmentRequestInfo(req, cookie);
+    AnnotateWriteTableFragmentRequestInfo(req, cookie);
 
     auto schema = New<TTableSchema>();
     auto promise = NewPromise<TSignedWriteFragmentResultPtr>();
@@ -954,7 +955,7 @@ IFileFragmentWriterPtr TClient::CreateFileFragmentWriter(
 
     FillRequest(req.Get(), cookie, options);
 
-    SetWriteFileFragmentRequestInfo(req, cookie);
+    AnnotateWriteFileFragmentRequestInfo(req, cookie);
 
     return NRpcProxy::CreateFileFragmentWriter(std::move(req));
 }
@@ -2151,7 +2152,7 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
 
     SetControlMultiplexingBandIfEnabled(*req, GetRpcProxyConnection()->GetConfig());
 
-    SetPartitionTablesRequestInfo(req, paths, *req);
+    AnnotatePartitionTablesRequestInfo(req, paths, *req);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {
         return FromProto<TMultiTablePartitions>(*rsp);
@@ -2171,7 +2172,7 @@ TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
 
     FillRequest(req.Get(), cookie, /*format*/ std::nullopt, options);
 
-    SetReadTablePartitionRequestInfo(req, *req);
+    AnnotateReadTablePartitionRequestInfo(req, *req);
 
     return NRpc::CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) -> TFuture<ITablePartitionReaderPtr>{
@@ -2230,7 +2231,7 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTableReader(
 
     FillRequest(req.Get(), path, format, options);
 
-    SetReadTableRequestInfo(req, path, *req);
+    AnnotateReadTableRequestInfo(req, path, *req);
 
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -2260,7 +2261,7 @@ TFuture<IFormattedTableReaderPtr> TClient::CreateFormattedTablePartitionReader(
 
     FillRequest(req.Get(), cookie, format, options);
 
-    SetReadTablePartitionRequestInfo(req, *req);
+    AnnotateReadTablePartitionRequestInfo(req, *req);
 
     return CreateRpcClientInputStream(std::move(req))
         .AsUnique().Apply(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -3343,8 +3344,8 @@ TFuture<TSignedShuffleHandlePtr> TClient::StartShuffle(
     if (options.Schema) {
         ToProto(req->mutable_schema(), options.Schema);
     }
-    if (options.PushConfig) {
-        req->set_push_config(ToProto(*options.PushConfig));
+    if (options.Config) {
+        req->set_config(ToProto(*options.Config));
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartShufflePtr& rsp) {
@@ -3356,7 +3357,7 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     const TSignedShuffleHandlePtr& signedShuffleHandle,
     int partitionIndex,
     std::optional<TIndexRange> logicalWriterIndexRange,
-    const TShuffleReaderOptions& options)
+    const TShuffleReaderOptions& /*options*/)
 {
     auto proxy = CreateApiServiceProxy();
 
@@ -3365,9 +3366,6 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
 
     req->set_signed_shuffle_handle(ToProto(ConvertToYsonString(signedShuffleHandle)));
     req->set_partition_index(partitionIndex);
-    if (options.Config) {
-        req->set_reader_config(ToProto(ConvertToYsonString(options.Config)));
-    }
     if (logicalWriterIndexRange) {
         auto* logicalWriterIndexRangeProto = req->mutable_writer_index_range();
         logicalWriterIndexRangeProto->set_begin(logicalWriterIndexRange->first);
@@ -3392,9 +3390,6 @@ TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
 
     req->set_signed_shuffle_handle(ToProto(ConvertToYsonString(signedShuffleHandle)));
     req->set_partition_column(ToProto(partitionColumn));
-    if (options.Config) {
-        req->set_writer_config(ToProto(ConvertToYsonString(options.Config)));
-    }
     if (logicalWriterIndex) {
         req->set_writer_index(*logicalWriterIndex);
     }

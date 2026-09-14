@@ -156,10 +156,8 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         output, output,
         [this](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             Y_UNUSED(ctx);
-            YQL_CLOG(TRACE, CoreDq) << "Processing node: " << PrintRBOExpression(node, ctx);
 
             if (node->IsList()) {
-                YQL_CLOG(TRACE, CoreDq) << "Processing list: " << PrintRBOExpression(node, ctx);
                 TVector<TExprNode::TPtr> roots;
                 for (const auto& child : node->Children()) {
                     if (!child->IsList()) {
@@ -353,6 +351,7 @@ bool TKqpNewRBOTransformer::IsSuitableToRequestStatistics() {
 IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
+    settings.VisitTuples = true;
     Y_ENSURE(OpRoot, "NEW RBO OpRoot is not initialized.");
 
     // Apply optimizations.
@@ -362,10 +361,13 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::ContinueOptimizations(TExprNod
             if (node->IsList()) {
                 TVector<TExprNode::TPtr> roots;
                 for (const auto& child : node->Children()) {
-                    if (!TKqpOpRoot::Match(child.Get())) {
+                    if (!child->IsList()) {
+                        return node;
+                    }
+                    if (!TKqpOpRoot::Match(child->ChildPtr(0).Get())) {
                         return node;
                     } else {
-                        roots.push_back(child);
+                        roots.push_back(child->ChildPtr(0));
                     }
                 }
 

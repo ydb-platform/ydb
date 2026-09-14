@@ -591,10 +591,12 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
     // clang-format on
 
     auto phyQuerySettings = GetPhysicalQuerySettings();
+    TExprNode::TPtr phyQuery;
+
     // Build Physical query
     if (Root.PlanProps.WithEffects && !Root.PlanProps.WithReturning) {
         // clang-format off
-        return Build<TKqpPhysicalQuery>(ctx, Root.Pos)
+        phyQuery = Build<TKqpPhysicalQuery>(ctx, Root.Pos)
             .Transactions()
                 .Add(phyTxs)
             .Build()
@@ -604,7 +606,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
         // clang-format on
     } else {
         // clang-format off
-        return Build<TKqpPhysicalQuery>(ctx, Root.Pos)
+        phyQuery = Build<TKqpPhysicalQuery>(ctx, Root.Pos)
             .Transactions()
                 .Add(phyTxs)
             .Build()
@@ -615,6 +617,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TExprNode::TPt
         .Done().Ptr();
         // clang-format on
     }
+
+    return ctx.NewList(Root.Pos, {ctx.NewList(Root.Pos, {phyQuery, columnOrder})});
 }
 
 TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {

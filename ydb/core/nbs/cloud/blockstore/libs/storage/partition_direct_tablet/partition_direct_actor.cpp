@@ -544,26 +544,23 @@ void TPartitionActor::HandleFastPathServiceReady(
         frontend && !FrontendRegistrationClosed)
     {
         auto registration = frontend->RegisterVolume(VolumeConfig);
-        if (HasError(registration)) {
-            LOG_ERROR(
-                ctx,
-                NKikimrServices::NBS_PARTITION,
-                "%s Could not publish frontend metadata: %s",
-                LogTitle.GetWithTime().c_str(),
-                FormatError(registration.GetError()).c_str());
-        } else {
-            FrontendRegistrationId = registration.ExtractResult();
-            LOG_INFO(
-                ctx,
-                NKikimrServices::NBS_PARTITION,
-                "%s Frontend metadata published: registrationId=%s "
-                "blockSize=%u blocksCount=%llu",
-                LogTitle.GetWithTime().c_str(),
-                FrontendRegistrationId.c_str(),
-                VolumeConfig.GetBlockSize(),
-                static_cast<unsigned long long>(
-                    VolumeConfig.GetPartitions(0).GetBlockCount()));
-        }
+        Y_ABORT_UNLESS(
+            !HasError(registration),
+            "%s Could not publish frontend metadata: %s",
+            LogTitle.GetWithTime().c_str(),
+            FormatError(registration.GetError()).c_str());
+
+        FrontendRegistrationId = registration.ExtractResult();
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s Frontend metadata published: registrationId=%s "
+            "blockSize=%u blocksCount=%llu",
+            LogTitle.GetWithTime().c_str(),
+            FrontendRegistrationId.c_str(),
+            VolumeConfig.GetBlockSize(),
+            static_cast<unsigned long long>(
+                VolumeConfig.GetPartitions(0).GetBlockCount()));
     }
 
     {

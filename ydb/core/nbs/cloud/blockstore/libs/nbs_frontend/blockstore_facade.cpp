@@ -116,8 +116,8 @@ TNbsFrontendBlockStore::Execute(
         if (HasError(response)) {
             STORAGE_DEBUG(
                 "Ping RequestId=" << request->GetHeaders().GetRequestId()
-                                    << " Error="
-                                    << FormatError(response.GetError()));
+                                  << " Error="
+                                  << FormatError(response.GetError()));
         }
     } else {
         auto error = FrontendState->ValidateIoSession(

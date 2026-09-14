@@ -827,8 +827,7 @@ void THistoryCutterWrapper::OnBarrierResult(const TEntryKey& key, bool ok, TInst
         NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryCut(key.Channel, key.FromGeneration);
     } else {
         *state = ECutState::None;
-        // A failure enters the disproval cooldown instead of retrying every cadence; Attempts restarts
-        // at 1 because nomination erased the record, so repeated failures plateau at cooldown(1).
+        // Nomination erased the record, so repeated failures plateau at cooldown(1) instead of retrying every cadence.
         auto& disproval = DisprovedAt[key];
         disproval.At = now;
         ++disproval.Attempts;

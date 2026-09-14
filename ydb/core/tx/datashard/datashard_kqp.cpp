@@ -131,6 +131,17 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(
                 continue;
             }
 
+            const TPathId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
+            if (!lockInfo->GetReadTables().contains(tableId)
+                && !lockInfo->GetWriteTables().contains(tableId)) {
+                 YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (lock is not set for table)",
+                     {"lockId", lockProto.GetLockId()},
+                     {"shardId", lockProto.GetDataShard()},
+                     {"tableId", tableId});
+                 brokenLocks.emplace_back(lockProto);
+                 continue;
+             }
+
             auto it = lockInfo->GetAncestorLocks().find(lockProto.GetDataShard());
             if (it == lockInfo->GetAncestorLocks().end()) {
                 YDB_LOG_TRACE("ValidateLocks: broken ancestor lock (ancestor lock not found)",
@@ -233,7 +244,7 @@ void KqpSetTxLocksKeys(
         addLockKey(lock);
     }
 
-    // First add keys for those ancestor locks that didn't have the key for the main lock added yet.
+    // Then add keys for those ancestor locks that didn't have the key for the main lock added yet.
     if (allowAncestorLocks) {
         for (const auto& lock : locks.GetLocks()) {
             if (lock.GetDataShard() == selfShardId) {

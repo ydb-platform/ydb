@@ -231,12 +231,24 @@ public:
                         << " not allowed after current shard writes");
                     return EExecutionStatus::Executed;
                 }
-                if (!lock->GetAncestorLocks().contains(shardKey)) {
+                auto ancestorIt = lock->GetAncestorLocks().find(shardKey);
+                if (ancestorIt == lock->GetAncestorLocks().end()) {
                     writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
                         << "Ancestor shard " << shardKey << " not found in lock " << guardLocks.LockTxId);
                     return EExecutionStatus::Executed;
                 }
-                current = lock->GetAncestorWriteSeqNum(shardKey, writerIndex);
+                for (const auto& [idx, state] : ancestorIt->second.WriteSeqNumStates) {
+                    if (idx == writerIndex) {
+                        current = state.WriteSeqNum;
+                    } else {
+                        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                            TStringBuilder() << "Ancestor shard " << shardKey
+                            << " has another writer: " << idx
+                            << " for lock id: " << guardLocks.LockTxId
+                            << " (requested write: " << writerIndex << ":" << seqnums.MaxRequested << ")");
+                        return EExecutionStatus::Executed;
+                    }
+                }
             }
 
             if (seqnums.MaxRequested == current) {

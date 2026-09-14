@@ -282,7 +282,7 @@ public:
 
     void PersistAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) override {
         using Schema = TSchemaDescription;
-        if constexpr (requires { typename Schema::LockWriteSeqNums; }) {
+        if constexpr (requires { typename Schema::AncestorLockWriteSeqNums; }) {
             NIceDb::TNiceDb db(DB);
             db.Table<typename Schema::AncestorLockWriteSeqNums>().Key(lockId, tabletId, writerIndex).Update(
                 NIceDb::TUpdate<typename Schema::AncestorLockWriteSeqNums::WriteSeqNum>(writeSeqNum),

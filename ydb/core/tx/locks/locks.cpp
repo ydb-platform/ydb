@@ -1991,15 +1991,12 @@ TRuntimeLockHolder TSysLocks::AddRuntimeLock(const TTableId& tableId, TConstArra
     return table->AddRuntimeLock(key, Update->Lock);
 }
 
-bool TSysLocks::RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& row, ILocksDb& locksDb) {
+void TSysLocks::RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& row, ILocksDb& locksDb) {
     Y_ENSURE(row.ReadTables.empty(), "Read locks are not supported");
 
     // Create TLockInfo if needed
     TLockInfo::TPtr lock = Locker.GetLock(row.LockId);
     if (!lock) {
-        if (Locker.LocksCount() >= Locker.LockLimit()) {
-            return false;
-        }
         lock = Locker.AddLockToPersist(row.LockId, row.LockNodeId);
     }
 
@@ -2046,8 +2043,6 @@ bool TSysLocks::RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& r
         }
         lock->AddAncestorLock(std::move(ancestorLock));
     }
-
-    return true;
 }
 
 void TSysLocks::RestoreConflictFromSplitSrc(ui64 lockId, ui64 conflictId, ILocksDb& locksDb) {

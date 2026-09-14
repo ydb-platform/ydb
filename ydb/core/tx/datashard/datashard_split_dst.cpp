@@ -252,9 +252,7 @@ public:
 
         // Restore ancestor locks transferred from the src shard.
         // These represent persistent write-only locks whose uncommitted writes are in the borrowed snapshot.
-        const bool lockTransferEnabled = AppData(ctx)
-                ->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
-        if (lockTransferEnabled && record.LocksSize() > 0) {
+        if (record.LocksSize() > 0) {
             TDataShardLocksDb locksDb(*Self, txc);
             TVector<std::pair<ui64, ui64>> pendingConflicts; // (lockId, conflictId)
             for (const auto& srcLockInfo : record.GetLocks()) {
@@ -269,7 +267,7 @@ public:
                 row.Generation = srcLockInfo.GetGeneration();
                 row.Counter = srcLockInfo.GetCounter();
                 row.CreateTs = srcLockInfo.GetCreateTimestamp();
-                row.Flags = ui64(ELockFlags::Persistent);
+                row.Flags = ui64(srcLockInfo.GetFlags());
 
                 auto writeSeqNumStateFromProto = [](const auto& proto) {
                     TWriteSeqNumState state;
@@ -313,15 +311,9 @@ public:
                     pendingConflicts.emplace_back(row.LockId, conflictId);
                 }
 
-                if (!Self->SysLocksTable().RestoreLockFromSplitSrc(
-                        srcTabletId, std::move(row), locksDb)) {
-                    YDB_LOG_WARN_CTX(ctx, "Too many locks, couldn't restore all",
-                        {"tabletId", Self->TabletID()},
-                        {"opId", opId},
-                        {"srcTabletId", srcTabletId});
-                    break;
-                }
+                Self->SysLocksTable().RestoreLockFromSplitSrc(srcTabletId, std::move(row), locksDb);
             }
+
             for (auto [lockId, conflictId] : pendingConflicts) {
                 Self->SysLocksTable().RestoreConflictFromSplitSrc(lockId, conflictId, locksDb);
             }

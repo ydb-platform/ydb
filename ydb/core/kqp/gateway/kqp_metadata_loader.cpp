@@ -1339,7 +1339,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             // Temporary assertion: all YDB EDS resolution must have DatabaseNames configured.
                             // This ensures the new DatabaseNames-based routing is used instead of the
                             // deprecated GetSchemeEntryType heuristic. Remove after full rollout.
-                            AFL_VERIFY(useNewRouting)("DatabaseNames must be configured for YDB connector routing");
+                            AFL_VERIFY(useNewRouting)("error", "DatabaseNames must be configured for YDB connector routing");
 
                             if (useNewRouting) {
                                 const auto& props = externalDataSourceMetadata.Metadata->ExternalSource.Properties.GetProperties();

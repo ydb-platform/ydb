@@ -652,7 +652,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             item.SysView = sysView;
         } else if (IsTable(SchemeKey)) {
             Ydb::Table::CreateTableRequest request;
-            if (!NYdb::NBackup::ParseProto(content, &request)) {
+            if (!NYdb::NBackup::ParseProto(content, request)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << SchemeKey << ": cannot parse scheme");
             }
             item.Table = request;

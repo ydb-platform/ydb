@@ -1,5 +1,6 @@
 import os
 import time
+from contextlib import ExitStack
 
 import ydb
 
@@ -27,10 +28,35 @@ def wait_topic_consumer(driver, cluster_name, path, consumer, timeout=60):
         time.sleep(1)
 
 
+def wait_topic_messages(logbrokers, path, expected_count, timeout=120):
+    deadline = time.monotonic() + timeout
+    while True:
+        counts = {}
+        for cluster_name, logbroker in logbrokers.items():
+            description = logbroker.driver.topic_client.describe_topic(path, include_stats=True)
+            # Missing statistics are not evidence that a cluster is empty.
+            if any(partition.partition_stats is None for partition in description.partitions):
+                counts[cluster_name] = None
+                continue
+            counts[cluster_name] = sum(
+                partition.partition_stats.partition_end - partition.partition_stats.partition_start
+                for partition in description.partitions
+            )
+        if all(count is not None for count in counts.values()) and sum(counts.values()) >= expected_count:
+            return counts
+        if time.monotonic() >= deadline:
+            raise AssertionError(
+                f"Expected at least {expected_count} messages in topic {path!r}; "
+                f"last observed per-cluster counts: {counts!r}"
+            )
+        time.sleep(1)
+
+
 class TestLogbroker(StreamingTestBase):
     def test_read_write(self, kikimr):
         database = "/Root/logbroker-federation/prod"
-        endpoint = f"localhost:{os.environ['cluster_a_port']}"
+        cm_endpoint = f"localhost:{os.environ['CM_PORT']}"
+        discovery_endpoint = os.environ["FEDERATION_DISCOVERY_ENDPOINT"]
         input_topic = "streaming-input"
         output_topic = "streaming-output"
         # Config manager uses the full path; cluster APIs use the name without the federation prefix.
@@ -40,7 +66,7 @@ class TestLogbroker(StreamingTestBase):
 
         # Create both topics through the federation's config manager.
         with ydb.Driver(
-            endpoint=f"grpc://localhost:{os.environ['CM_PORT']}",
+            endpoint=f"grpc://{cm_endpoint}",
             database="/logbroker-federation/prod",
         ) as driver:
             driver.wait(timeout=10, fail_fast=True)
@@ -62,9 +88,16 @@ class TestLogbroker(StreamingTestBase):
                 for topic in (input_topic, output_topic):
                     wait_topic_consumer(driver, cluster_name, f"{database}/{topic}", consumer)
 
-        logbroker = YdbClient.from_driver_config(f"grpc://{endpoint}", database)
-        try:
-            kikimr.ydb_client.create_external_data_source("logbroker", endpoint, database)
+        with ExitStack() as clients:
+            logbrokers = {}
+            for cluster_name in ("cluster_a", "cluster_b"):
+                logbroker = YdbClient.from_driver_config(
+                    f"grpc://localhost:{os.environ[f'{cluster_name}_port']}", database
+                )
+                clients.callback(logbroker.stop)
+                logbrokers[cluster_name] = logbroker
+
+            kikimr.ydb_client.create_external_data_source("logbroker", discovery_endpoint, "/logbroker-federation/prod")
             try:
                 kikimr.ydb_client.query(f"""
                     CREATE STREAMING QUERY `{query_name}` AS DO BEGIN
@@ -75,21 +108,17 @@ class TestLogbroker(StreamingTestBase):
                 try:
                     self.wait_completed_checkpoints(kikimr, query_name)
                     messages = ["hello from cluster_a", "hello from cluster_b"]
-                    logbroker.topic_write(input_topic, [messages[0]])
-                    logbroker_b = YdbClient.from_driver_config(
-                        f"grpc://localhost:{os.environ['cluster_b_port']}", database
-                    )
-                    try:
-                        logbroker_b.topic_write(input_topic, [messages[1]])
-                    finally:
-                        logbroker_b.stop()
+                    for cluster_name, message in zip(("cluster_a", "cluster_b"), messages):
+                        logbrokers[cluster_name].topic_write(input_topic, [message])
 
-                    # Messages from different clusters and partitions may arrive in any order.
-                    actual = logbroker.topic_read(output_topic, consumer, len(messages))
-                    assert sorted(actual) == sorted(messages)
+                    # The query may write to either cluster, or distribute messages across both.
+                    counts = wait_topic_messages(logbrokers, output_topic, len(messages))
+                    actual = []
+                    for cluster_name, count in counts.items():
+                        if count:
+                            actual.extend(logbrokers[cluster_name].topic_read(output_topic, consumer, count))
+                    assert sorted(actual) == sorted(messages), counts
                 finally:
                     kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
             finally:
                 kikimr.ydb_client.query("DROP EXTERNAL DATA SOURCE `logbroker`;")
-        finally:
-            logbroker.stop()

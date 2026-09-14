@@ -160,7 +160,11 @@ void TFederatedDbObserverImpl::OnFederationDiscovery(TStatus&& status, Ydb::Fede
         //   2) The database path in the request is simply wrong: the client should get the BAD_REQUEST status.
         if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::BAD_REQUEST) {
             LOG_LAZY(DbDriverState_->Log, TLOG_INFO, TStringBuilder()
-                << "OnFederationDiscovery fall back to single mode, database=" << DbDriverState_->Database);
+                << "OnFederationDiscovery fall back to single mode, database=" << DbDriverState_->Database
+                << ", endpoint=" << DbDriverState_->DiscoveryEndpoint
+                << ", status=" << status.GetStatus()
+                << ", issues=" << status.GetIssues().ToOneLineString()
+                << ", response=" << result.ShortDebugString());
             FederatedDbState->Status = TPlainStatus{};  // SUCCESS
             FederatedDbState->ControlPlaneEndpoint = DbDriverState_->DiscoveryEndpoint;
             // FederatedDbState->SelfLocation = ???;

@@ -8,6 +8,27 @@ namespace NKikimr::NPersQueueTests {
 
 Y_UNIT_TEST_SUITE(TPartitionWriterCacheActorTests) {
 
+Y_UNIT_TEST_F(ResolvesTopicPathForKqpTransaction, TPartitionWriterCacheActorFixture)
+{
+    ui64 cookie = 0;
+    for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
+        {"dir/topic", "/Root/db/dir/topic"},
+        {"Root/db/dir/topic", "/Root/db/dir/topic"},
+        {"/Root/db/dir/topic", "/Root/db/dir/topic"},
+        {"Root/other/topic", "/Root/other/topic"},
+        {"Root2/topic", "/Root/db/Root2/topic"},
+        {"db/topic", "/Root/db/db/topic"},
+    }) {
+        const TString txId = "tx-" + ToString(++cookie);
+        const auto cache = CreatePartitionWriterCacheActor({.Database = "/Root/db", .TopicPath = path});
+        SendTxWriteRequest(cache, {.SessionId = "session", .TxId = txId, .Cookie = cookie});
+        WaitForPartitionWriterOps({.CreateCount = 1});
+        const auto it = KqpTopicPaths.find(MakeTxId("session", txId));
+        UNIT_ASSERT_C(it != KqpTopicPaths.end(), path);
+        UNIT_ASSERT_VALUES_EQUAL_C(it->second, expected, path);
+    }
+}
+
 Y_UNIT_TEST_F(WriteReplyOrder, TPartitionWriterCacheActorFixture)
 {
     TActorId partitionWriterCache = CreatePartitionWriterCacheActor();

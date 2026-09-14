@@ -29,7 +29,10 @@ bool TrySplitPathByDb(const TString& path, const TString& database,
  */
 TString NormalizePath(TStringBuf database, TStringBuf path);
 TString NormalizePath(const TString& database, const TString& path);
-TString ResolvePathToDatabase(TStringBuf database, TStringBuf path);
+// Slashless paths starting with the cluster root are full paths; all others
+// are relative to the effective database. Local callers may omit rootDatabase
+// when database is already a canonical database of the local cluster.
+TString ResolvePathToDatabase(TStringBuf database, TStringBuf path, TStringBuf rootDatabase = {});
 
 template <typename TIter>
 TString CombinePath(TIter begin, TIter end, bool canonize = true) {

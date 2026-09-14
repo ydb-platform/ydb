@@ -189,9 +189,17 @@ TString NormalizePath(const TString& database, const TString& path) {
     return NormalizePathJoin(database, path);
 }
 
-TString ResolvePathToDatabase(TStringBuf database, TStringBuf path) {
+TString ResolvePathToDatabase(TStringBuf database, TStringBuf path, TStringBuf rootDatabase) {
     if (path.empty() || path.StartsWith('/')) {
         return TString{path};
+    }
+    if (path == "." && !database.empty()) {
+        return CanonizePath(TString{database});
+    }
+    const TString rootPath = CanonizePath(TString{rootDatabase.empty() ? database : rootDatabase});
+    const auto root = ExtractDomain(rootPath);
+    if (!root.empty() && path.Before('/') == root) {
+        return CanonizePath(TString{path});
     }
     return NormalizePathJoin(database, path);
 }

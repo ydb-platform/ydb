@@ -331,13 +331,26 @@ std::expected<TResolvedName, TString> ResolveName(
         name = canonName;
     }
 
-    TStringBuf topicName = StripLeadingSlash(name);
     const TStringBuf databaseNorm = StripSlashes(database);
-    const TStringBuf pqPrefix = StripSlashes(pqConfig.GetRoot());
     const TStringBuf lbRoot = StripSlashes(pqConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot());
 
+    if (!isFederation) {
+        // Resolve the original path before stripping any database or federation prefix.
+        // FCC legacy-looking names are literal, and absolute paths stay absolute.
+        const auto& domains = AppData()->DomainsInfo;
+        const TStringBuf root = domains && domains->Domain
+            ? TStringBuf{domains->GetDomain()->Name} : TStringBuf{};
+        TString path = name.empty()
+            ? JoinWithDatabase(database, databaseNorm, name)
+            : CanonizePath(ResolvePathToDatabase(database, name, root));
+        return MakeResolved(std::move(path), database, databaseNorm, lbRoot, false);
+    }
+
+    TStringBuf topicName = StripLeadingSlash(name);
+    const TStringBuf pqPrefix = StripSlashes(pqConfig.GetRoot());
+
     // Reject trailing '/' before stripping PQ/database prefixes (exact PQ root is "/").
-    if (isFederation && topicName.EndsWith("/")) {
+    if (topicName.EndsWith("/")) {
         return Fail("Invalid topic path or trailing '/'");
     }
 
@@ -347,7 +360,7 @@ std::expected<TResolvedName, TString> ResolveName(
     // /Root/test_db/topic with PQ Root=/Root becomes test_db/topic and rejoins as
     // /Root/test_db/test_db/topic.
     bool strippedPqPrefix = false;
-    const bool underPq = isFederation && !pqPrefix.empty() && IsPathPrefix(topicName, pqPrefix);
+    const bool underPq = !pqPrefix.empty() && IsPathPrefix(topicName, pqPrefix);
     const bool databaseUnderPq = !databaseNorm.empty()
         && databaseNorm != pqPrefix
         && IsPathPrefix(databaseNorm, pqPrefix);
@@ -380,12 +393,6 @@ std::expected<TResolvedName, TString> ResolveName(
     auto wrap = [&](TString path) {
         return MakeResolved(std::move(path), database, databaseNorm, lbRoot, isFederation);
     };
-
-    if (!isFederation) {
-        // FCC: never interpret rt3. / -- / @ as a legacy name. A leaf like
-        // TestSchemeList--test-topic-1 is a literal topic under the database.
-        return wrap(JoinWithDatabase(database, databaseNorm, topicName));
-    }
 
     // Federation mode.
     if (!BasicNameChecks(name)) {

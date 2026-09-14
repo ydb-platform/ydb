@@ -345,18 +345,13 @@ class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
-    virtual bool UseStrictDatabaseRelativePaths() const {
-        return false;
+    TString GetDatabaseRelativePath(TStringBuf path) const {
+        return NKikimr::ResolvePathToDatabase(GetDatabaseName().GetOrElse(TString()), path, GetDatabaseRoot());
     }
 
-    TString GetDatabaseRelativePath(TStringBuf path) const {
-        const auto database = GetDatabaseName();
-        if (!UseStrictDatabaseRelativePaths() && !path.empty() && !path.StartsWith('/')) {
-            return NKikimr::NormalizePath(
-                NKikimr::CanonizePath(database.GetOrElse(TString())),
-                NKikimr::CanonizePath(TString{path}));
-        }
-        return NKikimr::ResolvePathToDatabase(database.GetOrElse(TString()), path);
+protected:
+    virtual TString GetDatabaseRoot() const {
+        return {};
     }
 };
 
@@ -535,12 +530,8 @@ public:
         return ResolvedDatabaseName ? ResolvedDatabaseName : GetDatabaseNameFromRequest();
     }
 
-    bool UseStrictDatabaseRelativePaths() const final {
-        const auto providedDatabase = GetDatabaseNameFromRequest();
-        // Use strict relative paths only when the database itself is relative to the cluster root.
-        return providedDatabase && !providedDatabase->empty()
-            && !IsStartWithSlash(*providedDatabase)
-            && CanonizePath(*providedDatabase) != GetDatabaseName().GetOrElse(TString());
+    void SetDatabaseRoot(const TString& root) {
+        DatabaseRoot = root;
     }
 
     // Store the resolved database for request processing without updating counters.
@@ -584,9 +575,15 @@ public:
 
     virtual TString GetRpcMethodName() const = 0;
 
+protected:
+    TString GetDatabaseRoot() const final {
+        return DatabaseRoot;
+    }
+
 private:
     NWilson::TTraceId UserFacingTraceId;
     TMaybe<TString> ResolvedDatabaseName;
+    TString DatabaseRoot;
 };
 
 // Request context

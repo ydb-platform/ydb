@@ -145,6 +145,7 @@ private:
     template<class TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
+        requestBaseCtx->SetDatabaseRoot(RootDatabase);
         const auto providedDatabaseName = requestBaseCtx->GetDatabaseName();
         if (providedDatabaseName && !providedDatabaseName->empty()) {
             requestBaseCtx->SetDatabaseName(ResolveDatabaseName(*providedDatabaseName, RootDatabase));

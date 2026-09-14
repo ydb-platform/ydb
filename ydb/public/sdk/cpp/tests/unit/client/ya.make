@@ -16,5 +16,6 @@ RECURSE(
     row_ranges
     retry_range
     table
+    topic
     value
 )

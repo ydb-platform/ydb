@@ -238,6 +238,54 @@ Y_UNIT_TEST_SUITE(Path) {
             NormalizePath(TString{"/Root/Db"}, TString{"account//topic"}),
             "/Root/Db/account/topic");
     }
+
+    Y_UNIT_TEST(ResolveResourcePath) {
+        for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
+            {"dir/table", "/Root/mydb/dir/table"},
+            {"/Root/mydb/table", "/Root/mydb/table"},
+            {"Root/mydb/table", "/Root/mydb/table"},
+            {"mydb/table", "/Root/mydb/mydb/table"},
+            {"Root2/table", "/Root/mydb/Root2/table"},
+            {"Root/Root/mydb/table", "/Root/Root/mydb/table"},
+            {"Root/mydb2/table", "/Root/mydb2/table"},
+            {"Root/other/table", "/Root/other/table"},
+            {"Root", "/Root"},
+            {"Root//mydb/dir//table/", "/Root/mydb/dir/table"},
+            {"/Root/mydb/Root/table", "/Root/mydb/Root/table"},
+            {"/Other/table", "/Other/table"},
+            {".", "/Root/mydb"},
+            {"", ""},
+        }) {
+            const auto result = ResolvePathToDatabase("/Root/mydb", path, "/Root");
+            UNIT_ASSERT_VALUES_EQUAL_C(result, expected, path);
+            UNIT_ASSERT_VALUES_EQUAL_C(ResolvePathToDatabase("/Root/mydb", result, "/Root"), expected, path);
+            UNIT_ASSERT_VALUES_EQUAL_C(ResolvePathToDatabase("/Root/mydb", path), expected, path);
+        }
+    }
+
+    Y_UNIT_TEST(ResolveResourcePathInNestedDatabase) {
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/Root/folder/mydb", "Config", "/Root"),
+            "/Root/folder/mydb/Config");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/Root/folder/mydb", "Root/folder/mydb/Config", "/Root"),
+            "/Root/folder/mydb/Config");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/Root/Root/mydb", "Root/Root/mydb/Config", "/Root"),
+            "/Root/Root/mydb/Config");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/Root/Root/mydb", "mydb/Config", "/Root"),
+            "/Root/Root/mydb/mydb/Config");
+    }
+
+    Y_UNIT_TEST(ResolveResourcePathUsesConfiguredRoot) {
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/Other/mydb", "Root/table", "/Root"), "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/Other/mydb", "Other/table", "/Root"),
+            "/Other/mydb/Other/table");
+    }
+
+    Y_UNIT_TEST(ResolveResourcePathWithoutDatabase) {
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "dir/table", "/Root"), "/dir/table");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "Root/table", "/Root"), "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "/Root/table", "/Root"), "/Root/table");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", "", "/Root"), "");
+    }
 }
 
 }

@@ -2,15 +2,22 @@
 
 ## Version 26.2 {#26-2}
 
-### Version 26.2.1.13 {#26-2-1-13}
+### Version 26.2.1.14 {#26-2-1-14}
 
-Release date: September 2, 2026.
+Release date: September 16, 2026.
 
 #### Functionality
 
+* Added support for [incremental backups](./concepts/datamodel/backup-collection.md?version=v26.2), which store only changes relative to the preceding backup in a collection. This capability is disabled by default and can be enabled by the cluster administrator.
+* Added [export and import of database objects](./reference/ydb-cli/export-import/export-nfs.md?version=main) using a local file system, including file systems mounted over NFS. This capability is disabled by default and can be enabled by the cluster administrator.
 * [Streaming queries](./dev/streaming-query/index.md?version=v26.2) can read from local topics, write to local topics, read local tables, and contain multiple `INSERT` statements.
-* Streaming queries gained [watermarks](./dev/streaming-query/watermarks.md?version=v26.2) and evaluation of scalar expressions outside the context of an individual message.
+* Streaming queries gained [watermarks](./dev/streaming-query/watermarks.md?version=v26.2).
+* [Watermark](./dev/streaming-query/watermarks.md?version=v26.2) expressions can be evaluated outside the context of an individual message. This capability is disabled by default and can be enabled by the cluster administrator.
+* Streaming queries can read [user attributes of topic messages](https://github.com/ydb-platform/ydb/pull/40378). This capability is disabled by default and can be enabled by the cluster administrator.
 * Added [Bloom skip indexes](./dev/bloom-skip-indexes.md?version=v26.2): Bloom and Bloom n-gram indexes for column-oriented tables, and prefix Bloom indexes for row-oriented tables. Column-oriented tables also gained configurable column compression.
+* Added [min-max skip indexes](https://github.com/ydb-platform/ydb/pull/38585) for column-oriented tables. This capability is disabled by default and can be enabled by the cluster administrator.
+* Added [dictionary encoding](./yql/reference/syntax/create_table/index.md?version=v26.2#encoding) for columns in column-oriented tables. This capability is disabled by default and can be enabled by the cluster administrator.
+* Added [online construction of unique secondary indexes](https://github.com/ydb-platform/ydb/pull/35981). This capability is disabled by default and can be enabled by the cluster administrator.
 * The [parallelism level](./yql/reference/syntax/alter_table/indexes.md?version=v26.2) can now be configured for index builds.
 * [Full-text indexes](./dev/fulltext-indexes.md?version=v26.2) are enabled by default.
 * [`ALTER TABLE`](./yql/reference/syntax/alter_table/columns.md?version=v26.2) statements `ALTER COLUMN SET DEFAULT` and `ALTER COLUMN DROP DEFAULT` are available by default.
@@ -19,6 +26,8 @@ Release date: September 2, 2026.
 * Added forced [table compaction](./yql/reference/syntax/alter_table/compact.md?version=v26.2) using `ALTER TABLE ... COMPACT`.
 * Added automatic storage balancing between groups and background validation of disk placement.
 * Table partitioning schema changes are faster.
+* [Transactions between topics and tables can use optimized conflict checking](https://github.com/ydb-platform/ydb/pull/36706). This capability is disabled by default and can be enabled by the cluster administrator.
+* [IAM authorization checks can be sent to Access Service in batches](https://github.com/ydb-platform/ydb/pull/911). This capability is disabled by default and can be enabled by the cluster administrator.
 * Added [audit logging](./security/audit-log.md?version=v26.2) for topic operations.
 * Added [built-in minidump collection based on Google Breakpad](./devops/observability/minidumps.md?version=v26.2) for Linux nodes.
 * Added the [`ydb-dstool pdisk populate`](./reference/ydb-dstool/pdisk-populate.md?version=v26.2) subcommand for reproducing a PDisk workload on another device.

@@ -2206,6 +2206,7 @@ void TNodeState::StartReconciliation(bool major, char logSymbol) {
         if (major) {
             GenMajor++;
             GenMinor = 1;
+            SeqNo = 0;
             InputNodeActorId = NActors::TActorId{};
         } else {
             GenMinor++;
@@ -2261,10 +2262,9 @@ void TNodeState::DoReconciliation(char logSymbol) {
             << ", WQ=" << WaitersQueueSize.load() << ", Log=" << reconciliationLog);
     }
 
-    if (GenMinor == 1) { // => major reconciliation
-        // Every attempt of one major reconciliation numbers the queue the same way: nothing is sent while
-        // it runs, the peer is back at ConfirmedSeqNo 0, and the items dropped below would leave gaps.
-        SeqNo = 0;
+    // rebuilt on the 1st attempt of a major reconciliation only: the queue is frozen between the attempts,
+    // and renumbering it again would count past what the peer, back at ConfirmedSeqNo 0, can ask for
+    if (GenMinor == 1 && ReconciliationCount == 1) {
         std::deque<std::shared_ptr<TOutputItem>> RebuiltQueue;
         while (!Queue.empty()) {
 

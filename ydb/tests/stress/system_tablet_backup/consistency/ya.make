@@ -6,6 +6,7 @@ PY_SRCS(
     __init__.py
     __main__.py
     doctor.py
+    hive_recovery.py
     model.py
     registry.py
     report.py
@@ -23,6 +24,7 @@ PY_SRCS(
     sources/backup.py
     sources/ledger.py
     sources/live.py
+    sources/http_auth.py
 )
 
 END()

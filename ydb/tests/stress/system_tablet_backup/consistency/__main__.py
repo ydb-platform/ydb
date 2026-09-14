@@ -22,6 +22,8 @@ import sys
 from typing import Dict, List, Sequence
 
 from . import doctor
+from .sources.http_auth import load_credentials
+from .sources.live import DEFAULT_TIMEOUT_SECONDS
 from .model import TABLET_SLICES, Severity
 from .registry import required_tables, run_checks, select_checks
 from .report import max_severity, render_json, render_text
@@ -92,6 +94,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--insecure", action="store_true", help="do not verify TLS certificates of --mon-endpoint"
     )
+    parser.add_argument("--mon-credentials-file", metavar="FILE",
+                        help="private JSON file with Authorization/Cookie HTTP headers; requires verified HTTPS or loopback")
+    parser.add_argument("--mon-timeout", type=int, default=DEFAULT_TIMEOUT_SECONDS, metavar="SECONDS",
+                        help="positive socket timeout for monitoring requests (default: 30); not a total run deadline")
 
     parser.add_argument("--only", action="append", default=[], metavar="ID", help="run only these checks")
     parser.add_argument("--exclude", action="append", default=[], metavar="ID", help="skip these checks")
@@ -103,7 +109,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="minimum severity that makes the run fail: info, warning, error, critical (default: error)",
     )
     parser.add_argument("--json", dest="json_path", help="write the full report as JSON to this path")
-    parser.add_argument("-v", "--verbose", action="store_true", help="print finding details")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="print live request progress to stderr, all checks, findings with details, backup sources and doctor edits",
+    )
     parser.add_argument(
         "--skip-checksum-validation",
         action="store_true",
@@ -151,12 +160,20 @@ def _list_checks() -> int:
 def main(argv: Sequence[str] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.mon_timeout <= 0:
+        parser.error("--mon-timeout must be positive")
 
     if args.list_checks:
         return _list_checks()
 
     if not args.backup_root and not args.tablet:
         parser.error("nothing to read: pass --backup-root and/or --tablet")
+
+    try:
+        credentials = load_credentials(args.mon_credentials_file, args.mon_endpoint, args.insecure)
+    except (OSError, ValueError) as exc:
+        sys.stderr.write("error: %s\n" % exc)
+        return 2
 
     try:
         fail_on = Severity.parse(args.fail_on)
@@ -205,9 +222,14 @@ def main(argv: Sequence[str] = None) -> int:
         else:
             state.ledger = ledger
 
+    source_notes = list(notes)
     if args.mon_endpoint:
         tenant_hives = discover_tenant_hives(state)
-        hive_ids = set(tenant_hives) | set(args.tenant_hive)
+        # Read backed-up Hives too.  Doctor needs the running root Hive to
+        # distinguish stale rows that would be resurrected from legitimate
+        # tablets omitted by a differently-aged SchemeShard backup.
+        backed_up_hives = {d.tablet_id for d in state.by_type("hive")}
+        hive_ids = set(tenant_hives) | set(args.tenant_hive) | backed_up_hives
         versioned_paths = discover_versioned_paths(state)
         # Paths of in-flight operations are read for their identity only, so a
         # path that is also a versioned object keeps the richer kind.
@@ -215,7 +237,9 @@ def main(argv: Sequence[str] = None) -> int:
         live_paths.update(versioned_paths)
         if hive_ids or live_paths:
             state.live = read_live(
-                args.mon_endpoint, hive_ids, live_paths, insecure=args.insecure
+                args.mon_endpoint, hive_ids, live_paths, timeout=args.mon_timeout,
+                insecure=args.insecure, credentials=credentials,
+                progress=(lambda message: print(message, file=sys.stderr, flush=True)) if args.verbose else None,
             )
         if hive_ids:
             named = ", ".join(
@@ -246,7 +270,7 @@ def main(argv: Sequence[str] = None) -> int:
 
     outcomes = run_checks(state, specs)
 
-    print(render_text(state, outcomes, notes, verbose=args.verbose))
+    print(render_text(state, outcomes, notes if args.verbose else source_notes, verbose=args.verbose))
 
     if args.json_path:
         with open(args.json_path, "w") as handle:
@@ -258,7 +282,7 @@ def main(argv: Sequence[str] = None) -> int:
         repair_plan = doctor.plan(state, outcomes)
 
         if repair_plan.empty or not (args.doctor_out or args.in_place):
-            print(doctor.render_plan(repair_plan))
+            print(doctor.render_plan(repair_plan, verbose=args.verbose))
             return 1 if max_severity(outcomes) >= fail_on else 0
 
         try:
@@ -269,7 +293,7 @@ def main(argv: Sequence[str] = None) -> int:
             sys.stderr.write("error: doctor could not apply repairs: %s\n" % exc)
             return 2
 
-        print(doctor.render_plan(repair_plan, applied_to=written))
+        print(doctor.render_plan(repair_plan, applied_to=written, verbose=args.verbose))
         print("")
         print("re-run the checks against the repaired backup to confirm:")
         print("  python3 -m consistency --backup-root %s" % (args.doctor_out or "<original root>"))

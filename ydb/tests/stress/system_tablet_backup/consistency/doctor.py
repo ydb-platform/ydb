@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """Doctor mode: repair the invariants that can be repaired in a backup.
 
-Only the identifier-sequence invariants are repairable offline.  Referential
-findings (a tablet one side forgot) cannot be invented back into a backup -- they
-need reconciliation in the running cluster -- so doctor reports them with
-guidance instead of pretending to fix them.
+Identifier-sequence invariants are repairable offline.  A Hive tablet which is
+absent from a loaded SchemeShard can also be erased from a Hive backup: this is
+the inverse of inventing lost data and prevents a stale Hive restore from
+resurrecting tablets which SchemeShard already dropped.  Other referential
+findings still need reconciliation in the running cluster.
 
 **How a repair is applied.** Not by editing the snapshot: the restore replays
 ``changelog.json`` on top of it, so a snapshot edit would simply be overwritten
@@ -42,6 +43,7 @@ from .model import BS_CONTROLLER, HIVE, SCHEME_SHARD, ClusterState, TabletDump
 from .registry import CheckOutcome
 from .views import (
     HIVE_STATE_NEXT_TABLET_ID,
+    INVALID_TABLET_ID,
     SS_SYS_PARAM_NEXT_PATH_ID,
     SS_SYS_PARAM_NEXT_SHARD_IDX,
     TABLET_ID_BLACKHOLE_BEGIN,
@@ -111,8 +113,8 @@ GUIDANCE: Dict[str, str] = {
     "I1": "SchemeShard still knows the tablet ids. Re-create the missing tablets in Hive "
           "with TEvCreateTablet carrying the original TabletID (hive.proto field 22) so the "
           "reference from SchemeShard stays valid.",
-    "I2": "Delete the orphans in the running Hive: they are the set difference "
-          "Hive.Tablet(owner=SchemeShard) \\ SchemeShard.Shards.",
+    "I2": "For Hive recovery an authoritative current SchemeShard backup is sufficient "
+          "to erase orphan rows. Otherwise confirmation from a reachable Hive is needed.",
     "I3": "The groups are gone from BSController; the data they held cannot be conjured back. "
           "Recover the group configuration from an older BSController backup, or accept the "
           "loss of those channels.",
@@ -190,6 +192,69 @@ def has_repair(check_id: str) -> bool:
 # --------------------------------------------------------------------------
 
 
+@repair("I2")
+def repair_hive_orphans(state: ClusterState) -> Iterator[Edit]:
+    """Prevent a stale Hive restore from resurrecting already dropped shards.
+
+    Restore replays changes on top of the current local database; it does not
+    replace the database wholesale.  Consequently an old active Tablet row can
+    turn a long-deleted shard back into an endlessly restarting tablet.  The
+    loaded SchemeShard dumps are the authority for their own shard indexes.
+    """
+    hive = hive_view(state)
+    if hive is None:
+        return
+    live_hive = state.live.hives.get(hive.tablet_id) if state.live else None
+
+    known_owners = set()
+    owned_shards = set()
+    for ss in schemeshard_views(state):
+        if state.authoritative_schemeshard and (
+                ss.dump.changelog_truncated or not ss.dump.has_table("Shards")):
+            continue
+        known_owners.add(ss.tablet_id)
+        for shard in ss.shards():
+            owned_shards.add((shard.owner_tablet_id, shard.shard_idx))
+
+    for tablet in hive.tablets():
+        if tablet.owner is None or tablet.is_deleting:
+            continue
+        if tablet.owner_tablet_id not in known_owners or tablet.owner in owned_shards:
+            continue
+        if state.authoritative_schemeshard:
+            yield Edit(
+                tablet_type=HIVE, table=hive.TABLE_TABLET,
+                key={"ID": tablet.tablet_id}, values={},
+                current={"Owner": list(tablet.owner)}, op="erase",
+                reason="current authoritative SchemeShard backup has no shard %d:%d; "
+                       "prevent Hive restore from resurrecting tablet %d"
+                       % (*tablet.owner, tablet.tablet_id),
+            )
+            continue
+        if live_hive is None or not live_hive.reachable:
+            continue
+        # Backups of different system tablets are not a consistent snapshot.
+        # Never erase merely because a SchemeShard backup lacks the owner: a
+        # currently running tablet is stronger evidence.  Absence from live
+        # Hive, or the viewer's explicit dead state, confirms resurrection.
+        live_state = live_hive.tablet_states.get(tablet.tablet_id)
+        live_restarts = live_hive.tablet_restarts.get(tablet.tablet_id, 0)
+        if (tablet.tablet_id in live_hive.tablet_ids
+                and live_state != 2 and live_restarts < 10):
+            continue
+        yield Edit(
+            tablet_type=HIVE,
+            table=hive.TABLE_TABLET,
+            key={"ID": tablet.tablet_id},
+            values={},
+            current={"Owner": list(tablet.owner)},
+            op="erase",
+            reason="owning SchemeShard has no shard %d and live Hive reports state=%s, "
+                   "restarts=%d; prevent stale restore from resurrecting tablet %d"
+                   % (tablet.owner_idx, live_state, live_restarts, tablet.tablet_id),
+        )
+
+
 @repair("I4", "I15")
 def repair_hive_tablet_id(state: ClusterState) -> Iterator[Edit]:
     """Raise Hive's tablet id allocator above every referenced tablet id."""
@@ -201,7 +266,7 @@ def repair_hive_tablet_id(state: ClusterState) -> Iterator[Edit]:
     referenced = {uniq_part(t.tablet_id) for t in hive.tablets()}
     for ss in schemeshard_views(state):
         for shard in ss.shards():
-            if shard.tablet_id:
+            if shard.tablet_id and shard.tablet_id != INVALID_TABLET_ID:
                 referenced.add(uniq_part(shard.tablet_id))
     if state.ledger is not None:
         for entry in state.ledger.of_op("create"):
@@ -255,6 +320,31 @@ def repair_hive_tablet_id(state: ClusterState) -> Iterator[Edit]:
             values={"Next": advanced},
             current={"Next": seq.next},
             reason="advance the delegated range past uniq part %d, still in use" % highest,
+        )
+
+
+@repair("I20")
+def repair_hive_known_generations(state: ClusterState) -> Iterator[Edit]:
+    """Raise stale Hive KnownGeneration values to the live generations."""
+    hive = hive_view(state)
+    if hive is None or state.live is None:
+        return
+    live_hive = state.live.hives.get(hive.tablet_id)
+    if live_hive is None or not live_hive.reachable:
+        return
+    for tablet in hive.tablets():
+        live_generation = live_hive.tablet_generations.get(tablet.tablet_id)
+        if (live_generation is None or tablet.known_generation is None
+                or tablet.known_generation >= live_generation):
+            continue
+        yield Edit(
+            tablet_type=HIVE,
+            table=hive.TABLE_TABLET,
+            key={"ID": tablet.tablet_id},
+            values={"KnownGeneration": live_generation},
+            current={"KnownGeneration": tablet.known_generation},
+            reason="avoid ReasonBootSuggestOutdated restart loop; live generation is %d"
+                   % live_generation,
         )
 
 
@@ -652,7 +742,7 @@ def plan(state: ClusterState, outcomes: Sequence[CheckOutcome]) -> DoctorPlan:
     return result
 
 
-def render_plan(plan_: DoctorPlan, applied_to: Optional[str] = None) -> str:
+def render_plan(plan_: DoctorPlan, applied_to: Optional[str] = None, verbose: bool = False) -> str:
     lines: List[str] = []
     header = "DOCTOR" if applied_to else "DOCTOR PLAN (dry run)"
     lines.append(header)
@@ -664,6 +754,18 @@ def render_plan(plan_: DoctorPlan, applied_to: Optional[str] = None) -> str:
         for edit in plan_.edits:
             by_check.setdefault(edit.check_id, []).append(edit)
         for check_id in sorted(by_check):
+            if not verbose:
+                groups: Dict[Tuple[str, str, str], List[Edit]] = {}
+                for edit in by_check[check_id]:
+                    groups.setdefault((edit.tablet_type, edit.table, edit.op), []).append(edit)
+                for (tablet_type, table, op), edits in groups.items():
+                    lines.append("  %s  %s/%s: %d %s(s)" % (check_id, tablet_type, table, len(edits), op))
+                    for edit in edits[:3]:
+                        lines.append("      %s" % edit.describe())
+                        lines.append("        reason: %s" % edit.reason)
+                    if len(edits) > 3:
+                        lines.append("      ... %d more (use -v to show all edits)" % (len(edits) - 3))
+                continue
             lines.append("  %s" % check_id)
             for edit in by_check[check_id]:
                 lines.append("      %s" % edit.describe())

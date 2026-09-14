@@ -533,7 +533,6 @@ def load_state(
         if needed_tables is not None:
             tables = needed_tables.get(ref.tablet_type)
             if tables is None:
-                notes.append("%s: no selected check reads it, skipped" % ref.tablet_type)
                 continue
         try:
             dumps.append(

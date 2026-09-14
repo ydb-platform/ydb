@@ -1,8 +1,10 @@
 #!/bin/bash
 #
-# Repeatable stale-restore exercise for YDB cluster system tablets.
+# Repeatable restore exercise for YDB cluster system tablets.
+# Default: enter RECOVERY with DDL running, then copy and restore the backup.
+# The older stale/truncated experiment below is available with --stale-restore.
 #
-# One iteration:
+# One iteration in --stale-restore mode:
 #   1. make sure the cluster is healthy and the DDL workload is running
 #   2. copy the tablet's current backup aside      -> this becomes the stale one
 #   3. let the workload run on, so the cluster moves ahead of the copy
@@ -25,27 +27,43 @@ set -uo pipefail
 # ---------------------------------------------------------------- settings
 
 ITERATIONS=1
-TABLET=scheme_shard
+RECOVERY_FIRST=1
+RECOVERY_DOCTOR=0
+START_ITERATION=1
+TABLET=root_hive
 OUTDIR=~/restore-runs
 USE_DOCTOR=1
+ALLOW_UNHEALTHY_START=0
+ALLOW_DEGRADED=0
+FAST=0
 MON=http://localhost:8765
 GRPC=grpc://localhost:2135
 DOMAIN=/Root
 CACHE=/Berkanavt/kikimr/cache
 STAGE=/Berkanavt/kikimr/restore
-CHECKER=~/consistency
+CHECKER=${CHECKER:-$HOME/consistency}
 WORKLOAD=~/slice_workload.sh
 WORKLOAD_LOG=~/workload.log
 WORKLOAD_LIVE=~/workload_live.txt
+MAX_BACKUP_AGE=3600
 
 usage() {
     cat <<EOF
 usage: $0 [options]
 
   -n N            iterations (default $ITERATIONS)
-  -t TABLET       scheme_shard | hive | bscontroller (default $TABLET)
+  --start N       first iteration number (default $START_ITERATION)
+  -t TABLET       scheme_shard | root_hive | hive | bscontroller (default $TABLET)
   -o DIR          artifacts directory (default $OUTDIR)
-  --no-doctor     restore without repairing first, to compare outcomes
+  --max-backup-age SECONDS
+                  reject older snapshots; 0 disables (default $MAX_BACKUP_AGE)
+  --stale-restore use the older copy-before-recovery, truncate + doctor experiment
+  --doctor        repair the Hive copy after RECOVERY, before restoring it
+  --no-doctor     disable doctor
+  --allow-unhealthy-start
+                  proceed when repairing damage from an earlier restore
+  --allow-degraded accept GOOD or DEGRADED health (default: GOOD only)
+  --fast          10s staleness and shorter observation waits
   -h              this help
 EOF
 }
@@ -53,9 +71,16 @@ EOF
 while [ $# -gt 0 ]; do
     case "$1" in
         -n) ITERATIONS=$2; shift 2 ;;
+        --start) START_ITERATION=$2; shift 2 ;;
         -t) TABLET=$2; shift 2 ;;
         -o) OUTDIR=$2; shift 2 ;;
-        --no-doctor) USE_DOCTOR=0; shift ;;
+        --max-backup-age) MAX_BACKUP_AGE=$2; shift 2 ;;
+        --stale-restore) RECOVERY_FIRST=0; shift ;;
+        --doctor) USE_DOCTOR=1; RECOVERY_DOCTOR=1; shift ;;
+        --no-doctor) USE_DOCTOR=0; RECOVERY_DOCTOR=0; shift ;;
+        --allow-unhealthy-start) ALLOW_UNHEALTHY_START=1; shift ;;
+        --allow-degraded) ALLOW_DEGRADED=1; shift ;;
+        --fast) FAST=1; shift ;;
         -h|--help) usage; exit 0 ;;
         *) echo "unknown option: $1" >&2; usage; exit 2 ;;
     esac
@@ -63,10 +88,16 @@ done
 
 case "$TABLET" in
     scheme_shard) TABLET_ID=72057594046678944; BOOT_TYPE=FLAT_SCHEMESHARD ;;
-    hive)         TABLET_ID=72057594037968897; BOOT_TYPE=FLAT_HIVE ;;
+    hive|root_hive)
+                  TABLET=root_hive
+                  BACKUP_TABLET=hive
+                  TABLET_ID=72057594037968897
+                  BOOT_TYPE=FLAT_HIVE
+                  ;;
     bscontroller) TABLET_ID=72057594037932033; BOOT_TYPE=FLAT_BS_CONTROLLER ;;
     *) echo "unsupported tablet: $TABLET" >&2; exit 2 ;;
 esac
+BACKUP_TABLET=${BACKUP_TABLET:-$TABLET}
 
 mkdir -p "$OUTDIR"
 
@@ -76,7 +107,7 @@ log()  { echo "$(date -u +%H:%M:%S) | $*"; }
 fail() { echo "$(date -u +%H:%M:%S) | FAILED: $*" >&2; return 1; }
 
 healthcheck() {
-    ydb -e "$GRPC" -d "$DOMAIN" monitoring healthcheck 2>&1 | head -1
+    ydb -e "$GRPC" -d "$DOMAIN" monitoring healthcheck 2>&1 | sed -n '/^Healthcheck status:/p'
 }
 
 wait_healthy() {
@@ -84,6 +115,7 @@ wait_healthy() {
     while [ $SECONDS -lt $deadline ]; do
         case "$(healthcheck)" in
             *GOOD*) return 0 ;;
+            *DEGRADED*) [ "$ALLOW_DEGRADED" = 1 ] && return 0 ;;
         esac
         sleep 5
     done
@@ -91,12 +123,12 @@ wait_healthy() {
 }
 
 tablet_page() {
-    curl -s "$MON/tablets/app?TabletID=$TABLET_ID"
+    curl -fsS --max-time 30 "$MON/tablets/app?TabletID=$TABLET_ID"
 }
 
 restart_tablet() {
-    curl -s "$MON/tablets?RestartTabletID=$TABLET_ID" -o /dev/null
-    sleep 15
+    curl -fsS --max-time 30 "$MON/tablets?RestartTabletID=$TABLET_ID" -o /dev/null || return 1
+    sleep 5
 }
 
 # Wait until the tablet's app page reports a terminal restore status.
@@ -121,37 +153,53 @@ wait_restore() {
 set_boot_type() {
     local mode=$1          # RECOVERY | NORMAL
     local cfg=/tmp/cfg-$$.yaml
-    ydb -e "$GRPC" -d "$DOMAIN" admin cluster config fetch > "$cfg" 2>/dev/null || return 1
+    wait_config > "$cfg" || return 1
 
     python3 - "$cfg" "$BOOT_TYPE" "$mode" <<'PY'
 import sys
 path, boot_type, mode = sys.argv[1], sys.argv[2], sys.argv[3]
-out, marker = [], "- type: %s" % boot_type
+out, marker, selected, matches = [], "- type: %s" % boot_type, False, 0
 for line in open(path).read().split("\n"):
-    if line.strip() == "boot_type: RECOVERY":
-        continue                      # drop any existing marker first
+    if line.lstrip().startswith("- type:"):
+        selected = line.strip() == marker
+        matches += int(selected)
+    if selected and line.strip().startswith("boot_type:"):
+        continue
     out.append(line)
     if mode == "RECOVERY" and line.strip() == marker:
         out.append(" " * (len(line) - len(line.lstrip()) + 2) + "boot_type: RECOVERY")
+assert matches == 1, "expected exactly one bootstrap entry for " + boot_type
 open(path, "w").write("\n".join(out))
 PY
+    [ "$?" -eq 0 ] || { rm -f "$cfg"; return 1; }
 
     ydb -y -e "$GRPC" -d "$DOMAIN" admin cluster config replace -f "$cfg" 2>&1 | head -2
+    local rc=$?
     rm -f "$cfg"
+    return "$rc"
 }
 
 restart_node() {
-    sudo systemctl restart kikimr
+    sudo systemctl restart kikimr || return 1
     local deadline=$((SECONDS + 180))
     while [ $SECONDS -lt $deadline ]; do
-        [ "$(systemctl is-active kikimr)" = active ] && { sleep 20; return 0; }
+        [ "$(systemctl is-active kikimr)" = active ] && return 0
         sleep 5
     done
     return 1
 }
 
 in_recovery() {
-    curl -s "$MON/tablets?TabletID=$TABLET_ID" | grep -qi recovery
+    curl -fsS --max-time 30 "$MON/tablets?TabletID=$TABLET_ID" | grep -qi recovery
+}
+
+wait_recovery() {
+    local deadline=$((SECONDS + ${1:-60}))
+    while [ $SECONDS -lt $deadline ]; do
+        in_recovery && return 0
+        sleep 2
+    done
+    return 1
 }
 
 start_workload() {
@@ -162,6 +210,27 @@ start_workload() {
 }
 
 workload_creates() { grep -c 'create ok' "$WORKLOAD_LOG" 2>/dev/null || echo 0; }
+
+# A backup_* directory appears before its initial snapshot is complete.  Such a
+# directory may already have a changelog, but the executor cannot restore it.
+latest_complete_backup() {
+    local dir latest=""
+    for dir in "$CACHE/$BACKUP_TABLET/$TABLET_ID"/backup_*; do
+        [ -d "$dir/snapshot" ] || continue
+        latest=$dir
+    done
+    [ -n "$latest" ] && printf '%s\n' "$latest"
+}
+
+check_backup_age() {
+    local backup=$1 age
+    [ "$MAX_BACKUP_AGE" -eq 0 ] && return 0
+    age=$(( $(date +%s) - $(stat -c %Y "$backup/snapshot") ))
+    if [ "$age" -gt "$MAX_BACKUP_AGE" ]; then
+        fail "latest complete $TABLET backup is ${age}s old (limit ${MAX_BACKUP_AGE}s)"
+        return 1
+    fi
+}
 
 # Drop names the SchemeShard no longer has: after a stale restore the workload's
 # own list is ahead of the cluster, and every drop would fail forever.
@@ -218,6 +287,7 @@ run_iteration() {
     # Vary the two knobs that decide which failure classes show up.
     local staleness=$(( 30 + (n % 3) * 60 ))          # 30 / 90 / 150 s
     local truncate_kb=$(( (n % 4) * 16 ))             # 0 / 16 / 32 / 48 KiB
+    [ "$FAST" = 1 ] && staleness=10
 
     log "=== iteration $n: tablet=$TABLET staleness=${staleness}s truncate=${truncate_kb}KiB doctor=$USE_DOCTOR"
     {
@@ -225,37 +295,69 @@ run_iteration() {
         echo "staleness_seconds=$staleness truncate_kb=$truncate_kb use_doctor=$USE_DOCTOR"
     } > "$dir/params.txt"
 
-    wait_healthy 240 || { fail "cluster not GOOD before the iteration"; return 1; }
+    if [ "$ALLOW_UNHEALTHY_START" = 1 ]; then
+        log "cluster is not GOOD; continuing because --allow-unhealthy-start was given"
+    else
+        wait_healthy 240 || { fail "cluster not GOOD before the iteration"; return 1; }
+    fi
     start_workload
     local creates_before; creates_before=$(workload_creates)
 
     # ---- capture the stale copy
-    local src; src=$(ls -d $CACHE/$TABLET/$TABLET_ID/backup_*/ 2>/dev/null | tail -1)
-    [ -n "$src" ] || { fail "no backup found for $TABLET"; return 1; }
-    local name; name=$(basename "${src%/}")
+    local src="" name="" attempt
+    for attempt in 1 2 3 4 5; do
+        src=$(latest_complete_backup)
+        [ -n "$src" ] || break
+        check_backup_age "$src" || return 1
+        name=$(basename "${src%/}")
+        rm -rf "$dir/stale.tmp"
+        if sudo cp -a "${src%/}" "$dir/stale.tmp" 2>/dev/null; then
+            mv "$dir/stale.tmp" "$dir/stale"
+            break
+        fi
+        sleep 1                         # backup rotated between discovery and cp
+    done
+    [ -d "$dir/stale/snapshot" ] || {
+        fail "could not atomically capture a complete $TABLET backup"
+        return 1
+    }
     log "stale copy from $name"
-    sudo cp -a "${src%/}" "$dir/stale"
-    sudo chown -R "$USER" "$dir/stale"
+    sudo chown -R "$USER" "$dir/stale" || return 1
 
     # ---- let the cluster move ahead
     sleep "$staleness"
 
-    # ---- simulate records that never reached the backup
+    # ---- simulate complete records that never reached the backup.  Cutting at
+    # an arbitrary byte makes the backup malformed instead of merely stale.
     if [ "$truncate_kb" -gt 0 ] && [ -f "$dir/stale/changelog.json" ]; then
-        local size; size=$(stat -c%s "$dir/stale/changelog.json")
-        local target=$(( size - truncate_kb * 1024 ))
-        if [ "$target" -gt 0 ]; then
-            truncate -s "$target" "$dir/stale/changelog.json"
-            log "truncated changelog $size -> $target"
-        fi
+        local sizes
+        sizes=$(python3 - "$dir/stale/changelog.json" "$truncate_kb" <<'PY'
+import hashlib
+import sys
+
+path, truncate_kb = sys.argv[1], int(sys.argv[2])
+with open(path, "rb") as stream:
+    data = stream.read()
+old_size = len(data)
+target = max(0, old_size - truncate_kb * 1024)
+cut = data.rfind(b"\n", 0, target + 1)
+body = data[:cut + 1] if cut >= 0 else b""
+with open(path, "wb") as stream:
+    stream.write(body)
+with open(path + ".sha256", "w") as stream:
+    stream.write(hashlib.sha256(body).hexdigest())
+print(old_size, len(body))
+PY
+        )
+        log "truncated changelog $sizes"
     fi
 
     # ---- assemble a backup root the checker can read: stale target + live rest
-    mkdir -p "$dir/backups/$TABLET/$TABLET_ID"
-    cp -a "$dir/stale" "$dir/backups/$TABLET/$TABLET_ID/$name"
+    mkdir -p "$dir/backups/$BACKUP_TABLET/$TABLET_ID"
+    cp -a "$dir/stale" "$dir/backups/$BACKUP_TABLET/$TABLET_ID/$name"
     local other
     for other in hive scheme_shard bscontroller; do
-        [ "$other" = "$TABLET" ] && continue
+        [ "$other" = "$BACKUP_TABLET" ] && continue
         sudo cp -a "$CACHE/$other" "$dir/backups/" 2>/dev/null
     done
     sudo chown -R "$USER" "$dir/backups"
@@ -265,14 +367,17 @@ run_iteration() {
     log "checker before restore: exit=$rc_before ($(tail -1 "$dir/report-before.txt"))"
 
     # ---- doctor
-    local restore_src="$dir/backups/$TABLET/$TABLET_ID/$name"
+    local restore_src="$dir/backups/$BACKUP_TABLET/$TABLET_ID/$name"
     if [ "$USE_DOCTOR" = 1 ]; then
-        ( cd "$(dirname "$CHECKER")" && \
+        if ! ( cd "$(dirname "$CHECKER")" && \
           python3 -m "$(basename "$CHECKER")" --backup-root "$dir/backups" \
               --mon-endpoint "$MON" --doctor --doctor-out "$dir/repaired" ) \
-          > "$dir/doctor.txt" 2>&1
-        if [ -d "$dir/repaired/$TABLET/$TABLET_ID/$name" ]; then
-            restore_src="$dir/repaired/$TABLET/$TABLET_ID/$name"
+          > "$dir/doctor.txt" 2>&1; then
+            fail "doctor failed: $(tail -1 "$dir/doctor.txt")"
+            return 1
+        fi
+        if [ -d "$dir/repaired/$BACKUP_TABLET/$TABLET_ID/$name" ]; then
+            restore_src="$dir/repaired/$BACKUP_TABLET/$TABLET_ID/$name"
             # Edits render as "  <tablet>/<Table> [key]: col old -> new".
             local edits; edits=$(grep -cE '^ +[a-z_]+/[A-Za-z]+ \[' "$dir/doctor.txt" 2>/dev/null || echo 0)
             log "doctor: $edits edit(s), using repaired copy"
@@ -281,17 +386,32 @@ run_iteration() {
         fi
     fi
 
+    # The backup writer may be stuck on snapshot.tmp, so checking cache after
+    # restore can keep selecting an unrelated old snapshot.  Verify the exact
+    # repaired input as a stable measure of what doctor achieved.
+    local repaired_root="$dir/backups"
+    [ -d "$dir/repaired" ] && repaired_root="$dir/repaired"
+    local rc_repaired
+    rc_repaired=$(run_checker "$repaired_root" "$dir/report-repaired.txt")
+    log "checker repaired input: exit=$rc_repaired ($(tail -1 "$dir/report-repaired.txt"))"
+
     # ---- stage where the tablet process can read it
-    sudo rm -rf "$STAGE/$name"
-    sudo mkdir -p "$STAGE"
-    sudo cp -a "$restore_src" "$STAGE/$name"
-    sudo chown -R kikimr "$STAGE"
+    sudo rm -rf "$STAGE/$name" || return 1
+    sudo mkdir -p "$STAGE" || return 1
+    sudo cp -a "$restore_src" "$STAGE/$name" || {
+        fail "could not stage restore source $restore_src"
+        return 1
+    }
+    sudo chown -R kikimr "$STAGE" || return 1
 
     # ---- into RECOVERY
     log "switching $BOOT_TYPE to RECOVERY"
-    set_boot_type RECOVERY > "$dir/config-recovery.txt" 2>&1
+    set_boot_type RECOVERY > "$dir/config-recovery.txt" 2>&1 || {
+        fail "could not switch $BOOT_TYPE to recovery mode"
+        return 1
+    }
     restart_node || { fail "node did not come back"; return 1; }
-    in_recovery || { fail "tablet is not in recovery mode"; return 1; }
+    wait_recovery || { fail "tablet is not in recovery mode"; return 1; }
 
     # ---- dry run, then the real thing
     local encoded; encoded=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$STAGE/$name")
@@ -312,12 +432,24 @@ run_iteration() {
 
     # ---- back to normal
     log "switching $BOOT_TYPE back to normal"
-    set_boot_type NORMAL > "$dir/config-normal.txt" 2>&1
+    set_boot_type NORMAL > "$dir/config-normal.txt" 2>&1 || {
+        fail "could not switch $BOOT_TYPE back to normal mode"
+        return 1
+    }
     restart_node || { fail "node did not come back after recovery"; return 1; }
     wait_healthy 300 || { fail "cluster not GOOD after restore"; return 1; }
 
+    case "$dry" in
+        success|warning:*) ;;
+        *) fail "restore dry run did not succeed: $dry"; return 1 ;;
+    esac
+    case "$restore_status" in
+        success|warning:*) ;;
+        *) fail "restore did not succeed: $restore_status"; return 1 ;;
+    esac
+
     # ---- check after, against freshly written backups
-    sleep 30
+    [ "$FAST" = 1 ] && sleep 5 || sleep 30
     rm -rf "$dir/backups-after"; mkdir -p "$dir/backups-after"
     for other in hive scheme_shard bscontroller; do
         sudo cp -a "$CACHE/$other" "$dir/backups-after/" 2>/dev/null
@@ -328,7 +460,7 @@ run_iteration() {
 
     # ---- the cluster has to keep serving the workload
     reconcile_workload
-    sleep 45
+    [ "$FAST" = 1 ] && sleep 10 || sleep 45
     local creates_after; creates_after=$(workload_creates)
     local progressed=$(( creates_after - creates_before ))
     log "workload created $progressed table(s) across the iteration"
@@ -339,6 +471,7 @@ run_iteration() {
         echo "checker_before=$(tail -1 "$dir/report-before.txt")"
         echo "checker_after=$(tail -1 "$dir/report-after.txt")"
         echo "findings_before=$(digest "$dir/report-before.txt.json")"
+        echo "findings_repaired=$(digest "$dir/report-repaired.txt.json")"
         echo "findings_after=$(digest "$dir/report-after.txt.json")"
         echo "workload_creates=$progressed"
         echo "healthcheck=$(healthcheck)"
@@ -348,11 +481,19 @@ run_iteration() {
     return 0
 }
 
+# Recovery-first implementation shares the existing config/restore helpers.
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/recovery_first.sh"
+
 # ---------------------------------------------------------------- main
+
+if [ "$RECOVERY_FIRST" = 1 ]; then
+    run_recovery_first_series
+    exit $?
+fi
 
 log "artifacts: $OUTDIR"
 passed=0; failed=0
-for i in $(seq 1 "$ITERATIONS"); do
+for i in $(seq "$START_ITERATION" $((START_ITERATION + ITERATIONS - 1))); do
     if run_iteration "$i"; then
         passed=$((passed + 1))
     else

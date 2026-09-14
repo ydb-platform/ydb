@@ -22,11 +22,11 @@ from ..model import (
     warning,
 )
 from ..registry import check
-from ..views import ETabletState, bsc_view, hive_view, schemeshard_views
+from ..views import ETabletState, INVALID_TABLET_ID, bsc_view, hive_view, schemeshard_views
 from ._util import capped
 
 # Shards.TabletId is 0 until Hive answers the create request.
-NOT_CREATED_YET = (None, 0)
+NOT_CREATED_YET = (None, 0, INVALID_TABLET_ID)
 
 
 @check(

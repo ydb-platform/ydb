@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Dict, Iterator, List
 
-from ..model import BS_CONTROLLER, HIVE, SCHEME_SHARD, ClusterState, Finding, critical, error, info
+from ..model import BS_CONTROLLER, HIVE, LIVE, SCHEME_SHARD, ClusterState, Finding, critical, error, info
 from ..registry import check
 from ..views import HiveSequence, bsc_view, hive_view, schemeshard_views, uniq_part
 from ._util import capped
@@ -352,3 +352,45 @@ def ss_counters_sane(state: ClusterState) -> Iterator[Finding]:
                 next_shard_idx=next_shard_idx,
                 max_shard_idx=max(shard_idxs),
             )
+
+
+@check(
+    id="I20",
+    title="Hive backup generations are not behind live tablets",
+    needs={HIVE: ["Tablet"], LIVE: []},
+    tags=("hive", "generation", "restarts"),
+)
+def hive_generations_not_behind_live(state: ClusterState) -> Iterator[Finding]:
+    """A stale KnownGeneration makes Hive issue obsolete boot suggestions.
+
+    The tablet rejects each suggestion with ReasonBootSuggestOutdated, producing
+    a tight restart loop after restore even though the tablet data is intact.
+    """
+    hive = hive_view(state)
+    live_hive = state.live.hives.get(hive.tablet_id) if state.live else None
+    if live_hive is None or not live_hive.reachable:
+        return
+
+    behind = []
+    for tablet in hive.tablets():
+        live_generation = live_hive.tablet_generations.get(tablet.tablet_id)
+        if live_generation is None or tablet.known_generation is None:
+            continue
+        if tablet.known_generation < live_generation:
+            behind.append((tablet, live_generation))
+
+    yield from capped(
+        behind,
+        lambda pair: critical(
+            "tablet %d KnownGeneration %d is behind live generation %d"
+            % (pair[0].tablet_id, pair[0].known_generation, pair[1]),
+            tablet_id=pair[0].tablet_id,
+            backup_generation=pair[0].known_generation,
+            live_generation=pair[1],
+        ),
+        lambda total, rest: critical(
+            "%d Hive tablets have stale KnownGeneration" % total,
+            total=total,
+            sample=[pair[0].tablet_id for pair in rest[:100]],
+        ),
+    )

@@ -13,8 +13,11 @@ bare Python 3 on a production host.
 
 from __future__ import annotations
 
+import errno
 import json
+import socket
 import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -29,15 +32,46 @@ class LiveError(Exception):
     pass
 
 
-def _get_json(base: str, path: str, params: Dict[str, Any], timeout: int, insecure: bool) -> Any:
+def _safe_request_error(exc, timeout):
+    """Classify failures without echoing server text or credential-bearing URLs."""
+    if isinstance(exc, urllib.error.HTTPError):
+        return "HTTP %d" % exc.code
+    reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+    if isinstance(reason, (socket.timeout, TimeoutError)):
+        return "network operation timed out (socket timeout: %ss)" % timeout
+    if isinstance(reason, socket.gaierror):
+        return "DNS resolution failed"
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return "TLS certificate verification failed"
+    if isinstance(reason, ssl.SSLError):
+        return "TLS connection failed"
+    if isinstance(reason, OSError):
+        return {
+            errno.ECONNREFUSED: "TCP connection refused",
+            errno.ENETUNREACH: "network unreachable",
+            errno.EHOSTUNREACH: "host unreachable",
+            errno.ECONNRESET: "connection reset",
+        }.get(reason.errno, "network request failed")
+    if isinstance(exc, ValueError):
+        return "invalid JSON response or request"
+    return "HTTP/TLS request failed"
+
+
+def _get_json(base: str, path: str, params: Dict[str, Any], timeout: int, insecure: bool, credentials=None) -> Any:
     url = "%s%s?%s" % (base.rstrip("/"), path, urllib.parse.urlencode(params))
     context = None
     if insecure and url.startswith("https"):
         context = ssl._create_unverified_context()
     try:
-        with urllib.request.urlopen(url, timeout=timeout, context=context) as response:
+        response = (credentials.open(url, timeout) if credentials else
+                    urllib.request.urlopen(url, timeout=timeout, context=context))
+        with response:
             return json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError) as exc:
+        if credentials:
+            # Server reasons and redirected URLs can echo submitted credentials.
+            detail = _safe_request_error(exc, timeout)
+            raise LiveError("%s: %s" % (url, detail)) from None
         raise LiveError("%s: %s" % (url, exc))
 
 
@@ -46,6 +80,7 @@ def read_hive(
     hive_id: int,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
     insecure: bool = False,
+    credentials=None,
 ) -> LiveHive:
     """Ask one Hive for the tablets it owns.
 
@@ -61,24 +96,48 @@ def read_hive(
             {"hive_id": hive_id, "ui64": "false", "timeout": timeout * 1000},
             timeout,
             insecure,
+            credentials,
         )
     except LiveError as exc:
         return LiveHive(hive_id=hive_id, reachable=False, error=str(exc))
 
+    if not isinstance(body, dict):
+        return LiveHive(hive_id=hive_id, reachable=False, error="viewer returned no Hive data")
+
     tablet_ids: Set[int] = set()
     owners: Set[Tuple[int, int]] = set()
+    tablet_states: Dict[int, int] = {}
+    tablet_restarts: Dict[int, int] = {}
+    tablet_generations: Dict[int, int] = {}
 
     for tablet in body.get("Tablets", []) or []:
         raw_id = tablet.get("TabletID")
         if raw_id is None:
             continue
-        tablet_ids.add(int(raw_id))
+        tablet_id = int(raw_id)
+        tablet_ids.add(tablet_id)
+        raw_state = tablet.get("VolatileState")
+        if raw_state is not None:
+            tablet_states[tablet_id] = int(raw_state)
+        raw_restarts = tablet.get("RestartsPerPeriod")
+        if raw_restarts is not None:
+            tablet_restarts[tablet_id] = int(raw_restarts)
+        raw_generation = tablet.get("Generation")
+        if raw_generation is not None:
+            tablet_generations[tablet_id] = int(raw_generation)
         owner = tablet.get("TabletOwner") or {}
         owner_id, owner_idx = owner.get("Owner"), owner.get("OwnerIdx")
         if owner_id is not None and owner_idx is not None:
             owners.add((int(owner_id), int(owner_idx)))
 
-    return LiveHive(hive_id=hive_id, tablet_ids=tablet_ids, owners=owners)
+    return LiveHive(
+        hive_id=hive_id,
+        tablet_ids=tablet_ids,
+        owners=owners,
+        tablet_states=tablet_states,
+        tablet_restarts=tablet_restarts,
+        tablet_generations=tablet_generations,
+    )
 
 
 # Where the version lives in a describe result, per object kind.  The two
@@ -110,6 +169,7 @@ def read_path(
     kind: str,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
     insecure: bool = False,
+    credentials=None,
 ) -> LivePath:
     """Read one live path: its identity, and its version when it has one.
 
@@ -130,6 +190,7 @@ def read_path(
             {"path": path, "ui64": "false", "timeout": timeout * 1000},
             timeout,
             insecure,
+            credentials,
         )
     except LiveError as exc:
         return LivePath(path=path, kind=kind, reachable=False, error=str(exc))
@@ -176,6 +237,8 @@ def read_live(
     paths: Optional[Mapping[str, str]] = None,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
     insecure: bool = False,
+    credentials=None,
+    progress=None,
 ) -> LiveCluster:
     """Read every named Hive and every named versioned path.
 
@@ -185,10 +248,31 @@ def read_live(
     report that as an explicit gap in coverage instead of silently passing.
     """
     cluster = LiveCluster(source=mon_endpoint)
-    for hive_id in sorted(set(hive_ids)):
-        cluster.hives[hive_id] = read_hive(mon_endpoint, hive_id, timeout, insecure)
-    for path, kind in sorted((paths or {}).items()):
-        cluster.paths[path] = read_path(mon_endpoint, path, kind, timeout, insecure)
+    if credentials:
+        credentials.validate_endpoint(mon_endpoint, insecure)
+    hive_ids = sorted(set(hive_ids))
+    paths = sorted((paths or {}).items())
+    total = len(hive_ids) + len(paths)
+
+    def before(index, label):
+        if progress:
+            progress("Live [%d/%d]: reading %s from %s (socket timeout: %ss)" % (
+                index, total, label, mon_endpoint, timeout))
+        return time.monotonic()
+
+    def after(result, started):
+        if progress:
+            progress("Live: %s (%.1fs)" % (
+                "OK" if result.reachable else "FAILED: " + result.error, time.monotonic() - started))
+
+    for index, hive_id in enumerate(hive_ids, 1):
+        started = before(index, "Hive %d" % hive_id)
+        cluster.hives[hive_id] = read_hive(mon_endpoint, hive_id, timeout, insecure, credentials)
+        after(cluster.hives[hive_id], started)
+    for index, (path, kind) in enumerate(paths, len(hive_ids) + 1):
+        started = before(index, "path %r" % path)
+        cluster.paths[path] = read_path(mon_endpoint, path, kind, timeout, insecure, credentials)
+        after(cluster.paths[path], started)
     return cluster
 
 

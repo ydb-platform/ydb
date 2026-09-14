@@ -73,7 +73,7 @@ def test_consistent_cluster_is_clean(tmp_path):
 
     # Only the checks needing a ledger or a live cluster may be skipped.
     skipped = {o.spec.id for o in outcomes if o.skipped_reason}
-    assert skipped == {"I8", "I12", "I14", "I15"}
+    assert skipped == {"I8", "I12", "I14", "I15", "I20"}
 
 
 def test_stale_hive_loses_shards_and_reuses_ids(tmp_path):
@@ -585,6 +585,196 @@ def test_doctor_repairs_tablet_id_reuse(tmp_path):
     fixed, _ = check_ids(out)
     assert "I4" not in failing(fixed), "doctor must clear the reuse risk"
     assert "I1" in failing(fixed), "and must not pretend the lost shard is back"
+
+
+def test_doctor_ignores_unassigned_tablet_id_in_allocator_repair(tmp_path):
+    schemeshard = fb.schemeshard_backup(
+        shards=fb.SHARDS + [{"ShardIdx": 3, "TabletId": (1 << 64) - 1, "PathId": 4}],
+        next_shard_idx=4,
+        next_path_id=5,
+    )
+    root = build_cluster(tmp_path, schemeshard=schemeshard)
+    _, _, repair_plan = doctor_run(root)
+    assert all(
+        edit.values.get("Value", 0) < (1 << 44)
+        for edit in repair_plan.edits
+        if edit.table == "State"
+    )
+
+
+def test_doctor_erases_hive_tablets_dropped_by_schemeshard(tmp_path):
+    """A stale Hive restore must not resurrect a shard absent from SchemeShard."""
+    schemeshard = fb.schemeshard_backup(
+        shards=[fb.SHARDS[0]], next_shard_idx=3, next_path_id=3
+    )
+    root = build_cluster(tmp_path, schemeshard=schemeshard)
+
+    live = LiveCluster(hives={
+        fb.HIVE_TABLET_ID: LiveHive(
+            hive_id=fb.HIVE_TABLET_ID,
+            tablet_ids={fb.SHARDS[0]["TabletId"]},
+        )
+    })
+    state, _, repair_plan = doctor_run_with_live(root, live)
+    edits = [e for e in repair_plan.edits if e.check_id == "I2"]
+    assert len(edits) == 1
+    assert edits[0].table == "Tablet"
+    assert edits[0].key == {"ID": fb.SHARDS[1]["TabletId"]}
+    assert edits[0].op == "erase"
+
+    out = str(tmp_path / "repaired")
+    doctor.apply(state, repair_plan, out_dir=out)
+    fixed, _ = check_ids(out)
+    assert "I2" not in failing(fixed)
+
+
+@pytest.mark.parametrize("root_status", ["absent", "unreachable", "offline"])
+def test_doctor_preserves_orphan_when_failed_root_hive_is_unavailable(tmp_path, root_status):
+    schemeshard = fb.schemeshard_backup(
+        shards=[fb.SHARDS[0]], next_shard_idx=3, next_path_id=3
+    )
+    root = build_cluster(tmp_path, schemeshard=schemeshard)
+    live = LiveCluster(hives={
+        fb.TENANT_HIVE_TABLET_ID: LiveHive(hive_id=fb.TENANT_HIVE_TABLET_ID)
+    })
+    if root_status == "unreachable":
+        live.hives[fb.HIVE_TABLET_ID] = LiveHive(hive_id=fb.HIVE_TABLET_ID, reachable=False)
+    elif root_status == "offline":
+        live = None
+    _, outcomes, repair_plan = doctor_run_with_live(root, live)
+    assert any(o.spec.id == "I2" and o.findings for o in outcomes)
+    assert not [e for e in repair_plan.edits if e.check_id in ("I2", "I20")]
+    assert "I2" in repair_plan.unrepairable
+
+
+def test_doctor_does_not_erase_orphan_which_is_running_live(tmp_path):
+    schemeshard = fb.schemeshard_backup(
+        shards=[fb.SHARDS[0]], next_shard_idx=3, next_path_id=3
+    )
+    root = build_cluster(tmp_path, schemeshard=schemeshard)
+    live = LiveCluster(hives={
+        fb.HIVE_TABLET_ID: LiveHive(
+            hive_id=fb.HIVE_TABLET_ID,
+            tablet_ids={s["TabletId"] for s in fb.SHARDS},
+            tablet_states={s["TabletId"]: 4 for s in fb.SHARDS},
+        )
+    })
+    _, _, repair_plan = doctor_run_with_live(root, live)
+    assert not [e for e in repair_plan.edits if e.check_id == "I2"]
+
+
+@pytest.mark.parametrize("live", [None, LiveCluster(), LiveCluster(hives={
+    fb.HIVE_TABLET_ID: LiveHive(hive_id=fb.HIVE_TABLET_ID, reachable=False)
+})])
+def test_hive_recovery_trusts_current_schemeshard_without_live_root(tmp_path, live):
+    root = build_cluster(tmp_path, schemeshard=fb.schemeshard_backup(
+        shards=[fb.SHARDS[0]], next_shard_idx=3, next_path_id=3
+    ))
+    state, outcomes, _ = doctor_run_with_live(root, live)
+    state.authoritative_schemeshard = True
+    plan = doctor.plan(state, outcomes)
+    assert [(e.op, e.key) for e in plan.edits if e.check_id == "I2"] == [
+        ("erase", {"ID": fb.SHARDS[1]["TabletId"]})
+    ]
+    out = str(tmp_path / "repaired")
+    doctor.apply(state, plan, out_dir=out)
+    fixed, _ = check_ids(out)
+    assert "I2" not in failing(fixed)
+    original, _ = check_ids(root)
+    assert "I2" in failing(original), "original backup must remain unchanged"
+
+
+@pytest.mark.parametrize("missing_tablet", [False, True])
+def test_hive_recovery_repairs_orphan_and_blocks_unresolved_loss(tmp_path, monkeypatch, missing_tablet):
+    from ydb.tests.stress.system_tablet_backup.consistency import hive_recovery
+    from ydb.tests.stress.system_tablet_backup.consistency.sources import live as live_source
+
+    shards = [fb.SHARDS[0]]
+    if missing_tablet:
+        shards.append(dict(fb.SHARDS[1], TabletId=fb.SHARDS[1]["TabletId"] + 100))
+    root = build_cluster(tmp_path, schemeshard=fb.schemeshard_backup(
+        shards=shards, next_shard_idx=3, next_path_id=4,
+    ))
+
+    def peers(endpoint, ids, paths, **kwargs):
+        assert fb.HIVE_TABLET_ID not in ids
+        return LiveCluster(source=endpoint)
+
+    def unexpected_network(*args, **kwargs):
+        pytest.fail("doctor must not request live root Hive or orphan confirmation")
+
+    monkeypatch.setattr(hive_recovery, "read_live", peers)
+    monkeypatch.setattr(live_source.urllib.request, "urlopen", unexpected_network)
+    out = tmp_path / "doctor"
+    rc = hive_recovery.main([
+        "--backup-root", root, "--hive-id", str(fb.HIVE_TABLET_ID),
+        "--mon-endpoint", "http://unused", "--out", str(out),
+    ])
+    gate = json.loads((out / "restore-gate.json").read_text())
+    if missing_tablet:
+        assert rc == 3
+        assert not gate["allowed"]
+        assert any(b.startswith("I1:") for b in gate["blockers"])
+    else:
+        assert rc == 0, gate
+        assert gate["allowed"]
+    assert json.loads((out / "plan.json").read_text())["authoritative_schemeshard"]
+
+
+def test_i1_ignores_invalid_tablet_id_while_creation_is_in_flight(tmp_path):
+    root = build_cluster(tmp_path, schemeshard=fb.schemeshard_backup(
+        shards=fb.SHARDS + [{"ShardIdx": 3, "TabletId": (1 << 64) - 1, "PathId": 4}],
+        next_shard_idx=4, next_path_id=5,
+    ))
+    results, _ = check_ids(root)
+    assert "I1" not in failing(results)
+
+
+def test_doctor_erases_restarting_live_orphan(tmp_path):
+    schemeshard = fb.schemeshard_backup(
+        shards=[fb.SHARDS[0]], next_shard_idx=3, next_path_id=3
+    )
+    root = build_cluster(tmp_path, schemeshard=schemeshard)
+    orphan_id = fb.SHARDS[1]["TabletId"]
+    live = LiveCluster(hives={
+        fb.HIVE_TABLET_ID: LiveHive(
+            hive_id=fb.HIVE_TABLET_ID,
+            tablet_ids={s["TabletId"] for s in fb.SHARDS},
+            tablet_states={s["TabletId"]: 4 for s in fb.SHARDS},
+            tablet_restarts={orphan_id: 128},
+        )
+    })
+    _, _, repair_plan = doctor_run_with_live(root, live)
+    edits = [e for e in repair_plan.edits if e.check_id == "I2"]
+    assert [e.key for e in edits] == [{"ID": orphan_id}]
+
+
+def test_doctor_raises_hive_known_generation_to_live(tmp_path):
+    root = build_cluster(tmp_path)
+    tablet_id = fb.SHARDS[0]["TabletId"]
+    live = LiveCluster(hives={
+        fb.HIVE_TABLET_ID: LiveHive(
+            hive_id=fb.HIVE_TABLET_ID,
+            tablet_ids={tablet_id},
+            tablet_generations={tablet_id: 17},
+        )
+    })
+    state, outcomes, repair_plan = doctor_run_with_live(root, live)
+    failing_ids = {
+        outcome.spec.id
+        for outcome in outcomes
+        if any(f.severity > Severity.INFO for f in outcome.findings)
+    }
+    assert "I20" in failing_ids
+    edits = [e for e in repair_plan.edits if e.check_id == "I20"]
+    assert [(e.key, e.values) for e in edits] == [
+        ({"ID": tablet_id}, {"KnownGeneration": 17})
+    ]
+
+    out = str(tmp_path / "repaired")
+    doctor.apply(state, repair_plan, out_dir=out)
+    fixed, _, _ = run_with_live(out, live)
+    assert "I20" not in failing(fixed)
 
 
 def test_doctor_keeps_snapshot_checksums_valid(tmp_path):
@@ -1538,3 +1728,255 @@ def test_live_reader_records_an_unreachable_hive(tmp_path):
     assert not hive.reachable
     assert hive.error
     assert hive.tablet_ids == set()
+
+
+def test_cli_clean_report_lists_sources_and_short_summary(tmp_path, monkeypatch, capsys):
+    from ydb.tests.stress.system_tablet_backup.consistency import __main__ as cli
+
+    root = build_cluster(tmp_path)
+    endpoint = "http://cluster:8765"
+    monkeypatch.setattr(cli, "read_live", lambda *args, **kwargs: LiveCluster(
+        source=endpoint, hives={
+            fb.HIVE_TABLET_ID: LiveHive(hive_id=fb.HIVE_TABLET_ID),
+            fb.TENANT_HIVE_TABLET_ID: LiveHive(hive_id=fb.TENANT_HIVE_TABLET_ID),
+        }, paths={"/Root/table": LivePath(path="/Root/table", kind="path")},
+    ))
+    report_path = str(tmp_path / "report.json")
+    assert cli.main(["--backup-root", root, "--mon-endpoint", endpoint, "--json", report_path]) == 0
+
+    output = capsys.readouterr().out
+    with open(report_path) as stream:
+        report = json.load(stream)
+    names = {"hive": "Hive", "scheme_shard": "SchemeShard", "bscontroller": "BSController"}
+    expected = [
+        "%s data successfully loaded from %s" % (names[dump["tablet_type"]], dump["source"])
+        for dump in report["state"]["tablets"]
+    ]
+    expected += [
+        "Live data successfully loaded from %s" % endpoint,
+        "", "20 checks: 0 critical, 0 error, 0 warning",
+    ]
+    assert output.splitlines() == expected
+    # Optional checks stay visible in the machine-readable report.
+    assert report["summary"]["skipped"] == 3
+    assert any("read 1 live Hive(s)" in note for note in report["notes"])
+    assert {c["id"] for c in report["checks"] if c["skipped_reason"]} == {"I8", "I12", "I14"}
+
+
+@pytest.mark.parametrize("partial", [False, True])
+def test_compact_report_keeps_problems_and_failed_sources_visible(partial):
+    from ydb.tests.stress.system_tablet_backup.consistency.model import ClusterState, critical, warning
+    from ydb.tests.stress.system_tablet_backup.consistency.registry import CheckOutcome, CheckSpec
+    from ydb.tests.stress.system_tablet_backup.consistency.report import render_text
+
+    state = ClusterState(live=LiveCluster(source="http://cluster:8765", hives={
+        42: LiveHive(hive_id=42, reachable=False, error="connection refused"),
+    }, paths={
+        "/Root/table": LivePath(path="/Root/table", kind="path", reachable=False, error="timeout"),
+    }))
+    if partial:
+        state.live.hives[43] = LiveHive(hive_id=43)
+    outcomes = [
+        CheckOutcome(CheckSpec("I4", "ID reuse", lambda state: ()), findings=[critical("ID 123 will be reused")]),
+        CheckOutcome(CheckSpec("I11", "Freshness", lambda state: ()), findings=[warning("stale backup")]),
+        CheckOutcome(CheckSpec("I3", "Groups", lambda state: ()), failed_reason="ValueError: bad group"),
+    ]
+    text = render_text(state, outcomes, notes=["/backup/hive: checksum mismatch"])
+    assert "successfully loaded" not in text
+    live_lines = [line for line in text.splitlines() if line.startswith("Live data")]
+    status = "partially loaded" if partial else "could not be loaded"
+    assert live_lines == ["Live data %s from http://cluster:8765" % status]
+    for problem in ("connection refused", "timeout", "checksum mismatch", "ID 123 will be reused",
+                    "stale backup", "BROKE", "ValueError: bad group"):
+        assert problem in text
+    assert text.endswith("3 checks: 1 critical, 0 error, 1 warning")
+
+
+def test_compact_report_shows_missing_required_backups(tmp_path):
+    from ydb.tests.stress.system_tablet_backup.consistency.report import render_text
+
+    root = build_cluster(tmp_path)
+    state, _ = load_state(root=root, needed_tables={"hive": {"Tablet"}})
+    outcomes = run_checks(state, select_checks(only=["I1"]))
+    text = render_text(state, outcomes)
+    assert "SKIP  I1 -- no state for: scheme_shard" in text
+
+
+def test_verbose_report_keeps_check_details(tmp_path):
+    from ydb.tests.stress.system_tablet_backup.consistency.report import render_text
+
+    state, notes = load_state(root=build_cluster(tmp_path))
+    text = render_text(state, run_checks(state), notes, verbose=True)
+    assert "state:" in text
+    assert "SKIP  I8" in text
+    assert "changelog commits" in text
+    assert "5 skipped, 0 broken" in text
+
+
+@pytest.mark.parametrize("header", ["Authorization", "Cookie"])
+def test_monitoring_credentials_are_sent_to_hives_and_paths(tmp_path, monkeypatch, header):
+    import http.server
+    import threading
+    from ydb.tests.stress.system_tablet_backup.consistency.sources import live as live_source
+    from ydb.tests.stress.system_tablet_backup.consistency.sources.http_auth import load_credentials
+
+    monkeypatch.setenv("http_proxy", "http://127.0.0.1:1")
+    monkeypatch.setenv("no_proxy", "")
+    secret = "Bearer private-test-token" if header == "Authorization" else "ydb_session_id=private-test-token"
+    seen = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append((self.path, self.headers.get(header)))
+            if self.headers.get(header) != secret:
+                self.send_error(401)
+                return
+            body = {"Tablets": [{"TabletID": "42"}]} if "hiveinfo" in self.path else {
+                "PathDescription": {"Self": {"Name": "table", "PathId": "2"}}
+            }
+            payload = json.dumps(body).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    endpoint = "http://127.0.0.1:%d" % server.server_port
+    path = tmp_path / "credentials.json"
+    path.write_text(json.dumps({header: secret}))
+    path.chmod(0o600)
+    try:
+        credentials = load_credentials(str(path), endpoint)
+        state = live_source.read_live(endpoint, [42], {"/Root/table": "path"}, credentials=credentials)
+        assert state.hives[42].reachable and state.paths["/Root/table"].reachable
+        assert state.hives[42].tablet_ids == {42}
+        assert len(seen) == 2 and all(value == secret for _, value in seen)
+        assert secret not in repr(credentials) and secret not in repr(state)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_monitoring_credentials_do_not_follow_cross_origin_redirect(tmp_path):
+    import http.server
+    import threading
+    from ydb.tests.stress.system_tablet_backup.consistency.sources import live as live_source
+    from ydb.tests.stress.system_tablet_backup.consistency.sources.http_auth import load_credentials
+
+    leaked = []
+    secret = "Bearer never-forward-this"
+
+    class Sink(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            leaked.append(self.headers.get("Authorization"))
+            self.send_error(401)
+
+        def log_message(self, *args):
+            pass
+
+    sink = http.server.HTTPServer(("127.0.0.1", 0), Sink)
+
+    class Redirect(Sink):
+        def do_GET(self):
+            self.send_response(302)
+            self.send_header("Location", "http://127.0.0.1:%d/?echo=%s" % (sink.server_port, "never-forward-this"))
+            self.end_headers()
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Redirect)
+    threads = [threading.Thread(target=s.serve_forever, daemon=True) for s in (server, sink)]
+    for thread in threads:
+        thread.start()
+    path = tmp_path / "credentials.json"
+    path.write_text(json.dumps({"Authorization": secret}))
+    path.chmod(0o600)
+    endpoint = "http://127.0.0.1:%d" % server.server_port
+    try:
+        credentials = load_credentials(str(path), endpoint)
+        hive = live_source.read_hive(endpoint, 42, credentials=credentials)
+        assert not hive.reachable
+        assert not leaked
+        assert "never-forward-this" not in hive.error
+    finally:
+        for s in (server, sink):
+            s.shutdown()
+            s.server_close()
+        for thread in threads:
+            thread.join()
+
+
+@pytest.mark.parametrize("headers,mode,endpoint,insecure", [
+    ({"Authorization": "Bearer test"}, 0o644, "https://example.test", False),
+    ({"Authorization": "Bearer test\r\nX-Injected: yes"}, 0o600, "https://example.test", False),
+    ({"Authorization": "Bearer test"}, 0o600, "http://example.test", False),
+    ({"Authorization": "Bearer test"}, 0o600, "https://example.test", True),
+])
+def test_monitoring_credentials_reject_unsafe_inputs(tmp_path, headers, mode, endpoint, insecure):
+    from ydb.tests.stress.system_tablet_backup.consistency.sources.http_auth import load_credentials
+    path = tmp_path / "credentials.json"
+    path.write_text(json.dumps(headers))
+    path.chmod(mode)
+    with pytest.raises(ValueError) as error:
+        load_credentials(str(path), endpoint, insecure)
+    assert headers["Authorization"] not in str(error.value)
+
+
+@pytest.mark.parametrize("failure,expected", [
+    ("timeout", "network operation timed out (socket timeout: 5s)"),
+    ("dns", "DNS resolution failed"),
+    ("refused", "TCP connection refused"),
+    ("certificate", "TLS certificate verification failed"),
+    ("http", "HTTP 401"),
+    ("unknown", "HTTP/TLS request failed"),
+    ("json", "invalid JSON response or request"),
+])
+def test_authenticated_live_failures_and_progress_are_safe(monkeypatch, failure, expected):
+    import errno
+    import socket
+    import ssl
+    import urllib.error
+    from ydb.tests.stress.system_tablet_backup.consistency.sources import live as live_source
+    from ydb.tests.stress.system_tablet_backup.consistency.sources.http_auth import HttpCredentials
+
+    secret = "secret-must-not-appear"
+    errors = {
+        "timeout": urllib.error.URLError(socket.timeout(secret)),
+        "dns": urllib.error.URLError(socket.gaierror(socket.EAI_NONAME, secret)),
+        "refused": urllib.error.URLError(ConnectionRefusedError(errno.ECONNREFUSED, secret)),
+        "certificate": urllib.error.URLError(ssl.SSLCertVerificationError(1, secret)),
+        "http": urllib.error.HTTPError("https://example.test/" + secret, 401, secret, {}, None),
+        "unknown": urllib.error.URLError(secret),
+        "json": ValueError(secret),
+    }
+    credentials = HttpCredentials({"Cookie": secret})
+    progress = []
+
+    def fail(url, timeout):
+        assert timeout == 5
+        assert "timeout=5000" in url
+        # Progress must be visible before entering a potentially blocked call.
+        assert "reading" in progress[-1]
+        raise errors[failure]
+
+    monkeypatch.setattr(credentials, "open", fail)
+    state = live_source.read_live("https://example.test", [42], {"/Root/table": "path"},
+                                  timeout=5, credentials=credentials, progress=progress.append)
+    assert not state.hives[42].reachable and not state.paths["/Root/table"].reachable
+    assert expected in state.hives[42].error and expected in state.paths["/Root/table"].error
+    assert len(progress) == 4
+    assert "[1/2]: reading Hive 42" in progress[0]
+    assert "[2/2]: reading path '/Root/table'" in progress[2]
+    assert secret not in repr(progress) and secret not in repr(state)
+
+
+@pytest.mark.parametrize("seconds", ["0", "-1"])
+def test_cli_rejects_nonpositive_monitoring_timeout(seconds):
+    from ydb.tests.stress.system_tablet_backup.consistency import __main__ as cli
+    with pytest.raises(SystemExit) as error:
+        cli.main(["--mon-timeout", seconds])
+    assert error.value.code == 2

@@ -210,6 +210,10 @@ class LiveHive:
     tablet_ids: Set[int] = field(default_factory=set)
     # Owner keys, so a tenant Hive's tablets can be attributed.
     owners: Set[Tuple[int, int]] = field(default_factory=set)
+    # Viewer VolatileState by full tablet id (2 is dead, 4 is running).
+    tablet_states: Dict[int, int] = field(default_factory=dict)
+    tablet_restarts: Dict[int, int] = field(default_factory=dict)
+    tablet_generations: Dict[int, int] = field(default_factory=dict)
     reachable: bool = True
     error: str = ""
 
@@ -259,6 +263,9 @@ class ClusterState:
     dumps: List[TabletDump] = field(default_factory=list)
     ledger: Optional[Ledger] = None
     live: Optional[LiveCluster] = None
+    # Hive recovery assumes the surviving SchemeShard backup is current and
+    # complete. Other restore modes must not infer this from a backup's age.
+    authoritative_schemeshard: bool = False
 
     def by_type(self, tablet_type: str) -> List[TabletDump]:
         return [d for d in self.dumps if d.tablet_type == tablet_type]

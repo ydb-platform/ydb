@@ -188,6 +188,8 @@ HOST_SCHEMA = {
         },
         "node_id": {"type": "integer", "minLength": 1},
         "host": {"type": "string", "minLength": 1},
+        "dynamic_slots": {"type": "integer", "minimum": 0},
+        "storage": {"type": "boolean"},
     },
     "oneOf": [
         {

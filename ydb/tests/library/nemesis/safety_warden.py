@@ -179,6 +179,27 @@ def construct_list_of_grep_pattern_arguments(list_of_markers):
     ))
 
 
+def _as_naive_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromtimestamp(value)
+
+
+def resolve_log_search_window(hours_back=24, start_time=None, end_time=None):
+    """Return ``(start, end)`` naive local datetimes for log queries."""
+    end_dt = _as_naive_datetime(end_time) or datetime.now()
+    start_dt = _as_naive_datetime(start_time)
+    if start_dt is None:
+        start_dt = end_dt - timedelta(hours=hours_back)
+    return start_dt, end_dt
+
+
+def format_log_search_timestamp(value):
+    return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
 # ---------------------------------------------------------------------------
 # CommandBasedSafetyWarden — composition-based replacement
 # ---------------------------------------------------------------------------
@@ -347,13 +368,20 @@ class GrepGzippedLogFilesForMarkersSafetyWarden(CommandBasedSafetyWarden):
 
 
 class GrepJournalctlKernelForPatternsSafetyWarden(CommandBasedSafetyWarden):
-    def __init__(self, executor, list_of_markers, lines_after=1, hours_back=24):
+    def __init__(
+        self, executor, list_of_markers, lines_after=1, hours_back=24,
+        start_time=None, end_time=None,
+    ):
         name = "GrepJournalctlKernelForPatternsSafetyWarden for markers = {markers}".format(
             markers=list_of_markers,
         )
-        since_value = '{hours} hours ago'.format(hours=hours_back)
+        start_dt, end_dt = resolve_log_search_window(
+            hours_back=hours_back, start_time=start_time, end_time=end_time,
+        )
         command = [
-            'sudo', 'journalctl', '-k', '--no-pager', '--since', "'{since}'".format(since=since_value),
+            'sudo', 'journalctl', '-k', '--no-pager',
+            '--since', "'{since}'".format(since=format_log_search_timestamp(start_dt)),
+            '--until', "'{until}'".format(until=format_log_search_timestamp(end_dt)),
             '|',
             'grep',
             '-A', str(lines_after),
@@ -385,15 +413,19 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
     # Lines of context after each VERIFY failed match
     LINES_AFTER_MATCH = 25
 
-    def __init__(self, hours_back=24):
+    def __init__(self, hours_back=24, start_time=None, end_time=None):
         """
         Args:
-            hours_back: How many hours back to search (default 24)
+            hours_back: How many hours back to search when start/end are omitted (default 24)
+            start_time: Window start (datetime or unix timestamp)
+            end_time: Window end (datetime or unix timestamp)
         """
         super(UnifiedAgentVerifyFailedSafetyWarden, self).__init__(
             'UnifiedAgentVerifyFailedSafetyWarden'
         )
         self._hours_back = hours_back
+        self._start_time = start_time
+        self._end_time = end_time
 
     def list_of_safety_violations(self):
         """
@@ -404,11 +436,13 @@ class UnifiedAgentVerifyFailedSafetyWarden(SafetyWarden):
             Each violation is a full stack trace (up to LINES_AFTER_MATCH lines).
             Returns ALL errors found, not limited.
         """
-        end_time = datetime.now()
-        start_time = end_time - timedelta(hours=self._hours_back)
-
-        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
-        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        start_dt, end_dt = resolve_log_search_window(
+            hours_back=self._hours_back,
+            start_time=self._start_time,
+            end_time=self._end_time,
+        )
+        start_str = format_log_search_timestamp(start_dt)
+        end_str = format_log_search_timestamp(end_dt)
 
         verify_pattern = 'VERIFY failed|unhandled exception'
         violations = []
@@ -462,15 +496,19 @@ class UnifiedAgentSanitizerSafetyWarden(SafetyWarden):
     Runs locally (no SSH).
     """
 
-    def __init__(self, hours_back=24):
+    def __init__(self, hours_back=24, start_time=None, end_time=None):
         """
         Args:
-            hours_back: How many hours back to search (default 24)
+            hours_back: How many hours back to search when start/end are omitted (default 24)
+            start_time: Window start (datetime or unix timestamp)
+            end_time: Window end (datetime or unix timestamp)
         """
         super(UnifiedAgentSanitizerSafetyWarden, self).__init__(
             'UnifiedAgentSanitizerSafetyWarden'
         )
         self._hours_back = hours_back
+        self._start_time = start_time
+        self._end_time = end_time
 
     def list_of_safety_violations(self):
         """
@@ -481,11 +519,13 @@ class UnifiedAgentSanitizerSafetyWarden(SafetyWarden):
             Each violation is a complete sanitizer report (from ``====...``
             through ``SUMMARY:``). Returns ALL errors found, not limited.
         """
-        end_time = datetime.now()
-        start_time = end_time - timedelta(hours=self._hours_back)
-
-        start_str = start_time.strftime("%Y-%m-%d %H:%M:%S")
-        end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
+        start_dt, end_dt = resolve_log_search_window(
+            hours_back=self._hours_back,
+            start_time=self._start_time,
+            end_time=self._end_time,
+        )
+        start_str = format_log_search_timestamp(start_dt)
+        end_str = format_log_search_timestamp(end_dt)
 
         violations = []
 

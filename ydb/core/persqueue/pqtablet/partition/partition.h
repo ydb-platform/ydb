@@ -539,8 +539,8 @@ private:
     void ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus);
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
 
-    TString LogPrefix() const;
-    const TString& GetLogPrefix() const override;
+    TStructuredMessage BuildLogPrefix() const;
+    const TStructuredMessage& GetLogPrefix() const override;
 
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
@@ -624,8 +624,7 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Handle event",
-            {"actorState", "StateInit"},
+        LOG_T("Handle event",
             {"event", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
@@ -673,7 +672,7 @@ private:
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
-                YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
+                LOG_E("Unexpected",
                     {"event", EventStr("StateInit", ev)});
             }
             break;
@@ -684,8 +683,7 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Handle event",
-            {"actorState", "StateIdle"},
+        LOG_T("Handle event",
             {"event", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
@@ -758,7 +756,7 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
-            YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
+            LOG_E("Unexpected",
                 {"event", EventStr("StateIdle", ev)});
             break;
         };
@@ -871,9 +869,9 @@ private:
 
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
 
-    mutable TMaybe<TString> IdleLogPrefix;
-    mutable TMaybe<TString> InitLogPrefix;
-    mutable TMaybe<TString> UnknownLogPrefix;
+    mutable TMaybe<TStructuredMessage> IdleLogPrefix;
+    mutable TMaybe<TStructuredMessage> InitLogPrefix;
+    mutable TMaybe<TStructuredMessage> UnknownLogPrefix;
 
     struct TAffectedSourceIdsAndConsumers {
         TVector<TString> TxWriteSourcesIds;

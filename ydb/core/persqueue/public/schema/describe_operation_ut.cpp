@@ -29,11 +29,16 @@ constexpr ui32 LOCATION_NODE_ID = 7;
 constexpr ui32 LOCATION_GENERATION = 3;
 
 struct TIsolatedPipeConfig {
-    enum class ELocation { Reply, Drop, FailOnce };
-    enum class EStatus { Reply, EmptyOnce };
+    enum class ELocation { Reply, Drop, FailOnce, StatusFalseAlways };
+    enum class EStatus { Reply, EmptyOnce, FailAlways, WithConsumers };
 
     ELocation Location = ELocation::Reply;
     EStatus Status = EStatus::Reply;
+};
+
+enum class EFakeNavigateKind {
+    Topic,
+    Table,
 };
 
 struct TIsolatedPipeStats {
@@ -43,6 +48,11 @@ struct TIsolatedPipeStats {
 
 class TFakeSchemeCacheActor : public NActors::TActorBootstrapped<TFakeSchemeCacheActor> {
 public:
+    explicit TFakeSchemeCacheActor(EFakeNavigateKind kind = EFakeNavigateKind::Topic)
+        : Kind(kind)
+    {
+    }
+
     void Bootstrap() {
         Become(&TFakeSchemeCacheActor::StateWork);
     }
@@ -56,6 +66,15 @@ private:
         auto request = std::move(ev->Get()->Request);
         for (auto& entry : request->ResultSet) {
             entry.Status = TNavigate::EStatus::Ok;
+            if (Kind == EFakeNavigateKind::Table) {
+                entry.Kind = TNavigate::EKind::KindTable;
+                auto self = MakeIntrusive<TNavigate::TDirEntryInfo>();
+                self->Info.SetName("table");
+                self->Info.SetPathType(NKikimrSchemeOp::EPathTypeTable);
+                entry.Self = self;
+                continue;
+            }
+
             entry.Kind = TNavigate::EKind::KindTopic;
 
             auto pqInfo = MakeIntrusive<TNavigate::TPQGroupInfo>();
@@ -72,6 +91,8 @@ private:
         }
         Send(ev->Sender, new TEvTxProxySchemeCache::TEvNavigateKeySetResult(std::move(request)));
     }
+
+    EFakeNavigateKind Kind;
 };
 
 class TFakePipeCacheActor : public NActors::TActorBootstrapped<TFakePipeCacheActor> {
@@ -110,6 +131,11 @@ private:
                 return;
             }
             auto* response = new TEvPersQueue::TEvGetPartitionsLocationResponse();
+            if (Config.Location == TIsolatedPipeConfig::ELocation::StatusFalseAlways) {
+                response->Record.SetStatus(false);
+                Send(ev->Sender, response, 0, ev->Cookie);
+                return;
+            }
             response->Record.SetStatus(true);
             auto* location = response->Record.AddLocations();
             location->SetPartitionId(PARTITION_ID);
@@ -125,12 +151,27 @@ private:
                 Send(ev->Sender, new TEvPersQueue::TEvStatusResponse(), 0, ev->Cookie);
                 return;
             }
+            if (Config.Status == TIsolatedPipeConfig::EStatus::FailAlways) {
+                Send(ev->Sender, new TEvPersQueue::TEvStatusResponse(), 0, ev->Cookie);
+                return;
+            }
             auto* response = new TEvPersQueue::TEvStatusResponse();
             auto* part = response->Record.AddPartResult();
             part->SetPartition(PARTITION_ID);
             part->SetStatus(NKikimrPQ::TStatusResponse::STATUS_OK);
             part->SetStartOffset(0);
             part->SetEndOffset(10);
+            if (Config.Status == TIsolatedPipeConfig::EStatus::WithConsumers) {
+                auto* cons = part->AddConsumerResult();
+                cons->SetConsumer("user");
+                cons->SetLastReadTimestampMs(1000);
+                cons->SetReadLagMs(10);
+                cons->SetWriteLagMs(20);
+                cons->SetCommitedLagMs(30);
+                cons->SetAvgReadSpeedPerMin(1);
+                cons->SetAvgReadSpeedPerHour(2);
+                cons->SetAvgReadSpeedPerDay(3);
+            }
             Send(ev->Sender, response, 0, ev->Cookie);
             return;
         }
@@ -148,7 +189,9 @@ struct TIsolatedDescribeEnv {
     TIsolatedPipeStats PipeStats;
     NActors::TTestBasicRuntime Runtime;
 
-    explicit TIsolatedDescribeEnv(TIsolatedPipeConfig config = {})
+    explicit TIsolatedDescribeEnv(
+        TIsolatedPipeConfig config = {},
+        EFakeNavigateKind navigateKind = EFakeNavigateKind::Topic)
         : Runtime(1, false)
     {
         Runtime.Initialize(TAppPrepare().Unwrap());
@@ -157,7 +200,7 @@ struct TIsolatedDescribeEnv {
         Runtime.SetLogPriority(NKikimrServices::PQ_SCHEMA, NActors::NLog::PRI_DEBUG);
         Runtime.SetLogPriority(NKikimrServices::PQ_DESCRIBER, NActors::NLog::PRI_DEBUG);
 
-        auto schemeCacheId = Runtime.Register(new TFakeSchemeCacheActor());
+        auto schemeCacheId = Runtime.Register(new TFakeSchemeCacheActor(navigateKind));
         Runtime.RegisterService(MakeSchemeCacheID(), schemeCacheId);
 
         auto pipeCacheId = Runtime.Register(new TFakePipeCacheActor(config, &PipeStats));
@@ -549,6 +592,97 @@ Y_UNIT_TEST(PoisonRepliesCancelled) {
     UNIT_ASSERT(handle);
     auto response = THolder(handle->Release());
     UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::CANCELLED);
+}
+
+Y_UNIT_TEST(BalancerRetriesExhaustedOnFalseStatus) {
+    TIsolatedDescribeEnv env({.Location = TIsolatedPipeConfig::ELocation::StatusFalseAlways});
+
+    auto response = RunDescribeOperation(
+        env.Runtime,
+        MakeSettings("/Root/topic", /*includeLocation=*/true),
+        std::make_unique<TTestDescribeStrategy>(),
+        TDuration::Seconds(60));
+
+    UNIT_ASSERT_GT(env.PipeStats.LocationForwards, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::UNAVAILABLE);
+    UNIT_ASSERT_STRING_CONTAINS(response->ErrorMessage, "Partition locations are not available");
+}
+
+Y_UNIT_TEST(StatsRetriesExhaustedOnEmptyStatus) {
+    TIsolatedDescribeEnv env({.Status = TIsolatedPipeConfig::EStatus::FailAlways});
+
+    auto response = RunDescribeOperation(
+        env.Runtime,
+        MakeSettings("/Root/topic", /*includeLocation=*/true, /*includeStats=*/true),
+        std::make_unique<TTestDescribeStrategy>(TTestDescribeStrategyOptions{
+            .WithReadSessions = true,
+            .WithStatus = true,
+            .ConsumerName = "user",
+        }),
+        TDuration::Seconds(60));
+
+    UNIT_ASSERT_GT(env.PipeStats.StatusForwards, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::UNAVAILABLE);
+    UNIT_ASSERT_STRING_CONTAINS(response->ErrorMessage, "unresponsive");
+}
+
+Y_UNIT_TEST(ValidateSchemaThrowsMapsToInternalError) {
+    TIsolatedDescribeEnv env;
+
+    class TThrowingStrategy: public IDescribeStrategy {
+    public:
+        TString GetName() const override { return "Throw"; }
+        TDescribeSchemaResult ValidateSchema(const NDescriber::TTopicInfo&) override {
+            throw yexception() << "boom";
+        }
+        bool NeedProcessPartition(
+            const NKikimrSchemeOp::TPersQueueGroupDescription::TPartition&) const override {
+            return true;
+        }
+        std::unique_ptr<TEvPersQueue::TEvGetReadSessionsInfo> CreateReadSessionsInfoRequest() const override {
+            return nullptr;
+        }
+        std::unique_ptr<TEvPersQueue::TEvStatus> CreateStatusRequest() const override {
+            return nullptr;
+        }
+    };
+
+    auto response = RunDescribeOperation(
+        env.Runtime,
+        MakeSettings("/Root/topic"),
+        std::make_unique<TThrowingStrategy>());
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::INTERNAL_ERROR);
+    UNIT_ASSERT_STRING_CONTAINS(response->ErrorMessage, "Unhandled exception");
+}
+
+Y_UNIT_TEST(NotTopicMapsToSchemeError) {
+    TIsolatedDescribeEnv env({}, EFakeNavigateKind::Table);
+
+    auto response = RunDescribeOperation(
+        env.Runtime,
+        MakeSettings("/Root/table"),
+        std::make_unique<TTestDescribeStrategy>());
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::SCHEME_ERROR);
+    UNIT_ASSERT_EQUAL(response->IssueCode, Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+}
+
+Y_UNIT_TEST(StatusIncludesPerConsumerStats) {
+    TIsolatedDescribeEnv env({.Status = TIsolatedPipeConfig::EStatus::WithConsumers});
+
+    auto response = RunDescribeOperation(
+        env.Runtime,
+        MakeSettings("/Root/topic", /*includeLocation=*/true, /*includeStats=*/true),
+        std::make_unique<TTestDescribeStrategy>(TTestDescribeStrategyOptions{
+            .WithReadSessions = true,
+            .WithStatus = true,
+            .ConsumerName = "user",
+        }));
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(response->Partitions.size(), 1u);
+    UNIT_ASSERT(response->Partitions.begin()->second.Consumers.contains("user"));
 }
 
 } // Y_UNIT_TEST_SUITE(DescribeOperationActor)

@@ -1,0 +1,9 @@
+USE plato;
+
+PRAGMA plato.Pool = "default";
+
+SELECT
+    COUNT(*) AS count
+FROM
+    `Input[#0:#2]`
+;

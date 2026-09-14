@@ -17,11 +17,15 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
+
+#include <algorithm>
+#include <cmath>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_RESOURCE_MANAGER
 
@@ -32,16 +36,39 @@ namespace NRm {
 using namespace NActors;
 using namespace NResourceBroker;
 
+static double NormalizePoolPercent(double percent) {
+    if (!std::isfinite(percent) || percent < 0) {
+        return -1;
+    }
+    return Min(percent, 100.0);
+}
+
+// The rule of TTxState::MemoryPoolLimited, also needed before a TTxState exists (the cookie hand-out).
+// The percent must already be normalized.
+static bool IsMemoryPoolLimited(const TString& poolId, double memoryPoolPercent) {
+    return !poolId.empty() && poolId != NResourcePool::DEFAULT_POOL_ID
+        && memoryPoolPercent > 0 && memoryPoolPercent < 100;
+}
+
 TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
     const TString& database, bool collectBacktrace)
+    : TTxState(resourceManager, txId, now, poolId, memoryPoolPercent, database, collectBacktrace,
+        resourceManager->GetMemoryResourceCookies(database, poolId, NormalizePoolPercent(memoryPoolPercent)))
+{}
+
+TTxState::TTxState(std::shared_ptr<IKqpResourceManager>& resourceManager, ui64 txId, TInstant now, const TString& poolId, const double memoryPoolPercent,
+    const TString& database, bool collectBacktrace, TMemoryResourceCookies cookies)
     : ResourceManager(resourceManager)
     , Counters(resourceManager->GetCounters())
     , TxId(txId)
     , CreatedAt(now)
     , PoolId(poolId)
-    , MemoryPoolPercent(memoryPoolPercent)
+    , MemoryPoolPercent(NormalizePoolPercent(memoryPoolPercent))
     , Database(database)
+    , MemoryPoolLimited(IsMemoryPoolLimited(PoolId, MemoryPoolPercent))
     , CollectBacktrace(collectBacktrace)
+    , TotalMemoryCookie(std::move(cookies.Total))
+    , PoolMemoryCookie(std::move(cookies.Pool))
 {}
 
 TTxState::~TTxState() {
@@ -53,12 +80,38 @@ namespace {
 
 static constexpr double MYEPS = 1e-9;
 
+// Percents come from the config and the resource pool settings unchecked: anything outside [0, 100] would turn
+// into a negative double and wrap on the conversion to ui64, so they are clamped here, the one place they are
+// applied. Above 100 behaves as 100 (the spilling threshold at the limit itself), below 0 as 0.
+double ClampPercent(double percent) {
+    return std::clamp(percent, 0.0, 100.0);
+}
+
 ui64 OverPercentage(ui64 limit, double percent) {
-    return static_cast<double>(limit) / 100 * (100 - percent) + MYEPS;
+    return static_cast<double>(limit) / 100 * (100 - ClampPercent(percent)) + MYEPS;
 }
 
 ui64 Percentage(ui64 limit, double percent) {
-    return static_cast<double>(limit) / 100 * percent + MYEPS;
+    return static_cast<double>(limit) / 100 * ClampPercent(percent) + MYEPS;
+}
+
+struct TPoolSensors {
+    NMonitoring::TDynamicCounters::TCounterPtr Limit;
+    NMonitoring::TDynamicCounters::TCounterPtr Allocated;
+    NMonitoring::TDynamicCounters::TCounterPtr DeniedRequests;
+
+    explicit operator bool() const {
+        return Limit != nullptr;
+    }
+};
+
+TPoolSensors MakePoolSensors(const TIntrusivePtr<TKqpCounters>& counters, const TString& database, const TString& poolId) {
+    auto group = counters->GetWorkloadManagerCounters()->GetSubgroup("pool", TStringBuilder() << database << '/' << poolId);
+    return TPoolSensors{
+        .Limit = group->GetCounter("MemoryLimit", false),
+        .Allocated = group->GetCounter("MemoryAllocated", false),
+        .DeniedRequests = group->GetCounter("MemoryDeniedRequests", true),
+    };
 }
 
 class TMemoryResource : public TAtomicRefCount<TMemoryResource> {
@@ -77,6 +130,14 @@ public:
         return Limit > Used ? Limit - Used : 0;
     }
 
+    // Bytes left before the spilling threshold, negative when the threshold is exceeded. Negative whenever Used
+    // is past Limit - OverLimit, including a threshold equal to the limit (SpillingPercent = 100, OverLimit = 0)
+    // with Used above Limit after the limit was lowered under live usage; the former SpillingPercentReached flag
+    // compared the clamped Available() with OverLimit and stayed silent there.
+    i64 GetMemoryAvailability() const {
+        return static_cast<i64>(Limit) - static_cast<i64>(Used) - static_cast<i64>(OverLimit);
+    }
+
     bool Has(ui64 amount) const {
         return Available() >= amount;
     }
@@ -85,9 +146,34 @@ public:
         if (Available() >= value) {
             Used += value;
             UpdateCookie();
+            if (Sensors) {
+                Sensors.Allocated->Set(Used);
+            }
             return true;
         }
         return false;
+    }
+
+    bool HasSensors() const {
+        return static_cast<bool>(Sensors);
+    }
+
+    void AttachSensors(TPoolSensors sensors) {
+        Sensors = std::move(sensors);
+        Sensors.Limit->Set(Limit);
+        Sensors.Allocated->Set(Used);
+        Sensors.DeniedRequests->Add(DeniedRequests);
+    }
+
+    void RecordDenied() {
+        ++DeniedRequests;
+        if (Sensors) {
+            Sensors.DeniedRequests->Inc();
+        }
+    }
+
+    ui64 GetDeniedRequests() const {
+        return DeniedRequests;
     }
 
     TIntrusivePtr<TMemoryResourceCookie> GetSpillingCookie() const {
@@ -95,7 +181,7 @@ public:
     }
 
     void UpdateCookie() {
-        SpillingCookie->SpillingPercentReached.store(Available() < OverLimit);
+        SpillingCookie->MemoryAvailability.store(GetMemoryAvailability());
     }
 
     ui64 GetUsed() const {
@@ -110,11 +196,17 @@ public:
         }
 
         UpdateCookie();
+        if (Sensors) {
+            Sensors.Allocated->Set(Used);
+        }
     }
 
     void SetNewLimit(ui64 baseLimit, double memoryPoolPercent, double overPercent) {
-        if (abs(memoryPoolPercent - MemoryPoolPercent) < MYEPS && baseLimit == BaseLimit)
+        // std::fabs, not abs: unqualified abs may resolve to int abs(int) and truncate, and both percents are
+        // legitimately fractional (SpillingPercent in particular), so a sub-1.0 change must not compare equal
+        if (baseLimit == BaseLimit && std::fabs(memoryPoolPercent - MemoryPoolPercent) < MYEPS && std::fabs(overPercent - OverPercent) < MYEPS) {
             return;
+        }
 
         BaseLimit = baseLimit;
         MemoryPoolPercent = memoryPoolPercent;
@@ -122,9 +214,28 @@ public:
         SetActualLimits();
     }
 
+    // A runtime SpillingPercent change: the spilling threshold moves, the limit stays
+    void SetOverPercent(double overPercent) {
+        SetNewLimit(BaseLimit, MemoryPoolPercent, overPercent);
+    }
+
+    // A new base (the node total of a pool): the limit follows, the share and the threshold percent stay
+    void SetBaseLimit(ui64 baseLimit) {
+        SetNewLimit(baseLimit, MemoryPoolPercent, OverPercent);
+    }
+
+    // The configured spilling percent, the node total is its one holder (see TKqpResourceManager::SetConfigValues)
+    double GetOverPercent() const {
+        return OverPercent;
+    }
+
     void SetActualLimits() {
         Limit = Percentage(BaseLimit, MemoryPoolPercent);
         OverLimit = OverPercentage(Limit, OverPercent);
+        UpdateCookie();
+        if (Sensors) {
+            Sensors.Limit->Set(Limit);
+        }
     }
 
     ui64 GetLimit() const {
@@ -142,8 +253,10 @@ private:
     ui64 Used;
     double MemoryPoolPercent;
     double OverPercent;
+    ui64 DeniedRequests = 0;
 
     TIntrusivePtr<TMemoryResourceCookie> SpillingCookie;
+    TPoolSensors Sensors;
 };
 
 struct TEvPrivate {
@@ -171,7 +284,6 @@ public:
         : Counters(counters)
         , ExecutionUnitsResource(config.GetComputeActorsCount())
         , ExecutionUnitsLimit(config.GetComputeActorsCount())
-        , SpillingPercent(config.GetSpillingPercent())
         , TotalMemoryResource(MakeIntrusive<TMemoryResource>(config.GetQueryMemoryLimit(), (double)100, config.GetSpillingPercent()))
         , ResourceSnapshotState(std::make_shared<TResourceSnapshotState>())
     {
@@ -227,6 +339,29 @@ public:
         }
     }
 
+    TMemoryResourceCookies GetMemoryResourceCookies(const TString& database, const TString& poolId, double memoryPoolPercent) override {
+        TMemoryResourceCookies cookies;
+        with_lock (Lock) {
+            cookies.Total = TotalMemoryResource->GetSpillingCookie();
+            if (IsMemoryPoolLimited(poolId, memoryPoolPercent)) {
+                cookies.Pool = GetOrCreatePoolMemoryResource(TTxState::MakePoolId(database, poolId), memoryPoolPercent)->GetSpillingCookie();
+            }
+        }
+        return cookies;
+    }
+
+    // Must be called under Lock. The pool resource is created on its first use with the percent of that tx.
+    // The limit of an existing pool is not touched here: it follows the txs that allocate from the pool
+    // (see AllocateResources), a tx that merely gets constructed must not move the threshold under the
+    // running ones.
+    TIntrusivePtr<TMemoryResource> GetOrCreatePoolMemoryResource(const std::pair<TString, TString>& poolKey, double memoryPoolPercent) {
+        auto [it, success] = MemoryNamedPools.emplace(poolKey, nullptr);
+        if (success) {
+            it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), memoryPoolPercent, TotalMemoryResource->GetOverPercent());
+        }
+        return it->second;
+    }
+
     TKqpRMAllocateResult AllocateResources(TTxState& tx, ui64 taskId, const TKqpResourcesRequest& resources) override
     {
         const ui64 txId = tx.TxId;
@@ -274,27 +409,18 @@ public:
             }
 
             hasScanQueryMemory = TotalMemoryResource->AcquireIfAvailable(resources.Memory);
-            if (!tx.TotalMemoryCookie) {
-                tx.TotalMemoryCookie = TotalMemoryResource->GetSpillingCookie();
-            }
 
-            if (hasScanQueryMemory && !tx.PoolId.empty() && tx.MemoryPoolPercent > 0) {
-                auto [it, success] = MemoryNamedPools.emplace(tx.MakePoolId(), nullptr);
-
-                if (success) {
-                    it->second = MakeIntrusive<TMemoryResource>(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
-                } else {
-                    it->second->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, SpillingPercent.load());
+            if (hasScanQueryMemory && tx.HasMemoryPoolLimit()) {
+                auto poolMemory = GetOrCreatePoolMemoryResource(tx.MakePoolId(), tx.MemoryPoolPercent);
+                // the pool limit follows the latest tx that allocates from the pool
+                poolMemory->SetNewLimit(TotalMemoryResource->GetLimit(), tx.MemoryPoolPercent, TotalMemoryResource->GetOverPercent());
+                if (!poolMemory->HasSensors() && PoolSensorsEnabled()) {
+                    poolMemory->AttachSensors(MakePoolSensors(Counters, tx.Database, tx.PoolId));
                 }
-
-                auto& poolMemory = it->second;
                 if (!poolMemory->AcquireIfAvailable(resources.Memory)) {
                     hasScanQueryMemory = false;
                     TotalMemoryResource->Release(resources.Memory);
-                }
-
-                if (!tx.PoolMemoryCookie) {
-                    tx.PoolMemoryCookie = poolMemory->GetSpillingCookie();
+                    poolMemory->RecordDenied();
                 }
             }
         }
@@ -318,13 +444,10 @@ public:
                 tx.AckFailedMemoryAlloc(resources.Memory);
                 with_lock (Lock) {
                     TotalMemoryResource->Release(resources.Memory);
-                    if (!tx.PoolId.empty()) {
+                    if (tx.HasMemoryPoolLimit()) {
                         auto it = MemoryNamedPools.find(tx.MakePoolId());
                         if (it != MemoryNamedPools.end()) {
                             it->second->Release(resources.Memory);
-                            if (it->second->GetUsed() == 0) {
-                                MemoryNamedPools.erase(it);
-                            }
                         }
                     }
                 }
@@ -387,14 +510,10 @@ public:
         if (resources.Memory > 0) {
             with_lock (Lock) {
                 TotalMemoryResource->Release(resources.Memory);
-                if (!tx.PoolId.empty()) {
+                if (tx.HasMemoryPoolLimit()) {
                     auto it = MemoryNamedPools.find(tx.MakePoolId());
                     if (it != MemoryNamedPools.end()) {
                         it->second->Release(resources.Memory);
-
-                        if (it->second->GetUsed() == 0) {
-                            MemoryNamedPools.erase(it);
-                        }
                     }
                 }
             }
@@ -500,6 +619,18 @@ public:
         }, tasksCount);
     }
 
+    // A new node total (the resource broker queue limit): every pool is a share of it, so the pools follow
+    void SetTotalMemoryLimit(ui64 limit) {
+        with_lock (Lock) {
+            TotalMemoryResource->SetNewLimit(limit, (double)100, TotalMemoryResource->GetOverPercent());
+            for (auto& [poolKey, poolMemory] : MemoryNamedPools) {
+                poolMemory->SetBaseLimit(TotalMemoryResource->GetLimit());
+            }
+        }
+    }
+
+    // Called under Lock from the config notification handler; the constructor calls it before anything else
+    // can see the resource manager
     void SetConfigValues(const NKikimrConfig::TTableServiceConfig::TResourceManager& config) {
         MkqlHeavyProgramMemoryLimit.store(config.GetMkqlHeavyProgramMemoryLimit());
         MkqlLightProgramMemoryLimit.store(config.GetMkqlLightProgramMemoryLimit());
@@ -507,7 +638,12 @@ public:
         MinChannelBufferSize.store(config.GetMinChannelBufferSize());
         MaxTotalChannelBuffersSize.store(config.GetMaxTotalChannelBuffersSize());
         QueryMemoryLimit.store(config.GetQueryMemoryLimit());
-        SpillingPercent.store(config.GetSpillingPercent());
+        // the spilling thresholds of the node total and of every pool follow the new percent right away,
+        // the cookies of the running transactions with them; the node total is the holder of the percent
+        TotalMemoryResource->SetOverPercent(config.GetSpillingPercent());
+        for (auto& [poolKey, poolMemory] : MemoryNamedPools) {
+            poolMemory->SetOverPercent(TotalMemoryResource->GetOverPercent());
+        }
         MaxNonParallelTopStageExecutionLimit.store(config.GetMaxNonParallelTopStageExecutionLimit());
         MaxNonParallelTasksExecutionLimit.store(config.GetMaxNonParallelTasksExecutionLimit());
         PreferLocalDatacenterExecution.store(config.GetPreferLocalDatacenterExecution());
@@ -558,6 +694,10 @@ public:
         }
     }
 
+    bool PoolSensorsEnabled() const {
+        return Counters && ActorSystem && AppData(ActorSystem)->FeatureFlags.GetEnableResourcePoolsCounters();
+    }
+
     TActorId SelfId;
 
     std::atomic<ui64> QueryMemoryLimit;
@@ -577,7 +717,6 @@ public:
     // limits (guarded by Lock)
     std::atomic<i32> ExecutionUnitsResource;
     std::atomic<i32> ExecutionUnitsLimit;
-    std::atomic<double> SpillingPercent;
     TIntrusivePtr<TMemoryResource> TotalMemoryResource;
     std::atomic<ui64> ExternalDataQueryMemory = 0;
     std::atomic<ui64> MaxNonParallelTopStageExecutionLimit = 1;
@@ -597,6 +736,9 @@ public:
     std::shared_ptr<TResourceSnapshotState> ResourceSnapshotState;
     TActorId ResourceInfoExchanger = TActorId();
 
+    // Pool resources are never erased, not even when their usage drops to zero: the transactions of a pool keep
+    // the spilling cookie attached at their construction (TTxState::PoolMemoryCookie, read lock-free), so the
+    // resource that updates it has to stay the same one for as long as the pool is in use.
     absl::flat_hash_map<std::pair<TString, TString>, TIntrusivePtr<TMemoryResource>, THash<std::pair<TString, TString>>> MemoryNamedPools;
 };
 
@@ -770,9 +912,7 @@ private:
         auto& queueConfig = *ev->Get()->QueueConfig;
 
         if (queueConfig.GetLimit().GetMemory() > 0) {
-            with_lock (ResourceManager->Lock) {
-                ResourceManager->TotalMemoryResource->SetNewLimit(queueConfig.GetLimit().GetMemory(), (double)100, ResourceManager->SpillingPercent.load());
-            }
+            ResourceManager->SetTotalMemoryLimit(queueConfig.GetLimit().GetMemory());
             YDB_LOG_INFO("Total node memory for scan bytes",
                 {"queries", queueConfig.GetLimit().GetMemory()});
         }
@@ -929,6 +1069,38 @@ private:
                     }
                  }
             } // PRE()
+
+            struct TPoolRow {
+                TString Database;
+                TString Pool;
+                ui64 Limit;
+                ui64 Used;
+                ui64 DeniedRequests;
+            };
+
+            TVector<TPoolRow> pools;
+            with_lock (ResourceManager->Lock) {
+                pools.reserve(ResourceManager->MemoryNamedPools.size());
+                for (const auto& [key, pool] : ResourceManager->MemoryNamedPools) {
+                    pools.push_back({key.first, key.second, pool->GetLimit(), pool->GetUsed(), pool->GetDeniedRequests()});
+                }
+            }
+
+            if (!pools.empty()) {
+                str << "<h3>Memory Pools</h3>";
+                str << "<table border='1' cellpadding='4'>";
+                str << "<tr><th>Database</th><th>Pool</th><th>Limit</th><th>Allocated</th><th>DeniedRequests</th></tr>";
+                for (const auto& row : pools) {
+                    str << "<tr>"
+                        << "<td>" << EncodeHtmlPcdata(row.Database) << "</td>"
+                        << "<td>" << EncodeHtmlPcdata(row.Pool) << "</td>"
+                        << "<td>" << row.Limit << "</td>"
+                        << "<td>" << row.Used << "</td>"
+                        << "<td>" << row.DeniedRequests << "</td>"
+                        << "</tr>";
+                }
+                str << "</table>";
+            }
         }
 
         Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));

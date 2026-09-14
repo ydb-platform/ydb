@@ -46,7 +46,7 @@ public:
         Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
         TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);
         context.SS->PersistTableIndex(db, path->PathId);
-        context.SS->Indexes[path->PathId] = indexData->AlterData;
+        context.SS->Indexes.Set(path->PathId, indexData->AlterData);
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);

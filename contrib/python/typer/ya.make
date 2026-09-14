@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.27.1)
+VERSION(0.27.2)
 
 LICENSE(MIT)
 
@@ -45,6 +45,7 @@ PY_SRCS(
     typer/colors.py
     typer/completion.py
     typer/core.py
+    typer/exceptions.py
     typer/main.py
     typer/models.py
     typer/params.py

@@ -1707,6 +1707,97 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(PredicatePushdown_FastAsciiContainsIgnoreCase) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            const auto res = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/foo` (
+                    id Int64 NOT NULL,
+                    str String,
+                    u_str Utf8,
+                    PRIMARY KEY(id)
+                )
+                WITH (STORE = COLUMN);
+            )").GetValueSync();
+            UNIT_ASSERT(res.IsSuccess());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+        {
+            const auto res = session.ExecuteQuery(R"(
+                INSERT INTO `/Root/foo` (id, str, u_str) VALUES
+                    (1, "foobar", "foobar"),
+                    (2, "baz", "baz"),
+                    (3, "fooqux", "fooqux"),
+                    (4, NULL, NULL)
+            )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+        }
+
+        std::vector<TString> predicates = {
+            "str ILIKE '%foo%'",
+            "str ILIKE '%FOO%'",
+            "str ILIKE '%Foo%'",
+            "str ILIKE '%nomatch%'",
+            "u_str ILIKE '%foo%'",
+            "u_str ILIKE '%FOO%'",
+        };
+
+        std::vector<TString> expectedResults = {
+            "[[1];[3]]",
+            "[[1];[3]]",
+            "[[1];[3]]",
+            "[]",
+            "[[1];[3]]",
+            "[[1];[3]]",
+        };
+
+        UNIT_ASSERT_EQUAL(expectedResults.size(), predicates.size());
+
+        auto run = [&](const TString& extraPragma, bool expectFastKernel) {
+            for (ui32 i = 0; i < predicates.size(); ++i) {
+                const auto& query = TString(R"(
+                    PRAGMA OptimizeSimpleILike;
+                    PRAGMA AnsiLike;
+                    )") + extraPragma + R"(
+                    SELECT id FROM `/Root/foo` WHERE
+                    )" + predicates[i] + " ORDER BY id";
+                Cerr << "QUERY " << i << Endl << query << Endl;
+
+                const auto res = session
+                                     .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                                         NYdb::NQuery::TExecuteQuerySettings().StatsMode(NQuery::EStatsMode::Full))
+                                     .ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
+
+                const auto ast = res.GetStats()->GetAst();
+                UNIT_ASSERT_C(ast->find("KqpOlapFilter") != std::string::npos,
+                    TStringBuilder() << "ILIKE contains not pushed down. Query: " << query);
+                if (expectFastKernel) {
+                    UNIT_ASSERT_C(ast->find("OlapKernels._yql_AsciiContainsIgnoreCase") != std::string::npos,
+                        TStringBuilder() << "OlapKernels UDF not used. Query: " << query << " AST: " << *ast);
+                    UNIT_ASSERT_C(ast->find("String._yql_AsciiContainsIgnoreCase") == std::string::npos,
+                        TStringBuilder() << "String UDF path still used with pragma on. Query: " << query);
+                } else {
+                    UNIT_ASSERT_C(ast->find("OlapKernels._yql_AsciiContainsIgnoreCase") == std::string::npos,
+                        TStringBuilder() << "OlapKernels UDF used with pragma off. Query: " << query);
+                    UNIT_ASSERT_C(ast->find("String._yql_AsciiContainsIgnoreCase") != std::string::npos,
+                        TStringBuilder() << "UDF path missing with pragma off. Query: " << query << " AST: " << *ast);
+                }
+                CompareYson(FormatResultSetYson(res.GetResultSet(0)), expectedResults[i]);
+            }
+        };
+
+        run(R"(PRAGMA kikimr.OptEnableOlapFastAsciiIgnoreCase = "true";)", true);
+        run("", false);
+    }
+
     Y_UNIT_TEST(PredicatePushdown_MixStrictAndNotStrict) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -2239,6 +2330,26 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY a
                 LIMIT 1;
             )",
+            // Several projections over the same JSON_VALUE: the column shard computes it once,
+            // but every projection must still be a separate output column of the SSA program.
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT a, JSON_VALUE(jsonDoc1, "$.\"a\"") as col1, CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) + 1.0 as col2
+                FROM `/Root/foo`
+                ORDER BY a;
+            )",
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT col1, col2, col3, COUNT(*) as c
+                FROM `/Root/foo`
+                GROUP BY
+                    JSON_VALUE(jsonDoc1, "$.\"a\"") as col1,
+                    CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) + 1.0 as col2,
+                    CAST(JSON_VALUE(jsonDoc1, "$.\"a\"") as Double) + 2.0 as col3
+                ORDER BY col1;
+            )",
         };
 
         std::vector<TString> results = {
@@ -2250,7 +2361,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"([[#];[[1.1]];[[2.1]]])",
             R"([[#;#];[[%true];[1.1]];[[%false];[2.1]]])",
             R"([[#;#;#];[[%true];[1.1];[1.2]];[[%false];[2.1];[2.2]]])",
-            R"([[1;["a1"]]])"
+            R"([[1;["a1"]]])",
+            R"([[1;["1.1"];[2.1]];[2;["2.1"];[3.1]];[3;#;#]])",
+            R"([[#;#;#;1u];[["1.1"];[2.1];[3.1];1u];[["2.1"];[3.1];[4.1];1u]])",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

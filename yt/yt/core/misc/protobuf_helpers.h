@@ -190,15 +190,15 @@ struct TToProtoResult<TToProtoAutoDerivedSerializedTag, TOriginal>
 
 //! A simple heuristic to distinguish between `ToProto(original)` and `ToProto(&original, serialized)`.
 template <class T>
-concept CToProtoOriginal = !std::is_pointer_v<T>;
+concept CToProtoOriginal = !std::is_pointer_v<std::remove_cvref_t<T>>;
 
 } // namespace NDetail
 
 template <class TSerialized = NYT::NDetail::TToProtoAutoDerivedSerializedTag, NYT::NDetail::CToProtoOriginal TOriginal, class... TArgs>
-auto ToProto(const TOriginal& original, TArgs&&... args);
+auto ToProto(TOriginal&& original, TArgs&&... args);
 
 template <class TOriginal, class TSerialized, class... TArgs>
-TOriginal FromProto(const TSerialized& serialized, TArgs&&... args);
+TOriginal FromProto(TSerialized&& serialized, TArgs&&... args);
 
 ////////////////////////////////////////////////////////////////////////////////
 

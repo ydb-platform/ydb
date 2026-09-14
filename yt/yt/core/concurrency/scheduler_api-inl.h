@@ -13,9 +13,7 @@ namespace NYT::NConcurrency {
 template <CFuture TFuture>
 TErrorOr<typename TFuture::TValueType> WaitFor(TFuture future, IInvokerPtr invoker)
 {
-    YT_ASSERT(future);
-    YT_ASSERT(invoker);
-
+    // NB: Preconditions are verified in WaitUntilSet.
     WaitUntilSet(future.AsVoid(), {.ResumingInvoker = std::move(invoker)});
 
     return future.GetOrCrash();
@@ -24,9 +22,7 @@ TErrorOr<typename TFuture::TValueType> WaitFor(TFuture future, IInvokerPtr invok
 template <CFuture TFuture>
 TErrorOr<typename TFuture::TValueType> WaitForFast(TFuture future)
 {
-    YT_ASSERT(future);
-    YT_ASSERT(!IsContextSwitchForbidden());
-
+    // NB: Preconditions are verified in WaitUntilSet.
     WaitUntilSet(future.AsVoid(), {.AlwaysYieldFiber = false});
 
     return future.GetOrCrash();

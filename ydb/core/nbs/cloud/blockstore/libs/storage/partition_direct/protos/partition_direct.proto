@@ -11,8 +11,14 @@ message TDirectBlockGroupConnections {
     message TConnection {
         NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1;
         NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2;
+        bool RemovedFromBSC = 3;
     }
+
     repeated TConnection Connections = 1;
+
+    // The generation of the DirectBlockGroup connections config stored in the
+    // tablet local database.
+    uint32 DBGConnectionsConfigGeneration = 2;
 }
 
 message TDirectBlockGroupsConnections {
@@ -46,5 +52,15 @@ message TTabletInfo {
 // An in-flight AddHost, persisted so it can be finished (replayed) on restart.
 message TAddHostInProgress {
     uint32 DirectBlockGroupId = 1;
-    uint32 NewHostIndex = 2;
+    uint32 LiveHostCount = 2;
+    uint32 DBGConnectionsConfigGeneration = 3;
+}
+
+// An in-flight RemoveHost, persisted so it can be finished (replayed) on
+// restart.
+message TRemoveHostInProgress {
+    uint32 DirectBlockGroupId = 1;
+    NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 2;
+    NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 3;
+    uint32 DBGConnectionsConfigGeneration = 4;
 }

@@ -8,6 +8,7 @@
 #include "write_request_bundle.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/trace_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
@@ -36,6 +37,7 @@ class TVChunk
 {
 public:
     TVChunk(
+        IArenaAllocatorPtr arenaAllocator,
         NActors::TActorSystem* actorSystem,
         ITraceService* traceService,
         IPartitionDirectService* partitionDirectService,
@@ -44,6 +46,8 @@ public:
         const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
+        // Volume block size, distinct from the 4 KiB DDisk integrity unit.
+        ui32 blockSize,
         ui64 vChunkSize);
 
     ~TVChunk() override;
@@ -70,8 +74,10 @@ public:
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] TExecutorPtr GetExecutor() const;
     [[nodiscard]] TCountAndSize GetPBuffersUsage(THostIndex hostIndex) const;
-    [[nodiscard]] TCountAndSize GetAheadBlocks(THostIndex hostIndex) const;
-    [[nodiscard]] TCountAndSize GetBehindBlocks(THostIndex hostIndex) const;
+    [[nodiscard]] ui64 GetFreshTotalBytes(THostIndex hostIndex) const;
+    [[nodiscard]] ui64 GetRottenTotalBytes(THostIndex hostIndex) const;
+    [[nodiscard]] size_t GetAllocatedMemorySize() const;
+    [[nodiscard]] size_t GetUsedMemorySize() const;
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest record id still held in PBuffers, or nullopt when nothing is

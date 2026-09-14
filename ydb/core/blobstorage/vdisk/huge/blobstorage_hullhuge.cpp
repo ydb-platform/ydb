@@ -1188,10 +1188,16 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             }
 
             if (done) {
+                std::vector<bool> isStripe;
+                isStripe.reserve(task->Result.size());
+                for (const TDiskPart& p : task->Result) {
+                    isStripe.push_back(State.Pers->IsStripeAddr(p));
+                }
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLHUGE, "THullHugeKeeper TryToFulfillTask",
                     {"VDiskLogPrefix", HugeKeeperCtx->VCtx->VDiskLogPrefix},
                     {"TEvHugeAllocateSlotsResult", FormatList(task->Result)});
-                Send(task->Sender, new TEvHugeAllocateSlotsResult(std::move(task->Result)), 0, task->Cookie);
+                Send(task->Sender, new TEvHugeAllocateSlotsResult(std::move(task->Result), std::move(isStripe)), 0,
+                    task->Cookie);
             }
         }
 

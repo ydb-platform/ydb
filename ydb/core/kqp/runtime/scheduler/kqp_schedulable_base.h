@@ -2,11 +2,12 @@
 
 #include "fwd.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
-
 #include <library/cpp/time_provider/monotonic.h>
 
+#include <util/generic/yexception.h>
 #include <util/system/hp_timer.h>
+
+#include <optional>
 
 namespace NActors {
     struct TActorId;
@@ -14,7 +15,7 @@ namespace NActors {
 
 namespace NKikimr::NKqp::NScheduler {
 
-class TSchedulableBase : public NYql::NDq::IDqSchedulableWork {
+class TSchedulableBase {
 public:
     struct TOptions {
         NHdrf::NDynamic::TQueryPtr Query;
@@ -22,38 +23,45 @@ public:
     };
 
     explicit TSchedulableBase(const TOptions& options);
+    ~TSchedulableBase();
 
-protected:
-    std::optional<TDuration> TryStartExecution(TMonotonic now) override;
-    void StopExecution() override;
-    void RegisterForResume(const NActors::TActorId& actorId) override;
-    NYql::NDq::TWorkScope GetWorkScope() const override { return Scope; }
+    // TODO: hand out an RAII guard instead of a bare pair,
+    //       so that skipping the release becomes impossible to express.
+    std::optional<TDuration> TryStartExecution(TMonotonic now);
+    void StopExecution();
+    void NotifyResumed(bool byScheduler);
+    void RegisterForResume(const NActors::TActorId& actorId);
 
-    bool StartExecution(TMonotonic now);
-    TDuration CalculateDelay(TMonotonic now) const;
-    void StopExecution(bool& forcedResume);
-
-    static inline TMonotonic Now() {
-        return TMonotonic::Now();
+    const NHdrf::TFullPoolId& GetFullPoolId() const {
+        Y_ENSURE(IsAccountable());
+        return FullPoolId;
     }
 
-    inline bool IsAccountable() const {
+    bool IsAccountable() const {
         return !!SchedulableTask;
     }
-    inline bool IsThrottled() const {
+
+    bool IsThrottled() const {
         return Throttled;
     }
 
+    bool IsExecuting() const {
+        return Executed;
+    }
+
 private:
+    bool StartExecution(TMonotonic now);
+    TDuration CalculateDelay(TMonotonic now) const;
     void Resume();
 
     TSchedulableTaskPtr SchedulableTask;
-    const NYql::NDq::TWorkScope Scope;
+    const NHdrf::TFullPoolId FullPoolId;
     const bool IsSchedulable;
 
     THPTimer Timer;
     bool Executed = false;
     bool Throttled = false;
+    bool ForcedResume = false;
     TMonotonic StartThrottle;
 
     TDuration LastExecutionTime;

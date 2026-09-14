@@ -13,9 +13,13 @@
 
 #include <library/cpp/logger/log.h>
 
+#include <memory>
+
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+class TNbsFrontendRuntime;
 
 struct TNbsService: public IStartable
 {
@@ -33,8 +37,10 @@ struct TNbsService: public IStartable
     const ITimerPtr Timer;
     // Single scheduler thread for the whole NBS service and all partitions.
     const ISchedulerPtr Scheduler;
+    std::unique_ptr<TNbsFrontendRuntime> Frontend;
 
     explicit TNbsService(const NKikimrConfig::TNbsConfig& config);
+    ~TNbsService() override;
 
     void Start() override;
     void Stop() override;

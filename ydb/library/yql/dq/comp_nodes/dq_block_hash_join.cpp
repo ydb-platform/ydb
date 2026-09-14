@@ -266,8 +266,8 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
             MKQL_ENSURE(width == expectedSize,
                         Sprintf("runtime(%i) vs compile-time(%i) tuple width mismatch", width, expectedSize));
             const auto flushSink = [&](auto flush) { WriteFlushToOutput(output, std::move(flush)); };
-            switch (RunPackedHashJoinBatch<MaxOutputRows_>(*Ctx_, Join_, Output_, flushSink,
-                                                           PairFilter_ ? &*PairFilter_ : nullptr)) {
+            switch (RunPackedHashJoinBatch(*Ctx_, Join_, Output_, flushSink,
+                                           PairFilter_ ? &*PairFilter_ : nullptr)) {
             case EFetchResult::One:
                 return NYql::NUdf::EFetchStatus::Ok;
             case EFetchResult::Yield:
@@ -287,7 +287,6 @@ template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableCompu
         TComputationContext* Ctx_;
         TRenamesPackedTupleOutput<Join> Output_;
         std::optional<TPackedTuplePairFilter> PairFilter_;
-        static constexpr i64 MaxOutputRows_ = 10000;
     };
 
     void RegisterDependencies() const final {

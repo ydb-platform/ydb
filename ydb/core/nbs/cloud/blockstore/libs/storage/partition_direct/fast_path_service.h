@@ -5,6 +5,7 @@
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/volume_counters.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
@@ -38,6 +39,7 @@ private:
     const TDiskDescription DiskDescription;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
+    const IArenaAllocatorPtr ArenaAllocator;
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
     // Chaos controllers are indexed by DirectBlockGroup index.
     const TVector<NTransport::IChaosInjectorControlPtr> ChaosInjectorControls;
@@ -136,7 +138,14 @@ public:
         ui32 vChunkIndex,
         TDirtyMapStateProto state) override;
 
-    void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
+    void QueryAddHost(
+        size_t directBlockGroupId,
+        ui32 dbgConnectionsConfigGeneration) override;
+
+    void QueryRemoveHost(
+        size_t directBlockGroupId,
+        size_t hostIndex,
+        ui32 dbgConnectionsConfigGeneration) override;
 
     ui64 GenerateLsn() override;
 
@@ -147,6 +156,12 @@ public:
         ui64 lsn) override;
 
     TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override;
+
+    void PersistHostHealth(
+        size_t directBlockGroupId,
+        THostIndex hostIndex,
+        EHostHealth oldHealth,
+        EHostHealth newHealth) override;
 
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;

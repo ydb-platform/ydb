@@ -139,11 +139,9 @@ PEERDIR(
     library/cpp/json
 )
 
-IF (OPENSOURCE)
 PEERDIR(
     ydb/library/superlemmer_stub
 )
-ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

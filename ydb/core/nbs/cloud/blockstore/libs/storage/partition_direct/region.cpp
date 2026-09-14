@@ -25,6 +25,7 @@ size_t VChunkIndexFromHeaders(const TRequestHeaders& headers)
 ////////////////////////////////////////////////////////////////////////////////
 
 TRegion::TRegion(
+    IArenaAllocatorPtr arenaAllocator,
     NActors::TActorSystem* actorSystem,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
@@ -34,6 +35,7 @@ TRegion::TRegion(
     const TVChunkConfigs& vChunkConfigs,
     const TDirtyMapStateProtos& dirtyMapStates,
     ui32 syncRequestsBatchSize,
+    ui32 blockSize,
     ui64 vChunkSize)
     : ActorSystem(actorSystem)
     , DiskDescription(diskDescription)
@@ -41,7 +43,8 @@ TRegion::TRegion(
     const ui64 vChunksPerRegionCount = GetVChunksPerRegion(vChunkSize);
     for (size_t i = 0; i < vChunksPerRegionCount; i++) {
         const size_t vChunkIndex = (regionIndex * vChunksPerRegionCount) + i;
-        const size_t dbgIndex = vChunkIndex % directBlockGroups.size();
+        const size_t dbgIndex =
+            GetDirectBlockGroupIndex(vChunkIndex, directBlockGroups.size());
 
         const auto* persisted = vChunkConfigs.FindPtr(vChunkIndex);
         auto vChunkConfig = persisted ? *persisted
@@ -55,6 +58,7 @@ TRegion::TRegion(
 
         const auto* dirtyMapState = dirtyMapStates.FindPtr(vChunkIndex);
         auto vChunk = std::make_shared<TVChunk>(
+            arenaAllocator,
             ActorSystem,
             traceService,
             partitionDirectService,
@@ -63,6 +67,7 @@ TRegion::TRegion(
             dirtyMapState ? *dirtyMapState : TDirtyMapStateProto(),
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,
+            blockSize,
             vChunkSize);
         VChunks.push_back(std::move(vChunk));
     }

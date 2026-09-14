@@ -83,6 +83,9 @@ EMonPage ParsePage(const TCgiParameters& cgi)
     if (page == "latency") {
         return EMonPage::Latency;
     }
+    if (page == "memory") {
+        return EMonPage::Memory;
+    }
     return EMonPage::Overview;
 }
 
@@ -355,7 +358,11 @@ bool TPartitionActor::OnRenderAppHtmlPage(
                 LogTitle.GetWithTime().c_str(),
                 *data.SelectedDbg);
 
-            FastPathService->QueryAddHost(*data.SelectedDbg, 0);
+            FastPathService->QueryAddHost(
+                *data.SelectedDbg,
+                DirectBlockGroupsConnections
+                    .GetDirectBlockGroupConnections(*data.SelectedDbg)
+                    .GetDBGConnectionsConfigGeneration());
             reply << "<p>Add host requested for "
                   << PrintDbgId(*data.SelectedDbg) << ".</p>";
         } else {
@@ -386,7 +393,10 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         return true;
     }
 
-    if (page == EMonPage::Latency) {
+    if (page == EMonPage::Latency || page == EMonPage::Memory) {
+        if (page == EMonPage::Memory) {
+            data.FastPathServiceInfo = FastPathService->GetMonInfo();
+        }
         FastPathService->GatherMonSnapshots(std::nullopt)
             .Subscribe(
                 [data = std::move(data),

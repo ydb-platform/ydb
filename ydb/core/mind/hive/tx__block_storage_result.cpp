@@ -60,7 +60,7 @@ public:
                         Self->Execute(Self->CreateForceRestartTablet(tablet->GetFullTabletId()));
                     }
                 }
-            } else if (msg->Status == NKikimrProto::ERROR && !tablet->IsDeleting() && msg->ActualGeneration >= tablet->KnownGeneration) {
+            } else if (msg->Status == NKikimrProto::ERROR && tablet->IsReadyToBlockStorage() && msg->ActualGeneration >= tablet->KnownGeneration) {
                 Y_ABORT_UNLESS(!msg->IsTabletStorageInfoVersionObsolete); // only Hive can increment version, it cannot be obsolete
                 ui32 confirmedVersion = tablet->ConfirmedStorageVersion;
 

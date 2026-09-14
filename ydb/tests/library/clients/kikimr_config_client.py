@@ -86,10 +86,11 @@ class ConfigClient(object):
 
                 time.sleep(self.__retry_sleep_seconds)
 
-    def replace_config(self, main_config, dry_run=False):
+    def replace_config(self, main_config, dry_run=False, allow_unknown_fields=False):
         request = config_api.ReplaceConfigRequest()
         request.replace = main_config
         request.dry_run = dry_run
+        request.allow_unknown_fields = allow_unknown_fields
         return self.invoke(request, 'ReplaceConfig')
 
     def fetch_all_configs(self, transform=None):

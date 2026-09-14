@@ -40,7 +40,7 @@ TString DataFileExtension(EDataFormat format, ECompressionCodec codec);
 TString PermissionsKeySuffix(bool encryptedBackup);
 TString TopicKeySuffix(bool encryptedBackup);
 TString ChangefeedKeySuffix(bool encryptedBackup);
-TString SchemeKeySuffix(bool encryptedBackup);
+TString SchemeKeySuffix(bool encryptedBackup, bool asSql = false);
 TString MetadataKeySuffix(bool encryptedBackup);
 TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec, bool encryptedBackup);
 

@@ -389,8 +389,8 @@ class PlatformDirsABC(ABC):  # ruff:ignore[too-many-public-methods]
 
     @property
     def site_applications_path(self) -> Path:
-        """Applications path shared by users."""
-        return Path(self.site_applications_dir)
+        """Applications path shared by users. Only return the first item, even if ``multipath`` is set to ``True``."""
+        return self._first_item_as_path_if_multipath(self.site_applications_dir)
 
     @property
     def user_runtime_path(self) -> Path:

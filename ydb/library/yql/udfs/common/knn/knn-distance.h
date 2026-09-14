@@ -8,6 +8,7 @@
 #include <util/generic/array_ref.h>
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
+#include <util/generic/vector.h>
 #include <util/stream/format.h>
 
 #include <bit>
@@ -111,6 +112,22 @@ private:
         return VectorFuncImpl(v1.data(), v2.data(), v1.size(), v2.size(), std::forward<Func>(func));
     }
 
+    template <typename THalf, typename Func>
+    static auto ExpandToFloatVectorFunc(const TStringBuf& str1, const TStringBuf& str2, Func&& func) {
+        const TArrayRef<const THalf> v1 = GetArray<THalf>(str1);
+        const TArrayRef<const THalf> v2 = GetArray<THalf>(str2);
+        if (Y_UNLIKELY(v1.size() != v2.size())) {
+            return TDistanceResult{};
+        }
+        TVector<float> f1(v1.size());
+        TVector<float> f2(v2.size());
+        for (size_t i = 0; i < v1.size(); ++i) {
+            f1[i] = static_cast<float>(v1[i]);
+            f2[i] = static_cast<float>(v2[i]);
+        }
+        return TDistanceResult{func(f1.data(), f2.data(), f1.size())};
+    }
+
     template <typename Func>
     static auto BitVectorFunc(const TStringBuf& str1, const TStringBuf& str2, Func&& func) {
         auto [v1, bitLen1] = GetBitArray(str1);
@@ -129,6 +146,14 @@ public:
         switch (format1) {
             case EFormat::FloatVector:
                 return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
+                    return ::L1Distance(v1, v2, len);
+                });
+            case EFormat::Float16Vector:
+                return ExpandToFloatVectorFunc<TFloat16>(str1, str2, [](const float* v1, const float* v2, size_t len) {
+                    return ::L1Distance(v1, v2, len);
+                });
+            case EFormat::BFloat16Vector:
+                return ExpandToFloatVectorFunc<TBFloat16>(str1, str2, [](const float* v1, const float* v2, size_t len) {
                     return ::L1Distance(v1, v2, len);
                 });
             case EFormat::Int8Vector:
@@ -164,6 +189,14 @@ public:
                 return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
                     return ::L2Distance(v1, v2, len);
                 });
+            case EFormat::Float16Vector:
+                return ExpandToFloatVectorFunc<TFloat16>(str1, str2, [](const float* v1, const float* v2, size_t len) {
+                    return ::L2Distance(v1, v2, len);
+                });
+            case EFormat::BFloat16Vector:
+                return ExpandToFloatVectorFunc<TBFloat16>(str1, str2, [](const float* v1, const float* v2, size_t len) {
+                    return ::L2Distance(v1, v2, len);
+                });
             case EFormat::Int8Vector:
                 return VectorFunc<i8>(str1, str2, [](const i8* v1, const i8* v2, size_t len) {
                     return ::L2Distance(v1, v2, len);
@@ -195,6 +228,14 @@ public:
         switch (format1) {
             case EFormat::FloatVector:
                 return VectorFunc<float>(str1, str2, [](const float* v1, const float* v2, size_t len) {
+                    return ::DotProduct(v1, v2, len);
+                });
+            case EFormat::Float16Vector:
+                return ExpandToFloatVectorFunc<TFloat16>(str1, str2, [](const float* v1, const float* v2, size_t len) {
+                    return ::DotProduct(v1, v2, len);
+                });
+            case EFormat::BFloat16Vector:
+                return ExpandToFloatVectorFunc<TBFloat16>(str1, str2, [](const float* v1, const float* v2, size_t len) {
                     return ::DotProduct(v1, v2, len);
                 });
             case EFormat::Int8Vector:
@@ -234,6 +275,16 @@ public:
         switch (format1) {
             case EFormat::FloatVector:
                 return VectorFunc<float>(str1, str2, [&](const float* v1, const float* v2, size_t len) {
+                    const auto res = ::TriWayDotProduct(v1, v2, len);
+                    return compute(res.LL, res.LR, res.RR);
+                });
+            case EFormat::Float16Vector:
+                return ExpandToFloatVectorFunc<TFloat16>(str1, str2, [&](const float* v1, const float* v2, size_t len) {
+                    const auto res = ::TriWayDotProduct(v1, v2, len);
+                    return compute(res.LL, res.LR, res.RR);
+                });
+            case EFormat::BFloat16Vector:
+                return ExpandToFloatVectorFunc<TBFloat16>(str1, str2, [&](const float* v1, const float* v2, size_t len) {
                     const auto res = ::TriWayDotProduct(v1, v2, len);
                     return compute(res.LL, res.LR, res.RR);
                 });

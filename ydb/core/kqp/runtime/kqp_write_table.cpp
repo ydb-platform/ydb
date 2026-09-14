@@ -1,7 +1,9 @@
 #include "kqp_write_table.h"
 
+#include <algorithm>
 #include <util/generic/size_literals.h>
 #include <util/generic/yexception.h>
+#include <util/string/join.h>
 #include <ydb/core/base/fulltext.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/library/json_index/json_index.h>
@@ -443,14 +445,24 @@ class TColumnShardPayloadSerializer : public IPayloadSerializer {
 public:
     TColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+        const std::optional<THashSet<ui64>>& targetShardIds,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const i64 maxOperationBytes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) // key columns then value columns
-            : Columns(BuildColumns(inputColumns))
+            : TargetShardIds(targetShardIds)
+            , Columns(BuildColumns(inputColumns))
             , WriteColumnIds(BuildWriteColumnIds(inputColumns))
             , MaxOperationBytes(maxOperationBytes)
             , Alloc(std::move(alloc)) {
         AFL_ENSURE(MaxOperationBytes > 0);
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
+        AFL_VERIFY(TargetShardIds.has_value());
+#endif
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_EXPECTED_COUNT
+        if (TargetShardIds.has_value()) {
+            AFL_VERIFY(TargetShardIds->size() == KQP_WRITE_TABLE_TARGET_SHARD_IDS_EXPECTED_COUNT)("expected", KQP_WRITE_TABLE_TARGET_SHARD_IDS_EXPECTED_COUNT)("actual", TargetShardIds->size());
+        }
+#endif
         AFL_ENSURE(Alloc);
         AFL_ENSURE(schemeEntry.ColumnTableInfo);
         const auto& description = schemeEntry.ColumnTableInfo->Description;
@@ -473,6 +485,14 @@ public:
         TGuard guard(*Alloc);
         UnpreparedBatches.clear();
         Batches.clear();
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
+        if (TargetShardIds.has_value()) {
+            AFL_VERIFY(std::all_of(ShardIds.begin(), ShardIds.end(),
+                [&](ui64 shardId) { return TargetShardIds->contains(shardId); }))
+                ("expected", GetTargetShardIdsDebugString())
+                ("actual", GetShardIdsDebugString(ShardIds));
+        }
+#endif
     }
 
     void AddData(IDataBatchPtr&& batch) override {
@@ -492,9 +512,35 @@ public:
         ShardAndFlushBatch(std::move(data), false);
     }
 
+    static TString GetShardIdsDebugString(const THashSet<ui64>& shardIds) {
+        return JoinSeq(", ", shardIds);
+    }
+    TString GetTargetShardIdsDebugString() const {
+        if (!TargetShardIds.has_value()) {
+            return {};
+        }
+        return GetShardIdsDebugString(*TargetShardIds);
+    }
+
+    THashMap<ui64, TRecordBatchPtr> SplitByShards(const TRecordBatchPtr& unshardedBatch) {
+        if (TargetShardIds.has_value() && TargetShardIds->size() == 1) {
+#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
+            auto splitResult = Sharding->SplitByShardsToArrowBatches(unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool());
+            AFL_VERIFY(splitResult.size() == 1)("actual", splitResult.size());
+            return splitResult;
+#else
+            THashMap<ui64, TRecordBatchPtr> result;
+            result[*TargetShardIds->begin()] = unshardedBatch;
+            return result;
+#endif
+        } else {
+            return Sharding->SplitByShardsToArrowBatches(unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool());
+        }
+    }
+
     void ShardAndFlushBatch(TRecordBatchPtr&& unshardedBatch, bool force) {
-        for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(
-                                                    unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool())) {
+        auto splitResult = SplitByShards(unshardedBatch);
+        for (auto [shardId, shardBatch] : splitResult) {
             const i64 shardBatchMemory = NArrow::GetBatchDataSize(shardBatch);
             AFL_ENSURE(shardBatchMemory != 0);
 
@@ -638,6 +684,7 @@ public:
 
 private:
     std::shared_ptr<NSharding::IShardingBase> Sharding;
+    std::optional<THashSet<ui64>> TargetShardIds;
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteColumnIds;
@@ -1032,11 +1079,12 @@ private:
 
 IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
+        const std::optional<THashSet<ui64>>& targetShardIds,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const i64 maxOperationBytes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TColumnShardPayloadSerializer>(
-        schemeEntry, inputColumns, maxOperationBytes, std::move(alloc));
+        schemeEntry, targetShardIds, inputColumns, maxOperationBytes, std::move(alloc));
 }
 
 IPayloadSerializerPtr CreateDataShardPayloadSerializer(
@@ -1849,6 +1897,7 @@ public:
         for (auto& [_, writeInfo] : WriteInfos) {
             writeInfo.Serializer = CreateColumnShardPayloadSerializer(
                 *SchemeEntry,
+                Settings.TargetShardIds,
                 writeInfo.Metadata.InputColumnsMetadata,
                 Settings.ColumnShardMaxOperationBytes,
                 Alloc);
@@ -1943,6 +1992,7 @@ public:
         } else if (SchemeEntry) {
             iter->second.Serializer = CreateColumnShardPayloadSerializer(
                 *SchemeEntry,
+                Settings.TargetShardIds,
                 iter->second.Metadata.InputColumnsMetadata,
                 Settings.ColumnShardMaxOperationBytes,
                 Alloc);

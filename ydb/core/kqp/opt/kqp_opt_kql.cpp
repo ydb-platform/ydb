@@ -501,12 +501,17 @@ TExprBase BuildFillTable(const TKiWriteTable& write, TExprContext& ctx)
 {
     auto originalPathNode = GetSetting(write.Settings().Ref(), "OriginalPath");
     AFL_ENSURE(originalPathNode);
-    return Build<TKqlFillTable>(ctx, write.Pos())
+    auto builder = Build<TKqlFillTable>(ctx, write.Pos())
         .Input(write.Input())
         .Table(write.Table())
         .Cluster(write.DataSink().Cluster())
-        .OriginalPath(TCoNameValueTuple(originalPathNode).Value().Cast<TCoAtom>())
-        .Done();
+        .OriginalPath(TCoNameValueTuple(originalPathNode).Value().Cast<TCoAtom>());
+    if (const auto& node = GetSetting(write.Settings().Ref(), "CtasShardingColumns")) {
+        const auto& columns = TCoNameValueTuple(node).Value().Cast<TCoAtomList>();
+        AFL_ENSURE(columns.Ref().ChildrenSize() > 0);
+        builder.CtasShardingColumns(columns);
+    }
+    return builder.Done();
 }
 
 TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,

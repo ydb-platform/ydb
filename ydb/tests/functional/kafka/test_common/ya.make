@@ -1,5 +1,8 @@
+LIBRARY()
+
 PEERDIR(
     contrib/libs/librdkafka/src-cpp
+    library/cpp/testing/unittest
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/topic
 )
@@ -8,6 +11,8 @@ ADDINCL(
     contrib/libs/librdkafka/src-cpp
     contrib/libs/librdkafka/include
 )
+
+SRCDIR(ydb/tests/functional/kafka)
 
 SRCS(
     helpers.cpp
@@ -20,14 +25,6 @@ SRCS(
     protocol_ut.cpp
 )
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
-
-SIZE(MEDIUM)
-
 YQL_LAST_ABI_VERSION()
 
-FORK_SUBTESTS()
-
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16 cpu:4)
-ENDIF()
+END()

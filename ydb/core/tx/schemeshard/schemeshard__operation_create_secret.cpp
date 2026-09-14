@@ -7,11 +7,11 @@
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 
-namespace {
+namespace NKikimr::NSchemeShard {
 
-using namespace NKikimr;
-using namespace NSchemeShard;
-
+// Creates an ACL that interrupts inheritance from the parent, keeping only the DescribeSchema grant.
+// Used by CREATE SECRET and CREATE OR REPLACE SECRET (which converts to ALTER) to ensure that
+// secrets do not inherit permissions from their parent directory by default.
 TString InterruptInheritanceExceptDescribe(const TString& initialAcl) {
     NACLib::TACL secObj(initialAcl);
     NACLib::TACL resultSecObj;
@@ -31,6 +31,13 @@ TString InterruptInheritanceExceptDescribe(const TString& initialAcl) {
     Y_ABORT_UNLESS(resultSecObj.SerializeToString(&resultAcl));
     return resultAcl;
 }
+
+} // namespace NKikimr::NSchemeShard
+
+namespace {
+
+using namespace NKikimr;
+using namespace NSchemeShard;
 
 class TPropose : public TSubOperationState {
 private:
@@ -328,7 +335,40 @@ bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
 
 }
 
-ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    const auto& createSecretProto = tx.GetCreateSecret();
+    const auto replaceIfExists = tx.GetReplaceIfExists();
+
+    if (replaceIfExists) {
+        const TString& parentPathStr = tx.GetWorkingDir();
+        const TString& secretName = createSecretProto.GetName();
+        const TPath parentPath = TPath::Resolve(parentPathStr, context.SS);
+        const TPath dstPath = parentPath.Child(secretName);
+
+        const auto isAlreadyExists =
+            dstPath.Check()
+                .IsResolved()
+                .NotDeleted()
+                .NotUnderDeleting()
+                .NotUnderOperation()
+                .IsSecret();
+
+        if (isAlreadyExists) {
+            // Convert to alter: build an alter transaction from the create transaction
+            TTxTransaction alterTx = tx;
+            alterTx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSecret);
+            auto* alterSecret = alterTx.MutableAlterSecret();
+            alterSecret->SetName(createSecretProto.GetName());
+            if (createSecretProto.HasValue()) {
+                alterSecret->SetValue(createSecretProto.GetValue());
+            }
+            if (createSecretProto.HasInheritPermissions()) {
+                alterSecret->SetInheritPermissions(createSecretProto.GetInheritPermissions());
+            }
+            return CreateAlterSecret(id, alterTx);
+        }
+    }
+
     return MakeSubOperation<TCreateSecret>(id, tx);
 }
 

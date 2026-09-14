@@ -98,7 +98,7 @@ public:
             Self->UpdateCounterDeleteTabletQueueSize();
             Self->UpdateCounterTabletsDeleting();
         }
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 };
 

@@ -714,6 +714,12 @@ protected:
                         uv.UnRef();
                         uv = TUnboxedValuePod{};
                     }
+                    if (isDehydrated) {
+                        // The keys just released were owned by the arena tuple (HydratedBuffer
+                        // aliases them without an extra Ref); clear the stale arena copies so a
+                        // mid-spill teardown (ReleaseAggregationsFromArena) doesn't release them again
+                        std::fill_n(static_cast<TUnboxedValuePod*>(static_cast<void*>(item)), keysWidth, TUnboxedValuePod{});
+                    }
                     if (!pageFuture.has_value()) {
                         continue;
                     }
@@ -849,6 +855,12 @@ protected:
 
             while (!stateSpiller.Empty()) {
                 TUnboxedValuePod* keyAndStateBuf = static_cast<TUnboxedValuePod*>(Store->Alloc(0));
+                if (isDehydratedState) {
+                    // The arena page may be reused and hold stale value bits; the tuple stays
+                    // allocated across the async read below, so clear the keys for the teardown
+                    // sweep (ForgetState is a no-op for dehydrated states)
+                    std::fill_n(keyAndStateBuf, keysCount, TUnboxedValuePod{});
+                }
 
                 TArrayRef<TUnboxedValue> keyAndStateArr(static_cast<TUnboxedValue*>(isDehydratedState ? HydratedBuffer.data() : keyAndStateBuf), keyAndStatesCount);
                 for (auto& uv : keyAndStateArr) {
@@ -1035,11 +1047,20 @@ protected:
 
     EFillState ProcessFetchedRow(TUnboxedValue* const* input) {
         TArrayRef<TUnboxedValuePod> keyBuf(TempKeyBuffer);
-
         LoadItemAndKey(input, keyBuf.data());
+        return ProcessFetchedRow(input, keyBuf, Hasher(keyBuf.data()));
+    }
 
+    EFillState ProcessPrefetchedRow(TUnboxedValue* const* input, TArrayRef<TUnboxedValuePod> keyBuf, ui64 hash) {
+        LoadItem(input);
+        for (ui32 i = 0U; i < Nodes.KeyNodes.size(); ++i) {
+            Nodes.KeyNodes[i]->RefValue(Ctx) = keyBuf[i];
+        }
+        return ProcessFetchedRow(input, keyBuf, hash);
+    }
+
+    EFillState ProcessFetchedRow(TUnboxedValue* const* input, TArrayRef<TUnboxedValuePod> keyBuf, ui64 hash) {
         ui64 bucketId = 0;
-        ui64 hash = Hasher(keyBuf.data());
         if (EnableSpilling) {
             // Lower 16 bits of the same hash value are used by the hash shuffle connection to distribute keys among tasks,
             // so we can't use these (even with the hash seed).
@@ -1159,6 +1180,85 @@ protected:
         return EFillState::ContinueFilling;
     }
 
+    Y_FORCE_INLINE bool CanPrefetch() const {
+        return PassthroughKeys && SpillingStack.empty() && !BypassActivated;
+    }
+
+    void CollectPrefetchRow(TUnboxedValue* const* input) {
+        const size_t slot = PrefetchCount;
+        TUnboxedValue* rowSlot = PrefetchRows.data() + slot * InputUnpackedWidth;
+        for (size_t i = 0; i < InputUnpackedWidth; ++i) {
+            rowSlot[i] = *input[i];
+        }
+
+        TUnboxedValuePod* keySlot = PrefetchKeys.data() + slot * KeyTypes.size();
+        for (ui32 i = 0; i < KeyTypes.size(); ++i) {
+            keySlot[i] = *input[PassthroughKeysSourceItems[i]];
+        }
+
+        PrefetchHashes[slot] = Hasher(keySlot);
+        ++PrefetchCount;
+    }
+
+    EFillState FinishInput() {
+        SourceEmpty = true;
+        if (OpenDrain()) {
+            return EFillState::Yield;
+        }
+        return EFillState::SourceEmpty;
+    }
+
+    EFillState ProcessPrefetchBatch() {
+        if (!PrefetchPos) {
+            for (size_t slot = 0; slot < PrefetchCount; ++slot) {
+                Map->Prefetch(GlobalHashToRhItemHash(PrefetchHashes[slot]));
+            }
+        }
+
+        while (PrefetchPos < PrefetchCount) {
+            const size_t slot = PrefetchPos++;
+            TUnboxedValue* rowSlot = PrefetchRows.data() + slot * InputUnpackedWidth;
+            for (size_t i = 0; i < InputUnpackedWidth; ++i) {
+                PrefetchRowPtrs[i] = &rowSlot[i];
+            }
+            TArrayRef<TUnboxedValuePod> keyBuf(PrefetchKeys.data() + slot * KeyTypes.size(), KeyTypes.size());
+            const EFillState result = ProcessPrefetchedRow(PrefetchRowPtrs.data(), keyBuf, PrefetchHashes[slot]);
+            std::fill_n(rowSlot, InputUnpackedWidth, TUnboxedValue());
+            if (result != EFillState::ContinueFilling) {
+                return result;
+            }
+        }
+
+        PrefetchCount = 0;
+        PrefetchPos = 0;
+        if (PrefetchSourceEmptyPending) {
+            PrefetchSourceEmptyPending = false;
+            return FinishInput();
+        }
+        return EFillState::ContinueFilling;
+    }
+
+    bool HasPendingPrefetchBatch() const {
+        return PrefetchPos;
+    }
+
+    EFillState ProcessInputRow(TUnboxedValue* const* input) {
+        ++InputRows;
+        if (CanPrefetch()) {
+            CollectPrefetchRow(input);
+            return PrefetchCount == DqAggregationPrefetchBatchSize ? ProcessPrefetchBatch() : EFillState::ContinueFilling;
+        }
+        return ProcessFetchedRow(input);
+    }
+
+    EFillState ProcessInputFinished() {
+        if (PrefetchCount) {
+            PrefetchSourceEmptyPending = true;
+            return ProcessPrefetchBatch();
+        }
+        return FinishInput();
+    }
+
 public:
     using TBase = TComputationValue<TBaseAggregationState>;
 
@@ -1254,6 +1354,13 @@ public:
                 PassthroughKeysSourceItems = keySourceItems;
             }
         }
+
+        if (PassthroughKeys) {
+            PrefetchRows.resize(DqAggregationPrefetchBatchSize * InputUnpackedWidth);
+            PrefetchKeys.resize(DqAggregationPrefetchBatchSize * KeyTypes.size());
+            PrefetchHashes.resize(DqAggregationPrefetchBatchSize);
+            PrefetchRowPtrs.resize(InputUnpackedWidth);
+        }
     }
 
     bool IsDraining() {
@@ -1271,6 +1378,7 @@ public:
     }
 
     virtual ~TBaseAggregationState() {
+        PrefetchRows.clear();
         if (ForLLVM) {
             // LLVM code doesn't ref inputs so we need to just forget the contents of the input buffer without unref-ing
             for (TUnboxedValue& val : InputBuffer) {
@@ -1537,6 +1645,15 @@ protected:
 
     const bool CanBypass;
     const TDqHashCombineTestParams TestParams;
+
+    size_t PrefetchCount = 0;
+    size_t PrefetchPos = 0; // Nonzero between calls only if batch processing was interrupted.
+    bool PrefetchSourceEmptyPending = false;
+
+    TUnboxedValueVector PrefetchRows;
+    std::vector<TUnboxedValuePod, TMKQLAllocator<NUdf::TUnboxedValuePod>> PrefetchKeys;
+    std::vector<ui64> PrefetchHashes;
+    std::vector<TUnboxedValue*> PrefetchRowPtrs;
 };
 
 class TWideAggregationState: public TBaseAggregationState
@@ -1586,15 +1703,15 @@ public:
     }
 
     TUnboxedValue* const* GetInputBuffer() override {
-        return Ctx.WideFields.data() + WideFieldsIndex;
+        return HasPendingPrefetchBatch() ? nullptr : Ctx.WideFields.data() + WideFieldsIndex;
     }
 
     TUnboxedValueVector& GetDenseInputBuffer() override {
-        return InputBuffer;
+        return HasPendingPrefetchBatch() ? EmptyUVs : InputBuffer;
     }
 
     TUnboxedValue* GetDenseInputBufferDirect() {
-        return InputBuffer.data();
+        return HasPendingPrefetchBatch() ? nullptr : InputBuffer.data();
     }
 
     TUnboxedValue* GetDenseOutputBufferDirect() {
@@ -1611,23 +1728,23 @@ public:
     }
 
     EFillState ProcessInputInternal(EFillState sourceState, TUnboxedValue* const* output) {
+        if (HasPendingPrefetchBatch()) {
+            return ProcessPrefetchBatch();
+        }
+
         if (sourceState == EFillState::Yield) {
             return sourceState;
         } else if (sourceState == EFillState::SourceEmpty) {
-            SourceEmpty = true;
-            if (OpenDrain()) {
-                return EFillState::Yield;
-            }
-            return EFillState::SourceEmpty;
+            return ProcessInputFinished();
         }
 
-        ++InputRows;
         if (BypassActivated) {
+            ++InputRows;
             ++OutputRows;
             PassthroughFetchedRow(Ctx.WideFields.data() + WideFieldsIndex, output);
             return EFillState::ImmediateOutput;
         } else {
-            return ProcessFetchedRow(Ctx.WideFields.data() + WideFieldsIndex);
+            return ProcessInputRow(Ctx.WideFields.data() + WideFieldsIndex);
         }
     }
 
@@ -1698,6 +1815,7 @@ private:
     [[maybe_unused]] size_t OutputWidth;
     TUnboxedValueVector OutputBuffer;
     TVector<TUnboxedValue*> OutputPtrs;
+
 };
 
 class TBlockAggregationState: public TBaseAggregationState
@@ -1873,21 +1991,21 @@ public:
     }
 
     TUnboxedValue* const* GetInputBuffer() override {
-        if (CurrentInputBatchPtr < CurrentInputBatchSize || HasPendingBlocks) {
+        if (CurrentInputBatchPtr < CurrentInputBatchSize || HasPendingBlocks || HasPendingPrefetchBatch()) {
             return nullptr;
         }
         return Ctx.WideFields.data() + WideFieldsIndex;
     }
 
     TUnboxedValueVector& GetDenseInputBuffer() override {
-        if (CurrentInputBatchPtr < CurrentInputBatchSize || HasPendingBlocks) {
+        if (CurrentInputBatchPtr < CurrentInputBatchSize || HasPendingBlocks || HasPendingPrefetchBatch()) {
             return EmptyUVs;
         }
         return InputBuffer;
     }
 
     TUnboxedValue* GetDenseInputBufferDirect() {
-        if (CurrentInputBatchPtr < CurrentInputBatchSize || HasPendingBlocks) {
+        if (CurrentInputBatchPtr < CurrentInputBatchSize || HasPendingBlocks || HasPendingPrefetchBatch()) {
             return nullptr;
         }
         return InputBuffer.data();
@@ -1912,11 +2030,7 @@ public:
             if (fetchResult == EFillState::Yield) {
                 return fetchResult;
             } else if (fetchResult == EFillState::SourceEmpty) {
-                SourceEmpty = true;
-                if (OpenDrain()) {
-                    return EFillState::Yield;
-                }
-                return fetchResult;
+                return ProcessInputFinished();
             }
 
             if (!OpenBlock()) {
@@ -1928,14 +2042,21 @@ public:
             return EFillState::ImmediateOutput;
         }
 
-        // TODO: try to loop here, processing the entire block at once until we need to fetch the next block,
-        // as the outer loop in WideFetch has some small non-zero cost
+        if (HasPendingPrefetchBatch()) {
+            return ProcessPrefetchBatch();
+        }
+
         if (!BypassActivated) {
             MKQL_ENSURE(!Draining && !SourceEmpty, "Can't fill while draining or when the source is exhausted");
 
-            UnpackNextRowFromCurrentInputBlock();
-            ++InputRows;
-            return ProcessFetchedRow(RowBufferPointers.data());
+            while (CurrentInputBatchPtr < CurrentInputBatchSize) {
+                UnpackNextRowFromCurrentInputBlock();
+                const EFillState result = ProcessInputRow(RowBufferPointers.data());
+                if (result != EFillState::ContinueFilling) {
+                    return result;
+                }
+            }
+            return EFillState::ContinueFilling;
         } else {
             ProcessBypassedBlock(output);
             return EFillState::ImmediateOutput;

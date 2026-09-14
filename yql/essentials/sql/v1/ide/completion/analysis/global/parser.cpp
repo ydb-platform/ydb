@@ -16,30 +16,24 @@ public:
     {
     }
 
-    TParsedInput Parse(TCompletionInput input) override {
-        Recovered_.clear();
+    TParsedInput Parse(TCompletionInput input) const override {
+        TParsedInput output;
+
         if (IsRecoverable(input)) {
-            Recovered_ = TString(input.Text);
             // "_" is to parse `SELECT x._ FROM table`
             //        instead of `SELECT x.FROM table`
-            Recovered_.insert(input.CursorPosition, "_");
-            input.Text = Recovered_;
+            output.RecoveredText.ConstructInPlace(input.Text);
+            output.RecoveredText->insert(input.CursorPosition, "_");
+            input.Text = *output.RecoveredText;
         }
 
         TStringBuf prefix = TStringBuf(input.Text).Head(input.CursorPosition);
-        input.CursorPosition = GetNumberOfUTF8Chars(prefix);
+        output.CursorPosition = GetNumberOfUTF8Chars(prefix);
 
-        NSQLPureAST::TParseTree tree = Parser_->Parse(input.Text);
+        NSQLPureAST::IParseTree::TPtr tree = Parser_->Parse(input.Text);
+        output.ParseTree = std::move(tree);
 
-        return {
-            .Original = {
-                .Text = tree.Text,
-                .CursorPosition = input.CursorPosition,
-            },
-            .Tokens = tree.Tokens,
-            .Parser = tree.Parser,
-            .SqlQuery = tree.SqlQuery,
-        };
+        return output;
     }
 
 private:
@@ -49,7 +43,6 @@ private:
         return (i < s.size() && IsWordBoundary(s[i]) || i == s.size());
     }
 
-    TString Recovered_;
     NSQLPureAST::IParser::TPtr Parser_;
 };
 

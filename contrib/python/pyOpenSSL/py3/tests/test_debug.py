@@ -2,7 +2,7 @@ from OpenSSL import version
 from OpenSSL.debug import _env_info
 
 
-def test_debug_info():
+def test_debug_info() -> None:
     """
     Debug info contains correct data.
     """

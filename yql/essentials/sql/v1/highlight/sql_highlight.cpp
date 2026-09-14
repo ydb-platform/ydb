@@ -191,8 +191,8 @@ TUnit MakeUnit<EUnitKind::StringLiteral>(TSyntax& s) {
     return {
         .Kind = EUnitKind::StringLiteral,
         .RangePatterns = {
-            {.BeginPlain = R"(')", .EndPlain = R"(')", .EscapeRegex = R"re(\\.)re"},
-            {.BeginPlain = R"(")", .EndPlain = R"(")", .EscapeRegex = R"re(\\.)re"},
+            {.BeginPlain = R"(')", .EndPlain = R"(')", .EscapeRegex = R"re(\\.)re", .EscapeRegexANSI = R"re('')re"},
+            {.BeginPlain = R"(")", .EndPlain = R"(")", .EscapeRegex = R"re(\\.)re", .EscapeRegexANSI = R"re("")re"},
             {.BeginPlain = TRangePattern::EmbeddedPythonBegin, .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},
             {.BeginPlain = TRangePattern::EmbeddedJavaScriptBegin, .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},
             {.BeginPlain = R"(@@)", .EndPlain = R"(@@)", .EscapeRegex = R"re(\@\@\@\@)re"},

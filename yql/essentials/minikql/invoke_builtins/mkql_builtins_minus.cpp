@@ -2,8 +2,7 @@
 
 #include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -59,5 +58,4 @@ void RegisterMinus(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["Minus"] = std::move(family);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

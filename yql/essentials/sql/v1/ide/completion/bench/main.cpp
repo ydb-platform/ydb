@@ -28,8 +28,16 @@ void BenchmarkComplete(benchmark::State& state) {
     auto service = MakeStaticNameService(std::move(names), std::move(ranking));
     auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(service));
 
+    TString query =
+        "SELECT \n"
+        "  123467, \"Hello, {name}! 编码\"}, \n"
+        "  (1 + (5 * 1 / 0)), #MIN(identifier), \n"
+        "  Bool(field), Math::Sin(var) \n"
+        "FROM `local/test/space/table` JOIN test;";
+    TCompletionInput input = SharpedInput(query);
+
     for (const auto _ : state) {
-        auto completion = engine->Complete({.Text = "SELECT "});
+        auto completion = engine->Complete(input);
         benchmark::DoNotOptimize(completion);
     }
 }

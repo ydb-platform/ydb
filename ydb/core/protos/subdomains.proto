@@ -1,4 +1,5 @@
 import "ydb/core/protos/bind_channel_storage_pool.proto";
+import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
 import "ydb/library/login/protos/login.proto";
 
@@ -54,6 +55,8 @@ message TSubDomainSettings {
     optional bool ExternalStatisticsAggregator = 14 [default = false];
     optional bool GraphShard = 16 [default = false];
     optional bool ExternalBackupController = 17 [default = false];
+
+    optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel TablesMetricsLevel = 19;
 }
 
 message TProcessingParams {
@@ -144,6 +147,8 @@ message TDomainDescription {
     optional NLoginProto.TSecurityState SecurityState = 20;
 
     optional TAuditSettings AuditSettings = 21;
+
+    optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel TablesMetricsLevel = 26;
 }
 
 message TSchemeQuotas {

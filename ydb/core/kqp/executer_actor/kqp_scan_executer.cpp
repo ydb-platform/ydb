@@ -241,7 +241,10 @@ private:
             {"traceId", TraceId()});
 
         ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
-        ExecuteScanTx();
+
+        if (!ExecuteScanTx()) {
+            return;
+        }
 
         if (CheckExecutionComplete()) {
             return;
@@ -268,13 +271,13 @@ public:
     }
 
 private:
-    void ExecuteScanTx() {
-
+    [[nodiscard]] bool ExecuteScanTx() {
         if (!BuildPlannerAndSubmitTasks()) {
-            return;
+            return false;
         }
 
         LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, Planner->GetUnassignedTasksCount(), Planner->GetUnassignedTasksCount());
+        return true;
     }
 
 private:

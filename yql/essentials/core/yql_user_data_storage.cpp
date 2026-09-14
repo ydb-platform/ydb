@@ -194,10 +194,11 @@ std::map<TString, const TUserDataBlock*> TUserDataStorage::GetDirectoryContent(c
     EnumFolderContent(UserData_, fullPath, maxFileCount, [&](auto& key, auto& block) {
         const auto name = key.Alias().substr(fullPath.size());
         const auto pos = name.find(Sep);
-        if (TString::npos == pos)
+        if (TString::npos == pos) {
             result.emplace(name, &block);
-        else
+        } else {
             result.emplace(name.substr(0U, pos), nullptr);
+        }
     });
 
     return result;

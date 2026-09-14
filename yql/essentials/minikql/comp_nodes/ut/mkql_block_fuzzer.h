@@ -12,14 +12,8 @@
 // The framework supports various fuzzing strategies like removing optional bitmasks and shifting offsets.
 namespace NKikimr::NMiniKQL {
 
-struct TFuzzOptions {
-    bool FuzzZeroOptionalBitmaskRemove = true;
-    bool FuzzOffsetShift = true;
-    bool FuzzImmutable = true;
-
-    static TFuzzOptions FuzzAll() {
-        return TFuzzOptions{.FuzzZeroOptionalBitmaskRemove = true, .FuzzOffsetShift = true, .FuzzImmutable = true};
-    }
+struct TStreamFuzzOptions {
+    bool InsertYields = true;
 };
 
 class IFuzzer {
@@ -42,7 +36,8 @@ public:
 
     ui64 ReserveFuzzer();
 
-    void CreateFuzzers(TFuzzOptions options, ui64 fuzzerIndex, const TType* type, const TTypeEnvironment& env, NYql::EDatumValidationMode validationMode);
+    void CreateFuzzers(ui64 fuzzerIndex, const TType* type, const TTypeEnvironment& env,
+                       NYql::EDatumValidationMode validationMode, bool chunked);
 
     void ClearFuzzers();
 
@@ -53,7 +48,7 @@ public:
                                            IRandomProvider& randomProvider) const;
 
 private:
-    std::map<ui64, TFuzzerList> NodeToFuzzOptions_;
+    std::map<ui64, TFuzzerList> NodeToFuzzers_;
     ui64 FuzzerIdx_ = 1;
 };
 

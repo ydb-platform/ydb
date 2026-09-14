@@ -45,6 +45,7 @@ PEERDIR(
     yql/essentials/providers/common/transform
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/dq/mkql
     ydb/library/yql/providers/generic/provider
     yql/essentials/providers/result/expr_nodes
     ydb/library/yql/providers/s3/actors

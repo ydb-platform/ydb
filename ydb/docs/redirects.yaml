@@ -337,21 +337,27 @@ common:
   - from: /administration/ydb-dstool-setup.md
     to: /reference/ydb-dstool/install.md
 
-# Redirects for Embedded UI
+# Redirects for YDB UI
   - from: /maintenance/embedded_monitoring/ydb_monitoring.md
-    to: /reference/embedded-ui/ydb-monitoring.md
+    to: /reference/ydb-ui/ydb-monitoring.md
   - from: /maintenance/embedded_monitoring/overview.md
-    to: /reference/embedded-ui/overview.md
+    to: /reference/ydb-ui/overview.md
   - from: /maintenance/embedded_monitoring/hive.md
-    to: /reference/embedded-ui/hive.md
+    to: /reference/ydb-ui/hive.md
   - from: /maintenance/embedded_monitoring/logs.md
-    to: /reference/embedded-ui/logs.md
+    to: /reference/ydb-ui/logs.md
   - from: /maintenance/embedded_monitoring/interconnect_overview.md
-    to: /reference/embedded-ui/interconnect-overview.md
+    to: /reference/ydb-ui/interconnect-overview.md
   - from: /maintenance/embedded_monitoring/charts.md
-    to: /reference/embedded-ui/charts.md
+    to: /reference/ydb-ui/charts.md
   - from: /maintenance/embedded_monitoring/index.md
-    to: /reference/embedded-ui/index.md
+    to: /reference/ydb-ui/index.md
+  - from: /reference/embedded-ui$
+    to: /reference/ydb-ui/index.md
+  - from: /reference/embedded-ui/$
+    to: /reference/ydb-ui/index.md
+  - from: /reference/embedded-ui/(.*)$
+    to: /reference/ydb-ui/$1
 
 # Redirects for recipes
   - from: reference/ydb-sdk/recipes/auth-access-token.md
@@ -390,6 +396,18 @@ common:
     to: recipes/ydb-sdk/tx-control.md
   - from: reference/ydb-sdk/recipes/upsert.md
     to: recipes/ydb-sdk/upsert.md
+
+  # Redirects after recipes/backup reorganization
+  - from: /recipes/backup-collections/(.*)$
+    to: /recipes/backup/backup-collections/$1
+  - from: /recipes/system-tablet-backup/(.*)$
+    to: /recipes/backup/system-tablet-backup/$1
+  - from: /recipes/nfs-backup/(.*)$
+    to: /recipes/backup/nfs-backup/$1
+  - from: /recipes/import-export-column-tables.md
+    to: /recipes/backup/import-export-column-tables.md
+  - from: /recipes/backup/import-export-column-tables/import-export-column-tables.md
+    to: /recipes/backup/import-export-column-tables.md
 
 # Redirects from export_import to export-import
   - from: /reference/ydb-cli/export_import/s3_conn.md
@@ -544,20 +562,40 @@ ru:
     to: /reference/ydb-sdk/observability/metrics/opentelemetry.md
   - from: /recipes/ydb-sdk/debug-jaeger.md
     to: /reference/ydb-sdk/observability/tracing/jaeger.md
+  - from: /recipes/ydb-sdk/debug-otel.md
+    to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
   - from: /recipes/ydb-sdk/debug-otel-tracing.md
     to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
   - from: /integrations/sql-dialect-converter.md
     to: /integrations/sql-translation/sql-dialect-converter.md
+  - from: /devops/deployment-options/manual/node-authorization.md
+    to: /devops/concepts/node-authorization.md
 
 en:
-  - from: /reference/ydb-sdk/recipes/debug-jaeger.md
-    to: /recipes/ydb-sdk/debug-jaeger.md
-  - from: /reference/ydb-sdk/recipes/debug-logs.md
-    to: /recipes/ydb-sdk/debug-logs.md
-  - from: /reference/ydb-sdk/recipes/debug-prometheus.md
-    to: /recipes/ydb-sdk/debug-prometheus.md
   - from: /reference/ydb-sdk/recipes/debug.md
-    to: /recipes/ydb-sdk/debug.md
+    to: /reference/ydb-sdk/observability/index.md
+  - from: /reference/ydb-sdk/recipes/debug-logs.md
+    to: /reference/ydb-sdk/observability/logging/logging.md
+  - from: /reference/ydb-sdk/recipes/debug-prometheus.md
+    to: /reference/ydb-sdk/observability/metrics/prometheus.md
+  - from: /reference/ydb-sdk/recipes/debug-jaeger.md
+    to: /reference/ydb-sdk/observability/tracing/jaeger.md
+  - from: /recipes/ydb-sdk/debug.md
+    to: /reference/ydb-sdk/observability/index.md
+  - from: /recipes/ydb-sdk/debug-logs.md
+    to: /reference/ydb-sdk/observability/logging/logging.md
+  - from: /recipes/ydb-sdk/debug-logs-otel.md
+    to: /reference/ydb-sdk/observability/logging/opentelemetry.md
+  - from: /recipes/ydb-sdk/debug-prometheus.md
+    to: /reference/ydb-sdk/observability/metrics/prometheus.md
+  - from: /recipes/ydb-sdk/debug-otel-metrics.md
+    to: /reference/ydb-sdk/observability/metrics/opentelemetry.md
+  - from: /recipes/ydb-sdk/debug-jaeger.md
+    to: /reference/ydb-sdk/observability/tracing/jaeger.md
+  - from: /recipes/ydb-sdk/debug-otel.md
+    to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
+  - from: /recipes/ydb-sdk/debug-otel-tracing.md
+    to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
   - from: /devops/deployment-options/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /devops/manual/initial-deployment.md
@@ -594,3 +632,5 @@ en:
     to: /public-materials/videos.md
   - from: /reference/ydbops/scenarios.md
     to: /reference/ydbops/rolling-restart-scenario.md
+  - from: /devops/deployment-options/manual/node-authorization.md
+    to: /devops/concepts/node-authorization.md

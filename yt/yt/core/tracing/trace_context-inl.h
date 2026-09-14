@@ -59,9 +59,21 @@ Y_FORCE_INLINE const std::string& TTraceContext::GetSpanName() const
     return SpanName_;
 }
 
-Y_FORCE_INLINE const std::string& TTraceContext::GetLoggingTag() const
+template <class TValue>
+void TTraceContext::AddLoggingTag(NLogging::TLoggingTagKey key, const TValue& value)
 {
-    return LoggingTag_;
+    LoggingTags_.Add(key, value);
+}
+
+template <class... TArgs>
+void TTraceContext::AddLoggingTagFormat(NLogging::TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args)
+{
+    LoggingTags_.AddFormat(key, format, std::forward<TArgs>(args)...);
+}
+
+Y_FORCE_INLINE const NLogging::TLoggingTagList& TTraceContext::GetLoggingTags() const
+{
+    return LoggingTags_;
 }
 
 Y_FORCE_INLINE const std::optional<std::string>& TTraceContext::GetTargetEndpoint() const

@@ -31,7 +31,6 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 
 using namespace NActors;
 using namespace NKikimrClient;

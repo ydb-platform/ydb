@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yt/yql/providers/yt/gateway/lib/op_tracker.h>
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
 #include <yt/yql/providers/yt/gateway/lib/transaction_cache.h>
 #include <yql/essentials/utils/threading/async_queue.h>
@@ -88,6 +89,11 @@ public:
     NThreading::TFuture<bool> LookupImpl(const TAsyncQueue::TWeakPtr& queue);
     void StoreImpl();
 
+    void SetOperationId(NYT::TOperationId operationId);
+
+    void SetProgressData(IOperationTracker::TPtr tracker, TMaybe<ui32> publicId,
+        const TOperationProgressWriter& progressWriter, const TStatWriter& statWriter);
+
 private:
     static TString GetCachePath(const TString& userName, const TString& tmpFolder);
     TString MakeCachedPath(const TString& hash);
@@ -95,6 +101,11 @@ private:
     void SetTableAttrs(const NYT::TNode& spec, const TString& cachedPath);
 
 private:
+    IOperationTracker::TPtr Tracker_;
+    TMaybe<ui32> PublicId_;
+    TOperationProgressWriter ProgressWriter_;
+    TStatWriter StatWriter_;
+
     const TTransactionCache::TEntry::TPtr Entry;
     const TVector<TString> DstTables;
     const TVector<NYT::TNode> DstSpecs;

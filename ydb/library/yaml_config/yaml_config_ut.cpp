@@ -1389,6 +1389,29 @@ config:
 }
 
 Y_UNIT_TEST_SUITE(YamlConfig) {
+    Y_UNIT_TEST(InterconnectSessionExecutorIsConvertedToProto) {
+        auto doc = NFyaml::TDocument::Parse(R"(
+actor_system_config:
+  executor:
+  - name: ICSession0
+    type: BASIC
+    threads: 1
+    placement: 0
+  - name: ICSession1
+    type: BASIC
+    threads: 1
+    placement: 1
+  interconnect_session_executor: [0, 1]
+)");
+
+        const auto config = NYamlConfig::YamlToProto(doc.Root(), false, false);
+
+        const auto& actorSystemConfig = config.GetActorSystemConfig();
+        UNIT_ASSERT_VALUES_EQUAL(actorSystemConfig.InterconnectSessionExecutorSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(actorSystemConfig.GetInterconnectSessionExecutor(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(actorSystemConfig.GetInterconnectSessionExecutor(1), 1);
+    }
+
     Y_UNIT_TEST(CollectLabels) {
         auto doc = NFyaml::TDocument::Parse(WholeConfig);
 

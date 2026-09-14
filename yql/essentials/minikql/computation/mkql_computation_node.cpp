@@ -1,3 +1,4 @@
+#include "mkql_bridge.h"
 #include "mkql_computation_node_holders.h"
 #include "mkql_computation_node_impl.h"
 #include "mkql_computation_node_pack.h"
@@ -87,6 +88,8 @@ TComputationNodeFactoryContext::TComputationNodeFactoryContext(
     const NUdf::IValueBuilder* builder,
     NUdf::EValidateMode validateMode,
     NUdf::EValidatePolicy validatePolicy,
+    NUdf::EBridgeMode bridgeMode,
+    TString bridgeBinaryPath,
     EGraphPerProcess graphPerProcess,
     TComputationMutables& mutables,
     TComputationNodeOnNodeMap& elementsCache,
@@ -105,6 +108,8 @@ TComputationNodeFactoryContext::TComputationNodeFactoryContext(
     , Builder(builder)
     , ValidateMode(validateMode)
     , ValidatePolicy(validatePolicy)
+    , BridgeMode(bridgeMode)
+    , BridgeBinaryPath(std::move(bridgeBinaryPath))
     , GraphPerProcess(graphPerProcess)
     , Mutables(mutables)
     , ElementsCache(elementsCache)
@@ -123,7 +128,9 @@ TComputationPatternOpts::TComputationPatternOpts(TAllocState& allocState, const 
 
 TComputationOptsFull::TComputationOptsFull(IStatsRegistry* stats, TAllocState& allocState, const TTypeEnvironment& typeEnv, IRandomProvider& randomProvider,
                                            ITimeProvider& timeProvider, NUdf::EValidatePolicy validatePolicy, const NUdf::ISecureParamsProvider* secureParamsProvider,
-                                           NUdf::ICountersProvider* countersProvider, const NUdf::ILogProvider* logProvider, NYql::TLangVersion langver, NYql::TRuntimeSettings::TConstPtr runtimeSettings)
+                                           NUdf::ICountersProvider* countersProvider, const NUdf::ILogProvider* logProvider, NYql::TLangVersion langver, NYql::TRuntimeSettings::TConstPtr runtimeSettings,
+                                           NUdf::EBridgeMode bridgeMode,
+                                           TString bridgeBinaryPath)
     : TComputationOpts(stats)
     , AllocState(allocState)
     , TypeEnv(typeEnv)
@@ -135,6 +142,8 @@ TComputationOptsFull::TComputationOptsFull(IStatsRegistry* stats, TAllocState& a
     , LogProvider(logProvider)
     , LangVer(langver)
     , RuntimeSettings(std::move(runtimeSettings))
+    , BridgeMode(bridgeMode)
+    , BridgeBinaryPath(std::move(bridgeBinaryPath))
 {
 }
 
@@ -152,13 +161,17 @@ TComputationPatternOpts::TComputationPatternOpts(
     const NUdf::ISecureParamsProvider* secureParamsProvider,
     const NUdf::ILogProvider* logProvider,
     NYql::TLangVersion langver,
-    NYql::TRuntimeSettings::TConstPtr runtimeSettings)
+    NYql::TRuntimeSettings::TConstPtr runtimeSettings,
+    NUdf::EBridgeMode bridgeMode,
+    TString bridgeBinaryPath)
     : AllocState(allocState)
     , Env(env)
     , Factory(std::move(factory))
     , FunctionRegistry(functionRegistry)
     , ValidateMode(validateMode)
     , ValidatePolicy(validatePolicy)
+    , BridgeMode(bridgeMode)
+    , BridgeBinaryPath(std::move(bridgeBinaryPath))
     , OptLLVM(std::move(optLLVM))
     , GraphPerProcess(graphPerProcess)
     , Stats(stats)
@@ -176,11 +189,15 @@ void TComputationPatternOpts::SetOptions(TComputationNodeFactory factory, const 
                                          NUdf::ICountersProvider* counters,
                                          const NUdf::ISecureParamsProvider* secureParamsProvider,
                                          const NUdf::ILogProvider* logProvider, NYql::TLangVersion langver,
-                                         NYql::TRuntimeSettings::TConstPtr runtimeSettings) {
+                                         NYql::TRuntimeSettings::TConstPtr runtimeSettings,
+                                         NUdf::EBridgeMode bridgeMode,
+                                         TString bridgeBinaryPath) {
     Factory = factory;
     FunctionRegistry = functionRegistry;
     ValidateMode = validateMode;
     ValidatePolicy = validatePolicy;
+    BridgeMode = bridgeMode;
+    BridgeBinaryPath = std::move(bridgeBinaryPath);
     OptLLVM = optLLVM;
     GraphPerProcess = graphPerProcess;
     Stats = stats;
@@ -201,7 +218,7 @@ TComputationOptsFull TComputationPatternOpts::ToComputationOptions(IRandomProvid
     return TComputationOptsFull(Stats, allocStatePtr ? *allocStatePtr : AllocState,
                                 Env, randomProvider, timeProvider,
                                 ValidatePolicy, SecureParamsProvider,
-                                CountersProvider, LogProvider, LangVer, RuntimeSettings);
+                                CountersProvider, LogProvider, LangVer, RuntimeSettings, BridgeMode, BridgeBinaryPath);
 }
 
 TComputationPatternOpts::~TComputationPatternOpts() = default;
@@ -237,6 +254,8 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     , SecureParamsProvider(opts.SecureParamsProvider)
     , LogProvider(opts.LogProvider)
     , LangVer(opts.LangVer)
+    , BridgeMode(opts.BridgeMode)
+    , BridgeBinaryPath(opts.BridgeBinaryPath)
     , NotConsumedLinear(notConsumedLinear)
     , RuntimeSettings(*runtimeSettings)
     , RuntimeSettingsPtr_(std::move(runtimeSettings))
@@ -272,6 +291,17 @@ NUdf::TLoggerPtr TComputationContext::MakeLogger() const {
 
 NYql::TRuntimeSettings::TConstPtr TComputationContext::GetRuntimeSettingsSharedPtr() const {
     return RuntimeSettingsPtr_;
+}
+
+TIntrusivePtr<TBridgeChannel> TComputationContext::GetOrCreateBridgeChannel(
+    const TString& key, const std::function<TIntrusivePtr<TBridgeChannel>(TBridgeNamespaceId workerNamespace)>& factory) {
+    const auto it = BridgeChannels_.find(key);
+    if (it != BridgeChannels_.end()) {
+        return it->second;
+    }
+    auto channel = factory(TBridgeNamespaceId(NextFreeBridgeWorkerNamespace_++));
+    BridgeChannels_.emplace(key, channel);
+    return channel;
 }
 
 void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {

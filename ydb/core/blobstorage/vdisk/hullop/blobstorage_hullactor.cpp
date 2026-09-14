@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_fullsyncsst_add.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
 
 #include <type_traits>
 
@@ -262,6 +263,18 @@ namespace NKikimr {
             const double rateThreshold = Config->HullCompLevelRateThreshold;
             auto fullCompactionAttrs = FullCompactionState.GetFullCompactionAttrsForLevelCompactionSelector(RTCtx);
             NHullComp::TSelectorParams params = {Boundaries, rateThreshold, TInstant::Seconds(0), fullCompactionAttrs};
+            {
+                const auto& oos = HullDs->HullCtx->VCtx->GetOutOfSpaceState();
+                const ui32 totalChunks = oos.GetLocalTotalChunks();
+                const ui32 usedChunks = oos.GetLocalUsedChunks();
+                const ui32 reserve = ui32(Config->HullCompEmergencyChunkReserve);
+                if (totalChunks > 0) {
+                    const ui32 freeChunks = totalChunks > usedChunks ? totalChunks - usedChunks : 0;
+                    params.FreeChunksBudget = freeChunks > reserve ? freeChunks - reserve : 0;
+                }
+                params.EmergencyMode = oos.GetLocalColor() >= static_cast<ESpaceColor>(
+                    ui64(Config->HullCompEmergencyEnableAtColor));
+            }
             auto selector = std::make_unique<TSelectorActor>(HullDs->HullCtx, params, std::move(levelSnap),
                 std::move(barriersSnap), ctx.SelfID, std::move(CompactionTask), AllowGarbageCollection);
             auto aid = RunInBatchPool(ctx, selector.release());
@@ -356,6 +369,9 @@ namespace NKikimr {
                     case NHullComp::ESelectStrategy::FreeSpace:
                         ++group.BlobsFreeSpace();
                         break;
+                    case NHullComp::ESelectStrategy::Emergency:
+                        ++group.BlobsEmergency();
+                        break;
                     case NHullComp::ESelectStrategy::Squeeze:
                         ++group.BlobsSqueeze();
                         break;
@@ -421,7 +437,8 @@ namespace NKikimr {
                     Y_VERIFY_S(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty(),
                         HullDs->HullCtx->VCtx->VDiskLogPrefix);
                     CancelOrReleaseCompactionTokenIfNeeded(ctx);
-                    if (CompactionTask->GetHugeBlobsToDelete().Empty() && CompactionTask->GetHugeBlobsAllocated().Empty()) {
+                    if (CompactionTask->GetHugeBlobsToDelete().Empty() && CompactionTask->GetHugeBlobsAllocated().Empty()
+                            && CompactionTask->GetHugeBlobsAllocatedStripe().Empty()) {
                         AccountSelectedStrategy();
                         ApplyCompactionResult(ctx, {}, {}, 0);
                     } else {
@@ -650,10 +667,20 @@ namespace NKikimr {
 
             // run level committer
             TDiskPartVec removedHugeBlobs(CompactionTask->ExtractHugeBlobsToDelete());
+            if (CompactionTask->CollectDeletedSsts()) {
+                TLeveledSstsIterator delIt(&CompactionTask->GetSstsToDelete());
+                for (delIt.SeekToFirst(); delIt.Valid(); delIt.Next()) {
+                    const TLevelSegment& seg = *delIt.Get().SstPtr;
+                    if (!seg.HeapStripe.Empty()) {
+                        removedHugeBlobs.PushBack(seg.HeapStripe);
+                    }
+                }
+            }
             TDiskPartVec allocatedHugeBlobs(CompactionTask->GetHugeBlobsAllocated());
+            TDiskPartVec allocatedStripeBlobs(CompactionTask->GetHugeBlobsAllocatedStripe());
             auto committer = std::make_unique<TAsyncLevelCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
                 ctx.SelfID, std::move(chunksAdded), std::move(deleteChunks), std::move(removedHugeBlobs),
-                std::move(allocatedHugeBlobs), wId);
+                std::move(allocatedHugeBlobs), wId, std::move(allocatedStripeBlobs));
             TActorId committerID = ctx.RegisterWithSameMailbox(committer.release());
             ActiveActors.Insert(committerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
 
@@ -673,7 +700,8 @@ namespace NKikimr {
             }
             THullChange *msg = ev->Get();
 
-            if ((!msg->FreedHugeBlobs.Empty() || !msg->AllocatedHugeBlobs.Empty()) && !wId && !msg->Aborted) {
+            if ((!msg->FreedHugeBlobs.Empty() || !msg->AllocatedHugeBlobs.Empty() ||
+                    !msg->AllocatedStripeBlobs.Empty()) && !wId && !msg->Aborted) {
                 const ui64 cookie = NextPreCompactCookie++;
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "Requesting PreCompact for THullChange",
                     {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix});
@@ -726,7 +754,8 @@ namespace NKikimr {
                     // run fresh committer
                     auto committer = std::make_unique<TAsyncFreshCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
                             ctx.SelfID, std::move(msg->CommitChunks), std::move(msg->ReservedChunks),
-                            std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), dbg.Str(), wId);
+                            std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), dbg.Str(), wId,
+                            std::move(msg->AllocatedStripeBlobs));
                     auto aid = ctx.RegisterWithSameMailbox(committer.release());
                     ActiveActors.Insert(aid, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
                 }
@@ -745,7 +774,8 @@ namespace NKikimr {
                 }
 
                 CompactionTask->CompactSsts.CompactionFinished(std::move(msg->SegVec),
-                    std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), msg->Aborted);
+                    std::move(msg->FreedHugeBlobs), std::move(msg->AllocatedHugeBlobs), msg->Aborted,
+                    std::move(msg->AllocatedStripeBlobs));
 
                 if (msg->Aborted) { // if the compaction was aborted, ensure there was no index change
                     Y_VERIFY_S(CompactionTask->GetSstsToAdd().Empty(), HullDs->HullCtx->VCtx->VDiskLogPrefix);

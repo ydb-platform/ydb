@@ -25,7 +25,7 @@ public:
         : Name_(std::move(name))
         , CallbackProvider_(std::move(callbackProvider))
         , Options_(options)
-        , Logger(ConcurrencyLogger().WithTag("Executor: %v", Name_))
+        , Logger(ConcurrencyLogger().WithTag("Executor", Name_))
         , ControlQueue_(New<TActionQueue>(Format("%vCtl", Name_)))
         , ControlInvoker_(ControlQueue_->GetInvoker())
         , DesiredThreadCount_(options.ThreadCount)
@@ -87,9 +87,8 @@ private:
 
         int currentThreadCount = std::ssize(Workers_);
 
-        YT_LOG_DEBUG("Updating thread count (Count: %v -> %v)",
-            currentThreadCount,
-            desiredThreadCount);
+        YT_TLOG_DEBUG("Updating thread count")
+            .WithFormat("Count", "%v -> %v", currentThreadCount, desiredThreadCount);
 
         if (desiredThreadCount > currentThreadCount) {
             Workers_.reserve(desiredThreadCount);
@@ -121,9 +120,9 @@ private:
 
         ++QuantumIndex_;
 
-        YT_LOG_TRACE("Starting quantum (Index: %v, Timeout: %v)",
-            QuantumIndex_,
-            timeout);
+        YT_TLOG_TRACE("Starting quantum")
+            .With("Index", QuantumIndex_)
+            .With("Timeout", timeout);
 
         YT_VERIFY(!Running_);
         Running_ = true;
@@ -160,9 +159,9 @@ private:
             return;
         }
 
-        YT_LOG_TRACE("Finishing quantum (Index: %v, Immediately: %v)",
-            quantumIndex,
-            immediately);
+        YT_TLOG_TRACE("Finishing quantum")
+            .With("Index", quantumIndex)
+            .With("Immediately", immediately);
 
         FinishingQuantum_ = true;
 
@@ -236,8 +235,8 @@ private:
             return;
         }
 
-        YT_LOG_TRACE("Quantum timeout reached (Index: %v)",
-            quantumIndex);
+        YT_TLOG_TRACE("Quantum timeout reached")
+            .With("Index", quantumIndex);
 
         FinishQuantum(quantumIndex, /*immediate*/ true);
     }
@@ -246,8 +245,8 @@ private:
     {
         YT_ASSERT_THREAD_AFFINITY(ControlThread);
 
-        YT_LOG_TRACE("Quantum finished (Index: %v)",
-            quantumIndex);
+        YT_TLOG_TRACE("Quantum finished")
+            .With("Index", quantumIndex);
 
         FinishingQuantum_ = false;
         Running_ = false;

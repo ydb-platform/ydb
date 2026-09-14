@@ -1,4 +1,4 @@
-__version__ = "3.10.6"
+__version__ = "3.11.18"
 
 from typing import TYPE_CHECKING, Tuple
 
@@ -8,6 +8,7 @@ from .client import (
     ClientConnectionError,
     ClientConnectionResetError,
     ClientConnectorCertificateError,
+    ClientConnectorDNSError,
     ClientConnectorError,
     ClientConnectorSSLError,
     ClientError,
@@ -22,6 +23,7 @@ from .client import (
     ClientSSLError,
     ClientTimeout,
     ClientWebSocketResponse,
+    ClientWSTimeout,
     ConnectionTimeoutError,
     ContentTypeError,
     Fingerprint,
@@ -41,6 +43,7 @@ from .client import (
     TCPConnector,
     TooManyRedirects,
     UnixConnector,
+    WSMessageTypeError,
     WSServerHandshakeError,
     request,
 )
@@ -127,6 +130,7 @@ __all__: Tuple[str, ...] = (
     "ClientConnectionError",
     "ClientConnectionResetError",
     "ClientConnectorCertificateError",
+    "ClientConnectorDNSError",
     "ClientConnectorError",
     "ClientConnectorSSLError",
     "ClientError",
@@ -141,9 +145,11 @@ __all__: Tuple[str, ...] = (
     "ClientSession",
     "ClientTimeout",
     "ClientWebSocketResponse",
+    "ClientWSTimeout",
     "ConnectionTimeoutError",
     "ContentTypeError",
     "Fingerprint",
+    "FlowControlDataQueue",
     "InvalidURL",
     "InvalidUrlClientError",
     "InvalidUrlRedirectClientError",
@@ -211,7 +217,6 @@ __all__: Tuple[str, ...] = (
     "DataQueue",
     "EMPTY_PAYLOAD",
     "EofStream",
-    "FlowControlDataQueue",
     "StreamReader",
     # tracing
     "TraceConfig",
@@ -234,11 +239,12 @@ __all__: Tuple[str, ...] = (
     # workers (imported lazily with __getattr__)
     "GunicornUVLoopWebWorker",
     "GunicornWebWorker",
+    "WSMessageTypeError",
 )
 
 
 def __dir__() -> Tuple[str, ...]:
-    return __all__ + ("__author__", "__doc__")
+    return __all__ + ("__doc__",)
 
 
 def __getattr__(name: str) -> object:

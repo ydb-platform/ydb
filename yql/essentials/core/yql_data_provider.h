@@ -46,7 +46,7 @@ struct TPinInfo {
 
 class IPlanFormatter {
 public:
-    virtual ~IPlanFormatter() {}
+    virtual ~IPlanFormatter() = default;
 
     virtual bool HasCustomPlan(const TExprNode& node) = 0;
 
@@ -92,7 +92,7 @@ class IOptimizationContext;
 
 class IDataProvider : public TThrRefBase {
 public:
-    ~IDataProvider() override {}
+    ~IDataProvider() override = default;
 
     virtual TStringBuf GetName() const = 0;
 

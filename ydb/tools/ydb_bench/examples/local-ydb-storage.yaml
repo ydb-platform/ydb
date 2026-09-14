@@ -1,0 +1,37 @@
+local-ydb:
+  storage-capacity:
+    workload:
+      type: kv
+      operation: upsert
+      options:
+        init-upserts: 1000
+    geometry:
+      preset: storage
+      static-nodes: 2
+      dynamic-nodes: 1
+      max-dynamic-nodes: 8
+      disk-size-gb: 64
+      storage-groups: 1
+    client:
+      threads: 64
+    load:
+      parameter: rate
+      search:
+        start: 1000
+        maximum: 1000000
+        resolution-percent: 2
+      objective:
+        type: maximize-throughput
+        target-role: static
+    measurement:
+      warmup: 10
+      duration: 30
+      repetitions: 3
+    affinity:
+      ydb-cli:
+        mode: pack-numa-pack-chiplet-spread-core
+        cpus: one-chiplet
+      static-nodes:
+        mode: none
+      dynamic-nodes:
+        mode: none

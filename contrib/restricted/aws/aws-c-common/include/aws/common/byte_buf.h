@@ -23,6 +23,19 @@ AWS_PUSH_SANE_WARNING_LEVEL
  * Note that this structure allocates memory at the buffer pointer only. The
  * struct itself does not get dynamically allocated and must be either
  * maintained or copied to avoid losing access to the memory.
+ *
+ * GROWABILITY CONTRACT:
+ * - When `allocator != NULL`: the buffer owns its memory and can be grown
+ *   via aws_byte_buf_reserve / aws_byte_buf_append_dynamic / etc.
+ * - When `allocator == NULL`: the buffer's memory is externally owned
+ *   (e.g. by a buffer pool, by static storage, or by a stack frame) and
+ *   MUST NOT be reallocated. Functions that would grow the buffer
+ *   (aws_byte_buf_reserve, aws_byte_buf_append_dynamic, etc.) fail with
+ *   AWS_ERROR_INVALID_ARGUMENT when called on such a buffer.
+ *
+ * Callers that may receive a buffer of either kind (e.g. from a buffer
+ * pool ticket) should use aws_byte_buf_append_auto, which selects
+ * the right append path automatically.
  */
 struct aws_byte_buf {
     /* do not reorder this, this struct lines up nicely with windows buffer structures--saving us allocations.*/
@@ -413,6 +426,28 @@ int aws_byte_buf_append_with_lookup(
  */
 AWS_COMMON_API
 int aws_byte_buf_append_dynamic(struct aws_byte_buf *to, const struct aws_byte_cursor *from);
+
+/**
+ * Copies `from` to `to`, selecting between static and dynamic append based
+ * on whether `to` has an allocator.
+ *
+ * - If `to->allocator != NULL`: uses aws_byte_buf_append_dynamic (grows
+ *   the buffer as needed; same behavior as calling that function directly).
+ * - If `to->allocator == NULL`: uses aws_byte_buf_append (no grow; returns
+ *   AWS_ERROR_DEST_COPY_TOO_SMALL if `from` does not fit in remaining
+ *   capacity).
+ *
+ * This is intended for callers that receive a buffer from a source whose
+ * growability is not known at the call site — most commonly a buffer
+ * obtained from an aws_s3_buffer_pool ticket, where pool-backed tickets
+ * return a fixed-size buffer (allocator == NULL) and the default pool may
+ * return a growable one.
+ *
+ * `from` and `to` may be the same buffer, permitting copying a buffer
+ * into itself.
+ */
+AWS_COMMON_API
+int aws_byte_buf_append_auto(struct aws_byte_buf *to, const struct aws_byte_cursor *from);
 
 /**
  * Copies `from` to `to`. If `to` is too small, the buffer will be grown appropriately and

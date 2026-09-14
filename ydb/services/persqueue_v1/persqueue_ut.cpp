@@ -3453,7 +3453,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         settings.PQConfig.MutableCompactionConfig()->SetMaxWTimeLagSec(1);
         settings.PQConfig.MutableCompactionConfig()->SetBlobsSize(1_MB);
         NPersQueue::TTestServer server(settings);
-        server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8_MB, 86400);
+        // LowWatermark is not expressible via Topic API; msgbus create keeps 8MB.
+        server.AnnoyingClient->CreateTopicViaMsgBus(
+            TRequestCreatePQ(DEFAULT_TOPIC_NAME, 1, 0, 86400, 8_MB));
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
@@ -6130,7 +6132,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       }
       WriteSpeedInMessagesPerSecond: 80000
       BurstSizeInMessages: 40000
-      SourceIdMaxCounts: 6000000
+      SourceIdMaxCounts: 100000
     }
     Version: 6
     LocalDC: true
@@ -7110,6 +7112,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     }
 
     Y_UNIT_TEST(ReadRuleServiceTypeMigration) {
+        // Describe fill for consumers without ServiceType is unit-tested in
+        // TResolveConsumerServiceTypeTest. Here: default type + alter/add/remove via PQv1.
         TServerSettings settings = PQSettings(0);
         {
             settings.PQConfig.MutableDefaultClientServiceType()->SetName("default_type");
@@ -7277,115 +7281,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     }
 
-    Y_UNIT_TEST(ReadRuleServiceTypeMigrationWithDisallowDefault) {
-        TServerSettings settings = PQSettings(0);
-        {
-            settings.PQConfig.MutableDefaultClientServiceType()->SetName("default_type");
-            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType");
-            settings.PQConfig.AddClientServiceType()->SetName("AnotherType");
-            settings.PQConfig.AddClientServiceType()->SetName("SecondType");
-            settings.PQConfig.SetDisallowDefaultClientServiceType(true);
-        }
-        NPersQueue::TTestServer server(settings);
-
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
-
-        const ui32 topicsCount = 4;
-        for (ui32 i = 1; i <= topicsCount; ++i) {
-            TRequestCreatePQ createTopicRequest(TStringBuilder() << "rt3.dc1--topic_" << i, 1);
-            createTopicRequest.ReadRules.push_back("acc@user1");
-            createTopicRequest.ReadRules.push_back("acc@user2");
-            createTopicRequest.ReadRules.push_back("acc@user3");
-            server.AnnoyingClient->CreateTopic(createTopicRequest);
-        }
-
-        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
-        {
-            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
-            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
-        }
-
-        auto doAlter = [&](
-            const TString& topic,
-            const TVector<std::pair<TString, TString>>& readRules,
-            Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS
-        ) {
-            AlterTopicRequest request;
-            AlterTopicResponse response;
-            request.set_path(topic);
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            for (auto rrInfo : readRules) {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name(rrInfo.first);
-                rr->set_service_type(rrInfo.second);
-            }
-
-            grpc::ClientContext rcontext;
-            auto status = pqStub->AlterTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), statusCode);
-        };
-
-        auto checkDescribe = [&](
-            const TString& topic,
-            const TVector<std::pair<TString, TString>>& readRules,
-            Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS
-        ) {
-            DescribeTopicRequest request;
-            DescribeTopicResponse response;
-            request.set_path(topic);
-            grpc::ClientContext rcontext;
-
-            auto status = pqStub->DescribeTopic(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            DescribeTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), statusCode);
-            if (statusCode == Ydb::StatusIds::SUCCESS) {
-                UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size());
-                for (ui64 i = 0; i < readRules.size(); ++i) {
-                    const auto& rr = res.settings().read_rules(i);
-                    UNIT_ASSERT_EQUAL(rr.consumer_name(), readRules[i].first);
-                    UNIT_ASSERT_EQUAL(rr.service_type(), readRules[i].second);
-                }
-            }
-        };
-        checkDescribe(
-            "/Root/PQ/rt3.dc1--topic_1",
-            {},
-            Ydb::StatusIds::INTERNAL_ERROR
-        );
-        {
-            doAlter(
-                "/Root/PQ/rt3.dc1--topic_2",
-                {
-                    {"acc/new_user", "MyGreatType"},
-                    {"acc/user2", "SecondType"},
-                    {"acc/user3", "AnotherType"},
-                    {"acc/user4", "AnotherType"}
-                }
-            );
-            checkDescribe(
-                "/Root/PQ/rt3.dc1--topic_2",
-                {
-                    {"acc/new_user", "MyGreatType"},
-                    {"acc/user2", "SecondType"},
-                    {"acc/user3", "AnotherType"},
-                    {"acc/user4", "AnotherType"}
-                }
-            );
-        }
-    }
-
+    // Legacy "empty ServiceType in tablet config + DisallowDefault → describe INTERNAL_ERROR"
+    // is covered by TResolveConsumerServiceTypeTest in ydb/core/ydb_convert/ut.
+    // Create/alter with explicit types under DisallowDefault: ReadRuleDisallowDefaultServiceType.
 
     void TestReadRuleServiceTypePasswordImpl(bool forcePassword)
     {

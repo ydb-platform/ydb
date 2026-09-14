@@ -24,7 +24,7 @@ except ImportError:
     CompletionFinder = object  # type:ignore[assignment, misc]
 
 
-def get_argcomplete_cwords() -> t.Optional[t.List[str]]:
+def get_argcomplete_cwords() -> list[str] | None:
     """Get current words prior to completion point
 
     This is normally done in the `argcomplete.CompletionFinder` constructor,
@@ -37,14 +37,14 @@ def get_argcomplete_cwords() -> t.Optional[t.List[str]]:
     comp_line = os.environ["COMP_LINE"]
     comp_point = int(os.environ["COMP_POINT"])
     # argcomplete.debug("splitting COMP_LINE for:", comp_line, comp_point)
-    comp_words: t.List[str]
+    comp_words: list[str]
     try:
         (
-            cword_prequote,
-            cword_prefix,
-            cword_suffix,
+            _cword_prequote,
+            _cword_prefix,
+            _cword_suffix,
             comp_words,
-            last_wordbreak_pos,
+            _last_wordbreak_pos,
         ) = argcomplete.split_line(comp_line, comp_point)  # type:ignore[attr-defined,no-untyped-call]
     except ModuleNotFoundError:
         return None
@@ -57,8 +57,8 @@ def get_argcomplete_cwords() -> t.Optional[t.List[str]]:
     start = int(os.environ["_ARGCOMPLETE"]) - 1
     comp_words = comp_words[start:]
 
-    # argcomplete.debug("prequote=", cword_prequote, "prefix=", cword_prefix, "suffix=", cword_suffix, "words=", comp_words, "last=", last_wordbreak_pos)
-    return comp_words  # noqa: RET504
+    # argcomplete.debug("prequote=", _cword_prequote, "prefix=", _cword_prefix, "suffix=", _cword_suffix, "words=", comp_words, "last=", _last_wordbreak_pos)
+    return comp_words
 
 
 def increment_argcomplete_index() -> None:
@@ -98,10 +98,10 @@ class ExtendedCompletionFinder(CompletionFinder):
     """
 
     _parser: argparse.ArgumentParser
-    config_classes: t.List[t.Any] = []  # Configurables
-    subcommands: t.List[str] = []
+    config_classes: list[t.Any] = []  # Configurables
+    subcommands: list[str] = []
 
-    def match_class_completions(self, cword_prefix: str) -> t.List[t.Tuple[t.Any, str]]:
+    def match_class_completions(self, cword_prefix: str) -> list[tuple[t.Any, str]]:
         """Match the word to be completed against our Configurable classes
 
         Check if cword_prefix could potentially match against --{class}. for any class
@@ -146,9 +146,7 @@ class ExtendedCompletionFinder(CompletionFinder):
         except AttributeError:
             pass
 
-    def _get_completions(
-        self, comp_words: t.List[str], cword_prefix: str, *args: t.Any
-    ) -> t.List[str]:
+    def _get_completions(self, comp_words: list[str], cword_prefix: str, *args: t.Any) -> list[str]:
         """Overridden to dynamically append --Class.trait arguments if appropriate
 
         Warning:
@@ -187,7 +185,7 @@ class ExtendedCompletionFinder(CompletionFinder):
                         self.inject_class_to_parser(matched_cls)
                     break
 
-        completions: t.List[str]
+        completions: list[str]
         completions = super()._get_completions(comp_words, cword_prefix, *args)  # type:ignore[no-untyped-call]
 
         # For subcommand-handling: it is difficult to get this to work
@@ -203,9 +201,9 @@ class ExtendedCompletionFinder(CompletionFinder):
 
     def _get_option_completions(
         self, parser: argparse.ArgumentParser, cword_prefix: str
-    ) -> t.List[str]:
+    ) -> list[str]:
         """Overridden to add --Class. completions when appropriate"""
-        completions: t.List[str]
+        completions: list[str]
         completions = super()._get_option_completions(parser, cword_prefix)  # type:ignore[no-untyped-call]
         if cword_prefix.endswith("."):
             return completions

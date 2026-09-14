@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yt/yt/core/misc/string_builder.h>
+#include <library/cpp/yt/string/string_builder.h>
 
 #include <util/generic/hash.h>
 

@@ -3,6 +3,8 @@
 
 #include <ydb/core/protos/datashard_config.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr::NDataShard {
 
 static constexpr size_t MAX_DATASHARD_STATE_CHUNK_SIZE = 8_MB;
@@ -102,14 +104,12 @@ private:
             offset += prevSize;
             // Try to fail gracefully instead of crashing on unexpected data
             if (offset < lastOffset) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Received TEvInMemoryStateResponse with checkpoints that go backwards");
+                YDB_LOG_CRIT("Received TEvInMemoryStateResponse with checkpoints that go backwards");
                 Failed();
                 return;
             }
             if (Buffer.size() < offset) {
-                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                    "Received TEvInMemoryStateResponse with checkpoints that overflow current buffer");
+                YDB_LOG_CRIT("Received TEvInMemoryStateResponse with checkpoints that overflow current buffer");
                 Failed();
                 return;
             }
@@ -133,8 +133,7 @@ private:
                 TRopeStream stream(Buffer.Begin(), chunkSize);
                 bool ok = state->ParseFromZeroCopyStream(&stream);
                 if (!ok) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received TEvInMemoryStateResponse has a chunk that cannot be parsed");
+                    YDB_LOG_CRIT("Received TEvInMemoryStateResponse has a chunk that cannot be parsed");
                     Failed();
                     return;
                 }
@@ -171,6 +170,15 @@ private:
                     row.BreakerQuerySpanId = protoLock.GetBreakerQuerySpanId();
                     row.BreakerNodeId = protoLock.GetBreakerNodeId();
                 }
+                for (const auto& proto : protoLock.GetWriteSeqNumStates()) {
+                    TWriteSeqNumState state;
+                    state.WriterIndex = proto.GetWriterIndex();
+                    state.WriteSeqNum = proto.GetWriteSeqNum();
+                    state.SerializedResult = proto.GetSerializedResult();
+                    if (state.WriteSeqNum) {
+                        row.WriteSeqNumStates.push_back(std::move(state));
+                    }
+                }
                 if (protoLock.HasBreakVersion()) {
                     row.BreakVersion = TRowVersion::FromProto(protoLock.GetBreakVersion());
                 }
@@ -184,8 +192,8 @@ private:
             for (const auto& protoRange : state->GetLockRanges()) {
                 auto* row = Locks.FindPtr(protoRange.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received lock range for a missing lock " << protoRange.GetLockId());
+                    YDB_LOG_CRIT("Received lock range for a missing lock",
+                        {"rangeLockId", protoRange.GetLockId()});
                     Failed();
                     return;
                 }
@@ -197,8 +205,8 @@ private:
             for (const auto& protoConflict : state->GetLockConflicts()) {
                 auto* row = Locks.FindPtr(protoConflict.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received lock conflict for a missing lock " << protoConflict.GetLockId());
+                    YDB_LOG_CRIT("Received lock conflict for a missing lock",
+                        {"conflictLockId", protoConflict.GetLockId()});
                     Failed();
                     return;
                 }
@@ -207,8 +215,8 @@ private:
             for (const auto& protoVolatileDep : state->GetLockVolatileDependencies()) {
                 auto* row = Locks.FindPtr(protoVolatileDep.GetLockId());
                 if (!row) {
-                    LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-                        "Received volatile dependency for a missing lock " << protoVolatileDep.GetLockId());
+                    YDB_LOG_CRIT("Received volatile dependency for a missing lock",
+                        {"volatileDepLockId", protoVolatileDep.GetLockId()});
                     Failed();
                     return;
                 }
@@ -647,6 +655,17 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
         if (const auto& version = lockInfo.GetBreakVersion()) {
             version->ToProto(protoLockInfo->MutableBreakVersion());
         }
+        for (const auto& [writerIndex, state] : lockInfo.GetWriteSeqNumStates()) {
+            if (state.WriteSeqNum == 0) {
+                continue;
+            }
+            auto* proto = protoLockInfo->AddWriteSeqNumStates();
+            proto->SetWriterIndex(writerIndex);
+            proto->SetWriteSeqNum(state.WriteSeqNum);
+            if (!state.SerializedResult.empty()) {
+                proto->SetSerializedResult(state.SerializedResult);
+            }
+        }
         for (const auto& pathId : lockInfo.GetReadTables()) {
             pathId.ToProto(protoLockInfo->AddReadTables());
         }
@@ -736,3 +755,7 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

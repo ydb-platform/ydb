@@ -14,30 +14,21 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-// Conversion between physical arrow storage and logical JsonValue/BinaryJson in-program representation
-class IValueArrowCodec {
-public:
-    virtual ~IValueArrowCodec() = default;
-
-    virtual EValueType GetValueType() const = 0;
-    virtual std::shared_ptr<arrow::DataType> GetArrowType() const = 0;
-
-    // Read path - wrap the physical element `index` as a logical value view (a native scalar for
-    // Double/Bool/String, or a BinaryJson blob for BinaryJson).
-    // The view aliases `array`, which must outlive it.
-    virtual TJsonValueView ReadValueView(const arrow::Array& array, const i64 index) const = 0;
-    // Approximate size of element `index` for accounting: variable for binary values, fixed for scalar types.
-    virtual ui32 GetElementSize(const arrow::Array& array, const i64 index) const = 0;
-
-    // Write path - initialize builder and write values to it.
-    // reserveData makes sense only for variable-length types (BinaryJson and string).
-    virtual std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const ui32 reserveItems, const ui32 reserveData) const = 0;
-    virtual void AppendFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob) const = 0;
-};
+std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType);
 
 bool CanBeDictionaryEncoded(EValueType valueType);
 
-std::shared_ptr<const IValueArrowCodec> GetCodecForValueType(const EValueType valueType);
+// Read physical element `index` per the column's value type: a native scalar for Double/Bool/String, or a
+// BinaryJson blob for BinaryJson. The view aliases `array`, which must outlive it.
+TJsonValueView ArrayElementToJsonValueView(const arrow::Array& array, const i64 index, const EValueType valueType);
+NBinaryJson::TBinaryJson ArrayElementToBinaryJson(const arrow::Array& array, const i64 index, const EValueType valueType);
+ui32 ArrayElementSize(const arrow::Array& array, const i64 index, const EValueType valueType);
+
+// Make an arrow builder for the value type's storage; reserveData applies only to variable-length types.
+std::unique_ptr<arrow::ArrayBuilder> MakeBuilderForValueType(const EValueType valueType, const ui32 reserveItems, const ui32 reserveData);
+
+// Decode a BinaryJson value and append it to a builder of the value type's arrow storage.
+void AppendValueFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob, const EValueType valueType);
 
 // Element type to represent result of merging arrays with arg types
 EValueType MergeValueTypes(const std::optional<EValueType>& acc, const EValueType next);

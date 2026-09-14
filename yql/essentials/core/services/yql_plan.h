@@ -19,7 +19,7 @@ struct TPlanSettings {
 
 class IPlanBuilder {
 public:
-    virtual ~IPlanBuilder() {};
+    virtual ~IPlanBuilder() = default;
     virtual void Clear() = 0;
     virtual void WritePlan(NYson::TYsonWriter& writer, const TExprNode::TPtr& root, const TPlanSettings& settings = {}) = 0;
 };

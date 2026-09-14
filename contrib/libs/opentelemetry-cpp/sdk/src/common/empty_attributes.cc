@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "opentelemetry/common/key_value_iterable_view.h"
+#include "opentelemetry/nostd/utility.h"
 #include "opentelemetry/sdk/common/empty_attributes.h"
 #include "opentelemetry/version.h"
 

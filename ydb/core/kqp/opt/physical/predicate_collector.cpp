@@ -164,9 +164,13 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TPushdownOptions& push
             return false;
         }
 
-        // Pushdonw only SQL LIKE or ILIKE.
+        // By default push down only SQL LIKE or ILIKE (Re2 pattern built from Re2.PatternFromLike).
+        // When OptEnableOlapPushdownRegexp is enabled, also allow plain REGEXP (Re2.Match / Re2.Grep)
+        // with a constant/parameter pattern to be pushed down to the column shard.
         constexpr auto like = "Re2.PatternFromLike"sv;
-        if (udfName.Content().starts_with("Re2.") && !udfName.IsAtom({like, "Re2.Options"}) &&
+        if (udfName.Content().starts_with("Re2.") &&
+            !udfName.IsAtom({like, "Re2.Options"}) &&
+            !(pushdownOptions.PushdownRegexp && (udfName.IsAtom("Re2.Match") || udfName.IsAtom("Re2.Grep"))) &&
             !FindNode(udf.ChildPtr(1U), [like] (const TExprNode::TPtr& node) { return node->IsCallable("Udf") && node->Head().IsAtom(like); })) {
             return false;
         }
@@ -448,11 +452,11 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
     if (predicate.Maybe<TCoNot>() || predicate.Maybe<TCoAnd>() || predicate.Maybe<TCoOr>() || predicate.Maybe<TCoXor>()) {
         CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, inputType, options);
     } else if (const auto maybeCoalesce = predicate.Maybe<TCoCoalesce>()) {
-        predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, {false, options.PushdownSubstring});
-        predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, {true, options.PushdownSubstring});
+        predicateTree.CanBePushed = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, {false, options.PushdownSubstring, options.StripAliasPrefixFromColName, options.PushdownRegexp});
+        predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, inputType, {true, options.PushdownSubstring, options.StripAliasPrefixFromColName, options.PushdownRegexp});
     } else if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
-        predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, {false, options.PushdownSubstring});
-        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, {true, options.PushdownSubstring});
+        predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, {false, options.PushdownSubstring, options.StripAliasPrefixFromColName, options.PushdownRegexp});
+        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, inputType, {true, options.PushdownSubstring, options.StripAliasPrefixFromColName, options.PushdownRegexp});
     } else if (const auto maybeExists = predicate.Maybe<TCoExists>()) {
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
         predicateTree.CanBePushedApply = predicateTree.CanBePushed;
@@ -463,7 +467,7 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
 
     if (options.AllowOlapApply && !predicateTree.CanBePushedApply){
         if (predicate.Maybe<TCoIf>() || predicate.Maybe<TCoJust>() || predicate.Maybe<TCoCoalesce>()) {
-            CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, inputType, {true, options.PushdownSubstring});
+            CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, inputType, {true, options.PushdownSubstring, options.StripAliasPrefixFromColName, options.PushdownRegexp});
         }
         if (!predicateTree.CanBePushedApply) {
             predicateTree.CanBePushedApply = AbstractTreeCanBePushed(predicate, options);

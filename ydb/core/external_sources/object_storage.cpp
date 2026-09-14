@@ -668,8 +668,8 @@ private:
             // Couldn't build the in-memory CSV buffer for partition values: fall back
             // to whatever types AppendPartitionColumns assigned (UTF8 by default).
             YDB_LOG_WARN_CTX(*ActorSystem, "Couldn't build arrow buffer for partition column type inference",
-                {"build", buildStatus.ToString()},
-                {"finish", finishStatus.ToString()});
+                {"buildStatus", buildStatus.ToString()},
+                {"finishStatus", finishStatus.ToString()});
             return result;
         }
 

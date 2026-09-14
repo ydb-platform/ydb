@@ -176,6 +176,7 @@ private:
     std::shared_ptr<Impl> impl_;
 };
 
+class Node;
 class Field {
 public:
     Field();
@@ -186,7 +187,7 @@ public:
     Field& details(std::initializer_list<Widget> widgets);
 
 private:
-    friend class Node;
+    friend class optimizer_trace::Node;
     friend class detail::Emitter;
 
     std::string key_;

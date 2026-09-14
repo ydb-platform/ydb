@@ -62,9 +62,9 @@ directory require at least one of the following TLS backends:
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_
   (deprecated)
 - GnuTLS >= 3.7.5
-- BoringSSL (commit 664a985707470a62f436cca862ccec9524c561ca);
+- BoringSSL (commit 3c6315e00ab02d7bc9b8922aff1f85d8f81ee130);
   or aws-lc >= 1.39.0
-- Picotls (commit b84869f41414b6d0148db7728f1cf12f5b544874)
+- Picotls (commit 44bc503943f47ec59f49ca7a157238fb81a91ac0)
 - wolfSSL >= 5.5.0
 - LibreSSL >= v3.9.2
 - OpenSSL >= 3.5.0 (experimental)
@@ -83,7 +83,7 @@ Build with wolfSSL
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v5.9.0-stable https://github.com/wolfSSL/wolfssl
+   $ git clone --depth 1 -b v5.9.2-stable https://github.com/wolfSSL/wolfssl
    $ cd wolfssl
    $ autoreconf -i
    $ # For wolfSSL < v5.6.6, append --enable-quic.
@@ -116,7 +116,7 @@ Build with BoringSSL
 
    $ git clone https://boringssl.googlesource.com/boringssl
    $ cd boringssl
-   $ git checkout 664a985707470a62f436cca862ccec9524c561ca
+   $ git checkout 3c6315e00ab02d7bc9b8922aff1f85d8f81ee130
    $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
    $ make -j$(nproc) -C build
    $ cd ..
@@ -143,7 +143,7 @@ Build with aws-lc
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v1.71.0 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v5.1.0 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON
    $ make -j$(nproc) -C build
@@ -171,7 +171,7 @@ Build with libressl
 
 .. code-block:: shell
 
-   $ LIBRESSL_VERSION=v4.2.1
+   $ LIBRESSL_VERSION=v4.3.2
    $ git clone --depth 1 -b $LIBRESSL_VERSION https://github.com/libressl/portable.git libressl
    $ cd libressl
    $ # Workaround autogen.sh failure
@@ -224,15 +224,15 @@ The notable options are:
 
 - ``-V``, ``--validate-addr``: Enforce stateless address validation.
 
-H09wsslclient/H09wsslserver
----------------------------
+wsslhqclient/wsslhqserver
+-------------------------
 
-There are h09wsslclient and h09wsslserver which speak HTTP/0.9.  They
-are written just for `quic-interop-runner
+There are wsslhqclient and wsslhqserver which speak HQ protocol, which
+is specifically tailored for `quic-interop-runner
 <https://github.com/marten-seemann/quic-interop-runner>`_.  They share
 the basic functionalities with HTTP/3 client and server but have less
-functions (e.g., h09wsslclient does not have a capability to send
-request body, and h09wsslserver does not understand numeric request
+functions (e.g., wsslhqclient does not have a capability to send
+request body, and wsslhqserver does not understand numeric request
 path, like /1000).
 
 Resumption and 0-RTT

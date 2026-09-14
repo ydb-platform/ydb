@@ -53,6 +53,7 @@ setuptools.setup(
         'ydb/public/api/protos/annotations',
         'ydb/public/api/protos/draft',
         'ydb/public/api/protos',
+        'ydb/apps/dstool/protos',
         'ydb/apps/dstool/lib',
         'ydb/apps/dstool',
     ],
@@ -60,11 +61,12 @@ setuptools.setup(
         "Programming Language :: Python :: 3",
     ],
     install_requires=(
-        "protobuf>=3.13.0",
+        "protobuf>=4.22.5",
         "grpcio>=1.5.0",
-        "packaging"
+        "packaging",
+        "PyYAML>=5.1",
     ),
-    python_requires=">=3.7",
+    python_requires=">=3.8",
     entry_points={
         "console_scripts": [
             "ydb-dstool = ydb.apps.dstool.main:main",

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: scramp
-Version: 1.4.12
+Version: 1.4.17
 Summary: An implementation of the SCRAM protocol.
 Project-URL: Homepage, https://codeberg.org/tlocke/scramp
 Author: The Contributors
@@ -44,6 +44,7 @@ Scramp supports the following mechanisms:
   * [Server only](#server-only)
   * [Server Error](#server-error)
 * [Standards](#standards)
+* [Missing `tls-exporter` channel binding support](#missing-tls-exporter-channel-binding-support)
 * [API Docs](#api-docs)
   * [scramp.MECHANISMS](#scrampmechanisms)
   * [scramp.ScramClient](#scrampscramclient)
@@ -54,6 +55,11 @@ Scramp supports the following mechanisms:
 * [OpenSSF Scorecard](#openssf-scorecard)
 * [Doing A Release Of Scramp](#doing-a-release-of-scramp)
 * [Release Notes](#release-notes)
+  * [Version 1.4.17, 2026-08-07](#version-1417-2026-08-07)
+  * [Version 1.4.16, 2026-08-06](#version-1416-2026-08-06)
+  * [Version 1.4.15, 2026-07-26](#version-1415-2026-07-26)
+  * [Version 1.4.14, 2026-07-25](#version-1414-2026-07-25)
+  * [Version 1.4.13, 2026-07-23](#version-1413-2026-07-23)
   * [Version 1.4.12, 2026-07-05](#version-1412-2026-07-05)
   * [Version 1.4.11, 2026-07-04](#version-1411-2026-07-04)
   * [Version 1.4.10, 2026-06-27](#version-1410-2026-06-27)
@@ -293,6 +299,24 @@ e=channel-binding-not-supported
 - [draft-ietf-kitten-tls-channel-bindings-for-tls13](https://datatracker.ietf.org/doc/html/draft-ietf-kitten-tls-channel-bindings-for-tls13) Defines the `tls-exporter` channel binding, which is [not yet supported by Scramp](https://codeberg.org/tlocke/scramp/issues/9).
 
 
+## Missing `tls-exporter` channel binding support
+
+RFC 9266 defines `tls-exporter` as the channel binding type for TLS 1.3, using the
+keying-material exporter from [RFC 5705](https://www.rfc-editor.org/rfc/rfc5705)
+(TLS ≤1.2) / [RFC 8446 §7.5](https://www.rfc-editor.org/rfc/rfc8446#section-7.5)
+(TLS 1.3), i.e. OpenSSL's `SSL_export_keying_material()`.
+
+Scramp can't implement `tls-exporter` because Python doesn't support it in
+ [`SSLSocket.get_channel_binding()`](https://docs.python.org/3/library/ssl.html#ssl.SSLSocket.get_channel_binding).
+Only the older `tls-unique`/`tls-server-end-point` are supported.
+
+* Relevant Python issue: [python/cpython#25255](https://github.com/python/cpython/pull/25255)
+* Relevant [Scramp issue](https://codeberg.org/tlocke/scramp/issues/9).
+
+Once `tls-exporter` is supported by `SSLSocket.get_channel_binding()`, we can
+support `tls-exporter` in Scramp.
+
+
 ## API Docs
 
 
@@ -353,6 +377,9 @@ The `ScramServer` object has the following methods:
 - `set_client_final(message)` - Set the final client message.
 - `get_server_final()` - Get the server final message.
 
+Note that `ScramServer` doesn't enforce a maximum message or field length, so that's something you
+might want to consider doing if you're embedding it in a network-facing server.
+
 
 ### scramp.make\_channel\_binding(name, ssl\_socket)
 
@@ -386,6 +413,35 @@ Run `tox` to make sure all tests pass, then update the release notes, then do:
 
 
 ## Release Notes
+
+### Version 1.4.17, 2026-08-07
+
+- Allow `auth_fn` to be any callable.
+
+
+### Version 1.4.16, 2026-08-06
+
+- Encapsulate `auth_fn` with `AuthFn`, a class that parses the output.
+
+
+### Version 1.4.15, 2026-07-26
+
+- Check message attribute values don't have invalid characters.
+
+
+### Version 1.4.14, 2026-07-25
+
+- Make sure all Salt and Nonce errors can be handled with the protocol.
+- Add note in README on tls-exporter.
+
+### Version 1.4.13, 2026-07-23
+
+- Have a Nonce class for validation.
+- Have a Salt class for validation.
+- Handle exceptions from the auth function.
+- Optional extensions should be ignored.
+- Check for invalid GS2 header.
+
 
 ### Version 1.4.12, 2026-07-05
 

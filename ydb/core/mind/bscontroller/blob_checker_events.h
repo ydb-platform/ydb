@@ -1,7 +1,11 @@
 #pragma once
 
-#include "blob_checker.h"
 #include "defs.h"
+
+#include "blob_checker.h"
+
+#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/base.pb.h>
 
 namespace NKikimr {
 namespace NBsController {

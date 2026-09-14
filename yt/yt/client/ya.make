@@ -8,7 +8,7 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     api/config.cpp
-    api/chaos_lease_base.cpp
+    api/chaos_lease.cpp
     api/client.cpp
     api/client_common.cpp
     api/client_cache.cpp
@@ -19,7 +19,9 @@ SRCS(
     api/distributed_file_session.cpp
     api/distributed_file_client.cpp
     api/etc_client.cpp
+    api/file_client.cpp
     api/journal_client.cpp
+    api/not_implemented_client.cpp
     api/operation_client.cpp
     api/security_client.cpp
     api/table_client.cpp
@@ -40,7 +42,6 @@ SRCS(
     api/private.cpp
 
     api/rpc_proxy/address_helpers.cpp
-    api/rpc_proxy/chaos_lease.cpp
     api/rpc_proxy/client_base.cpp
     api/rpc_proxy/client_impl.cpp
     api/rpc_proxy/cluster_directory.cpp

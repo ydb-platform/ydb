@@ -94,10 +94,10 @@ public:
 
 protected:
     TStatus DoParsing() override {
-        YDB_LOG_TRACE("Do parsing, first",
+        YDB_LOG_TRACE("Do parsing",
             {"logPrefix", LogPrefix},
             {"offset", Offsets.front()},
-            {"value", CurrentMessage});
+            {"firstValue", CurrentMessage});
 
         NYql::NUdf::TUnboxedValue value = LockObject(NKikimr::NMiniKQL::ValueFromString(DataSlot, CurrentMessage));
         if (value) {

@@ -4,18 +4,18 @@
 #include "helpers.h"
 #include "private.h"
 
-#include <yt/yt/client/table_client/config.h>
+#include <yt/yt/client/api/client.h>
+#include <yt/yt/client/api/rowset.h>
+#include <yt/yt/client/api/transaction.h>
+
+#include <yt/yt/client/table_client/check_schema_compatibility.h>
 #include <yt/yt/client/table_client/comparator.h>
+#include <yt/yt/client/table_client/config.h>
+#include <yt/yt/client/table_client/helpers.h>
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/schema.h>
-#include <yt/yt/client/table_client/helpers.h>
-#include <yt/yt/client/table_client/check_schema_compatibility.h>
 
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
-
-#include <yt/yt/client/api/rowset.h>
-#include <yt/yt/client/api/client.h>
-#include <yt/yt/client/api/transaction.h>
 
 #include <yt/yt/client/transaction_client/helpers.h>
 
@@ -170,7 +170,7 @@ public:
                 partitionIndex);
 
             i64 currentOffset = 0;
-            TTimestamp offsetTimestamp = 0;
+            auto offsetTimestamp = NullTimestamp;
             // If the key doesn't exist, or the offset value is null, the offset is -1 in BigRT terms and 0 in ours.
             if (!rows.empty()) {
                 const auto& offsetValue = rows[0].Values()[0];
@@ -184,12 +184,11 @@ public:
                     }
                 }
 
-                YT_LOG_DEBUG(
-                    "Read current offset (Consumer: %v, PartitionIndex: %v, Offset: %v, Timestamp: %v)",
-                    ConsumerPath_,
-                    partitionIndex,
-                    currentOffset,
-                    offsetTimestamp);
+                YT_TLOG_DEBUG("Read current offset")
+                    .With("Consumer", ConsumerPath_)
+                    .With("PartitionIndex", partitionIndex)
+                    .With("Offset", currentOffset)
+                    .With("Timestamp", offsetTimestamp);
             }
 
             if (currentOffset != *oldOffset) {
@@ -200,11 +199,11 @@ public:
                     ConsumerPath_,
                     *oldOffset,
                     currentOffset)
-                        << TErrorAttribute("partition", partitionIndex)
-                        << TErrorAttribute("consumer", ConsumerPath_)
-                        << TErrorAttribute("expected_offset", *oldOffset)
-                        << TErrorAttribute("current_offset", currentOffset)
-                        << TErrorAttribute("current_offset_timestamp", offsetTimestamp);
+                        .With("partition", partitionIndex)
+                        .With("consumer", ConsumerPath_)
+                        .With("expected_offset", *oldOffset)
+                        .With("current_offset", currentOffset)
+                        .With("current_offset_timestamp", offsetTimestamp);
             }
         }
 
@@ -236,7 +235,7 @@ public:
                     metaValue = MakeUnversionedAnyValue(metaYsonString.AsStringBuf(), *MetaColumnId_);
                 }
             } else {
-                YT_LOG_DEBUG("Consumer meta was not calculated due to unknown queue path or cluster client");
+                YT_TLOG_DEBUG("Consumer meta was not calculated due to unknown queue path or cluster client");
             }
 
             rowBuilder.AddValue(std::move(metaValue));
@@ -244,12 +243,11 @@ public:
 
         rowsBuilder.AddRow(RowBuffer_->CaptureRow(rowBuilder.GetRow()));
 
-        YT_LOG_DEBUG(
-            "Advancing consumer offset (Path: %v, Partition: %v, Offset: %v -> %v)",
-            ConsumerPath_,
-            partitionIndex,
-            oldOffset,
-            newOffset);
+        YT_TLOG_DEBUG("Advancing consumer offset")
+            .With("Path", ConsumerPath_)
+            .With("PartitionIndex", partitionIndex)
+            .With("OldOffset", oldOffset)
+            .With("NewOffset", newOffset);
         consumerTransaction->WriteRows(ConsumerPath_, ConsumerNameTable_, rowsBuilder.Build());
         RowBuffer_->Clear();
     }
@@ -402,7 +400,8 @@ private:
     {
         std::vector<TPartitionInfo> result;
 
-        YT_LOG_DEBUG("Collecting partitions (Query: %v)", selectQuery);
+        YT_TLOG_DEBUG("Collecting partitions")
+            .With("Query", selectQuery);
 
         TSelectRowsOptions selectRowsOptions;
         selectRowsOptions.ReplicaConsistency = EReplicaConsistency::Sync;
@@ -461,9 +460,14 @@ private:
 
             if (metaColumnId) {
                 const auto& metaValue = row[*metaColumnId];
-                YT_VERIFY(metaValue.Type == EValueType::Any || metaValue.Type == EValueType::Null);
                 if (metaValue.Type == EValueType::Any) {
-                    partitionInfo.ConsumerMeta = ConvertTo<TConsumerMeta>(FromUnversionedValue<TYsonString>(metaValue));
+                    try {
+                        partitionInfo.ConsumerMeta = ConvertTo<TConsumerMeta>(FromUnversionedValue<TYsonString>(metaValue));
+                    } catch (const std::exception& ex) {
+                        YT_TLOG_DEBUG("Failed to parse consumer meta, ignoring it")
+                            .With("PartitionIndex", partitionInfo.PartitionIndex)
+                            .With(TError(ex));
+                    }
                 }
             }
 
@@ -540,8 +544,9 @@ private:
             Logger()));
 
         if (!partitionRowInfosOrError.IsOK()) {
-            YT_LOG_DEBUG(partitionRowInfosOrError, "Failed to get partition row infos (Path: %v)",
-                QueueRef_->Path);
+            YT_TLOG_DEBUG("Failed to get partition row infos")
+                .With("Path", QueueRef_->Path)
+                .With(partitionRowInfosOrError);
             return {};
         }
 
@@ -549,9 +554,9 @@ private:
 
         auto partitionIt = partitionRowInfos.find(partitionIndex);
         if (partitionIt == partitionRowInfos.end()) {
-            YT_LOG_DEBUG("Failed to collect row info for partition (Path: %v, PartitionIndex: %v)",
-                QueueRef_->Path,
-                partitionIndex);
+            YT_TLOG_DEBUG("Failed to collect row info for partition")
+                .With("Path", QueueRef_->Path)
+                .With("PartitionIndex", partitionIndex);
             return {};
         }
 
@@ -561,10 +566,10 @@ private:
         if (partitionRowIt != partitionIt->second.end()) {
             meta.OffsetTimestamp = partitionRowIt->second.Timestamp;
         } else {
-            YT_LOG_DEBUG("Failed to collect consumer offset timestamp (Path: %v, PartitionIndex: %v, Offset: %v)",
-                QueueRef_->Path,
-                partitionIndex,
-                offset);
+            YT_TLOG_DEBUG("Failed to collect consumer offset timestamp")
+                .With("Path", QueueRef_->Path)
+                .With("PartitionIndex", partitionIndex)
+                .With("Offset", offset);
         }
 
         if (offset > 0) {
@@ -572,10 +577,10 @@ private:
             if (partitionRowIt != partitionIt->second.end()) {
                 meta.CumulativeDataWeight = partitionRowIt->second.CumulativeDataWeight;
             } else {
-                YT_LOG_DEBUG("Failed to collect consumer cumulative data weight (Path: %v, PartitionIndex: %v, Offset: %v)",
-                    QueueRef_->Path,
-                    partitionIndex,
-                    offset - 1);
+                YT_TLOG_DEBUG("Failed to collect consumer cumulative data weight")
+                    .With("Path", QueueRef_->Path)
+                    .With("PartitionIndex", partitionIndex)
+                    .With("Offset", offset - 1);
             }
         }
 
@@ -667,8 +672,8 @@ IConsumerClientPtr CreateConsumerClient(
     if (consumerSchema == *YTMultiConsumerTableSchema) {
         if (!consumerPath.GetQueueConsumerName()) {
             THROW_ERROR_EXCEPTION("Queue consumer name is required for multi-consumer schema")
-                << TErrorAttribute("consumer_schema", consumerSchema)
-                << TErrorAttribute("consumer_path", consumerPath);
+                .With("consumer_schema", consumerSchema)
+                .With("consumer_path", consumerPath);
         }
         return New<TYTConsumerClient>(consumerClusterClient, consumerPath.GetPath(), consumerPath.GetQueueConsumerName(), YTMultiConsumerTableSchema);
     }
@@ -677,14 +682,14 @@ IConsumerClientPtr CreateConsumerClient(
     bool isConsumerSchemaWithoutMeta = consumerSchema == *YTConsumerWithoutMetaTableSchema;
     if (!isConsumerSchemaWithMeta && !isConsumerSchemaWithoutMeta) {
         THROW_ERROR_EXCEPTION("Table schema is not recognized as a valid consumer schema")
-            << TErrorAttribute("actual_schema", consumerSchema)
-            << TErrorAttribute("consumer_path", consumerPath);
+            .With("actual_schema", consumerSchema)
+            .With("consumer_path", consumerPath);
     }
 
     if (consumerPath.GetQueueConsumerName()) {
         THROW_ERROR_EXCEPTION("Queue consumer name is not supported for consumer schema")
-            << TErrorAttribute("consumer_schema", consumerSchema)
-            << TErrorAttribute("consumer_path", consumerPath);
+            .With("consumer_schema", consumerSchema)
+            .With("consumer_path", consumerPath);
     }
 
     return New<TYTConsumerClient>(consumerClusterClient, consumerPath.GetPath(), std::nullopt, isConsumerSchemaWithMeta ? YTConsumerTableSchema : YTConsumerWithoutMetaTableSchema);

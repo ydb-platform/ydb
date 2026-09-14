@@ -16,7 +16,7 @@ TIntrusivePtr<IOperator> TExtractCommonConjunctsRule::SimpleMatchAndApply(const 
     }
 
     auto filter = CastOperator<TOpFilter>(input);
-    auto newFilterExpr = filter->FilterExpr.TryExtractCommonConjuncts();
+    auto newFilterExpr = filter->GetFilterExpression().TryExtractCommonConjuncts();
     if (!newFilterExpr) {
         return input;
     }

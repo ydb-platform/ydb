@@ -1945,6 +1945,24 @@ TRestoreResult TRestoreClient::CheckSchema(const TString& dbPath, const TTableDe
     return Result<TRestoreResult>();
 }
 
+namespace {
+
+// ImportData is not supported for column-oriented tables; BulkUpsert is the efficient fallback.
+TRestoreSettings RestoreSettingsForTable(const TRestoreSettings& settings, const TTableDescription& desc) {
+    if (settings.Mode_ != TRestoreSettings::EMode::ImportData || desc.GetStoreType() != EStoreType::Column) {
+        return settings;
+    }
+
+    auto adjusted = settings;
+    adjusted.Mode(TRestoreSettings::EMode::BulkUpsert);
+    if (!adjusted.MaxInFlight_) {
+        adjusted.MaxInFlight(NSystemInfo::CachedNumberOfCpus());
+    }
+    return adjusted;
+}
+
+} // namespace
+
 THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(
         const TString& dbPath,
         const TRestoreSettings& settings,
@@ -1952,17 +1970,20 @@ THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(
         ui32 partitionCount,
         const TVector<THolder<NPrivate::IDataAccumulator>>& accumulators)
 {
+    const auto tableSettings = RestoreSettingsForTable(settings, desc);
+
     THolder<NPrivate::IDataWriter> writer;
-    switch (settings.Mode_) {
+    switch (tableSettings.Mode_) {
         case TRestoreSettings::EMode::Yql:
         case TRestoreSettings::EMode::BulkUpsert: {
             // Need only one accumulator to initialize query string
-            writer.Reset(CreateCompatWriter(dbPath, TableClient, accumulators[0].Get(), settings));
+            writer.Reset(CreateCompatWriter(dbPath, TableClient, QueryClient, accumulators[0].Get(), tableSettings,
+                desc.GetStoreType() == EStoreType::Column));
             break;
         }
 
         case TRestoreSettings::EMode::ImportData: {
-            writer.Reset(CreateImportDataWriter(dbPath, desc, partitionCount, ImportClient, TableClient, accumulators, settings, Log));
+            writer.Reset(CreateImportDataWriter(dbPath, desc, partitionCount, ImportClient, TableClient, accumulators, tableSettings, Log));
             break;
         }
     }
@@ -1977,18 +1998,20 @@ TRestoreResult TRestoreClient::CreateDataAccumulators(
         const TTableDescription& desc,
         ui32 dataFilesCount)
 {
-    size_t accumulatorsCount = settings.MaxInFlight_;
+    const auto tableSettings = RestoreSettingsForTable(settings, desc);
+
+    size_t accumulatorsCount = tableSettings.MaxInFlight_;
     if (!accumulatorsCount) {
         accumulatorsCount = Min<size_t>(dataFilesCount, NSystemInfo::CachedNumberOfCpus());
     }
 
     outAccumulators.resize(accumulatorsCount);
 
-    switch (settings.Mode_) {
+    switch (tableSettings.Mode_) {
         case TRestoreSettings::EMode::Yql:
         case TRestoreSettings::EMode::BulkUpsert:
             for (size_t i = 0; i < accumulatorsCount; ++i) {
-                outAccumulators[i].Reset(CreateCompatAccumulator(dbPath, desc, settings));
+                outAccumulators[i].Reset(CreateCompatAccumulator(dbPath, desc, tableSettings));
             }
             break;
 
@@ -1999,7 +2022,7 @@ TRestoreResult TRestoreClient::CreateDataAccumulators(
                 return Result<TRestoreResult>(dbPath, std::move(descResult));
             }
             for (size_t i = 0; i < accumulatorsCount; ++i) {
-                outAccumulators[i].Reset(CreateImportDataAccumulator(desc, *actualDesc, settings, Log));
+                outAccumulators[i].Reset(CreateImportDataAccumulator(desc, *actualDesc, tableSettings, Log));
             }
             break;
         }
@@ -2021,6 +2044,11 @@ TRestoreResult TRestoreClient::RestoreData(
     const ui32 dataFilesCount = dataFiles.size();
     if (dataFilesCount == 0) {
         return Result<TRestoreResult>();
+    }
+
+    if (settings.Mode_ == TRestoreSettings::EMode::ImportData && desc.GetStoreType() == EStoreType::Column) {
+        LOG_W("ImportData restore mode is not supported for column-oriented table " << dbPath.Quote()
+            << ", falling back to BulkUpsert");
     }
 
     TVector<THolder<NPrivate::IDataAccumulator>> accumulators;

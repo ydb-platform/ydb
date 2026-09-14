@@ -1101,7 +1101,7 @@ class ISession(abc.ABC):
     @abstractmethod
     def explain(self, yql_text, settings=None):
         """
-        Expiremental API.
+        Experimental API.
 
         :param yql_text:
         :param settings:
@@ -1239,6 +1239,25 @@ class BaseTableClient(ITableClient, Generic[DriverT]):
             (),
         )
 
+    def describe_system_view(self, path, settings=None):
+        # type: (str, ydb.BaseRequestSettings) -> Any
+        """
+        Returns a full description of a system view by the provided path.
+
+        :param path: A system view path
+        :param settings: A request settings
+
+        :return: SystemViewSchemeEntry describing the system view
+        """
+        return self._driver(
+            _session_impl.describe_system_view_request_factory(path, settings),
+            _apis.TableService.Stub,
+            _apis.TableService.DescribeSystemView,
+            _session_impl.wrap_describe_system_view_response,
+            settings,
+            (SystemViewSchemeEntry,),
+        )
+
 
 class TableClient(BaseTableClient["SyncDriver"]):
     def __init__(self, driver: "SyncDriver", table_client_settings: Optional[TableClientSettings] = None) -> None:
@@ -1274,6 +1293,17 @@ class TableClient(BaseTableClient["SyncDriver"]):
             (),
         )
 
+    @_utilities.wrap_async_call_exceptions
+    def async_describe_system_view(self, path, settings=None):
+        return self._driver.future(
+            _session_impl.describe_system_view_request_factory(path, settings),
+            _apis.TableService.Stub,
+            _apis.TableService.DescribeSystemView,
+            _session_impl.wrap_describe_system_view_response,
+            settings,
+            (SystemViewSchemeEntry,),
+        )
+
     def _init_pool_if_needed(self) -> None:
         if self._pool is None:
             self._pool = SessionPool(self._driver, 10)
@@ -1292,7 +1322,7 @@ class TableClient(BaseTableClient["SyncDriver"]):
         Create a YDB table.
 
         :param path: A table path
-        :param table_description: TableDescription instanse.
+        :param table_description: TableDescription instance.
         :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
 
         :return: Operation or YDB error otherwise.
@@ -1650,6 +1680,33 @@ class TableSchemeEntry(scheme.SchemeEntry):
         self.attributes = attributes
 
 
+class SystemViewSchemeEntry(scheme.SchemeEntry):
+    def __init__(
+        self,
+        name,
+        owner,
+        type,
+        effective_permissions,
+        permissions,
+        size_bytes,
+        sys_view_id,
+        sys_view_name,
+        columns,
+        primary_key,
+        attributes,
+        *args,
+        **kwargs
+    ):
+        super(SystemViewSchemeEntry, self).__init__(
+            name, owner, type, effective_permissions, permissions, size_bytes, *args, **kwargs
+        )
+        self.sys_view_id = sys_view_id
+        self.sys_view_name = sys_view_name
+        self.columns = [Column(column.name, convert.type_to_native(column.type), column.family) for column in columns]
+        self.primary_key = [pk for pk in primary_key]
+        self.attributes = attributes
+
+
 class RenameItem:
     def __init__(self, source_path, destination_path, replace_destination=False):
         self._source_path = source_path
@@ -1824,7 +1881,7 @@ class BaseSession(ISession):
 
     def explain(self, yql_text, settings=None):
         """
-        Expiremental API.
+        Experimental API.
 
         :param yql_text:
         :param settings:
@@ -2499,7 +2556,7 @@ class BaseTxContext(ITxContext):
 
     def _check_split(self, allow=""):
         """
-        Deny all operaions with transaction after commit/rollback.
+        Deny all operations with transaction after commit/rollback.
         Exception: double commit and double rollbacks, because it is safe
         """
         allow_split_transaction = (

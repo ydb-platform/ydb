@@ -1,19 +1,20 @@
 import contextlib
 import os
 import sys
+from collections.abc import Generator
 
 _DEBUG = "_ARC_DEBUG" in os.environ
 
 debug_stream = sys.stderr
 
 
-def debug(*args):
+def debug(*args: object) -> None:
     if _DEBUG:
         print(file=debug_stream, *args)
 
 
 @contextlib.contextmanager
-def mute_stdout():
+def mute_stdout() -> Generator[None]:
     stdout = sys.stdout
     sys.stdout = open(os.devnull, "w")
     try:
@@ -23,7 +24,7 @@ def mute_stdout():
 
 
 @contextlib.contextmanager
-def mute_stderr():
+def mute_stderr() -> Generator[None]:
     stderr = sys.stderr
     sys.stderr = open(os.devnull, "w")
     try:
@@ -33,7 +34,7 @@ def mute_stderr():
         sys.stderr = stderr
 
 
-def warn(*args):
+def warn(*args: object) -> None:
     """
     Prints **args** to standard error when running completions. This will interrupt the user's command line interaction;
     use it to indicate an error condition that is preventing your completer from working.

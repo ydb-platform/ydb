@@ -164,6 +164,12 @@ public:
             return result;
         }
 
+        if (alterSecretProto.HasValueParamName()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                "Secret value must be set via Value, however ValueParamName was passed");
+            return result;
+        }
+
         context.MemChanges.GrabPath(context.SS, secretPath.Base()->PathId);
         context.MemChanges.GrabSecret(context.SS, secretPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
@@ -172,10 +178,22 @@ public:
         context.DbChanges.PersistAlterSecret(secretPath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        if (alterSecretProto.HasValueParamName()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter,
-                "Secret value must be set via Value, however ValueParamName was passed");
-            return result;
+        // InheritPermissions is set only by CREATE OR REPLACE SECRET over an existing secret:
+        // reapply the ACL so that the result matches a freshly created secret (DROP + CREATE).
+        // Keep the same precedence as TCreateSecret: an explicit ACL wins over InheritPermissions.
+        if (alterSecretProto.HasInheritPermissions()) {
+            const TString acl = Transaction.GetModifyACL().GetDiffACL();
+            if (!acl.empty()) {
+                secretPath.Base()->ApplyACL(acl);
+            } else {
+                if (alterSecretProto.GetInheritPermissions()) {
+                    // Inherit from the parent: no ACL of its own.
+                    secretPath.Base()->ACL.clear();
+                } else {
+                    secretPath.Base()->ACL = InterruptInheritanceExceptDescribe(parentPath.GetEffectiveACL());
+                }
+                ++secretPath.Base()->ACLVersion;
+            }
         }
 
         auto alterData = secretInfo->CreateNextVersion();

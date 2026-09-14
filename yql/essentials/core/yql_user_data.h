@@ -95,7 +95,7 @@ private:
     {
     }
 
-private:
+
     const EDataType Type_;
     const TString Alias_;
 };

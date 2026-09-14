@@ -7,6 +7,20 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+namespace {
+
+void ValidateHashJoinKeyColumns(EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
+                                const TArrayRef<const ui32>& rightKeyColumns) {
+    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
+    if (joinKind == EJoinKind::Cross) {
+        MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
+    } else {
+        MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    }
+}
+
+} // namespace
+
 TDqProgramBuilder::TDqProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
     : TProgramBuilder(env, functionRegistry)
 {}
@@ -127,19 +141,64 @@ TRuntimeNode TDqProgramBuilder::AsTuple(TArrayRef<const ui32> nums) {
     return NewTuple(tupleNodes);
 }
 
+TRuntimeNode::TList TDqProgramBuilder::MakeRowArgs(TRuntimeNode input, bool forceOptional) {
+    std::vector<TType*> columns;
+    if (UnwrapBlockTypes(GetWideComponents(input.GetStaticType()), columns)) {
+        MKQL_ENSURE(!columns.empty(), "Expected a block length column in a block input");
+        columns.pop_back();
+    }
+
+    TRuntimeNode::TList args;
+    args.reserve(columns.size());
+    for (TType* column : columns) {
+        args.push_back(Arg(forceOptional && !column->IsOptional() ? NewOptionalType(column) : column));
+    }
+    return args;
+}
+
+void TDqProgramBuilder::AddJoinFilters(TCallableBuilder& callableBuilder, TRuntimeNode leftInput,
+                                       TRuntimeNode rightInput, EJoinKind joinKind,
+                                       const TJoinFilterLambda& leftFilter, const TJoinFilterLambda& rightFilter,
+                                       const TJoinCommonFilterLambda& commonFilter) {
+    if (!leftFilter && !rightFilter && !commonFilter) {
+        return;
+    }
+
+    TRuntimeNode::TList leftArgs;
+    if (leftFilter || commonFilter) {
+        leftArgs = MakeRowArgs(leftInput, /*forceOptional=*/false);
+    }
+    TRuntimeNode::TList rightArgs;
+    if (rightFilter || commonFilter) {
+        rightArgs = MakeRowArgs(rightInput, ForceRightOptional(joinKind));
+    }
+
+    const auto asPredicate = [this](TRuntimeNode body) {
+        TType* type = body.GetStaticType();
+        TType* item = type->IsOptional() ? AS_TYPE(TOptionalType, type)->GetItemType() : type;
+        MKQL_ENSURE(item->IsData() && AS_TYPE(TDataType, item)->GetSchemeType() == NUdf::TDataType<bool>::Id,
+                    "Join filter must return Bool or Optional<Bool>, got " << type->GetKindAsStr());
+        return NewTuple({body});
+    };
+
+    callableBuilder.Add(NewTuple(leftArgs));
+    callableBuilder.Add(NewTuple(rightArgs));
+    callableBuilder.Add(leftFilter ? asPredicate(leftFilter(leftArgs)) : NewEmptyTuple());
+    callableBuilder.Add(rightFilter ? asPredicate(rightFilter(rightArgs)) : NewEmptyTuple());
+    callableBuilder.Add(commonFilter ? asPredicate(commonFilter(leftArgs, rightArgs)) : NewEmptyTuple());
+}
+
 TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
                                                 const TArrayRef<const ui32>& leftKeyColumns,
                                                 const TArrayRef<const ui32>& rightKeyColumns,
                                                 const TArrayRef<const ui32>& leftRenames,
                                                 const TArrayRef<const ui32>& rightRenames, TType* returnType,
-                                                TBlockHashJoinSettings settings) {
+                                                TBlockHashJoinSettings settings,
+                                                const TJoinFilterLambda& leftFilter,
+                                                const TJoinFilterLambda& rightFilter,
+                                                const TJoinCommonFilterLambda& commonFilter) {
 
-    MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
-    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
-
-    // TODO (mfilitov): add validation like here:
-    // https://github.com/ydb-platform/ydb/blob/e8af538b05a1bd7bc4a3bcba2fdcbe430675f69c/yql/essentials/minikql/mkql_program_builder.cpp#L5849
+    ValidateHashJoinKeyColumns(joinKind, leftKeyColumns, rightKeyColumns);
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftStream);
@@ -149,8 +208,8 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     callableBuilder.Add(AsTuple(rightKeyColumns));
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
-
     callableBuilder.Add(NewTuple({NewDataLiteral(static_cast<ui32>(settings.BuildSide))}));
+    AddJoinFilters(callableBuilder, leftStream, rightStream, joinKind, leftFilter, rightFilter, commonFilter);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -159,21 +218,12 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
                                                  const TArrayRef<const ui32>& leftKeyColumns,
                                                  const TArrayRef<const ui32>& rightKeyColumns,
                                                  const TArrayRef<const ui32>& leftRenames,
-                                                 const TArrayRef<const ui32>& rightRenames, TType* returnType) {
+                                                 const TArrayRef<const ui32>& rightRenames, TType* returnType,
+                                                 const TJoinFilterLambda& leftFilter,
+                                                 const TJoinFilterLambda& rightFilter,
+                                                 const TJoinCommonFilterLambda& commonFilter) {
 
-    MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
-    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
-
-    TRuntimeNode::TList leftKeyColumnsNodes;
-    leftKeyColumnsNodes.reserve(leftKeyColumns.size());
-    std::transform(leftKeyColumns.cbegin(), leftKeyColumns.cend(), std::back_inserter(leftKeyColumnsNodes),
-                   [this](const ui32 idx) { return NewDataLiteral(idx); });
-
-    TRuntimeNode::TList rightKeyColumnsNodes;
-    rightKeyColumnsNodes.reserve(rightKeyColumns.size());
-    std::transform(rightKeyColumns.cbegin(), rightKeyColumns.cend(), std::back_inserter(rightKeyColumnsNodes),
-                   [this](const ui32 idx) { return NewDataLiteral(idx); });
+    ValidateHashJoinKeyColumns(joinKind, leftKeyColumns, rightKeyColumns);
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftFlow);
@@ -183,6 +233,7 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     callableBuilder.Add(AsTuple(rightKeyColumns));
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
+    AddJoinFilters(callableBuilder, leftFlow, rightFlow, joinKind, leftFilter, rightFilter, commonFilter);
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

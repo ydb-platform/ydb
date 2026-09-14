@@ -249,6 +249,8 @@ protected:
                 .LangVer(State_->Types->LangVer)
                 .LayersPaths(std::move(finalCypressPaths))
                 .RuntimeSettings(State_->Types->RuntimeSettings)
+                .BridgeMode(State_->Types->BridgeMode)
+                .BridgeBinaryPath(State_->Types->UdfBridgeBinaryPath)
             );
 
         return WrapFuture(future, [](const IYtGateway::TResOrPullResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {

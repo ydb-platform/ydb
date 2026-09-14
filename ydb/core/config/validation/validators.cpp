@@ -341,7 +341,7 @@ EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::v
 }
 
 
-TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSSConfig, const NKikimrConfig::TDomainsConfig::TStateStorage& newSSConfig) {
+TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig) {
     if (!newSSConfig.HasRing() && newSSConfig.RingGroupsSize() == 0) {
         return TStringBuilder() << "New " << name << " configuration is not filled in";
     }

@@ -24,7 +24,6 @@ SRCS(
     configurable_singleton_ut.cpp
     consistent_hashing_ut.cpp
     crash_handler_ut.cpp
-    default_map_ut.cpp
     digest_ut.cpp
     duration_moving_average_ut.cpp
     ema_counter_ut.cpp
@@ -49,7 +48,6 @@ SRCS(
     lru_cache_ut.cpp
     maybe_inf_ut.cpp
     moving_average_ut.cpp
-    mpl_ut.cpp
     mpsc_fair_share_queue_ut.cpp
     mpsc_queue_ut.cpp
     mpsc_stack_ut.cpp
@@ -60,9 +58,7 @@ SRCS(
     random_ut.cpp
     ref_counted_tracker_ut.cpp
     relaxed_mpsc_queue_ut.cpp
-    ring_queue_ut.cpp
     serialize_ut.cpp
-    skip_list_ut.cpp
     slab_allocator_ut.cpp
     sliding_window_ut.cpp
     spsc_queue_ut.cpp
@@ -71,7 +67,6 @@ SRCS(
     sync_cache_ut.cpp
     sync_expiring_cache_ut.cpp
     time_formula_ut.cpp
-    three_level_stable_vector_ut.cpp
     tls_destructor_ut.cpp
     tls_expiring_cache_ut.cpp
     topological_ordering_ut.cpp

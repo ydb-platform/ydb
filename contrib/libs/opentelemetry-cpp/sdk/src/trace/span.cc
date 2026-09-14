@@ -66,6 +66,7 @@ Span::Span(std::shared_ptr<Tracer> &&tracer,
   {
     return;
   }
+  recordable_->SetSpanLimits(tracer_->GetSpanLimits());
   recordable_->SetName(name);
   recordable_->SetInstrumentationScope(tracer_->GetInstrumentationScope());
   recordable_->SetIdentity(*span_context_, parent_span_context.IsValid()

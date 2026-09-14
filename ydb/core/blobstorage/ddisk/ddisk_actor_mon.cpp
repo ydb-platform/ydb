@@ -215,7 +215,11 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
         }
 
         // --- Section 5: Active connections ------------------------------------------
-        str << "<h3>Active connections (" << Connections.size() << ")</h3>";
+        size_t activeConnectionCount = 0;
+        for (const auto& connection : Connections) {
+            activeConnectionCount += connection.Active;
+        }
+        str << "<h3>Active connections (" << activeConnectionCount << ")</h3>";
         TABLE_CLASS("table") {
             TABLEHEAD() {
                 TABLER() {
@@ -226,8 +230,10 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
                 }
             }
             TABLEBODY() {
-                for (const auto& [tabletId, info] : Connections) {
-                    Y_UNUSED(tabletId);
+                for (const auto& info : Connections) {
+                    if (!info.Active) {
+                        continue;
+                    }
                     TABLER() {
                         TABLED() { str << info.TabletId; }
                         TABLED() { str << info.Generation; }
@@ -242,12 +248,10 @@ void TDDiskActor::Handle(NMon::TEvHttpInfo::TPtr ev) {
         str << "<h3>In-flight I/O</h3>";
         TABLE_CLASS("table") {
             TABLEBODY() {
-                TABLER() { TABLED() { str << "DirectIoQueue"; } TABLED() { str << DirectIoQueue.size(); } }
                 TABLER() { TABLED() { str << "WriteCallbacks"; } TABLED() { str << WriteCallbacks.size(); } }
                 TABLER() { TABLED() { str << "ReadCallbacks"; } TABLED() { str << ReadCallbacks.size(); } }
                 TABLER() { TABLED() { str << "SyncsInFlight"; } TABLED() { str << SyncsInFlight.size(); } }
                 TABLER() { TABLED() { str << "LogCallbacks"; } TABLED() { str << LogCallbacks.size(); } }
-                TABLER() { TABLED() { str << "DirectIO QueueSize counter"; } TABLED() { str << CounterVal(Counters.DirectIO.QueueSize); } }
                 TABLER() { TABLED() { str << "DirectIO RunningCount counter"; } TABLED() { str << CounterVal(Counters.DirectIO.RunningCount); } }
                 TABLER() { TABLED() { str << "ShortReads"; } TABLED() { str << CounterVal(Counters.DirectIO.ShortReads); } }
                 TABLER() { TABLED() { str << "ShortWrites"; } TABLED() { str << CounterVal(Counters.DirectIO.ShortWrites); } }

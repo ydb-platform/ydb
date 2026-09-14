@@ -4,7 +4,7 @@ PY3_LIBRARY()
 
 PROVIDES(python_traitlets)
 
-VERSION(5.15.1)
+VERSION(5.16.1)
 
 LICENSE(BSD-3-Clause)
 
@@ -23,6 +23,7 @@ PY_SRCS(
     traitlets/config/sphinxdoc.py
     traitlets/log.py
     traitlets/tests/__init__.py
+    traitlets/tests/test_traitlets.py
     traitlets/tests/utils.py
     traitlets/traitlets.py
     traitlets/utils/__init__.py

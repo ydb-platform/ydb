@@ -61,9 +61,6 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
 
         proto.AddKeyColumnNames("pk");
         proto.SetVersion(1);
-        proto.MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets");
-        *proto.MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() =
-            NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer();
 
         auto info = TIndexInfo::BuildFromProto(1, proto, storages, cache);
         UNIT_ASSERT(info);
@@ -89,6 +86,45 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
         return out;
     }
 
+    std::shared_ptr<TSubColumnsArray> MergeChunks(const std::vector<std::shared_ptr<TSubColumnsArray>>& chunks, const TSettings& settings) {
+        NArrow::NAccessor::TCompositeChunkedArray::TBuilder cb(chunks.front()->GetDataType());
+        ui32 total = 0;
+        for (const auto& chunk : chunks) {
+            cb.AddChunk(chunk);
+            total += chunk->GetRecordsCount();
+        }
+        std::vector<std::shared_ptr<IChunkedArray>> inputs = { cb.Finish() };
+
+        const ui32 columnId = 2;
+        auto schema = MakeSchema(settings);
+        TColumnMergeContext mergeCtx(columnId, schema, 8u * 1024 * 1024, std::nullopt);
+        THolder<IColumnMerger> merger = IColumnMerger::TFactory::MakeHolder(TConstructor::GetClassNameStatic(), mergeCtx);
+        UNIT_ASSERT(merger);
+
+        TMergingContext mergingCtx({});
+        merger->Start(inputs, mergingCtx);
+
+        // Output row i is mapped to row i of the single (0-th) input.
+        arrow::UInt16Builder idxB;
+        arrow::UInt32Builder recB;
+        for (ui32 i = 0; i < total; ++i) {
+            UNIT_ASSERT(idxB.Append(0).ok());
+            UNIT_ASSERT(recB.Append(i).ok());
+        }
+        auto pkSchema = arrow::schema({ arrow::field(IColumnMerger::PortionIdFieldName, arrow::uint16()),
+            arrow::field(IColumnMerger::PortionRecordIndexFieldName, arrow::uint32()) });
+        auto pkBatch = arrow::RecordBatch::Make(pkSchema, total, { idxB.Finish().ValueOrDie(), recB.Finish().ValueOrDie() });
+
+        TMergingChunkContext chunkCtxOwner(pkBatch);
+        NColumnShard::TIndexationCounters counters("Compaction");
+        TChunkMergeContext chunkCtx(counters, chunkCtxOwner.Slice(0, total));
+        auto result = merger->Execute(chunkCtx, mergingCtx);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetChunks().size(), 1);
+
+        auto loader = schema->GetIndexInfo().GetColumnLoaderVerified(columnId);
+        return std::static_pointer_cast<TSubColumnsArray>(loader->ApplyVerified(result.GetChunks()[0]->GetData(), total));
+    }
+
     Y_UNIT_TEST(MultiChunkDivergentScalarType) {
         const auto settings = MakeSettings();
 
@@ -103,45 +139,40 @@ Y_UNIT_TEST_SUITE(SubColumnsCompaction) {
         UNIT_ASSERT_VALUES_EQUAL_C((ui32)chunk1->GetColumnsData().GetStats().GetValueType(0), (ui32)EValueType::Double,
             "chunk1 key 'a' must be a native Double column");
 
-        NArrow::NAccessor::TCompositeChunkedArray::TBuilder cb(chunk0->GetDataType());
-        cb.AddChunk(chunk0);
-        cb.AddChunk(chunk1);
-        std::vector<std::shared_ptr<IChunkedArray>> inputs = { cb.Finish() };
-
-        const ui32 columnId = 2;
-        auto schema = MakeSchema(settings);
-        TColumnMergeContext mergeCtx(columnId, schema, 8u * 1024 * 1024, std::nullopt);
-
-        THolder<IColumnMerger> merger = IColumnMerger::TFactory::MakeHolder(TConstructor::GetClassNameStatic(), mergeCtx);
-        UNIT_ASSERT(merger);
-
-        TMergingContext mergingCtx({});
-        merger->Start(inputs, mergingCtx);
-
-        const ui32 total = docs0.size() + docs1.size();
-        arrow::UInt16Builder idxB;
-        arrow::UInt32Builder recB;
-        for (ui32 i = 0; i < total; ++i) {
-            UNIT_ASSERT(idxB.Append(0).ok());
-            UNIT_ASSERT(recB.Append(i).ok());
-        }
-        auto pkSchema = arrow::schema({ arrow::field(IColumnMerger::PortionIdFieldName, arrow::uint16()),
-            arrow::field(IColumnMerger::PortionRecordIndexFieldName, arrow::uint32()) });
-        auto pkBatch = arrow::RecordBatch::Make(pkSchema, total, { idxB.Finish().ValueOrDie(), recB.Finish().ValueOrDie() });
-
-        TMergingChunkContext chunkCtxOwner(pkBatch);
-        NColumnShard::TIndexationCounters counters("Compaction");
-        TChunkMergeContext chunkCtx(counters, chunkCtxOwner.Slice(0, total));
-
-        auto result = merger->Execute(chunkCtx, mergingCtx);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetChunks().size(), 1);
-
-        auto loader = schema->GetIndexInfo().GetColumnLoaderVerified(columnId);
-        auto merged = std::static_pointer_cast<TSubColumnsArray>(loader->ApplyVerified(result.GetChunks()[0]->GetData(), total));
+        auto merged = MergeChunks({ chunk0, chunk1 }, settings);
 
         // The merged portion must round-trip to the input documents.
         const TString expected =
             RenderDocs(BuildChunk({ docs0[0], docs0[1], docs0[2], docs0[3], docs1[0], docs1[1], docs1[2], docs1[3] }, settings));
         UNIT_ASSERT_VALUES_EQUAL(RenderDocs(merged), expected);
+    }
+
+    Y_UNIT_TEST(DictionaryNativeString) {
+        auto settings = MakeSettings();
+        settings.SetDictionaryUniqueFraction(1.0);
+        const std::vector<TString> docs = { R"({"a":"xxxx"})", R"({"a":"xxxx"})", R"({"a":"yyyy"})", R"({"a":"yyyy"})" };
+        auto chunk = BuildChunk(docs, settings);
+
+        auto merged = MergeChunks({ chunk }, settings);
+        const auto& stats = merged->GetColumnsData().GetStats();
+        UNIT_ASSERT_VALUES_EQUAL(stats.GetAccessorType(0), IChunkedArray::EType::Dictionary);
+        UNIT_ASSERT_VALUES_EQUAL(RenderDocs(merged), RenderDocs(BuildChunk(docs, settings)));
+    }
+
+    Y_UNIT_TEST(DictionaryNativeStringWithNulls) {
+        auto settings = MakeSettings();
+        settings.SetDictionaryUniqueFraction(1.0);
+        const std::vector<TString> docs = { R"({"a":"xxxx"})", "{}", R"({"a":"yyyy"})", "{}" };
+        auto merged = MergeChunks({ BuildChunk(docs, settings) }, settings);
+        const auto& stats = merged->GetColumnsData().GetStats();
+        UNIT_ASSERT_VALUES_EQUAL(stats.GetAccessorType(0), IChunkedArray::EType::Dictionary);
+
+        auto path = merged->GetPathAccessor("$.a", docs.size()).DetachResult();
+        TStringBuilder values;
+        path->VisitValues([&](const std::optional<TStringBuf>& value) {
+            values << (value ? *value : TStringBuf("<null>")) << ';';
+        });
+        UNIT_ASSERT_VALUES_EQUAL(values, "xxxx;<null>;yyyy;<null>;");
+        UNIT_ASSERT_VALUES_EQUAL(RenderDocs(merged), RenderDocs(BuildChunk(docs, settings)));
     }
 }

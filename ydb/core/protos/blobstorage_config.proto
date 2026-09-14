@@ -224,60 +224,6 @@ message TMoveDDisk {
     NKikimrBlobStorage.TPDiskId TargetPDiskId = 4;
 }
 
-enum EDriveStatus {
-    UNKNOWN = 0; // value of status is unknown (default)
-    ACTIVE = 1; // working as expected
-    INACTIVE = 2; // new groups are not created over this drive, but existing ones continue to work as expected
-    BROKEN = 3; // drive is not working, groups are automatically moved out of this drive upon reception of this status
-    reserved 4;
-    FAULTY = 5; // drive is expected to become BROKEN soon, new groups are not created, old groups are asynchronously moved out from this drive
-    TO_BE_REMOVED = 6; // same as INACTIVE, but drive is counted in fault model as not working
-}
-
-enum EDecommitStatus {
-    DECOMMIT_UNSET = 0; // unset status -- missing optional field
-    DECOMMIT_NONE = 1; // no decomission
-    DECOMMIT_PENDING = 2; // drive is going to be removed soon, but SelfHeal logic would not remove it automatically
-    DECOMMIT_IMMINENT = 3; // drive is going to be settled automatically
-    DECOMMIT_REJECTED = 4; // drive is working as usual, but decommitted slots are not placed here
-}
-
-message TGroupStatus {
-    enum E {
-        UNKNOWN = 0; // group status is unknown (default value)
-        FULL = 1; // all VDisks of the group are READY for specific period of time
-        PARTIAL = 2; // some of VDisks are operational, but group is not yet DEGRADED
-        DEGRADED = 3; // group is DEGRADED -- one random failure may lead to group loss (but may not lead too)
-        DISINTEGRATED = 4; // group is not available for operation
-    }
-}
-
-message TDriveLifeStage {
-    enum E {
-        FREE = 0; // disk drive has been seen on a node, but is not added to BSC yet
-        ADDED_BY_DSTOOL = 1; // disk drive has been added to BSC
-        REMOVED_BY_DSTOOL = 2; // disk drive has been removed from BSC
-    }
-}
-
-message TSerialManagementStage {
-    enum E {
-        DISCOVER_SERIAL = 0;
-        CHECK_SERIAL = 1;
-        ONLY_SERIAL = 2;
-    }
-}
-
-// set by CMS
-message TMaintenanceStatus {
-    enum E {
-        NOT_SET = 0;                        // unset status, default value
-        NO_REQUEST = 1;                     // no active maintenance request
-        LONG_TERM_MAINTENANCE_PLANNED = 2;  // maintenance requested, VDisks should be moved asynchronously from PDisk
-        NO_NEW_VDISKS = 3;                  // no new VDisks should be allocated on this PDisk, but existing ones are not moved
-    }
-}
-
 message TUpdateDriveStatus {
     THostKey HostKey = 1; // host on which we are looking for the drive
     string Path = 2; // absolute path to the device as enlisted in PDisk configuration

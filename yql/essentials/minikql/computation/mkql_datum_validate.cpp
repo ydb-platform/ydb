@@ -70,6 +70,7 @@ std::shared_ptr<arrow::ArrayData> ConvertYqlOffsetsToArrowStandard(
     }
 
     std::vector<std::shared_ptr<arrow::ArrayData>> children;
+    children.reserve(result->child_data.size());
     for (const auto& child : result->child_data) {
         children.push_back(ConvertYqlOffsetsToArrowStandard(*child));
     }
@@ -167,7 +168,7 @@ public:
                 }
             }
         } else {
-            auto array = datum.array();
+            const auto& array = datum.array();
             for (size_t i = 0; i < Children_.size(); ++i) {
                 Children_[i]->Validate(*array->child_data[i]);
                 MKQL_ENSURE(array->child_data[i]->length == array->length, "A tuple's child array must have the same size as the tuple itself.");
@@ -217,7 +218,7 @@ public:
             MKQL_ENSURE(variantScalar->Index < Children_.size(), "Variant type code out of range.");
             Children_[variantScalar->Index]->Validate(arrow::Datum(variantScalar->value));
         } else {
-            auto array = datum.array();
+            const auto& array = datum.array();
             if (!IsExpensive()) {
                 for (size_t i = 0; i < Children_.size(); ++i) {
                     Children_[i]->Validate(*array->child_data[i]);
@@ -241,7 +242,9 @@ private:
         TVector<TMaybe<i32>> lastOffsetForType(Children_.size());
 
         for (i64 i = 0; i < arrayData.length; ++i) {
+            MKQL_ENSURE(typeCodes[i] >= 0, "DenseUnion type code is negative.");
             const size_t typeCode = static_cast<size_t>(typeCodes[i]);
+            MKQL_ENSURE(typeCode < Children_.size(), "DenseUnion type code out of range.");
             const i32 currentOffset = offsets[i];
 
             if (lastOffsetForType[typeCode].Defined()) {

@@ -4,7 +4,9 @@
 #include "helpers/writer.h"
 #include "helpers/get_value.h"
 
+#include <library/cpp/lwtrace/all.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
@@ -241,6 +243,28 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("Rows")), 10 * 1000);
         }
+    }
+
+    Y_UNIT_TEST(StatsSysViewChunksLimit) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable");
+        for (ui64 i = 0; i < 50; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i * 10000, 1000);
+        }
+        csController->WaitCompactions(TDuration::Seconds(10));
+
+        auto tableClient = kikimr.GetTableClient();
+        auto selectQuery = TString(R"(
+            SELECT *
+            FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+            LIMIT 1
+        )");
+
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
     }
 
     Y_UNIT_TEST(StatsSysViewEnumStringBytes) {
@@ -964,6 +988,44 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("PathId")), tablePaths[i]);
             }
         }
+    }
+
+    Y_UNIT_TEST(FetchAddedColumnWithProgramTracing) {
+        class TDummyProbeExecutor: public NLWTrace::IExecutor {
+        protected:
+            bool DoExecute(NLWTrace::TOrbit& /*orbit*/, const NLWTrace::TParams& /*params*/) override {
+                return true;
+            }
+        };
+
+        auto& probe = NOlap::NReader::NLWTrace_YDB_CS_DATA_SOURCE::lwtrace_ProgramFetchOriginalData;
+        TDummyProbeExecutor executor;
+        UNIT_ASSERT(probe.Probe.Attach(&executor));
+        Y_DEFER {
+            probe.Probe.Detach(&executor);
+        };
+
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 100);
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        {
+            auto alterResult = session.ExecuteSchemeQuery(
+                "ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column_ui64 Uint64;").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        auto rows = ExecuteScanQuery(tableClient, R"(
+            SELECT timestamp, uid, new_column_ui64
+            FROM `/Root/olapStore/olapTable`
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 100);
     }
 }
 

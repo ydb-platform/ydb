@@ -6,12 +6,11 @@
 
 #include <yql/essentials/utils/sort.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLHeapTest) {
 Y_UNIT_TEST_LLVM(TestMakeHeap) {
-    const std::array<float, 10U> xxx = {{0.f, 13.f, -3.14f, 1212.f, -7898.8f, 21E4f, HUGE_VALF, -HUGE_VALF, 3673.f, -32764.f}};
+    const std::array<float, 10U> xxx = {{0.F, 13.F, -3.14F, 1212.F, -7898.8F, 21E4F, HUGE_VALF, -HUGE_VALF, 3673.F, -32764.F}};
 
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
@@ -66,7 +65,7 @@ Y_UNIT_TEST_LLVM(TestPopHeap) {
 }
 
 Y_UNIT_TEST_LLVM(TestSortHeap) {
-    const std::array<float, 10U> xxx = {{9E9f, -HUGE_VALF, 0.003f, 137.4f, -3.1415f, 1212.f, -7898.8f, 21E4f, 3673.f, -32764.f}};
+    const std::array<float, 10U> xxx = {{9E9F, -HUGE_VALF, 0.003F, 137.4F, -3.1415F, 1212.F, -7898.8F, 21E4F, 3673.F, -32764.F}};
 
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
@@ -97,7 +96,7 @@ Y_UNIT_TEST_LLVM(TestSortHeap) {
 }
 
 Y_UNIT_TEST_LLVM(TestStableSort) {
-    const std::array<double, 10U> xxx = {{9E9f, -HUGE_VALF, 0.003f, HUGE_VALF, +3.1415f, -0.003f, -7898.8f, -3.1415f, 3673.f, 0.003f}};
+    const std::array<double, 10U> xxx = {{9E9F, -HUGE_VALF, 0.003F, HUGE_VALF, +3.1415F, -0.003F, -7898.8F, -3.1415F, 3673.F, 0.003F}};
 
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
@@ -123,7 +122,7 @@ Y_UNIT_TEST_LLVM(TestStableSort) {
 }
 
 Y_UNIT_TEST_LLVM(TestNthElement) {
-    const std::array<float, 10U> xxx = {{0.f, 13.f, -3.14f, 1212.f, -7898.8f, 21E4f, HUGE_VALF, -HUGE_VALF, 3673.f, -32764.f}};
+    const std::array<float, 10U> xxx = {{0.F, 13.F, -3.14F, 1212.F, -7898.8F, 21E4F, HUGE_VALF, -HUGE_VALF, 3673.F, -32764.F}};
 
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
@@ -215,7 +214,8 @@ Y_UNIT_TEST_LLVM(TestTopN) {
     NYql::FastNthElement(copy.begin(), copy.begin() + n - 1U, copy.end(), comp);
     const auto mm = std::minmax_element(copy.begin(), copy.begin() + n, comp);
 
-    double min = result.GetElement(0).template Get<double>(), max = min;
+    double min = result.GetElement(0).template Get<double>();
+    double max = min;
     for (auto i = 1U; i < n; ++i) {
         const auto v = result.GetElement(i).template Get<double>();
         min = std::min(min, v, comp);
@@ -268,7 +268,8 @@ Y_UNIT_TEST_LLVM(TestTopByNthElement) {
     NYql::FastNthElement(copy.begin(), copy.begin() + n - 1U, copy.end(), comp);
     const auto mm = std::minmax_element(copy.begin(), copy.begin() + n, comp);
 
-    double min = result.GetElement(0).template Get<double>(), max = min;
+    double min = result.GetElement(0).template Get<double>();
+    double max = min;
     for (auto i = 1U; i < n; ++i) {
         const auto v = result.GetElement(i).template Get<double>();
         min = std::min(min, v, comp);
@@ -279,5 +280,4 @@ Y_UNIT_TEST_LLVM(TestTopByNthElement) {
     UNIT_ASSERT_VALUES_EQUAL(*mm.second, max);
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLHeapTest)
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

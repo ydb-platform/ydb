@@ -11,6 +11,7 @@
 #include <ydb/core/security/sasl/scram_auth_actor.h>
 #include <ydb/library/login/sasl/scram.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -296,7 +297,9 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
         auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient, errorCode);
         auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath,
                                                         DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator,
-                                                        ResourcePath, IsServerless, errorMessage, ResourseDatabasePath);
+                                                        ResourcePath, IsServerless, errorMessage, ResourseDatabasePath,
+                                                        Ticket, TicketParserEntries, AuthDatabasePath,
+                                                        TStringBuilder() << Address);
         Send(Context->ConnectionId, authResult);
     }
 
@@ -415,7 +418,7 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
     }
 
     if (CurrentStateFunc() == &TThis::StateResolveDatabase) {
-        Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
+        AFL_ENSURE(navigate->ResultSet.size() == 1)("result_set_size", navigate->ResultSet.size())("database", DatabasePath);
         IsServerless = navigate->ResultSet.front().DomainInfo->IsServerless();
 
         for (const auto& attr : navigate->ResultSet.front().Attributes) {

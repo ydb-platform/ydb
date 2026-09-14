@@ -6,7 +6,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
-    contrib/libs/opentelemetry-proto
+    contrib/proto/opentelemetry
     ydb/core/base/generated
     ydb/core/control/lib/generated
     ydb/core/tx/columnshard/engines/protos  # stopgap: columnshard_private_events.h transitively requires engines/protos; direct columnshard dep would create a cycle

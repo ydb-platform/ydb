@@ -42,6 +42,7 @@ class TestSqsTopicPurgeQueue(KikimrSqsTopicTestBase):
             QueueUrl=self._queue_url,
             MessageBody='hello from fifo sqs',
             MessageGroupId='message-group-1',
+            MessageDeduplicationId='deduplication-id-1',
         )
 
         assert_that(

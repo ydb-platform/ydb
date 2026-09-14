@@ -1,12 +1,12 @@
 import logging
 import time
 
-from hamcrest import assert_that
+from hamcrest import assert_that, greater_than
 
 from ydb.core.protos.cms_pb2 import EAvailabilityMode
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 
-from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.types import Erasure, TabletStates
 import ydb.tests.library.common.cms as cms
 
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
@@ -14,7 +14,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
-from ydb.tests.library.common.delayed import wait_tablets_are_active
+from ydb.tests.library.common.delayed import wait_tablets_are_active, wait_tablets_state_by_id
 
 import utils
 
@@ -62,8 +62,24 @@ class AbstractTestCmsStateStorageRestarts(AbstractLocalClusterTest):
 
         client = utils.create_client_from_alive_hosts(self.cluster, restart_nodes)
         kv_client = utils.create_kv_client_from_alive_hosts(self.cluster, restart_nodes)
+        wait_tablets_are_active(client, tablet_ids, timeout_seconds=180)
+        generations = {
+            info.TabletId: info.Generation
+            for info in client.tablet_state(tablet_ids=tablet_ids).TabletStateInfo
+        }
+
         for tablet_id in tablet_ids:
             client.tablet_kill(tablet_id)
+
+        wait_tablets_state_by_id(
+            client,
+            TabletStates.Active,
+            tablet_ids=tablet_ids,
+            skip_generations=generations,
+            generation_matcher=greater_than,
+            message='Killed tablets are active again with increased generation',
+            timeout_seconds=180,
+        )
 
         for partition_id, tablet_id in enumerate(tablet_ids):
             resp = kv_client.kv_write(table_path, partition_id, "key", utils.value_for("key", tablet_id))
@@ -72,7 +88,7 @@ class AbstractTestCmsStateStorageRestarts(AbstractLocalClusterTest):
         for node in restart_nodes:
             self.cluster.nodes[node].start()
 
-        wait_tablets_are_active(self.cluster.client, tablet_ids)
+        wait_tablets_are_active(self.cluster.client, tablet_ids, timeout_seconds=180)
 
 
 class TestCmsStateStorageRestartsBlockMax(AbstractTestCmsStateStorageRestarts):

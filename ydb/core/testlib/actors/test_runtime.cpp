@@ -16,6 +16,7 @@
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 
 #include <ydb/core/base/wilson_tracing_control.h>
+#include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/key.pb.h>
@@ -197,6 +198,7 @@ namespace NActors {
             nodeAppData->NetClassifierConfig.CopyFrom(app0->NetClassifierConfig);
             nodeAppData->EnableKqpSpilling = app0->EnableKqpSpilling;
             nodeAppData->InitFeatureFlags(app0->FeatureFlags);
+            NKikimr::NPQ::InitMaxHeaderSize(nodeAppData->FeatureFlags);
             nodeAppData->CompactionConfig = app0->CompactionConfig;
             nodeAppData->HiveConfig.SetWarmUpBootWaitingPeriod(10);
             nodeAppData->HiveConfig.SetMaxNodeUsageToKick(100);

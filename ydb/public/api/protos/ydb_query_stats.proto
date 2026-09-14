@@ -18,6 +18,10 @@ message TableAccessStats {
     OperationStats updates = 4;
     OperationStats deletes = 5;
     uint64 partitions_count = 6;
+    // Populated when collect_affected_rows is enabled. Counts logical base-table rows
+    // affected by DML (INSERT, UPSERT, REPLACE, UPDATE, DELETE), excluding
+    // secondary-index maintenance. Zero for read-only queries and non-matching DML.
+    uint64 affected_rows = 7;
 }
 
 message QueryPhaseStats {

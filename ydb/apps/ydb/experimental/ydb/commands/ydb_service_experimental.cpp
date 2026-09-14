@@ -2,6 +2,7 @@
 #include "generate.h"
 #include "ydb_service_experimental.h"
 #include "ydb_sql.h"
+#include "ydb_topic_deferred_publish.h"
 
 #include <memory>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
@@ -41,6 +42,7 @@ TCommandExperimental::TCommandExperimental()
     AddCommand(std::make_unique<TCommandSqlExperimental>());
     AddCommand(std::make_unique<TCommandSqlOperation>());
     AddCommand(std::make_unique<TCommandDeleteSession>());
+    AddCommand(std::make_unique<TCommandExperimentalTopic>());
 }
 
 TCommandStreamQuery::TCommandStreamQuery()
@@ -391,8 +393,8 @@ void TCommandExplain::DotPrintPlan(IOutputStream* out, const TString& planJson) 
 }
 
 void TCommandExplain::SvgPrintPlan(IOutputStream* out, const TString& planJson) {
-    TPlanVisualizer planviz;
-    planviz.LoadPlans(planJson);
+    NPlan2Svg::TPlanVisualizer planviz;
+    planviz.LoadPlansSafe(planJson);
     *out << planviz.PrintSvgSafe();
 }
 
@@ -589,7 +591,7 @@ int TCommandJson2Svg::Run(TConfig&) {
         planJson = Cin.ReadAll();
     }
 
-    TPlanVisualizer planviz;
+    NPlan2Svg::TPlanVisualizer planviz;
 
     NJson::TJsonReaderConfig jsonConfig;
     NJson::TJsonValue jsonNode;
@@ -600,7 +602,7 @@ int TCommandJson2Svg::Run(TConfig&) {
             topNode = jsonNode.GetValueByPath("plan.Plan");
         }
         if (topNode) {
-            planviz.LoadPlans(*topNode);
+            planviz.LoadPlansSafe(*topNode);
         }
     }
 

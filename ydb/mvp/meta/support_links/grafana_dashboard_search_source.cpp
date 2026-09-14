@@ -210,6 +210,9 @@ private:
 } // namespace
 
 void ValidateGrafanaDashboardSearchSourceConfig(const TSupportLinkEntryConfig& config, const TMetaSettings& metaSettings) {
+    if (config.GetUrl().Contains('{') || config.GetUrl().Contains('}')) {
+        ythrow yexception() << "url template placeholders are not supported for source=" << config.GetSource();
+    }
     if (metaSettings.SupportLinks.GrafanaEndpoint.empty()) {
         ythrow yexception() << "grafana.endpoint is required for source=" << config.GetSource();
     }

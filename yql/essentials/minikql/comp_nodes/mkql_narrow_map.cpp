@@ -7,7 +7,9 @@
 
 namespace NKikimr::NMiniKQL {
 
+#ifndef MKQL_DISABLE_CODEGEN
 using NYql::EnsureDynamicCast;
+#endif
 
 namespace {
 
@@ -17,37 +19,37 @@ class TNarrowMapWrapper: public TStatelessFlowCodegeneratorNode<TNarrowMapWrappe
 public:
     TNarrowMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* newItem)
         : TBaseComputation(flow, kind)
-        , Flow(flow)
-        , Items(std::move(items))
-        , NewItem(newItem)
-        , PasstroughItem(GetPasstroughtMap(TComputationNodePtrVector{NewItem}, Items).front())
-        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
+        , Flow_(flow)
+        , Items_(std::move(items))
+        , NewItem_(newItem)
+        , PasstroughItem_(GetPasstroughtMap(TComputationNodePtrVector{NewItem_}, Items_).front())
+        , WideFieldsIndex_(mutables.IncrementWideFieldsIndex(Items_.size()))
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex_;
 
-        for (auto i = 0U; i < Items.size(); ++i) {
-            if (NewItem == Items[i] || Items[i]->GetDependentsCount() > 0U) {
-                fields[i] = &Items[i]->RefValue(ctx);
+        for (auto i = 0U; i < Items_.size(); ++i) {
+            if (NewItem_ == Items_[i] || Items_[i]->GetDependentsCount() > 0U) {
+                fields[i] = &Items_[i]->RefValue(ctx);
             }
         }
 
-        switch (/* const auto result = */ Flow->FetchValues(ctx, fields)) {
+        switch (/* const auto result = */ Flow_->FetchValues(ctx, fields)) {
             case EFetchResult::Finish:
                 return NUdf::TUnboxedValuePod::MakeFinish();
             case EFetchResult::Yield:
                 return NUdf::TUnboxedValuePod::MakeYield();
             case EFetchResult::One:
-                return NewItem->GetValue(ctx).Release();
+                return NewItem_->GetValue(ctx).Release();
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto getres = GetNodeValues(Flow, ctx, block);
+        const auto getres = GetNodeValues(Flow_, ctx, block);
 
         const auto yield = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, getres.first, ConstantInt::get(getres.first->getType(), 0), "yield", block);
         const auto good = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SGT, getres.first, ConstantInt::get(getres.first->getType(), 0), "good", block);
@@ -64,16 +66,16 @@ public:
 
         block = work;
 
-        if (const auto passtrough = PasstroughItem) {
+        if (const auto passtrough = PasstroughItem_) {
             result->addIncoming(getres.second[*passtrough](ctx, block), block);
         } else {
-            for (auto i = 0U; i < Items.size(); ++i) {
-                if (Items[i]->GetDependentsCount() > 0U) {
-                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+            for (size_t i = 0U; i < Items_.size(); ++i) {
+                if (Items_[i]->GetDependentsCount() > 0U) {
+                    EnsureDynamicCast<ICodegeneratorExternalNode*>(Items_[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
                 }
             }
 
-            result->addIncoming(GetNodeValue(NewItem, ctx, block), block);
+            result->addIncoming(GetNodeValue(NewItem_, ctx, block), block);
         }
 
         BranchInst::Create(pass, block);
@@ -84,18 +86,18 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        if (const auto flow = FlowDependsOn(Flow)) {
-            std::for_each(Items.cbegin(), Items.cend(), std::bind(&TNarrowMapWrapper::Own, flow, std::placeholders::_1));
-            DependsOn(flow, NewItem);
+        if (const auto flow = FlowDependsOn(Flow_)) {
+            std::for_each(Items_.cbegin(), Items_.cend(), std::bind(&TNarrowMapWrapper::Own, flow, std::placeholders::_1));
+            DependsOn(flow, NewItem_);
         }
     }
 
-    IComputationWideFlowNode* const Flow;
-    const TComputationExternalNodePtrVector Items;
-    IComputationNode* const NewItem;
+    IComputationWideFlowNode* const Flow_;
+    const TComputationExternalNodePtrVector Items_;
+    IComputationNode* const NewItem_;
 
-    const std::optional<size_t> PasstroughItem;
-    const ui32 WideFieldsIndex;
+    const std::optional<size_t> PasstroughItem_;
+    const ui32 WideFieldsIndex_;
 };
 
 } // namespace

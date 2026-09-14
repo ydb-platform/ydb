@@ -173,7 +173,6 @@ public:
     {
     }
 
-public:
     void OnObject(NPureCalcProto::TSimpleMessage* t) override {
         Buf_->push_back(t->GetX());
     }
@@ -191,7 +190,6 @@ public:
     using TType1 = TVector<std::pair<ui32, TString>>;
     using TType2 = TVector<TString>;
 
-public:
     TVariantConsumerImpl(TType0* q0, TType1* q1, TType2* q2, int* v)
         : Queue0_(q0)
         , Queue1_(q1)
@@ -232,7 +230,6 @@ public:
         Message_.SetAString("Hello!");
     }
 
-public:
     NPureCalcProto::TUnsplitted* Fetch() override {
         switch (I_) {
             case 0:
@@ -416,15 +413,18 @@ void CheckMessageIsInvalid(const TString& expectedExceptionMessage) {
 
     UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
         factory->MakePushStreamProgram(TProtobufInputSpec<T>(), TProtobufOutputSpec<T>(), "SELECT * FROM Input", ETranslationMode::SQL);
-    }(), yexception, expectedExceptionMessage);
+    }(), yexception,
+                                   TStringBuf{expectedExceptionMessage});
 
     UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
         factory->MakePullStreamProgram(TProtobufInputSpec<T>(), TProtobufOutputSpec<T>(), "SELECT * FROM Input", ETranslationMode::SQL);
-    }(), yexception, expectedExceptionMessage);
+    }(), yexception,
+                                   TStringBuf{expectedExceptionMessage});
 
     UNIT_ASSERT_EXCEPTION_CONTAINS([&]() {
         factory->MakePullListProgram(TProtobufInputSpec<T>(), TProtobufOutputSpec<T>(), "SELECT * FROM Input", ETranslationMode::SQL);
-    }(), yexception, expectedExceptionMessage);
+    }(), yexception,
+                                   TStringBuf{expectedExceptionMessage});
 }
 
 Y_UNIT_TEST(TestSimpleNested) {

@@ -15,8 +15,7 @@
 
 #include <yql/essentials/utils/sort.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -41,27 +40,27 @@ TChunkedArrayIndex MakeChunkedArrayIndex(const arrow::Datum& datum) {
 template <bool Sort, bool HasCount>
 class TTopOrSortBlocksState: public TBlockState {
 public:
-    bool WritingOutput_ = false;
-    bool IsFinished_ = false;
+    bool WritingOutput = false;
+    bool IsFinished = false;
 
-    ui64 OutputLength_ = 0;
-    ui64 Written_ = 0;
-    const std::vector<bool> Directions_;
-    const ui64 Count_;
-    const std::vector<TBlockType*> Columns_;
-    const std::vector<ui32> KeyIndicies_;
-    std::vector<std::vector<arrow::Datum>> SortInput_;
-    std::vector<ui64> SortPermutation_;
-    std::vector<TChunkedArrayIndex> SortArrays_;
+    ui64 OutputLength = 0;
+    ui64 Written = 0;
+    const std::vector<bool> Directions;
+    const ui64 TopCount;
+    const std::vector<TBlockType*> Columns;
+    const std::vector<ui32> KeyIndicies;
+    std::vector<std::vector<arrow::Datum>> SortInput;
+    std::vector<ui64> SortPermutation;
+    std::vector<TChunkedArrayIndex> SortArrays;
 
-    bool ScalarsFilled_ = false;
-    TUnboxedValueVector ScalarValues_;
-    std::vector<std::unique_ptr<IBlockReader>> LeftReaders_;
-    std::vector<std::unique_ptr<IBlockReader>> RightReaders_;
-    std::vector<std::unique_ptr<IArrayBuilder>> Builders_;
-    ui64 BuilderMaxLength_ = 0;
-    ui64 BuilderLength_ = 0;
-    std::vector<NUdf::IBlockItemComparator::TPtr> Comparators_; // by key columns only
+    bool ScalarsFilled = false;
+    TUnboxedValueVector ScalarValues;
+    std::vector<std::unique_ptr<IBlockReader>> LeftReaders;
+    std::vector<std::unique_ptr<IBlockReader>> RightReaders;
+    std::vector<std::unique_ptr<IArrayBuilder>> Builders;
+    ui64 BuilderMaxLength = 0;
+    ui64 BuilderLength = 0;
+    std::vector<NUdf::IBlockItemComparator::TPtr> Comparators; // by key columns only
 
     class TBlockLess {
     public:
@@ -81,12 +80,12 @@ public:
                     return false;
                 }
 
-                auto leftItem = GetBlockItem(*State_.LeftReaders_[i], arrayIndex, lhs);
-                auto rightItem = GetBlockItem(*State_.RightReaders_[i], arrayIndex, rhs);
-                if (State_.Directions_[0]) {
-                    return State_.Comparators_[0]->Less(leftItem, rightItem);
+                auto leftItem = GetBlockItem(*State_.LeftReaders[i], arrayIndex, lhs);
+                auto rightItem = GetBlockItem(*State_.RightReaders[i], arrayIndex, rhs);
+                if (State_.Directions[0]) {
+                    return State_.Comparators[0]->Less(leftItem, rightItem);
                 } else {
-                    return State_.Comparators_[0]->Greater(leftItem, rightItem);
+                    return State_.Comparators[0]->Greater(leftItem, rightItem);
                 }
             } else {
                 for (ui32 k = 0; k < KeyIndicies_.size(); ++k) {
@@ -97,14 +96,14 @@ public:
                         continue;
                     }
 
-                    auto leftItem = GetBlockItem(*State_.LeftReaders_[i], arrayIndex, lhs);
-                    auto rightItem = GetBlockItem(*State_.RightReaders_[i], arrayIndex, rhs);
-                    auto cmp = State_.Comparators_[k]->Compare(leftItem, rightItem);
+                    auto leftItem = GetBlockItem(*State_.LeftReaders[i], arrayIndex, lhs);
+                    auto rightItem = GetBlockItem(*State_.RightReaders[i], arrayIndex, rhs);
+                    auto cmp = State_.Comparators[k]->Compare(leftItem, rightItem);
                     if (cmp == 0) {
                         continue;
                     }
 
-                    if (State_.Directions_[k]) {
+                    if (State_.Directions[k]) {
                         return cmp < 0;
                     } else {
                         return cmp > 0;
@@ -133,50 +132,50 @@ public:
 
     TTopOrSortBlocksState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const std::vector<ui32>& keyIndicies, const std::vector<TBlockType*>& columns, const bool* directions, ui64 count)
         : TBlockState(memInfo, columns.size() + 1U)
-        , IsFinished_(HasCount && !count)
-        , Directions_(directions, directions + keyIndicies.size())
-        , Count_(count)
-        , Columns_(columns)
-        , KeyIndicies_(keyIndicies)
-        , SortInput_(Columns_.size())
-        , SortArrays_(Columns_.size())
-        , ScalarValues_(Columns_.size())
-        , LeftReaders_(Columns_.size())
-        , RightReaders_(Columns_.size())
-        , Builders_(Columns_.size())
-        , Comparators_(KeyIndicies_.size())
+        , IsFinished(HasCount && !count)
+        , Directions(directions, directions + keyIndicies.size())
+        , TopCount(count)
+        , Columns(columns)
+        , KeyIndicies(keyIndicies)
+        , SortInput(Columns.size())
+        , SortArrays(Columns.size())
+        , ScalarValues(Columns.size())
+        , LeftReaders(Columns.size())
+        , RightReaders(Columns.size())
+        , Builders(Columns.size())
+        , Comparators(KeyIndicies.size())
     {
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
-            if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
                 continue;
             }
 
-            LeftReaders_[i] = MakeBlockReader(TTypeInfoHelper(), columns[i]->GetItemType());
-            RightReaders_[i] = MakeBlockReader(TTypeInfoHelper(), columns[i]->GetItemType());
+            LeftReaders[i] = MakeBlockReader(TTypeInfoHelper(), columns[i]->GetItemType());
+            RightReaders[i] = MakeBlockReader(TTypeInfoHelper(), columns[i]->GetItemType());
         }
 
-        for (ui32 k = 0; k < KeyIndicies_.size(); ++k) {
-            Comparators_[k] = TBlockTypeHelper().MakeComparator(Columns_[KeyIndicies_[k]]->GetItemType());
+        for (ui32 k = 0; k < KeyIndicies.size(); ++k) {
+            Comparators[k] = TBlockTypeHelper().MakeComparator(Columns[KeyIndicies[k]]->GetItemType());
         }
 
-        BuilderMaxLength_ = GetStorageLength();
+        BuilderMaxLength = GetStorageLength();
         size_t maxBlockItemSize = 0;
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
-            if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+        for (auto Column : Columns) {
+            if (Column->GetShape() == TBlockType::EShape::Scalar) {
                 continue;
             }
 
-            maxBlockItemSize = Max(maxBlockItemSize, CalcMaxBlockItemSize(Columns_[i]->GetItemType()));
+            maxBlockItemSize = Max(maxBlockItemSize, CalcMaxBlockItemSize(Column->GetItemType()));
         };
 
-        BuilderMaxLength_ = Max(BuilderMaxLength_, CalcBlockLen(maxBlockItemSize));
+        BuilderMaxLength = Max(BuilderMaxLength, CalcBlockLen(maxBlockItemSize));
 
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
-            if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
                 continue;
             }
 
-            Builders_[i] = MakeArrayBuilder(TTypeInfoHelper(), Columns_[i]->GetItemType(), ctx.ArrowMemoryPool, BuilderMaxLength_, &ctx.Builder->GetPgBuilder());
+            Builders[i] = MakeArrayBuilder(TTypeInfoHelper(), Columns[i]->GetItemType(), ctx.ArrowMemoryPool, BuilderMaxLength, &ctx.Builder->GetPgBuilder());
         }
     }
 
@@ -187,53 +186,53 @@ public:
     void ProcessInput() {
         const ui64 blockLen = TArrowBlock::From(Values.back()).GetDatum().template scalar_as<arrow::UInt64Scalar>().value;
 
-        if (!ScalarsFilled_) {
-            for (ui32 i = 0; i < Columns_.size(); ++i) {
-                if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
-                    ScalarValues_[i] = std::move(Values[i]);
+        if (!ScalarsFilled) {
+            for (ui32 i = 0; i < Columns.size(); ++i) {
+                if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
+                    ScalarValues[i] = std::move(Values[i]);
                 }
             }
 
-            ScalarsFilled_ = true;
+            ScalarsFilled = true;
         }
 
         if constexpr (!HasCount) {
-            for (ui32 i = 0; i < Columns_.size(); ++i) {
-                if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
+            for (ui32 i = 0; i < Columns.size(); ++i) {
+                if (Columns[i]->GetShape() != TBlockType::EShape::Scalar) {
                     auto datum = TArrowBlock::From(Values[i]).GetDatum();
-                    SortInput_[i].emplace_back(datum);
+                    SortInput[i].emplace_back(datum);
                 }
             }
 
-            OutputLength_ += blockLen;
+            OutputLength += blockLen;
             Values.assign(Values.size(), NUdf::TUnboxedValuePod());
             return;
         }
 
         // shrink input block
         std::optional<std::vector<ui64>> blockIndicies;
-        if (blockLen > Count_) {
+        if (blockLen > TopCount) {
             blockIndicies.emplace();
             blockIndicies->reserve(blockLen);
             for (ui64 row = 0; row < blockLen; ++row) {
                 blockIndicies->emplace_back(row);
             }
 
-            std::vector<TChunkedArrayIndex> arrayIndicies(Columns_.size());
-            for (ui32 i = 0; i < Columns_.size(); ++i) {
-                if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
+            std::vector<TChunkedArrayIndex> arrayIndicies(Columns.size());
+            for (ui32 i = 0; i < Columns.size(); ++i) {
+                if (Columns[i]->GetShape() != TBlockType::EShape::Scalar) {
                     auto datum = TArrowBlock::From(Values[i]).GetDatum();
                     arrayIndicies[i] = MakeChunkedArrayIndex(datum);
                 }
             }
 
-            const TBlockLess cmp(KeyIndicies_, *this, arrayIndicies);
-            NYql::FastNthElement(blockIndicies->begin(), blockIndicies->begin() + Count_, blockIndicies->end(), cmp);
+            const TBlockLess cmp(KeyIndicies, *this, arrayIndicies);
+            NYql::FastNthElement(blockIndicies->begin(), blockIndicies->begin() + TopCount, blockIndicies->end(), cmp);
         }
 
         // copy all to builders
-        AddTop(Columns_, blockIndicies, blockLen);
-        if (BuilderLength_ + Count_ > BuilderMaxLength_) {
+        AddTop(Columns, blockIndicies, blockLen);
+        if (BuilderLength + TopCount > BuilderMaxLength) {
             CompressBuilders(false);
         }
 
@@ -241,30 +240,30 @@ public:
     }
 
     ui64 GetStorageLength() const {
-        return 2 * Count_;
+        return 2 * TopCount;
     }
 
     void CompressBuilders(bool sort) {
-        Y_ABORT_UNLESS(ScalarsFilled_);
-        std::vector<TChunkedArrayIndex> arrayIndicies(Columns_.size());
-        std::vector<arrow::Datum> tmpDatums(Columns_.size());
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
-            if (Columns_[i]->GetShape() != TBlockType::EShape::Scalar) {
-                auto datum = Builders_[i]->Build(false);
+        Y_ABORT_UNLESS(ScalarsFilled);
+        std::vector<TChunkedArrayIndex> arrayIndicies(Columns.size());
+        std::vector<arrow::Datum> tmpDatums(Columns.size());
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            if (Columns[i]->GetShape() != TBlockType::EShape::Scalar) {
+                auto datum = Builders[i]->Build(false);
                 arrayIndicies[i] = MakeChunkedArrayIndex(datum);
                 tmpDatums[i] = std::move(datum);
             }
         }
 
         std::vector<ui64> blockIndicies;
-        blockIndicies.reserve(BuilderLength_);
-        for (ui64 row = 0; row < BuilderLength_; ++row) {
+        blockIndicies.reserve(BuilderLength);
+        for (ui64 row = 0; row < BuilderLength; ++row) {
             blockIndicies.push_back(row);
         }
 
-        const ui64 blockLen = Min(BuilderLength_, Count_);
-        const TBlockLess cmp(KeyIndicies_, *this, arrayIndicies);
-        if (BuilderLength_ <= Count_) {
+        const ui64 blockLen = Min(BuilderLength, TopCount);
+        const TBlockLess cmp(KeyIndicies, *this, arrayIndicies);
+        if (BuilderLength <= TopCount) {
             if (sort) {
                 std::sort(blockIndicies.begin(), blockIndicies.end(), cmp);
             }
@@ -276,101 +275,101 @@ public:
             }
         }
 
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
-            if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
                 continue;
             }
 
             auto& arrayIndex = arrayIndicies[i];
-            Builders_[i]->AddMany(arrayIndex.data(), arrayIndex.size(), blockIndicies.data(), blockLen);
+            Builders[i]->AddMany(arrayIndex.data(), arrayIndex.size(), blockIndicies.data(), blockLen);
         }
 
-        BuilderLength_ = blockLen;
+        BuilderLength = blockLen;
     }
 
     void SortAll() {
-        SortPermutation_.reserve(OutputLength_);
-        for (ui64 i = 0; i < OutputLength_; ++i) {
-            SortPermutation_.emplace_back(i);
+        SortPermutation.reserve(OutputLength);
+        for (ui64 i = 0; i < OutputLength; ++i) {
+            SortPermutation.emplace_back(i);
         }
 
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
+        for (ui32 i = 0; i < Columns.size(); ++i) {
             ui64 offset = 0;
-            for (const auto& datum : SortInput_[i]) {
+            for (const auto& datum : SortInput[i]) {
                 if (datum.is_scalar()) {
                     continue;
                 } else if (datum.is_array()) {
                     auto arrayData = datum.array();
-                    SortArrays_[i].push_back({arrayData.get(), offset});
+                    SortArrays[i].push_back({arrayData.get(), offset});
                     offset += arrayData->length;
                 } else {
                     auto chunks = datum.chunks();
                     for (auto& chunk : chunks) {
                         auto arrayData = chunk->data();
-                        SortArrays_[i].push_back({arrayData.get(), offset});
+                        SortArrays[i].push_back({arrayData.get(), offset});
                         offset += arrayData->length;
                     }
                 }
             }
         }
 
-        TBlockLess cmp(KeyIndicies_, *this, SortArrays_);
-        std::sort(SortPermutation_.begin(), SortPermutation_.end(), cmp);
+        TBlockLess cmp(KeyIndicies, *this, SortArrays);
+        std::sort(SortPermutation.begin(), SortPermutation.end(), cmp);
     }
 
     bool FillOutput(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
-        if (WritingOutput_) {
+        if (WritingOutput) {
             FillSortOutputPart(holderFactory, validationMode);
         } else if constexpr (!HasCount) {
-            if (!OutputLength_) {
-                IsFinished_ = true;
+            if (!OutputLength) {
+                IsFinished = true;
                 return false;
             }
 
             SortAll();
-            WritingOutput_ = true;
+            WritingOutput = true;
             FillSortOutputPart(holderFactory, validationMode);
         } else {
-            IsFinished_ = true;
-            if (!BuilderLength_) {
+            IsFinished = true;
+            if (!BuilderLength) {
                 return false;
             }
 
-            if (BuilderLength_ > Count_ || Sort) {
+            if (BuilderLength > TopCount || Sort) {
                 CompressBuilders(Sort);
             }
 
-            for (ui32 i = 0; i < Columns_.size(); ++i) {
-                if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
-                    Values[i] = ScalarValues_[i];
+            for (ui32 i = 0; i < Columns.size(); ++i) {
+                if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
+                    Values[i] = ScalarValues[i];
                 } else {
-                    Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(true)), validationMode);
+                    Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders[i]->Build(true)), validationMode);
                 }
             }
 
-            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BuilderLength_)), validationMode);
+            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(BuilderLength)), validationMode);
         }
         FillArrays();
         return true;
     }
 
     void FillSortOutputPart(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
-        auto blockLen = Min(BuilderMaxLength_, OutputLength_ - Written_);
-        const bool isLast = (Written_ + blockLen == OutputLength_);
+        auto blockLen = Min(BuilderMaxLength, OutputLength - Written);
+        const bool isLast = (Written + blockLen == OutputLength);
 
-        for (ui32 i = 0; i < Columns_.size(); ++i) {
-            if (Columns_[i]->GetShape() == TBlockType::EShape::Scalar) {
-                Values[i] = ScalarValues_[i];
+        for (ui32 i = 0; i < Columns.size(); ++i) {
+            if (Columns[i]->GetShape() == TBlockType::EShape::Scalar) {
+                Values[i] = ScalarValues[i];
             } else {
-                Builders_[i]->AddMany(SortArrays_[i].data(), SortArrays_[i].size(), SortPermutation_.data() + Written_, blockLen);
-                Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders_[i]->Build(isLast)), validationMode);
+                Builders[i]->AddMany(SortArrays[i].data(), SortArrays[i].size(), SortPermutation.data() + Written, blockLen);
+                Values[i] = holderFactory.CreateArrowBlock(arrow::Datum(Builders[i]->Build(isLast)), validationMode);
             }
         }
 
         Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)), validationMode);
-        Written_ += blockLen;
-        if (Written_ >= OutputLength_) {
-            IsFinished_ = true;
+        Written += blockLen;
+        if (Written >= OutputLength) {
+            IsFinished = true;
         }
     }
 
@@ -383,16 +382,16 @@ public:
             const auto& datum = TArrowBlock::From(Values[i]).GetDatum();
             auto arrayIndex = MakeChunkedArrayIndex(datum);
             if (blockIndicies) {
-                Builders_[i]->AddMany(arrayIndex.data(), arrayIndex.size(), blockIndicies->data(), Count_);
+                Builders[i]->AddMany(arrayIndex.data(), arrayIndex.size(), blockIndicies->data(), TopCount);
             } else {
-                Builders_[i]->AddMany(arrayIndex.data(), arrayIndex.size(), ui64(0), blockLen);
+                Builders[i]->AddMany(arrayIndex.data(), arrayIndex.size(), ui64(0), blockLen);
             }
         }
 
         if (blockIndicies) {
-            BuilderLength_ += Count_;
+            BuilderLength += TopCount;
         } else {
-            BuilderLength_ += blockLen;
+            BuilderLength += blockLen;
         }
     }
 };
@@ -458,18 +457,18 @@ private:
         }
 
     private:
-        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) override {
             auto& blockState = *static_cast<TState*>(BlockState_.AsBoxed().Get());
             Y_DEBUG_ABORT_UNLESS(blockState.Values.size() == width);
-            Y_DEBUG_ABORT_UNLESS(blockState.Values.size() == blockState.Columns_.size() + 1);
+            Y_DEBUG_ABORT_UNLESS(blockState.Values.size() == blockState.Columns.size() + 1);
             auto* inputFields = blockState.Pointer;
 
             if (!blockState.Count) {
-                if (blockState.IsFinished_) {
+                if (blockState.IsFinished) {
                     return NUdf::EFetchStatus::Finish;
                 }
 
-                if (!blockState.WritingOutput_) {
+                if (!blockState.WritingOutput) {
                     while (true) {
                         switch (Stream_.WideFetch(inputFields, width)) {
                             case NUdf::EFetchStatus::Yield:
@@ -528,7 +527,7 @@ IComputationNode* WrapTopOrSort(TCallable& callable, const TComputationNodeFacto
     MKQL_ENSURE(inputType->IsStream(), "Expected WideStream as an input");
 
     const auto wideComponents = GetWideComponents(inputType);
-    MKQL_ENSURE(wideComponents.size() > 0, "Expected at least one column");
+    MKQL_ENSURE(!wideComponents.empty(), "Expected at least one column");
 
     auto node = LocateNode(ctx.NodeLocator, callable, 0);
 
@@ -565,5 +564,4 @@ IComputationNode* WrapWideSortBlocks(TCallable& callable, const TComputationNode
     return WrapTopOrSort<true, false>(callable, ctx);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -1,9 +1,10 @@
 #pragma once
 
+#include "direct_block_group_impl.h"
 #include "partition_direct_service_mock.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
 
@@ -31,6 +32,10 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TVector<TExecutorPtr> Executors;
 
+    TDiskDescription DiskDescription{
+        .DiskId = "disk-id",
+        .TabletId = 100,
+        .Generation = 1};
     std::shared_ptr<TTraceServiceMock> TraceService =
         std::make_shared<TTraceServiceMock>();
     std::shared_ptr<TPartitionDirectServiceMock> Service;
@@ -67,18 +72,27 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
         const std::shared_ptr<TDirectBlockGroup>& dbg,
         size_t index,
         TDuration waitTimeout);
+    [[nodiscard]] static std::optional<NKikimr::NDDisk::TConnectionToken>
+    GetConnectionToken(
+        const TExecutorPtr& executor,
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        NTransport::THostConnection::EConnectionType connectionType,
+        size_t index,
+        TDuration waitTimeout);
 
     [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,
-        std::unique_ptr<NTransport::IStorageTransport> transport,
+        NTransport::TStorageTransportPtr transport,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
-        const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds) const;
+        const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
+        size_t directBlockGroupIndex = 0) const;
 
     template <typename TTransport>
         requires std::derived_from<TTransport, NTransport::IStorageTransport>
     [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,
-        std::unique_ptr<TTransport> transport) const
+        std::shared_ptr<TTransport> transport,
+        size_t directBlockGroupIndex = 0) const
     {
         auto ddisks = transport->GetDDiskIds();
         auto pbuffers = transport->GetPBufferIds();
@@ -87,7 +101,8 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
             executor,
             std::move(transport),
             ddisks,
-            pbuffers);
+            pbuffers,
+            directBlockGroupIndex);
     }
 
     // Interleaves the simulated runtime and the coroutine executor: dispatches
@@ -130,6 +145,10 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
         const TExecutorPtr& executor,
         const NThreading::TFuture<void>& future,
         TDuration timeout = DefaultWaitFutureTimeout);
+
+    // Sets all response Promises for update configs requests. Returns executed
+    // requests count.
+    size_t ReplyUpdateRequests();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

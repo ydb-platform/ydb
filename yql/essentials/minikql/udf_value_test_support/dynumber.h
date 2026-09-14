@@ -1,7 +1,11 @@
 
 #pragma once
 
+#include <yql/essentials/types/dynumber/dynumber.h>
+
 #include <util/generic/string.h>
+#include <util/generic/yexception.h>
+#include <util/str_stl.h>
 
 namespace NYql::NUdf::NTest {
 

@@ -187,57 +187,57 @@ private:
             return;
         }
         if (runnerOptions.SchemeQueryAstOutput) {
-            ythrow yexception() << "Scheme query AST output can not be used without scheme query";
+            ythrow yexception() << "Scheme query AST output cannot be used without scheme query";
         }
     }
 
     void ValidateScriptExecutionOptions(const TRunnerOptions& runnerOptions) const {
         if (runnerOptions.YdbSettings.SameSession && HasExecutionCase(EExecutionCase::AsyncQuery)) {
-            ythrow yexception() << "Same session can not be used with async quries";
+            ythrow yexception() << "Same session cannot be used with async quries";
         }
 
         const bool hasScript = HasExecutionCase(EExecutionCase::GenericScript);
         const bool hasStreaming = HasExecutionCase(EExecutionCase::StreamingQuery);
         if (!hasScript && !hasStreaming) {
             if (ForgetExecution) {
-                ythrow yexception() << "Forget execution can not be used without script queries";
+                ythrow yexception() << "Forget execution cannot be used without script queries";
             }
             if (runnerOptions.ScriptCancelAfter) {
-                ythrow yexception() << "Cancel after can not be used without script queries";
+                ythrow yexception() << "Cancel after cannot be used without script queries";
             }
         }
 
         const bool hasSimpleQuery = hasScript || HasExecutionCase(EExecutionCase::GenericQuery);
         if (!hasSimpleQuery) {
             if (ResultsRowsLimit) {
-                ythrow yexception() << "Result rows limit can not be used without generic/script queries";
+                ythrow yexception() << "Result rows limit cannot be used without generic/script queries";
             }
             if (!hasStreaming && !runnerOptions.InProgressStatisticsOutputFiles.empty()) {
-                ythrow yexception() << "Script statistics can not be used without generic/script/streaming queries";
+                ythrow yexception() << "Script statistics cannot be used without generic/script/streaming queries";
             }
         }
 
         const bool hasYqlQuery = hasSimpleQuery || HasExecutionCase(EExecutionCase::YqlScript);
         if (!hasYqlQuery) {
             if (runnerOptions.YdbSettings.SameSession) {
-                ythrow yexception() << "Same session can not be used without generic/script/yql queries";
+                ythrow yexception() << "Same session cannot be used without generic/script/yql queries";
             }
         }
 
         const bool hasAnyQuery = hasStreaming || hasYqlQuery;
         if (!hasAnyQuery) {
             if (!runnerOptions.ScriptQueryAstOutputs.empty()) {
-                ythrow yexception() << "Script query AST output can not be used without generic/script/yql/streaming queries";
+                ythrow yexception() << "Script query AST output cannot be used without generic/script/yql/streaming queries";
             }
             if (!runnerOptions.ScriptQueryPlanOutputs.empty()) {
-                ythrow yexception() << "Script query plan output can not be used without generic/script/yql/streaming queries";
+                ythrow yexception() << "Script query plan output cannot be used without generic/script/yql/streaming queries";
             }
         }
     }
 
     void ValidateAsyncOptions(const TAsyncQueriesSettings& asyncQueriesSettings) const {
         if (asyncQueriesSettings.InFlightLimit && !HasExecutionCase(EExecutionCase::AsyncQuery)) {
-            ythrow yexception() << "In flight limit can not be used without async queries";
+            ythrow yexception() << "In flight limit cannot be used without async queries";
         }
 
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -544,7 +544,7 @@ protected:
                 } else {
                     value = GetEnv(TString(variable));
                     if (!value) {
-                        ythrow yexception() << "Invalid env template, can not find value for variable '" << variable << "'";
+                        ythrow yexception() << "Invalid env template, cannot find value for variable '" << variable << "'";
                     }
                 }
 

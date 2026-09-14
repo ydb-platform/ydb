@@ -79,16 +79,19 @@ struct IShuffleClient
         NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) = 0;
 
+    //! logicalWriterIndexRange is a half-open range of caller-assigned logical writer indices.
     virtual TFuture<IRowBatchReaderPtr> CreateShuffleReader(
         const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<TIndexRange> writerIndexRange = {},
+        std::optional<TIndexRange> logicalWriterIndexRange = {},
         const TShuffleReaderOptions& options = {}) = 0;
 
+    //! logicalWriterIndex is a stable caller-assigned identity shared by retries
+    //! of one logical writer.
     virtual TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
         const TSignedShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        std::optional<int> writerIndex = {},
+        std::optional<int> logicalWriterIndex = {},
         const TShuffleWriterOptions& options = {}) = 0;
 };
 

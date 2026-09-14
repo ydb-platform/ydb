@@ -1,8 +1,10 @@
 #include "manager.h"
 #include "checker.h"
+#include "object.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
+#include <ydb/core/resource_pools/resource_pool_settings.h>
 
 
 namespace NKikimr::NWorkloadManager {
@@ -46,37 +48,27 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
         return TConclusionStatus::Fail(TStringBuilder() << "Invalid reset properties: " << *error);
     }
 
-    NJson::TJsonValue configJson = NJson::JSON_MAP;
-    TClassifierSettings resourcePoolClassifierSettings;
-    for (const auto& [property, setting] : resourcePoolClassifierSettings.GetPropertiesMap()) {
-        if (std::optional<TString> value = featuresExtractor.Extract(property)) {
-            try {
-                std::visit(TClassifierSettings::TParser{*value}, setting);
-            } catch (const yexception& error) {
-                return TConclusionStatus::Fail(TStringBuilder() << "Failed to parse property " << property << ": " << error.what());
-            }
-        } else if (featuresExtractor.ExtractResetFeature(property)) {
-            if (property == "resource_pool") {
-                return TConclusionStatus::Fail("Cannot reset required property resource_pool");
-            }
-        } else {
-            continue;
-        }
+    // Parse all properties from DDL using shared method from object.cpp
+    TResourcePoolClassifierConfig::TParseResult parseResult;
+    if (auto parseError = TResourcePoolClassifierConfig::ParseFromFeaturesExtractor(featuresExtractor, &parseResult)) {
+        return TConclusionStatus::Fail(*parseError);
+    }
 
-        const TString value = std::visit(TClassifierSettings::TExtractor(), setting);
-        if (property == TResourcePoolClassifierConfig::TDecoder::Rank) {
-            result.SetColumn(property, NMetadata::NInternal::TYDBValue::Int64(FromString<i64>(value)));
-        } else if (property == "has_stream") {
-            if (!value.empty()) {
-                configJson.InsertValue(property, value == "true");
-            }
-        } else {
-            configJson.InsertValue(property, value);
+    auto& classifierSettings = parseResult.Settings;
+
+    if (context.GetActivityType() == EActivityType::Create || parseResult.HasRank) {
+        result.SetColumn(TResourcePoolClassifierConfig::TDecoder::Rank, NMetadata::NInternal::TYDBValue::Int64(classifierSettings.Rank));
+    }
+
+    if (classifierSettings.Action == EClassifierAction::Reject) {
+        if (parseResult.HasResourcePool) {
+            return TConclusionStatus::Fail("Property resource_pool must not be set when action='reject'");
         }
+        classifierSettings.ResourcePool.reset();
     }
 
     if (context.GetActivityType() == EActivityType::Create) {
-        if (!configJson.GetMap().contains("resource_pool") && !configJson.GetMap().contains("action")) {
+        if (!parseResult.Settings.ResourcePool.has_value() && !parseResult.Settings.Action.has_value()) {
             return TConclusionStatus::Fail("Missing required property resource_pool");
         }
 
@@ -85,21 +77,25 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
         if (const auto brokenAt = PathPartBrokenAt(name, extraPathSymbolsAllowed); brokenAt != name.end()) {
             return TConclusionStatus::Fail(TStringBuilder()<< "Symbol '" << *brokenAt << "' is not allowed in the resource pool classifier name '" << name << "'");
         }
-    }
 
-    if (resourcePoolClassifierSettings.Action == EClassifierAction::Reject) {
-        if (configJson.GetMap().contains("resource_pool")) {
-            return TConclusionStatus::Fail("Property resource_pool must not be set when action='reject'");
+        if (auto error = classifierSettings.Validate()) {
+            return TConclusionStatus::Fail(TStringBuilder() << "Invalid resource pool classifier settings: " << *error);
         }
-        configJson.InsertValue("resource_pool", DEFAULT_POOL_ID);
-    }
-    if (auto error = resourcePoolClassifierSettings.Validate()) {
-        return TConclusionStatus::Fail(TStringBuilder() << "Invalid resource pool classifier settings: " << *error);
     }
 
-    NJsonWriter::TBuf writer;
-    writer.WriteJsonValue(&configJson);
-    result.SetColumn(TResourcePoolClassifierConfig::TDecoder::ConfigJson, NMetadata::NInternal::TYDBValue::Utf8(writer.Str()));
+    // For ALTER, only serialize config JSON if config-related properties were changed.
+    // If only RANK is changed, don't overwrite the existing config column.
+    // Use ConfigPatch so RESET writes JSON nulls that the merger erases from the stored config.
+    if (context.GetActivityType() == EActivityType::Create) {
+        NJson::TJsonValue configJson = TResourcePoolClassifierConfig::SerializeToJson(classifierSettings);
+        NJsonWriter::TBuf writer;
+        writer.WriteJsonValue(&configJson);
+        result.SetColumn(TResourcePoolClassifierConfig::TDecoder::ConfigJson, NMetadata::NInternal::TYDBValue::Utf8(writer.Str()));
+    } else if (parseResult.HasConfigPatch) {
+        NJsonWriter::TBuf writer;
+        writer.WriteJsonValue(&parseResult.ConfigPatch);
+        result.SetColumn(TResourcePoolClassifierConfig::TDecoder::ConfigJson, NMetadata::NInternal::TYDBValue::Utf8(writer.Str()));
+    }
 
     if (!featuresExtractor.IsFinished()) {
         return TConclusionStatus::Fail(TStringBuilder() << "Unknown property: " << featuresExtractor.GetRemainedParamsString());

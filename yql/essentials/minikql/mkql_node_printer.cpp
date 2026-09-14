@@ -861,7 +861,6 @@ private:
         }
     }
 
-private:
     const bool SingleLine_;
     TStringStream Out_;
     ui32 Indent_;

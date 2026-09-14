@@ -2,6 +2,7 @@
 
 #include "summary.h"
 
+#include <library/cpp/yt/system/cpu_id.h>
 #include <library/cpp/yt/system/tscp.h>
 
 namespace NYT::NProfiling {
@@ -10,8 +11,8 @@ namespace NYT::NProfiling {
 
 void TPerCpuCounter::Increment(i64 delta)
 {
-    auto tscp = TTscp::Get();
-    Shards_[tscp.ProcessorId].Value.fetch_add(delta, std::memory_order::relaxed);
+    auto processorId = GetCurrentCpuId() & (TTscp::MaxProcessorId - 1);
+    Shards_[processorId].Value.fetch_add(delta, std::memory_order::relaxed);
 }
 
 i64 TPerCpuCounter::GetValue()
@@ -27,8 +28,8 @@ i64 TPerCpuCounter::GetValue()
 
 void TPerCpuTimeCounter::Add(TDuration delta)
 {
-    auto tscp = TTscp::Get();
-    Shards_[tscp.ProcessorId].Value.fetch_add(delta.GetValue(), std::memory_order::relaxed);
+    auto processorId = GetCurrentCpuId() & (TTscp::MaxProcessorId - 1);
+    Shards_[processorId].Value.fetch_add(delta.GetValue(), std::memory_order::relaxed);
 }
 
 TDuration TPerCpuTimeCounter::GetValue()
@@ -60,7 +61,7 @@ TPerCpuGauge::TWrite TPerCpuGauge::TWrite::Unpack(__int128 i)
 
 void TPerCpuGauge::Update(double value)
 {
-    auto tscp = TTscp::Get();
+    auto tscp = TTscp::GetApproximate();
 
     TWrite write{value, tscp.Instant};
 #ifdef __clang__
@@ -98,9 +99,10 @@ double TPerCpuGauge::GetValue()
 template <class T>
 void TPerCpuSummary<T>::Record(T value)
 {
-    auto tscp = TTscp::Get();
-    auto guard = Guard(Shards_[tscp.ProcessorId].Lock);
-    Shards_[tscp.ProcessorId].Value.Record(value);
+    auto& shard = Shards_[GetCurrentCpuId() & (TTscp::MaxProcessorId - 1)];
+    auto guard = Guard(shard.Lock);
+    shard.Value.Record(value);
+    shard.Empty.store(false, std::memory_order::release);
 }
 
 template <class T>
@@ -108,6 +110,9 @@ TSummarySnapshot<T> TPerCpuSummary<T>::GetSummary()
 {
     TSummarySnapshot<T> value;
     for (const auto& shard : Shards_) {
+        if (shard.Empty.load(std::memory_order::acquire)) {
+            continue;
+        }
         auto guard = Guard(shard.Lock);
         value += shard.Value;
     }
@@ -119,9 +124,13 @@ TSummarySnapshot<T> TPerCpuSummary<T>::GetSummaryAndReset()
 {
     TSummarySnapshot<T> value;
     for (auto& shard : Shards_) {
+        if (shard.Empty.load(std::memory_order::acquire)) {
+            continue;
+        }
         auto guard = Guard(shard.Lock);
         value += shard.Value;
         shard.Value = {};
+        shard.Empty.store(true, std::memory_order::release);
     }
     return value;
 }

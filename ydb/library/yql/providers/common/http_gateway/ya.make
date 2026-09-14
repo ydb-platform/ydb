@@ -6,6 +6,7 @@ SRCS(
     yql_aws_signature.cpp
     yql_http_default_retry_policy.cpp
     yql_http_gateway.cpp
+    yql_http_pool_cap_pusher.cpp
 )
 
 PEERDIR(

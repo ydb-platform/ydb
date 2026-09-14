@@ -199,6 +199,11 @@ public:
         return Proto;
     }
 
+    void AddOptionalValue(const std::string& key, const std::string& value) {
+        NKikimr::NOperationId::AddOptionalValue(Proto, key, value);
+        AddToIndex(Proto.data(Proto.data_size() - 1));
+    }
+
     const std::vector<const std::string*>& GetValue(const std::string& key) const {
         auto it = Index.find(key);
         if (it != Index.end()) {
@@ -221,13 +226,17 @@ public:
     }
 
 private:
+    void AddToIndex(const Ydb::TOperationId::TData& data) {
+#ifdef YDB_SDK_OSS
+        Index[data.key()].push_back(&data.value());
+#else
+        Index[data.key()].push_back(&data.value().ConstRef());
+#endif
+    }
+
     void BuildIndex() {
         for (const auto& data : Proto.data()) {
-#ifdef YDB_SDK_OSS
-            Index[data.key()].push_back(&data.value());
-#else
-            Index[data.key()].push_back(&data.value().ConstRef());
-#endif
+            AddToIndex(data);
         }
     }
 
@@ -282,7 +291,7 @@ std::vector<TOperationId::TData> TOperationId::GetData() const {
 }
 
 void TOperationId::AddOptionalValue(const std::string& key, const std::string& value) {
-    NKikimr::NOperationId::AddOptionalValue(Impl->GetProto(), key, value);
+    Impl->AddOptionalValue(key, value);
 }
 
 const std::vector<const std::string*>& TOperationId::GetValue(const std::string& key) const {

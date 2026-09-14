@@ -386,6 +386,40 @@ bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {
     return false;
 }
 
+THashMap<NYql::NDq::TWorkScope, double> TComputeScheduler::GetLeafPoolFairShares() const {
+    THashMap<NYql::NDq::TWorkScope, double> result;
+    const auto totalCpu = GetTotalCpuLimit();
+    if (!totalCpu) {
+        return result;
+    }
+    auto snapshot = Root->GetSnapshot();
+    if (!snapshot) {
+        return result;
+    }
+
+    auto visitPool = [&](auto self, const NHdrf::TDatabaseId& databaseId, const auto* pool) -> void {
+        if (pool->IsLeaf()) {
+            NYql::NDq::TWorkScope scope{
+                .Namespace = databaseId,
+                .Name = std::get<NHdrf::TPoolId>(pool->GetId()),
+            };
+            result[std::move(scope)] = double(pool->FairShare) / totalCpu;
+        } else {
+            pool->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* child, size_t) {
+                self(self, databaseId, child);
+            });
+        }
+    };
+
+    snapshot->ForEachChild<NHdrf::NSnapshot::TDatabase>([&](auto* database, size_t) {
+        const auto& databaseId = std::get<NHdrf::TDatabaseId>(database->GetId());
+        database->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* pool, size_t) {
+            visitPool(visitPool, databaseId, pool);
+        });
+    });
+    return result;
+}
+
 void TComputeScheduler::UpdateFairShare() {
     auto startTime = TMonotonic::Now();
 

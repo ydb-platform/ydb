@@ -31,13 +31,18 @@ public:
     explicit TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
         const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId);
 
+    bool SendTaskToExecute(const std::shared_ptr<ITask>& task) const;
+
     void Finish();
 
     TProcessGuard(TProcessGuard&& other)
         : Category(other.Category)
         , ScopeId(other.ScopeId)
         , ExternalProcessId(other.ExternalProcessId)
-        , ServiceActorId(other.ServiceActorId) {
+        , InternalProcessId(other.InternalProcessId)
+        , Finished(other.Finished)
+        , ServiceActorId(std::move(other.ServiceActorId)) {
+        other.Finished = true;
         other.ServiceActorId.reset();
     }
 

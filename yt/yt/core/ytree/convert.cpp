@@ -50,7 +50,7 @@ double ConvertYsonStringBufToDouble(const NYson::TYsonStringBuf& yson)
         default:
             THROW_ERROR_EXCEPTION("Cannot parse \"double\" from %Qlv",
                 token.GetType())
-                << TErrorAttribute("data", yson.AsStringBuf());
+                .With("data", yson.AsStringBuf());
     }
 }
 
@@ -71,7 +71,7 @@ std::string ConvertYsonStringBufToString(const NYson::TYsonStringBuf& yson)
         default:
             THROW_ERROR_EXCEPTION("Cannot parse \"string\" from %Qlv",
                 token.GetType())
-                << TErrorAttribute("data", yson.AsStringBuf());
+                .With("data", yson.AsStringBuf());
     }
 }
 

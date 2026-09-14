@@ -16,6 +16,7 @@ ENV(TESTS_LARGE=1)
 
 PEERDIR(
     library/cpp/testing/unittest
+    ydb/core/base
     ydb/library/actors/testlib
     ydb/library/actors/wilson
     ydb/library/services

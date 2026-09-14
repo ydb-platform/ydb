@@ -1,0 +1,15 @@
+/* custom error: Wrong number of columns, expected: 1, got: 2 */
+PRAGMA YqlSelect = 'force';
+
+WITH x (a, b) AS (
+    SELECT
+        1
+    UNION ALL
+    SELECT
+        '2'
+)
+SELECT
+    *
+FROM
+    x
+;

@@ -1,6 +1,6 @@
-#include <yt/yt/core/test_framework/framework.h>
-
 #include <yt/yt/client/queue_client/common.h>
+
+#include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/ytree/helpers.h>
 
@@ -11,11 +11,11 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using ClusterPathString = std::tuple<std::string, std::string, std::string>;
+using TClusterPathTestCase = std::tuple<std::string, std::string, std::string>;
 
 class TCrossClusterReferenceFromStringTest
     : public ::testing::Test
-    , public ::testing::WithParamInterface<ClusterPathString>
+    , public ::testing::WithParamInterface<TClusterPathTestCase>
 { };
 
 TEST_P(TCrossClusterReferenceFromStringTest, TestFromString)
@@ -28,13 +28,13 @@ INSTANTIATE_TEST_SUITE_P(
     TCrossClusterReferenceFromStringTest,
     TCrossClusterReferenceFromStringTest,
     ::testing::Values(
-        ClusterPathString{"secondary", "//keker", "secondary://keker"},
-        ClusterPathString{"secondary", "/keker", "secondary:/keker"},
-        ClusterPathString{"primary", "//haha:haha:", "primary://haha:haha:"},
-        ClusterPathString{"primary", "//some/path", "<cluster=primary>//some/path"},
-        ClusterPathString{"primary", "//some/path", "<cluster=primary;queue_consumer_id=my_consumer>//some/path"},
-        ClusterPathString{"primary", "//some/path", "<cluster=primary;queue_consumer_id=my_consumer;any_attribute=is_ok>//some/path"},
-        ClusterPathString{"primary", "//cluster/with/dot/is/ok", "<queue_consumer_id=my_consumer;any_attribute=is_ok>primary://cluster/with/dot/is/ok"}
+        TClusterPathTestCase{"secondary", "//keker", "secondary://keker"},
+        TClusterPathTestCase{"secondary", "/keker", "secondary:/keker"},
+        TClusterPathTestCase{"primary", "//haha:haha:", "primary://haha:haha:"},
+        TClusterPathTestCase{"primary", "//some/path", "<cluster=primary>//some/path"},
+        TClusterPathTestCase{"primary", "//some/path", "<cluster=primary;queue_consumer_id=my_consumer>//some/path"},
+        TClusterPathTestCase{"primary", "//some/path", "<cluster=primary;queue_consumer_id=my_consumer;any_attribute=is_ok>//some/path"},
+        TClusterPathTestCase{"primary", "//cluster/with/dot/is/ok", "<queue_consumer_id=my_consumer;any_attribute=is_ok>primary://cluster/with/dot/is/ok"}
 ));
 
 ////////////////////////////////////////////////////////////////////////////////

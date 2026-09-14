@@ -1,5 +1,5 @@
 import codecs
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
 
 from .core import IDNAError, _unicode_dots_re, alabel, decode, encode, ulabel
 
@@ -15,7 +15,7 @@ class Codec(codecs.Codec):
     raises :exc:`~idna.IDNAError`.
     """
 
-    def encode(self, data: str, errors: str = "strict") -> Tuple[bytes, int]:  # ty: ignore[invalid-method-override]
+    def encode(self, data: str, errors: str = "strict") -> tuple[bytes, int]:  # ty: ignore[invalid-method-override]
         if errors != "strict":
             raise IDNAError(f'Unsupported error handling "{errors}"')
 
@@ -24,7 +24,7 @@ class Codec(codecs.Codec):
 
         return encode(data), len(data)
 
-    def decode(self, data: bytes, errors: str = "strict") -> Tuple[str, int]:  # ty: ignore[invalid-method-override]
+    def decode(self, data: bytes, errors: str = "strict") -> tuple[str, int]:  # ty: ignore[invalid-method-override]
         if errors != "strict":
             raise IDNAError(f'Unsupported error handling "{errors}"')
 
@@ -46,7 +46,7 @@ class IncrementalEncoder(codecs.BufferedIncrementalEncoder):
     Only the ``"strict"`` error handler is supported.
     """
 
-    def _buffer_encode(self, data: str, errors: str, final: bool) -> Tuple[bytes, int]:  # ty: ignore[invalid-method-override]
+    def _buffer_encode(self, data: str, errors: str, final: bool) -> tuple[bytes, int]:  # ty: ignore[invalid-method-override]
         if errors != "strict":
             raise IDNAError(f'Unsupported error handling "{errors}"')
 
@@ -89,7 +89,7 @@ class IncrementalDecoder(codecs.BufferedIncrementalDecoder):
     Only the ``"strict"`` error handler is supported.
     """
 
-    def _buffer_decode(self, data: Any, errors: str, final: bool) -> Tuple[str, int]:  # ty: ignore[invalid-method-override]
+    def _buffer_decode(self, data: Any, errors: str, final: bool) -> tuple[str, int]:  # ty: ignore[invalid-method-override]
         if errors != "strict":
             raise IDNAError(f'Unsupported error handling "{errors}"')
 

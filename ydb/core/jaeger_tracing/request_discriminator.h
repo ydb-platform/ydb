@@ -130,6 +130,10 @@ enum class ERequestType: size_t {
     NBS_WRITEBLOCKS,
     NBS_READBLOCKS,
 
+    // DistributedStorage requests
+    DISTRIBUTED_STORAGE_STREAMSTORAGESTATE,
+    DISTRIBUTED_STORAGE_REASSIGNVDISK,
+
     REQUEST_TYPES_CNT, // Add new types above this line
 };
 

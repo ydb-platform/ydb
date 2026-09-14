@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/fq/libs/credentials/structured_token_credentials.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/pq/gateway/dummy/yql_pq_dummy_gateway_factory.h>
@@ -235,16 +236,6 @@ public:
     }
 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& structuredTokenJson, bool addBearerToToken) override {
-        if (NYql::IsStructuredTokenJson(structuredTokenJson)) {
-            NYql::TStructuredTokenParser parser = NYql::CreateStructuredTokenParser(structuredTokenJson);
-            if (parser.HasIamAuth()) {
-                // the same validation as in KikimrIamAuthCredentialsProviderFactory
-                if (!NKikimr::AppData()->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
-                    throw yexception() << "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it";
-                }
-            }
-        }
-
         return NYql::CreateCredentialsProviderFactoryForStructuredToken(
             SaFactory_, structuredTokenJson, addBearerToToken);
     }
@@ -254,7 +245,7 @@ private:
 };
 
 std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CreateCredentialsFactory(const TString& token) {
-    return std::make_shared<TStaticSecuredCredentialsFactory>(token);
+    return NFq::CreateKikimrStructuredTokenCredentialsFactoryOverFactory(std::make_shared<TStaticSecuredCredentialsFactory>(token));
 }
 
 std::function<void(const std::string&)> AstChecker(ui64 txCount, ui64 stagesCount) {
@@ -267,8 +258,8 @@ std::function<void(const std::string&)> AstChecker(ui64 txCount, ui64 stagesCoun
     };
 
     return [txCount, stagesCount, stringCounter](const std::string& ast) {
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
+        UNIT_ASSERT_VALUES_EQUAL_C(stringCounter(ast, "KqpPhysicalTx"), txCount, "Ast:\n" << ast);
+        UNIT_ASSERT_VALUES_EQUAL_C(stringCounter(ast, "DqPhyStage"), stagesCount, "Ast:\n" << ast);
     };
 }
 

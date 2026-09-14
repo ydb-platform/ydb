@@ -9,6 +9,8 @@ namespace {
 class TNameService: public INameService {
 public:
     explicit TNameService(TVector<TColumnId> columns) {
+        columns = Deduplicated(std::move(columns));
+
         TSchemaData data;
         for (auto& column : columns) {
             Tables_.emplace(column.TableAlias);
@@ -26,9 +28,15 @@ public:
             return NThreading::MakeFuture<TNameResponse>({});
         }
 
+        TStringBuf alias = request.Constraints.Column->TableAlias;
+
         TNameResponse response;
 
         for (const TString& tableName : Tables_) {
+            if (!alias.empty() && tableName != alias) {
+                continue;
+            }
+
             const auto& withoutByTableAlias = request.Constraints.Column->WithoutByTableAlias;
 
             THashSet<TString> without;
@@ -76,6 +84,29 @@ public:
     }
 
 private:
+    static TVector<TColumnId> Deduplicated(TVector<TColumnId> columns) {
+        TVector<TColumnId*> ptrs(Reserve(columns.size()));
+        for (auto& column : columns) {
+            ptrs.emplace_back(&column);
+        }
+
+        SortUniqueBy(ptrs, [](const TColumnId* id) {
+            TString alias = id->TableAlias;
+            if (alias.empty()) {
+                alias = ToString(reinterpret_cast<std::uintptr_t>(id));
+            }
+
+            return std::pair<TString, TStringBuf>(alias, id->Name);
+        });
+
+        TVector<TColumnId> deduplicated(Reserve(ptrs.size()));
+        for (TColumnId* ptr : ptrs) {
+            deduplicated.emplace_back(std::move(*ptr));
+        }
+
+        return deduplicated;
+    }
+
     static TString Escaped(TString tableName) {
         if (tableName.empty()) {
             tableName.prepend("table_");

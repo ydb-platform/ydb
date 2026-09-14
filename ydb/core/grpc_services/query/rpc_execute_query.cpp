@@ -15,6 +15,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
+
 
 namespace NKikimr::NGRpcService {
 
@@ -325,6 +327,7 @@ private:
 
         ev->SetProgressStatsPeriod(TDuration::MilliSeconds(req->stats_period_ms()));
         ev->Record.MutableRequest()->SetCollectDiagnostics(NeedCollectDiagnostics(*req));
+        ev->Record.MutableRequest()->SetCollectAffectedRows(req->collect_affected_rows());
 
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId())) {
             NYql::TIssues issues;
@@ -346,11 +349,12 @@ private:
     }
 
     void Handle(TRpcServices::TEvGrpcNextReply::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " NextReply"
-            << ", left: " << ev->Get()->LeftInQueue
-            << ", queue: " << FlowControl_.QueueSize()
-            << ", inflight bytes: " << FlowControl_.InflightBytes()
-            << ", limit bytes: " << FlowControl_.InflightLimitBytes());
+        YDB_LOG_DEBUG_CTX(ctx, "NextReply",
+            {"selfId", this->SelfId()},
+            {"left", ev->Get()->LeftInQueue},
+            {"queue", FlowControl_.QueueSize()},
+            {"inflightBytes", FlowControl_.InflightBytes()},
+            {"limitBytes", FlowControl_.InflightLimitBytes()});
 
         while (FlowControl_.QueueSize() > ev->Get()->LeftInQueue) {
             FlowControl_.PopResponse();
@@ -360,10 +364,11 @@ private:
         if (freeSpaceBytes > 0) {
             for (auto& [channelId, channel] : StreamChannels_) {
                 if (channel.ResumeIfStopped(SelfId(), freeSpaceBytes)) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Resume execution, "
-                        << ", channel: " << channelId
-                        << ", seqNo: " << channel.LastSeqNo
-                        << ", freeSpace: " << freeSpaceBytes);
+                    YDB_LOG_DEBUG_CTX(ctx, "Resume execution",
+                        {"selfId", this->SelfId()},
+                        {"channel", channelId},
+                        {"seqNo", channel.LastSeqNo},
+                        {"freeSpace", freeSpaceBytes});
                 }
             }
         }
@@ -396,11 +401,12 @@ private:
         channel.AckedFreeSpaceBytes = freeSpaceBytes;
         channel.ChannelId = ev->Get()->Record.GetChannelId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << "Send stream data ack"
-            << ", seqNo: " << ev->Get()->Record.GetSeqNo()
-            << ", freeSpace: " << freeSpaceBytes
-            << ", to: " << ev->Sender
-            << ", queue: " << FlowControl_.QueueSize());
+        YDB_LOG_DEBUG_CTX(ctx, "Send stream data ack",
+            {"selfId", this->SelfId()},
+            {"seqNo", ev->Get()->Record.GetSeqNo()},
+            {"freeSpace", freeSpaceBytes},
+            {"actorId", ev->Sender},
+            {"queue", FlowControl_.QueueSize()});
 
         channel.SendAck(SelfId());
     }
@@ -496,7 +502,7 @@ private:
 
 private:
     void HandleClientLost(const TActorContext& ctx) {
-        LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Client lost");
+        YDB_LOG_WARN_CTX(ctx, "Client lost");
 
         // We must try to finish stream otherwise grpc will not free allocated memory
         // If stream already scheduled to be finished (ReplyFinishStream already called)
@@ -533,8 +539,8 @@ private:
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message)
     {
-        ALOG_INFO(NKikimrServices::RPC_REQUEST, "Finish grpc stream, status: "
-            << Ydb::StatusIds::StatusCode_Name(status));
+        YDB_LOG_INFO("Finish grpc stream",
+            {"status", Ydb::StatusIds::StatusCode_Name(status)});
 
         // Skip sending empty result in case of success status - simplify client logic
         if (status != Ydb::StatusIds::SUCCESS || message.size() > 0) {
@@ -553,7 +559,8 @@ private:
     }
 
     void InternalError(const TString& message) {
-        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+        YDB_LOG_ERROR("Internal error",
+            {"message", message});
 
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message);
         ReplyFinishStream(Ydb::StatusIds::INTERNAL_ERROR, issue);

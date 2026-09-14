@@ -70,7 +70,7 @@ class Workload(unittest.TestCase):
         workloadConsumerName = self.workload_consumer_name
 
         print("Creating test topic")
-        testOptions = [("0", "1"), ("0", "0")]
+        testOptions = [("1", "1"), ("0", "1"), ("0", "0")]
         checkerConsumer = "targetCheckerConsumer"
         self.create_topic(self.test_topic_path, [workloadConsumerName, checkerConsumer] + [f"{checkerConsumer}-{i}" for i in range(len(testOptions))])
         user_creation_command = "CREATE USER iwgrnkn PASSWORD 'abrengo'"

@@ -141,7 +141,7 @@ int TNameTable::DoRegisterName(TStringBuf name)
             EErrorCode::CorruptedNameTable,
             "Cannot register column %Qv: column limit exceeded",
             name)
-            << TErrorAttribute("max_column_id", MaxColumnId);
+            .With("max_column_id", MaxColumnId);
     }
 
     if (EnableColumnNameValidation_ && name.length() > MaxColumnNameLength) {
@@ -149,7 +149,7 @@ int TNameTable::DoRegisterName(TStringBuf name)
             EErrorCode::CorruptedNameTable,
             "Cannot register column %Qv: column name is too long",
             name)
-            << TErrorAttribute("max_column_name_length", MaxColumnNameLength);
+            .With("max_column_name_length", MaxColumnNameLength);
     }
 
     const auto& savedName = IdToName_.emplace_back(name);

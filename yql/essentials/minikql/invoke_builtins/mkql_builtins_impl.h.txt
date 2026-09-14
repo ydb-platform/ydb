@@ -3,11 +3,13 @@
 #include "mkql_builtins_impl_common.h"
 #include <mkql_builtins.h>
 #include "mkql_builtins_codegen.h"
+
 #include <arrow/array/array_base.h>
 #include <arrow/array/util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+namespace NKikimr::NMiniKQL {
 
 struct TUnaryStub {
     template<typename TFunc>
@@ -77,7 +79,8 @@ struct TAggregateWrap {
 struct TAggrCompareWrap {
     template<typename TFunc>
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod* args) {
-        const bool a0(args[0]), a1(args[1]);
+        const bool a0(args[0]);
+        const bool a1(args[1]);
         return (a0 && a1) ?
             TFunc::Execute(args[0], args[1]) : NUdf::TUnboxedValuePod(TFunc::Simple(a0, a1));
     }
@@ -210,176 +213,184 @@ struct TShiftArithmeticBinary : public TArithmeticConstraintsSame<TInput, TOutpu
 
 template <typename TInput, typename TOutput>
 struct TUnaryArgs {
-    static const TFunctionParamMetadata Value[3];
+    static const std::array<TFunctionParamMetadata, 3> Value;
 };
 
+inline constexpr ui16 NullableFlag(bool isNullable) {
+    return isNullable ? TFunctionParamMetadata::FlagIsNullable : 0;
+}
+
+inline constexpr ui16 NullableFlag(bool leftNullable, bool rightNullable) {
+    return NullableFlag(leftNullable) | NullableFlag(rightNullable);
+}
+
 template <typename TInput, typename TOutput>
-const TFunctionParamMetadata TUnaryArgs<TInput, TOutput>::Value[3] = {
+const std::array<TFunctionParamMetadata, 3> TUnaryArgs<TInput, TOutput>::Value = {{
     { TOutput::Id, 0 },
     { TInput::Id, 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TInput, typename TOutput, bool IsOptional>
 struct TUnaryArgsOpt {
-    static const TFunctionParamMetadata Value[3];
+    static const std::array<TFunctionParamMetadata, 3> Value;
 };
 
 template <typename TInput, typename TOutput, bool IsOptional>
-const TFunctionParamMetadata TUnaryArgsOpt<TInput, TOutput, IsOptional>::Value[3] = {
+const std::array<TFunctionParamMetadata, 3> TUnaryArgsOpt<TInput, TOutput, IsOptional>::Value = {{
     { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TInput, typename TOutput>
 struct TUnaryArgsWithNullableResult {
-    static const TFunctionParamMetadata Value[3];
+    static const std::array<TFunctionParamMetadata, 3> Value;
 };
 
 template <typename TInput, typename TOutput>
-const TFunctionParamMetadata TUnaryArgsWithNullableResult<TInput, TOutput>::Value[3] = {
+const std::array<TFunctionParamMetadata, 3> TUnaryArgsWithNullableResult<TInput, TOutput>::Value = {{
     { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
     { TInput::Id, 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TInput, typename TOutput, bool IsOptional>
 struct TUnaryArgsWithNullableResultOpt {
-    static const TFunctionParamMetadata Value[3];
+    static const std::array<TFunctionParamMetadata, 3> Value;
 };
 
 template <typename TInput, typename TOutput, bool IsOptional>
-const TFunctionParamMetadata TUnaryArgsWithNullableResultOpt<TInput, TOutput, IsOptional>::Value[3] = {
+const std::array<TFunctionParamMetadata, 3> TUnaryArgsWithNullableResultOpt<TInput, TOutput, IsOptional>::Value = {{
     { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
     { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TInput, typename TOutput>
 struct TBinaryArgs {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput, typename TOutput>
-const TFunctionParamMetadata TBinaryArgs<TInput, TOutput>::Value[4] = {
+const std::array<TFunctionParamMetadata, 4> TBinaryArgs<TInput, TOutput>::Value = {{
     { TOutput::Id, 0 },
     { TInput::Id, 0 },
     { TInput::Id, 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
 struct TBinaryArgsOpt {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
-const TFunctionParamMetadata TBinaryArgsOpt<TInput1, TInput2, TOutput, IsLeftOptional, IsRightOptional>::Value[4] = {
-    { TOutput::Id, (IsLeftOptional || IsRightOptional) ? TFunctionParamMetadata::FlagIsNullable : 0 },
+const std::array<TFunctionParamMetadata, 4> TBinaryArgsOpt<TInput1, TInput2, TOutput, IsLeftOptional, IsRightOptional>::Value = {{
+    { TOutput::Id, NullableFlag(IsLeftOptional, IsRightOptional) },
     { TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TInput, typename TOutput, bool IsOptional>
 struct TBinaryArgsSameOpt {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput, typename TOutput, bool IsOptional>
-const TFunctionParamMetadata TBinaryArgsSameOpt<TInput, TOutput, IsOptional>::Value[4] = {
+const std::array<TFunctionParamMetadata, 4> TBinaryArgsSameOpt<TInput, TOutput, IsOptional>::Value = {{
     { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TInput, typename TOutput, bool IsOptional>
 struct TBinaryArgsSameOptArgsWithNullableResult {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput, typename TOutput, bool IsOptional>
-const TFunctionParamMetadata TBinaryArgsSameOptArgsWithNullableResult<TInput, TOutput, IsOptional>::Value[4] = {
+const std::array<TFunctionParamMetadata, 4> TBinaryArgsSameOptArgsWithNullableResult<TInput, TOutput, IsOptional>::Value = {{
     { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
     { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TInput, typename TOutput>
 struct TBinaryShiftArgs {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput, typename TOutput>
-const TFunctionParamMetadata TBinaryShiftArgs<TInput, TOutput>::Value[4] = {
+const std::array<TFunctionParamMetadata, 4> TBinaryShiftArgs<TInput, TOutput>::Value = {{
     { TOutput::Id, 0 },
     { TInput::Id, 0 },
     { NUdf::TDataType<ui8>::Id, 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TInput, typename TOutput, bool IsOptional>
 struct TBinaryShiftArgsOpt {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput, typename TOutput, bool IsOptional>
-const TFunctionParamMetadata TBinaryShiftArgsOpt<TInput, TOutput, IsOptional>::Value[4] = {
+const std::array<TFunctionParamMetadata, 4> TBinaryShiftArgsOpt<TInput, TOutput, IsOptional>::Value = {{
     { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { NUdf::TDataType<ui8>::Id, 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TInput, typename TOutput>
 struct TBinaryArgsWithNullableResult {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput, typename TOutput>
-const TFunctionParamMetadata TBinaryArgsWithNullableResult<TInput, TOutput>::Value[4] = {
+const std::array<TFunctionParamMetadata, 4> TBinaryArgsWithNullableResult<TInput, TOutput>::Value = {{
     { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
     { TInput::Id, 0 },
     { TInput::Id, 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TOutput, typename TInput1, typename TInput2, typename TInput3, bool IsFirstOptional, bool IsSecondOptional, bool IsThirdOptional, bool IsResultOptional = IsFirstOptional>
 struct TTernaryArgs {
-    static const TFunctionParamMetadata Value[5];
+    static const std::array<TFunctionParamMetadata, 5> Value;
 };
 
 template <typename TOutput, typename TInput1, typename TInput2, typename TInput3, bool IsFirstOptional, bool IsSecondOptional, bool IsThirdOptional, bool IsResultOptional>
-const TFunctionParamMetadata TTernaryArgs<TOutput, TInput1, TInput2, TInput3, IsFirstOptional, IsSecondOptional, IsThirdOptional, IsResultOptional>::Value[5] = {
+const std::array<TFunctionParamMetadata, 5> TTernaryArgs<TOutput, TInput1, TInput2, TInput3, IsFirstOptional, IsSecondOptional, IsThirdOptional, IsResultOptional>::Value = {{
     { TOutput::Id, IsResultOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
     { TInput1::Id, IsFirstOptional  ? TFunctionParamMetadata::FlagIsNullable : 0},
     { TInput2::Id, IsSecondOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
     { TInput3::Id, IsThirdOptional  ? TFunctionParamMetadata::FlagIsNullable : 0},
     { 0, 0 }
-};
+}};
 
 template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
 struct TBinaryArgsOptWithNullableResult {
-    static const TFunctionParamMetadata Value[4];
+    static const std::array<TFunctionParamMetadata, 4> Value;
 };
 
 template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
-const TFunctionParamMetadata TBinaryArgsOptWithNullableResult<TInput1, TInput2, TOutput, IsLeftOptional, IsRightOptional>::Value[4] = {
+const std::array<TFunctionParamMetadata, 4> TBinaryArgsOptWithNullableResult<TInput1, TInput2, TOutput, IsLeftOptional, IsRightOptional>::Value = {{
     { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
     { TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
     { 0, 0 }
-};
+}};
 
 template <typename TFunc, typename TArgs, typename TWrap>
 void RegisterFunctionImpl(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
 #ifndef MKQL_DISABLE_CODEGEN
-    const TFunctionDescriptor description(TArgs::Value, &TWrap::template Execute<TFunc>, reinterpret_cast<void*>(&TWrap::template Generate<TFunc>));
+    const TFunctionDescriptor description(TArgs::Value.data(), &TWrap::template Execute<TFunc>, reinterpret_cast<void*>(&TWrap::template Generate<TFunc>));
 #else
-    const TFunctionDescriptor description(TArgs::Value, &TWrap::template Execute<TFunc>);
+    const TFunctionDescriptor description(TArgs::Value.data(), &TWrap::template Execute<TFunc>);
 #endif
     registry.Register(name, description);
 }
@@ -1350,7 +1361,9 @@ inline arrow::Status ExecDecimalBinaryOptImpl(arrow::compute::KernelContext* ker
         if (arg2.is_scalar()) {
             return ExecDecimalArrayScalarOptImpl<TOut>(batch, res, arrayScalarFunc);
         } else {
-            return ExecArrayArrayOptImpl<NYql::NDecimal::TInt128, NYql::NDecimal::TInt128, TOut>(kernelCtx, batch, res, arrayArrayFunc, outputSizeOf, typeGetter, false, false, EPropagateTz::None);
+            return ExecArrayArrayOptImpl<NYql::NDecimal::TInt128, NYql::NDecimal::TInt128, TOut>(
+                kernelCtx, batch, res, arrayArrayFunc, outputSizeOf, typeGetter,
+                /*tz1=*/ false, /*tz2=*/ false, EPropagateTz::None);
         }
     }
 }
@@ -1605,7 +1618,7 @@ public:
     bool IsPolymorphic() const final;
 
 private:
-    const std::unique_ptr<arrow::compute::ScalarKernel> ArrowKernel;
+    const std::unique_ptr<arrow::compute::ScalarKernel> ArrowKernel_;
 };
 
 template<typename TInput, bool Tz, typename TOutput, bool PropagateTz, class TFuncInstance>
@@ -1667,11 +1680,11 @@ void AddUnaryKernel(TKernelFamilyBase& owner) {
     using TInputLayout = typename TInput::TLayout;
     using TOutputLayout = typename TOutput::TLayout;
 
-    static constexpr bool tz = (TInput::Features & NUdf::TzDateType) != 0;
-    static constexpr bool propagateTz = (TOutput::Features & NUdf::TzDateType) != 0;
+    static constexpr bool Tz = (TInput::Features & NUdf::TzDateType) != 0;
+    static constexpr bool PropagateTz = (TOutput::Features & NUdf::TzDateType) != 0;
 
     using TFuncInstance = TFunc<TInputLayout, TOutputLayout>;
-    using TExecs = TUnaryKernelExecs<TInputLayout, tz, TOutputLayout, propagateTz, TFuncInstance>;
+    using TExecs = TUnaryKernelExecs<TInputLayout, Tz, TOutputLayout, PropagateTz, TFuncInstance>;
 
     AddUnaryKernelImpl(owner, TInput::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
 }
@@ -1693,14 +1706,14 @@ void AddBinaryKernel(TKernelFamilyBase& owner) {
     using TInput2Layout = typename TInput2::TLayout;
     using TOutputLayout = typename TOutput::TLayout;
 
-    static constexpr bool tz1 = (TInput1::Features & NUdf::TzDateType) != 0;
-    static constexpr bool tz2 = (TInput2::Features & NUdf::TzDateType) != 0;
-    static constexpr EPropagateTz propagateTz = (TOutput::Features & NUdf::TzDateType) ?
+    static constexpr bool Tz1 = (TInput1::Features & NUdf::TzDateType) != 0;
+    static constexpr bool Tz2 = (TInput2::Features & NUdf::TzDateType) != 0;
+    static constexpr EPropagateTz PropagateTz = (TOutput::Features & NUdf::TzDateType) ?
         ((TInput1::Features & NUdf::TzDateType) ? EPropagateTz::FromLeft : EPropagateTz::FromRight) :
         EPropagateTz::None;
 
     using TFuncInstance = TFunc<TInput1Layout, TInput2Layout, TOutputLayout>;
-    using TExecs = TBinaryKernelExecs<TInput1Layout, tz1, TInput2Layout, tz2, TOutputLayout, propagateTz, TFuncInstance, TFuncInstance::NullMode>;
+    using TExecs = TBinaryKernelExecs<TInput1Layout, Tz1, TInput2Layout, Tz2, TOutputLayout, PropagateTz, TFuncInstance, TFuncInstance::NullMode>;
 
     AddBinaryKernelImpl(owner, TInput1::Slot, TInput2::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
 }
@@ -1712,14 +1725,14 @@ void AddBinaryKernelPoly(TKernelFamilyBase& owner) {
     using TInput2Layout = typename TInput2::TLayout;
     using TOutputLayout = typename TOutput::TLayout;
 
-    static constexpr bool tz1 = (TInput1::Features & NUdf::TzDateType) != 0;
-    static constexpr bool tz2 = (TInput2::Features & NUdf::TzDateType) != 0;
-    static constexpr EPropagateTz propagateTz = (TOutput::Features & NUdf::TzDateType) ?
+    static constexpr bool Tz1 = (TInput1::Features & NUdf::TzDateType) != 0;
+    static constexpr bool Tz2 = (TInput2::Features & NUdf::TzDateType) != 0;
+    static constexpr EPropagateTz PropagateTz = (TOutput::Features & NUdf::TzDateType) ?
         ((TInput1::Features & NUdf::TzDateType) ? EPropagateTz::FromLeft : EPropagateTz::FromRight) :
         EPropagateTz::None;
 
     using TFuncInstance = TFunc<TInput1, TInput2, TOutput>;
-    using TExecs = TBinaryKernelExecs<TInput1Layout, tz1, TInput2Layout, tz2, TOutputLayout, propagateTz, TFuncInstance, TFuncInstance::NullMode>;
+    using TExecs = TBinaryKernelExecs<TInput1Layout, Tz1, TInput2Layout, Tz2, TOutputLayout, PropagateTz, TFuncInstance, TFuncInstance::NullMode>;
 
     AddBinaryKernelImpl(owner, TInput1::Slot, TInput2::Slot, TOutput::Slot, &TExecs::Exec, TFuncInstance::NullMode);
 }
@@ -1968,26 +1981,12 @@ void AddDateComparisonKernels(TKernelFamilyBase& owner) {
     AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>, TPred>(owner);
 }
 
-class TDecimalKernel : public TKernel {
-public:
-    struct TKernelState : arrow::compute::KernelState {
-        ui8 Precision;
-    };
-
-    TDecimalKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
-        NUdf::TDataTypeId returnType, TStatelessArrayKernelExec exec,
-        TKernel::ENullMode nullMode);
-
-    const arrow::compute::ScalarKernel& GetArrowKernel() const final;
-    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const final;
-    bool IsPolymorphic() const final;
-
-private:
-    TStatelessArrayKernelExec Exec;
+struct TDecimalKernelState : arrow::compute::KernelState {
+    ui8 Precision;
 };
 
 template<template<ui8> class TFuncInstance>
-struct TDecimalKernelExecs
+class TDecimalKernelExecs
 {
     using TInput1 = NYql::NDecimal::TInt128;
     using TInput2 = NYql::NDecimal::TInt128;
@@ -2022,31 +2021,26 @@ struct TDecimalKernelExecs
         return std::array<ExecFunc, sizeof...(Is)>{ExecImpl<Is+1>...};
     }
 
+public:
     static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        ui8 precision = static_cast<TDecimalKernel::TKernelState*>(kernelCtx->state())->Precision;
+        ui8 precision = static_cast<TDecimalKernelState*>(kernelCtx->state())->Precision;
         Y_DEBUG_ABORT_UNLESS(precision >= 1&& precision <= 35);
 
-        static constexpr auto jumpTable = GenerateTable(std::make_index_sequence<35>{});
-        return jumpTable[precision-1](kernelCtx, batch, res);
+        static constexpr auto JumpTable = GenerateTable(std::make_index_sequence<35>{});
+        return JumpTable[precision-1](kernelCtx, batch, res);
+    }
+
+    static TStatelessArrayKernelExec GetExec(
+        ui8 leftPrecision, ui8 leftScale, ui8 rightPrecision, ui8 rightScale) {
+        MKQL_ENSURE(
+            leftPrecision == rightPrecision && leftScale == rightScale,
+            "Require same precision/scale");
+        return &Exec;
     }
 };
 
-
-template<template<ui8> class TFunc>
-void AddBinaryDecimalKernels(TKernelFamilyBase& owner) {
-    auto type1 = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Decimal).TypeId;
-    auto type2 = type1;
-    auto returnType = type1;
-    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
-
-    using Execs = TDecimalKernelExecs<TFunc>;
-    auto kernel = std::make_unique<TDecimalKernel>(owner, argTypes, returnType, &Execs::Exec, TKernel::ENullMode::Default);
-    owner.Adopt(argTypes, returnType, std::move(kernel));
-}
-
-template<class TFuncInstance>
-struct TDecimalComparisonKernelExecs
-{
+template <template <i8> class TFuncInstance>
+class TDecimalComparisonKernelExecs {
     using TInput1 = NYql::NDecimal::TInt128;
     using TInput2 = NYql::NDecimal::TInt128;
     using TOutput = bool;
@@ -2057,11 +2051,15 @@ struct TDecimalComparisonKernelExecs
         return result;
     }
 
-    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarScalarCoreOpt;
-        auto scalarArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarArrayCoreOpt;
-        auto arrayScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayScalarCoreOpt;
-        auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayArrayCoreOpt;
+    template <i8 ScaleFactor>
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx,
+        const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        using TFunc = TFuncInstance<ScaleFactor>;
+        using TExecs = TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFunc>;
+        auto scalarScalarFunc = &TExecs::ScalarScalarCoreOpt;
+        auto scalarArrayFunc = &TExecs::ScalarArrayCoreOpt;
+        auto arrayScalarFunc = &TExecs::ArrayScalarCoreOpt;
+        auto arrayArrayFunc = &TExecs::ArrayArrayCoreOpt;
 
         return ExecDecimalBinaryOptImpl(kernelCtx, batch, res,
             &GetPrimitiveDataType<TOutput>, &ScalarGetter,
@@ -2071,9 +2069,66 @@ struct TDecimalComparisonKernelExecs
             arrayScalarFunc,
             arrayArrayFunc);
     }
+
+    template <size_t... Indices>
+    static constexpr auto MakeExecs(std::index_sequence<Indices...>) {
+        return std::array<TStatelessArrayKernelExec, sizeof...(Indices)>{
+            &Exec<static_cast<i8>(
+                static_cast<i16>(Indices) - NYql::NDecimal::MaxPrecision)>...};
+    }
+
+public:
+    static TStatelessArrayKernelExec GetExec(
+        ui8, ui8 leftScale, ui8, ui8 rightScale) {
+        const i8 scaleDifference = static_cast<i8>(rightScale) -
+            static_cast<i8>(leftScale);
+        return Execs[scaleDifference + NYql::NDecimal::MaxPrecision];
+    }
+
+private:
+    inline static constexpr auto Execs = MakeExecs(
+        std::make_index_sequence<2U * NYql::NDecimal::MaxPrecision + 1U>{});
 };
 
-template<class TFunc>
+class TDecimalKernel final : public TKernel {
+public:
+    using TExecFactory = TStatelessArrayKernelExec (*)(ui8, ui8, ui8, ui8);
+
+    TDecimalKernel(const TKernelFamily& family,
+        const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType,
+        TKernel::ENullMode nullMode, TExecFactory execFactory);
+
+    const arrow::compute::ScalarKernel& GetArrowKernel() const final;
+
+    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(
+        const TVector<TType*>& argTypes, TType* resultType) const final;
+
+    bool IsPolymorphic() const final;
+
+private:
+    static TDataType* GetDataType(TType* blockType, bool& isOptional);
+
+    static std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(
+        TDataDecimalType* leftType, TDataType* resultType,
+        TStatelessArrayKernelExec exec);
+
+    const TExecFactory ExecFactory_;
+};
+
+template<template<ui8> class TFunc>
+void AddBinaryDecimalKernels(TKernelFamilyBase& owner) {
+    auto type1 = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Decimal).TypeId;
+    auto type2 = type1;
+    auto returnType = type1;
+    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
+
+    using Execs = TDecimalKernelExecs<TFunc>;
+    auto kernel = std::make_unique<TDecimalKernel>(
+        owner, argTypes, returnType, TKernel::ENullMode::Default, &Execs::GetExec);
+    owner.Adopt(argTypes, returnType, std::move(kernel));
+}
+
+template <template <i8> class TFunc>
 void AddDecimalComparisonKernels(TKernelFamilyBase& owner) {
     auto type1 = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Decimal).TypeId;
     auto type2 = type1;
@@ -2081,9 +2136,9 @@ void AddDecimalComparisonKernels(TKernelFamilyBase& owner) {
     std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
 
     using Execs = TDecimalComparisonKernelExecs<TFunc>;
-    auto kernel = std::make_unique<TDecimalKernel>(owner, argTypes, returnType, &Execs::Exec, TKernel::ENullMode::Default);
+    auto kernel = std::make_unique<TDecimalKernel>(
+        owner, argTypes, returnType, TKernel::ENullMode::Default, &Execs::GetExec);
     owner.Adopt(argTypes, returnType, std::move(kernel));
 }
 
-}
-}
+} // namespace NKikimr::NMiniKQL

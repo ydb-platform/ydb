@@ -124,8 +124,10 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
         return true;
     }
 
+    // Node level memory pressure signal, see NRm::TTxState::IsReasonableToStartSpilling.
+    // Channels do not spill on it, but propagate it as back pressure, see TInputDescriptor::MemoryPressure
     bool IsReasonableToUseSpilling() const override {
-        return false;
+        return Tx->IsReasonableToStartSpilling();
     }
 
     void FreeQuota(ui64 memorySize) override {
@@ -178,12 +180,13 @@ class TKqpQueryManager : public NActors::TActor<TKqpQueryManager> {
 public:
     TKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
         std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
-        bool enableChannelMemoryTracking)
+        bool enableSmallComputeMemoryAllocations, bool enableChannelMemoryTracking)
         : TActor(&TThis::StateFunc)
         , Counters_(counters)
         , State_(state)
         , ResourceManager_(resourceManager)
         , CaFactory_(caFactory)
+        , EnableSmallComputeMemoryAllocations(enableSmallComputeMemoryAllocations)
         , EnableChannelMemoryTracking(enableChannelMemoryTracking)
     {
     }
@@ -312,16 +315,27 @@ public:
             rlPath.ConstructInPlace(runtimeSettings.GetRlPath());
         }
 
-        auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
+        auto lightLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
+        auto heavyLimit = CaFactory_->MkqlHeavyProgramMemoryLimit.load();
         const ui32 tasksCount = msg.GetTasks().size();
-        auto externalMemory = initialMemoryLimit * tasksCount;
-        auto channelMemory = 0;
+        ui64 externalMemory = 0;
+        if (EnableSmallComputeMemoryAllocations) {
+            externalMemory = tasksCount * lightLimit;
+        } else {
+            for (const auto& dqTask: msg.GetTasks()) {
+                auto& taskOpts = dqTask.GetProgram().GetSettings();
+                externalMemory += taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation() ? heavyLimit : lightLimit;
+            }
+        }
+        ui64 channelMemory = 0;
 
         if (!TxInfo) {
             // - for the very 1st start request we reserve the same amount of memory for channels as well
-            // - for following start requests (unlikely) we allocate no extra mempry for channels
-            channelMemory = externalMemory;
-            externalMemory += channelMemory;
+            // - for following start requests (unlikely) we allocate no extra memory for channels
+            if (EnableChannelMemoryTracking) {
+                channelMemory = tasksCount * lightLimit;
+                externalMemory += channelMemory;
+            }
             TxInfo = MakeIntrusive<NRm::TTxState>(ResourceManager_, txId, TInstant::Now(),
                 poolId, msg.GetMemoryPoolPercent(),
                 msg.GetDatabase(),  CaFactory_->GetVerboseMemoryLimitException());
@@ -361,6 +375,9 @@ public:
 
             const auto taskId = dqTask.GetId();
 
+            auto& taskOpts = dqTask.GetProgram().GetSettings();
+            auto initialMemoryLimit = !EnableSmallComputeMemoryAllocations && (taskOpts.GetHasMapJoin() || taskOpts.GetHasStateAggregation()) ? heavyLimit : lightLimit;
+
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
                 .ExecuterId = executerId,
                 .TxId = txId,
@@ -387,6 +404,7 @@ public:
                 .State = State_, // pass state to later inform when task is finished
                 .Database = msg.GetDatabase(),
                 .Query = query,
+                .UseBatchPool = msg.GetUseBatchPool(),
                 // TODO: block tracking mode is not set!
             };
             if (msg.HasUserToken() && msg.GetUserToken()) {
@@ -426,7 +444,8 @@ public:
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
-                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(ev->TraceId), cpuLimits));
+                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(ev->TraceId), cpuLimits,
+                    msg.GetUseBatchPool()));
             }
         }
 
@@ -509,13 +528,14 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferInflightBytes;
     NYql::NDq::IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    const bool EnableSmallComputeMemoryAllocations;
     const bool EnableChannelMemoryTracking;
 };
 
 NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, std::shared_ptr<TNodeState>& state,
     std::shared_ptr<NRm::IKqpResourceManager>& resourceManager, std::shared_ptr<NComputeActor::IKqpNodeComputeActorFactory>& caFactory,
-    bool enableChannelMemoryTracking) {
-    return new TKqpQueryManager(counters, state, resourceManager, caFactory, enableChannelMemoryTracking);
+    bool enableSmallComputeMemoryAllocations, bool enableChannelMemoryTracking) {
+    return new TKqpQueryManager(counters, state, resourceManager, caFactory, enableSmallComputeMemoryAllocations, enableChannelMemoryTracking);
 }
 
 } // namespace NKikimr::NKqp

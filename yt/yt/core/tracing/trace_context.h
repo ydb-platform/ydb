@@ -12,6 +12,8 @@
 
 #include <yt/yt/core/concurrency/public.h>
 
+#include <library/cpp/yt/logging/tag.h>
+
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -41,6 +43,9 @@ struct TSpanContext
 };
 
 void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStringBuf spec);
+
+//! Parses a W3C traceparent value into a span context.
+bool TryParseTraceParent(TStringBuf traceParent, TSpanContext& spanContext);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -136,12 +141,18 @@ public:
     std::optional<T> SetAllocationTag(const TAllocationTagKey& key, const T& value);
     void RemoveAllocationTag(const TAllocationTagKey& key);
 
+    const NLogging::TLoggingTagList& GetLoggingTags() const;
     //! Sets logging tag.
     /*!
      *  Not thread-safe.
      */
-    void SetLoggingTag(const std::string& loggingTag);
-    const std::string& GetLoggingTag() const;
+    void SetLoggingTags(NLogging::TLoggingTagList loggingTags);
+
+    //! Appends a tag to those inherited from the parent context.
+    template <class TValue>
+    void AddLoggingTag(NLogging::TLoggingTagKey key, const TValue& value);
+    template <class... TArgs>
+    void AddLoggingTagFormat(NLogging::TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args);
 
     TInstant GetStartTime() const;
 
@@ -242,7 +253,7 @@ private:
     const std::string SpanName_;
     TRequestId RequestId_;
     std::optional<std::string> TargetEndpoint_;
-    std::string LoggingTag_;
+    NLogging::TLoggingTagList LoggingTags_;
     const NProfiling::TCpuInstant StartTime_;
     std::atomic<NProfiling::TCpuInstant> LeakDeadline_;
 

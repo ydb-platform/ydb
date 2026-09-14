@@ -50,7 +50,7 @@ bool ITask::AddError(const TString& storageIdExt, const TBlobRange& range, const
     return true;
 }
 
-void ITask::AddData(const TString& storageIdExt, const TBlobRange& range, const TString& data) {
+void ITask::AddData(const TString& storageIdExt, const TBlobRange& range, const TString& data, const bool fromCache) {
     const TString storageId = storageIdExt ? storageIdExt : IStoragesManager::DefaultStorageId;
     AFL_VERIFY(--BlobsWaitingCount >= 0);
     if (TaskFinishedWithError || AbortFlag) {
@@ -66,13 +66,14 @@ void ITask::AddData(const TString& storageIdExt, const TBlobRange& range, const 
             {"event", "NewData"},
             {"storageId", storageId},
             {"range", range},
+            {"fromCache", fromCache},
             {"externalTaskId", ExternalTaskId});
     }
     Y_ABORT_UNLESS(BlobsFetchingStarted);
     {
         auto it = AgentsWaiting.find(storageId);
         AFL_VERIFY(it != AgentsWaiting.end())("storage_id", storageId);
-        it->second->OnReadResult(range, data);
+        it->second->OnReadResult(range, data, fromCache);
         if (it->second->IsFinished()) {
             AgentsWaiting.erase(it);
         }

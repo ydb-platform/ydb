@@ -1,6 +1,18 @@
-/* Generated from porter.sbl by Snowball 3.0.1 - https://snowballstem.org/ */
+/* Generated from porter.sbl by Snowball 3.1.1 - https://snowballstem.org/ */
 
-#include "../runtime/header.h"
+#include "stem_UTF_8_porter.h"
+
+#include <stddef.h>
+
+#include "../runtime/snowball_runtime.h"
+
+struct SN_local {
+    struct SN_env z;
+    int i_p2;
+    int i_p1;
+};
+
+typedef struct SN_local SN_local;
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,6 +21,7 @@ extern int porter_UTF_8_stem(struct SN_env * z);
 #ifdef __cplusplus
 }
 #endif
+
 static int r_Step_5b(struct SN_env * z);
 static int r_Step_5a(struct SN_env * z);
 static int r_Step_4(struct SN_env * z);
@@ -20,18 +33,32 @@ static int r_Step_1a(struct SN_env * z);
 static int r_R2(struct SN_env * z);
 static int r_R1(struct SN_env * z);
 static int r_shortv(struct SN_env * z);
-#ifdef __cplusplus
-extern "C" {
-#endif
 
+static const symbol s_0[] = { 's', 's' };
+static const symbol s_1[] = { 'i' };
+static const symbol s_2[] = { 'e', 'e' };
+static const symbol s_3[] = { 'e' };
+static const symbol s_4[] = { 'e' };
+static const symbol s_5[] = { 'i' };
+static const symbol s_6[] = { 't', 'i', 'o', 'n' };
+static const symbol s_7[] = { 'e', 'n', 'c', 'e' };
+static const symbol s_8[] = { 'a', 'n', 'c', 'e' };
+static const symbol s_9[] = { 'a', 'b', 'l', 'e' };
+static const symbol s_10[] = { 'e', 'n', 't' };
+static const symbol s_11[] = { 'e' };
+static const symbol s_12[] = { 'i', 'z', 'e' };
+static const symbol s_13[] = { 'a', 't', 'e' };
+static const symbol s_14[] = { 'a', 'l' };
+static const symbol s_15[] = { 'f', 'u', 'l' };
+static const symbol s_16[] = { 'o', 'u', 's' };
+static const symbol s_17[] = { 'i', 'v', 'e' };
+static const symbol s_18[] = { 'b', 'l', 'e' };
+static const symbol s_19[] = { 'a', 'l' };
+static const symbol s_20[] = { 'i', 'c' };
+static const symbol s_21[] = { 'Y' };
+static const symbol s_22[] = { 'Y' };
+static const symbol s_23[] = { 'y' };
 
-extern struct SN_env * porter_UTF_8_create_env(void);
-extern void porter_UTF_8_close_env(struct SN_env * z);
-
-
-#ifdef __cplusplus
-}
-#endif
 static const symbol s_0_0[1] = { 's' };
 static const symbol s_0_1[3] = { 'i', 'e', 's' };
 static const symbol s_0_2[4] = { 's', 's', 'e', 's' };
@@ -185,51 +212,25 @@ static const unsigned char g_v[] = { 17, 65, 16, 1 };
 
 static const unsigned char g_v_WXY[] = { 1, 17, 65, 208, 1 };
 
-static const symbol s_0[] = { 's', 's' };
-static const symbol s_1[] = { 'i' };
-static const symbol s_2[] = { 'e', 'e' };
-static const symbol s_3[] = { 'e' };
-static const symbol s_4[] = { 'e' };
-static const symbol s_5[] = { 'i' };
-static const symbol s_6[] = { 't', 'i', 'o', 'n' };
-static const symbol s_7[] = { 'e', 'n', 'c', 'e' };
-static const symbol s_8[] = { 'a', 'n', 'c', 'e' };
-static const symbol s_9[] = { 'a', 'b', 'l', 'e' };
-static const symbol s_10[] = { 'e', 'n', 't' };
-static const symbol s_11[] = { 'e' };
-static const symbol s_12[] = { 'i', 'z', 'e' };
-static const symbol s_13[] = { 'a', 't', 'e' };
-static const symbol s_14[] = { 'a', 'l' };
-static const symbol s_15[] = { 'f', 'u', 'l' };
-static const symbol s_16[] = { 'o', 'u', 's' };
-static const symbol s_17[] = { 'i', 'v', 'e' };
-static const symbol s_18[] = { 'b', 'l', 'e' };
-static const symbol s_19[] = { 'a', 'l' };
-static const symbol s_20[] = { 'i', 'c' };
-static const symbol s_21[] = { 'Y' };
-static const symbol s_22[] = { 'Y' };
-static const symbol s_23[] = { 'y' };
-
 static int r_shortv(struct SN_env * z) {
     if (out_grouping_b_U(z, g_v_WXY, 89, 121, 0)) return 0;
     if (in_grouping_b_U(z, g_v, 97, 121, 0)) return 0;
-    if (out_grouping_b_U(z, g_v, 97, 121, 0)) return 0;
-    return 1;
+    return !out_grouping_b_U(z, g_v, 97, 121, 0);
 }
 
 static int r_R1(struct SN_env * z) {
-    return z->I[1] <= z->c;
+    return ((SN_local *)z)->i_p1 <= z->c;
 }
 
 static int r_R2(struct SN_env * z) {
-    return z->I[0] <= z->c;
+    return ((SN_local *)z)->i_p2 <= z->c;
 }
 
 static int r_Step_1a(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c <= z->lb || z->p[z->c - 1] != 115) return 0;
-    among_var = find_among_b(z, a_0, 4);
+    among_var = find_among_b(z, a_0, 4, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -259,7 +260,7 @@ static int r_Step_1b(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 1 <= z->lb || (z->p[z->c - 1] != 100 && z->p[z->c - 1] != 103)) return 0;
-    among_var = find_among_b(z, a_2, 3);
+    among_var = find_among_b(z, a_2, 3, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     switch (among_var) {
@@ -290,7 +291,7 @@ static int r_Step_1b(struct SN_env * z) {
             {
                 int v_2 = z->l - z->c;
                 if (z->c - 1 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((68514004 >> (z->p[z->c - 1] & 0x1f)) & 1)) among_var = 3; else
-                among_var = find_among_b(z, a_1, 13);
+                among_var = find_among_b(z, a_1, 13, 0);
                 z->c = z->l - v_2;
             }
             switch (among_var) {
@@ -316,7 +317,7 @@ static int r_Step_1b(struct SN_env * z) {
                     }
                     break;
                 case 3:
-                    if (z->c != z->I[1]) return 0;
+                    if (z->c != ((SN_local *)z)->i_p1) return 0;
                     {
                         int v_3 = z->l - z->c;
                         {
@@ -340,17 +341,14 @@ static int r_Step_1b(struct SN_env * z) {
 
 static int r_Step_1c(struct SN_env * z) {
     z->ket = z->c;
-    {
-        int v_1 = z->l - z->c;
-        if (z->c <= z->lb || z->p[z->c - 1] != 'y') goto lab1;
+    do {
+        if (z->c <= z->lb || z->p[z->c - 1] != 'y') goto lab0;
         z->c--;
-        goto lab0;
-    lab1:
-        z->c = z->l - v_1;
+        break;
+    lab0:
         if (z->c <= z->lb || z->p[z->c - 1] != 'Y') return 0;
         z->c--;
-    }
-lab0:
+    } while (0);
     z->bra = z->c;
     {
         int ret = out_grouping_b_U(z, g_v, 97, 121, 1);
@@ -368,7 +366,7 @@ static int r_Step_2(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 2 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((815616 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    among_var = find_among_b(z, a_3, 20);
+    among_var = find_among_b(z, a_3, 20, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     {
@@ -462,7 +460,7 @@ static int r_Step_3(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 2 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((528928 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    among_var = find_among_b(z, a_4, 7);
+    among_var = find_among_b(z, a_4, 7, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     {
@@ -496,7 +494,7 @@ static int r_Step_4(struct SN_env * z) {
     int among_var;
     z->ket = z->c;
     if (z->c - 1 <= z->lb || z->p[z->c - 1] >> 5 != 3 || !((3961384 >> (z->p[z->c - 1] & 0x1f)) & 1)) return 0;
-    among_var = find_among_b(z, a_5, 19);
+    among_var = find_among_b(z, a_5, 19, 0);
     if (!among_var) return 0;
     z->bra = z->c;
     {
@@ -511,17 +509,14 @@ static int r_Step_4(struct SN_env * z) {
             }
             break;
         case 2:
-            {
-                int v_1 = z->l - z->c;
-                if (z->c <= z->lb || z->p[z->c - 1] != 's') goto lab1;
+            do {
+                if (z->c <= z->lb || z->p[z->c - 1] != 's') goto lab0;
                 z->c--;
-                goto lab0;
-            lab1:
-                z->c = z->l - v_1;
+                break;
+            lab0:
                 if (z->c <= z->lb || z->p[z->c - 1] != 't') return 0;
                 z->c--;
-            }
-        lab0:
+            } while (0);
             {
                 int ret = slice_del(z);
                 if (ret < 0) return ret;
@@ -536,29 +531,30 @@ static int r_Step_5a(struct SN_env * z) {
     if (z->c <= z->lb || z->p[z->c - 1] != 'e') return 0;
     z->c--;
     z->bra = z->c;
-    {
-        int ret = r_R2(z);
-        if (ret == 0) goto lab1;
-        if (ret < 0) return ret;
-    }
-    goto lab0;
-lab1:
-    {
-        int ret = r_R1(z);
-        if (ret <= 0) return ret;
-    }
-    {
-        int v_1 = z->l - z->c;
+    do {
         {
-            int ret = r_shortv(z);
-            if (ret == 0) goto lab2;
+            int ret = r_R2(z);
+            if (ret == 0) goto lab0;
             if (ret < 0) return ret;
         }
-        return 0;
-    lab2:
-        z->c = z->l - v_1;
-    }
-lab0:
+        break;
+    lab0:
+        {
+            int ret = r_R1(z);
+            if (ret <= 0) return ret;
+        }
+        {
+            int v_1 = z->l - z->c;
+            {
+                int ret = r_shortv(z);
+                if (ret == 0) goto lab1;
+                if (ret < 0) return ret;
+            }
+            return 0;
+        lab1:
+            z->c = z->l - v_1;
+        }
+    } while (0);
     {
         int ret = slice_del(z);
         if (ret < 0) return ret;
@@ -585,7 +581,8 @@ static int r_Step_5b(struct SN_env * z) {
 }
 
 extern int porter_UTF_8_stem(struct SN_env * z) {
-    z->I[2] = 0;
+    int b_Y_found;
+    b_Y_found = 0;
     {
         int v_1 = z->c;
         z->bra = z->c;
@@ -596,7 +593,7 @@ extern int porter_UTF_8_stem(struct SN_env * z) {
             int ret = slice_from_s(z, 1, s_21);
             if (ret < 0) return ret;
         }
-        z->I[2] = 1;
+        b_Y_found = 1;
     lab0:
         z->c = v_1;
     }
@@ -625,7 +622,7 @@ extern int porter_UTF_8_stem(struct SN_env * z) {
                 int ret = slice_from_s(z, 1, s_22);
                 if (ret < 0) return ret;
             }
-            z->I[2] = 1;
+            b_Y_found = 1;
             continue;
         lab2:
             z->c = v_3;
@@ -633,8 +630,8 @@ extern int porter_UTF_8_stem(struct SN_env * z) {
         }
         z->c = v_2;
     }
-    z->I[1] = z->l;
-    z->I[0] = z->l;
+    ((SN_local *)z)->i_p1 = z->l;
+    ((SN_local *)z)->i_p2 = z->l;
     {
         int v_5 = z->c;
         {
@@ -647,7 +644,7 @@ extern int porter_UTF_8_stem(struct SN_env * z) {
             if (ret < 0) goto lab4;
             z->c += ret;
         }
-        z->I[1] = z->c;
+        ((SN_local *)z)->i_p1 = z->c;
         {
             int ret = out_grouping_U(z, g_v, 97, 121, 1);
             if (ret < 0) goto lab4;
@@ -658,7 +655,7 @@ extern int porter_UTF_8_stem(struct SN_env * z) {
             if (ret < 0) goto lab4;
             z->c += ret;
         }
-        z->I[0] = z->c;
+        ((SN_local *)z)->i_p2 = z->c;
     lab4:
         z->c = v_5;
     }
@@ -730,7 +727,7 @@ extern int porter_UTF_8_stem(struct SN_env * z) {
     z->c = z->lb;
     {
         int v_14 = z->c;
-        if (!(z->I[2])) goto lab5;
+        if (!b_Y_found) goto lab5;
         while (1) {
             int v_15 = z->c;
             while (1) {
@@ -764,7 +761,16 @@ extern int porter_UTF_8_stem(struct SN_env * z) {
     return 1;
 }
 
-extern struct SN_env * porter_UTF_8_create_env(void) { return SN_create_env(0, 3); }
+extern struct SN_env * porter_UTF_8_create_env(void) {
+    struct SN_env * z = SN_new_env(sizeof(SN_local));
+    if (z) {
+        ((SN_local *)z)->i_p2 = 0;
+        ((SN_local *)z)->i_p1 = 0;
+    }
+    return z;
+}
 
-extern void porter_UTF_8_close_env(struct SN_env * z) { SN_close_env(z, 0); }
+extern void porter_UTF_8_close_env(struct SN_env * z) {
+    SN_delete_env(z);
+}
 

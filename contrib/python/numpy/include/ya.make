@@ -1,10 +1,8 @@
-SUBSCRIBER(g:python-contrib)
-
 LIBRARY()
 
 LICENSE(BSD-3-Clause)
 
-VERSION(1.25.2)
+VERSION(2.2.6)
 
 ADDINCL(
     GLOBAL contrib/python/numpy/include/numpy/core/include

@@ -35,13 +35,13 @@ Physically, a group is a set of multiple physical devices (OS block devices) loc
 
 This scheme is shown in the figure below.
 
-![PDisk, VDisk, and a group](_assets/Slide3_group_layout.svg)
+![PDisk, VDisk, and a group](_assets/Slide3_group_layout.svg){inline=false}
 
 VDisks from different groups are shown as multicolored squares; one color stands for one group.
 
 A group can be treated as a set of VDisks:
 
-![Group](_assets/Slide_group_content.svg)
+![Group](_assets/Slide_group_content.svg){inline=false}
 
 Each VDisk within a group has a sequence number, and disks are numbered 0 to N-1, where N is the number of disks in the group.
 

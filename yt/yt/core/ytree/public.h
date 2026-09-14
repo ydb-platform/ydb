@@ -6,7 +6,8 @@
 
 #include <yt/yt/core/rpc/public.h>
 
-#include <yt/yt/core/misc/mpl.h>
+#include <library/cpp/yt/mpl/concepts.h>
+#include <library/cpp/yt/mpl/type_traits.h>
 
 namespace NYT::NYTree {
 

@@ -73,14 +73,15 @@ public:
 
     TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig)
         : Ctx(CreateExecutionContext(request, settings, queryServiceConfig))
-        , QueryServiceConfig(queryServiceConfig)
-        , QueryRequest(CreateQueryRequest(request, settings, queryServiceConfig, *Ctx))
+        , QueryRequest(CreateQueryRequest(request, settings, queryServiceConfig))
+        , QueryServiceConfig(std::move(queryServiceConfig))
     {}
 
     void Bootstrap() {
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Bootstrap",
             {"logPrefix", LogPrefix()},
-            {"streamingDisposition", (Ctx->UserRequestContext->StreamingDisposition ? Ctx->UserRequestContext->StreamingDisposition->DebugString() : "null")});
+            {"streamingDisposition", (Ctx->UserRequestContext->StreamingDisposition ? Ctx->UserRequestContext->StreamingDisposition->DebugString() : "null")},
+            {"checkpointInterval", Ctx->UserRequestContext->CheckpointInterval ? ToString(*Ctx->UserRequestContext->CheckpointInterval) : "null"});
         Become(&TThis::StateFuncCreating);
     }
 
@@ -100,6 +101,8 @@ private:
         userRequestContext->StreamingQueryPath = settings.StreamingQueryPath;
         userRequestContext->WatermarkLateEventsPolicy = settings.WatermarkLateEventsPolicy;
         userRequestContext->StreamingDisposition = settings.StreamingDisposition;
+        userRequestContext->CurrentExecutionGeneration = settings.LeaseGeneration;
+        userRequestContext->CheckpointInterval = settings.CheckpointInterval;
 
         return std::make_shared<TScriptExecutionContext>(TScriptExecutionContext{
             .UserRequestContext = std::move(userRequestContext),
@@ -111,12 +114,11 @@ private:
         });
     }
 
-    static std::unique_ptr<TEvKqp::TEvQueryRequest> CreateQueryRequest(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TScriptExecutionContext& ctx) {
+    static std::unique_ptr<TEvKqp::TEvQueryRequest> CreateQueryRequest(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig) {
         auto ev = std::make_unique<TEvKqp::TEvQueryRequest>();
         ev->Record = request;
         ev->SetSaveQueryPhysicalGraph(settings.SaveQueryPhysicalGraph);
         ev->SetDisableDefaultTimeout(settings.DisableDefaultTimeout);
-        ev->SetUserRequestContext(ctx.UserRequestContext);
 
         if (settings.PhysicalGraph) {
             ev->SetQueryPhysicalGraph(std::move(*settings.PhysicalGraph));
@@ -126,7 +128,6 @@ private:
             ev->SetProgressStatsPeriod(settings.ProgressStatsPeriod ? settings.ProgressStatsPeriod : TDuration::MilliSeconds(queryServiceConfig.GetProgressStatsPeriodMs()));
         }
 
-        ev->SetGeneration(settings.LeaseGeneration);
         return ev;
     }
 
@@ -156,7 +157,7 @@ private:
         Become(&TThis::StateFuncInitialize);
 
         ScriptLeaseWatcherActor.Id = RegisterWithSameMailbox(CreateScriptLeaseWatcherActor(Ctx));
-        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Started",
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Started script lease watcher actor",
             {"logPrefix", LogPrefix()},
             {"scriptLeaseWatcherActor", ScriptLeaseWatcherActor.Id});
 
@@ -172,9 +173,9 @@ private:
     }
 
     void HandleCancellation(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
-        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got cancel",
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got cancel request",
             {"logPrefix", LogPrefix()},
-            {"request", ev->Sender});
+            {"sender", ev->Sender});
 
         CancelRequests.emplace_front(std::move(ev));
 
@@ -184,9 +185,9 @@ private:
     }
 
     void HandleCheckAlive(TEvCheckAliveRequest::TPtr& ev) {
-        YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Lease was expired in database, checker",
+        YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Lease was expired in database",
             {"logPrefix", LogPrefix()},
-            {"actor", ev->Sender});
+            {"sender", ev->Sender});
         Send(ev->Sender, new TEvCheckAliveResponse());
     }
 
@@ -204,10 +205,10 @@ private:
         const auto& record = ev->Get()->Record;
         if (const auto status = record.GetYdbStatus(); status != Ydb::StatusIds::SUCCESS) {
             const auto resourceExhausted = record.GetResourceExhausted();
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Create new session resource",
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Create new session failed",
                 {"logPrefix", LogPrefix()},
-                {"failed", status},
-                {"exhausted", resourceExhausted});
+                {"status", status},
+                {"resourceExhausted", resourceExhausted});
 
             auto error = TStringBuilder() << "Create new session failed with " << status;
 
@@ -233,7 +234,7 @@ private:
         }
 
         if (session.GetNodeId() != SelfId().NodeId()) {
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "New session started on unexpected",
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "New session started on unexpected node",
                 {"logPrefix", LogPrefix()},
                 {"node", session.GetNodeId()});
             Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Session created on wrong node " << session.GetNodeId() << ", expected local session on node " << SelfId().NodeId());
@@ -244,12 +245,13 @@ private:
 
         const auto& physicalGraph = QueryRequest->GetQueryPhysicalGraph();
         ScriptResultHandlerActor.Id = RegisterWithSameMailbox(CreateScriptResultHandlerActor(Ctx, physicalGraph ? std::optional(*physicalGraph) : std::nullopt, QueryServiceConfig));
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Started starting query, has physical",
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Started query",
             {"logPrefix", LogPrefix()},
             {"scriptResultHandlerActor", ScriptResultHandlerActor.Id},
-            {"graph", (physicalGraph ? "YES" : "NO")});
+            {"hasPhysicalGraph", (physicalGraph ? "YES" : "NO")});
 
         Ctx->UserRequestContext->RunScriptActorId = ScriptResultHandlerActor.Id;
+        QueryRequest->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(*Ctx->UserRequestContext)); // Make copy of context, because it may be changed
         ActorIdToProto(ScriptResultHandlerActor.Id, QueryRequest->Record.MutableRequestActorId());
         Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release());
     }
@@ -259,16 +261,16 @@ private:
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS || !FinishInfo.IsFinished()) {
             const auto& issues = ev->Get()->Issues;
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got lease watcher with status",
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got lease watcher fail",
                 {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
-            Finish(status, AddRootIssue("Script lease watcher error", issues));
+            Finish(status == Ydb::StatusIds::SUCCESS ? Ydb::StatusIds::INTERNAL_ERROR : status, AddRootIssue("Script lease watcher error", issues));
         } else {
-            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got lease watcher",
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got lease watcher finish",
                 {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender});
+                {"sender", ev->Sender});
             Finish();
         }
     }
@@ -289,7 +291,7 @@ private:
             const auto& response = record.GetResponse();
             NYql::TIssues issues;
             NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
-            YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Ignored query response from execution already finished",
+            YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Ignored query response, execution already finished",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
                 {"status", record.GetYdbStatus()},
@@ -297,7 +299,7 @@ private:
             return;
         }
 
-        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Forward query response from to result handler",
+        YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Forward query response to result handler",
             {"logPrefix", LogPrefix()},
             {"sender", ev->Sender});
         Forward(ev, ScriptResultHandlerActor.Id);
@@ -307,15 +309,15 @@ private:
         ScriptResultHandlerActor.Id = {};
 
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got result handler with status",
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got result handler fail",
                 {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender},
+                {"sender", ev->Sender},
                 {"status", status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
         } else {
-            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got result handler",
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got result handler finish",
                 {"logPrefix", LogPrefix()},
-                {"finished", ev->Sender});
+                {"sender", ev->Sender});
         }
 
         ExecutionInfo = std::move(ev->Get()->Info);
@@ -341,13 +343,13 @@ private:
         const auto& issues = ev->Get()->Issues;
         const auto& info = ev->Get()->Info;
         if (status != Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got with status",
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Got script execution finalization fail",
                 {"logPrefix", LogPrefix()},
                 {"finalize", ev->Sender},
                 {"status", status},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
         } else {
-            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got already execution entry",
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Got script execution finalization finish",
                 {"logPrefix", LogPrefix()},
                 {"finalize", ev->Sender},
                 {"finished", info.AlreadyStopped},
@@ -362,6 +364,12 @@ private:
                 .AlreadyStopped = alreadyStopped,
             }, issues), /* flags */ 0, request->Cookie);
         }
+
+        YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Exit",
+            {"logPrefix", LogPrefix()},
+            {"finishStatus", FinishInfo.Status.value_or(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)},
+            {"issues", FinishInfo.Issues.ToOneLineString()},
+            {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
     }
 
     void Finish() {
@@ -448,7 +456,8 @@ private:
             YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Skipping finish with error because finalization is already in progress",
                 {"logPrefix", LogPrefix()},
                 {"finishStatus", *FinishInfo.Status},
-                {"issues", FinishInfo.Issues.ToOneLineString()});
+                {"issues", FinishInfo.Issues.ToOneLineString()},
+                {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
         }
     }
 
@@ -457,8 +466,8 @@ private:
     }
 
     const TScriptExecutionContext::TPtr Ctx;
-    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     std::unique_ptr<TEvKqp::TEvQueryRequest> QueryRequest;
+    const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     TFinishInfo FinishInfo;
     TExecutionInfo ExecutionInfo;
     TSessionState SessionState;

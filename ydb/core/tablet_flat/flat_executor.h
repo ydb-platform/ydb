@@ -370,6 +370,7 @@ class TExecutor
     const TIntrusivePtr<ITimeProvider> Time = nullptr;
     NFlatExecutorSetup::ITablet * Owner;
     const TActorId OwnerActorId;
+    const NActors::TActorActivityType OwnerActivityType;
     TAutoPtr<NUtil::ILogger> Logger;
 
     ui32 FollowerId = 0;
@@ -516,6 +517,7 @@ class TExecutor
     TControlWrapper MaxTxInFly;
 
     THashSet<TActorId> MoveDataSubscribers;
+    bool MoveDataVacuumInProgress = false;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;
@@ -713,10 +715,11 @@ public:
     bool CompactTables() override;
     THolder<TDirectPartWriter> BeginWritePart(ui32 tableId) override;
     void ReleaseWritePart(ui32 step) override;
-    void MoveData(TEvTablet::TEvMoveData::TPtr &ev) override;
 
     void StartVacuum(TVacuumTag tag) override;
     void VacuumComplete(TVacuumGeneration generation, const TActorContext& ctx) override;
+    void MoveData(TEvTablet::TEvMoveData::TPtr &ev) override;
+    void StartMoveDataVacuumFromOwner() override;
 
     void Handle(NMemory::TEvMemTableRegistered::TPtr &ev);
     void Handle(NMemory::TEvMemTableCompact::TPtr &ev);

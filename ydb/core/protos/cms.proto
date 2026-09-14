@@ -1,5 +1,6 @@
-import "ydb/core/protos/blobstorage_config.proto";
+import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 
@@ -456,6 +457,7 @@ message TCmsConfig {
             UNKNOWN = 0;
             DISABLED = 1;
             FAULTY = 2;
+            MAINTENANCE = 3;
         }
 
         optional bool Enable = 1 [default = true];
@@ -604,6 +606,8 @@ message TLogRecordData {
         optional TAvailabilityStats NodeAvailabilityStats = 7;
         optional string Host = 8;
         optional string Reason = 9;
+        optional NKikimrBlobStorage.TMaintenanceStatus.E CurrentMaintenanceStatus = 10;
+        optional NKikimrBlobStorage.TMaintenanceStatus.E RequiredMaintenanceStatus = 11;
     }
 
     message TMarkersModification {
@@ -698,6 +702,9 @@ message TPDiskInfo {
     optional string LastStatusChange = 11;
     optional EIgnoreReason IgnoreReason = 12;
     optional bool StatusChangeFailed = 13;
+    optional uint32 MaintenanceStatus = 14;
+    optional uint32 DesiredMaintenanceStatus = 15;
+    optional uint32 PrevDesiredMaintenanceStatus = 16;
 }
 
 message TPDisk {
@@ -738,4 +745,85 @@ message TGetSentinelStateResponse {
     optional TStateUpdaterState StateUpdater = 4;
     optional TConfigUpdaterState ConfigUpdater = 5;
     repeated TNodeState NodesState = 6;
+}
+
+// NBS 2.0 (Direct Block Group) UI pagination support. All filtering, sorting
+// and paging is performed on the CMS side so that the UI never has to fetch
+// the complete tablet/disk list (which can be huge in a large cluster).
+
+enum EDDiskTabletSortBy {
+    DDISK_TABLET_SORT_BY_TABLET_ID = 0;
+    DDISK_TABLET_SORT_BY_LAST_CHANGED_AT = 1;
+    DDISK_TABLET_SORT_BY_GROUPS_COUNT = 2;
+}
+
+message TDDiskTabletListRequest {
+    // 0-based offset of the first item to return.
+    optional uint32 Offset = 1 [default = 0];
+    // Maximum number of items to return.
+    optional uint32 Limit = 2 [default = 50];
+    // Case-insensitive substring filter applied to the tablet id (as a decimal string).
+    optional string FilterTabletId = 3;
+    optional EDDiskTabletSortBy SortBy = 4 [default = DDISK_TABLET_SORT_BY_TABLET_ID];
+    optional bool SortDescending = 5 [default = false];
+    // If set, only tablets that have at least one unavailable DDisk or
+    // Persistent Buffer are returned (evaluated on the CMS side using the
+    // latest known PDisk availability, before paging).
+    optional bool OnlyProblems = 6 [default = false];
+}
+
+message TDDiskTabletListResponse {
+    message TTabletRevision {
+        optional uint64 TabletId = 1;
+        optional uint64 Revision = 2;
+        optional uint32 GroupsCount = 3;
+        optional uint64 LastChangedAt = 4;
+        optional uint32 UnavailableDDiskCount = 5;
+        optional uint32 UnavailablePersistentBufferCount = 6;
+    }
+
+    reserved 2;
+    optional TStatus Status = 1;
+    repeated TTabletRevision Tablets = 3;
+    // Total number of items matching the filter (before paging), used by the UI
+    // to compute the number of pages.
+    optional uint32 TotalCount = 4;
+}
+
+enum EDDiskDiskSortBy {
+    DDISK_DISK_SORT_BY_DISK_ID = 0;
+    DDISK_DISK_SORT_BY_TABLETS_COUNT = 1;
+}
+
+message TDDiskDiskListRequest {
+    optional uint32 Offset = 1 [default = 0];
+    optional uint32 Limit = 2 [default = 50];
+    // Case-insensitive substring filter applied to "NodeId:PDiskId:DDiskSlotId".
+    optional string FilterDiskId = 3;
+    // Case-insensitive substring filter applied to associated tablet ids.
+    optional string FilterTabletId = 4;
+    optional EDDiskDiskSortBy SortBy = 5 [default = DDISK_DISK_SORT_BY_DISK_ID];
+    optional bool SortDescending = 6 [default = false];
+    // If set, only disks currently considered unavailable are returned
+    // (evaluated on the CMS side, before paging).
+    optional bool OnlyProblems = 7 [default = false];
+}
+
+message TDDiskDiskListResponse {
+    message TDiskUsage {
+        optional NKikimrBlobStorage.NDDisk.TDDiskId DiskId = 1;
+        repeated uint64 DDiskTabletIds = 2; // tablets using this disk in the DDisk role
+        repeated uint64 PersistentBufferTabletIds = 3; // tablets using this disk in the PersistentBuffer role
+        optional bool Available = 4;
+        // Full underlying PDisk state as reported by Whiteboard (e.g. "Normal",
+        // "Missing", "Timeout", "NodeDisconnected", one of the Initial*/*Error
+        // states, or "Unknown" if it was never reported to CMS). This is a more
+        // detailed status than Available, which is only a coarse up/down flag.
+        optional string State = 5;
+    }
+
+    reserved 2;
+    optional TStatus Status = 1;
+    repeated TDiskUsage Disks = 3;
+    optional uint32 TotalCount = 4;
 }

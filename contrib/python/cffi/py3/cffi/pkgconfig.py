@@ -31,7 +31,7 @@ def call(libname, flag, encoding=sys.getfilesystemencoding()):
     a.append(libname)
     try:
         pc = subprocess.Popen(a, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except EnvironmentError as e:
+    except OSError as e:
         raise PkgConfigError("cannot run pkg-config: %s" % (str(e).strip(),))
 
     bout, berr = pc.communicate()

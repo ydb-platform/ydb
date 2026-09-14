@@ -2,9 +2,10 @@ import ipaddress
 import uuid
 from collections.abc import Sequence
 from enum import Enum as PyEnum
-from typing import Any, cast
+from typing import Any, TypeVar, cast, overload
 
 from sqlalchemy.exc import ArgumentError
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import (
     ARRAY,
     Float,
@@ -28,11 +29,14 @@ from sqlalchemy.types import (
 )
 
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType, schema_types, sqla_type_from_name
+from clickhouse_connect.cc_sqlalchemy.sql.clauses import json_subcolumn
 from clickhouse_connect.datatypes.base import EMPTY_TYPE_DEF, LC_TYPE_DEF, NULLABLE_TYPE_DEF, TypeDef
 from clickhouse_connect.datatypes.numeric import Enum8 as ChEnum8
 from clickhouse_connect.datatypes.numeric import Enum16 as ChEnum16
 from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import decimal_prec
+
+_T = TypeVar("_T")
 
 
 class Int8(ChSqlaType, Integer):  # type: ignore[misc]
@@ -326,18 +330,17 @@ class Time(ChSqlaType, Interval):  # type: ignore[misc]
     second precision. Maps to Python timedelta objects.
     """
 
+    cache_ok = True
+
     def __init__(self, type_def: TypeDef = EMPTY_TYPE_DEF):
         ChSqlaType.__init__(self, type_def)
         Interval.__init__(self)
 
-    def process_bind_param(self, value, dialect):
-        return value
-
-    def process_result_value(self, value, dialect):
-        return value
-
-    def process_literal_param(self, value, dialect):
+    def bind_processor(self, dialect):
         return None
+
+    def coerce_compared_value(self, op, value):
+        return self
 
 
 class Time64(ChSqlaType, Interval):  # type: ignore[misc]
@@ -348,6 +351,8 @@ class Time64(ChSqlaType, Interval):  # type: ignore[misc]
     999:59:59.999999999 configurable precision. Maps to Python timedelta objects.
     If no precision is defined it default to 3.
     """
+
+    cache_ok = True
 
     def __init__(self, precision: int | None = None, type_def: TypeDef | None = None):
         """
@@ -369,14 +374,11 @@ class Time64(ChSqlaType, Interval):  # type: ignore[misc]
 
         Interval.__init__(self, second_precision=precision)
 
-    def process_bind_param(self, value, dialect):
-        return value
-
-    def process_result_value(self, value, dialect):
-        return value
-
-    def process_literal_param(self, value, dialect):
+    def bind_processor(self, dialect):
         return None
+
+    def coerce_compared_value(self, op, value):
+        return self
 
 
 def Nullable(element: ChSqlaType | type[ChSqlaType]) -> ChSqlaType:  # noqa: N802
@@ -416,7 +418,8 @@ class Array(ChSqlaType, ARRAY):  # type: ignore[misc]
         ChSqlaType.__init__(self, type_def)
         # Set item_type directly; calling ARRAY.__init__ would reject nested Array(Array(T)),
         # which CH supports natively (CH expresses dimensions via nesting, not a dim count).
-        # as_tuple has no class-level default, so set it here to satisfy ARRAY result processing.
+        # as_tuple has no class-level default and ARRAY reads it (e.g. the hashable property), so set it
+        # here since we skip ARRAY.__init__.
         self.item_type = cast("TypeEngine[Any]", sqla_type_from_name(type_def.values[0]))
         self.as_tuple = False
 
@@ -480,11 +483,30 @@ class Tuple(ChSqlaType, UserDefinedType):  # type: ignore[misc]
 
 
 class JSON(ChSqlaType, UserDefinedType):  # type: ignore[misc]
-    """
-    Note this isn't currently supported for insert/select, only table definitions
-    """
+    cache_ok: bool = True
+    python_type: type[dict[str, object]] = dict
 
-    python_type = dict
+    class _Comparator(UserDefinedType.Comparator):  # type: ignore[type-arg]
+        """Build storage-backed JSON subcolumn expressions."""
+
+        def __getitem__(self, segment: str) -> ColumnElement[object]:
+            return json_subcolumn(self.expr, segment)
+
+        @overload
+        def subcolumn(self, segment: str, type_: None = None) -> ColumnElement[object]: ...
+
+        @overload
+        def subcolumn(self, segment: str, type_: TypeEngine[_T] | type[TypeEngine[_T]]) -> ColumnElement[_T]: ...
+
+        def subcolumn(
+            self,
+            segment: str,
+            type_: TypeEngine[Any] | type[TypeEngine[Any]] | None = None,
+        ) -> ColumnElement[Any]:
+            """Select one JSON path segment and optionally cast it."""
+            return json_subcolumn(self.expr, segment, type_)
+
+    comparator_factory: type[_Comparator] = _Comparator
 
 
 class Nested(ChSqlaType, UserDefinedType):  # type: ignore[misc]

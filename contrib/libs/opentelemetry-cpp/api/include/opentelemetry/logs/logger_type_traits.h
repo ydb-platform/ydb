@@ -21,6 +21,10 @@
 #include "opentelemetry/trace/trace_id.h"
 #include "opentelemetry/version.h"
 
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+#  include "opentelemetry/context/context.h"
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
+
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace logs
 {
@@ -143,6 +147,21 @@ struct LogRecordSetterTrait<common::KeyValueIterable>
   }
 };
 
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+// Context in the argument list is consumed by EmitLogRecord(args...) for
+// context-aware filtering and trace stamping (see FindContextInArgs); it is
+// not a record field, so the setter is a no-op.
+template <>
+struct LogRecordSetterTrait<opentelemetry::context::Context>
+{
+  template <class ArgumentType>
+  inline static LogRecord *Set(LogRecord *log_record, ArgumentType && /*arg*/) noexcept
+  {
+    return log_record;
+  }
+};
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
+
 template <class ValueType>
 struct LogRecordSetterTrait
 {
@@ -197,6 +216,166 @@ struct LogRecordHasType<ValueType, TargetType, ArgumentType...>
                               std::true_type,
                               LogRecordHasType<ValueType, ArgumentType...>>::type
 {};
+
+inline Severity FindSeverityInArgs() noexcept
+{
+  return Severity::kInvalid;
+}
+
+template <class... Rest>
+inline Severity FindSeverityInArgs(Severity severity, Rest &&.../*rest*/) noexcept
+{
+  return severity;
+}
+
+template <class First,
+          class... Rest,
+          typename std::enable_if<!std::is_same<typename std::decay<First>::type, Severity>::value,
+                                  int>::type = 0>
+inline Severity FindSeverityInArgs(First && /*first*/, Rest &&...rest) noexcept
+{
+  return FindSeverityInArgs(std::forward<Rest>(rest)...);
+}
+
+inline const EventId *FindEventIdInArgs() noexcept
+{
+  return nullptr;
+}
+
+template <class... Rest>
+inline const EventId *FindEventIdInArgs(const EventId &event_id
+                                            OPENTELEMETRY_ATTRIBUTE_LIFETIME_BOUND,
+                                        Rest &&.../*rest*/) noexcept
+{
+  return &event_id;
+}
+
+template <class First,
+          class... Rest,
+          typename std::enable_if<!std::is_same<typename std::decay<First>::type, EventId>::value,
+                                  int>::type = 0>
+inline const EventId *FindEventIdInArgs(First && /*first*/, Rest &&...rest) noexcept
+{
+  return FindEventIdInArgs(std::forward<Rest>(rest)...);
+}
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+inline const opentelemetry::context::Context *FindContextInArgs() noexcept
+{
+  return nullptr;
+}
+
+template <class... Rest>
+inline const opentelemetry::context::Context *FindContextInArgs(
+    const opentelemetry::context::Context &context OPENTELEMETRY_ATTRIBUTE_LIFETIME_BOUND,
+    Rest &&.../*rest*/) noexcept
+{
+  return &context;
+}
+
+template <class First,
+          class... Rest,
+          typename std::enable_if<!std::is_same<typename std::decay<First>::type,
+                                                opentelemetry::context::Context>::value,
+                                  int>::type = 0>
+inline const opentelemetry::context::Context *FindContextInArgs(First && /*first*/,
+                                                                Rest &&...rest) noexcept
+{
+  return FindContextInArgs(std::forward<Rest>(rest)...);
+}
+
+inline const trace::SpanContext *FindSpanContextInArgs() noexcept
+{
+  return nullptr;
+}
+
+template <class... Rest>
+inline const trace::SpanContext *FindSpanContextInArgs(const trace::SpanContext &span_context
+                                                           OPENTELEMETRY_ATTRIBUTE_LIFETIME_BOUND,
+                                                       Rest &&.../*rest*/) noexcept
+{
+  return &span_context;
+}
+
+template <class First,
+          class... Rest,
+          typename std::enable_if<
+              !std::is_same<typename std::decay<First>::type, trace::SpanContext>::value,
+              int>::type = 0>
+inline const trace::SpanContext *FindSpanContextInArgs(First && /*first*/, Rest &&...rest) noexcept
+{
+  return FindSpanContextInArgs(std::forward<Rest>(rest)...);
+}
+
+inline const trace::TraceId *FindTraceIdInArgs() noexcept
+{
+  return nullptr;
+}
+
+template <class... Rest>
+inline const trace::TraceId *FindTraceIdInArgs(const trace::TraceId &trace_id
+                                                   OPENTELEMETRY_ATTRIBUTE_LIFETIME_BOUND,
+                                               Rest &&.../*rest*/) noexcept
+{
+  return &trace_id;
+}
+
+template <
+    class First,
+    class... Rest,
+    typename std::enable_if<!std::is_same<typename std::decay<First>::type, trace::TraceId>::value,
+                            int>::type = 0>
+inline const trace::TraceId *FindTraceIdInArgs(First && /*first*/, Rest &&...rest) noexcept
+{
+  return FindTraceIdInArgs(std::forward<Rest>(rest)...);
+}
+
+inline const trace::SpanId *FindSpanIdInArgs() noexcept
+{
+  return nullptr;
+}
+
+template <class... Rest>
+inline const trace::SpanId *FindSpanIdInArgs(const trace::SpanId &span_id
+                                                 OPENTELEMETRY_ATTRIBUTE_LIFETIME_BOUND,
+                                             Rest &&.../*rest*/) noexcept
+{
+  return &span_id;
+}
+
+template <
+    class First,
+    class... Rest,
+    typename std::enable_if<!std::is_same<typename std::decay<First>::type, trace::SpanId>::value,
+                            int>::type = 0>
+inline const trace::SpanId *FindSpanIdInArgs(First && /*first*/, Rest &&...rest) noexcept
+{
+  return FindSpanIdInArgs(std::forward<Rest>(rest)...);
+}
+
+inline const trace::TraceFlags *FindTraceFlagsInArgs() noexcept
+{
+  return nullptr;
+}
+
+template <class... Rest>
+inline const trace::TraceFlags *FindTraceFlagsInArgs(const trace::TraceFlags &trace_flags
+                                                         OPENTELEMETRY_ATTRIBUTE_LIFETIME_BOUND,
+                                                     Rest &&.../*rest*/) noexcept
+{
+  return &trace_flags;
+}
+
+template <class First,
+          class... Rest,
+          typename std::enable_if<
+              !std::is_same<typename std::decay<First>::type, trace::TraceFlags>::value,
+              int>::type = 0>
+inline const trace::TraceFlags *FindTraceFlagsInArgs(First && /*first*/, Rest &&...rest) noexcept
+{
+  return FindTraceFlagsInArgs(std::forward<Rest>(rest)...);
+}
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
 
 }  // namespace detail
 

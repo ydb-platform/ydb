@@ -15,44 +15,49 @@ class TLLVMFieldsStructure;
 template <class T>
 class TLLVMFieldsStructure<TComputationValue<T>> {
 protected:
-    llvm::LLVMContext& Context;
+    llvm::LLVMContext& Context_;
+
+    llvm::LLVMContext& GetContext() const {
+        return Context_;
+    }
+
     ui32 GetFieldsCount() const {
-        return FieldsCount;
+        return FieldsCount_;
     }
     const std::vector<llvm::Type*>& GetFields() const {
-        return Fields;
+        return Fields_;
     }
 private:
-    llvm::PointerType* StructPtrType;
-    std::vector<llvm::Type*> Fields;
-    const ui32 FieldsCount;
+    llvm::PointerType* StructPtrType_;
+    std::vector<llvm::Type*> Fields_;
+    const ui32 FieldsCount_;
     std::vector<llvm::Type*> BuildFields() {
         std::vector<llvm::Type*> result;
-        result.emplace_back(StructPtrType);             // vtbl
-        result.emplace_back(llvm::Type::getInt32Ty(Context)); // ref
-        result.emplace_back(llvm::Type::getInt16Ty(Context)); // abi
-        result.emplace_back(llvm::Type::getInt16Ty(Context)); // reserved
+        result.emplace_back(StructPtrType_);             // vtbl
+        result.emplace_back(llvm::Type::getInt32Ty(Context_)); // ref
+        result.emplace_back(llvm::Type::getInt16Ty(Context_)); // abi
+        result.emplace_back(llvm::Type::getInt16Ty(Context_)); // reserved
 #ifndef NDEBUG
-        result.emplace_back(StructPtrType);             // meminfo
+        result.emplace_back(StructPtrType_);             // meminfo
 #endif
         return result;
     }
 
 public:
-    TLLVMFieldsStructure(llvm::LLVMContext& context)
-        : Context(context)
-        , StructPtrType(llvm::PointerType::getUnqual(llvm::StructType::get(Context)))
-        , Fields(BuildFields())
-        , FieldsCount(Fields.size()) {
+    explicit TLLVMFieldsStructure(llvm::LLVMContext& context)
+        : Context_(context)
+        , StructPtrType_(llvm::PointerType::getUnqual(llvm::StructType::get(Context_)))
+        , Fields_(BuildFields())
+        , FieldsCount_(Fields_.size()) {
 
     }
 
     llvm::Constant* This() const {
-        return llvm::ConstantInt::get(llvm::Type::getInt32Ty(Context), 0);
+        return llvm::ConstantInt::get(llvm::Type::getInt32Ty(Context_), 0);
     }
 
     const std::vector<llvm::Type*>& GetFieldsArray() const {
-        return Fields;
+        return Fields_;
     }
 };
 

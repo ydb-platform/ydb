@@ -326,6 +326,223 @@ Y_UNIT_TEST(SubqueryWithout) {
     }
 }
 
+Y_UNIT_TEST(ResultColumnDeduplication) {
+    IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+    {
+        TString query = "SELECT # FROM (SELECT 1 AS a, 2 AS a)";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {.Columns = {{.Name = "a"}}};
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+    {
+        TString query = R"sql(SELECT # FROM (SELECT 1 AS a, 2 AS a) AS x)sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {.Columns = {{.TableAlias = "x", .Name = "a"}}};
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+}
+
+Y_UNIT_TEST(UnionColumnDeduplication) {
+    IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                UNION
+                SELECT 3 AS a, 4 AS b
+            )
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {.Columns = {{.Name = "a"}, {.Name = "b"}}};
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                UNION
+                SELECT 3 AS c, 4 AS d
+            )
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {.Columns = {{.Name = "a"}, {.Name = "b"}, {.Name = "c"}, {.Name = "d"}}};
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                INTERSECT
+                SELECT 3 AS a, 4 AS b
+            )
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {.Columns = {{.Name = "a"}, {.Name = "b"}}};
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                EXCEPT
+                SELECT 3 AS a, 4 AS b
+            )
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {.Columns = {{.Name = "a"}, {.Name = "b"}}};
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                SELECT 1 AS a, 2 AS b
+                EXCEPT
+                SELECT 4 AS b, 3 AS a
+            )
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {.Columns = {{.Name = "a"}, {.Name = "b"}}};
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+}
+
+Y_UNIT_TEST(JoinAmbiguity) {
+    IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b)
+            JOIN (SELECT 1 AS a, 3 AS c) ON 1 = 1
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {.Columns = {{.Name = "a"}, {.Name = "a"}, {.Name = "b"}, {.Name = "c"}}};
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+}
+
+Y_UNIT_TEST(JoinUnionAmbiguity) {
+    IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                    SELECT *
+                    FROM (SELECT 1 AS a, 2 AS b)
+                    JOIN (SELECT 1 AS a, 3 AS c) ON 1 = 1
+                UNION
+                    SELECT *
+                    FROM (SELECT 1 AS a, 2 AS b)
+                    JOIN (SELECT 1 AS a, 3 AS c) ON 1 = 1
+            )
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {.Columns = {{.Name = "a"}, {.Name = "b"}, {.Name = "c"}}};
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT # FROM (
+                    SELECT *
+                    FROM (SELECT 1 AS a, 2 AS b) AS t1
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t2 ON 1 = 1
+                UNION
+                    SELECT *
+                    FROM (SELECT 1 AS a, 2 AS b) AS t3
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t4 ON 1 = 1
+            )
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {.Columns = {{.Name = "a"}, {.Name = "b"}, {.Name = "c"}}};
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT * FROM (
+                    SELECT #
+                    FROM (SELECT 1 AS a, 2 AS b) AS t1
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t2 ON 1 = 1
+                UNION
+                    SELECT *
+                    FROM (SELECT 1 AS a, 2 AS b) AS t3
+                    JOIN (SELECT 1 AS a, 3 AS c) AS t4 ON 1 = 1
+            )
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {
+            .Columns = {
+                {.TableAlias = "t1", .Name = "a"},
+                {.TableAlias = "t1", .Name = "b"},
+                {.TableAlias = "t2", .Name = "a"},
+                {.TableAlias = "t2", .Name = "c"},
+            },
+        };
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+}
+
+Y_UNIT_TEST(TableAliasAmbiguity) {
+    IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b) AS x
+            JOIN (SELECT 1 AS c, 3 AS d) AS x ON 1 = 1
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {
+            .Columns = {
+                {.TableAlias = "x", .Name = "a"},
+                {.TableAlias = "x", .Name = "b"},
+                {.TableAlias = "x", .Name = "c"},
+                {.TableAlias = "x", .Name = "d"},
+            },
+        };
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+    {
+        TString query = R"sql(
+            SELECT #
+            FROM (SELECT 1 AS a, 2 AS b) AS x
+            JOIN (SELECT 1 AS a, 3 AS b) AS x ON 1 = 1
+        )sql";
+
+        TGlobalContext ctx = global->Analyze(SharpedInput(query), {});
+
+        TColumnContext expected = {
+            .Columns = {
+                {.TableAlias = "x", .Name = "a"},
+                {.TableAlias = "x", .Name = "a"},
+                {.TableAlias = "x", .Name = "b"},
+                {.TableAlias = "x", .Name = "b"},
+            },
+        };
+        UNIT_ASSERT_VALUES_EQUAL(ctx.Column, expected);
+    }
+}
+
 Y_UNIT_TEST(Projection) {
     IGlobalAnalysis::TPtr global = MakeGlobalAnalysis();
     {

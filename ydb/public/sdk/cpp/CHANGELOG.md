@@ -1,3 +1,19 @@
+* Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
+
+# v3.22.0
+
+* Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.
+
+* Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.
+
+* Added the initial process-wide SDK runtime infrastructure. Driver cancellation and callback accounting are now isolated per driver, without changing public APIs or resource-sharing behavior.
+
+## v3.21.1
+
+* Fix read session close deadlock in topic sdk.
+
+## v3.21.0
+
 * Fixed Query SDK `CreateSession` metrics being recorded when reusing a session from the pool.
 
 * Added `TQueryClient::DeleteSession` to explicitly delete a query session by session id.
@@ -8,7 +24,7 @@
 
 * Added a distributed lock primitive based on the coordination service, which implements basic_lockable concept.
 
-# v3.20.0
+## v3.20.0
 
 * Added automatic retries for unary methods of table and query clients(ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
 

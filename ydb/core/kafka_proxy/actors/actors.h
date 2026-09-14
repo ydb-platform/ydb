@@ -2,14 +2,56 @@
 
 #include <ydb/core/raw_socket/sock_impl.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange
 
+#include <util/datetime/base.h>
+#include <util/generic/hash_set.h>
+#include <util/system/backtrace.h>
+#include <util/system/type_name.h>
+#include <optional>
+
 namespace NKafka {
+
+template <typename TDerived>
+class TKafkaExceptionHandler: public NActors::IActorExceptionHandler {
+public:
+    bool OnUnhandledException(const std::exception& exc) override {
+        auto* self = static_cast<TDerived*>(this);
+        const auto& ctx = self->ActorContext();
+        YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::KAFKA_PROXY, "Unhandled exception in kafka actor",
+            {"actor", TypeName<TDerived>()},
+            {"typeName", TypeName(exc)},
+            {"exception", exc.what()},
+            {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
+        self->OnKafkaUnhandledException(exc, ctx);
+        return true;
+    }
+
+    // Default: tear down the TCP connection when available so the client reconnects.
+    // Override GetKafkaConnectionId() in actors that own a TContext.
+    NActors::TActorId GetKafkaConnectionId() const {
+        return {};
+    }
+
+    void OnKafkaUnhandledException(const std::exception&, const NActors::TActorContext& ctx) {
+        auto* self = static_cast<TDerived*>(this);
+        if (const auto connectionId = self->GetKafkaConnectionId()) {
+            ctx.Send(connectionId, new NActors::TEvents::TEvPoison);
+            return;
+        }
+        ctx.Send(self->SelfId(), new NActors::TEvents::TEvPoison);
+    }
+};
 
 static constexpr int ProxyNodeId = 1;
 static constexpr char UnderlayPrefix[] = "u-";
@@ -23,6 +65,12 @@ enum EAuthSteps {
     FAILED
 };
 
+enum class ETokenCheckStatus {
+    Ok,
+    Invalid,
+    Unavailable
+};
+
 enum class EBalancingMode {
     Server,
     Native,
@@ -34,6 +82,27 @@ struct TReadSession {
     NActors::TActorId ProxyActorId;
 };
 
+struct TCredentials {
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString Ticket;
+    TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> TicketParserEntries;
+    TString AuthDatabasePath;
+    TString PeerName;
+    ETokenCheckStatus Status = ETokenCheckStatus::Ok;
+
+    std::optional<EKafkaErrors> UnusableError() const {
+        switch (Status) {
+            case ETokenCheckStatus::Invalid:
+                return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+            case ETokenCheckStatus::Unavailable:
+                return EKafkaErrors::BROKER_NOT_AVAILABLE;
+            case ETokenCheckStatus::Ok:
+                return std::nullopt;
+        }
+        return std::nullopt;
+    }
+};
+
 struct TContext {
     using TPtr = std::shared_ptr<TContext>;
 
@@ -43,6 +112,22 @@ struct TContext {
 
     TContext(const TContext& other)
         : Config(other.Config)
+        , ConnectionId(other.ConnectionId)
+        , KafkaClient(other.KafkaClient)
+        , AuthenticationStep(other.AuthenticationStep)
+        , SaslMechanism(other.SaslMechanism)
+        , GroupId(other.GroupId)
+        , DatabasePath(other.DatabasePath)
+        , FolderId(other.FolderId)
+        , CloudId(other.CloudId)
+        , DatabaseId(other.DatabaseId)
+        , ResourceDatabasePath(other.ResourceDatabasePath)
+        , InitialServerlessTransactionsFlagValue(other.InitialServerlessTransactionsFlagValue)
+        , Token(other.Token)
+        , ClientDC(other.ClientDC)
+        , IsServerless(other.IsServerless)
+        , RequireAuthentication(other.RequireAuthentication)
+        , RlContext(other.RlContext)
     {
     }
 
@@ -61,7 +146,8 @@ struct TContext {
     TString CloudId;
     TString DatabaseId;
     TString ResourceDatabasePath;
-    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    std::optional<bool> InitialServerlessTransactionsFlagValue;
+    TCredentials Token;
     TString ClientDC;
     bool IsServerless = false;
     bool RequireAuthentication = false;
@@ -69,9 +155,45 @@ struct TContext {
 
     NKikimr::NPQ::TRlContext RlContext;
 
+    THashSet<TString> TopicAclOk;
 
     bool Authenticated() {
         return !RequireAuthentication || AuthenticationStep == SUCCESS;
+    }
+
+    bool ShouldCheckTopicAcl() const {
+        return RequireAuthentication || bool(Token.UserToken);
+    }
+
+    bool HasTopicAccess(const NACLib::TSecurityObject* securityObject, NACLib::EAccessRights rights) const {
+        if (!ShouldCheckTopicAcl()) {
+            return true;
+        }
+        if (!Token.UserToken || !securityObject) {
+            return false;
+        }
+        return securityObject->CheckAccess(rights, *Token.UserToken);
+    }
+
+    TDuration TokenRecheckInterval() const {
+        return TDuration::MilliSeconds(Config.GetTokenRecheckIntervalMs());
+    }
+
+    bool TokenRecheckEnabled() const {
+        return Config.GetTokenRecheckIntervalMs() > 0 && !Token.Ticket.empty();
+    }
+
+    void RememberTopicAclOk(const TString& topic) {
+        TopicAclOk.insert(topic);
+    }
+
+    bool HadTopicAclOk(const TString& topic) const {
+        return TopicAclOk.find(topic) != TopicAclOk.end();
+    }
+
+    bool KafkaTableFeatureFlagChanged(bool serverlessTransactionsEnabledNow) const {
+        return InitialServerlessTransactionsFlagValue.has_value() &&
+               *InitialServerlessTransactionsFlagValue != serverlessTransactionsEnabledNow;
     }
 };
 
@@ -184,18 +306,51 @@ inline TString GetTopicNameWithoutDb(const TString& database, TString topic) {
 }
 
 inline TString GetUsernameOrAnonymous(std::shared_ptr<TContext> context) {
-    return context->RequireAuthentication ? context->UserToken->GetUserSID() : "anonymous";
+    return context->Token.UserToken ? context->Token.UserToken->GetUserSID() : "anonymous";
 }
 
 inline TString GetUserSerializedToken(std::shared_ptr<TContext> context) {
-    return context->RequireAuthentication ? context->UserToken->GetSerializedToken() : "";
+    if (!context->Token.UserToken) {
+        return "";
+    }
+    if (!context->Token.UserToken->GetSerializedToken().empty()) {
+        return context->Token.UserToken->GetSerializedToken();
+    }
+    return context->Token.UserToken->SerializeAsString();
 }
 
-NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message);
+NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message,
+                                            TKafkaVersion requestApiVersion);
 NActors::IActor* CreateKafkaInitProducerIdActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TInitProducerIdRequestData>& message);
 NActors::IActor* CreateKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId,
                                           const TMessagePtr<TMetadataRequestData>& message,
                                           const NActors::TActorId& discoveryCacheActor);
+NActors::IActor* CreateTopicLocationActor(
+    const NActors::TActorId& requester,
+    TString path,
+    TString database,
+    TString token);
+
+struct TTopicOffsetsSettings {
+    TString Path;
+    TString Database;
+    TString Token;
+    // Used for SelectRow when set; otherwise Token is used. Lets OffsetFetch
+    // describe anonymously when auth is optional but still check SelectRow.
+    TString SelectRowToken;
+    TVector<ui32> PartitionIds;
+    TVector<TString> Consumers;
+    bool RequireSelectRow = false;
+    bool RequireAuthentication = false;
+    // OffsetFetch: if the authenticated describe hides the path (UNAUTHORIZED),
+    // describe again without a token. Missing topic → SCHEME_ERROR (Kafka NONE + -1);
+    // existing topic → UNAUTHORIZED (ACL deny). Matches the old scheme-cache check.
+    bool UnauthenticatedExistenceCheck = false;
+};
+
+NActors::IActor* CreateTopicOffsetsActor(
+    const NActors::TActorId& requester,
+    TTopicOffsetsSettings settings);
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context);
 NActors::IActor* CreateKafkaReadSessionProxyActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaReadSessionActor(const TContext::TPtr context, ui64 cookie);

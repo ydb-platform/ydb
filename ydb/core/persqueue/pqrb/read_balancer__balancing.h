@@ -2,6 +2,10 @@
 
 #include "read_balancer.h"
 
+#include <library/cpp/containers/absl/btree_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
 namespace NKikimr::NPQ::NApp {
 struct TNavigationBar;
 }
@@ -29,8 +33,8 @@ struct TPartition {
     ui64 Cookie = 0;
 
     // Generation of PQ-tablet and cookie for synchronization of commit information.
-    ui32 PartitionGeneration;
-    ui64 PartitionCookie;
+    ui32 PartitionGeneration = 0;
+    ui64 PartitionCookie = 0;
 
     // Return true if the reading of the partition has been finished and children's partitions are readable.
     bool IsInactive() const;
@@ -81,12 +85,12 @@ struct TPartitionFamily {
     // Partitions that are in the family
     std::vector<ui32> Partitions;
 
-    std::unordered_set<ui32> WantedPartitions;
+    absl::flat_hash_set<ui32> WantedPartitions;
 
     // The reading session in which the family is currently being read.
-    TSession* Session;
+    TSession* Session = nullptr;
     // Partitions that are in the family
-    std::unordered_set<ui32> LockedPartitions;
+    absl::flat_hash_set<ui32> LockedPartitions;
 
     // The number of active partitions in the family.
     size_t ActivePartitionCount = 0;
@@ -94,10 +98,10 @@ struct TPartitionFamily {
     size_t InactivePartitionCount = 0;
 
     // Reading sessions that have a list of partitions to read and these sessions can read this family
-    std::unordered_map<TActorId, TSession*> SpecialSessions;
+    absl::flat_hash_map<TActorId, TSession*, THash<TActorId>> SpecialSessions;
 
     TActorId LastPipe;
-    size_t MergeTo;
+    size_t MergeTo = 0;
 
     TPartitionFamily(TConsumer& consumerInfo, size_t id, std::vector<ui32>&& partitions);
     ~TPartitionFamily() = default;
@@ -166,13 +170,11 @@ struct TPartitionFamilyComparator {
     bool operator()(const TPartitionFamily* lhs, const TPartitionFamily* rhs) const;
 };
 
-using TOrderedPartitionFamilies = std::set<TPartitionFamily*, TPartitionFamilyComparator>;
-
 struct SessionComparator {
     bool operator()(const TSession* lhs, const TSession* rhs) const;
 };
 
-using TOrderedSessions = std::set<TSession*, SessionComparator>;
+using TOrderedSessions = absl::btree_set<TSession*, SessionComparator>;
 
 // It contains all the logic of balancing the reading sessions of a single consumer: the distribution of partitions
 // across reading sessions, the uniformity of the load.
@@ -184,22 +186,22 @@ struct TConsumer {
     TString ConsumerName;
 
     size_t NextFamilyId;
-    std::unordered_map<size_t, const std::unique_ptr<TPartitionFamily>> Families;
+    absl::flat_hash_map<size_t, std::unique_ptr<TPartitionFamily>> Families;
 
     // Mapping the IDs of the partitions to the families they belong to
-    std::unordered_map<ui32, TPartitionFamily*> PartitionMapping;
+    absl::flat_hash_map<ui32, TPartitionFamily*> PartitionMapping;
     // All reading sessions in which the family is currently being read.
-    std::unordered_map<TActorId, TSession*> Sessions;
+    absl::flat_hash_map<TActorId, TSession*, THash<TActorId>> Sessions;
     std::optional<TOrderedSessions> OrderedSessions;
     bool WithCommonSessions;
 
     // Families is not reading now.
-    std::unordered_map<size_t, TPartitionFamily*> UnreadableFamilies;
+    absl::flat_hash_map<size_t, TPartitionFamily*> UnreadableFamilies;
     // Families that require balancing. Only families are included here if there are reading
     // sessions that want to read the partitions of this family.
-    std::unordered_map<size_t, TPartitionFamily*> FamiliesRequireBalancing;
+    absl::flat_hash_map<size_t, TPartitionFamily*> FamiliesRequireBalancing;
 
-    std::unordered_map<ui32, TPartition> Partitions;
+    absl::flat_hash_map<ui32, TPartition> Partitions;
 
     bool BalanceScheduled;
 
@@ -260,30 +262,30 @@ struct TSession {
     TActorId Sender;
 
     TString ClientNode;
-    ui32 ProxyNodeId;
+    ui32 ProxyNodeId = 0;
     TInstant CreateTimestamp;
 
     // partitions which are reading
-    std::unordered_set<ui32> Partitions;
+    absl::flat_hash_set<ui32> Partitions;
     // the number of pipes connected from SessionActor to ReadBalancer
-    ui32 ServerActors;
+    ui32 ServerActors = 0;
 
     // The number of active partitions
-    size_t ActivePartitionCount;
+    size_t ActivePartitionCount = 0;
     // The number of inactive partitions
-    size_t InactivePartitionCount;
+    size_t InactivePartitionCount = 0;
     // The number of releasing partitions (active and inactive)
-    size_t ReleasingPartitionCount;
+    size_t ReleasingPartitionCount = 0;
 
     // The number of active families (the status equal Active)
-    size_t ActiveFamilyCount;
+    size_t ActiveFamilyCount = 0;
     // The number of releasing families (the status equal Releasing)
-    size_t ReleasingFamilyCount;
+    size_t ReleasingFamilyCount = 0;
 
     // The partition families that are being read by this session.
-    std::unordered_map<size_t, TPartitionFamily*> Families;
+    absl::flat_hash_map<size_t, TPartitionFamily*> Families;
 
-    size_t Order;
+    size_t Order = 0;
 
     // true if client connected to read from concret partitions
     bool WithGroups() const;
@@ -305,14 +307,14 @@ public:
     ui32 TabletGeneration() const;
 
     const TPartitionInfo* GetPartitionInfo(ui32 partitionId) const;
-    const std::unordered_map<ui32, TPartitionInfo>& GetPartitionsInfo() const;
+    const absl::flat_hash_map<ui32, TPartitionInfo>& GetPartitionsInfo() const;
     const TPartitionGraph& GetPartitionGraph() const;
     bool ScalingSupport() const;
     i32 GetLifetimeSeconds() const;
 
     TConsumer* GetConsumer(const TString& consumerName);
-    const std::unordered_map<TString, std::unique_ptr<TConsumer>>& GetConsumers() const;
-    const std::unordered_map<TActorId, std::unique_ptr<TSession>>& GetSessions() const;
+    const absl::flat_hash_map<TString, std::unique_ptr<TConsumer>>& GetConsumers() const;
+    const absl::flat_hash_map<TActorId, std::unique_ptr<TSession>, THash<TActorId>>& GetSessions() const;
 
     void UpdateConfig(const std::vector<ui32>& addedPartitions, const std::vector<ui32>& deletedPartitions, const TActorContext& ctx);
     bool SetCommittedState(const TString& consumer, ui32 partitionId, ui32 generation, ui64 cookie, const TActorContext& ctx);
@@ -351,8 +353,8 @@ private:
 private:
     TPersQueueReadBalancer& TopicActor;
 
-    std::unordered_map<TActorId, std::unique_ptr<TSession>> Sessions;
-    std::unordered_map<TString, std::unique_ptr<TConsumer>> Consumers;
+    absl::flat_hash_map<TActorId, std::unique_ptr<TSession>, THash<TActorId>> Sessions;
+    absl::flat_hash_map<TString, std::unique_ptr<TConsumer>> Consumers;
 
     ui32 Step;
 
@@ -362,14 +364,14 @@ private:
         const TString Consumer;
         bool Commited;
     };
-    std::unordered_map<ui32, std::vector<TData>> PendingUpdates;
+    absl::flat_hash_map<ui32, std::vector<TData>> PendingUpdates;
 
     struct TSubscription {
         TActorId Sender;
         TString Consumer;
     };
     // Pipe -> Information
-    std::unordered_map<TActorId, std::vector<TSubscription>> Subscriptions;
+    absl::flat_hash_map<TActorId, std::vector<TSubscription>, THash<TActorId>> Subscriptions;
     ui64 NotifyCookie = 0;
 
 };

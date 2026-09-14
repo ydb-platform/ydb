@@ -4,7 +4,7 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
-#include "ut_helpers.h"
+#include <ydb/core/formats/arrow/accessor/sub_columns/ut_common/ut_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/types/binary_json/read.h>
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(SubColumnsNativeScalars) {
             UNIT_ASSERT(native->GetChunkedArray());   // read-back document reconstruction must not abort
             const auto assertExact = [&](const std::shared_ptr<TSubColumnsArray>& arr) {
                 auto it = arr->GetColumnsData().BuildIterator(0);
-                auto bj = GetCodecForValueType(EValueType::Double)->ReadValueView(it.GetArray(), it.GetLocalIndex()).ToBinaryJson();
+                auto bj = ArrayElementToBinaryJson(it.GetArray(), it.GetLocalIndex(), EValueType::Double);
                 auto reader = NBinaryJson::TBinaryJsonReader::Make(bj);
                 UNIT_ASSERT_VALUES_EQUAL(reader->GetRootCursor().GetElement(0).GetNumber(), expected);
             };

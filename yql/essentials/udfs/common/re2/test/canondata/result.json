@@ -1,77 +1,73 @@
 {
-    "test.test[BackslashInLike]": [
+    "test.test[BackslashInLike-Results]": [
         {
-            "uri": "file://test.test_BackslashInLike_/results.txt"
+            "uri": "file://test.test_BackslashInLike-Results_/results.txt"
         }
     ],
-    "test.test[BasicOptions]": [
+    "test.test[Basic-Results]": [
         {
-            "uri": "file://test.test_BasicOptions_/results.txt"
+            "uri": "file://test.test_Basic-Results_/results.txt"
         }
     ],
-    "test.test[Basic]": [
+    "test.test[BasicOptions-Results]": [
         {
-            "uri": "file://test.test_Basic_/results.txt"
+            "uri": "file://test.test_BasicOptions-Results_/results.txt"
         }
     ],
-    "test.test[DefOptions]": [
+    "test.test[DefOptions-Results]": [
         {
-            "uri": "file://test.test_DefOptions_/results.txt"
+            "uri": "file://test.test_DefOptions-Results_/results.txt"
         }
     ],
-    "test.test[FindAndConsumeEmpty]": [
+    "test.test[FindAndConsumeEmpty-Results]": [
         {
-            "uri": "file://test.test_FindAndConsumeEmpty_/results.txt"
+            "uri": "file://test.test_FindAndConsumeEmpty-Results_/results.txt"
         }
     ],
-    "test.test[InvalidCaptureRegexFail]": [
+    "test.test[InvalidCaptureRegexFail-Results]": [
         {
-            "uri": "file://test.test_InvalidCaptureRegexFail_/extracted"
+            "uri": "file://test.test_InvalidCaptureRegexFail-Results_/extracted"
         }
     ],
-    "test.test[InvalidRegexFail_2025.02]": [
+    "test.test[InvalidRegexFail_2025.02-Results]": [
+        ""
+    ],
+    "test.test[InvalidRegexFail_2025.03-Results]": [
+        ""
+    ],
+    "test.test[InvalidRegexSuccess_2025.02-Results]": [
         {
-            "uri": "file://test.test_InvalidRegexFail_2025.02_/extracted"
+            "uri": "file://test.test_InvalidRegexSuccess_2025.02-Results_/results.txt"
         }
     ],
-    "test.test[InvalidRegexFail_2025.03]": [
+    "test.test[IsValidRegexp-Results]": [
         {
-            "uri": "file://test.test_InvalidRegexFail_2025.03_/extracted"
+            "uri": "file://test.test_IsValidRegexp-Results_/results.txt"
         }
     ],
-    "test.test[InvalidRegexSuccess_2025.02]": [
+    "test.test[LikeEscape-Results]": [
         {
-            "uri": "file://test.test_InvalidRegexSuccess_2025.02_/results.txt"
+            "uri": "file://test.test_LikeEscape-Results_/results.txt"
         }
     ],
-    "test.test[IsValidRegexp]": [
+    "test.test[MultipleCaptureGroups-Results]": [
         {
-            "uri": "file://test.test_IsValidRegexp_/results.txt"
+            "uri": "file://test.test_MultipleCaptureGroups-Results_/extracted"
         }
     ],
-    "test.test[LikeEscape]": [
+    "test.test[MutableLambda-Results]": [
         {
-            "uri": "file://test.test_LikeEscape_/results.txt"
+            "uri": "file://test.test_MutableLambda-Results_/results.txt"
         }
     ],
-    "test.test[MultipleCaptureGroups]": [
+    "test.test[SkipGroup-Results]": [
         {
-            "uri": "file://test.test_MultipleCaptureGroups_/extracted"
+            "uri": "file://test.test_SkipGroup-Results_/results.txt"
         }
     ],
-    "test.test[MutableLambda]": [
+    "test.test[Space-Results]": [
         {
-            "uri": "file://test.test_MutableLambda_/results.txt"
-        }
-    ],
-    "test.test[SkipGroup]": [
-        {
-            "uri": "file://test.test_SkipGroup_/results.txt"
-        }
-    ],
-    "test.test[Space]": [
-        {
-            "uri": "file://test.test_Space_/results.txt"
+            "uri": "file://test.test_Space-Results_/results.txt"
         }
     ]
 }

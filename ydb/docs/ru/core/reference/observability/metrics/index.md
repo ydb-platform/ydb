@@ -9,7 +9,7 @@
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
 ----- | -----
 `resources.storage.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных в распределенном сетевом хранилище. `resources.storage.used_bytes` = `resources.storage.table.used_bytes` + `resources.storage.topic.used_bytes`.
-`resources.storage.table.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных таблицами в распределенном сетевом хранилище. К служебным данным относятся данные первичного, [вторичных индексов](../../../concepts/glossary.md#secondary-index), [векторных индексов](../../../concepts/glossary.md#vector-index), [полнотекстовых индексов](../../../concepts/glossary.md#fulltext-index) и [локальных Блум-индексов](../../../concepts/glossary.md#local-bloom-skip-index).
+`resources.storage.table.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных таблицами в распределенном сетевом хранилище. К служебным данным относятся данные первичного, [вторичных индексов](../../../concepts/glossary.md#secondary-index), [векторных индексов](../../../concepts/glossary.md#vector-index), [полнотекстовых индексов](../../../concepts/glossary.md#fulltext-index), [локальных Блум-индексов](../../../concepts/glossary.md#local-bloom-skip-index) и [локального min_max-индекса](../../../concepts/glossary.md#local-min-max-index).
 `resources.storage.topic.used_bytes`<br/>`IGAUGE`, байты  | Размер распределенного сетевого хранилища, используемого топиками. Равен сумме значений `topic.storage_bytes` всех топиков.
 `resources.storage.limit_bytes`<br/>`IGAUGE`, байты  | Ограничение на размер пользовательских и служебных данных, которые база данных может сохранить в распределенном сетевом хранилище.
 
@@ -58,7 +58,7 @@
 `api.http.data_streams.response.bytes`<br/>`RATE`, байты | Суммарный размер ответов по протоколу HTTP.<br/>Метки:<br/>- _method_ – название метода сервиса HTTP API, в данном случае только `GetRecords`.<br/>- _topic_ – название топика.
 `api.http.data_streams.response.duration_milliseconds`<br/>`HIST_RATE`, штуки | Гистограммный счетчик. Интервалы заданы в миллисекундах. Показывает количество ответов, время выполнения которых попадает в определенный интервал.<br/>Метки:<br/>- _method_ – название метода сервиса HTTP API.<br/>- _topic_ – название топика.
 `api.http.data_streams.get_records.messages`<br/>`RATE`, штуки | Количество сообщений, прочитанных методом `GetRecords`.<br/>Метки:<br/>- _topic_ – название топика.
-`api.http.data_streams.put_record.messages`<br/>`RATE`, штуки | Количество сообщений, записанных методом `PutRecord` (всегда =1).<br/>Метки:<br/>- _topic_ – название топика.
+`api.http.data_streams.put_record.messages`<br/>`RATE`, штуки | Количество сообщений, отправленных методом `PutRecord`.<br/>Метки:<br/>- _topic_ – название топика.
 `api.http.data_streams.put_records.failed_messages`<br/>`RATE`, штуки | Количество сообщений, отправленных методом `PutRecords`, которые не были записаны.<br/>Метки:<br/>- _topic_ – название топика.
 `api.http.data_streams.put_records.successful_messages`<br/>`RATE`, штуки | Количество сообщений, отправленных методом `PutRecords`, которые были успешно записаны.<br/>Метки:<br/>- _topic_ – название топика.
 `api.http.data_streams.put_records.total_messages`<br/>`RATE`, штуки | Количество сообщений, отправленных методом `PutRecords`.<br/>Метки:<br/>- _topic_ – название топика.

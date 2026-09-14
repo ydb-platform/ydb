@@ -117,8 +117,9 @@ IGraphTransformer::TStatus WideMapWrapper(const TExprNode::TPtr& input, TExprNod
 
     if (const auto width = lambda->Head().ChildrenSize(); lambda->ChildrenSize() == width + 1U) {
         bool pass = true;
-        for (auto i = 0U; pass && i < width; ++i)
+        for (auto i = 0U; pass && i < width; ++i) {
             pass = lambda->Head().Child(i) == lambda->Child(i + 1U);
+        }
 
         if (pass) {
             output = input->HeadPtr();

@@ -12,7 +12,7 @@ from ...query.transaction import (
     BaseQueryTxContext,
     QueryTxStateEnum,
 )
-from ...opentelemetry.tracing import SpanName, create_ydb_span, span_finish_callback
+from ...observability.tracing import SpanName, create_ydb_span, span_finish_callback
 
 if TYPE_CHECKING:
     from .session import QuerySession
@@ -177,6 +177,7 @@ class QueryTxContext(BaseQueryTxContext["AsyncDriver"]):
         schema_inclusion_mode: Optional[base.QuerySchemaInclusionMode] = None,
         result_set_format: Optional[base.QueryResultSetFormat] = None,
         arrow_format_settings: Optional[base.ArrowFormatSettings] = None,
+        pool_id: Optional[str] = None,
     ) -> AsyncResponseContextIterator:
         """Sends a query to Query Service
 
@@ -204,6 +205,7 @@ class QueryTxContext(BaseQueryTxContext["AsyncDriver"]):
          1) QueryResultSetFormat.VALUE, which is default;
          2) QueryResultSetFormat.ARROW.
         :param arrow_format_settings: Settings for Arrow format when result_set_format is ARROW.
+        :param pool_id: Optional resource pool ID for routing the query to a specific compute pool.
 
         :return: Iterator with result sets
         """
@@ -229,6 +231,7 @@ class QueryTxContext(BaseQueryTxContext["AsyncDriver"]):
                 arrow_format_settings=arrow_format_settings,
                 concurrent_result_sets=concurrent_result_sets,
                 settings=settings,
+                pool_id=pool_id,
             )
         self._prev_stream = AsyncResponseContextIterator(
             it=stream_it,

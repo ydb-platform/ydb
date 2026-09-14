@@ -25,7 +25,7 @@ jobs:
         run: |
           set -ex
           python -m pip install --upgrade pip
-          pip install build twine grpcio-tools setuptools
+          pip install build twine grpcio-tools protobuf setuptools
 
       - name: Checkout
         uses: actions/checkout@v5

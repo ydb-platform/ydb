@@ -84,7 +84,7 @@ protected:
             others = OthersData->ApplyFilter(filter, Settings);
         }
         return std::make_shared<TSubColumnsPartialArray>(
-            Header, PartialColumnsData.ApplyFilter(filter), std::move(others), GetDataType(), filter.GetFilteredCountVerified());
+            Header, PartialColumnsData.ApplyFilter(filter), std::move(others), GetDataType(), filter.GetFilteredCountVerified(), Settings);
     }
 
     virtual std::shared_ptr<IChunkedArray> DoISlice(const ui32 offset, const ui32 count) const override {
@@ -93,13 +93,15 @@ protected:
             others = OthersData->Slice(offset, count, Settings);
         }
         return std::make_shared<TSubColumnsPartialArray>(
-            Header, PartialColumnsData.Slice(offset, count), std::move(others), GetDataType(), count);
+            Header, PartialColumnsData.Slice(offset, count), std::move(others), GetDataType(), count, Settings);
     }
 
 public:
-    TSubColumnsPartialArray(TSubColumnsHeader&& header, const ui32 recordsCount, const std::shared_ptr<arrow::DataType>& dataType)
+    TSubColumnsPartialArray(TSubColumnsHeader&& header, const ui32 recordsCount, const std::shared_ptr<arrow::DataType>& dataType,
+        const NSubColumns::TSettings& settings)
         : TBase(recordsCount, EType::SubColumnsPartialArray, dataType)
         , Header(std::move(header))
+        , Settings(settings)
     {
     }
 
@@ -114,12 +116,17 @@ public:
         return !NeedFetch(std::string_view(subColumnName.data(), subColumnName.size()));
     }
 
-    static std::shared_ptr<TSubColumnsPartialArray> BuildEmpty(const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount) {
-        return std::make_shared<TSubColumnsPartialArray>(TSubColumnsHeader::BuildEmpty(), recordsCount, dataType);
+    static std::shared_ptr<TSubColumnsPartialArray> BuildEmpty(
+        const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount, const NSubColumns::TSettings& settings) {
+        return std::make_shared<TSubColumnsPartialArray>(TSubColumnsHeader::BuildEmpty(), recordsCount, dataType, settings);
     }
 
     const TSubColumnsHeader& GetHeader() const {
         return Header;
+    }
+
+    const NSubColumns::TSettings& GetSettings() const {
+        return Settings;
     }
 
     TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const;
@@ -153,11 +160,13 @@ public:
     }
 
     TSubColumnsPartialArray(const TSubColumnsHeader& header, TPartialColumnsData&& columnsData,
-        std::optional<NSubColumns::TOthersData>&& othersData, const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount)
+        std::optional<NSubColumns::TOthersData>&& othersData, const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount,
+        const NSubColumns::TSettings& settings)
         : TBase(recordsCount, EType::SubColumnsPartialArray, dataType)
         , Header(header)
         , PartialColumnsData(std::move(columnsData))
         , OthersData(std::move(othersData))
+        , Settings(settings)
     {
     }
 

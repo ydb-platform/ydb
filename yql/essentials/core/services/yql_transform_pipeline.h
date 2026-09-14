@@ -25,7 +25,7 @@ public:
     TTransformationPipeline& AddParametersEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, EYqlIssueCode issueCode = TIssuesIds::CORE_PARAM_EVALUATION);
     TTransformationPipeline& AddPreTypeAnnotation(bool expandCons = true, EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
     TTransformationPipeline& AddExpressionEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-                                                     IGraphTransformer* calcTransfomer = nullptr, EYqlIssueCode issueCode = TIssuesIds::CORE_EXPR_EVALUATION);
+                                                     IGraphTransformer* calcTransformer = nullptr, EYqlIssueCode issueCode = TIssuesIds::CORE_EXPR_EVALUATION);
     TTransformationPipeline& AddPreIOAnnotation(bool withEpochsTransformer = true, EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
     TTransformationPipeline& AddIOAnnotation(bool withEpochsTransformer = true, EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
     TTransformationPipeline& AddTypeAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN, bool twoStages = false);

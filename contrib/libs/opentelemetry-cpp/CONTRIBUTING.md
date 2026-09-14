@@ -7,8 +7,10 @@ repo for information on this and other language SIGs.
 See the [public meeting
 notes](https://docs.google.com/document/d/1i1E4-_y4uJ083lCutKGDhkpi3n4_e774SBLi9hPLocw/edit)
 for a summary description of past meetings. To request edit access, join the
-meeting or get in touch on
-[Slack](https://cloud-native.slack.com/archives/C01N3AT62SJ).
+meeting or get in touch on the
+[#otel-cpp](https://cloud-native.slack.com/archives/C01N3AT62SJ)
+channel on CNCF Slack. If you are new to the CNCF Slack community,
+you can [create an account](https://slack.cncf.io/).
 
 See the [community membership
 document](https://github.com/open-telemetry/community/blob/main/community-membership.md)

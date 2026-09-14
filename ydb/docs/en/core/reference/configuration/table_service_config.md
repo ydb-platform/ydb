@@ -124,42 +124,82 @@ table_service_config:
 
 ### Directory configuration
 
-#### local_file_config.root
+#### local_file_config.root {#root}
 
-**Type:** `string`  \n**Default:** `""` (temporary directory)  \n**Description:** File directory for storing spilling files.
+**Type:** `string`  
+**Default:** `""` (temporary directory)  
+**Description:** File directory for storing spilling files. The directory must already exist and be readable and writable by the `ydbd` process: {{ ydb-short-name }} does not create it, see [Requirements for the root directory](#root-requirements). If the value is empty, the OS temporary directory is used, see [Default directory](#default-root).
 
-For each `ydbd` process, a separate directory with a unique name is created. Spilling directories have the following name format:
+For each `ydbd` process, a separate directory is created inside `root`:
 
-`node_<node_id>_<spilling_service_id>`
+`spilling-tmp-<node_id>-<spilling_service_id>-<username>`
 
 Where:
 
 - `node_id`: [node](../../concepts/glossary.md#node) identifier
-- `spilling_service_id`: unique instance identifier created once during [Spilling Service](../../contributor/spilling-service.md) initialization when the ydbd process starts
+- `spilling_service_id`: unique instance identifier (a GUID) created once during [Spilling Service](../../contributor/spilling-service.md) initialization when the ydbd process starts
+- `username`: OS username under which the `ydbd` process runs
 
 Spilling files are stored inside each such directory.
 
 Example of a full path to a spilling directory:
 
-
 ```bash
-/tmp/spilling-tmp-<username>/node_1_32860791-037c-42b4-b201-82a0a337ac80
+/tmp/spilling-tmp-1-1144b692-f1e5d361-f3960fe8-f607582e-kikimr
 ```
-
 
 Where:
 
-- `/tmp`: value of the `root` parameter
-- `<username>`: username under which the `ydbd` process runs
-
-**Important notes:**
-
-- When the process starts, all existing spilling directories in the specified directory are automatically deleted. Spilling directories have a special name format that includes an instance identifier generated once when the ydbd process starts. When a new process starts, all directories in the spilling directory that match the name format but have a different `spilling_service_id` from the current one are deleted.
-- The directory must have sufficient read and write permissions for the user under which ydbd runs.
+- `/tmp`: value of the `root` parameter (or the system temporary directory if `root` is not set)
+- `1`: node identifier
+- `1144b692-f1e5d361-f3960fe8-f607582e`: Spilling Service instance identifier
+- `kikimr`: OS username
 
 {% note info %}
 
 Spilling is performed only on [database nodes](../../concepts/glossary.md#database-node).
+
+{% endnote %}
+
+##### Requirements for the root directory {#root-requirements}
+
+{{ ydb-short-name }} does not create the `root` directory: it must exist before the nodes start. The cluster administrator or the deployment system has to create it in advance. The `ydbd` process only creates its own subdirectory inside `root`.
+
+All OS users that run database nodes need read and write access to `root`: a node creates its own subdirectory there, writes spilling files into it, and reads them back. If [static](../../concepts/glossary.md#static-node) and [dynamic](../../concepts/glossary.md#dynamic) nodes run under different OS users and share the same `root`, each of these users needs such access, for example, mode `1777`, where the sticky bit prevents users from deleting other users' subdirectories.
+
+{% note warning %}
+
+If spilling is enabled but the `root` directory is missing or not readable and writable, the database node does not start. Make sure that `root` exists and is accessible on all database nodes before enabling spilling.
+
+{% endnote %}
+
+##### Default directory {#default-root}
+
+If `root` is not set, the OS temporary directory of the `ydbd` process that runs the node is used:
+
+- if the `TMPDIR` environment variable is set for the process, its value is used
+- otherwise, `/tmp` is used
+
+The requirements described above apply to this directory as well, but `/tmp` usually already exists with mode `1777` and needs no extra setup.
+
+Nevertheless, it is recommended to set `root` explicitly, to a dedicated directory and preferably on a separate disk.
+
+##### Directory cleanup at startup {#cleanup}
+
+Each process start writes to its own directory with a new `spilling_service_id`, and spilling files are only needed while the process is running, so directories of previous runs are deleted. The cleanup runs asynchronously when the Spilling Service starts.
+
+Directories whose `node_id` and `username` match the current process and whose `spilling_service_id` differs from the one of the current run are deleted. This way, disk space is reclaimed on the next node start after an abnormal process termination, such as `SIGKILL` or a power outage.
+
+The following are not deleted:
+
+- `root` itself: {{ ydb-short-name }} neither creates nor deletes it, it only writes inside
+- other nodes' directories (`spilling-tmp-<other_node_id>-...`): those nodes might be running right now
+- directories with the same `node_id` but a different `username`: another `ydbd` process might be running under that OS user
+- any foreign files and directories inside `root`: the name has to match the format completely, including a `spilling_service_id` that is a GUID
+
+{% note info %}
+
+In previous {{ ydb-short-name }} versions, the directories were named `node_<node_id>_<spilling_service_id>` and were created either directly in `root` (if it was set) or in `spilling-tmp-<username>` inside the system temporary directory (if `root` was not set). Such directories of this node are also deleted at startup, and both locations are inspected regardless of the current `root` value: directories left in the temporary directory are deleted even if `root` is now set explicitly. The shared `spilling-tmp-<username>` directory and other nodes' `node_<other_node_id>_*` directories are preserved: during a cluster upgrade, neighboring nodes may still write there in the old format.
 
 {% endnote %}
 

@@ -53,8 +53,8 @@ public:
                OtherStats.GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));
     }
 
-    TConstructorContainer GetAccessorConstructor(const ui32 colIndex) const {
-        return ColumnStats.GetAccessorConstructor(colIndex);
+    TConstructorContainer GetAccessorConstructor(const ui32 colIndex, const TEncodingParams& encodingParams) const {
+        return ColumnStats.GetAccessorConstructor(colIndex, encodingParams);
     }
 
     std::shared_ptr<arrow::Field> GetField(const ui32 colIndex) const {

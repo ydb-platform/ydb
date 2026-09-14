@@ -18,8 +18,8 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 # Timeouts for background SSH commands executed via execute_ssh + .wait()
 _COREDUMP_ANALYZE_TIMEOUT = 600   # breakpad analyzer can be slow on many cores
 _COREDUMP_SEARCH_TIMEOUT = 300    # find + cat JSON files
-_LOG_COLLECT_TIMEOUT = 600        # unified_agent select for full logs
-_TAR_TIMEOUT = 120                # tar -czf archive
+_LOG_COLLECT_TIMEOUT = 900        # unified_agent select for full logs
+_TAR_TIMEOUT = 1200                # tar -czf archive
 
 _WARDEN_POLL_INTERVAL_S = 30
 _WARDEN_POLL_TIMEOUT_S = 1200

@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package NYdb.NBS.PartitionDirect.NProto;
+
+message TBlockField {
+    oneof Encoding {
+        bytes RunLengthEncoding = 1;
+        bytes BitMask = 2;
+    }
+}
+
+message TDDiskState {
+    TBlockField Ahead = 1;
+    TBlockField Behind = 2;
+}
+
+message TDirtyMapState {
+    uint32 StateGeneration = 1;
+    repeated TDDiskState DDiskStates = 2;
+}

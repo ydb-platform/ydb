@@ -19,6 +19,8 @@
 
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
+#include <ydb/core/kqp/common/dynamic_function_registry.h>
+
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/library/actors/core/scheduler_actor.h>
@@ -680,6 +682,12 @@ public:
 class TOverloadManagerInitializer: public IKikimrServicesInitializer {
 public:
     TOverloadManagerInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TFlowControlManagerInitializer: public IKikimrServicesInitializer {
+public:
+    TFlowControlManagerInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 

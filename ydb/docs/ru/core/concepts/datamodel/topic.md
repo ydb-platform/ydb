@@ -68,6 +68,8 @@
 
 Примеры YQL-запросов для перевода топика в различные режимы автопартиционирования можно посмотреть [здесь](../../yql/reference/syntax/alter-topic.md#autopartitioning).
 
+{% include [no_up_and_down](./_includes/no_up_and_down.md) %}
+
 ### Ограничения {#autopartitioning_constraints}
 
 При использовании автопартиционирования действуют следующие ограничения:

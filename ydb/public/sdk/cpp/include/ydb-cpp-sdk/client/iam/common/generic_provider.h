@@ -80,6 +80,7 @@ private:
               TCredentialsProviderPtr authTokenProvider)
             : Rpc_(rpc)
             , NextTicketUpdate_(SysTimePoint{})
+            , RetryDeadline_(SafeAddSystemTime(SysClock::now(), ToBoundedSysDuration(2 * iamEndpoint.RequestTimeout)))
             , IamEndpoint_(iamEndpoint)
             , RequestFiller_(requestFiller)
             , Context_(std::nullopt)
@@ -237,9 +238,10 @@ private:
                 RequestFiller_(req);
                 Rpc_(Stub_.get(), &*Context_, &req, response.get(), std::move(cb));
             } catch (...) {
-                std::lock_guard guard(Lock_);
+                std::unique_lock guard(Lock_);
                 ResetContextImpl();
-                RescheduleOnFailure();
+                guard.unlock();
+                Fail(CurrentExceptionMessage());
             }
         }
 
@@ -307,6 +309,7 @@ private:
                 }
                 if (AuthInfo_.GetFuture().IsReady()) {
                     AuthInfo_ = NThreading::NewPromise<std::string>();
+                    RetryDeadline_ = SafeAddSystemTime(SysClock::now(), ToBoundedSysDuration(2 * IamEndpoint_.RequestTimeout));
                 }
                 try {
                     authPending = !FillContext(guard);
@@ -353,7 +356,7 @@ private:
                         << " Message: \"" << status.error_message()
                         << "\" iam-endpoint: \"" << IamEndpoint_.Endpoint << "\"";
 
-                    if (IsRetryable(status.error_code())) {
+                    if (IsRetryable(status.error_code()) && SysClock::now() < RetryDeadline_) {
                         RescheduleOnFailure();
                     } else {
                         terminalError = error;
@@ -411,6 +414,7 @@ private:
         TAsyncRpc Rpc_;
 
         SysTimePoint NextTicketUpdate_;
+        SysTimePoint RetryDeadline_;
         const TIamEndpoint IamEndpoint_;
         const TRequestFiller RequestFiller_;
         std::optional<grpc::ClientContext> Context_;

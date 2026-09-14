@@ -80,18 +80,18 @@ static void* GetTLSAddress(void* control) {
 #endif
 
 #if !defined(_win_) || defined(__clang__)
-extern "C" void __divti3();
-extern "C" void __fixdfti();
-extern "C" void __fixsfti();
-extern "C" void __fixunsdfti();
-extern "C" void __floattidf();
-extern "C" void __floattisf();
-extern "C" void __floatuntidf();
-extern "C" void __floatuntisf();
-extern "C" void __modti3();
-extern "C" void __muloti4();
-extern "C" void __udivti3();
-extern "C" void __umodti3();
+extern "C" void __divti3();      // NOLINT(readability-identifier-naming)
+extern "C" void __fixdfti();     // NOLINT(readability-identifier-naming)
+extern "C" void __fixsfti();     // NOLINT(readability-identifier-naming)
+extern "C" void __fixunsdfti();  // NOLINT(readability-identifier-naming)
+extern "C" void __floattidf();   // NOLINT(readability-identifier-naming)
+extern "C" void __floattisf();   // NOLINT(readability-identifier-naming)
+extern "C" void __floatuntidf(); // NOLINT(readability-identifier-naming)
+extern "C" void __floatuntisf(); // NOLINT(readability-identifier-naming)
+extern "C" void __modti3();      // NOLINT(readability-identifier-naming)
+extern "C" void __muloti4();     // NOLINT(readability-identifier-naming)
+extern "C" void __udivti3();     // NOLINT(readability-identifier-naming)
+extern "C" void __umodti3();     // NOLINT(readability-identifier-naming)
 #else
     #include <yql/essentials/public/decimal/yql_decimal.h>
     #define CRT_HAS_128BIT
@@ -209,8 +209,7 @@ double __floattidfabi(du_int x, du_int y) {
 
 #endif
 
-namespace NYql {
-namespace NCodegen {
+namespace NYql::NCodegen {
 
 namespace {
 
@@ -226,7 +225,7 @@ struct TCodegenInit {
         llvm::InitializeNativeTargetAsmPrinter();
         llvm::InitializeNativeTargetAsmParser();
         llvm::InitializeNativeTargetDisassembler();
-        llvm::install_fatal_error_handler(&FatalErrorHandler, nullptr);
+        llvm::install_fatal_error_handler(&FatalErrorHandler, /*user_data=*/nullptr);
     }
 };
 
@@ -332,7 +331,7 @@ public:
 #endif
     }
 
-    ~TCodegen() {
+    ~TCodegen() override {
 #ifdef __linux__
         if (PerfListener_) {
             Engine_->UnregisterJITEventListener(PerfListener_);
@@ -382,12 +381,12 @@ public:
     }
 
     void ExportSymbol(llvm::Function* function) override {
-        if (!ExportedSymbols) {
-            ExportedSymbols.ConstructInPlace();
+        if (!ExportedSymbols_) {
+            ExportedSymbols_.ConstructInPlace();
         }
 
         auto name = function->getName();
-        ExportedSymbols->emplace(TString(name.data(), name.size()));
+        ExportedSymbols_->emplace(TString(name.data(), name.size()));
     }
 
     void Compile(const TStringBuf compileOpts, TCompileStats* compileStats) override {
@@ -483,15 +482,15 @@ public:
 
         llvm::ModulePassManager modulePassManager;
         if (disableOpt) {
-            modulePassManager = passBuilder.buildO0DefaultPipeline(llvm::OptimizationLevel::O0, false);
+            modulePassManager = passBuilder.buildO0DefaultPipeline(llvm::OptimizationLevel::O0, /*LTOPreLink=*/false);
         } else {
             modulePassManager = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O2);
         }
 
-        if (ExportedSymbols) {
+        if (ExportedSymbols_) {
             modulePassManager.addPass(llvm::InternalizePass([&](const llvm::GlobalValue& gv) -> bool {
                 auto name = TString(gv.getName().str());
-                return ExportedSymbols->contains(name);
+                return ExportedSymbols_->contains(name);
             }));
 
             modulePassManager.addPass(llvm::GlobalDCEPass());
@@ -537,7 +536,7 @@ public:
         }
 
         if (compileStats) {
-            compileStats->TotalObjectSize = TotalObjectSize;
+            compileStats->TotalObjectSize = TotalObjectSize_;
         }
     }
 
@@ -578,33 +577,38 @@ public:
 
     void Disassemble(IOutputStream* out, const unsigned char* buf, size_t size) {
         InitRegexps();
-        auto dis = LLVMCreateDisasm(Triple_.c_str(), nullptr, 0, nullptr, nullptr);
+        auto dis = LLVMCreateDisasm(
+            Triple_.c_str(),
+            /*DisInfo=*/nullptr,
+            0,
+            /*GetOpInfo=*/nullptr,
+            /*SymbolLookUp=*/nullptr);
         if (!dis) {
             ythrow yexception() << "Cannot create disassembler";
         }
 
         std::unique_ptr<void, void (*)(void*)> delDis(dis, LLVMDisasmDispose);
         LLVMSetDisasmOptions(dis, LLVMDisassembler_Option_AsmPrinterVariant);
-        char outline[1024];
+        std::array<char, 1024> outline;
         size_t pos = 0;
         while (pos < size) {
-            size_t l = LLVMDisasmInstruction(dis, (uint8_t*)buf + pos, size - pos, 0, outline, sizeof(outline));
+            size_t l = LLVMDisasmInstruction(dis, (uint8_t*)buf + pos, size - pos, 0, outline.data(), outline.size());
             if (!l) {
                 *out << "  " << LeftPad(pos, 4, '0') << "\t???";
                 ++pos;
             } else {
-                *out << "  " << LeftPad(pos, 4, '0') << outline;
-                TStringBuf s(outline);
+                *out << "  " << LeftPad(pos, 4, '0') << outline.data();
+                TStringBuf s(outline.data());
                 const re2::StringPiece piece(s.data(), s.size());
                 std::array<re2::StringPiece, 2> captures;
-                if (Patterns_->Imm_.Match(piece, 0, s.size(), re2::RE2::UNANCHORED, captures.data(), captures.size())) {
+                if (Patterns_->Imm.Match(piece, 0, s.size(), re2::RE2::UNANCHORED, captures.data(), captures.size())) {
                     auto numBuf = TStringBuf(captures[1].data(), captures[1].size());
                     ui64 addr = FromString<ui64>(numBuf);
                     auto it = ReverseGlobalMapping_.find((void*)addr);
                     if (it != ReverseGlobalMapping_.end()) {
                         *out << " ; &" << it->second;
                     }
-                } else if (Patterns_->Jump_.Match(piece, 0, s.size(), re2::RE2::UNANCHORED, captures.data(), captures.size())) {
+                } else if (Patterns_->Jump.Match(piece, 0, s.size(), re2::RE2::UNANCHORED, captures.data(), captures.size())) {
                     auto numBuf = TStringBuf(captures[1].data(), captures[1].size());
                     i64 offset = FromString<i64>(numBuf);
                     *out << " ; -> " << pos + l + offset;
@@ -645,7 +649,7 @@ public:
             if (uniqId) {
                 err.append(' ').append(uniqId);
             }
-            if (Diagnostic_.size()) {
+            if (!Diagnostic_.empty()) {
                 err.append(": ").append(Diagnostic_.c_str(), Diagnostic_.size());
             }
             ythrow yexception() << err;
@@ -664,7 +668,7 @@ public:
     void notifyObjectLoaded(ObjectKey key, const llvm::object::ObjectFile& obj,
                             const llvm::RuntimeDyld::LoadedObjectInfo& loi) override {
         Y_UNUSED(key);
-        TotalObjectSize += obj.getData().size();
+        TotalObjectSize_ += obj.getData().size();
 
         for (const auto& section : obj.sections()) {
             // auto nameExp = section.getName();
@@ -685,18 +689,18 @@ private:
     }
 
     static void DiagnosticHandler(const llvm::DiagnosticInfo& info, void* context) {
-        return static_cast<TCodegen*>(context)->OnDiagnosticInfo(info);
+        static_cast<TCodegen*>(context)->OnDiagnosticInfo(info);
     }
 
     struct TPatterns {
         TPatterns()
-            : Imm_(re2::StringPiece("\\s*movabs\\s+[0-9a-z]+\\s*,\\s*(\\d+)\\s*"))
-            , Jump_(re2::StringPiece("\\s*(?:j[a-z]+)\\s*(-?\\d+)\\s*"))
+            : Imm(re2::StringPiece(R"(\s*movabs\s+[0-9a-z]+\s*,\s*(\d+)\s*)"))
+            , Jump(re2::StringPiece(R"(\s*(?:j[a-z]+)\s*(-?\d+)\s*)"))
         {
         }
 
-        re2::RE2 Imm_;
-        re2::RE2 Jump_;
+        re2::RE2 Imm;
+        re2::RE2 Jump;
     };
 
     void InitRegexps() {
@@ -718,9 +722,9 @@ private:
 #endif
     std::unique_ptr<llvm::ExecutionEngine> Engine_;
     std::vector<std::pair<llvm::object::SectionRef, ui64>> CodeSections_;
-    ui64 TotalObjectSize = 0;
+    ui64 TotalObjectSize_ = 0;
     std::vector<std::pair<ui64, llvm::Function*>> SortedFuncs_;
-    TMaybe<THashSet<TString>> ExportedSymbols;
+    TMaybe<THashSet<TString>> ExportedSymbols_;
     THashMap<const void*, TString> ReverseGlobalMapping_;
     TMaybe<TPatterns> Patterns_;
     THashSet<TString> LoadedModules_;
@@ -736,5 +740,4 @@ ICodegen::MakeShared(ETarget target, ESanitize sanitize) {
     return std::make_shared<TCodegen>(target, sanitize);
 }
 
-} // namespace NCodegen
-} // namespace NYql
+} // namespace NYql::NCodegen

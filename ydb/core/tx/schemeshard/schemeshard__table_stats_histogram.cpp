@@ -188,7 +188,10 @@ public:
 
 
 void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx) {
-    const auto& rec = ev->Get()->Record;
+    auto* msg = ev->Get();
+    const auto& rec = msg->Record;
+
+    TabletCounters->Percentile()[COUNTER_GET_TABLE_STATS_RESULT_ARENA_SPACE_USED].IncrementFor(msg->Arena->Get()->SpaceUsed());
 
     auto datashardId = TTabletId(rec.GetDatashardId());
     ui64 dataSize = rec.GetTableStats().GetDataSize();

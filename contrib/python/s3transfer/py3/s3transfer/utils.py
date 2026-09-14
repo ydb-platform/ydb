@@ -831,3 +831,18 @@ def set_default_checksum_algorithm(extra_args):
     if any(checksum in extra_args for checksum in FULL_OBJECT_CHECKSUM_ARGS):
         return
     extra_args.setdefault("ChecksumAlgorithm", DEFAULT_CHECKSUM_ALGORITHM)
+
+
+# NOTE: The following interfaces are considered private and are subject
+# to abrupt breaking changes. Please do not use them directly.
+
+try:
+    from botocore.utils import create_nested_client as create_client
+except ImportError:
+
+    def create_client(session, *args, **kwargs):
+        return session.create_client(*args, **kwargs)
+
+
+def create_nested_client(session, service_name, **kwargs):
+    return create_client(session, service_name, **kwargs)

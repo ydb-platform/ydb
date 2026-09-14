@@ -26,34 +26,28 @@ inline TResourcePoolClassifierConfig MakeClassifierConfig(
     std::optional<TString> hasFullScan = std::nullopt,
     std::optional<TString> hasPath = std::nullopt,
     std::optional<bool> hasStream = std::nullopt,
-    std::optional<TString> action = std::nullopt)
+    std::optional<NResourcePool::EClassifierAction> action = std::nullopt)
 {
-    NJson::TJsonValue json(NJson::JSON_MAP);
-    json["resource_pool"] = resourcePool;
-    if (memberName) {
-        json["member_name"] = *memberName;
-    }
-    if (hasAppName) {
-        json["has_app_name"] = *hasAppName;
-    }
+    NResourcePool::TClassifierSettings settings;
+    settings.Rank = rank;
+    settings.ResourcePool = resourcePool;
+    settings.MemberName = memberName;
+    settings.HasAppName = hasAppName;
     if (hasFullScan) {
-        json["has_full_scan"] = *hasFullScan;
+        settings.HasFullScan = NResourcePool::TRegexPredicate::FromGlob(*hasFullScan);
     }
     if (hasPath) {
-        json["has_path"] = *hasPath;
+        settings.HasPath = NResourcePool::TRegexPredicate::FromGlob(*hasPath);
     }
-    if (hasStream) {
-        json["has_stream"] = *hasStream;
-    }
-    if (action) {
-        json["action"] = *action;
-    }
+    settings.HasStream = hasStream;
+    settings.Action = action;
+
 
     TResourcePoolClassifierConfig config;
     config.SetDatabase(database);
     config.SetName(name);
-    config.SetRank(rank);
-    config.SetConfigJson(json);
+    config.SetClassifierSettings(settings);
+
     return config;
 }
 
@@ -99,11 +93,12 @@ struct TClassifyTestCase {
     std::optional<TString> ClassifierHasFullScan;
     std::optional<TString> ClassifierHasPath;
     std::optional<bool> ClassifierHasStream;
-    std::optional<TString> ClassifierAction;
+    std::optional<NResourcePool::EClassifierAction> ClassifierAction;
 
     TString ContextAppName;
     TString ContextMemberName;
     TString ExplicitPoolId;
+    TString ResourcePoolForSharedReading;
 
     std::vector<std::pair<TString, i32>> ExtraPools;
 
@@ -116,7 +111,7 @@ struct TClassifyTestCase {
         std::optional<TString> HasFullScan;
         std::optional<TString> HasPath;
         std::optional<bool> HasStream;
-        std::optional<TString> Action;
+        std::optional<NResourcePool::EClassifierAction> Action;
     };
     std::vector<TExtraClassifier> ExtraClassifiers;
 
@@ -157,12 +152,17 @@ struct TClassifyTestCase {
             .UserToken = token,
         };
 
-        return NWorkloadManager::CreateQueryClassifier(poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx));
+        return CreateQueryClassifier(poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx),
+            ResourcePoolForSharedReading.empty() ? std::optional<TString>() : ResourcePoolForSharedReading);
     }
 
-    NWorkloadManager::IQueryClassifier::TPreCompileClassifyResult RunPreClassify() const {
+    NWorkloadManager::IQueryClassifier::TPreCompileClassifyResult RunPreClassify(
+        bool isStreamingQuery = false) const
+    {
         auto classifier = BuildClassifier();
-        return classifier->PreCompileClassify();
+        NKqp::TUserRequestContext userRequestContext;
+        userRequestContext.IsStreamingQuery = isStreamingQuery;
+        return classifier->PreCompileClassify(userRequestContext);
     }
 
     ///
@@ -174,7 +174,8 @@ struct TClassifyTestCase {
         const TString& queryTablePath, bool isFullScan) const
     {
         auto classifier = BuildClassifier();
-        (void)classifier->PreCompileClassify();
+        NKqp::TUserRequestContext userRequestContext;
+        (void)classifier->PreCompileClassify(userRequestContext);
 
         auto proto = std::make_unique<NKikimrKqp::TPreparedQuery>();
         auto* phyQuery = proto->MutablePhysicalQuery();
@@ -190,7 +191,6 @@ struct TClassifyTestCase {
         }
 
         NKqp::TPreparedQueryHolder holder(proto.release(), nullptr, /*noFillTables=*/true);
-        NKqp::TUserRequestContext userRequestContext;
         return classifier->PostCompileClassify(holder, userRequestContext);
     }
 
@@ -201,10 +201,12 @@ struct TClassifyTestCase {
     /// for wiring verification; the matcher UT covers the full walk surface.
     ///
     NWorkloadManager::IQueryClassifier::TPostCompileClassifyResult RunPostClassifyForPath(
-        const TString& queryTablePath) const
+        const TString& queryTablePath, bool isStreamingQuery = false) const
     {
         auto classifier = BuildClassifier();
-        (void)classifier->PreCompileClassify();
+        NKqp::TUserRequestContext userRequestContext;
+        userRequestContext.IsStreamingQuery = isStreamingQuery;
+        (void)classifier->PreCompileClassify(userRequestContext);
 
         auto proto = std::make_unique<NKikimrKqp::TPreparedQuery>();
         auto* phyQuery = proto->MutablePhysicalQuery();
@@ -212,7 +214,6 @@ struct TClassifyTestCase {
         tx->AddTables()->MutableId()->SetPath(queryTablePath);
 
         NKqp::TPreparedQueryHolder holder(proto.release(), nullptr, /*noFillTables=*/true);
-        NKqp::TUserRequestContext userRequestContext;
         return classifier->PostCompileClassify(holder, userRequestContext);
     }
 
@@ -220,12 +221,12 @@ struct TClassifyTestCase {
         bool isStreamingQuery) const
     {
         auto classifier = BuildClassifier();
-        (void)classifier->PreCompileClassify();
+        NKqp::TUserRequestContext userRequestContext;
+        userRequestContext.IsStreamingQuery = isStreamingQuery;
+        (void)classifier->PreCompileClassify(userRequestContext);
 
         auto proto = std::make_unique<NKikimrKqp::TPreparedQuery>();
         NKqp::TPreparedQueryHolder holder(proto.release(), nullptr, /*noFillTables=*/true);
-        NKqp::TUserRequestContext userRequestContext;
-        userRequestContext.IsStreamingQuery = isStreamingQuery;
         return classifier->PostCompileClassify(holder, userRequestContext);
     }
 };

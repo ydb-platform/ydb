@@ -27,7 +27,8 @@ public:
 
 };
 
-class TKafkaDescribeConfigsActor: public NActors::TActorBootstrapped<TKafkaDescribeConfigsActor> {
+class TKafkaDescribeConfigsActor: public NActors::TActorBootstrapped<TKafkaDescribeConfigsActor>
+                                , public TKafkaExceptionHandler<TKafkaDescribeConfigsActor> {
 public:
     TKafkaDescribeConfigsActor(
             const TContext::TPtr context,
@@ -41,6 +42,10 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
     void Handle(const TEvKafka::TEvTopicDescribeResponse::TPtr& ev);
     void Reply();
+
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {

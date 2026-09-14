@@ -8,7 +8,7 @@ option (TabletTypeName) = "Cms";
 
 enum ESimpleCounters {
     COUNTER_SIMPLE_IGNORE = 0;
- 
+
     // 1 when local config differs from console
     COUNTER_BOOTSTRAP_DIFFERS = 1                        [(CounterOpts) = {Name: "BootstrapConfigDiffersFromConsole"}];
     COUNTER_REQUESTS_QUEUE_SIZE = 2                      [(CounterOpts) = {Name: "RequestsQueueSize"}];
@@ -54,7 +54,7 @@ enum ETxTypes {
     TXTYPE_LOAD_STATE = 3                                 [(TxTypeOpts) = {Name: "TxLoadState"}];
     TXTYPE_LOG_AND_SEND = 4                               [(TxTypeOpts) = {Name: "TxLogAndSend"}];
     TXTYPE_LOG_CLEANUP = 5                                [(TxTypeOpts) = {Name: "TxLogCleanup"}];
-    TXTYPE_PROCESS_NOTIFICATION = 6                       [(TxTypeOpts) = {Name: "TxProcessNotification"}];  
+    TXTYPE_PROCESS_NOTIFICATION = 6                       [(TxTypeOpts) = {Name: "TxProcessNotification"}];
     TXTYPE_REJECT_NOTIFICATION = 7                        [(TxTypeOpts) = {Name: "TxRejectNotification"}];
     TXTYPE_REMOVE_EXPIRED_NOTIFICATION = 8                [(TxTypeOpts) = {Name: "TxRemoveExpiredNotification"}];
     TXTYPE_STORE_PERMISSIONS = 9                          [(TxTypeOpts) = {Name: "TxStorePermissions"}];
@@ -65,4 +65,5 @@ enum ETxTypes {
     TXTYPE_UPDATE_CONFIG = 14                             [(TxTypeOpts) = {Name: "TxUpdateConfig"}];
     TXTYPE_UPDATE_DOWNTIMES = 15                          [(TxTypeOpts) = {Name: "TxUpdateDowntimes"}];
     TXTYPE_STORE_FIRST_BOOT_TIMESTAMP = 16                [(TxTypeOpts) = {Name: "TxStoreFirstBootTimestamp"}];
+    TXTYPE_PERSIST_DDISK_INFO = 17                        [(TxTypeOpts) = {Name: "TxPersistDDiskInfo"}];
 }

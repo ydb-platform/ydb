@@ -18,7 +18,7 @@ namespace NKikimr::NBlobDepot {
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_PREPARE_WRITE_S3; }
 
         TTxPrepareWriteS3(TBlobDepot *self, TAgent& agent, std::unique_ptr<TEvBlobDepot::TEvPrepareWriteS3::THandle> request)
-            : TTransactionBase(self)
+            : TTransactionBase(self, std::move(request->TraceId))
             , NodeId(agent.Connection->NodeId)
             , AgentInstanceId(*agent.AgentInstanceId)
             , Request(std::move(request))

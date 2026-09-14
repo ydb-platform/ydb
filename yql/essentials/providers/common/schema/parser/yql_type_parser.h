@@ -37,7 +37,6 @@ protected:
     void SaveDataTypeParams(const TStringBuf& dataType, const TStringBuf& paramOne, const TStringBuf& paramTwo);
     void SaveResourceType(const TStringBuf& tag);
 
-protected:
     NYson::TYsonConsumerBase& Writer_;
     const bool ExtendedForm_;
 };

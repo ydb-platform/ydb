@@ -1,45 +1,37 @@
 {
-    "test.test[ErfInvNoLLVM]": [
+    "test.test[ErfInv-Results]": [
         {
-            "checksum": "be26c6ffe8018b2afe5c6bd554d4468d",
-            "size": 6789,
-            "uri": "https://{canondata_backend}/1937429/e098bd35e45d8b2d18b6958e5e9b0a875d6a03f1/resource.tar.gz#test.test_ErfInvNoLLVM_/results.txt"
+            "uri": "file://test.test_ErfInv-Results_/results.txt"
         }
     ],
-    "test.test[ErfInv]": [
+    "test.test[ErfInvNoLLVM-Results]": [
         {
-            "checksum": "be26c6ffe8018b2afe5c6bd554d4468d",
-            "size": 6789,
-            "uri": "https://{canondata_backend}/1937429/e098bd35e45d8b2d18b6958e5e9b0a875d6a03f1/resource.tar.gz#test.test_ErfInv_/results.txt"
+            "uri": "file://test.test_ErfInvNoLLVM-Results_/results.txt"
         }
     ],
-    "test.test[IR]": [
+    "test.test[IR-Results]": [
         {
-            "checksum": "83061f69c401182342478cbc8fd11b63",
-            "size": 10168,
-            "uri": "https://{canondata_backend}/1937429/e098bd35e45d8b2d18b6958e5e9b0a875d6a03f1/resource.tar.gz#test.test_IR_/results.txt"
+            "uri": "file://test.test_IR-Results_/results.txt"
         }
     ],
-    "test.test[IR_LLVM_OFF]": [
+    "test.test[IR_LLVM_OFF-Results]": [
         {
-            "checksum": "83061f69c401182342478cbc8fd11b63",
-            "size": 10168,
-            "uri": "https://{canondata_backend}/1937429/e098bd35e45d8b2d18b6958e5e9b0a875d6a03f1/resource.tar.gz#test.test_IR_LLVM_OFF_/results.txt"
+            "uri": "file://test.test_IR_LLVM_OFF-Results_/results.txt"
         }
     ],
-    "test.test[NearbyInt]": [
+    "test.test[NearbyInt-Results]": [
         {
-            "uri": "file://test.test_NearbyInt_/results.txt"
+            "uri": "file://test.test_NearbyInt-Results_/results.txt"
         }
     ],
-    "test.test[SwapBytes]": [
+    "test.test[SwapBytes-Results]": [
         {
-            "uri": "file://test.test_SwapBytes_/results.txt"
+            "uri": "file://test.test_SwapBytes-Results_/results.txt"
         }
     ],
-    "test.test[SwapBytes_2025_02]": [
+    "test.test[SwapBytes_2025_02-Results]": [
         {
-            "uri": "file://test.test_SwapBytes_2025_02_/extracted"
+            "uri": "file://test.test_SwapBytes_2025_02-Results_/extracted"
         }
     ]
 }

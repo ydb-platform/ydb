@@ -15,11 +15,27 @@
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
 
+#include <optional>
+#include <utility>
+
 #include <util/system/valgrind.h>
 #include <util/system/sanitizers.h>
 
 namespace NKikimr {
 namespace NDataShard {
+
+// One writer's position in a lock's uncommitted write chain
+struct TLockWriteSeqNum {
+    ui64 WriterIndex = 0;
+    ui64 WriteSeqNum = 0;
+};
+
+// Last uncommitted write for one WriterIndex.
+struct TWriteSeqNumState {
+    ui64 WriterIndex = 0;
+    ui64 WriteSeqNum = 0;
+    TString SerializedResult; // last TEvWriteResult; empty if none
+};
 
 class ILocksDb {
 protected:
@@ -40,6 +56,7 @@ public:
         ui64 Counter;
         ui64 CreateTs;
         ui64 Flags;
+        TVector<TWriteSeqNumState> WriteSeqNumStates;
         ui64 VictimQuerySpanId = 0;
         ui64 BreakerQuerySpanId = 0;
         ui32 BreakerNodeId = 0;
@@ -68,6 +85,8 @@ public:
     virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
+    virtual void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) = 0;
+    virtual void PersistRemoveLockWriteSeqNum(ui64 lockId, ui64 writerIndex) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
 
     // Persist adding/removing info on locked ranges
@@ -445,6 +464,42 @@ public:
     bool IsPersisting() const { return WaitPersistentCounter > 0; }
     void AddWaitPersistentCallback(ILocksDb* db);
 
+    ui64 GetWriteSeqNum(ui64 writerIndex) const {
+        auto it = WriteSeqNumStates.find(writerIndex);
+        return it != WriteSeqNumStates.end() ? it->second.WriteSeqNum : 0;
+    }
+    std::optional<ui64> FindOtherWriter(ui64 writerIndex) const {
+        for (const auto& [idx, state] : WriteSeqNumStates) {
+            if (idx != writerIndex && state.WriteSeqNum != 0) {
+                return idx;
+            }
+        }
+        return std::nullopt;
+    }
+    TVector<TLockWriteSeqNum> GetWriteSeqNums() const {
+        TVector<TLockWriteSeqNum> result;
+        result.reserve(WriteSeqNumStates.size());
+        for (const auto& [idx, state] : WriteSeqNumStates) {
+            if (state.WriteSeqNum) {
+                result.push_back(TLockWriteSeqNum{idx, state.WriteSeqNum});
+            }
+        }
+        return result;
+    }
+    // TLock reports a single writer; DataShard enforces one writer per lock.
+    TLockWriteSeqNum GetLockWriteSeqNum() const {
+        auto seqs = GetWriteSeqNums();
+        return seqs.size() == 1 ? seqs[0] : TLockWriteSeqNum{};
+    }
+    bool SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
+
+    const TWriteSeqNumState* FindWriteSeqNumState(ui64 writerIndex) const {
+        auto it = WriteSeqNumStates.find(writerIndex);
+        return it != WriteSeqNumStates.end() ? &it->second : nullptr;
+    }
+    const THashMap<ui64, TWriteSeqNumState>& GetWriteSeqNumStates() const { return WriteSeqNumStates; }
+    void SetWriteSeqNumResult(ui64 writerIndex, TString serializedResult, ILocksDb* db = nullptr);
+
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
 private:
@@ -492,6 +547,7 @@ private:
 
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
+    THashMap<ui64, TWriteSeqNumState> WriteSeqNumStates;
 
 public:
     TAsyncEvent OnBrokenEvent;
@@ -937,6 +993,9 @@ struct TLocksUpdate {
     ui64 ConflictBreakerQuerySpanId = 0;
     TLockInfo::TPtr Lock;
 
+    // This uncommitted write's position in its writer's chain; ApplyLocks persists it on the lock.
+    std::optional<TLockWriteSeqNum> SetWriteSeqNum;
+
     // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
     // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.
     ui64 GetEffectiveBreakerQuerySpanId() const {
@@ -1248,8 +1307,10 @@ private:
     TLocksCache* Cache = nullptr;
     ILocksDb* Db = nullptr;
 
-    TLock MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const;
-    TLock MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const;
+    TLock MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
+        TLockWriteSeqNum writeSeqNum = {}) const;
+    TLock MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites,
+        TLockWriteSeqNum writeSeqNum = {}) const;
 
     static ui64 GetLockId(const TArrayRef<const TCell>& key) {
         ui64 lockId;

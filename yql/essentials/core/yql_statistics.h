@@ -61,7 +61,7 @@ private:
 // derive stats for higher-level operators in the plan.
 class IProviderStatistics {
 public:
-    virtual ~IProviderStatistics() {}
+    virtual ~IProviderStatistics() = default;
 };
 
 struct TColumnStatistics {
@@ -71,7 +71,7 @@ struct TColumnStatistics {
     std::shared_ptr<NKikimr::TEqWidthHistogramEstimator> EqWidthHistogramEstimator;
     TString Type;
 
-    TColumnStatistics() {}
+    TColumnStatistics() = default;
 };
 
 /**
@@ -109,7 +109,7 @@ struct TOptimizerStatistics {
 
     struct TColumnStatMap : public TSimpleRefCount<TColumnStatMap> {
         THashMap<TString,TColumnStatistics> Data;
-        TColumnStatMap() {}
+        TColumnStatMap() = default;
         explicit TColumnStatMap(THashMap<TString,TColumnStatistics> data) : Data(std::move(data)) {}
     };
 

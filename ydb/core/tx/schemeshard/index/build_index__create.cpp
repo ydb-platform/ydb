@@ -103,8 +103,29 @@ public:
         if (settings.has_index() && settings.has_column_build_operation()) {
             return makeReply("unable to build index and column in the single operation");
         } else if (settings.has_index()) {
+            const bool isRebuild = settings.is_rebuild();
             const auto& indexPath = tablePath.Child(settings.index().name());
-            {
+            if (isRebuild) {
+                // For REBUILD INDEX, the index must already exist and be Ready
+                const auto checks = indexPath.Check();
+                checks
+                    .IsAtLocalSchemeShard()
+                    .IsResolved()
+                    .NotDeleted()
+                    .NotUnderDeleting();
+
+                if (!checks) {
+                    return Reply(checks.GetStatus(), TStringBuilder()
+                        << "REBUILD INDEX: index '" << settings.index().name() << "' check failed: " << checks.GetError());
+                }
+
+                if (indexPath.Base()->PathType != TPathElement::EPathType::EPathTypeTableIndex) {
+                    return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                        << "REBUILD INDEX: '" << settings.index().name() << "' is not an index");
+                }
+
+                buildInfo->IsRebuild = true;
+            } else {
                 const auto checks = indexPath.Check();
                 checks
                     .IsAtLocalSchemeShard();
@@ -125,10 +146,6 @@ public:
                 }
 
                 checks
-                    //NOTE: empty userToken here means that index is forbidden from getting a name
-                    // thats system reserved or starts with a system reserved prefix.
-                    // Even an cluster admin or the system inself will not be able to force a reserved name for this index.
-                    // If that will become an issue at some point, then a real userToken should be passed here.
                     .IsValidLeafName(/*userToken*/ nullptr)
                     .DirChildrenLimit();
 
@@ -140,19 +157,21 @@ public:
             auto tableInfo = Self->Tables.at(tablePath.Base()->PathId);
             auto domainInfo = tablePath.DomainInfo();
 
-            const ui64 aliveIndices = Self->GetAliveChildren(
-                tablePath.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
+            if (!isRebuild) {
+                const ui64 aliveIndices = Self->GetAliveChildren(
+                    tablePath.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
 
-            if (aliveIndices + 1 >
-                domainInfo->GetSchemeLimits().MaxTableIndices) {
-                return Reply(
-                    Ydb::StatusIds::PRECONDITION_FAILED,
-                    TStringBuilder()
-                        << "indexes count has reached maximum value in the table, "
-                           "children limit for dir in domain: "
-                        << domainInfo->GetSchemeLimits().MaxTableIndices
-                        << ", intention to create new children: "
-                        << aliveIndices + 1);
+                if (aliveIndices + 1 >
+                    domainInfo->GetSchemeLimits().MaxTableIndices) {
+                    return Reply(
+                        Ydb::StatusIds::PRECONDITION_FAILED,
+                        TStringBuilder()
+                            << "indexes count has reached maximum value in the table, "
+                               "children limit for dir in domain: "
+                            << domainInfo->GetSchemeLimits().MaxTableIndices
+                            << ", intention to create new children: "
+                            << aliveIndices + 1);
+                }
             }
 
             TString explain;
@@ -393,7 +412,41 @@ private:
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
-            *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+
+            if (buildInfo.IsRebuild) {
+                // For rebuild: start from existing index settings, then merge user overrides
+                const auto& indexPath = TPath::Resolve(settings.source_path(), Self).Child(index.name());
+                Y_ENSURE(indexPath.IsResolved());
+                auto existingIndex = Self->Indexes.at(indexPath.Base()->PathId);
+                const auto* existingDesc = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+                    &existingIndex->SpecializedIndexDescription);
+                if (!existingDesc) {
+                    explain = "REBUILD INDEX is only supported for vector_kmeans_tree indexes";
+                    return false;
+                }
+                vectorIndexKmeansTreeDescription = *existingDesc;
+                // Merge user-provided settings over existing ones
+                const auto& userSettings = index.global_vector_kmeans_tree_index().vector_settings();
+                if (userSettings.has_settings()) {
+                    const auto& userVectorSettings = userSettings.settings();
+                    const auto& existingVectorSettings = existingDesc->GetSettings().settings();
+                    if (userVectorSettings.has_metric() && userVectorSettings.metric() != existingVectorSettings.metric()) {
+                        explain = "REBUILD INDEX cannot change metric (distance/similarity)";
+                        return false;
+                    }
+                    if (userVectorSettings.has_vector_type() && userVectorSettings.vector_type() != existingVectorSettings.vector_type()) {
+                        explain = "REBUILD INDEX cannot change vector_type";
+                        return false;
+                    }
+                    if (userVectorSettings.has_vector_dimension() && userVectorSettings.vector_dimension() != existingVectorSettings.vector_dimension()) {
+                        explain = "REBUILD INDEX cannot change vector_dimension";
+                        return false;
+                    }
+                }
+                vectorIndexKmeansTreeDescription.MutableSettings()->MergeFrom(userSettings);
+            } else {
+                *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+            }
 
             if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
                 return false;
@@ -477,6 +530,27 @@ private:
         buildInfo.IndexName = index.name();
         buildInfo.IndexColumns.assign(index.index_columns().begin(), index.index_columns().end());
         buildInfo.DataColumns.assign(index.data_columns().begin(), index.data_columns().end());
+        if (buildInfo.IsRebuild && (index.index_columns().empty() || index.data_columns().empty())) {
+            // Inherit columns from the existing index when they are not provided explicitly.
+            // Index columns and data columns are inherited independently: providing one must
+            // not silently drop the other (e.g. specifying index_columns without data_columns
+            // must preserve the existing data columns).
+            const auto& indexPath = TPath::Resolve(settings.source_path(), Self).Child(index.name());
+            auto existingIndex = Self->Indexes.at(indexPath.Base()->PathId);
+            if (index.index_columns().empty()) {
+                buildInfo.IndexColumns.assign(existingIndex->IndexKeys.begin(), existingIndex->IndexKeys.end());
+            }
+            if (index.data_columns().empty()) {
+                buildInfo.DataColumns.assign(existingIndex->IndexDataColumns.begin(), existingIndex->IndexDataColumns.end());
+            }
+        }
+
+        // Re-evaluate BuildKind for vector indexes after column inheritance
+        if (buildInfo.IsBuildVectorIndex()) {
+            buildInfo.BuildKind = buildInfo.IndexColumns.size() == 1
+                ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
+                : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
+        }
 
         Ydb::StatusIds::StatusCode status;
         if (!FillIndexTablePartitioning(buildInfo.ImplTableDescriptions, index, status, explain)) {

@@ -227,6 +227,10 @@ public:
         ChunkTracker.SetColorBorder(colorBorder);
     }
 
+    void SetStaticGroupChunkReservePerMille(ui32 perMille) {
+        ChunkTracker.SetStaticGroupChunkReservePerMille(perMille);
+    }
+
     //
     // GUI
     //

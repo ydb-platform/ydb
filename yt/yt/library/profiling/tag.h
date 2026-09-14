@@ -90,7 +90,7 @@ public:
     void Append(const TTagSet& other);
 
     TDynamicTagPtr AddDynamicTag(int index);
-    void ApplyDynamicTag(TDynamicTagPtr dynamicTag);
+    void ApplyDynamicTag(const TDynamicTagPtr& dynamicTag);
 
     const TTagList& Tags() const;
 

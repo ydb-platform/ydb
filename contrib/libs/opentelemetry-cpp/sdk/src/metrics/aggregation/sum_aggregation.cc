@@ -45,25 +45,53 @@ void LongSumAggregation::Aggregate(int64_t value, const PointAttributes & /* att
 
 std::unique_ptr<Aggregation> LongSumAggregation::Merge(const Aggregation &delta) const noexcept
 {
-  int64_t merge_value =
-      nostd::get<int64_t>(
-          nostd::get<SumPointData>((static_cast<const LongSumAggregation &>(delta).ToPoint()))
-              .value_) +
-      nostd::get<int64_t>(nostd::get<SumPointData>(ToPoint()).value_);
+  auto delta_point = static_cast<const LongSumAggregation &>(delta).ToPoint();
+  auto curr_point  = ToPoint();
+
+  const auto *delta_sum = nostd::get_if<SumPointData>(&delta_point);
+  const auto *curr_sum  = nostd::get_if<SumPointData>(&curr_point);
+  if (delta_sum == nullptr || curr_sum == nullptr)
+  {
+    OTEL_INTERNAL_LOG_ERROR("LongSumAggregation::Merge - Loss of type");
+    return std::unique_ptr<Aggregation>(new LongSumAggregation(point_data_.is_monotonic_));
+  }
+
+  const auto *delta_val = nostd::get_if<int64_t>(&delta_sum->value_);
+  const auto *curr_val  = nostd::get_if<int64_t>(&curr_sum->value_);
+  if (delta_val == nullptr || curr_val == nullptr)
+  {
+    OTEL_INTERNAL_LOG_ERROR("LongSumAggregation::Merge - Loss of type");
+    return std::unique_ptr<Aggregation>(new LongSumAggregation(point_data_.is_monotonic_));
+  }
+
   std::unique_ptr<Aggregation> aggr(new LongSumAggregation(point_data_.is_monotonic_));
-  static_cast<LongSumAggregation *>(aggr.get())->point_data_.value_ = merge_value;
+  static_cast<LongSumAggregation *>(aggr.get())->point_data_.value_ = *delta_val + *curr_val;
   return aggr;
 }
 
 std::unique_ptr<Aggregation> LongSumAggregation::Diff(const Aggregation &next) const noexcept
 {
-  int64_t diff_value =
-      nostd::get<int64_t>(
-          nostd::get<SumPointData>((static_cast<const LongSumAggregation &>(next).ToPoint()))
-              .value_) -
-      nostd::get<int64_t>(nostd::get<SumPointData>(ToPoint()).value_);
+  auto next_point = static_cast<const LongSumAggregation &>(next).ToPoint();
+  auto curr_point = ToPoint();
+
+  const auto *next_sum = nostd::get_if<SumPointData>(&next_point);
+  const auto *curr_sum = nostd::get_if<SumPointData>(&curr_point);
+  if (next_sum == nullptr || curr_sum == nullptr)
+  {
+    OTEL_INTERNAL_LOG_ERROR("LongSumAggregation::Diff - Loss of type");
+    return std::unique_ptr<Aggregation>(new LongSumAggregation(point_data_.is_monotonic_));
+  }
+
+  const auto *next_val = nostd::get_if<int64_t>(&next_sum->value_);
+  const auto *curr_val = nostd::get_if<int64_t>(&curr_sum->value_);
+  if (next_val == nullptr || curr_val == nullptr)
+  {
+    OTEL_INTERNAL_LOG_ERROR("LongSumAggregation::Diff - Loss of type");
+    return std::unique_ptr<Aggregation>(new LongSumAggregation(point_data_.is_monotonic_));
+  }
+
   std::unique_ptr<Aggregation> aggr(new LongSumAggregation(point_data_.is_monotonic_));
-  static_cast<LongSumAggregation *>(aggr.get())->point_data_.value_ = diff_value;
+  static_cast<LongSumAggregation *>(aggr.get())->point_data_.value_ = *next_val - *curr_val;
   return aggr;
 }
 
@@ -98,25 +126,53 @@ void DoubleSumAggregation::Aggregate(double value,
 
 std::unique_ptr<Aggregation> DoubleSumAggregation::Merge(const Aggregation &delta) const noexcept
 {
-  double merge_value =
-      nostd::get<double>(
-          nostd::get<SumPointData>((static_cast<const DoubleSumAggregation &>(delta).ToPoint()))
-              .value_) +
-      nostd::get<double>(nostd::get<SumPointData>(ToPoint()).value_);
+  auto delta_point = static_cast<const DoubleSumAggregation &>(delta).ToPoint();
+  auto curr_point  = ToPoint();
+
+  const auto *delta_sum = nostd::get_if<SumPointData>(&delta_point);
+  const auto *curr_sum  = nostd::get_if<SumPointData>(&curr_point);
+  if (delta_sum == nullptr || curr_sum == nullptr)
+  {
+    OTEL_INTERNAL_LOG_ERROR("DoubleSumAggregation::Merge - Loss of type");
+    return std::unique_ptr<Aggregation>(new DoubleSumAggregation(point_data_.is_monotonic_));
+  }
+
+  const auto *delta_val = nostd::get_if<double>(&delta_sum->value_);
+  const auto *curr_val  = nostd::get_if<double>(&curr_sum->value_);
+  if (delta_val == nullptr || curr_val == nullptr)
+  {
+    OTEL_INTERNAL_LOG_ERROR("DoubleSumAggregation::Merge - Loss of type");
+    return std::unique_ptr<Aggregation>(new DoubleSumAggregation(point_data_.is_monotonic_));
+  }
+
   std::unique_ptr<Aggregation> aggr(new DoubleSumAggregation(point_data_.is_monotonic_));
-  static_cast<DoubleSumAggregation *>(aggr.get())->point_data_.value_ = merge_value;
+  static_cast<DoubleSumAggregation *>(aggr.get())->point_data_.value_ = *delta_val + *curr_val;
   return aggr;
 }
 
 std::unique_ptr<Aggregation> DoubleSumAggregation::Diff(const Aggregation &next) const noexcept
 {
-  double diff_value =
-      nostd::get<double>(
-          nostd::get<SumPointData>((static_cast<const DoubleSumAggregation &>(next).ToPoint()))
-              .value_) -
-      nostd::get<double>(nostd::get<SumPointData>(ToPoint()).value_);
+  auto next_point = static_cast<const DoubleSumAggregation &>(next).ToPoint();
+  auto curr_point = ToPoint();
+
+  const auto *next_sum = nostd::get_if<SumPointData>(&next_point);
+  const auto *curr_sum = nostd::get_if<SumPointData>(&curr_point);
+  if (next_sum == nullptr || curr_sum == nullptr)
+  {
+    OTEL_INTERNAL_LOG_ERROR("DoubleSumAggregation::Diff - Loss of type");
+    return std::unique_ptr<Aggregation>(new DoubleSumAggregation(point_data_.is_monotonic_));
+  }
+
+  const auto *next_val = nostd::get_if<double>(&next_sum->value_);
+  const auto *curr_val = nostd::get_if<double>(&curr_sum->value_);
+  if (next_val == nullptr || curr_val == nullptr)
+  {
+    OTEL_INTERNAL_LOG_ERROR("DoubleSumAggregation::Diff - Loss of type");
+    return std::unique_ptr<Aggregation>(new DoubleSumAggregation(point_data_.is_monotonic_));
+  }
+
   std::unique_ptr<Aggregation> aggr(new DoubleSumAggregation(point_data_.is_monotonic_));
-  static_cast<DoubleSumAggregation *>(aggr.get())->point_data_.value_ = diff_value;
+  static_cast<DoubleSumAggregation *>(aggr.get())->point_data_.value_ = *next_val - *curr_val;
   return aggr;
 }
 

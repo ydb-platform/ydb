@@ -14,6 +14,10 @@ std::expected<std::monostate, TError> GetAvailability(
     EBackportCompatibleFeaturesMode mode,
     const TFeature& feature)
 {
+    if (!feature.IsBackportAllowed) {
+        mode = EBackportCompatibleFeaturesMode::None;
+    }
+
     if (auto v = feature.MinLangVer; !IsBackwardCompatibleFeatureAvailable(current, v, mode)) {
         if constexpr (std::is_same_v<TError, TString>) {
             return std::unexpected(
@@ -44,16 +48,6 @@ std::expected<std::monostate, TError> GetAvailability(
 }
 
 } // namespace
-
-TFeature TFeature::Finish() && {
-    YQL_ENSURE(
-        MinLangVer == UnknownLangVersion || IsValidLangVersion(MinLangVer),
-        "LangVer: " << FormatLangVersion(MinLangVer));
-    YQL_ENSURE(
-        MaxLangVer == UnknownLangVersion || IsValidLangVersion(MaxLangVer),
-        "LangVer: " << FormatLangVersion(MaxLangVer));
-    return *this;
-}
 
 bool IsAvailableOn(
     TLangVersion current,

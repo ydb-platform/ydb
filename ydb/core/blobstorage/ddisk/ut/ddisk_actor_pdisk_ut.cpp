@@ -27,6 +27,14 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
         TestWriteAndRead({.ForcePDiskFallback = true}, 1_MB);
     }
 
+    Y_UNIT_TEST(WriteAndReadWithoutChecksums_Uring) {
+        TestWriteAndReadWithoutChecksums({});
+    }
+
+    Y_UNIT_TEST(WriteAndReadWithoutChecksums_PDiskFallback) {
+        TestWriteAndReadWithoutChecksums({.ForcePDiskFallback = true});
+    }
+
     Y_UNIT_TEST(CheckVChunksArePerTablet_Uring) {
         TestCheckVChunksArePerTablet({});
     }
@@ -97,6 +105,10 @@ Y_UNIT_TEST_SUITE(TDDiskActorPDiskTest) {
 
     Y_UNIT_TEST(EmptyRestart_PDiskFallback) {
         TestEmptyRestart({.ForcePDiskFallback = true});
+    }
+
+    Y_UNIT_TEST(ConnectionTokenAcrossRestart) {
+        TestConnectionTokenAcrossRestart();
     }
 
     Y_UNIT_TEST(RestartAfterCutLog_Uring) {

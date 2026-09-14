@@ -23,6 +23,18 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     if (!settings.CheckACL) {
         appConfig.MutablePQConfig()->SetCheckACL(false);
     }
+    if (settings.ACLRetryTimeoutSec) {
+        appConfig.MutablePQConfig()->SetACLRetryTimeoutSec(settings.ACLRetryTimeoutSec);
+    }
+    if (settings.TokenRecheckIntervalMs.has_value()) {
+        appConfig.MutableKafkaProxyConfig()->SetTokenRecheckIntervalMs(*settings.TokenRecheckIntervalMs);
+    }
+    if (settings.LoginTokenExpireTime) {
+        appConfig.MutableAuthConfig()->SetLoginTokenExpireTime(settings.LoginTokenExpireTime);
+    }
+    if (settings.AuthRefreshTime) {
+        appConfig.MutableAuthConfig()->SetRefreshTime(settings.AuthRefreshTime);
+    }
     appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(false);
 
     auto cst = appConfig.MutablePQConfig()->AddClientServiceType();
@@ -101,6 +113,9 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
 
     if (!settings.EnableNativeKafkaBalancing) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(false);
+    }
+    if (settings.EnableKafkaServerlessTransactions) {
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaServerlessTransactions(true);
     }
     KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaTransactions(true);
     KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicCompactificationByKey(true);
@@ -208,8 +223,11 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
 
 template <class TKikimr, bool secure>
 TTestServer<TKikimr, secure>::TTestServer(const TString& kafkaApiMode, bool serverless, bool enableNativeKafkaBalancing,
-            bool enableAutoTopicCreation, bool enableAutoConsumerCreation, bool enableQuoting, bool checkACL)
-    : TTestServer(TTestServerSettings{kafkaApiMode, serverless, enableNativeKafkaBalancing, enableAutoTopicCreation, enableAutoConsumerCreation, enableQuoting, checkACL})
+            bool enableAutoTopicCreation, bool enableAutoConsumerCreation, bool enableQuoting, bool checkACL, bool EnableKafkaServerlessTransactions)
+    : TTestServer(TTestServerSettings{kafkaApiMode, serverless, enableNativeKafkaBalancing,
+                enableAutoTopicCreation, enableAutoConsumerCreation,
+                    enableQuoting, checkACL, false, EnableKafkaServerlessTransactions,
+                    std::nullopt, {}, {}, 0})
 {}
 
 // Explicit template instantiations

@@ -1,6 +1,66 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 
 Y_UNIT_TEST_SUITE(ExtraBlockChecks) {
+    Y_UNIT_TEST(StorageInfoVersion) {
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        });
+
+        auto& runtime = env.Runtime;
+        env.CreateBoxAndPool(1, 1);
+        const auto groups = env.GetGroups();
+        UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+        const TIntrusivePtr<TBlobStorageGroupInfo> info = env.GetGroupInfo(groups.front());
+        const TActorId edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+        const ui64 tabletId = 1;
+        const ui64 issuerGuid = 1;
+
+        auto block = [&](ui32 generation, ui32 version) {
+            runtime->WrapInActorContext(edge, [&] {
+                SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(tabletId, generation,
+                    TInstant::Max(), issuerGuid, TWriteSource::Unknown, version));
+            });
+            return env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false);
+        };
+
+        auto result = block(10, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(20, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        result = block(11, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(10, 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(!result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        // The rejected version bump must not mutate either record.
+        result = block(12, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(13, 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(14, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(~tabletId, 4, TInstant::Max(),
+                TWriteSource::SyncerMergeBlock));
+        });
+        result = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(15, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+    }
+
     Y_UNIT_TEST(Basic) {
         TEnvironmentSetup env(TEnvironmentSetup::TSettings{
             .NodeCount = 8,

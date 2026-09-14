@@ -1,4 +1,9 @@
 #include "kafka_offset_commit_actor.h"
+#include <ydb/library/actors/core/log.h>
+
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/kafka_proxy/kafka_metrics.h>
+#include "kafka_metadata_service.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -26,6 +31,10 @@ void TKafkaOffsetCommitActor::Die(const TActorContext& ctx) {
         Kqp->CloseKqpSession(ctx);
     }
     TBase::Die(ctx);
+}
+
+TString TKafkaOffsetCommitActor::GetMetadataDatabasePath() const {
+    return NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
 }
 
 void TKafkaOffsetCommitActor::Handle(NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvCloseSession::TPtr& ev, const TActorContext& ctx) {
@@ -75,7 +84,7 @@ void TKafkaOffsetCommitActor::CreateConsumerGroupIfNecessary(const TString& topi
     };
     NKikimr::NGRpcService::DoAlterTopicRequest(
         std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
-        topicName, Context->DatabasePath, std::move(request), callback, Context->UserToken),
+        topicName, Context->DatabasePath, std::move(request), callback, Context->Token.UserToken),
         NKikimr::NReplication::TLocalProxyActor(Context->DatabasePath));
 }
 
@@ -91,7 +100,7 @@ void TKafkaOffsetCommitActor::SendFailedForAllPartitions(EKafkaErrors error, con
         }
         Response->Topics.push_back(topic);
     }
-    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
+    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, error));
     Die(ctx);
 }
 
@@ -134,11 +143,11 @@ void TKafkaOffsetCommitActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev
 
 void TKafkaOffsetCommitActor::ProcessPipeProblem(ui64 tabletId, const TActorContext& ctx) {
     auto cookiesIt = TabletIdToCookies.find(tabletId);
-    Y_ABORT_UNLESS(cookiesIt != TabletIdToCookies.end());
+    AFL_ENSURE(cookiesIt != TabletIdToCookies.end())("tablet_id", tabletId)("group", Message->GroupId.value())("database", Context->DatabasePath);
 
     for (auto cookie: cookiesIt->second) {
         auto requestInfoIt = CookieToRequestInfo.find(cookie);
-        Y_ABORT_UNLESS(requestInfoIt != CookieToRequestInfo.end());
+        AFL_ENSURE(requestInfoIt != CookieToRequestInfo.end())("tablet_id", tabletId)("cookie", cookie)("database", Context->DatabasePath);
 
         if (!requestInfoIt->second.Done) {
             requestInfoIt->second.Done = true;
@@ -159,12 +168,18 @@ void TKafkaOffsetCommitActor::SendGenerationCheckRequest(const TActorContext& ct
 
     Kqp->SendYqlRequest(Sprintf(CHECK_GROUP_GENERATION.c_str(),
                         NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()
-                        ->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()),
+                        ->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()),
              params.Build(), 0, ctx);
 }
 
 void TKafkaOffsetCommitActor::Handle(NKikimr::NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
+    if (TryRequestConsumerMetadataTablesCreation(record.GetYdbStatus(), GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
+        Error = COORDINATOR_NOT_AVAILABLE;
+        SendFailedForAllPartitions(Error, ctx);
+        return;
+    }
+
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         YDB_LOG_CRIT("Generation check KQP query failed",
             {LogPrefix()},
@@ -218,7 +233,11 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
     if (Message->GenerationId == -1) {
         SendCommits(ctx);
     } else {
-        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+        } else {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+        }
         Kqp->SendCreateSessionRequest(ctx);
     }
 
@@ -300,17 +319,38 @@ void TKafkaOffsetCommitActor::SendCommits(const TActorContext& ctx) {
 void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
     auto requestInfo = CookieToRequestInfo.find(partitionResult.GetCookie());
-    Y_ABORT_UNLESS(requestInfo != CookieToRequestInfo.end());
+    AFL_ENSURE(requestInfo != CookieToRequestInfo.end())("cookie", partitionResult.GetCookie())("database", Context->DatabasePath);
 
     requestInfo->second.Done = true;
-    if (ev->Get()->Record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
+    const auto pqError = ev->Get()->Record.GetErrorCode();
+    // Kafka OffsetCommit does not validate against log start/end. PQ Strict
+    // still rejects those commits; map the error to NONE so Java clients do
+    // not treat OFFSET_OUT_OF_RANGE as a failed commit.
+    if (pqError == NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE ||
+        pqError == NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST) {
+        YDB_LOG_DEBUG("Ignoring out-of-range commit, Kafka OffsetCommit returns NONE",
+            {LogPrefix()},
+            {"status", EErrorCode_Name(pqError)},
+            {"reason", ev->Get()->Record.GetErrorReason()});
+        ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(
+            1,
+            BuildLabels(
+                Context,
+                "",
+                GetTopicNameWithoutDb(Context->DatabasePath, requestInfo->second.TopicName),
+                "api.kafka.offset_commit.ignored_out_of_range",
+                "")));
+        AddPartitionResponse(NONE_ERROR, requestInfo->second.TopicName, requestInfo->second.PartitionId, ctx);
+        return;
+    }
+    if (pqError != NPersQueue::NErrorCode::OK) {
         YDB_LOG_CRIT("Commit offset error",
             {LogPrefix()},
-            {"status", EErrorCode_Name(ev->Get()->Record.GetErrorCode())},
+            {"status", EErrorCode_Name(pqError)},
             {"reason", ev->Get()->Record.GetErrorReason()});
     }
 
-    AddPartitionResponse(ConvertErrorCode(NGRpcProxy::V1::ConvertOldCode(ev->Get()->Record.GetErrorCode())), requestInfo->second.TopicName, requestInfo->second.PartitionId, ctx);
+    AddPartitionResponse(ConvertErrorCode(NGRpcProxy::V1::ConvertOldCode(pqError)), requestInfo->second.TopicName, requestInfo->second.PartitionId, ctx);
 }
 
 void TKafkaOffsetCommitActor::AddPartitionResponse(EKafkaErrors error, const TString& topicName, ui64 partitionId, const TActorContext& ctx) {
@@ -368,12 +408,17 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
 
     AuthInitActor = ctx.Register(new NKikimr::NGRpcProxy::V1::TReadInitAndAuthActor(
             ctx, ctx.SelfID, Message->GroupId.value(), 0, "",
-            NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NKikimr::MakeSchemeCacheID(), nullptr, Context->UserToken, topicsToConverter,
+            NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NKikimr::MakeSchemeCacheID(), nullptr, Context->Token.UserToken, topicsToConverter,
         topicHandler->GetLocalCluster(), false)
     );
 }
 
 void TKafkaOffsetCommitActor::Bootstrap(const NActors::TActorContext& ctx) {
+    if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+        Error = EKafkaErrors::COORDINATOR_NOT_AVAILABLE;
+        SendFailedForAllPartitions(Error, ctx);
+        return;
+    }
     SendAuthRequest(ctx);
     Become(&TKafkaOffsetCommitActor::StateWork);
 }

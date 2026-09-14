@@ -19,6 +19,8 @@ struct TClientAuthenticationIdentity
         const std::string& userTag = {},
         const std::string& serviceTicket = {});
 
+    bool operator==(const TClientAuthenticationIdentity& other) const = default;
+
     std::string ServiceTicket;
 };
 
@@ -77,4 +79,3 @@ struct THash<NYT::NApi::TClientAuthenticationIdentity>
 {
     size_t operator()(const NYT::NApi::TClientAuthenticationIdentity& value) const;
 };
-

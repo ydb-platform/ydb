@@ -3,6 +3,7 @@
 
 #include <util/system/hostname.h>
 
+#include <ydb/core/fq/libs/credentials/structured_token_credentials.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
@@ -46,13 +47,13 @@ private:
     TString YqlToken_;
 };
 
-class TStaticSecuredCredentialsFactory : public NYql::IStructuredTokenCredentialsFactory {
+class TStaticSecuredCredentialsFactory final : public NYql::ISecuredServiceAccountCredentialsFactory {
 public:
     explicit TStaticSecuredCredentialsFactory(const TString& yqlToken)
         : YqlToken_(yqlToken)
     {}
 
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, bool) override {
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) final {
         return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
     }
 
@@ -86,7 +87,7 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     const auto& kqpSettings = settings.AppConfig.GetKQPConfig().GetSettings();
     serverSettings.SetKqpSettings({kqpSettings.begin(), kqpSettings.end()});
 
-    serverSettings.SetCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(settings.YqlToken));
+    serverSettings.SetCredentialsFactory(NFq::CreateKikimrStructuredTokenCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(settings.YqlToken)));
     serverSettings.SetComputationFactory(settings.ComputationFactory);
     serverSettings.SetYtGateway(settings.YtGateway);
     serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();

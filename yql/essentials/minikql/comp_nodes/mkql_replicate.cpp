@@ -4,13 +4,14 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TReplicateWrapper: public TMutableComputationNode<TReplicateWrapper> {
-    typedef TMutableComputationNode<TReplicateWrapper> TBaseComputation;
+    using TBaseComputation = TMutableComputationNode<TReplicateWrapper>;
 
 public:
     class TValue: public TCustomListValue {
@@ -18,17 +19,17 @@ public:
         template <EDictItems Mode>
         class TIterator: public TComputationValue<TIterator<Mode>> {
         public:
-            TIterator(TMemoryUsageInfo* memInfo, const NUdf::TUnboxedValue& item, ui64 count)
+            TIterator(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue item, ui64 count)
                 : TComputationValue<TIterator<Mode>>(memInfo)
-                , Item(item)
-                , Current(0)
-                , End(count)
+                , Item_(std::move(item))
+                , Current_(0)
+                , End_(count)
             {
             }
 
         private:
             bool NextPair(NUdf::TUnboxedValue& key, NUdf::TUnboxedValue& payload) override {
-                if (Current < End) {
+                if (Current_ < End_) {
                     switch (Mode) {
                         case EDictItems::Payloads:
                             this->ThrowNotSupported(__func__);
@@ -37,12 +38,12 @@ public:
                             this->ThrowNotSupported(__func__);
                             break;
                         case EDictItems::Both:
-                            key = NUdf::TUnboxedValuePod(ui64(Current));
-                            payload = Item;
+                            key = NUdf::TUnboxedValuePod(ui64(Current_));
+                            payload = Item_;
                             break;
                     }
 
-                    ++Current;
+                    ++Current_;
                     return true;
                 }
 
@@ -50,20 +51,20 @@ public:
             }
 
             bool Next(NUdf::TUnboxedValue& value) override {
-                if (Current < End) {
+                if (Current_ < End_) {
                     switch (Mode) {
                         case EDictItems::Payloads:
-                            value = Item;
+                            value = Item_;
                             break;
                         case EDictItems::Keys:
-                            value = NUdf::TUnboxedValuePod(ui64(Current));
+                            value = NUdf::TUnboxedValuePod(ui64(Current_));
                             break;
                         case EDictItems::Both:
                             this->ThrowNotSupported(__func__);
                             break;
                     }
 
-                    ++Current;
+                    ++Current_;
                     return true;
                 }
 
@@ -71,30 +72,30 @@ public:
             }
 
             bool Skip() override {
-                if (Current < End) {
-                    ++Current;
+                if (Current_ < End_) {
+                    ++Current_;
                     return true;
                 }
 
                 return false;
             }
 
-            const NUdf::TUnboxedValue Item;
-            ui64 Current;
-            const ui64 End;
+            const NUdf::TUnboxedValue Item_;
+            ui64 Current_;
+            const ui64 End_;
         };
 
-        TValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, const NUdf::TUnboxedValue& item, ui64 count)
+        TValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, NUdf::TUnboxedValue item, ui64 count)
             : TCustomListValue(memInfo)
-            , Ctx(ctx)
-            , Item(item)
-            , Count(count)
+            , Ctx_(ctx)
+            , Item_(std::move(item))
+            , Count_(count)
         {
         }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const override {
-            return Ctx.HolderFactory.Create<TIterator<EDictItems::Payloads>>(Item, Count);
+            return Ctx_.HolderFactory.Create<TIterator<EDictItems::Payloads>>(Item_, Count_);
         }
 
         bool HasFastListLength() const override {
@@ -102,15 +103,15 @@ public:
         }
 
         ui64 GetListLength() const override {
-            return Count;
+            return Count_;
         }
 
         ui64 GetEstimatedListLength() const override {
-            return Count;
+            return Count_;
         }
 
         bool HasListItems() const override {
-            return Count > 0;
+            return Count_ > 0;
         }
 
         NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const override {
@@ -124,24 +125,24 @@ public:
                 return const_cast<TValue*>(this);
             }
 
-            if (count >= Count) {
-                return Ctx.HolderFactory.GetEmptyContainerLazy().AsBoxed();
+            if (count >= Count_) {
+                return Ctx_.HolderFactory.GetEmptyContainerLazy().AsBoxed();
             }
 
-            return Ctx.HolderFactory.Create<TValue>(Ctx, Item, Count - count).AsBoxed();
+            return Ctx_.HolderFactory.Create<TValue>(Ctx_, Item_, Count_ - count).AsBoxed();
         }
 
         NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
             Y_UNUSED(builder);
             if (count == 0) {
-                return Ctx.HolderFactory.GetEmptyContainerLazy().AsBoxed();
+                return Ctx_.HolderFactory.GetEmptyContainerLazy().AsBoxed();
             }
 
-            if (count >= Count) {
+            if (count >= Count_) {
                 return const_cast<TValue*>(this);
             }
 
-            return Ctx.HolderFactory.Create<TValue>(Ctx, Item, count).AsBoxed();
+            return Ctx_.HolderFactory.Create<TValue>(Ctx_, Item_, count).AsBoxed();
         }
 
         NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override {
@@ -150,31 +151,31 @@ public:
         }
 
         ui64 GetDictLength() const override {
-            return Count;
+            return Count_;
         }
 
         bool HasDictItems() const override {
-            return Count > 0;
+            return Count_ > 0;
         }
 
         bool Contains(const NUdf::TUnboxedValuePod& key) const override {
-            return key.Get<ui64>() < Count;
+            return key.Get<ui64>() < Count_;
         }
 
         NUdf::TUnboxedValue Lookup(const NUdf::TUnboxedValuePod& key) const override {
-            if (key.Get<ui64>() < Count) {
-                return Item.MakeOptional();
+            if (key.Get<ui64>() < Count_) {
+                return Item_.MakeOptional();
             }
 
             return {};
         }
 
         NUdf::TUnboxedValue GetDictIterator() const override {
-            return Ctx.HolderFactory.Create<TIterator<EDictItems::Both>>(Item, Count);
+            return Ctx_.HolderFactory.Create<TIterator<EDictItems::Both>>(Item_, Count_);
         }
 
         NUdf::TUnboxedValue GetKeysIterator() const override {
-            return Ctx.HolderFactory.Create<TIterator<EDictItems::Keys>>(Item, Count);
+            return Ctx_.HolderFactory.Create<TIterator<EDictItems::Keys>>(Item_, Count_);
         }
 
         NUdf::TUnboxedValue GetPayloadsIterator() const override {
@@ -185,26 +186,26 @@ public:
             return true;
         }
 
-        TComputationContext& Ctx;
-        const NUdf::TUnboxedValue Item;
-        const ui64 Count;
+        TComputationContext& Ctx_;
+        const NUdf::TUnboxedValue Item_;
+        const ui64 Count_;
     };
 
     TReplicateWrapper(TComputationMutables& mutables, IComputationNode* item, IComputationNode* count,
                       NUdf::TSourcePosition pos)
         : TBaseComputation(mutables)
-        , Item(item)
-        , Count(count)
-        , Pos(pos)
+        , Item_(item)
+        , Count_(count)
+        , Pos_(pos)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto count = Count->GetValue(ctx).Get<ui64>();
-        const ui64 MAX_VALUE = 1ull << 32;
+        const auto count = Count_->GetValue(ctx).Get<ui64>();
+        const ui64 MAX_VALUE = 1ULL << 32;
         if (count >= MAX_VALUE) {
             TStringBuilder res;
-            res << Pos << " Second argument in ListReplicate = " << count << " exceeds maximum value = " << MAX_VALUE;
+            res << Pos_ << " Second argument in ListReplicate = " << count << " exceeds maximum value = " << MAX_VALUE;
             UdfTerminate(res.data());
         }
 
@@ -212,18 +213,18 @@ public:
             return ctx.HolderFactory.GetEmptyContainerLazy();
         }
 
-        return ctx.HolderFactory.Create<TValue>(ctx, Item->GetValue(ctx), count);
+        return ctx.HolderFactory.Create<TValue>(ctx, Item_->GetValue(ctx), count);
     }
 
 private:
     void RegisterDependencies() const final {
-        DependsOn(Item);
-        DependsOn(Count);
+        DependsOn(Item_);
+        DependsOn(Count_);
     }
 
-    IComputationNode* const Item;
-    IComputationNode* const Count;
-    const NUdf::TSourcePosition Pos;
+    IComputationNode* const Item_;
+    IComputationNode* const Count_;
+    const NUdf::TSourcePosition Pos_;
 };
 
 } // namespace
@@ -244,5 +245,4 @@ IComputationNode* WrapReplicate(TCallable& callable, const TComputationNodeFacto
     return new TReplicateWrapper(ctx.Mutables, list, count, pos);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

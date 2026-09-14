@@ -14,6 +14,31 @@ namespace NKikimr::NConsole {
 
 using namespace NJaegerTracing;
 
+namespace {
+
+ui32 GetConfigItemKind(ETracingConfigKind configKind) {
+    switch (configKind) {
+        case ETracingConfigKind::Dev:
+            return static_cast<ui32>(NKikimrConsole::TConfigItem::TracingConfigItem);
+        case ETracingConfigKind::UserFacing:
+            return static_cast<ui32>(NKikimrConsole::TConfigItem::UserFacingTracingConfigItem);
+    }
+    Y_ABORT("Invalid tracing channel");
+}
+
+const NKikimrConfig::TTracingConfig& GetTracingConfig(
+        const NKikimrConfig::TAppConfig& config, ETracingConfigKind configKind) {
+    switch (configKind) {
+        case ETracingConfigKind::Dev:
+            return config.GetTracingConfig();
+        case ETracingConfigKind::UserFacing:
+            return config.GetUserFacingTracingConfig();
+    }
+    Y_ABORT("Invalid tracing channel");
+}
+
+} // namespace
+
 class TJaegerTracingConfigurator : public TActorBootstrapped<TJaegerTracingConfigurator> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -21,7 +46,8 @@ public:
     }
 
     TJaegerTracingConfigurator(TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
-                               NKikimrConfig::TTracingConfig cfg);
+                               NKikimrConfig::TTracingConfig cfg,
+                               ETracingConfigKind configKind);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -40,13 +66,16 @@ private:
 
     TIntrusivePtr<TSamplingThrottlingConfigurator> TracingConfigurator;
     NKikimrConfig::TTracingConfig initialConfig;
+    ETracingConfigKind ConfigKind;
 };
 
 TJaegerTracingConfigurator::TJaegerTracingConfigurator(
     TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
-    NKikimrConfig::TTracingConfig cfg)
+    NKikimrConfig::TTracingConfig cfg,
+    ETracingConfigKind configKind)
     : TracingConfigurator(std::move(tracingConfigurator))
     , initialConfig(std::move(cfg))
+    , ConfigKind(configKind)
 {}
 
 void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {
@@ -56,9 +85,8 @@ void TJaegerTracingConfigurator::Bootstrap(const TActorContext& ctx) {
     ApplyConfigs(initialConfig);
 
     YDB_LOG_DEBUG_CTX(ctx, "TJaegerTracingConfigurator: subscribing to config updates");
-    ui32 item = static_cast<ui32>(NKikimrConsole::TConfigItem::TracingConfigItem);
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
-             new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(item));
+             new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(GetConfigItemKind(ConfigKind)));
 }
 
 void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr& ev, const TActorContext& ctx) {
@@ -67,7 +95,7 @@ void TJaegerTracingConfigurator::Handle(TEvConsole::TEvConfigNotificationRequest
     YDB_LOG_INFO_CTX(ctx, "TJaegerTracingConfigurator: got new config",
         {"config", rec.GetConfig().ShortDebugString()});
 
-    ApplyConfigs(rec.GetConfig().GetTracingConfig());
+    ApplyConfigs(GetTracingConfig(rec.GetConfig(), ConfigKind));
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
     YDB_LOG_TRACE_CTX(ctx, "TJaegerTracingConfigurator: Send TEvConfigNotificationResponse");
@@ -228,8 +256,21 @@ TSettings<double, TWithTag<TThrottlingSettings>> TJaegerTracingConfigurator::Get
 }
 
 IActor* CreateJaegerTracingConfigurator(TIntrusivePtr<TSamplingThrottlingConfigurator> tracingConfigurator,
-                                        NKikimrConfig::TTracingConfig cfg) {
-    return new TJaegerTracingConfigurator(std::move(tracingConfigurator), std::move(cfg));
+                                        NKikimrConfig::TTracingConfig cfg,
+                                        ETracingConfigKind configKind) {
+    return new TJaegerTracingConfigurator(std::move(tracingConfigurator), std::move(cfg), configKind);
+}
+
+std::array<IActor*, 2> CreateJaegerTracingConfigurators(
+        TIntrusivePtr<TSamplingThrottlingConfigurator> devConfigurator,
+        TIntrusivePtr<TSamplingThrottlingConfigurator> userConfigurator,
+        const NKikimrConfig::TAppConfig& config) {
+    return {
+        CreateJaegerTracingConfigurator(
+            std::move(devConfigurator), config.GetTracingConfig(), ETracingConfigKind::Dev),
+        CreateJaegerTracingConfigurator(
+            std::move(userConfigurator), config.GetUserFacingTracingConfig(), ETracingConfigKind::UserFacing),
+    };
 }
 
 } // namespace NKikimr::NConsole

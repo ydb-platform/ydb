@@ -42,14 +42,16 @@ TMaybeNode<TYtSection> MaterializeSectionIfRequired(TExprBase world, TYtSection 
     const bool hasLimit = NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip);
     bool needMaterialize = hasLimit && NYql::HasSetting(section.Settings().Ref(), EYtSettingType::Sample);
     bool hasDynamic = false;
+    bool hasRLS = false;
     if (!needMaterialize) {
         bool hasRanges = false;
         for (TYtPath path: section.Paths()) {
             TYtPathInfo pathInfo(path);
             hasDynamic = hasDynamic || (pathInfo.Table->Meta && pathInfo.Table->Meta->IsDynamic);
+            hasRLS = hasRLS || (pathInfo.Table->Meta && pathInfo.Table->Meta->HasRLS);
             hasRanges = hasRanges || pathInfo.Ranges;
         }
-        needMaterialize = hasRanges || (hasLimit && hasDynamic);
+        needMaterialize = hasRanges || (hasLimit && (hasDynamic || hasRLS));
     }
 
     if (needMaterialize) {
@@ -981,6 +983,7 @@ NNodes::TMaybeNode<NNodes::TExprBase> FuseMapToMapReduce(NNodes::TExprBase node,
         auto resultSettings = MergeSettings(
             *NYql::RemoveSettings(outerMapReduce.Settings().Ref(), EYtSettingType::Flow | EYtSettingType::BlockInputReady, ctx),
             *NYql::RemoveSettings(innerMap.Settings().Ref(), EYtSettingType::Ordered | EYtSettingType::KeepSorted | EYtSettingType::BlockInputReady | EYtSettingType::BlockOutputReady, ctx), ctx);
+        resultSettings = NYql::AddSetting(*resultSettings, EYtSettingType::ForceApplyMaxJobCount, {}, ctx);
         return Build<TYtMapReduce>(ctx, node.Pos())
             .InitFrom(outerMapReduce)
             .World<TCoSync>()

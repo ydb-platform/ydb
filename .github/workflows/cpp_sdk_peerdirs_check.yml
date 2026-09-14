@@ -1,11 +1,16 @@
 name: Check CPP SDK PEERDIRs
 
+# SECURITY: pull_request_target keeps the workflow and checker trusted. The PR
+# commit is fetched into Git's object database but is never checked out or run.
 on:
   pull_request_target:
-    branches: [main, stable-*]
+    branches: [main]
     types: [opened, synchronize, reopened, labeled]
     paths: ['ydb/public/sdk/cpp/**', '.github/workflows/cpp_sdk_peerdirs_check.yml']
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   # Irrelevant label events must not cancel a running check for the same PR.
@@ -22,56 +27,56 @@ jobs:
   check:
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.state == 'open' &&
-       (github.event.action != 'labeled' || github.event.label.name == 'ok-to-test'))
+      (
+        github.event.pull_request.state == 'open' &&
+        (github.event.action != 'labeled' || github.event.label.name == 'ok-to-test') &&
+        (
+          github.event.pull_request.head.repo.full_name == github.repository ||
+          contains(
+            fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'),
+            github.event.pull_request.author_association
+          ) ||
+          contains(github.event.pull_request.labels.*.name, 'ok-to-test')
+        )
+      )
     runs-on: [self-hosted, tiny-worker]
     steps:
-      - uses: actions/github-script@v8
-        if: github.event_name == 'pull_request_target'
-        id: gate
-        with:
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          script: |
-            const pr = context.payload.pull_request;
-            if (pr.labels.some(l => l.name === 'ok-to-test')) return true;
-            if (pr.user.login === context.repo.owner) return true;
-            try {
-              await github.rest.repos.checkCollaborator({
-                owner: context.repo.owner, repo: context.repo.repo, username: pr.user.login,
-              });
-              return true;
-            } catch (e) {
-              if (e.status === 404) return false;
-              throw e;
-            }
-
-      - name: Comment if waiting on ok-to-test
-        if: steps.gate.outputs.result == 'false' && github.event.action == 'opened'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: 'Hi! The C++ SDK PEERDIRs check will run after a maintainer adds an `ok-to-test` label to this PR. Thank you for your patience!'
-            });
-
       - uses: actions/checkout@v5
-        if: github.event_name != 'pull_request_target' || steps.gate.outputs.result == 'true'
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          ref: ${{ github.event.pull_request.base.sha || 'main' }}
           fetch-depth: 0
+          persist-credentials: false
 
-      - if: github.event_name != 'pull_request_target' || steps.gate.outputs.result == 'true'
+      - name: Check PEERDIRs with the trusted main script
         env:
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = pull_request_target ]; then
-            git fetch --no-tags origin "$BASE_REF"
-            git diff --name-only --diff-filter=ACMRT "origin/$BASE_REF...HEAD" > changed.txt
-            python3 ydb/public/sdk/cpp/scripts/check_peerdirs.py changed.txt
+            git fetch --no-tags origin \
+              "+refs/heads/main:refs/remotes/origin/main" \
+              "refs/pull/$PR_NUMBER/head"
+            git merge-base --is-ancestor "$BASE_SHA" origin/main
+            git cat-file -e "$HEAD_SHA^{commit}"
+            git diff --name-only --diff-filter=ACMRT "$BASE_SHA...$HEAD_SHA" \
+              > "$RUNNER_TEMP/changed.txt"
+            sdk_root="$(mktemp -d "$RUNNER_TEMP/cpp-sdk-peerdirs.XXXXXX")/sdk"
+            mkdir -p "$sdk_root/scripts"
+            cp ydb/public/sdk/cpp/scripts/check_peerdirs.py "$sdk_root/scripts/"
+            cp ydb/public/sdk/cpp/allowed_peerdirs.txt "$sdk_root/"
+            while IFS= read -r -d '' path; do
+              rel="${path#ydb/public/sdk/cpp/}"
+              case "$rel" in
+                */ya.make) ;;
+                *) continue ;;
+              esac
+              target="$sdk_root/$rel"
+              mkdir -p -- "$(dirname -- "$target")"
+              git show "$HEAD_SHA:$path" > "$target"
+            done < <(git ls-tree -rz --name-only "$HEAD_SHA" -- ydb/public/sdk/cpp)
+            python3 "$sdk_root/scripts/check_peerdirs.py" "$RUNNER_TEMP/changed.txt"
           else
             python3 ydb/public/sdk/cpp/scripts/check_peerdirs.py
           fi

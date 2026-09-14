@@ -9,19 +9,20 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 #include <util/charset/utf8.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
 TAclWrapper::TAclWrapper(THolder<NACLib::TSecurityObject> acl)
     : AclOldSchemeCache(std::move(acl))
 {
-    Y_ABORT_UNLESS(AclOldSchemeCache);
+    AFL_ENSURE(AclOldSchemeCache);
 }
 
 TAclWrapper::TAclWrapper(TIntrusivePtr<TSecurityObject> acl)
     : AclNewSchemeCache(std::move(acl))
 {
-    Y_ABORT_UNLESS(AclNewSchemeCache);
+    AFL_ENSURE(AclNewSchemeCache);
 }
 
 bool TAclWrapper::CheckAccess(NACLib::EAccessRights rights, const NACLib::TUserToken& userToken) {

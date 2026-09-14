@@ -20,10 +20,10 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         THostRoute route{.SourceHostIndex = 0, .DestinationHostIndex = 0};
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 42,
+            .PBufferKey = MakeKey(42),
             .Range = TBlockRange64::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 43,
+            .PBufferKey = MakeKey(43),
             .Range = TBlockRange64::WithLength(20, 3)});
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
@@ -48,8 +48,12 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(2, response.FlushOk.size());
-        UNIT_ASSERT_VALUES_EQUAL(42, response.FlushOk[0]);
-        UNIT_ASSERT_VALUES_EQUAL(43, response.FlushOk[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(42).Print(),
+            response.FlushOk[0].Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(43).Print(),
+            response.FlushOk[1].Print());
         UNIT_ASSERT_VALUES_EQUAL(0, response.FlushFailed.size());
         UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
     }
@@ -61,10 +65,10 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         THostRoute route{.SourceHostIndex = 1, .DestinationHostIndex = 2};
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 42,
+            .PBufferKey = MakeKey(42),
             .Range = TBlockRange64::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 43,
+            .PBufferKey = MakeKey(43),
             .Range = TBlockRange64::WithLength(20, 3)});
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
@@ -89,9 +93,13 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(1, response.FlushOk.size());
-        UNIT_ASSERT_VALUES_EQUAL(42, response.FlushOk[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(42).Print(),
+            response.FlushOk[0].Print());
         UNIT_ASSERT_VALUES_EQUAL(1, response.FlushFailed.size());
-        UNIT_ASSERT_VALUES_EQUAL(43, response.FlushFailed[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(43).Print(),
+            response.FlushFailed[0].Print());
         UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
     }
 
@@ -102,10 +110,10 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         THostRoute route{.SourceHostIndex = 1, .DestinationHostIndex = 2};
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 42,
+            .PBufferKey = MakeKey(42),
             .Range = TBlockRange64::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 43,
+            .PBufferKey = MakeKey(43),
             .Range = TBlockRange64::WithLength(20, 3)});
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
@@ -131,8 +139,12 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(0, response.FlushOk.size());
         UNIT_ASSERT_VALUES_EQUAL(2, response.FlushFailed.size());
-        UNIT_ASSERT_VALUES_EQUAL(42, response.FlushFailed[0]);
-        UNIT_ASSERT_VALUES_EQUAL(43, response.FlushFailed[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(42).Print(),
+            response.FlushFailed[0].Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(43).Print(),
+            response.FlushFailed[1].Print());
         UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
     }
 
@@ -144,10 +156,10 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         THostRoute route{.SourceHostIndex = 1, .DestinationHostIndex = 2};
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 42,
+            .PBufferKey = MakeKey(42),
             .Range = TBlockRange64::WithLength(10, 3)});
         hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 43,
+            .PBufferKey = MakeKey(43),
             .Range = TBlockRange64::WithLength(20, 3)});
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
@@ -176,8 +188,12 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(0, response.FlushOk.size());
         UNIT_ASSERT_VALUES_EQUAL(2, response.FlushFailed.size());
-        UNIT_ASSERT_VALUES_EQUAL(42, response.FlushFailed[0]);
-        UNIT_ASSERT_VALUES_EQUAL(43, response.FlushFailed[1]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(42).Print(),
+            response.FlushFailed[0].Print());
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(43).Print(),
+            response.FlushFailed[1].Print());
         UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
     }
 
@@ -195,7 +211,7 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         THostRoute route{.SourceHostIndex = 1, .DestinationHostIndex = 2};
         TFlushHint hint;
         hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 42,
+            .PBufferKey = MakeKey(42),
             .Range = TBlockRange64::WithLength(10, 3)});
 
         auto flushRequest = std::make_shared<TFlushRequestExecutor>(
@@ -231,7 +247,9 @@ Y_UNIT_TEST_SUITE(TFlushRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(1, response.FlushOk.size());
-        UNIT_ASSERT_VALUES_EQUAL(42, response.FlushOk[0]);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(42).Print(),
+            response.FlushOk[0].Print());
         UNIT_ASSERT_VALUES_EQUAL(0, response.FlushFailed.size());
         UNIT_ASSERT_EQUAL_C(route, response.Route, response.Route.DebugPrint());
     }

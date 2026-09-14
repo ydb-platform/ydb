@@ -63,6 +63,7 @@ protected:
 
     std::atomic<i64> Capacity_;
     std::atomic<double> YoungerSizeFraction_;
+    std::atomic<bool> RejectOversizedItems_;
 
     explicit TSyncSlruCacheBase(
         TSlruCacheConfigPtr config,
@@ -72,6 +73,12 @@ protected:
     virtual void OnAdded(const TValuePtr& value);
     virtual void OnRemoved(const TValuePtr& value);
     virtual void OnTotalWeightUpdated(i64 weightDelta);
+
+    //! For testing purposes only.
+    const NProfiling::TCounter& GetRejectedOversizedCounter() const;
+    const NProfiling::TCounter& GetRejectedOversizedWeightCounter() const;
+    const NProfiling::TCounter& GetEvictedCounter() const;
+    const NProfiling::TCounter& GetEvictedWeightCounter() const;
 
 private:
     struct TItem
@@ -107,6 +114,10 @@ private:
     NProfiling::TCounter HitWeightCounter_;
     NProfiling::TCounter MissedWeightCounter_;
     NProfiling::TCounter DroppedWeightCounter_;
+    NProfiling::TCounter RejectedOversizedCounter_;
+    NProfiling::TCounter RejectedOversizedWeightCounter_;
+    NProfiling::TCounter EvictedCounter_;
+    NProfiling::TCounter EvictedWeightCounter_;
     std::atomic<i64> YoungerWeightCounter_ = 0;
     std::atomic<i64> OlderWeightCounter_ = 0;
 

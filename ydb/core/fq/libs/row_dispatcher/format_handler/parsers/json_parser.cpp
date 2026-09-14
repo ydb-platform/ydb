@@ -832,15 +832,15 @@ public:
         FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
 
-        YDB_LOG_INFO("JsonParser was created, simdjson active implementation config: error skip batch latency limit buffer cell max number",
+        YDB_LOG_INFO("JsonParser was created",
             {"logPrefix", LogPrefix},
-            {"name", simdjson::get_active_implementation()->name()},
-            {"description", simdjson::get_active_implementation()->description()},
-            {"mode", Config.SkipErrors},
-            {"size", Config.BatchSize},
+            {"activeImplementationName", simdjson::get_active_implementation()->name()},
+            {"activeImplementationDescription", simdjson::get_active_implementation()->description()},
+            {"skipErrors", Config.SkipErrors},
+            {"batchSize", Config.BatchSize},
             {"latencyLimit", Config.LatencyLimit},
-            {"count", Config.BufferCellCount},
-            {"rows", MaxNumberRows});
+            {"bufferCellCount", Config.BufferCellCount},
+            {"maxNumberRows", MaxNumberRows});
         Parser.threaded = false;
     }
 
@@ -889,9 +889,9 @@ public:
             if (!Config.LatencyLimit) {
                 ParseBuffer();
             } else {
-                YDB_LOG_TRACE("Collecting data to parse, skip parsing, current buffer",
+                YDB_LOG_TRACE("Collecting data to parse, skip parsing",
                     {"logPrefix", LogPrefix},
-                    {"size", Buffer.GetSize()});
+                    {"currentBufferSize", Buffer.GetSize()});
             }
         }
     }
@@ -907,9 +907,9 @@ public:
         if (force || creationDuration > Config.LatencyLimit) {
             ParseBuffer();
         } else {
-            YDB_LOG_TRACE("Refresh, skip parsing, buffer creation",
+            YDB_LOG_TRACE("Refresh, skip parsing",
                 {"logPrefix", LogPrefix},
-                {"duration", creationDuration});
+                {"bufferCreationDuration", creationDuration});
         }
     }
 
@@ -948,10 +948,10 @@ protected:
 
         auto [values, size] = Buffer.Finish();
         OutputOffsets.resize(Buffer.Offsets.size());
-        YDB_LOG_TRACE("Do parsing, first values:\n",
+        YDB_LOG_TRACE("Do parsing",
             {"logPrefix", LogPrefix},
             {"offset", Buffer.Offsets.front()},
-            {"values", values});
+            {"firstValues", values});
 
          if (Config.SkipErrors) {
             OutputOffsets = Buffer.Offsets;

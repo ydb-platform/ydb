@@ -2,8 +2,6 @@
 
 namespace NYql::NUdf {
 
-IFunctionDescriptor::IFunctionDescriptor()
-{
-}
+IFunctionDescriptor::IFunctionDescriptor() = default;
 
 } // namespace NYql::NUdf

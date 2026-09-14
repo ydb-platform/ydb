@@ -24,8 +24,11 @@ jobs:
     if: |
       github.event_name == 'workflow_dispatch' ||
       github.event.pull_request.state == 'open'
+    # Include event_name so rebuild_docs workflow_dispatch does not cancel the
+    # pull_request build. Dispatch runs on main and its check attaches to main
+    # SHA; only the pull_request run updates the PR's build-docs status (#48409).
     concurrency:
-      group: docs-build-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
+      group: docs-build-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     permissions:
@@ -40,40 +43,6 @@ jobs:
         id: sha
         run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-      # Branches listed below keep the old logic (use-ya-opensource: false).
-      # All other branches use the new logic (use-ya-opensource: true).
-      - name: Determine ya-opensource flag
-        id: ya
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const legacyBranches = [
-              'stable-25-1',
-              'stable-25-2',
-              'stable-25-2-1',
-              'stable-25-3',
-              'stable-25-3-1',
-              'stable-25-4',
-              'stable-25-4-1',
-              'stable-26-1',
-              'stable-26-1-1',
-              'stable-26-2',
-              'stable-26-2-1',
-              'stable-26-1-1-enterprise', 
-            ];
-            let baseRef;
-            if (context.eventName === 'workflow_dispatch') {
-              const { data: pr } = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: Number(${{ inputs.pull_number }}),
-              });
-              baseRef = pr.base.ref;
-            } else {
-              baseRef = context.payload.pull_request.base.ref;
-            }
-            core.setOutput('use', legacyBranches.includes(baseRef) ? 'false' : 'true');
-
       - name: Disable PDF for PR build
         run: yq -i '.["docs-viewer"].pdf = false | .singlePage = false' ydb/docs/.yfm
 
@@ -82,8 +51,8 @@ jobs:
         with:
           revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
-          cli-version: "4.59.12"
-          use-ya-opensource: ${{ steps.ya.outputs.use }}
+          cli-version: "stable"
+          use-ya-opensource: false
 
       - name: Fail on documentation build issues
         run: |

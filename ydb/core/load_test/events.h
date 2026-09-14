@@ -138,6 +138,8 @@ struct TEvLoad {
         ui32 InFlight;
         TVector<ui64> RwSpeedBps;
         ELoadType LoadType;
+        ui64 MeasuredReadsSent = 0;
+        ui64 BackgroundWritesSent = 0;
         NMonitoring::TPercentileTrackerLg<10, 4, 1> LatencyUs; // Upper threshold of this tracker is ~134 seconds, size is 256kB
 
         double GetAverageSpeed() const {

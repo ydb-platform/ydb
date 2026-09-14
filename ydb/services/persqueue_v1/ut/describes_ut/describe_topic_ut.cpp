@@ -1,15 +1,14 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
+#include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
-#include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
 
 namespace NKikimr::NPersQueueTests {
 
-using namespace NKikimr::NGRpcProxy::V1;
 using namespace NIcNodeCache;
 
 const static TString topicName = "rt3.dc1--topic-x";
@@ -168,6 +167,16 @@ public:
         UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS);
     }
 
+    Ydb::StatusIds::StatusCode DescribeConsumerStatus(const TString& consumerName) {
+        grpc::ClientContext rcontext;
+        Ydb::Topic::DescribeConsumerRequest request;
+        Ydb::Topic::DescribeConsumerResponse response;
+        request.set_path(JoinPath({"/Root/PQ/", topicName}));
+        request.set_consumer(consumerName);
+        Stub->DescribeConsumer(&rcontext, request, &response);
+        return response.operation().status();
+    }
+
 private:
     std::shared_ptr<grpc::Channel> Channel;
     std::unique_ptr<Ydb::Topic::V1::TopicService::Stub> Stub;
@@ -185,49 +194,31 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         const auto edge = runtime->AllocateEdgeActor();
 
         TString currentTopicName = topicName;
-        auto getDescribe = [&] (const TVector<ui32>& parts, bool fails = false) {
-            auto partitionActor = runtime->Register(new TPartitionsLocationActor(
-                TGetPartitionsLocationRequest{TString("/Root/PQ/") + currentTopicName, "", "", parts}, edge
-            ));
-            runtime->EnableScheduleForActor(partitionActor);
+        auto getDescribe = [&]() {
+            const TString path = TString("/Root/PQ/") + currentTopicName;
+            runtime->Register(NPQ::NDescriber::CreateDescriberActor(edge, TString(), {path}, {}));
             runtime->DispatchEvents();
-            auto ev = runtime->GrabEdgeEvent<TEvPQProxy::TEvPartitionLocationResponse>();
-            if (currentTopicName != topicName) {
-                UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SCHEME_ERROR);
-                return ev;
-            }
-            if (fails) {
-                UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::BAD_REQUEST);
-                return ev;
-            }
-            UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Issues.ToString());
-            UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), parts ? parts.size() : 15);
-            return ev;
-
+            auto ev = runtime->GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>();
+            UNIT_ASSERT(ev);
+            const auto it = ev->Topics.find(path);
+            UNIT_ASSERT(it != ev->Topics.end());
+            return it->second;
         };
 
-        auto ev = getDescribe({});
+        auto info = getDescribe();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(info.Status), static_cast<int>(NPQ::NDescriber::EStatus::SUCCESS));
+        UNIT_ASSERT(info.Info);
+        UNIT_ASSERT(info.Self);
+        UNIT_ASSERT_VALUES_EQUAL(info.Info->Description.PartitionsSize(), 15u);
+        UNIT_ASSERT(info.Info->Description.GetBalancerTabletID() != 0);
+        UNIT_ASSERT_GT(info.Self->Info.GetPathId(), 0);
+        UNIT_ASSERT_GT(info.Self->Info.GetSchemeshardId(), 0);
 
-        THashSet<ui64> allParts;
-        for (const auto& p : ev->Partitions) {
-            UNIT_ASSERT(p.NodeId > 0);
-//            UNIT_ASSERT(p.IncGeneration > 0);
-            UNIT_ASSERT(p.PartitionId < 15);
-            allParts.insert(p.PartitionId);
-        }
-        UNIT_ASSERT_VALUES_EQUAL(allParts.size(), 15);
-
-        ev = getDescribe({1, 3, 5});
-        allParts.clear();
-        for (const auto& p : ev->Partitions) {
-            auto res = allParts.insert(p.PartitionId);
-            UNIT_ASSERT(res.second);
-            UNIT_ASSERT(p.PartitionId == 1 || p.PartitionId == 3 || p.PartitionId == 5);
-        }
-
-        getDescribe({1000}, true);
         currentTopicName = "bad-topic";
-        getDescribe({}, true);
+        info = getDescribe();
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<int>(info.Status),
+            static_cast<int>(NPQ::NDescriber::EStatus::NOT_FOUND));
     }
     Y_UNIT_TEST(GetPartitionDescribe) {
         ui32 partsCount = 15;
@@ -280,6 +271,13 @@ Y_UNIT_TEST_SUITE(TTopicApiDescribes) {
         server.DescribeConsumer("my-consumer",false, false);
         server.UseBadTopic = true;
         server.DescribeConsumer("my-consumer",true, true);
+    }
+
+    Y_UNIT_TEST(DescribeUnknownConsumer) {
+        auto server = TDescribeTestServer();
+        UNIT_ASSERT_VALUES_EQUAL(
+            server.DescribeConsumerStatus("no-such-consumer"),
+            Ydb::StatusIds::SCHEME_ERROR);
     }
 }
 

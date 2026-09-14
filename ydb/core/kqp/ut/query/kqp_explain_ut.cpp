@@ -3,6 +3,8 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
+#include <util/folder/dirut.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -400,6 +402,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto* spilling = appCfg.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
         spilling->SetEnable(true);
         spilling->SetRoot("./spilling/");
+        MakeDirIfNotExist("./spilling");
         auto kikimr = DefaultKikimrRunner({}, appCfg);
 
         auto db = kikimr.GetTableClient();

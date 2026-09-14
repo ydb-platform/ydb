@@ -112,7 +112,7 @@ def _init_stress_utils():
         'IncrementalBackup': {
             'args': [
                 "--endpoint", "grpc://{node_host}:2135",
-                "--backup-interval", "20"
+                "--backup-interval", "200"
             ],
             'local_path': 'ydb/tests/stress/backup/backup_stress'
         },
@@ -129,7 +129,7 @@ def _init_stress_utils():
                 "--endpoint", "grpc://{node_host}:2135",
                 "--sqs-endpoint", "http://{node_host}:8433/{database}",
             ],
-            'local_path': 'ydb/tests/stress/topic_sqs/topic_sqs'
+            'local_path': 'ydb/tests/stress/sqs_topic/sqs_topic'
         },
         'MinMax': {
             'args': ["--endpoint", "grpc://{node_host}:2135",
@@ -141,10 +141,37 @@ def _init_stress_utils():
                      "--path", "result_set_format_{node_host}_iter_{iteration_num}_{uuid}"],
             'local_path': 'ydb/tests/stress/result_set_format/result_set_format'
         },
-        'SystemTabletBackup': {
-            'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--mon-endpoint", "http://{node_host}:8765"],
-            'local_path': 'ydb/tests/stress/system_tablet_backup/system_tablet_backup'
+        # Disabled due to https://st.yandex-team.ru/YDBBUGS-765
+        # 'SystemTabletBackup': {
+        #     'args': ["--endpoint", "grpc://{node_host}:2135",
+        #              "--mon-endpoint", "http://{node_host}:8765"],
+        #     'local_path': 'ydb/tests/stress/system_tablet_backup/system_tablet_backup'
+        # },
+        'Tpcc': {
+            'pre_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--path", "workload_tpcc_{node_host}_{test_run_uuid}",
+                "--warehouses", "1000",
+                "--phase", "prepare",
+            ],
+            'args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--path", "workload_tpcc_{node_host}_{test_run_uuid}",
+                "--warehouses", "1000",
+                "--phase", "run",
+                "--tx-mode", "mixed",
+            ],
+            'post_nemesis_args': [
+                "--endpoint", "grpc://{node_host}:2135",
+                "--path", "workload_tpcc_{node_host}_{test_run_uuid}",
+                "--warehouses", "1000",
+                "--phase", "clean",
+            ],
+            'local_path': 'ydb/tests/stress/tpcc/workload_tpcc'
+        },
+        'RemoveStorageGroups': {
+            'args': ["--endpoint", "{node_host}:2135"],
+            'local_path': 'ydb/tests/stress/remove_storage_groups/remove_storage_groups'
         },
     }
 
@@ -231,6 +258,10 @@ def get_stress_util(name, common_args):
     """
     workload_copy = deepcopy(_all_stress_utils[name])
     workload_copy['args'] += common_args
+    if 'pre_nemesis_args' in workload_copy:
+        workload_copy['pre_nemesis_args'] += common_args
+    if 'post_nemesis_args' in workload_copy:
+        workload_copy['post_nemesis_args'] += common_args
     return workload_copy
 
 
@@ -250,4 +281,8 @@ def get_all_stress_utils(common_args):
     workload_copy = deepcopy(_all_stress_utils)
     for wl, arg in workload_copy.items():
         arg['args'] += common_args
+        if 'pre_nemesis_args' in arg:
+            arg['pre_nemesis_args'] += common_args
+        if 'post_nemesis_args' in arg:
+            arg['post_nemesis_args'] += common_args
     return workload_copy

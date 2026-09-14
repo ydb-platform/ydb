@@ -2,9 +2,15 @@
 
 #include <library/cpp/testing/gtest/gtest.h>
 
+#include <library/cpp/yt/logging/tag.h>
 #include <library/cpp/yt/logging/tagged_payload.h>
 
+#include <library/cpp/yt/string/raw_formatter.h>
+#include <library/cpp/yt/string/string_builder.h>
+
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace NYT::NLogging {
@@ -138,6 +144,128 @@ TEST(TTaggedPayloadTest, FormatWellKnownTagTrailing)
     WriteWellKnownTag(&writer, "Error", "boom");
     // Regular tags stay inline; the well-known tag is appended after the |(...)| group.
     EXPECT_EQ(FormatTaggedPayload(writer.Finish()), "Message (Key: Value)\nboom");
+}
+
+TEST(TTaggedPayloadTest, FormatIntoFormatter)
+{
+    TRawFormatter<256> formatter;
+    FormatTaggedPayload(&formatter, Encode("Message", {{"Key", "Value"}}));
+    EXPECT_EQ(formatter.GetBuffer(), "Message (Key: Value)");
+}
+
+TEST(TTaggedPayloadTest, FormatIntoFullFormatter)
+{
+    // A full buffer clips the tail, closing paren included.
+    TRawFormatter<12> formatter;
+    FormatTaggedPayload(&formatter, Encode("Message", {{"Key", "Value"}}));
+    EXPECT_EQ(formatter.GetBuffer(), "Message (Key");
+}
+
+TEST(TTaggedPayloadTest, FormatWellKnownTagIntoFormatter)
+{
+    TTaggedPayloadWriter writer;
+    WriteMessage(&writer, "Message");
+    WriteTag(&writer, "Key", "Value");
+    WriteWellKnownTag(&writer, "Error", "boom");
+
+    TRawFormatter<256> formatter;
+    FormatTaggedPayload(&formatter, writer.Finish());
+    EXPECT_EQ(formatter.GetBuffer(), "Message (Key: Value)\nboom");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TTags = std::vector<std::pair<std::string, std::string>>;
+
+TTags ReadTags(const TLoggingTagListPayload& tags)
+{
+    TTags result;
+    TTaggedPayloadReader reader(AsView(tags));
+    while (auto tag = reader.TryReadTag()) {
+        result.emplace_back(tag->Key, tag->Value);
+    }
+    return result;
+}
+
+void AppendStringTag(TLoggingTagListPayload* tags, TStringBuf key, TStringBuf value)
+{
+    TTaggedPayloadWriter::AppendTag(tags, key, [&] (TStringBuilderBase* builder) {
+        builder->AppendString(value);
+    });
+}
+
+TEST(TTaggedPayloadTest, AppendTag)
+{
+    auto check = [] (TStringBuf key, const auto& value, TStringBuf expected) {
+        TLoggingTagListPayload tags;
+        TTaggedPayloadWriter::AppendTag(&tags, key, [&] (TStringBuilderBase* builder) {
+            FormatValue(builder, value, "v"_sb);
+        });
+        EXPECT_EQ(ReadTags(tags), (TTags{{std::string(key), std::string(expected)}}));
+    };
+
+    // Preallocates room for the digits and advances by fewer, leaving slack to trim.
+    check("Count", 42, "42");
+    check("Empty", TStringBuf(""), "");
+    // Past TStringBuilderBase::MinBufferLength, so the payload grows mid-value.
+    check("Long", std::string(4096, 'x'), std::string(4096, 'x'));
+}
+
+TEST(TTaggedPayloadTest, AppendTagAppendsAfterExistingTags)
+{
+    TLoggingTagListPayload tags;
+    AppendStringTag(&tags, "First", "1");
+    TTaggedPayloadWriter::AppendTag(&tags, "Second", [&] (TStringBuilderBase* builder) {
+        FormatValue(builder, std::string(4096, 'y'), "v"_sb);
+    });
+    AppendStringTag(&tags, "Third", "3");
+
+    EXPECT_EQ(ReadTags(tags), (TTags{{"First", "1"}, {"Second", std::string(4096, 'y')}, {"Third", "3"}}));
+}
+
+TEST(TTaggedPayloadTest, AppendTagRestoresTagsOnThrow)
+{
+    TLoggingTagListPayload tags;
+    AppendStringTag(&tags, "Kept", "yes");
+    auto before = tags.Underlying();
+
+    auto throwAfter = [&] (int byteCount) {
+        EXPECT_THROW(
+            TTaggedPayloadWriter::AppendTag(&tags, "Doomed", [&] (TStringBuilderBase* builder) {
+                builder->AppendString(std::string(byteCount, 'x'));
+                throw std::runtime_error("boom");
+            }),
+            std::runtime_error);
+        EXPECT_EQ(tags.Underlying(), before);
+    };
+
+    throwAfter(0);
+    throwAfter(4096);
+}
+
+TEST(TTaggedPayloadTest, AppendTagWithReset)
+{
+    TLoggingTagListPayload tags;
+    TTaggedPayloadWriter::AppendTag(&tags, "Rewritten", [] (TStringBuilderBase* builder) {
+        builder->AppendString(std::string(4096, 'x'));
+        builder->Reset();
+        builder->AppendString("final");
+    });
+    TTaggedPayloadWriter::AppendTag(&tags, "Emptied", [] (TStringBuilderBase* builder) {
+        builder->AppendString(std::string(4096, 'x'));
+        builder->Reset();
+    });
+
+    EXPECT_EQ(ReadTags(tags), (TTags{{"Rewritten", "final"}, {"Emptied", ""}}));
+}
+
+TEST(TLoggingTagListTest, Add)
+{
+    TLoggingTagList tags;
+    tags.Add("Count", 42);
+    tags.AddFormat("Range", "%v-%v", 1, 9);
+
+    EXPECT_EQ(ReadTags(tags.GetPayload()), (TTags{{"Count", "42"}, {"Range", "1-9"}}));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

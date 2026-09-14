@@ -132,14 +132,14 @@ CreateAsyncDoubleMetricCicdPipelineRunErrors(metrics::Meter *meter)
 }
 
 /**
-  The number of errors in a component of the CICD system (eg. controller, scheduler, agent).
+  The number of errors in a component of the CI/CD system (eg. controller, scheduler, agent).
   <p>
   Errors in pipeline run execution are explicitly excluded. Ie a test failure is not counted in this
   metric. <p> counter
  */
 static constexpr const char *kMetricCicdSystemErrors = "cicd.system.errors";
 static constexpr const char *descrMetricCicdSystemErrors =
-    "The number of errors in a component of the CICD system (eg. controller, scheduler, agent).";
+    "The number of errors in a component of the CI/CD system (eg. controller, scheduler, agent).";
 static constexpr const char *unitMetricCicdSystemErrors = "{error}";
 
 static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricCicdSystemErrors(
@@ -171,14 +171,14 @@ CreateAsyncDoubleMetricCicdSystemErrors(metrics::Meter *meter)
 }
 
 /**
-  The number of workers on the CICD system by state.
+  The number of workers on the CI/CD system by state.
   <p>
   updowncounter
  */
 static constexpr const char *kMetricCicdWorkerCount = "cicd.worker.count";
 static constexpr const char *descrMetricCicdWorkerCount =
-    "The number of workers on the CICD system by state.";
-static constexpr const char *unitMetricCicdWorkerCount = "{count}";
+    "The number of workers on the CI/CD system by state.";
+static constexpr const char *unitMetricCicdWorkerCount = "{worker}";
 
 static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricCicdWorkerCount(metrics::Meter *meter)

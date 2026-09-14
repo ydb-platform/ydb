@@ -681,6 +681,7 @@ TKafkaRecordBatch ReadKafkaRecordBatch(
     TStringBuf data,
     TKafkaVersion version = 2);
 TKafkaRecordBatch ReadRecordBatch(TStringBuf data);
+bool SetKafkaBatchBaseOffset(TString& data, ui64 baseOffset);
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
 
 std::pair<EKafkaErrors, ui64> GetBatchBaseSeqNo(const TKafkaBatchHeader& header);

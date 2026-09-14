@@ -97,6 +97,10 @@ TString TYtForwardingGatewayBase::GetClusterServer(const TString& cluster) const
     return Slave_->GetClusterServer(cluster);
 }
 
+TString TYtForwardingGatewayBase::GetClusterYtName(const TString& cluster) const {
+    return Slave_->GetClusterYtName(cluster);
+}
+
 NYT::TRichYPath TYtForwardingGatewayBase::GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const {
     return Slave_->GetRealTable(sessionId, cluster, table, epoch, tmpFolder, temp, anonymous);
 }

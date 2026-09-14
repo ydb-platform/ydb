@@ -1,8 +1,13 @@
 #include "analyze_actor.h"
 
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/statistics/events.h>
+#include <ydb/core/base/path.h>
+#include <ydb/core/scheme/scheme_type_info.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/algorithm.h>
 #include <util/string/vector.h>
 #include <algorithm>
 
@@ -10,7 +15,6 @@
 
 namespace NKikimr::NStat {
 
-static constexpr ui64 MAX_STATISTIC_SIZE = 8_MB;
 static constexpr ui64 MAX_STATISTICS_SIZE_IN_SINGLE_SCAN = 40_MB;
 
 namespace {
@@ -21,7 +25,11 @@ std::optional<EStatType> ConvertMultiColumnStatType(NKikimrSchemeOp::EMultiColum
         return std::nullopt;
     case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
         return EStatType::COUNT_MIN_SKETCH;
+    case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+        return EStatType::EQ_HEIGHT_HISTOGRAM;
     }
+    // Unknown protobuf value from a newer schemeshard: skip rather than fail ANALYZE.
+    return std::nullopt;
 }
 
 } // anonymous namespace
@@ -33,7 +41,9 @@ public:
         , Parent(parent)
         , Query(std::move(query))
         , ColumnCount(columnCount)
-    {}
+    {
+        RequestType = TString(NRequestTypes::Analyze);
+    }
 
     void OnRunQuery() override {
         RunStreamQuery(Query);
@@ -74,6 +84,10 @@ public:
             return;
         }
 
+        YDB_LOG_WARN("ScanActor OnFinish non-success",
+            {"selfId", SelfId()},
+            {"status", status});
+
         if (!ResponseSent) {
             auto response = std::make_unique<TEvPrivate::TEvAnalyzeScanResult>(
                 status, std::move(issues));
@@ -105,6 +119,12 @@ private:
 };
 
 void TAnalyzeActor::Bootstrap() {
+    YDB_LOG_DEBUG("Bootstrap",
+        {"selfId", SelfId()},
+        {"operationId", OperationId.Quote()},
+        {"pathId", PathId},
+        {"databaseName", DatabaseName});
+
     Become(&TThis::StateNavigate);
 
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -123,6 +143,12 @@ void TAnalyzeActor::Bootstrap() {
 void TAnalyzeActor::FinishWithFailure(
         TEvStatistics::TEvAnalyzeActorResult::EStatus status,
         NYql::TIssue issue) {
+    YDB_LOG_WARN("FinishWithFailure",
+        {"selfId", SelfId()},
+        {"status", static_cast<int>(status)},
+        {"operationId", OperationId.Quote()},
+        {"pathId", PathId});
+
     auto response = std::make_unique<TEvStatistics::TEvAnalyzeActorResult>(status);
 
     TStringBuilder errMsg;
@@ -144,6 +170,13 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     const auto& request = *ev->Get()->Request;
     Y_ABORT_UNLESS(request.ResultSet.size() == 1);
     const NSchemeCache::TSchemeCacheNavigate::TEntry& entry = request.ResultSet.front();
+
+    // Second navigate round: resolve the domain key to an absolute database
+    // path for background traversals (where DatabaseName is empty).
+    if (ResolvingDatabase) {
+        HandleResolveDatabase(entry);
+        return;
+    }
 
     if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
         YDB_LOG_WARN("Navigate request failed",
@@ -176,17 +209,82 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
     TableName = "/" + JoinVectorIntoString(entry.Path, "/");
     IsColumnTable = !!entry.ColumnTableInfo;
 
+    // For background traversals, DatabaseName is empty. Resolve it from
+    // the table's DomainKey via a second navigate round, which correctly
+    // handles tables nested in subdirectories. We use DomainKey (the tenant
+    // domain), not ResourcesDomainKey, because the scan query runs against
+    // the tenant database.
+    if (DatabaseName.empty()) {
+        const auto& domainKey = entry.DomainInfo->DomainKey;
+
+        auto resolveNavigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        resolveNavigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
+        auto& resolveEntry = resolveNavigate->ResultSet.emplace_back();
+        resolveEntry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
+        resolveEntry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+        resolveEntry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+        resolveEntry.RedirectRequired = false;
+
+        NavigateColumns = entry.Columns;
+        NavigateMultiColumnStatistics = entry.MultiColumnStatistics;
+        ResolvingDatabase = true;
+        Send(MakeSchemeCacheID(),
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(resolveNavigate.release()));
+        return;
+    }
+
+    NavigateColumns = entry.Columns;
+    NavigateMultiColumnStatistics = entry.MultiColumnStatistics;
+    HandleNavigateResult();
+}
+
+void TAnalyzeActor::HandleResolveDatabase(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry) {
+    ResolvingDatabase = false;
+
+    if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+        YDB_LOG_WARN("Resolve database navigate failed",
+            {"selfId", SelfId()},
+            {"status", entry.Status},
+            {"operationId", OperationId.Quote()},
+            {"pathId", PathId});
+
+        FinishWithFailure(
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue(TStringBuilder() << "Resolve database navigate failed with " << entry.Status));
+        return;
+    }
+
+    DatabaseName = CanonizePath(entry.Path);
+    if (DatabaseName.empty()) {
+        FinishWithFailure(
+            TEvStatistics::TEvAnalyzeActorResult::EStatus::InternalError,
+            NYql::TIssue("Resolved database path is empty"));
+        return;
+    }
+    YDB_LOG_DEBUG("Resolved database path",
+        {"selfId", SelfId()},
+        {"operationId", OperationId.Quote()},
+        {"databaseName", DatabaseName});
+
+    HandleNavigateResult();
+}
+
+void TAnalyzeActor::HandleNavigateResult() {
     THashMap<ui32, TSysTables::TTableColumnInfo> tag2Column;
-    for (const auto& col : entry.Columns) {
+    std::vector<std::pair<TString, ui32>> keyColumns;
+    for (const auto& col : NavigateColumns) {
         tag2Column[col.second.Id] = col.second;
 
         if (col.second.KeyOrder >= 0) {
             KeyColumnTypes.resize(Max<size_t>(KeyColumnTypes.size(), col.second.KeyOrder + 1));
             KeyColumnTypes[col.second.KeyOrder] = col.second.PType;
+
+            keyColumns.resize(Max<size_t>(keyColumns.size(), col.second.KeyOrder + 1));
+            keyColumns[col.second.KeyOrder] = {col.second.Name, col.second.Id};
         }
     }
 
-    for (const auto& def : entry.MultiColumnStatistics) {
+    for (const auto& def : NavigateMultiColumnStatistics) {
         TMultiColumnStatDesc desc;
         desc.Name = def.GetName();
 
@@ -205,22 +303,96 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
             continue;
         }
 
-        if (desc.ColumnIds.size() < 2) {
-            // A 1-column multi-column statistic is degenerate: its column_tags key would collide
-            // with the single-column stat's key in .metadata/statistics_v2, and single-column CMS
-            // already covers it. Skip gathering it.
-            continue;
-        }
+        auto addType = [&](EStatType statType) {
+            if (Find(desc.Types, statType) != desc.Types.end()) {
+                return;
+            }
+            // A 1-column COUNT_MIN_SKETCH would collide with the single-column sketch's
+            // (column_tags, stat_type) key, and is already covered by it. Other types have their own
+            // stat_type and cannot collide.
+            if (desc.ColumnIds.size() < 2 && statType == EStatType::COUNT_MIN_SKETCH) {
+                return;
+            }
+            if (statType == EStatType::EQ_HEIGHT_HISTOGRAM) {
+                TStringBuilder issue;
+                issue << "EQ_HEIGHT_HISTOGRAM '" << desc.Name
+                      << "' has a column type that PresortKey cannot encode";
+                bool anyUnsupported = false;
+                for (ui32 id : desc.ColumnIds) {
+                    const auto& col = tag2Column.at(id);
+                    if (!NScheme::NTypeIds::IsPresortEncodable(col.PType.GetTypeId())) {
+                        issue << (anyUnsupported ? ", " : ": ")
+                              << "column '" << col.Name << "' of type "
+                              << NScheme::TypeName(col.PType, col.PTypeMod);
+                        anyUnsupported = true;
+                    }
+                }
+                if (anyUnsupported) {
+                    // Skip this type only. Covers persisted descriptors and
+                    // STATISTICS without WITH; explicit WITH is rejected at DDL.
+                    YDB_LOG_WARN("Skipping EQ_HEIGHT_HISTOGRAM: column type is not encodable by PresortKey",
+                        {"operationId", OperationId.Quote()},
+                        {"pathId", PathId},
+                        {"details", TString(issue)});
+                    return;
+                }
+            }
+            desc.Types.push_back(statType);
+        };
 
-        for (auto type : def.GetTypes()) {
-            auto statType = ConvertMultiColumnStatType(
-                static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type));
-            if (statType) {
-                desc.Types.push_back(*statType);
+        if (def.GetTypes().empty()) {
+            // No WITH clause: collect every supported multi-column type.
+            for (auto type : IMultiColumnStatisticEval::SupportedMultiColumnTypes()) {
+                addType(type);
+            }
+        } else {
+            for (auto type : def.GetTypes()) {
+                auto statType = ConvertMultiColumnStatType(
+                    static_cast<NKikimrSchemeOp::EMultiColumnStatisticsType>(type));
+                if (statType) {
+                    addType(*statType);
+                }
             }
         }
         if (!desc.Types.empty()) {
             MultiColumnStatDescs.push_back(std::move(desc));
+        }
+    }
+
+    if (Config.CollectPrimaryKeyHistogram && !keyColumns.empty()) {
+        // Skip auto-PK histogram if a dropped key column left a gap in KeyOrder.
+        const bool hasDroppedKeyColumn = AnyOf(keyColumns, [](const auto& kc) {
+            return kc.first.empty();
+        });
+        const bool hasUnsupportedKeyType = AnyOf(keyColumns, [&](const auto& kc) {
+            auto it = tag2Column.find(kc.second);
+            return it == tag2Column.end() || !NScheme::NTypeIds::IsPresortEncodable(it->second.PType.GetTypeId());
+        });
+        if (hasDroppedKeyColumn) {
+            YDB_LOG_WARN("Skipping auto-PK EQ_HEIGHT_HISTOGRAM: key columns are not contiguous",
+                {"operationId", OperationId.Quote()},
+                {"pathId", PathId});
+        } else if (hasUnsupportedKeyType) {
+            YDB_LOG_WARN("Skipping auto-PK EQ_HEIGHT_HISTOGRAM: a key column type is not encodable by PresortKey",
+                {"operationId", OperationId.Quote()},
+                {"pathId", PathId});
+        } else {
+            TMultiColumnStatDesc pk;
+            pk.Name = "__pk";
+            for (const auto& [name, id] : keyColumns) {
+                pk.ColumnNames.push_back(name);
+                pk.ColumnIds.push_back(id);
+            }
+            pk.Types = {EStatType::EQ_HEIGHT_HISTOGRAM};
+
+            // Declared PK histogram (explicit WITH or no WITH) wins over auto-PK.
+            const bool alreadyDeclared = AnyOf(MultiColumnStatDescs, [&](const auto& d) {
+                return d.ColumnIds == pk.ColumnIds
+                    && Find(d.Types, EStatType::EQ_HEIGHT_HISTOGRAM) != d.Types.end();
+            });
+            if (!alreadyDeclared) {
+                MultiColumnStatDescs.push_back(std::move(pk));
+            }
         }
     }
 
@@ -261,7 +433,24 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         return;
     }
 
-    if (IsColumnTable) {
+    // Per-shard scans for column tables unless size is known and at or below
+    // the whole-table threshold. Unknown size (missing/unparsed base stats)
+    // stays per-shard to avoid a full-table scan of a potentially large table.
+    UsePerShardScans = IsColumnTable
+        && (Config.WholeTableScanMaxBytes == 0
+            || !Config.TableBytesSize
+            || *Config.TableBytesSize > Config.WholeTableScanMaxBytes);
+    YDB_LOG_DEBUG("Scan strategy",
+        {"selfId", SelfId()},
+        {"operationId", OperationId.Quote()},
+        {"pathId", PathId},
+        {"isColumnTable", IsColumnTable},
+        {"tableBytesSizeKnown", Config.TableBytesSize.has_value()},
+        {"tableBytesSize", Config.TableBytesSize.value_or(0)},
+        {"wholeTableScanMaxBytes", Config.WholeTableScanMaxBytes},
+        {"usePerShardScans", UsePerShardScans});
+
+    if (UsePerShardScans) {
         // Resolve table shard ids.
         TVector<TCell> minusInf(KeyColumnTypes.size());
         TVector<TCell> plusInf;
@@ -339,7 +528,7 @@ void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
     }
 
     // Report initial progress: shards known, none done yet
-    ui32 shardsTotal = IsColumnTable ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
+    ui32 shardsTotal = UsePerShardScans ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
     SendProgressEvent(shardsTotal, 0);
 
     Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
@@ -372,13 +561,13 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
     Y_ENSURE(!PendingTasks.empty());
 
 
-    if (IsColumnTable) {
+    if (UsePerShardScans) {
         for (const auto& [tabletId, nodeId] : TabletId2NodeId) {
             NodeId2State.try_emplace(nodeId, nodeId).first->second.PendingTablets.push_back(tabletId);
         }
     }
 
-    SelectBuilder.emplace(/*isIntermediateAggregation=*/IsColumnTable);
+    SelectBuilder.emplace(/*isIntermediateAggregation=*/UsePerShardScans);
     size_t totalSize = 0;
 
     if (!CountSeq && !RowCount) {
@@ -418,12 +607,12 @@ void TAnalyzeActor::DispatchSomeScanActors() {
         auto actor = std::make_unique<TScanActor>(
             SelfId(), DatabaseName,
             SelectBuilder->Build(TableName, tabletId), SelectBuilder->ColumnCount());
-        ScanActorsInFlight[Register(actor.release())] = TScanActorInfo{
+        ScanActorsInFlight[Register(actor.release(), TMailboxType::HTSwap, AppData()->BatchPoolId)] = TScanActorInfo{
             .TabletNodeId = nodeId,
         };
     };
 
-    if (!IsColumnTable) {
+    if (!UsePerShardScans) {
         Y_ENSURE(ScanActorsInFlight.empty());
         YDB_LOG_DEBUG("Dispatching scan actor for the whole table",
             {"selfId", SelfId()});
@@ -480,7 +669,7 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     ScanActorsInFlight.erase(actorIt);
 
     ++ScansCompletedTotal;
-    const ui32 shardsTotal = IsColumnTable ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
+    const ui32 shardsTotal = UsePerShardScans ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
     // Cap intermediate progress below 100%: simple-stats and stage-2 rounds share
     // ScansCompletedTotal, so 100% is only emitted from the final-result branch.
     const ui32 shardsDoneCap = shardsTotal > 0 ? shardsTotal - 1 : 0;
@@ -546,12 +735,21 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                         == supportedMultiColumnTypes.end()) {
                     continue;
                 }
+                IMultiColumnStatisticEval::THistogramSizing sizing;
+                sizing.OversampleFactor = Config.HistogramOversampleFactor;
+                sizing.MaxStateBytes = Config.HistogramMaxStateBytes;
                 auto statEval = IMultiColumnStatisticEval::MaybeCreate(
-                    type, def.ColumnNames, def.ColumnIds, RowCount.value());
+                    type, def.ColumnNames, def.ColumnIds, RowCount.value(), sizing);
                 if (!statEval) {
                     continue;
                 }
-                if (statEval->EstimateSize() > MAX_STATISTIC_SIZE) {
+                if (statEval->EstimateSize() > TAnalyzeActor::MaxStatisticSize) {
+                    YDB_LOG_WARN("Skipping multi-column statistic: estimated size exceeds MaxStatisticSize",
+                        {"operationId", OperationId.Quote()},
+                        {"pathId", PathId},
+                        {"statType", static_cast<int>(type)},
+                        {"estimatedSize", statEval->EstimateSize()},
+                        {"maxStatisticSize", TAnalyzeActor::MaxStatisticSize});
                     continue;
                 }
                 PendingTasks.push(TColumnStatEvalTask{
@@ -579,7 +777,13 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 if (!statEval) {
                     continue;
                 }
-                if (statEval->EstimateSize() > MAX_STATISTIC_SIZE) {
+                if (statEval->EstimateSize() > TAnalyzeActor::MaxStatisticSize) {
+                    YDB_LOG_WARN("Skipping stage-2 statistic: estimated size exceeds MaxStatisticSize",
+                        {"operationId", OperationId.Quote()},
+                        {"pathId", PathId},
+                        {"statType", static_cast<int>(type)},
+                        {"estimatedSize", statEval->EstimateSize()},
+                        {"maxStatisticSize", TAnalyzeActor::MaxStatisticSize});
                     continue;
                 }
                 PendingTasks.push(TColumnStatEvalTask{
@@ -594,10 +798,13 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
                 task.Stage2StatEval->GetType(),
                 task.Stage2StatEval->ExtractData(result.AggColumns));
         } else {
-            resultItems.emplace_back(
-                task.MultiStatEval->GetColumnIds(),
-                task.MultiStatEval->GetType(),
-                task.MultiStatEval->ExtractData(result.AggColumns));
+            auto data = task.MultiStatEval->ExtractData(result.AggColumns);
+            if (data) {
+                resultItems.emplace_back(
+                    task.MultiStatEval->GetColumnIds(),
+                    task.MultiStatEval->GetType(),
+                    std::move(*data));
+            }
         }
     }
 
@@ -621,6 +828,11 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     try {
         HandleImpl(ev);
     } catch (const std::exception& ex) {
+        YDB_LOG_ERROR("Handle TEvAnalyzeScanResult exception",
+            {"selfId", SelfId()},
+            {"operationId", OperationId.Quote()},
+            {"error", ex.what()});
+
         NYql::TIssue error(TStringBuilder()
             << "Processing statistics scan results failed with " << ex.what());
         FinishWithFailure(
@@ -630,6 +842,10 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
 }
 
 void TAnalyzeActor::PassAway() {
+    YDB_LOG_DEBUG("PassAway",
+        {"selfId", SelfId()},
+        {"operationId", OperationId.Quote()});
+
     for (const auto& [id, info] : ScanActorsInFlight){
         Send(id, new TEvents::TEvPoison());
     }

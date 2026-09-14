@@ -1,0 +1,8 @@
+[
+    {
+        name=fail;
+        calling_convention=unversioned_value;
+        argument_types=[];
+        result_type={value=int64; tag=concrete_type;};
+    };
+]

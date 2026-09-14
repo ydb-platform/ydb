@@ -1,7 +1,7 @@
 import "ydb/core/protos/blob_depot_config.proto";
 import "ydb/core/protos/base.proto";
-import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_base.proto";
+import "ydb/core/protos/blobstorage_disk_color.proto";
 
 package NKikimrBlobDepot;
 
@@ -70,7 +70,6 @@ message TResolvedValueChain {
 message TEvApplyConfig {
     optional uint64 TxId = 1;
     optional NKikimrBlobDepot.TBlobDepotConfig Config = 2;
-    optional NKikimrBlobStorage.TGroupInfo GroupInfo = 3;
 }
 
 message TEvApplyConfigResult {
@@ -81,7 +80,6 @@ message TEvApplyConfigResult {
 message TEvRegisterAgent {
     optional uint32 VirtualGroupId = 1; // for validation purposes
     optional fixed64 AgentInstanceId = 2; // randomly generated number every time agent starts from scratch
-    optional uint32 GroupGeneration = 3; // group generation known by agent
 }
 
 message TEvRegisterAgentResult {
@@ -100,7 +98,6 @@ message TEvRegisterAgentResult {
     optional float ApproximateFreeSpaceShare = 5;
     optional NKikimrBlobDepot.TS3BackendSettings S3BackendSettings = 6;
     optional string Name = 7;
-    optional NKikimrBlobStorage.TGroupInfo GroupInfo = 8; // relevant group info in case when agent repoted obsolete one
 }
 
 message TEvAllocateIds {
@@ -118,14 +115,15 @@ message TEvBlock {
     optional fixed64 TabletId = 1;
     optional uint32 BlockedGeneration = 2;
     optional uint64 IssuerGuid = 3;
-    optional uint32 GroupGeneration = 4;
+    optional uint32 Version = 4;
+    optional uint32 WriteSourceOp = 5;
 }
 
 message TEvBlockResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 2;
     optional uint32 TimeToLiveMs = 3;
-    optional NKikimrBlobStorage.TGroupInfo GroupInfo = 4;
+    optional bool IsTabletStorageInfoVersionObsolete = 4 [default = false];
 }
 
 message TEvPushNotify {
@@ -170,13 +168,11 @@ message TEvCollectGarbage {
     optional uint32 CollectGeneration = 8;
     optional uint64 CollectStep = 9;
     optional bool IgnoreBlock = 10;
-    optional uint32 GroupGeneration = 11;
 }
 
 message TEvCollectGarbageResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 2;
-    optional NKikimrBlobStorage.TGroupInfo GroupInfo = 3;
 }
 
 message TEvCommitBlobSeq {
@@ -198,7 +194,6 @@ message TEvCommitBlobSeq {
     }
 
     repeated TItem Items = 1;
-    optional uint32 GroupGeneration = 2;
 }
 
 message TEvCommitBlobSeqResult {
@@ -208,7 +203,6 @@ message TEvCommitBlobSeqResult {
     }
 
     repeated TItem Items = 1;
-    optional NKikimrBlobStorage.TGroupInfo GroupInfo = 2;
 }
 
 message TEvDiscardSpoiledBlobSeq {
@@ -243,6 +237,11 @@ message TEvResolve {
     }
 
     repeated TItem Items = 1;
+
+    // Admission hint of the request this resolve serves: in decommission mode a MustRestoreFirst
+    // item makes BlobDepot copy the blob into its own storage, and that write must be admitted the
+    // same way the requesting tablet's own writes are, or the tablet cannot boot.
+    optional NKikimrBlobStorage.TDataKind.E DataKind = 2;
 }
 
 message TEvResolveResult {
@@ -264,6 +263,7 @@ message TEvResolveResult {
 message TEvPushMetrics {
     optional uint64 BytesRead = 1; // since last update
     optional uint64 BytesWritten = 2; // since last update
+    optional uint32 NodeId = 3;
 }
 
 message TEvPrepareWriteS3 {

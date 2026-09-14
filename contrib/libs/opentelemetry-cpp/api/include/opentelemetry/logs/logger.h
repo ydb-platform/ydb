@@ -15,6 +15,13 @@
 #include "opentelemetry/nostd/unique_ptr.h"
 #include "opentelemetry/version.h"
 
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+#  include "opentelemetry/context/runtime_context.h"
+#  include "opentelemetry/nostd/variant.h"
+#  include "opentelemetry/trace/span_context.h"
+#  include "opentelemetry/trace/trace_flags.h"
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
+
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace common
 {
@@ -50,6 +57,22 @@ public:
    */
   virtual nostd::unique_ptr<LogRecord> CreateLogRecord() noexcept = 0;
 
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+  /**
+   * Create a Log Record object using either a Context or a SpanContext.
+   *
+   * @param context_or_span Variant carrying either a full Context or just a
+   *                        SpanContext.
+   * @return nostd::unique_ptr<LogRecord>
+   */
+  virtual nostd::unique_ptr<LogRecord> CreateLogRecord(
+      const nostd::variant<trace::SpanContext, opentelemetry::context::Context> &
+      /*context_or_span*/) noexcept
+  {
+    return CreateLogRecord();
+  }
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
+
   /**
    * Emit a Log Record object
    *
@@ -58,7 +81,16 @@ public:
   virtual void EmitLogRecord(nostd::unique_ptr<LogRecord> &&log_record) noexcept = 0;
 
   /**
-   * Emit a Log Record object with arguments
+   * Emit a Log Record object with arguments.
+   *
+   * @note This overload does NOT apply the @c Enabled filter chain. Callers who
+   *       constructed @p log_record themselves are responsible for calling
+   *       @c Enabled(severity, ...) before invoking this overload if they want
+   *       the LoggerConfig filtering rules (minimum severity, trace-based,
+   *       processor.Enabled) to be honored. In ABI v2 builds, the no-record
+   *       overload @c EmitLogRecord(args...) below does call the filter chain
+   *       automatically when @c Severity is present in @p args; in ABI v1
+   *       builds neither overload applies the filter chain.
    *
    * @param log_record Log record
    * @param args Arguments which can be used to set data of log record by type.
@@ -120,11 +152,72 @@ public:
    *  KeyValueIterable                        -> attributes
    *  Key value iterable container            -> attributes
    *  span<pair<string_view, AttributeValue>> -> attributes(return type of MakeAttributes)
+   *  Context (v2 only)                       -> filter + trace stamp (recommended: pass last)
+   *
+   *  When a @c Context or trace parts (@c SpanContext, or @c TraceId +
+   *  @c SpanId [+ @c TraceFlags]) are in args, the filter chain uses
+   *  @c Enabled(context_or_span, severity, ...) and the record is created
+   *  via @c CreateLogRecord(context_or_span), so the filter evaluates
+   *  against the trace this record is for instead of the implicit runtime
+   *  context.
    */
   template <class... ArgumentType>
   void EmitLogRecord(ArgumentType &&...args)
   {
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+    const Severity arg_severity = detail::FindSeverityInArgs(args...);
+    if (arg_severity != Severity::kInvalid && !Enabled(arg_severity))
+    {
+      return;
+    }
+
+    nostd::variant<trace::SpanContext, opentelemetry::context::Context> context_or_span =
+        trace::SpanContext::GetInvalid();
+
+    if (const opentelemetry::context::Context *ctx = detail::FindContextInArgs(args...))
+    {
+      context_or_span = *ctx;
+    }
+    else if (const trace::SpanContext *sc = detail::FindSpanContextInArgs(args...))
+    {
+      context_or_span = *sc;
+    }
+    else
+    {
+      const trace::TraceId *trace_id_ptr = detail::FindTraceIdInArgs(args...);
+      const trace::SpanId *span_id_ptr   = detail::FindSpanIdInArgs(args...);
+      if (trace_id_ptr != nullptr && span_id_ptr != nullptr)
+      {
+        const trace::TraceFlags *trace_flags_ptr = detail::FindTraceFlagsInArgs(args...);
+        context_or_span                          = trace::SpanContext(
+            *trace_id_ptr, *span_id_ptr,
+            trace_flags_ptr != nullptr ? *trace_flags_ptr : trace::TraceFlags{}, false);
+      }
+      else
+      {
+        context_or_span = opentelemetry::context::RuntimeContext::GetCurrent();
+      }
+    }
+
+    if (arg_severity != Severity::kInvalid)
+    {
+      const EventId *event_id_ptr = detail::FindEventIdInArgs(args...);
+      if (ExtendedEnabledRequired())
+      {
+        const bool extended_enabled =
+            event_id_ptr ? EnabledImplementation(context_or_span, arg_severity, *event_id_ptr)
+                         : EnabledImplementation(context_or_span, arg_severity);
+        if (!extended_enabled)
+        {
+          return;
+        }
+      }
+    }
+
+    nostd::unique_ptr<LogRecord> log_record = CreateLogRecord(context_or_span);
+#else
     nostd::unique_ptr<LogRecord> log_record = CreateLogRecord();
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
 
     EmitLogRecord(std::move(log_record), std::forward<ArgumentType>(args)...);
   }
@@ -278,25 +371,27 @@ public:
   //
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
-  inline bool Enabled(const opentelemetry::context::Context &context,
-                      Severity severity = Severity::kInvalid) const noexcept
+  inline bool Enabled(
+      const nostd::variant<trace::SpanContext, opentelemetry::context::Context> &context_or_span,
+      Severity severity = Severity::kInvalid) const noexcept
   {
     if OPENTELEMETRY_LIKELY_CONDITION (!Enabled(severity))
     {
       return false;
     }
-    return EnabledImplementation(context, severity);
+    return EnabledImplementation(context_or_span, severity);
   }
 
-  inline bool Enabled(const opentelemetry::context::Context &context,
-                      Severity severity,
-                      const EventId &event_id) const noexcept
+  inline bool Enabled(
+      const nostd::variant<trace::SpanContext, opentelemetry::context::Context> &context_or_span,
+      Severity severity,
+      const EventId &event_id) const noexcept
   {
     if OPENTELEMETRY_LIKELY_CONDITION (!Enabled(severity))
     {
       return false;
     }
-    return EnabledImplementation(context, severity, event_id);
+    return EnabledImplementation(context_or_span, severity, event_id);
   }
 #endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
 
@@ -322,6 +417,13 @@ public:
   {
     return static_cast<uint8_t>(severity) >= OPENTELEMETRY_ATOMIC_READ_8(&minimum_severity_);
   }
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+  inline bool ExtendedEnabledRequired() const noexcept
+  {
+    return OPENTELEMETRY_ATOMIC_READ_8(&extended_enabled_required_) != 0;
+  }
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
 
   /**
    * Log an event
@@ -505,15 +607,19 @@ protected:
   }
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
-  virtual bool EnabledImplementation(const opentelemetry::context::Context & /*context*/,
-                                     Severity /*severity*/) const noexcept
+  virtual bool EnabledImplementation(
+      const nostd::variant<trace::SpanContext, opentelemetry::context::Context> &
+      /*context_or_span*/,
+      Severity /*severity*/) const noexcept
   {
     return false;
   }
 
-  virtual bool EnabledImplementation(const opentelemetry::context::Context & /*context*/,
-                                     Severity /*severity*/,
-                                     const EventId & /*event_id*/) const noexcept
+  virtual bool EnabledImplementation(
+      const nostd::variant<trace::SpanContext, opentelemetry::context::Context> &
+      /*context_or_span*/,
+      Severity /*severity*/,
+      const EventId & /*event_id*/) const noexcept
   {
     return false;
   }
@@ -523,6 +629,14 @@ protected:
   {
     OPENTELEMETRY_ATOMIC_WRITE_8(&minimum_severity_, severity_or_max);
   }
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+  void SetExtendedEnabledRequired(bool required) noexcept
+  {
+    OPENTELEMETRY_ATOMIC_WRITE_8(&extended_enabled_required_,
+                                 static_cast<uint8_t>(required ? 1 : 0));
+  }
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
 
 private:
   template <class... ValueType>
@@ -535,6 +649,19 @@ private:
   // compatible for OpenTelemetry C++ API.
   //
   mutable uint8_t minimum_severity_{kMaxSeverity};
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+  //
+  // Controls whether the EmitLogRecord(args...) template calls the
+  // EnabledImplementation virtual in addition to the cheap atomic
+  // minimum_severity_ check. When 0, the template trusts the atomic check
+  // as the complete enabled decision and skips the virtual dispatch. When
+  // 1, the template also consults EnabledImplementation, which lets a
+  // Logger subclass apply richer filtering (trace-based, processor-level
+  // Enabled, custom predicates).
+  //
+  mutable uint8_t extended_enabled_required_{0};
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
 };
 }  // namespace logs
 OPENTELEMETRY_END_NAMESPACE

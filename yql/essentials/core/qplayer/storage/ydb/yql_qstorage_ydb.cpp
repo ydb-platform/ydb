@@ -215,7 +215,6 @@ private:
         return Settings_.MaxBatchSize.GetOrElse(DefaultMaxBatchSize);
     }
 
-private:
     const TYdbQStorageSettings Settings_;
     const TString FullOperationId_;
     const IQStoragePtr Storage_;
@@ -412,7 +411,6 @@ private:
         return Settings_.MaxRetries.GetOrElse(DefaultRetriesCount);
     }
 
-private:
     const TYdbQStorageSettings Settings_;
 };
 

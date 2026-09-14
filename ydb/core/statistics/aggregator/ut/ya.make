@@ -16,19 +16,21 @@ YQL_LAST_ABI_VERSION()
 PEERDIR(
     library/cpp/testing/unittest
     ydb/library/yql/udfs/statistics_internal
+    ydb/core/kqp/node_service
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/testlib/default
     ydb/core/statistics/ut_common
+    ydb/core/tx/conveyor_composite/usage
+    yql/essentials/core/histogram
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/hyperloglog
 )
 
 SRCS(
-    ut_analyze_datashard.cpp
-    ut_analyze_columnshard.cpp
+    ut_analyze.cpp
+    ut_traverse.cpp
     ut_analyze_op.cpp
-    ut_traverse_datashard.cpp
-    ut_traverse_columnshard.cpp
 )
 
 END()

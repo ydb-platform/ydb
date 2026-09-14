@@ -6,8 +6,8 @@
 import argparse
 import os
 import sys
-from collections.abc import Mapping
-from typing import Callable, Dict, List, Optional, Sequence, TextIO, Union
+from collections.abc import Container, Mapping
+from typing import Callable, Literal, TextIO
 
 from . import io as _io
 from .completers import BaseCompleter, ChoicesCompleter, FilesCompleter, SuppressCompleter
@@ -26,28 +26,42 @@ safe_actions = {
 }
 
 
-def default_validator(completion, prefix):
+def default_validator(completion: str, prefix: str) -> bool:
     return completion.startswith(prefix)
 
 
-class CompletionFinder(object):
+class CompletionFinder:
     """
     Inherit from this class if you wish to override any of the stages below. Otherwise, use
     ``argcomplete.autocomplete()`` directly (it's a convenience instance of this class). It has the same signature as
     :meth:`CompletionFinder.__call__()`.
     """
 
+    _parser: argparse.ArgumentParser | None
+    _formatter: argparse.HelpFormatter | None
+    always_complete_options: bool | Literal["long", "short"]
+    exclude: Container[str] | None
+    validator: Callable[[str, str], bool]
+    print_suppressed: bool
+    completing: bool
+    _display_completions: dict[str, str]
+    default_completer: BaseCompleter
+    append_space: bool
+
+    active_parsers: list[argparse.ArgumentParser]
+    visited_positionals: list[argparse.Action]
+
     def __init__(
         self,
-        argument_parser=None,
-        always_complete_options=True,
-        exclude=None,
-        validator=None,
-        print_suppressed=False,
-        default_completer=FilesCompleter(),
-        append_space=None,
-    ):
-        self._parser = argument_parser
+        argument_parser: argparse.ArgumentParser | None = None,
+        always_complete_options: bool | Literal["long", "short"] = True,
+        exclude: Container[str] | None = None,
+        validator: Callable[[str, str], bool] | None = None,
+        print_suppressed: bool = False,
+        default_completer: BaseCompleter = FilesCompleter(),
+        append_space: bool | None = None,
+    ) -> None:
+        self._parser = argument_parser  # type: ignore[assignment]
         self._formatter = None
         self.always_complete_options = always_complete_options
         self.exclude = exclude
@@ -56,7 +70,7 @@ class CompletionFinder(object):
         self.validator = validator
         self.print_suppressed = print_suppressed
         self.completing = False
-        self._display_completions: Dict[str, str] = {}
+        self._display_completions = {}
         self.default_completer = default_completer
         if append_space is None:
             append_space = os.environ.get("_ARGCOMPLETE_SUPPRESS_SPACE") != "1"
@@ -65,13 +79,13 @@ class CompletionFinder(object):
     def __call__(
         self,
         argument_parser: argparse.ArgumentParser,
-        always_complete_options: Union[bool, str] = True,
+        always_complete_options: bool | str = True,
         exit_method: Callable = os._exit,
-        output_stream: Optional[TextIO] = None,
-        exclude: Optional[Sequence[str]] = None,
-        validator: Optional[Callable] = None,
+        output_stream: TextIO | None = None,
+        exclude: Container[str] | None = None,
+        validator: Callable[[str, str], bool] | None = None,
         print_suppressed: bool = False,
-        append_space: Optional[bool] = None,
+        append_space: bool | None = None,
         default_completer: BaseCompleter = FilesCompleter(),
     ) -> None:
         """
@@ -158,6 +172,7 @@ class CompletionFinder(object):
         start = int(os.environ["_ARGCOMPLETE"]) - 1
         comp_words = comp_words[start:]
 
+        assert self._parser is not None
         if cword_prefix and cword_prefix[0] in self._parser.prefix_chars and "=" in cword_prefix:
             # Special case for when the current word is "--optional=PARTIAL_VALUE". Give the optional to the parser.
             comp_words.append(cword_prefix.split("=", 1)[0])
@@ -211,6 +226,7 @@ class CompletionFinder(object):
         try:
             debug("invoking parser with", comp_words[1:])
             with mute_stderr():
+                assert self._parser is not None
                 a = self._parser.parse_known_args(comp_words[1:], namespace=parsed_args)
             debug("parsed args:", a)
         except BaseException as e:
@@ -233,8 +249,8 @@ class CompletionFinder(object):
         figure out which subparsers need to be activated (then recursively monkey-patch those).
         We save all active ArgumentParsers to extract all their possible option names later.
         """
-        self.active_parsers: List[argparse.ArgumentParser] = []
-        self.visited_positionals: List[argparse.Action] = []
+        self.active_parsers = []
+        self.visited_positionals = []
 
         completer = self
 
@@ -289,12 +305,14 @@ class CompletionFinder(object):
             return ""
         if "%" not in action.help:
             return action.help
-        if self._formatter is None:
-            self._formatter = self._parser.formatter_class(prog=self._parser.prog)
-        return self._formatter._expand_help(action)
+        formatters = self._formatter
+        if formatters is None:
+            assert self._parser is not None
+            self._formatter = formatters = self._parser.formatter_class(prog=self._parser.prog)
+        return formatters._expand_help(action)
 
     def _get_subparser_completions(self, parser, cword_prefix):
-        aliases_by_parser: Dict[argparse.ArgumentParser, List[str]] = {}
+        aliases_by_parser: dict[argparse.ArgumentParser, list[str]] = {}
         for key in parser.choices.keys():
             p = parser.choices[key]
             aliases_by_parser.setdefault(p, []).append(key)
@@ -433,15 +451,15 @@ class CompletionFinder(object):
         return completions
 
     def collect_completions(
-        self, active_parsers: List[argparse.ArgumentParser], parsed_args: argparse.Namespace, cword_prefix: str
-    ) -> List[str]:
+        self, active_parsers: list[argparse.ArgumentParser], parsed_args: argparse.Namespace, cword_prefix: str
+    ) -> list[str]:
         """
         Visits the active parsers and their actions, executes their completers or introspects them to collect their
         option strings. Returns the resulting completions as a list of strings.
 
         This method is exposed for overriding in subclasses; there is no need to use it directly.
         """
-        completions: List[str] = []
+        completions: list[str] = []
 
         debug("all active parsers:", active_parsers)
         active_parser = active_parsers[-1]
@@ -488,7 +506,7 @@ class CompletionFinder(object):
 
         return None
 
-    def filter_completions(self, completions: List[str]) -> List[str]:
+    def filter_completions(self, completions: list[str]) -> list[str]:
         """
         De-duplicates completions and excludes those specified by ``exclude``.
         Returns the filtered completions as a list.
@@ -505,8 +523,8 @@ class CompletionFinder(object):
         return filtered_completions
 
     def quote_completions(
-        self, completions: List[str], cword_prequote: str, last_wordbreak_pos: Optional[int]
-    ) -> List[str]:
+        self, completions: list[str], cword_prequote: str, last_wordbreak_pos: int | None
+    ) -> list[str]:
         """
         If the word under the cursor started with a quote (as indicated by a nonempty ``cword_prequote``), escapes
         occurrences of that quote character in the completions, and adds the quote to the beginning of each completion.
@@ -570,7 +588,7 @@ class CompletionFinder(object):
 
         return escaped_completions
 
-    def rl_complete(self, text, state):
+    def rl_complete(self, text: str, state: int) -> str | None:
         """
         Alternate entry point for using the argcomplete completer in a readline-based REPL. See also
         `rlcompleter <https://docs.python.org/3/library/rlcompleter.html#completer-objects>`_.
@@ -598,7 +616,7 @@ class CompletionFinder(object):
         else:
             return None
 
-    def get_display_completions(self):
+    def get_display_completions(self) -> dict[str, str]:
         """
         This function returns a mapping of completions to their help strings for displaying to the user.
         """

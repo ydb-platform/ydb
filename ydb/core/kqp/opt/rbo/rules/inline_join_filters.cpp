@@ -30,19 +30,44 @@ bool TInlineJoinFiltersRule::QuickMatch(const TIntrusivePtr<IOperator>& input) c
     return input->Kind == EOperator::Join;
 }
 
-// Inline join filters. In case of inner join, replace the join with a filter on top of inner or cross join
-// More complex logic for other types of joins
+// Inline join filters. Temporarily inline join filters only of there are no equi-join conditions in the join
 
 TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    Y_UNUSED(ctx);
-    Y_UNUSED(props);
-
     if (input->Kind != EOperator::Join) {
         return input;
     }
 
     auto join = CastOperator<TOpJoin>(input);
     if (join->JoinFilters.empty()) {
+        return input;
+    }
+
+    // Inner with empty keys - cross.
+    const bool isRealCrossJoin = join->JoinKind == "Cross" || (join->JoinKind == "Inner" && join->JoinKeys.empty());
+    const bool usingBlockJoin = ctx.KqpCtx.Config->GetUseBlockHashJoin();
+    const bool usingBlockCrossJoin = usingBlockJoin && ctx.KqpCtx.Config->GetUseBlockHashJoinForCross();
+
+    // Do not inline filters for cross join.
+    if (isRealCrossJoin && usingBlockCrossJoin) {
+        join->JoinKind = "Cross";
+        return join;
+    }
+
+    // We inline join filters in the following cases:
+    // - There implementation is a lookup join or reverse lookup join
+    // - There are no equi-join conditions in the join
+    // - We're not using BlockJoin, which supports join filters
+
+    // Lookup join is not supported for join filters.
+    const bool isLookupJoin = join->Props.JoinAlgo == EJoinAlgoType::LookupJoin || join->Props.JoinAlgo == EJoinAlgoType::LookupJoinReverse;
+    bool containsEquiJoinConditions = !join->JoinKeys.empty();
+    for (const auto& f : join->JoinFilters) {
+        if (f.MaybeEquiJoinCondition()) {
+            containsEquiJoinConditions = true;
+        }
+    }
+
+    if (!isRealCrossJoin && usingBlockJoin && !isLookupJoin && containsEquiJoinConditions) {
         return input;
     }
 

@@ -323,7 +323,7 @@ void TMapNodeMixin::ListSelf(
 
     if (limit && limit < 0) {
         THROW_ERROR_EXCEPTION("Limit is negative")
-            << TErrorAttribute("limit", limit);
+            .With("limit", limit);
     }
 
     ValidatePermission(EPermissionCheckScope::This, EPermission::Read);
@@ -427,7 +427,7 @@ std::pair<std::string, INodePtr> TMapNodeMixin::PrepareSetChildOrChildValue(
     } catch (const std::exception& ex) {
         if (recursive) {
             THROW_ERROR_EXCEPTION("Failed to set node recursively")
-                << ex;
+                .With(ex);
         } else {
             throw;
         }

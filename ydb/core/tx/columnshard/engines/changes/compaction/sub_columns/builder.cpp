@@ -37,8 +37,9 @@ std::shared_ptr<NArrow::NAccessor::IChunkedArray> TMergedBuilder::MaybeDictionar
     if (!Settings.IsDictionary(filledRecordsCount, enumerateNotNull)) {
         return accessor;
     }
-    const NArrow::NAccessor::TChunkConstructionData cData(
-        accessor->GetRecordsCount(), nullptr, arrow::binary(), NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
+    const NArrow::NAccessor::TChunkConstructionData cData(accessor->GetRecordsCount(), nullptr,
+        NArrow::NAccessor::NSubColumns::GetArrowTypeForValueType(valueType),
+        NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer());
     return NArrow::NAccessor::NDictionary::TConstructor().Construct(accessor, cData).DetachResult();
 }
 
@@ -84,12 +85,10 @@ void TMergedBuilder::Initialize() {
         const auto valueType = ResultColumnStats.GetValueType(i);
         switch (ResultColumnStats.GetAccessorType(i)) {
             case NArrow::NAccessor::IChunkedArray::EType::Array:
-                ColumnBuilders.emplace_back(
-                    TEncodingPlainBuilder(NArrow::NAccessor::NSubColumns::GetCodecForValueType(valueType), 0, 0), valueType);
+                ColumnBuilders.emplace_back(TEncodingPlainBuilder(valueType, 0, 0), valueType);
                 break;
             case NArrow::NAccessor::IChunkedArray::EType::SparsedArray:
-                ColumnBuilders.emplace_back(
-                    TEncodingSparsedBuilder(NArrow::NAccessor::NSubColumns::GetCodecForValueType(valueType), 0, 0), valueType);
+                ColumnBuilders.emplace_back(TEncodingSparsedBuilder(valueType, 0, 0), valueType);
                 break;
             case NArrow::NAccessor::IChunkedArray::EType::Undefined:
             case NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray:

@@ -98,7 +98,7 @@ NYdb::NIssue::TIssues MakeIssues(const TString& error) {
 } // anonymous namespace
 
 bool Prompt(const TString& path, ESchemeEntryType type) {
-    return AskYesOrNo(TStringBuilder() << "Remove " << to_lower(ToString(type)) << " '" << path << "' (y/n)? ");
+    return AskYesOrNo(TStringBuilder() << "Remove " << to_lower(ToString(type)) << " '" << path << "'?");
 }
 
 bool Prompt(ERecursiveRemovePrompt mode, const TString& path, NScheme::ESchemeEntryType type, bool first) {

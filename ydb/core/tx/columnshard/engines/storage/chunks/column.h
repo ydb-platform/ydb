@@ -49,10 +49,12 @@ protected:
 
     virtual void DoAddIntoPortionBeforeBlob(const TBlobRangeLink16& bRange, TPortionAccessorConstructor& portionInfo) const override;
 
-    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(
-        TString&& data, const ui32 rawBytes, const TSimpleColumnInfo& columnInfo) const override {
+    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& data, const ui32 rawBytes,
+        const std::shared_ptr<NArrow::NAccessor::IAdditionalAccessorData>& additionalData, const TSimpleColumnInfo& columnInfo) const override {
         TColumnRecord cRecord = Record;
         cRecord.MutableMeta().SetRawBytes(rawBytes);
+        // The blob is re-serialized here, so its accessor metadata is the new blob's - not the source's.
+        cRecord.MutableMeta().SetAdditionalAccessorData(additionalData);
         cRecord.ResetBlobRange();
         return std::make_shared<TChunkPreparation>(std::move(data), cRecord, columnInfo);
     }

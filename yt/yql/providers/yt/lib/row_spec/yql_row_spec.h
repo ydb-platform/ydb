@@ -64,12 +64,14 @@ struct TYqlRowSpecInfo: public TThrRefBase {
     // Returns true if sortness is changed
     bool CopySortness(TExprContext& ctx, const TYqlRowSpecInfo& from, bool useNativeYtDefaultColumnOrder, ECopySort mode = ECopySort::Pure);
     // Returns true if sortness is changed
-    bool MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInfo& from);
+    bool MakeCommonSortness(TExprContext& ctx, const TYqlRowSpecInfo& from, bool useNativeDescSort = false);
     bool CompareSortness(const TYqlRowSpecInfo& with, bool checkUniqueFlag = true) const;
     // Returns true if sortness is changed
     bool ClearSortness(TExprContext& ctx, size_t fromMember = 0);
     // Returns true if sortness is changed
     bool KeepPureSortOnly(TExprContext& ctx);
+    bool HasNonNativeDescendingSort() const;
+    bool HasNativeDescendingSort() const;
     bool ClearNativeDescendingSort(TExprContext& ctx);
     const TSortedConstraintNode* MakeSortConstraint(TExprContext& ctx) const;
     const TDistinctConstraintNode* MakeDistinctConstraint(TExprContext& ctx) const;

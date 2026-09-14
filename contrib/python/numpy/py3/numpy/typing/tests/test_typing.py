@@ -5,25 +5,10 @@ import os
 import re
 import shutil
 from collections import defaultdict
-from collections.abc import Iterator
 from typing import TYPE_CHECKING
 
 import pytest
 from numpy.typing.mypy_plugin import _EXTENDED_PRECISION_LIST
-
-
-# Only trigger a full `mypy` run if this environment variable is set
-# Note that these tests tend to take over a minute even on a macOS M1 CPU,
-# and more than that in CI.
-RUN_MYPY = "NPY_RUN_MYPY_IN_TESTSUITE" in os.environ
-if RUN_MYPY and RUN_MYPY not in ('0', '', 'false'):
-    RUN_MYPY = True
-
-# Skips all functions in this file
-pytestmark = pytest.mark.skipif(
-    not RUN_MYPY,
-    reason="`NPY_RUN_MYPY_IN_TESTSUITE` not set"
-)
 
 
 # Only trigger a full `mypy` run if this environment variable is set
@@ -48,6 +33,7 @@ else:
     NO_MYPY = False
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     # We need this as annotation, but it's located in a private namespace.
     # As a compromise, do *not* import it during runtime
     from _pytest.mark.structures import ParameterSet
@@ -182,9 +168,9 @@ def test_fail(path: str) -> None:
         target_line = lines[lineno - 1]
         if "# E:" in target_line:
             expression, _, marker = target_line.partition("  # E: ")
-            expected_error = errors[lineno].strip()
-            marker = marker.strip()
-            _test_fail(path, expression, marker, expected_error, lineno)
+            error = errors[lineno].strip()
+            expected_error = marker.strip()
+            _test_fail(path, expression, error, expected_error, lineno)
         else:
             pytest.fail(
                 f"Unexpected mypy output at line {lineno}\n\n{errors[lineno]}"
@@ -214,7 +200,7 @@ def _test_fail(
 ) -> None:
     if expected_error is None:
         raise AssertionError(_FAIL_MSG1.format(lineno, expression, error))
-    elif error not in expected_error:
+    elif expected_error not in error:
         raise AssertionError(_FAIL_MSG2.format(
             lineno, expression, expected_error, error
         ))

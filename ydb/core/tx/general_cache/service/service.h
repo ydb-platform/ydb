@@ -91,3 +91,12 @@ public:
 };
 
 }   // namespace NKikimr::NGeneralCache::NPrivate
+
+namespace NKikimr::NGeneralCache {
+
+template <class TPolicy>
+NActors::IActor* CreateService(const NPublic::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> signals) {
+    return new NPrivate::TDistributor<TPolicy>(config, signals);
+}
+
+}   // namespace NKikimr::NGeneralCache

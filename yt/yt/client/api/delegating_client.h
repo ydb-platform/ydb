@@ -341,6 +341,11 @@ public:
         const TChaosLeaseAttachOptions& options),
         (chaosLeaseId, options));
 
+    DELEGATE_METHOD(TFuture<void>, PingChaosLease, (
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeasePingOptions& options),
+        (chaosLeaseId, options));
+
     DELEGATE_METHOD(TFuture<void>, SetUserBanned, (
         const std::string& user,
         bool isBanned,
@@ -458,6 +463,17 @@ public:
         const std::string& expectedMD5,
         const TPutFileToCacheOptions& options),
         (path, expectedMD5, options))
+
+    DELEGATE_METHOD(TFuture<TFilePartitions>, PartitionFile, (
+        const NYPath::TYPath& path,
+        const std::vector<TFileReadRange>& ranges,
+        const TPartitionFileOptions& options),
+        (path, ranges, options))
+
+    DELEGATE_METHOD(TFuture<IFileReaderPtr>, CreateFilePartitionReader, (
+        const TFilePartitionCookiePtr& cookie,
+        const TReadFilePartitionOptions& options),
+        (cookie, options))
 
     // Security
     DELEGATE_METHOD(TFuture<void>, AddMember, (
@@ -1030,16 +1046,16 @@ public:
     DELEGATE_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
         const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
+        std::optional<std::pair<int, int>> logicalWriterIndexRange,
         const TShuffleReaderOptions& options),
-        (shuffleHandle, partitionIndex, writerIndexRange, options))
+        (shuffleHandle, partitionIndex, logicalWriterIndexRange, options))
 
     DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TSignedShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        std::optional<int> writerIndex,
+        std::optional<int> logicalWriterIndex,
         const TShuffleWriterOptions& options),
-        (shuffleHandle, partitionColumn, writerIndex, options))
+        (shuffleHandle, partitionColumn, logicalWriterIndex, options))
 
     #undef DELEGATE_METHOD
 

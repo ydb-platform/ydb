@@ -230,6 +230,62 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(error, "columns should have a single value");
     }
 
+    Y_UNIT_TEST(ValidateSuperLemmerSettings) {
+        const auto makeSettings = [] {
+            Ydb::Table::FulltextIndexSettings settings;
+            auto* column = settings.add_columns();
+            column->set_column("text");
+            auto* analyzers = column->mutable_analyzers();
+            analyzers->set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+            analyzers->set_use_filter_superlemmer(true);
+            return settings;
+        };
+
+        TString error;
+
+        {
+            auto settings = makeSettings();
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "language required when use_filter_superlemmer is set");
+        }
+
+        {
+            auto settings = makeSettings();
+            settings.mutable_columns()->at(0).mutable_analyzers()->set_language("klingon");
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "language is not supported by superlemmer");
+        }
+
+        {
+            auto settings = makeSettings();
+            auto* analyzers = settings.mutable_columns()->at(0).mutable_analyzers();
+            analyzers->set_language("russian");
+            analyzers->set_use_filter_snowball(true);
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_snowball and use_filter_superlemmer at the same time");
+        }
+
+        for (bool edge : {false, true}) {
+            auto settings = makeSettings();
+            auto* analyzers = settings.mutable_columns()->at(0).mutable_analyzers();
+            analyzers->set_language("russian");
+            if (edge) {
+                analyzers->set_use_filter_edge_ngram(true);
+            } else {
+                analyzers->set_use_filter_ngram(true);
+            }
+            UNIT_ASSERT_C(!ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "cannot set use_filter_superlemmer with use_filter_ngram or use_filter_edge_ngram at the same time");
+        }
+
+        {
+            auto settings = makeSettings();
+            settings.mutable_columns()->at(0).mutable_analyzers()->set_language("russian");
+            UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+            UNIT_ASSERT_VALUES_EQUAL(error, "");
+        }
+    }
+
     Y_UNIT_TEST(FillSetting) {
         TString error;
         Ydb::Table::FulltextIndexSettings settings;
@@ -256,6 +312,36 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_C(FillSetting(settings, "filter_length_max", "5", error), error);
         UNIT_ASSERT_VALUES_EQUAL(error, "");
         UNIT_ASSERT_VALUES_EQUAL(settings.columns().at(0).analyzers().filter_length_max(), 5);
+    }
+
+    Y_UNIT_TEST(FillAnalyzer) {
+        TString error;
+        Ydb::Table::FulltextIndexSettings settings;
+        settings.add_columns()->set_column("text");
+
+        UNIT_ASSERT_C(FillSetting(settings, "analyzer", "standard", error), error);
+        auto* analyzers = settings.mutable_columns(0)->mutable_analyzers();
+        UNIT_ASSERT_EQUAL(analyzers->tokenizer(), Ydb::Table::FulltextIndexSettings::STANDARD);
+        UNIT_ASSERT(analyzers->use_filter_lowercase());
+        UNIT_ASSERT(analyzers->use_filter_stopwords());
+        UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+
+        analyzers->Clear();
+        UNIT_ASSERT_C(FillSetting(settings, "analyzer", "snowball", error), error);
+        UNIT_ASSERT_C(FillSetting(settings, "language", "russian", error), error);
+        UNIT_ASSERT_EQUAL(analyzers->tokenizer(), Ydb::Table::FulltextIndexSettings::STANDARD);
+        UNIT_ASSERT(analyzers->use_filter_lowercase());
+        UNIT_ASSERT(analyzers->use_filter_stopwords());
+        UNIT_ASSERT(analyzers->use_filter_snowball());
+        UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+
+        analyzers->Clear();
+        UNIT_ASSERT_C(FillSetting(settings, "analyzer", "keyword", error), error);
+        UNIT_ASSERT_EQUAL(analyzers->tokenizer(), Ydb::Table::FulltextIndexSettings::KEYWORD);
+        UNIT_ASSERT_C(ValidateSettings(settings, error), error);
+
+        UNIT_ASSERT(!FillSetting(settings, "analyzer", "unknown", error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "Invalid analyzer: unknown");
     }
 
     Y_UNIT_TEST(FillSettingInvalid) {
@@ -324,6 +410,22 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
         analyzers.set_use_filter_lowercase(true);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"привет", "это", "test123", "и", "слово", "ёлка", "ёль"}));
+    }
+
+    Y_UNIT_TEST(AnalyzeFilterStopwords) {
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        analyzers.set_use_filter_lowercase(true);
+        analyzers.set_use_filter_stopwords(true);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            Analyze("The quick brown fox is in the garden", analyzers),
+            (TVector<TString>{"quick", "brown", "fox", "garden"}));
+
+        analyzers.set_language("russian");
+        UNIT_ASSERT_VALUES_EQUAL(
+            Analyze("Это быстрый лис и он в саду", analyzers),
+            (TVector<TString>{"быстрый", "лис", "саду"}));
     }
 
     Y_UNIT_TEST(AnalyzeInvalid) {

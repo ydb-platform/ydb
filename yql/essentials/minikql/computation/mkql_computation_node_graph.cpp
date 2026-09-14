@@ -10,15 +10,16 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <util/system/env.h>
 #include <util/system/mutex.h>
+#include <util/system/type_name.h>
 #include <util/digest/city.h>
+#include <util/generic/adaptor.h>
 #include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
     #include <llvm/Support/raw_ostream.h> // Y_IGNORE
 #endif
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using namespace NDetail;
 
@@ -32,44 +33,44 @@ constexpr ui64 MaxFunctionInstructionsLimit = 50000;
 
 const ui64 IS_NODE_REACHABLE = 1;
 
-const static TStatKey PagePool_PeakAllocated("PagePool_PeakAllocated", false);
-const static TStatKey PagePool_PeakUsed("PagePool_PeakUsed", false);
-const static TStatKey PagePool_AllocCount("PagePool_AllocCount", true);
-const static TStatKey PagePool_PageAllocCount("PagePool_PageAllocCount", true);
-const static TStatKey PagePool_PageHitCount("PagePool_PageHitCount", true);
-const static TStatKey PagePool_PageMissCount("PagePool_PageMissCount", true);
-const static TStatKey PagePool_OffloadedAllocCount("PagePool_OffloadedAllocCount", true);
-const static TStatKey PagePool_OffloadedBytes("PagePool_OffloadedBytes", true);
+const TStatKey PagePool_PeakAllocated("PagePool_PeakAllocated", /*deriv=*/false);
+const TStatKey PagePool_PeakUsed("PagePool_PeakUsed", /*deriv=*/false);
+const TStatKey PagePool_AllocCount("PagePool_AllocCount", /*deriv=*/true);
+const TStatKey PagePool_PageAllocCount("PagePool_PageAllocCount", /*deriv=*/true);
+const TStatKey PagePool_PageHitCount("PagePool_PageHitCount", /*deriv=*/true);
+const TStatKey PagePool_PageMissCount("PagePool_PageMissCount", /*deriv=*/true);
+const TStatKey PagePool_OffloadedAllocCount("PagePool_OffloadedAllocCount", /*deriv=*/true);
+const TStatKey PagePool_OffloadedBytes("PagePool_OffloadedBytes", /*deriv=*/true);
 
-const static TStatKey CodeGen_FullTime("CodeGen_FullTime", true);
-const static TStatKey CodeGen_GenerateTime("CodeGen_GenerateTime", true);
-const static TStatKey CodeGen_CompileTime("CodeGen_CompileTime", true);
-const static TStatKey CodeGen_TotalFunctions("CodeGen_TotalFunctions", true);
-const static TStatKey CodeGen_TotalInstructions("CodeGen_TotalInstructions", true);
-const static TStatKey CodeGen_MaxFunctionInstructions("CodeGen_MaxFunctionInstructions", false);
-const static TStatKey CodeGen_FunctionPassTime("CodeGen_FunctionPassTime", true);
-const static TStatKey CodeGen_ModulePassTime("CodeGen_ModulePassTime", true);
-const static TStatKey CodeGen_FinalizeTime("CodeGen_FinalizeTime", true);
+const TStatKey CodeGen_FullTime("CodeGen_FullTime", /*deriv=*/true);
+const TStatKey CodeGen_GenerateTime("CodeGen_GenerateTime", /*deriv=*/true);
+const TStatKey CodeGen_CompileTime("CodeGen_CompileTime", /*deriv=*/true);
+const TStatKey CodeGen_TotalFunctions("CodeGen_TotalFunctions", /*deriv=*/true);
+const TStatKey CodeGen_TotalInstructions("CodeGen_TotalInstructions", /*deriv=*/true);
+const TStatKey CodeGen_MaxFunctionInstructions("CodeGen_MaxFunctionInstructions", /*deriv=*/false);
+const TStatKey CodeGen_FunctionPassTime("CodeGen_FunctionPassTime", /*deriv=*/true);
+const TStatKey CodeGen_ModulePassTime("CodeGen_ModulePassTime", /*deriv=*/true);
+const TStatKey CodeGen_FinalizeTime("CodeGen_FinalizeTime", /*deriv=*/true);
 
-const static TStatKey Mkql_TotalNodes("Mkql_TotalNodes", true);
-const static TStatKey Mkql_CodegenFunctions("Mkql_CodegenFunctions", true);
+const TStatKey Mkql_TotalNodes("Mkql_TotalNodes", /*deriv=*/true);
+const TStatKey Mkql_CodegenFunctions("Mkql_CodegenFunctions", /*deriv=*/true);
 
 class TDependencyScanVisitor: public TEmptyNodeVisitor {
 public:
     void Walk(TNode* root, std::vector<TNode*>& nodeStack) {
-        Stack = &nodeStack;
-        Stack->clear();
-        Stack->push_back(root);
-        while (!Stack->empty()) {
-            auto top = Stack->back();
-            Stack->pop_back();
+        Stack_ = &nodeStack;
+        Stack_->clear();
+        Stack_->push_back(root);
+        while (!Stack_->empty()) {
+            auto top = Stack_->back();
+            Stack_->pop_back();
             if (top->GetCookie() != IS_NODE_REACHABLE) {
                 top->SetCookie(IS_NODE_REACHABLE);
                 top->Accept(*this);
             }
         }
 
-        Stack = nullptr;
+        Stack_ = nullptr;
     }
 
 private:
@@ -128,52 +129,52 @@ private:
 
     void AddNode(TNode* node) {
         if (node->GetCookie() != IS_NODE_REACHABLE) {
-            Stack->push_back(node);
+            Stack_->push_back(node);
         }
     }
 
-    std::vector<TNode*>* Stack = nullptr;
+    std::vector<TNode*>* Stack_ = nullptr;
 };
 
 class TPatternNodes: public TAtomicRefCount<TPatternNodes> {
 public:
-    typedef TIntrusivePtr<TPatternNodes> TPtr;
+    using TPtr = TIntrusivePtr<TPatternNodes>;
 
-    TPatternNodes(TAllocState& allocState)
-        : AllocState(allocState)
-        , MemInfo(MakeIntrusive<TMemoryUsageInfo>("ComputationPatternNodes"))
+    explicit TPatternNodes(TAllocState& allocState)
+        : AllocState_(allocState)
+        , MemInfo_(MakeIntrusive<TMemoryUsageInfo>("ComputationPatternNodes"))
     {
 #ifndef NDEBUG
-        AllocState.ActiveMemInfo.emplace(MemInfo.Get(), MemInfo);
+        AllocState_.ActiveMemInfo.emplace(MemInfo_.Get(), MemInfo_);
 #else
-        Y_UNUSED(AllocState);
+        Y_UNUSED(AllocState_);
 #endif
     }
 
     ~TPatternNodes()
     {
-        for (auto it = ComputationNodesList.rbegin(); it != ComputationNodesList.rend(); ++it) {
-            *it = nullptr;
+        for (auto& computationNode : Reversed(ComputationNodesList_)) {
+            computationNode = nullptr;
         }
 
-        ComputationNodesList.clear();
+        ComputationNodesList_.clear();
         if (!UncaughtException()) {
 #ifndef NDEBUG
-            AllocState.ActiveMemInfo.erase(MemInfo.Get());
+            AllocState_.ActiveMemInfo.erase(MemInfo_.Get());
 #endif
         }
     }
 
     ITerminator& GetTerminator() {
-        return *ValueBuilder;
+        return *ValueBuilder_;
     }
 
     const TComputationMutables& GetMutables() const {
-        return Mutables;
+        return Mutables_;
     }
 
     const TComputationNodePtrDeque& GetNodes() const {
-        return ComputationNodesList;
+        return ComputationNodesList_;
     }
 
     IComputationNode* GetComputationNode(TNode* node, bool pop = false, bool require = true) {
@@ -194,84 +195,86 @@ public:
     }
 
     IComputationExternalNode* GetEntryPoint(size_t index, bool require) {
-        MKQL_ENSURE(index < Runtime2ComputationEntryPoints.size() && (!require || Runtime2ComputationEntryPoints[index]),
+        MKQL_ENSURE(index < Runtime2ComputationEntryPoints_.size() && (!require || Runtime2ComputationEntryPoints_[index]),
                     "Pattern nodes can not get computation node by index: "
                         << index << ", require: " << require
-                        << ", Runtime2ComputationEntryPoints size: " << Runtime2ComputationEntryPoints.size());
-        return Runtime2ComputationEntryPoints[index];
+                        << ", Runtime2ComputationEntryPoints size: " << Runtime2ComputationEntryPoints_.size());
+        return Runtime2ComputationEntryPoints_[index];
     }
 
     IComputationNode* GetRoot() {
-        return RootNode;
+        return RootNode_;
     }
 
     bool GetSuitableForCache() const {
-        return SuitableForCache;
+        return SuitableForCache_;
     }
 
     size_t GetEntryPointsCount() const {
-        return Runtime2ComputationEntryPoints.size();
+        return Runtime2ComputationEntryPoints_.size();
     }
 
 private:
     friend class TComputationGraphBuildingVisitor;
     friend class TComputationGraph;
 
-    TAllocState& AllocState;
-    TIntrusivePtr<TMemoryUsageInfo> MemInfo;
-    THolder<THolderFactory> HolderFactory;
-    THolder<TDefaultValueBuilder> ValueBuilder;
-    TComputationMutables Mutables;
-    TComputationNodePtrDeque ComputationNodesList;
-    IComputationNode* RootNode = nullptr;
-    TComputationExternalNodePtrVector Runtime2ComputationEntryPoints;
-    TComputationNodeOnNodeMap ElementsCache;
-    bool SuitableForCache = true;
+    TAllocState& AllocState_;
+    TIntrusivePtr<TMemoryUsageInfo> MemInfo_;
+    THolder<THolderFactory> HolderFactory_;
+    THolder<TDefaultValueBuilder> ValueBuilder_;
+    TComputationMutables Mutables_;
+    TComputationNodePtrDeque ComputationNodesList_;
+    IComputationNode* RootNode_ = nullptr;
+    TComputationExternalNodePtrVector Runtime2ComputationEntryPoints_;
+    TComputationNodeOnNodeMap ElementsCache_;
+    bool SuitableForCache_ = true;
 };
 
 class TComputationGraphBuildingVisitor: public INodeVisitor,
                                         private TNonCopyable {
 public:
-    TComputationGraphBuildingVisitor(const TComputationPatternOpts& opts)
-        : Env(opts.Env)
-        , TypeInfoHelper(new TTypeInfoHelper())
-        , CountersProvider(opts.CountersProvider)
-        , SecureParamsProvider(opts.SecureParamsProvider)
-        , LogProvider(opts.LogProvider)
-        , LangVer(opts.LangVer)
-        , Factory(opts.Factory)
-        , FunctionRegistry(*opts.FunctionRegistry)
-        , ValidateMode(opts.ValidateMode)
-        , ValidatePolicy(opts.ValidatePolicy)
-        , GraphPerProcess(opts.GraphPerProcess)
-        , PatternNodes(MakeIntrusive<TPatternNodes>(opts.AllocState))
-        , ExternalAlloc(opts.PatternEnv)
-        , RuntimeSettings(opts.RuntimeSettings)
+    explicit TComputationGraphBuildingVisitor(const TComputationPatternOpts& opts)
+        : Env_(opts.Env)
+        , TypeInfoHelper_(new TTypeInfoHelper())
+        , CountersProvider_(opts.CountersProvider)
+        , SecureParamsProvider_(opts.SecureParamsProvider)
+        , LogProvider_(opts.LogProvider)
+        , LangVer_(opts.LangVer)
+        , Factory_(opts.Factory)
+        , FunctionRegistry_(*opts.FunctionRegistry)
+        , ValidateMode_(opts.ValidateMode)
+        , ValidatePolicy_(opts.ValidatePolicy)
+        , BridgeMode_(opts.BridgeMode)
+        , BridgeBinaryPath_(opts.BridgeBinaryPath)
+        , GraphPerProcess_(opts.GraphPerProcess)
+        , PatternNodes_(MakeIntrusive<TPatternNodes>(opts.AllocState))
+        , ExternalAlloc_(opts.PatternEnv)
+        , RuntimeSettings_(opts.RuntimeSettings)
     {
-        PatternNodes->HolderFactory = MakeHolder<THolderFactory>(opts.AllocState, *PatternNodes->MemInfo, &FunctionRegistry);
-        PatternNodes->ValueBuilder = MakeHolder<TDefaultValueBuilder>(*PatternNodes->HolderFactory, ValidatePolicy);
-        PatternNodes->ValueBuilder->SetSecureParamsProvider(opts.SecureParamsProvider);
-        NodeFactory = MakeHolder<TNodeFactory>(*PatternNodes->MemInfo, PatternNodes->Mutables);
+        PatternNodes_->HolderFactory_ = MakeHolder<THolderFactory>(opts.AllocState, *PatternNodes_->MemInfo_, &FunctionRegistry_);
+        PatternNodes_->ValueBuilder_ = MakeHolder<TDefaultValueBuilder>(*PatternNodes_->HolderFactory_, ValidatePolicy_);
+        PatternNodes_->ValueBuilder_->SetSecureParamsProvider(opts.SecureParamsProvider);
+        NodeFactory_ = MakeHolder<TNodeFactory>(*PatternNodes_->MemInfo_, PatternNodes_->Mutables_);
     }
 
-    ~TComputationGraphBuildingVisitor() {
-        auto g = Env.BindAllocator();
-        NodeFactory.Reset();
-        PatternNodes.Reset();
+    ~TComputationGraphBuildingVisitor() override {
+        auto g = Env_.BindAllocator();
+        NodeFactory_.Reset();
+        PatternNodes_.Reset();
     }
 
     const TTypeEnvironment& GetTypeEnvironment() const {
-        return Env;
+        return Env_;
     }
 
     const IFunctionRegistry& GetFunctionRegistry() const {
-        return FunctionRegistry;
+        return FunctionRegistry_;
     }
 
 private:
     template <typename T>
     void VisitType(T& node) {
-        AddNode(node, NodeFactory->CreateTypeNode(&node));
+        AddNode(node, NodeFactory_->CreateTypeNode(&node));
     }
 
     void Visit(TTypeType& node) override {
@@ -363,19 +366,19 @@ private:
     }
 
     void Visit(TVoid& node) override {
-        AddNode(node, NodeFactory->CreateImmutableNode(NUdf::TUnboxedValue::Void()));
+        AddNode(node, NodeFactory_->CreateImmutableNode(NUdf::TUnboxedValue::Void()));
     }
 
     void Visit(TNull& node) override {
-        AddNode(node, NodeFactory->CreateImmutableNode(NUdf::TUnboxedValue()));
+        AddNode(node, NodeFactory_->CreateImmutableNode(NUdf::TUnboxedValue()));
     }
 
     void Visit(TEmptyList& node) override {
-        AddNode(node, NodeFactory->CreateImmutableNode(PatternNodes->HolderFactory->GetEmptyContainerLazy()));
+        AddNode(node, NodeFactory_->CreateImmutableNode(PatternNodes_->HolderFactory_->GetEmptyContainerLazy()));
     }
 
     void Visit(TEmptyDict& node) override {
-        AddNode(node, NodeFactory->CreateImmutableNode(PatternNodes->HolderFactory->GetEmptyContainerLazy()));
+        AddNode(node, NodeFactory_->CreateImmutableNode(PatternNodes_->HolderFactory_->GetEmptyContainerLazy()));
     }
 
     void Visit(TDataLiteral& node) override {
@@ -388,7 +391,7 @@ private:
         }
 
         NUdf::TUnboxedValue externalValue;
-        if (ExternalAlloc) {
+        if (ExternalAlloc_) {
             if (value.IsString()) {
                 externalValue = MakeString(value.AsStringRef());
             }
@@ -397,7 +400,7 @@ private:
             externalValue = std::move(value);
         }
 
-        AddNode(node, NodeFactory->CreateImmutableNode(std::move(externalValue)));
+        AddNode(node, NodeFactory_->CreateImmutableNode(std::move(externalValue)));
     }
 
     void Visit(TStructLiteral& node) override {
@@ -407,7 +410,7 @@ private:
             values.push_back(GetComputationNode(node.GetValue(i).GetNode()));
         }
 
-        AddNode(node, NodeFactory->CreateArrayNode(std::move(values)));
+        AddNode(node, NodeFactory_->CreateArrayNode(std::move(values)));
     }
 
     void Visit(TListLiteral& node) override {
@@ -417,12 +420,12 @@ private:
             items.push_back(GetComputationNode(node.GetItems()[i].GetNode()));
         }
 
-        AddNode(node, NodeFactory->CreateArrayNode(std::move(items)));
+        AddNode(node, NodeFactory_->CreateArrayNode(std::move(items)));
     }
 
     void Visit(TOptionalLiteral& node) override {
         auto item = node.HasItem() ? GetComputationNode(node.GetItem().GetNode()) : nullptr;
-        AddNode(node, NodeFactory->CreateOptionalNode(item));
+        AddNode(node, NodeFactory_->CreateOptionalNode(item));
     }
 
     void Visit(TDictLiteral& node) override {
@@ -437,22 +440,22 @@ private:
         items.reserve(node.GetItemsCount());
         for (ui32 i = 0, e = node.GetItemsCount(); i < e; ++i) {
             auto item = node.GetItem(i);
-            items.push_back(std::make_pair(
+            items.emplace_back(
                 GetComputationNode(item.first.GetNode()),
-                GetComputationNode(item.second.GetNode())));
+                GetComputationNode(item.second.GetNode()));
         }
 
         bool isSorted = !CanHash(keyType);
-        AddNode(node, NodeFactory->CreateDictNode(std::move(items), types, isTuple, encoded ? keyType : nullptr,
-                                                  useIHash && !isSorted ? MakeHashImpl(keyType) : nullptr,
-                                                  useIHash ? MakeEquateImpl(keyType) : nullptr,
-                                                  useIHash && isSorted ? MakeCompareImpl(keyType) : nullptr, isSorted));
+        AddNode(node, NodeFactory_->CreateDictNode(std::move(items), types, isTuple, encoded ? keyType : nullptr,
+                                                   useIHash && !isSorted ? MakeHashImpl(keyType) : nullptr,
+                                                   useIHash ? MakeEquateImpl(keyType) : nullptr,
+                                                   useIHash && isSorted ? MakeCompareImpl(keyType) : nullptr, isSorted));
     }
 
     void Visit(TCallable& node) override {
         if (node.HasResult()) {
             node.GetResult().GetNode()->Accept(*this);
-            auto computationNode = PatternNodes->ComputationNodesList.back().Get();
+            auto computationNode = PatternNodes_->ComputationNodesList_.back().Get();
             node.SetCookie((ui64)computationNode);
             return;
         }
@@ -466,24 +469,26 @@ private:
         };
         TComputationNodeFactoryContext ctx(
             nodeLocator,
-            FunctionRegistry,
-            Env,
-            TypeInfoHelper,
-            CountersProvider,
-            SecureParamsProvider,
-            LogProvider,
-            LangVer,
-            *NodeFactory,
-            *PatternNodes->HolderFactory,
-            PatternNodes->ValueBuilder.Get(),
-            ValidateMode,
-            ValidatePolicy,
-            GraphPerProcess,
-            PatternNodes->Mutables,
-            PatternNodes->ElementsCache,
+            FunctionRegistry_,
+            Env_,
+            TypeInfoHelper_,
+            CountersProvider_,
+            SecureParamsProvider_,
+            LogProvider_,
+            LangVer_,
+            *NodeFactory_,
+            *PatternNodes_->HolderFactory_,
+            PatternNodes_->ValueBuilder_.Get(),
+            ValidateMode_,
+            ValidatePolicy_,
+            BridgeMode_,
+            BridgeBinaryPath_,
+            GraphPerProcess_,
+            PatternNodes_->Mutables_,
+            PatternNodes_->ElementsCache_,
             std::bind(&TComputationGraphBuildingVisitor::PushBackNode, this, std::placeholders::_1),
-            RuntimeSettings);
-        const auto computationNode = Factory(node, ctx);
+            RuntimeSettings_);
+        const auto computationNode = Factory_(node, ctx);
         const auto& name = node.GetType()->GetName();
         if (name == "KqpWideReadTable" ||
             name == "KqpWideReadTableRanges" ||
@@ -492,12 +497,12 @@ private:
             name == "KqpReadTable" ||
             name == "MultiHoppingCore" ||
             name == "DqWatermarkGenerator") {
-            PatternNodes->SuitableForCache = false;
+            PatternNodes_->SuitableForCache_ = false;
         }
 
         if (!computationNode) {
             THROW yexception()
-                << "Computation graph builder, unsupported function: " << name << " type: " << Factory.target_type().name();
+                << "Computation graph builder, unsupported function: " << name << " type: " << TypeName(Factory_.target_type());
         }
 
         AddNode(node, computationNode);
@@ -505,7 +510,7 @@ private:
 
     void Visit(TAny& node) override {
         if (!node.HasItem()) {
-            AddNode(node, NodeFactory->CreateImmutableNode(NUdf::TUnboxedValue::Void()));
+            AddNode(node, NodeFactory_->CreateImmutableNode(NUdf::TUnboxedValue::Void()));
         } else {
             AddNode(node, GetComputationNode(node.GetItem().GetNode()));
         }
@@ -518,47 +523,47 @@ private:
             values.push_back(GetComputationNode(node.GetValue(i).GetNode()));
         }
 
-        AddNode(node, NodeFactory->CreateArrayNode(std::move(values)));
+        AddNode(node, NodeFactory_->CreateArrayNode(std::move(values)));
     }
 
     void Visit(TVariantLiteral& node) override {
         auto item = GetComputationNode(node.GetItem().GetNode());
-        AddNode(node, NodeFactory->CreateVariantNode(item, node.GetIndex()));
+        AddNode(node, NodeFactory_->CreateVariantNode(item, node.GetIndex()));
     }
 
 public:
     IComputationNode* GetComputationNode(TNode* node, bool pop = false, bool require = true) {
-        return PatternNodes->GetComputationNode(node, pop, require);
+        return PatternNodes_->GetComputationNode(node, pop, require);
     }
 
     TMemoryUsageInfo& GetMemInfo() {
-        return *PatternNodes->MemInfo;
+        return *PatternNodes_->MemInfo_;
     }
 
     const THolderFactory& GetHolderFactory() const {
-        return *PatternNodes->HolderFactory;
+        return *PatternNodes_->HolderFactory_;
     }
 
     TPatternNodes::TPtr GetPatternNodes() {
-        return PatternNodes;
+        return PatternNodes_;
     }
 
     const TComputationNodePtrDeque& GetNodes() const {
-        return PatternNodes->GetNodes();
+        return PatternNodes_->GetNodes();
     }
 
     void PreserveRoot(IComputationNode* rootNode) {
-        PatternNodes->RootNode = rootNode;
+        PatternNodes_->RootNode_ = rootNode;
     }
 
     void PreserveEntryPoints(TComputationExternalNodePtrVector&& runtime2ComputationEntryPoints) {
-        PatternNodes->Runtime2ComputationEntryPoints = std::move(runtime2ComputationEntryPoints);
+        PatternNodes_->Runtime2ComputationEntryPoints_ = std::move(runtime2ComputationEntryPoints);
     }
 
 private:
     void PushBackNode(const IComputationNode::TPtr& computationNode) {
         computationNode->RegisterDependencies();
-        PatternNodes->ComputationNodesList.push_back(computationNode);
+        PatternNodes_->ComputationNodesList_.push_back(computationNode);
     }
 
     void AddNode(TNode& node, const IComputationNode::TPtr& computationNode) {
@@ -566,45 +571,46 @@ private:
         node.SetCookie((ui64)computationNode.Get());
     }
 
-private:
-    const TTypeEnvironment& Env;
-    NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
-    NUdf::ICountersProvider* CountersProvider;
-    const NUdf::ISecureParamsProvider* SecureParamsProvider;
-    const NUdf::ILogProvider* LogProvider;
-    const NYql::TLangVersion LangVer;
-    const TComputationNodeFactory Factory;
-    const IFunctionRegistry& FunctionRegistry;
-    TIntrusivePtr<TMemoryUsageInfo> MemInfo;
-    THolder<TNodeFactory> NodeFactory;
-    NUdf::EValidateMode ValidateMode;
-    NUdf::EValidatePolicy ValidatePolicy;
-    EGraphPerProcess GraphPerProcess;
-    TPatternNodes::TPtr PatternNodes;
-    const bool ExternalAlloc; // obsolete, will be removed after YQL-13977
-    NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
+    const TTypeEnvironment& Env_;
+    NUdf::ITypeInfoHelper::TPtr TypeInfoHelper_;
+    NUdf::ICountersProvider* CountersProvider_;
+    const NUdf::ISecureParamsProvider* SecureParamsProvider_;
+    const NUdf::ILogProvider* LogProvider_;
+    const NYql::TLangVersion LangVer_;
+    const TComputationNodeFactory Factory_;
+    const IFunctionRegistry& FunctionRegistry_;
+    TIntrusivePtr<TMemoryUsageInfo> MemInfo_;
+    THolder<TNodeFactory> NodeFactory_;
+    NUdf::EValidateMode ValidateMode_;
+    NUdf::EValidatePolicy ValidatePolicy_;
+    NUdf::EBridgeMode BridgeMode_;
+    const TString BridgeBinaryPath_;
+    EGraphPerProcess GraphPerProcess_;
+    TPatternNodes::TPtr PatternNodes_;
+    const bool ExternalAlloc_; // obsolete, will be removed after YQL-13977
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
 };
 
 class TComputationGraph final: public IComputationGraph {
 public:
     TComputationGraph(TPatternNodes::TPtr& patternNodes, const TComputationOptsFull& compOpts,
                       NYql::NCodegen::ICodegen::TSharedPtr codegen)
-        : PatternNodes(patternNodes)
-        , MemInfo(MakeIntrusive<TMemoryUsageInfo>("ComputationGraph"))
-        , CompOpts(compOpts)
-        , Codegen(std::move(codegen))
+        : PatternNodes_(patternNodes)
+        , MemInfo_(MakeIntrusive<TMemoryUsageInfo>("ComputationGraph"))
+        , CompOpts_(compOpts)
+        , Codegen_(std::move(codegen))
     {
 #ifndef NDEBUG
-        CompOpts.AllocState.ActiveMemInfo.emplace(MemInfo.Get(), MemInfo);
+        CompOpts_.AllocState.ActiveMemInfo.emplace(MemInfo_.Get(), MemInfo_);
 #endif
-        HolderFactory = MakeHolder<THolderFactory>(CompOpts.AllocState, *MemInfo, patternNodes->HolderFactory->GetFunctionRegistry());
-        ValueBuilder = MakeHolder<TDefaultValueBuilder>(*HolderFactory.Get(), compOpts.ValidatePolicy);
-        ValueBuilder->SetSecureParamsProvider(CompOpts.SecureParamsProvider);
+        HolderFactory_ = MakeHolder<THolderFactory>(CompOpts_.AllocState, *MemInfo_, patternNodes->HolderFactory_->GetFunctionRegistry());
+        ValueBuilder_ = MakeHolder<TDefaultValueBuilder>(*HolderFactory_.Get(), compOpts.ValidatePolicy);
+        ValueBuilder_->SetSecureParamsProvider(CompOpts_.SecureParamsProvider);
     }
 
-    ~TComputationGraph() {
-        auto stats = CompOpts.Stats;
-        auto& pagePool = HolderFactory->GetPagePool();
+    ~TComputationGraph() override {
+        auto stats = CompOpts_.Stats;
+        auto& pagePool = HolderFactory_->GetPagePool();
         MKQL_SET_MAX_STAT(stats, PagePool_PeakAllocated, pagePool.GetPeakAllocated());
         MKQL_SET_MAX_STAT(stats, PagePool_PeakUsed, pagePool.GetPeakUsed());
         MKQL_ADD_STAT(stats, PagePool_AllocCount, pagePool.GetAllocCount());
@@ -616,50 +622,50 @@ public:
     }
 
     void Prepare() override {
-        if (!IsPrepared) {
-            Ctx.Reset(new TComputationContext(*HolderFactory,
-                                              ValueBuilder.Get(),
-                                              CompOpts,
-                                              PatternNodes->GetMutables(),
-                                              *NYql::NUdf::GetYqlMemoryPool(),
-                                              NotConsumedLinear_,
-                                              CompOpts.RuntimeSettings));
-            Ctx->ExecuteLLVM = Codegen.get() != nullptr;
-            ValueBuilder->SetCalleePositionHolder(Ctx->CalleePosition);
-            for (auto& node : PatternNodes->GetNodes()) {
-                node->InitNode(*Ctx);
+        if (!IsPrepared_) {
+            Ctx_.Reset(new TComputationContext(*HolderFactory_,
+                                               ValueBuilder_.Get(),
+                                               CompOpts_,
+                                               PatternNodes_->GetMutables(),
+                                               *NYql::NUdf::GetYqlMemoryPool(),
+                                               NotConsumedLinear_,
+                                               CompOpts_.RuntimeSettings));
+            Ctx_->ExecuteLLVM = Codegen_.get() != nullptr;
+            ValueBuilder_->SetCalleePositionHolder(Ctx_->CalleePosition);
+            for (auto& node : PatternNodes_->GetNodes()) {
+                node->InitNode(*Ctx_);
             }
-            IsPrepared = true;
+            IsPrepared_ = true;
         }
     }
 
     TComputationContext& GetContext() override {
         Prepare();
-        return *Ctx;
+        return *Ctx_;
     }
 
     NUdf::TUnboxedValue GetValue() override {
         Prepare();
-        return PatternNodes->GetRoot()->GetValue(*Ctx);
+        return PatternNodes_->GetRoot()->GetValue(*Ctx_);
     }
 
     IComputationExternalNode* GetEntryPoint(size_t index, bool require) override {
         Prepare();
-        return PatternNodes->GetEntryPoint(index, require);
+        return PatternNodes_->GetEntryPoint(index, require);
     }
 
     const TArrowKernelsTopology* GetKernelsTopology() override {
         Prepare();
-        if (!KernelsTopology.has_value()) {
-            CalculateKernelTopology(*Ctx);
+        if (!KernelsTopology_.has_value()) {
+            CalculateKernelTopology(*Ctx_);
         }
 
-        return &KernelsTopology.value();
+        return &KernelsTopology_.value();
     }
 
     void CalculateKernelTopology(TComputationContext& ctx) {
-        KernelsTopology.emplace();
-        KernelsTopology->InputArgsCount = PatternNodes->GetEntryPointsCount();
+        KernelsTopology_.emplace();
+        KernelsTopology_->InputArgsCount = PatternNodes_->GetEntryPointsCount();
 
         std::stack<const IComputationNode*> stack;
         struct TNodeState {
@@ -668,19 +674,19 @@ public:
         };
 
         std::unordered_map<const IComputationNode*, TNodeState> deps;
-        for (ui32 i = 0; i < KernelsTopology->InputArgsCount; ++i) {
-            auto entryPoint = PatternNodes->GetEntryPoint(i, false);
+        for (ui32 i = 0; i < KernelsTopology_->InputArgsCount; ++i) {
+            auto entryPoint = PatternNodes_->GetEntryPoint(i, /*require=*/false);
             if (!entryPoint) {
                 continue;
             }
 
-            deps.emplace(entryPoint, TNodeState{true, i});
+            deps.emplace(entryPoint, TNodeState{.Visited = true, .Index = i});
         }
 
-        stack.push(PatternNodes->GetRoot());
+        stack.push(PatternNodes_->GetRoot());
         while (!stack.empty()) {
             auto node = stack.top();
-            auto [iter, inserted] = deps.emplace(node, TNodeState{false, 0});
+            auto [iter, inserted] = deps.emplace(node, TNodeState{.Visited = false, .Index = 0});
             auto extNode = dynamic_cast<const IComputationExternalNode*>(node);
             if (extNode) {
                 MKQL_ENSURE(!inserted, "Unexpected external node");
@@ -698,9 +704,9 @@ public:
                 }
                 iter->second.Visited = true;
             } else {
-                iter->second.Index = KernelsTopology->InputArgsCount + KernelsTopology->Items.size();
-                KernelsTopology->Items.emplace_back();
-                auto& i = KernelsTopology->Items.back();
+                iter->second.Index = KernelsTopology_->InputArgsCount + KernelsTopology_->Items.size();
+                KernelsTopology_->Items.emplace_back();
+                auto& i = KernelsTopology_->Items.back();
                 i.Inputs.reserve(argsCount);
                 for (ui32 j = 0; j < argsCount; ++j) {
                     auto it = deps.find(kernelNode->GetArgument(j));
@@ -716,36 +722,36 @@ public:
 
     void Invalidate() override {
         std::fill_n(
-            Ctx->MutableValues.get(),
-            PatternNodes->GetMutables().CurValueIndex,
+            Ctx_->MutableValues.get(),
+            PatternNodes_->GetMutables().CurValueIndex,
             NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
     }
 
     void InvalidateCaches() override {
-        for (const auto cachedIndex : Ctx->Mutables.CachedValues) {
-            Ctx->MutableValues[cachedIndex] = NUdf::TUnboxedValuePod::Invalid();
+        for (const auto cachedIndex : Ctx_->Mutables.CachedValues) {
+            Ctx_->MutableValues[cachedIndex] = NUdf::TUnboxedValuePod::Invalid();
         }
     }
 
     const TComputationNodePtrDeque& GetNodes() const override {
-        return PatternNodes->GetNodes();
+        return PatternNodes_->GetNodes();
     }
 
     TMemoryUsageInfo& GetMemInfo() const override {
-        return *MemInfo;
+        return *MemInfo_;
     }
 
     const THolderFactory& GetHolderFactory() const override {
-        return *HolderFactory;
+        return *HolderFactory_;
     }
 
     ITerminator* GetTerminator() const override {
-        return ValueBuilder.Get();
+        return ValueBuilder_.Get();
     }
 
     bool SetExecuteLLVM(bool value) override {
-        const bool old = Ctx->ExecuteLLVM;
-        Ctx->ExecuteLLVM = value;
+        const bool old = Ctx_->ExecuteLLVM;
+        Ctx_->ExecuteLLVM = value;
         return old;
     }
 
@@ -753,8 +759,8 @@ public:
         Prepare();
 
         TString result;
-        for (ui32 i : PatternNodes->GetMutables().SerializableValues) {
-            const NUdf::TUnboxedValuePod& mutableValue = Ctx->MutableValues[i];
+        for (ui32 i : PatternNodes_->GetMutables().SerializableValues) {
+            const NUdf::TUnboxedValuePod& mutableValue = Ctx_->MutableValues[i];
             if (mutableValue.IsInvalid()) {
                 WriteUi64(result, std::numeric_limits<ui64>::max()); // -1.
             } else if (mutableValue.IsBoxed()) {
@@ -805,13 +811,13 @@ public:
     void LoadGraphState(TStringBuf state) override {
         Prepare();
 
-        for (ui32 i : PatternNodes->GetMutables().SerializableValues) {
+        for (ui32 i : PatternNodes_->GetMutables().SerializableValues) {
             if (const ui64 size = ReadUi64(state); size != std::numeric_limits<ui64>::max()) {
                 MKQL_ENSURE(state.Size() >= size,
                             "Serialized state is corrupted - buffer is too short ("
                                 << state.Size() << ") for specified size: " << size);
                 TStringBuf savedRef(state.Data(), size);
-                Ctx->MutableValues[i] = NKikimr::NMiniKQL::TOutputSerializer::MakeArray(*Ctx, savedRef);
+                Ctx_->MutableValues[i] = NKikimr::NMiniKQL::TOutputSerializer::MakeArray(*Ctx_, savedRef);
                 state.Skip(size);
             } // else leave it Invalid()
         }
@@ -824,23 +830,23 @@ public:
     }
 
     bool GetFlushingMode() const override {
-        return Ctx->FlushingMode;
+        return Ctx_->FlushingMode;
     }
 
     void SetFlushingMode(bool value) override {
-        Ctx->FlushingMode = value;
+        Ctx_->FlushingMode = value;
     }
 
 private:
-    const TPatternNodes::TPtr PatternNodes;
-    const TIntrusivePtr<TMemoryUsageInfo> MemInfo;
-    THolder<THolderFactory> HolderFactory;
-    THolder<TDefaultValueBuilder> ValueBuilder;
-    THolder<TComputationContext> Ctx;
-    TComputationOptsFull CompOpts;
-    NYql::NCodegen::ICodegen::TSharedPtr Codegen;
-    bool IsPrepared = false;
-    std::optional<TArrowKernelsTopology> KernelsTopology;
+    const TPatternNodes::TPtr PatternNodes_;
+    const TIntrusivePtr<TMemoryUsageInfo> MemInfo_;
+    THolder<THolderFactory> HolderFactory_;
+    THolder<TDefaultValueBuilder> ValueBuilder_;
+    THolder<TComputationContext> Ctx_;
+    TComputationOptsFull CompOpts_;
+    NYql::NCodegen::ICodegen::TSharedPtr Codegen_;
+    bool IsPrepared_ = false;
+    std::optional<TArrowKernelsTopology> KernelsTopology_;
     TMaybe<NUdf::TSourcePosition> NotConsumedLinear_;
 };
 
@@ -848,19 +854,19 @@ class TComputationPatternImpl final: public IComputationPattern {
 public:
     TComputationPatternImpl(THolder<TComputationGraphBuildingVisitor>&& builder, const TComputationPatternOpts& opts)
 #if defined(MKQL_DISABLE_CODEGEN)
-        : Codegen()
+        : Codegen_()
 #elif defined(MKQL_FORCE_USE_CODEGEN)
-        : Codegen(NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native))
+        : Codegen_(NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native))
 #else
-        : Codegen((NYql::NCodegen::ICodegen::IsCodegenAvailable() && opts.OptLLVM != "OFF") ||
-                          GetEnv(TString("MKQL_FORCE_USE_LLVM"))
-                      ? NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native)
-                      : NYql::NCodegen::ICodegen::TPtr())
+        : Codegen_((NYql::NCodegen::ICodegen::IsCodegenAvailable() && opts.OptLLVM != "OFF") ||
+                           GetEnv(TString("MKQL_FORCE_USE_LLVM"))
+                       ? NYql::NCodegen::ICodegen::MakeShared(NYql::NCodegen::ETarget::Native)
+                       : NYql::NCodegen::ICodegen::TPtr())
 #endif
     {
-        /// TODO: Enable JIT for AARCH64/Win
-#if defined(__aarch64__) || defined(_win_)
-        Codegen = {};
+        /// TODO: Enable JIT for AARCH64/Win/Darwin (YDBREQUESTS-7823)
+#if defined(__aarch64__) || defined(_win_) || defined(_darwin_)
+        Codegen_ = {};
 #endif
 
         const auto& nodes = builder->GetNodes();
@@ -872,42 +878,42 @@ public:
         }
 
         MKQL_ADD_STAT(opts.Stats, Mkql_TotalNodes, nodes.size());
-        PatternNodes = builder->GetPatternNodes();
+        PatternNodes_ = builder->GetPatternNodes();
 
-        if (Codegen) {
+        if (Codegen_) {
             Compile(opts.OptLLVM, opts.Stats);
         }
     }
 
-    ~TComputationPatternImpl() {
-        if (TypeEnv) {
-            auto guard = TypeEnv->BindAllocator();
-            PatternNodes.Reset();
+    ~TComputationPatternImpl() override {
+        if (TypeEnv_) {
+            auto guard = TypeEnv_->BindAllocator();
+            PatternNodes_.Reset();
         }
     }
 
-    void Compile(TString optLLVM, IStatsRegistry* stats) {
-        TGuard<TMutex> lock(CompileMutex);
+    void Compile(TString optLLVM, IStatsRegistry* stats) override {
+        TGuard<TMutex> lock(CompileMutex_);
 
-        if (IsPatternCompiled) {
+        if (IsPatternCompiled_) {
             return;
         }
 
 #ifndef MKQL_DISABLE_CODEGEN
-        if (!Codegen) {
-            Codegen = NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native);
+        if (!Codegen_) {
+            Codegen_ = NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native);
         }
 
-        const auto& nodes = PatternNodes->GetNodes();
+        const auto& nodes = PatternNodes_->GetNodes();
 
         TStatTimer timerFull(CodeGen_FullTime);
         timerFull.Acquire();
         {
             TStatTimer timerGen(CodeGen_GenerateTime);
             timerGen.Acquire();
-            for (auto it = nodes.crbegin(); nodes.crend() != it; ++it) {
-                if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(it->Get())) {
-                    codegen->GenerateFunctions(*Codegen);
+            for (const auto& node : Reversed(nodes)) {
+                if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
+                    codegen->GenerateFunctions(*Codegen_);
                 }
             }
             timerGen.Release();
@@ -916,7 +922,7 @@ public:
 
         if (optLLVM.Contains("--dump-generated")) {
             Cerr << "############### Begin generated module ###############" << Endl;
-            Codegen->GetModule().print(llvm::errs(), nullptr);
+            Codegen_->GetModule().print(llvm::errs(), /*AAW=*/nullptr);
             Cerr << "################ End generated module ################" << Endl;
         }
 
@@ -924,7 +930,7 @@ public:
         timerComp.Acquire();
 
         NYql::NCodegen::TCodegenStats codegenStats;
-        Codegen->GetStats(codegenStats);
+        Codegen_->GetStats(codegenStats);
         MKQL_ADD_STAT(stats, CodeGen_TotalFunctions, codegenStats.TotalFunctions);
         MKQL_ADD_STAT(stats, CodeGen_TotalInstructions, codegenStats.TotalInstructions);
         MKQL_SET_MAX_STAT(stats, CodeGen_MaxFunctionInstructions, codegenStats.MaxFunctionInstructions);
@@ -935,42 +941,42 @@ public:
         }
 
         if (optLLVM.Contains("--dump-perf-map")) {
-            Codegen->TogglePerfJITEventListener();
+            Codegen_->TogglePerfJITEventListener();
         }
 
         if (codegenStats.TotalFunctions >= TotalFunctionsLimit ||
             codegenStats.TotalInstructions >= TotalInstructionsLimit ||
             codegenStats.MaxFunctionInstructions >= MaxFunctionInstructionsLimit) {
-            Codegen.reset();
+            Codegen_.reset();
         } else {
-            Codegen->Verify();
-            Codegen->Compile(GetCompileOptions(optLLVM), &CompileStats);
+            Codegen_->Verify();
+            Codegen_->Compile(GetCompileOptions(optLLVM), &CompileStats_);
 
-            MKQL_ADD_STAT(stats, CodeGen_FunctionPassTime, CompileStats.FunctionPassTime);
-            MKQL_ADD_STAT(stats, CodeGen_ModulePassTime, CompileStats.ModulePassTime);
-            MKQL_ADD_STAT(stats, CodeGen_FinalizeTime, CompileStats.FinalizeTime);
+            MKQL_ADD_STAT(stats, CodeGen_FunctionPassTime, CompileStats_.FunctionPassTime);
+            MKQL_ADD_STAT(stats, CodeGen_ModulePassTime, CompileStats_.ModulePassTime);
+            MKQL_ADD_STAT(stats, CodeGen_FinalizeTime, CompileStats_.FinalizeTime);
         }
 
         timerComp.Release();
         timerComp.Report(stats);
 
-        if (Codegen) {
+        if (Codegen_) {
             if (optLLVM.Contains("--dump-compiled")) {
                 Cerr << "############### Begin compiled module ###############" << Endl;
-                Codegen->GetModule().print(llvm::errs(), nullptr);
+                Codegen_->GetModule().print(llvm::errs(), /*AAW=*/nullptr);
                 Cerr << "################ End compiled module ################" << Endl;
             }
 
             if (optLLVM.Contains("--asm-compiled")) {
                 Cerr << "############### Begin compiled asm ###############" << Endl;
-                Codegen->ShowGeneratedFunctions(&Cerr);
+                Codegen_->ShowGeneratedFunctions(&Cerr);
                 Cerr << "################ End compiled asm ################" << Endl;
             }
 
             ui64 count = 0U;
             for (const auto& node : nodes) {
                 if (const auto codegen = dynamic_cast<ICodegeneratorRootNode*>(node.Get())) {
-                    codegen->FinalizeFunctions(*Codegen);
+                    codegen->FinalizeFunctions(*Codegen_);
                     ++count;
                 }
             }
@@ -987,34 +993,34 @@ public:
         Y_UNUSED(stats);
 #endif
 
-        IsPatternCompiled = true;
+        IsPatternCompiled_ = true;
     }
 
-    bool IsCompiled() const {
-        TGuard<TMutex> lock(CompileMutex);
-        return IsPatternCompiled;
+    bool IsCompiled() const override {
+        TGuard<TMutex> lock(CompileMutex_);
+        return IsPatternCompiled_;
     }
 
-    size_t CompiledCodeSize() const {
-        TGuard<TMutex> lock(CompileMutex);
-        return CompileStats.TotalObjectSize;
+    size_t CompiledCodeSize() const override {
+        TGuard<TMutex> lock(CompileMutex_);
+        return CompileStats_.TotalObjectSize;
     }
 
-    void RemoveCompiledCode() {
-        TGuard<TMutex> lock(CompileMutex);
+    void RemoveCompiledCode() override {
+        TGuard<TMutex> lock(CompileMutex_);
 
-        IsPatternCompiled = false;
-        CompileStats = {};
-        Codegen.reset();
+        IsPatternCompiled_ = false;
+        CompileStats_ = {};
+        Codegen_.reset();
     }
 
-    THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) {
-        TGuard<TMutex> lock(CompileMutex);
-        return MakeHolder<TComputationGraph>(PatternNodes, compOpts, IsPatternCompiled ? Codegen : nullptr);
+    THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) override {
+        TGuard<TMutex> lock(CompileMutex_);
+        return MakeHolder<TComputationGraph>(PatternNodes_, compOpts, IsPatternCompiled_ ? Codegen_ : nullptr);
     }
 
-    bool GetSuitableForCache() const {
-        return PatternNodes->GetSuitableForCache();
+    bool GetSuitableForCache() const override {
+        return PatternNodes_->GetSuitableForCache();
     }
 
 private:
@@ -1033,14 +1039,14 @@ private:
         }
     };
 
-    TTypeEnvironment* TypeEnv = nullptr;
-    TPatternNodes::TPtr PatternNodes;
+    TTypeEnvironment* TypeEnv_ = nullptr;
+    TPatternNodes::TPtr PatternNodes_;
 
-    TMutex CompileMutex;
-    NYql::NCodegen::ICodegen::TSharedPtr Codegen; // protected by CompileMutex
-    bool IsPatternCompiled = false;               // protected by CompileMutex
-    NYql::NCodegen::TCompileStats CompileStats;   // protected by CompileMutex
-    NYql::TRuntimeSettings::TConstPtr RuntimeSettings;
+    TMutex CompileMutex_;
+    NYql::NCodegen::ICodegen::TSharedPtr Codegen_; // protected by CompileMutex_
+    bool IsPatternCompiled_ = false;               // protected by CompileMutex_
+    NYql::NCodegen::TCompileStats CompileStats_;   // protected by CompileMutex_
+    NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
 };
 
 TIntrusivePtr<TComputationPatternImpl> MakeComputationPatternImpl(
@@ -1098,5 +1104,4 @@ IComputationPattern::TPtr MakeComputationPattern(TExploringNodeVisitor& explorer
     return MakeComputationPatternImpl(explorer, root, entryPoints, opts);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -401,7 +401,8 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
 
     if (!TAllocState::IsDefaultArrowAllocatorUsed()) {
         if (size <= ArrowSizeForArena) {
-            return MKQLArrowFreeOnArena(mem);
+            MKQLArrowFreeOnArena(mem);
+            return;
         }
     }
 
@@ -448,7 +449,7 @@ void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size) {
 void MKQLArrowFree(const void* mem, ui64 size) {
     mem = NYql::NUdf::UnwrapPointerWithRedZones(mem, size);
     auto sizeWithRedzones = NYql::NUdf::GetSizeToAlloc(size);
-    return MKQLArrowFreeImpl(mem, sizeWithRedzones);
+    MKQLArrowFreeImpl(mem, sizeWithRedzones);
 }
 
 void MKQLArrowUntrack(const void* mem) {

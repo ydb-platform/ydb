@@ -25,52 +25,52 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const TVector<TStreamScript>& script)
             : TBase(memInfo)
-            , CompCtx(compCtx)
-            , Script(script)
+            , CompCtx_(compCtx)
+            , Script_(script)
         {
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (Index == Script.size()) {
+            if (Index_ == Script_.size()) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            const auto& item = Script[Index++];
+            const auto& item = Script_[Index_++];
             if (std::holds_alternative<TYieldMark>(item)) {
                 return NUdf::EFetchStatus::Yield;
             }
 
             const auto& data = std::get<TVarValue>(item);
             if (std::holds_alternative<ui32>(data)) {
-                result = CompCtx.HolderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(std::get<ui32>(data)), 0);
+                result = CompCtx_.HolderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(std::get<ui32>(data)), 0);
             } else {
-                result = CompCtx.HolderFactory.CreateVariantHolder(MakeString(std::get<TString>(data)), 1);
+                result = CompCtx_.HolderFactory.CreateVariantHolder(MakeString(std::get<TString>(data)), 1);
             }
 
             return NUdf::EFetchStatus::Ok;
         }
 
-        TComputationContext& CompCtx;
-        const TVector<TStreamScript>& Script;
-        ui64 Index = 0;
+        TComputationContext& CompCtx_;
+        const TVector<TStreamScript>& Script_;
+        ui64 Index_ = 0;
     };
 
     TScriptedStreamWrapper(TComputationMutables& mutables, const TVector<TStreamScript>& script)
         : TBaseComputation(mutables)
-        , Script(script)
+        , Script_(script)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, Script);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Script_);
     }
 
 private:
     void RegisterDependencies() const final {
     }
 
-    const TVector<TStreamScript>& Script;
+    const TVector<TStreamScript>& Script_;
 };
 
 class TYieldMidBufferHandlerWrapper: public TMutableComputationNode<TYieldMidBufferHandlerWrapper> {
@@ -83,50 +83,50 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, ui32 yieldAfter)
             : TBase(memInfo)
-            , Input(std::move(input))
-            , YieldAfter(yieldAfter)
+            , Input_(std::move(input))
+            , YieldAfter_(yieldAfter)
         {
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (!Yielded && Forwarded == YieldAfter) {
-                Yielded = true;
+            if (!Yielded_ && Forwarded_ == YieldAfter_) {
+                Yielded_ = true;
                 return NUdf::EFetchStatus::Yield;
             }
 
-            const auto status = Input.Fetch(result);
+            const auto status = Input_.Fetch(result);
             if (status == NUdf::EFetchStatus::Ok) {
-                ++Forwarded;
+                ++Forwarded_;
             }
 
             return status;
         }
 
-        const NUdf::TUnboxedValue Input;
-        const ui32 YieldAfter;
-        ui32 Forwarded = 0;
-        bool Yielded = false;
+        const NUdf::TUnboxedValue Input_;
+        const ui32 YieldAfter_;
+        ui32 Forwarded_ = 0;
+        bool Yielded_ = false;
     };
 
     TYieldMidBufferHandlerWrapper(TComputationMutables& mutables, IComputationNode* input, ui32 yieldAfter)
         : TBaseComputation(mutables)
-        , Input(input)
-        , YieldAfter(yieldAfter)
+        , Input_(input)
+        , YieldAfter_(yieldAfter)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(Input->GetValue(ctx), YieldAfter);
+        return ctx.HolderFactory.Create<TStreamValue>(Input_->GetValue(ctx), YieldAfter_);
     }
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Input);
+        this->DependsOn(Input_);
     }
 
-    IComputationNode* const Input;
-    const ui32 YieldAfter;
+    IComputationNode* const Input_;
+    const ui32 YieldAfter_;
 };
 
 class TYieldOnFinishHandlerWrapper: public TMutableComputationNode<TYieldOnFinishHandlerWrapper> {
@@ -139,20 +139,20 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input)
             : TBase(memInfo)
-            , Input(std::move(input))
+            , Input_(std::move(input))
         {
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (Done) {
+            if (Done_) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            if (!Collected) {
+            if (!Collected_) {
                 for (;;) {
                     NUdf::TUnboxedValue item;
-                    const auto status = Input.Fetch(item);
+                    const auto status = Input_.Fetch(item);
                     if (status == NUdf::EFetchStatus::Yield) {
                         return NUdf::EFetchStatus::Yield;
                     }
@@ -160,45 +160,45 @@ public:
                         break;
                     }
 
-                    Buffer.push_back(std::move(item));
+                    Buffer_.push_back(std::move(item));
                 }
 
-                Collected = true;
+                Collected_ = true;
                 return NUdf::EFetchStatus::Yield;
             }
 
-            if (ReplayIndex < Buffer.size()) {
-                result = Buffer[ReplayIndex++];
+            if (ReplayIndex_ < Buffer_.size()) {
+                result = Buffer_[ReplayIndex_++];
                 return NUdf::EFetchStatus::Ok;
             }
 
-            Done = true;
+            Done_ = true;
             return NUdf::EFetchStatus::Finish;
         }
 
-        const NUdf::TUnboxedValue Input;
-        TUnboxedValueVector Buffer;
-        ui64 ReplayIndex = 0;
-        bool Collected = false;
-        bool Done = false;
+        const NUdf::TUnboxedValue Input_;
+        TUnboxedValueVector Buffer_;
+        ui64 ReplayIndex_ = 0;
+        bool Collected_ = false;
+        bool Done_ = false;
     };
 
     TYieldOnFinishHandlerWrapper(TComputationMutables& mutables, IComputationNode* input)
         : TBaseComputation(mutables)
-        , Input(input)
+        , Input_(input)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(Input->GetValue(ctx));
+        return ctx.HolderFactory.Create<TStreamValue>(Input_->GetValue(ctx));
     }
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Input);
+        this->DependsOn(Input_);
     }
 
-    IComputationNode* const Input;
+    IComputationNode* const Input_;
 };
 
 class TYieldSkipHandlerWrapper: public TMutableComputationNode<TYieldSkipHandlerWrapper> {
@@ -211,44 +211,44 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input)
             : TBase(memInfo)
-            , Input(std::move(input))
+            , Input_(std::move(input))
         {
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (const auto status = Input.Fetch(result); status != NUdf::EFetchStatus::Yield) {
+            if (const auto status = Input_.Fetch(result); status != NUdf::EFetchStatus::Yield) {
                 return status;
             }
 
-            if (!SkippedYield) {
-                SkippedYield = true;
-                return Input.Fetch(result);
+            if (!SkippedYield_) {
+                SkippedYield_ = true;
+                return Input_.Fetch(result);
             }
 
             return NUdf::EFetchStatus::Yield;
         }
 
-        const NUdf::TUnboxedValue Input;
-        bool SkippedYield = false;
+        const NUdf::TUnboxedValue Input_;
+        bool SkippedYield_ = false;
     };
 
     TYieldSkipHandlerWrapper(TComputationMutables& mutables, IComputationNode* input)
         : TBaseComputation(mutables)
-        , Input(input)
+        , Input_(input)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(Input->GetValue(ctx));
+        return ctx.HolderFactory.Create<TStreamValue>(Input_->GetValue(ctx));
     }
 
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Input);
+        this->DependsOn(Input_);
     }
 
-    IComputationNode* const Input;
+    IComputationNode* const Input_;
 };
 
 class TCountingStreamWrapper: public TMutableComputationNode<TCountingStreamWrapper> {
@@ -261,41 +261,41 @@ public:
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, ui64 count)
             : TBase(memInfo)
-            , CompCtx(compCtx)
-            , Count(count)
+            , CompCtx_(compCtx)
+            , Count_(count)
         {
         }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (Index >= Count) {
+            if (Index_ >= Count_) {
                 return NUdf::EFetchStatus::Finish;
             }
 
-            result = CompCtx.HolderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(static_cast<ui32>(Index++)), 0);
+            result = CompCtx_.HolderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(static_cast<ui32>(Index_++)), 0);
             return NUdf::EFetchStatus::Ok;
         }
 
-        TComputationContext& CompCtx;
-        const ui64 Count;
-        ui64 Index = 0;
+        TComputationContext& CompCtx_;
+        const ui64 Count_;
+        ui64 Index_ = 0;
     };
 
     TCountingStreamWrapper(TComputationMutables& mutables, ui64 count)
         : TBaseComputation(mutables)
-        , Count(count)
+        , Count_(count)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return ctx.HolderFactory.Create<TStreamValue>(ctx, Count);
+        return ctx.HolderFactory.Create<TStreamValue>(ctx, Count_);
     }
 
 private:
     void RegisterDependencies() const final {
     }
 
-    const ui64 Count;
+    const ui64 Count_;
 };
 
 TComputationNodeFactory GetCountingStreamFactory(ui64 count) {
@@ -357,8 +357,9 @@ Y_UNIT_TEST_LLVM(TestStreamOfVariantsSwap) {
                                                  return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.ToString(item), 0U, varOutType); });
                                              case 1U:
                                                  return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
+                                             default:
+                                                 MKQL_ENSURE(false, "Unexpected handler index: " << index);
                                          }
-                                         Y_ABORT("Wrong case!");
                                      },
                                      0ULL,
                                      pb.NewStreamType(varOutType));
@@ -401,8 +402,9 @@ Y_UNIT_TEST_LLVM(TestStreamOfVariantsTwoInOne) {
                                                  return pb.Map(stream, [&](TRuntimeNode item) { return item; });
                                              case 1U:
                                                  return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
+                                             default:
+                                                 MKQL_ENSURE(false, "Unexpected handler index: " << index);
                                          }
-                                         Y_ABORT("Wrong case!");
                                      },
                                      0ULL,
                                      pb.NewStreamType(varOutType));
@@ -445,8 +447,9 @@ Y_UNIT_TEST_LLVM(TestFlowOfVariantsSwap) {
                                                              return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.ToString(item), 0U, varOutType); });
                                                          case 1U:
                                                              return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
+                                                         default:
+                                                             MKQL_ENSURE(false, "Unexpected handler index: " << index);
                                                      }
-                                                     Y_ABORT("Wrong case!");
                                                  },
                                                  0ULL,
                                                  pb.NewFlowType(varOutType)));
@@ -489,8 +492,9 @@ Y_UNIT_TEST_LLVM(TestFlowOfVariantsTwoInOne) {
                                                              return pb.Map(stream, [&](TRuntimeNode item) { return item; });
                                                          case 1U:
                                                              return pb.Map(stream, [&](TRuntimeNode item) { return pb.NewVariant(pb.StrictFromString(item, intType), 1U, varOutType); });
+                                                         default:
+                                                             MKQL_ENSURE(false, "Unexpected handler index: " << index);
                                                      }
-                                                     Y_ABORT("Wrong case!");
                                                  },
                                                  0ULL,
                                                  pb.NewFlowType(varOutType)));
@@ -527,7 +531,7 @@ Y_UNIT_TEST_QUAD(TestSwitchDoesNotPropagateStaleYield, LLVM, StreamInput) {
     const auto streamType = pb.NewStreamType(varInType);
 
     TCallableBuilder callableBuilder(*setup.Env, "TestScriptedStream", streamType);
-    auto stream = TRuntimeNode(callableBuilder.Build(), false);
+    auto stream = TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 
     const auto varOutType = NTest::ConvertToMinikqlType<std::variant<ui32, TStringBuf>>(pb);
     const auto handler = [&](ui32 index, TRuntimeNode handlerStream) {
@@ -536,8 +540,9 @@ Y_UNIT_TEST_QUAD(TestSwitchDoesNotPropagateStaleYield, LLVM, StreamInput) {
                 return pb.Map(handlerStream, [&](TRuntimeNode item) { return item; });
             case 1U:
                 return pb.Map(handlerStream, [&](TRuntimeNode item) { return item; });
+            default:
+                MKQL_ENSURE(false, "Unexpected handler index: " << index);
         }
-        Y_ABORT("Wrong case!");
     };
 
     TRuntimeNode pgmReturn;
@@ -592,7 +597,7 @@ Y_UNIT_TEST_QUAD(TestSwitchFinishesWhenHandlerStops, LLVM, StreamInput) {
     const auto streamType = pb.NewStreamType(varInType);
 
     TCallableBuilder inputBuilder(*setup.Env, "TestScriptedStream", streamType);
-    const auto input = TRuntimeNode(inputBuilder.Build(), false);
+    const auto input = TRuntimeNode(inputBuilder.Build(), /*isImmediate=*/false);
 
     const auto handler = [&](ui32, TRuntimeNode handlerStream) {
         return pb.Take(handlerStream, pb.NewDataLiteral<ui64>(2ULL));
@@ -645,12 +650,12 @@ Y_UNIT_TEST_QUAD(TestSwitchWaitsForHandlerDataAfterInputFinish, LLVM, StreamInpu
     const auto streamType = pb.NewStreamType(varInType);
 
     TCallableBuilder inputBuilder(*setup.Env, "TestScriptedStream", streamType);
-    const auto input = TRuntimeNode(inputBuilder.Build(), false);
+    const auto input = TRuntimeNode(inputBuilder.Build(), /*isImmediate=*/false);
 
     const auto buildHandler = [&](TRuntimeNode handlerStream) {
         TCallableBuilder cb(*setup.Env, "TestYieldOnFinishHandler", pb.NewStreamType(intType));
         cb.Add(handlerStream);
-        return TRuntimeNode(cb.Build(), false);
+        return TRuntimeNode(cb.Build(), /*isImmediate=*/false);
     };
     const auto handler = [&](ui32, TRuntimeNode handlerStream) -> TRuntimeNode {
         if constexpr (StreamInput) {
@@ -689,12 +694,12 @@ Y_UNIT_TEST_QUAD(TestSwitchKeepsBufferOnHandlerYield, LLVM, StreamInput) {
     const auto streamType = pb.NewStreamType(varInType);
 
     TCallableBuilder inputBuilder(*setup.Env, "TestScriptedStream", streamType);
-    const auto input = TRuntimeNode(inputBuilder.Build(), false);
+    const auto input = TRuntimeNode(inputBuilder.Build(), /*isImmediate=*/false);
 
     const auto buildHandler = [&](TRuntimeNode handlerStream) {
         TCallableBuilder cb(*setup.Env, "TestYieldMidBufferHandler", pb.NewStreamType(intType));
         cb.Add(handlerStream);
-        return TRuntimeNode(cb.Build(), false);
+        return TRuntimeNode(cb.Build(), /*isImmediate=*/false);
     };
     const auto handler = [&](ui32, TRuntimeNode handlerStream) -> TRuntimeNode {
         if constexpr (StreamInput) {
@@ -736,7 +741,7 @@ Y_UNIT_TEST_QUAD(TestSwitchDoesNotRereadBufferOnYield, LLVM, StreamInput) {
     const auto streamType = pb.NewStreamType(varType);
 
     TCallableBuilder inputBuilder(*setup.Env, "TestScriptedStream", streamType);
-    const auto input = TRuntimeNode(inputBuilder.Build(), false);
+    const auto input = TRuntimeNode(inputBuilder.Build(), /*isImmediate=*/false);
 
     const auto buildHandler = [&](ui32 index, TRuntimeNode handlerStream) {
         TType* type = nullptr;
@@ -747,11 +752,13 @@ Y_UNIT_TEST_QUAD(TestSwitchDoesNotRereadBufferOnYield, LLVM, StreamInput) {
             case 1U:
                 type = strType;
                 break;
+            default:
+                MKQL_ENSURE(false, "Unexpected handler index: " << index);
         }
 
         TCallableBuilder cb(*setup.Env, "TestYieldSkipHandler", pb.NewStreamType(type));
         cb.Add(handlerStream);
-        return TRuntimeNode(cb.Build(), false);
+        return TRuntimeNode(cb.Build(), /*isImmediate=*/false);
     };
     const auto handler = [&](ui32 index, TRuntimeNode handlerStream) -> TRuntimeNode {
         if constexpr (StreamInput) {

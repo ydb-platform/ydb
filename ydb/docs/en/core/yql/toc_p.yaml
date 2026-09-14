@@ -1,3 +1,5 @@
 items:
-- include: { mode: link, path: toc_i.yaml }
+- name: Overview
+  href: reference/index.md
 - include: { mode: link, path: reference/toc_p.yaml }
+- include: { mode: link, path: toc_i.yaml }

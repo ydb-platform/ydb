@@ -134,12 +134,19 @@ TJsonPathAccessor::TJsonPathAccessor(std::shared_ptr<IChunkedArray> accessor, TS
     }
 }
 
+std::shared_ptr<IChunkedArray> TJsonPathAccessor::GetNativeStringArray() const {
+    if (!RemainingPath.empty() || ValueType != EValueType::String || !ChunkedArrayAccessor ||
+        ChunkedArrayAccessor->GetType() != IChunkedArray::EType::Array || ChunkedArrayAccessor->GetDataType()->id() != arrow::Type::STRING) {
+        return nullptr;
+    }
+    return ChunkedArrayAccessor;
+}
+
 void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {
     if (!ChunkedArrayAccessor) {
         return;
     }
 
-    const auto codec = GetCodecForValueType(ValueType);
     ChunkedArrayAccessor->VisitValues([&](std::shared_ptr<arrow::Array> arr) {
         AFL_VERIFY(arr);
         for (int64_t i = 0; i < arr->length(); ++i) {
@@ -148,7 +155,7 @@ void TJsonPathAccessor::VisitValues(const TValuesVisitor& visitor) const {
                 continue;
             }
 
-            const auto value = codec->ReadValueView(*arr, i);
+            const auto value = ArrayElementToJsonValueView(*arr, i, ValueType);
             if (auto scalar = value.GetScalarOptional()) {
                 // A scalar has no sub-structure, so a remaining path cannot resolve against it.
                 visitor(RemainingPathPtr ? std::nullopt : scalar);

@@ -1,12 +1,13 @@
 import re
 
-from sqlalchemy.exc import CompileError
+from sqlalchemy.exc import ArgumentError, CompileError
 from sqlalchemy.sql import elements, sqltypes
 from sqlalchemy.sql.compiler import SQLCompiler
 from sqlalchemy.util import memoized_property
 
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType
 from clickhouse_connect.cc_sqlalchemy.sql import format_table
+from clickhouse_connect.driver.binding import format_str
 
 # The driver's external_bind_re only recognizes \w+ placeholder names.
 _bind_name_re = re.compile(r"\w+\Z")
@@ -438,3 +439,19 @@ class ChStatementCompiler(SQLCompiler):
         left = self.process(binary.left, **kw)
         right = self.process(binary.right, **kw)
         return f"{left} NOT ILIKE {right}"
+
+
+class EngineExprCompiler(ChStatementCompiler):
+    """Statement compiler for MergeTree engine key clauses: ClickHouse string escaping, no unbound binds."""
+
+    def render_literal_value(self, value, type_):
+        if isinstance(value, str):
+            return format_str(value)
+        return super().render_literal_value(value, type_)
+
+    def visit_bindparam(self, bindparam, **kw):
+        if bindparam.required:
+            raise ArgumentError(
+                None, f"Engine clause expression cannot contain an unbound parameter {bindparam.key!r}; use a literal value"
+            )
+        return super().visit_bindparam(bindparam, **kw)

@@ -7,6 +7,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/public/udf/udf_value.h>
 #include <unordered_map>
+#include <utility>
 
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
@@ -27,27 +28,27 @@ class TSparseList {
         using iterator = TStorage::const_iterator;
 
         [[nodiscard]] iterator Begin() const noexcept {
-            return Storage.begin();
+            return Storage_.begin();
         }
 
         [[nodiscard]] iterator End() const noexcept {
-            return Storage.end();
+            return Storage_.end();
         }
 
         [[nodiscard]] size_t Size() const noexcept {
-            return Storage.size();
+            return Storage_.size();
         }
 
         [[nodiscard]] size_t Empty() const noexcept {
-            return Storage.empty();
+            return Storage_.empty();
         }
 
         [[nodiscard]] bool Contains(size_t i) const noexcept {
-            return Storage.find(i) != Storage.cend();
+            return Storage_.find(i) != Storage_.cend();
         }
 
         [[nodiscard]] NUdf::TUnboxedValue Get(size_t i) const {
-            if (const auto it = Storage.find(i); it != Storage.cend()) {
+            if (const auto it = Storage_.find(i); it != Storage_.cend()) {
                 return it->second.Value;
             } else {
                 return NUdf::TUnboxedValue{};
@@ -55,50 +56,50 @@ class TSparseList {
         }
 
         void Add(size_t index, NUdf::TUnboxedValue&& value) {
-            const auto& [iter, newOne] = Storage.emplace(index, TItem{std::move(value), 1});
+            const auto& [iter, newOne] = Storage_.emplace(index, TItem{.Value = std::move(value), .LockCount = 1});
             MKQL_ENSURE(newOne, "Internal logic error");
         }
 
         void LockRange(size_t from, size_t to) {
             for (auto i = from; i <= to; ++i) {
-                const auto it = Storage.find(i);
-                MKQL_ENSURE(it != Storage.cend(), "Internal logic error");
+                const auto it = Storage_.find(i);
+                MKQL_ENSURE(it != Storage_.cend(), "Internal logic error");
                 ++it->second.LockCount;
             }
         }
 
         void UnlockRange(size_t from, size_t to) {
             for (auto i = from; i <= to; ++i) {
-                const auto it = Storage.find(i);
-                MKQL_ENSURE(it != Storage.cend(), "Internal logic error");
+                const auto it = Storage_.find(i);
+                MKQL_ENSURE(it != Storage_.cend(), "Internal logic error");
                 auto lockCount = --it->second.LockCount;
                 if (0 == lockCount) {
-                    Storage.erase(it);
+                    Storage_.erase(it);
                 }
             }
         }
 
         void Save(TMrOutputSerializer& serializer) const {
-            serializer(Storage.size());
-            for (const auto& [key, item] : Storage) {
+            serializer(Storage_.size());
+            for (const auto& [key, item] : Storage_) {
                 serializer(key, item.Value, item.LockCount);
             }
         }
 
         void Load(TMrInputSerializer& serializer) {
             auto size = serializer.Read<TStorage::size_type>();
-            Storage.reserve(size);
+            Storage_.reserve(size);
             for (size_t i = 0; i < size; ++i) {
                 TStorage::key_type key;
                 NUdf::TUnboxedValue row;
                 decltype(TItem::LockCount) lockCount;
                 serializer(key, row, lockCount);
-                Storage.emplace(key, TItem{row, lockCount});
+                Storage_.emplace(key, TItem{.Value = row, .LockCount = lockCount});
             }
         }
 
     private:
-        TStorage Storage;
+        TStorage Storage_;
     };
 
 public:
@@ -110,26 +111,26 @@ public:
 
     public:
         TRange()
-            : Container()
-            , FromIndex(Max())
-            , ToIndex(Max())
+            : Container_()
+            , FromIndex_(Max())
+            , ToIndex_(Max())
             , NfaIndex_(Max())
         {
         }
 
         TRange(const TRange& other)
-            : Container(other.Container)
-            , FromIndex(other.FromIndex)
-            , ToIndex(other.ToIndex)
+            : Container_(other.Container_)
+            , FromIndex_(other.FromIndex_)
+            , ToIndex_(other.ToIndex_)
             , NfaIndex_(other.NfaIndex_)
         {
-            LockRange(FromIndex, ToIndex);
+            LockRange(FromIndex_, ToIndex_);
         }
 
         TRange(TRange&& other)
-            : Container(other.Container)
-            , FromIndex(other.FromIndex)
-            , ToIndex(other.ToIndex)
+            : Container_(std::move(other.Container_))
+            , FromIndex_(other.FromIndex_)
+            , ToIndex_(other.ToIndex_)
             , NfaIndex_(other.NfaIndex_)
         {
             other.Reset();
@@ -145,11 +146,11 @@ public:
             }
             // TODO(zverevgeny): optimize for overlapped source and destination
             Release();
-            Container = other.Container;
-            FromIndex = other.FromIndex;
-            ToIndex = other.ToIndex;
+            Container_ = other.Container_;
+            FromIndex_ = other.FromIndex_;
+            ToIndex_ = other.ToIndex_;
             NfaIndex_ = other.NfaIndex_;
-            LockRange(FromIndex, ToIndex);
+            LockRange(FromIndex_, ToIndex_);
             return *this;
         }
 
@@ -158,34 +159,34 @@ public:
                 return *this;
             }
             Release();
-            Container = other.Container;
-            FromIndex = other.FromIndex;
-            ToIndex = other.ToIndex;
+            Container_ = other.Container_;
+            FromIndex_ = other.FromIndex_;
+            ToIndex_ = other.ToIndex_;
             NfaIndex_ = other.NfaIndex_;
             other.Reset();
             return *this;
         }
 
         friend inline bool operator==(const TRange& lhs, const TRange& rhs) {
-            return std::tie(lhs.FromIndex, lhs.ToIndex, lhs.NfaIndex_) == std::tie(rhs.FromIndex, rhs.ToIndex, rhs.NfaIndex_);
+            return std::tie(lhs.FromIndex_, lhs.ToIndex_, lhs.NfaIndex_) == std::tie(rhs.FromIndex_, rhs.ToIndex_, rhs.NfaIndex_);
         }
 
         friend inline bool operator<(const TRange& lhs, const TRange& rhs) {
-            return std::tie(lhs.FromIndex, lhs.ToIndex, lhs.NfaIndex_) < std::tie(rhs.FromIndex, rhs.ToIndex, rhs.NfaIndex_);
+            return std::tie(lhs.FromIndex_, lhs.ToIndex_, lhs.NfaIndex_) < std::tie(rhs.FromIndex_, rhs.ToIndex_, rhs.NfaIndex_);
         }
 
         bool IsValid() const {
-            return static_cast<bool>(Container) && FromIndex != Max<size_t>() && ToIndex != Max<size_t>();
+            return static_cast<bool>(Container_) && FromIndex_ != Max<size_t>() && ToIndex_ != Max<size_t>();
         }
 
         size_t From() const {
             MKQL_ENSURE(IsValid(), "Internal logic error");
-            return FromIndex;
+            return FromIndex_;
         }
 
         size_t To() const {
             MKQL_ENSURE(IsValid(), "Internal logic error");
-            return ToIndex;
+            return ToIndex_;
         }
 
         [[nodiscard]] size_t NfaIndex() const {
@@ -199,29 +200,29 @@ public:
 
         size_t Size() const {
             MKQL_ENSURE(IsValid(), "Internal logic error");
-            return ToIndex - FromIndex + 1;
+            return ToIndex_ - FromIndex_ + 1;
         }
 
         void Extend() {
             MKQL_ENSURE(IsValid(), "Internal logic error");
-            ++ToIndex;
-            LockRange(ToIndex, ToIndex);
+            ++ToIndex_;
+            LockRange(ToIndex_, ToIndex_);
         }
 
         void Release() {
-            UnlockRange(FromIndex, ToIndex);
-            Container.Reset();
-            FromIndex = Max();
-            ToIndex = Max();
+            UnlockRange(FromIndex_, ToIndex_);
+            Container_.Reset();
+            FromIndex_ = Max();
+            ToIndex_ = Max();
             NfaIndex_ = Max();
         }
 
         void Save(TMrOutputSerializer& serializer) const {
-            serializer(Container, FromIndex, ToIndex, NfaIndex_);
+            serializer(Container_, FromIndex_, ToIndex_, NfaIndex_);
         }
 
         void Load(TMrInputSerializer& serializer) {
-            serializer(Container, FromIndex, ToIndex);
+            serializer(Container_, FromIndex_, ToIndex_);
             if (serializer.GetStateVersion() >= 2U) {
                 serializer(NfaIndex_);
             }
@@ -229,92 +230,92 @@ public:
 
     private:
         TRange(TContainer::TPtr container, size_t index)
-            : Container(container)
-            , FromIndex(index)
-            , ToIndex(index)
+            : Container_(std::move(container))
+            , FromIndex_(index)
+            , ToIndex_(index)
             , NfaIndex_(Max())
         {
         }
 
         void LockRange(size_t from, size_t to) {
-            if (Container) {
-                Container->LockRange(from, to);
+            if (Container_) {
+                Container_->LockRange(from, to);
             }
         }
 
         void UnlockRange(size_t from, size_t to) {
-            if (Container) {
-                Container->UnlockRange(from, to);
+            if (Container_) {
+                Container_->UnlockRange(from, to);
             }
         }
 
         void Reset() {
-            Container.Reset();
-            FromIndex = Max();
-            ToIndex = Max();
+            Container_.Reset();
+            FromIndex_ = Max();
+            ToIndex_ = Max();
             NfaIndex_ = Max();
         }
 
-        TContainer::TPtr Container;
-        size_t FromIndex;
-        size_t ToIndex;
+        TContainer::TPtr Container_;
+        size_t FromIndex_;
+        size_t ToIndex_;
         size_t NfaIndex_;
     };
 
     TRange Append(NUdf::TUnboxedValue&& value) {
-        const auto index = ListSize++;
-        Container->Add(index, std::move(value));
-        return TRange(Container, index);
+        const auto index = ListSize_++;
+        Container_->Add(index, std::move(value));
+        return TRange(Container_, index);
     }
 
     using iterator = TContainer::iterator;
 
     [[nodiscard]] iterator Begin() const noexcept {
-        return Container->Begin();
+        return Container_->Begin();
     }
 
     [[nodiscard]] iterator End() const noexcept {
-        return Container->End();
+        return Container_->End();
     }
 
     /// Return total size of sparse list including absent values
     size_t LastRowIndex() const noexcept {
-        return ListSize;
+        return ListSize_;
     }
 
     /// Return number of present values in sparse list
     size_t Size() const noexcept {
-        return Container->Size();
+        return Container_->Size();
     }
 
     [[nodiscard]] bool Empty() const noexcept {
-        return Container->Empty();
+        return Container_->Empty();
     }
 
     [[nodiscard]] bool Contains(size_t i) const noexcept {
-        return Container->Contains(i);
+        return Container_->Contains(i);
     }
 
     [[nodiscard]] NUdf::TUnboxedValue Get(size_t i) const {
-        return Container->Get(i);
+        return Container_->Get(i);
     }
 
     void Save(TMrOutputSerializer& serializer) const {
-        serializer(Container, ListSize);
+        serializer(Container_, ListSize_);
     }
 
     void Load(TMrInputSerializer& serializer) {
-        serializer(Container, ListSize);
+        serializer(Container_, ListSize_);
     }
 
 private:
-    TContainer::TPtr Container = MakeIntrusive<TContainer>();
-    size_t ListSize = 0; // impl: max index ever stored + 1
+    TContainer::TPtr Container_ = MakeIntrusive<TContainer>();
+    size_t ListSize_ = 0; // impl: max index ever stored + 1
 };
 
 class TListValue final: public TComputationValue<TListValue> {
 public:
-    TListValue(TMemoryUsageInfo* memUsage, const TSparseList& list);
+    TListValue(TMemoryUsageInfo* memUsage, TSparseList list);
 
     bool HasFastListLength() const final;
     ui64 GetListLength() const final;
@@ -333,7 +334,7 @@ public:
     bool HasDictItems() const final;
 
 private:
-    TSparseList List;
+    TSparseList List_;
 };
 
 } // namespace NKikimr::NMiniKQL::NMatchRecognize

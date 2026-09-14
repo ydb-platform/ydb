@@ -1,0 +1,8 @@
+--- contrib/python/numpy/py3/numpy/fft/pocketfft/pocketfft_hdronly.h	(index)
++++ contrib/python/numpy/py3/numpy/fft/pocketfft/pocketfft_hdronly.h	(working tree)
+@@ -3515 +3515 @@ template<typename T> void r2c(const shape_t &shape_in,
+-  auto newaxes = shape_t{axes.begin(), --axes.end()};
++  auto newaxes = shape_t{axes.begin(), axes.end() - 1};
+@@ -3553 +3553 @@ template<typename T> void c2r(const shape_t &shape_out,
+-  auto newaxes = shape_t{axes.begin(), --axes.end()};
++  auto newaxes = shape_t{axes.begin(), axes.end() - 1};

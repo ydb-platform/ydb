@@ -29,12 +29,20 @@ message TEncoding {
     }
 }
 
+message TDefaultExpression {
+    optional string ExprText = 1;
+    optional string Context = 2;
+    repeated string Dependencies = 3;
+    optional bool Stored = 4 [default = false];
+}
+
 message TKqpColumnMetadataProto {
     enum EDefaultKind {
         DEFAULT_KIND_UNSPECIFIED = 0;
         DEFAULT_KIND_NULL = 1;
         DEFAULT_KIND_SEQUENCE = 2;
         DEFAULT_KIND_LITERAL = 3;
+        DEFAULT_KIND_EXPRESSION = 4;
     };
 
     optional string Name = 1;
@@ -59,4 +67,5 @@ message TKqpColumnMetadataProto {
     // spread across partitions instead of concentrating on the last shard.
     optional bool BitReverseSequenceValue = 15 [default = false];
     optional bool SetNotNullInProgress = 16 [default = false];
+    optional TDefaultExpression DefaultExpression = 17;
 };

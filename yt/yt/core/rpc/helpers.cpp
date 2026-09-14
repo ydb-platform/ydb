@@ -87,7 +87,7 @@ bool IsChannelFailureErrorHandled(const TError& error)
 
 void LabelHandledChannelFailureError(TError* error)
 {
-    *error <<= TErrorAttribute("channel_failure_error_handled", true);
+    error->Add("channel_failure_error_handled", true);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -393,7 +393,7 @@ private:
                 std::move(attachmentsTransfer));
         }
 
-        void HandleError(TError error) override
+        void HandleError(TError error, const std::string& address) override
         {
             if (IsError_(error)) {
                 OnFailure_.Run(Channel_, error);
@@ -403,7 +403,7 @@ private:
                 error = MaybeTransformError_(std::move(error));
             }
 
-            UnderlyingHandler_->HandleError(std::move(error));
+            UnderlyingHandler_->HandleError(std::move(error), address);
         }
 
         void HandleStreamingPayload(const TStreamingPayload& payload) override
@@ -669,7 +669,7 @@ void EnrichClientRequestError(
     {
         auto featureId = error->Attributes().Get<int>(FeatureIdAttributeKey);
         if (auto featureName = (*featureIdFormatter)(featureId)) {
-            *error <<= TErrorAttribute(FeatureNameAttributeKey, featureName);
+            error->Add(FeatureNameAttributeKey, featureName);
         }
     }
 

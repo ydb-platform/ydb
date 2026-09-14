@@ -599,6 +599,7 @@ public:
                 std::make_shared<TColumnTableInfo>(*srcTable));
             tableInfo->AlterVersion += 1;
             tableInfo->IsReadOnly = true;
+            tableInfo->Stats = {};
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         }
         context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "copy table info");

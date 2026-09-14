@@ -30,8 +30,10 @@ public:
         return std::move(response).Apply([request, ranking = Ranking_](auto f) -> TNameResponse {
             TNameResponse response = f.ExtractValue();
 
-            TVector<TGenericName> replicatable = ReplicatableColumns(response.RankedNames, request.Prefix);
-            std::ranges::move(std::move(replicatable), std::back_inserter(response.RankedNames));
+            THashMap<TString, size_t> references = CountAsUnqualified(response.RankedNames);
+            response.RankedNames = Replicated(std::move(response.RankedNames));
+            response.RankedNames = Disambiguated(std::move(response.RankedNames), references);
+            response.RankedNames = Filtered(std::move(response.RankedNames), request.Prefix);
 
             ranking->CropToSortedPrefix(response.RankedNames, request.Constraints, request.Limit);
 
@@ -40,38 +42,65 @@ public:
     }
 
 private:
-    static TVector<TGenericName> ReplicatableColumns(const TVector<TGenericName>& names, TStringBuf prefix) {
+    static THashMap<TString, size_t> CountAsUnqualified(const TVector<TGenericName>& names) {
         THashMap<TString, size_t> references;
         for (const TGenericName& name : names) {
-            if (!std::holds_alternative<TColumnName>(name)) {
+            const auto* column = std::get_if<TColumnName>(&name);
+            if (column == nullptr) {
                 continue;
             }
 
-            const TColumnName& column = std::get<TColumnName>(name);
-            if (column.TableAlias.empty()) {
-                continue;
-            }
-
-            references[column.Identifier] += 1;
+            references[column->Identifier] += 1;
         }
 
-        TVector<TGenericName> replicatable;
-        for (auto& [column, count] : references) {
-            if (count != 1) {
+        return references;
+    }
+
+    static TVector<TGenericName> Replicated(TVector<TGenericName> names) {
+        const size_t size = names.size();
+
+        for (size_t i = 0; i < size; ++i) {
+            const auto* column = std::get_if<TColumnName>(&names[i]);
+            if (column == nullptr || column->TableAlias.empty()) {
                 continue;
             }
+
+            TColumnName unqualified;
+            unqualified.Identifier = column->Identifier;
+            names.emplace_back(std::move(unqualified));
+        }
+
+        return names;
+    }
+
+    static TVector<TGenericName> Disambiguated(
+        TVector<TGenericName> names,
+        const THashMap<TString, size_t>& references)
+    {
+        EraseIf(names, [&](const TGenericName& name) {
+            const auto* column = std::get_if<TColumnName>(&name);
+            if (column == nullptr) {
+                return false;
+            }
+
+            const auto* count = references.FindPtr(column->Identifier);
+            return column->TableAlias.empty() && 1 < *count;
+        });
+
+        return names;
+    }
+
+    static TVector<TGenericName> Filtered(TVector<TGenericName> names, TStringBuf prefix) {
+        EraseIf(names, [&](const TGenericName& name) {
+            const auto* column = std::get_if<TColumnName>(&name);
 
             // TODO(YQL-19747): introduce a single source of truth of filtration policy
-            if (!TCaseInsensitiveStringBuf(column).StartsWith(prefix)) {
-                continue;
-            }
+            return column &&
+                   !TCaseInsensitiveStringBuf(column->Identifier).StartsWith(prefix) &&
+                   !TCaseInsensitiveStringBuf(column->TableAlias).StartsWith(prefix);
+        });
 
-            TColumnName name;
-            name.Identifier = column;
-            replicatable.emplace_back(std::move(name));
-        }
-
-        return replicatable;
+        return names;
     }
 
     INameService::TPtr Origin_;

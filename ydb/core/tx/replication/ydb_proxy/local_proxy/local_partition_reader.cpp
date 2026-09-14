@@ -5,12 +5,22 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 
 namespace NKikimr::NReplication {
+
+namespace {
+
+bool IsKafkaBatchDataChunk(const NKikimrPQClient::TDataChunk& proto) {
+    return proto.HasCodec() && proto.GetCodec() + 1 == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH);
+}
+
+} // namespace
 
 class TLocalTopicPartitionReaderActor: public TBaseLocalTopicPartitionActor {
     using TBase = TBaseLocalTopicPartitionActor;
@@ -308,6 +318,9 @@ private:
             );
 
             TString data;
+            if (IsKafkaBatchDataChunk(proto)) {
+                NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), result.GetOffset());
+            }
             bool isCompressed = proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1;
             if (isCompressed && !AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
                 const auto* codec = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));

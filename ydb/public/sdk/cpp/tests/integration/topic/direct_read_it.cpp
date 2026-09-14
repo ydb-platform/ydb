@@ -1040,7 +1040,7 @@ void SuccessfulInitImpl(bool thenTimeout) {
             });
 
         EXPECT_CALL(*setup.MockReadProcessor, OnInitRequest(_))
-            .WillOnce(Invoke([&setup](const Ydb::Topic::StreamReadMessage::InitRequest& req) {
+            .WillOnce([&setup](const Ydb::Topic::StreamReadMessage::InitRequest& req) {
                 ASSERT_EQ(req.consumer(), setup.ReadSessionSettings.ConsumerName_);
                 ASSERT_TRUE(req.direct_read());
                 ASSERT_EQ(req.topics_read_settings_size(), 1);
@@ -1049,7 +1049,7 @@ void SuccessfulInitImpl(bool thenTimeout) {
                 ASSERT_EQ(req.topics_read_settings(0).partition_ids_size(), 2);
                 ASSERT_EQ(req.topics_read_settings(0).partition_ids(0), 100);
                 ASSERT_EQ(req.topics_read_settings(0).partition_ids(1), 101);
-            }));
+            });
 
         EXPECT_CALL(*setup.MockReadProcessor, OnReadRequest(_));
     }
@@ -1098,20 +1098,20 @@ TEST_F(DirectReadWithControlSession, StopPartitionSessionGracefully) {
                 });
 
             EXPECT_CALL(*setup.MockReadProcessor, OnInitRequest(_))
-                .WillOnce(Invoke([&](const Ydb::Topic::StreamReadMessage::InitRequest& req) {
+                .WillOnce([&](const Ydb::Topic::StreamReadMessage::InitRequest& req) {
                     ASSERT_TRUE(req.direct_read());
                     ASSERT_EQ(req.topics_read_settings_size(), 1);
                     ASSERT_EQ(req.topics_read_settings(0).path(), setup.ReadSessionSettings.Topics_[0].Path_);
                     ASSERT_EQ(req.topics_read_settings(0).partition_ids_size(), 1);
                     ASSERT_EQ(req.topics_read_settings(0).partition_ids(0), startPartitionSessionRequest.PartitionId);
-                }));
+                });
 
             EXPECT_CALL(*setup.MockReadProcessor, OnReadRequest(_));
 
             EXPECT_CALL(*setup.MockReadProcessor, OnStartPartitionSessionResponse(_))
-                .WillOnce(Invoke([&startPartitionSessionRequest](const Ydb::Topic::StreamReadMessage::StartPartitionSessionResponse& resp) {
+                .WillOnce([&startPartitionSessionRequest](const Ydb::Topic::StreamReadMessage::StartPartitionSessionResponse& resp) {
                     ASSERT_EQ(static_cast<std::uint64_t>(resp.partition_session_id()), startPartitionSessionRequest.PartitionSessionId);
-                }));
+                });
 
             EXPECT_CALL(*setup.MockReadProcessor, OnDirectReadAck(_))
                 .Times(4);
@@ -1129,18 +1129,18 @@ TEST_F(DirectReadWithControlSession, StopPartitionSessionGracefully) {
                 });
 
             EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitRequest(_))
-                .WillOnce(Invoke([&setup](const Ydb::Topic::StreamDirectReadMessage::InitRequest& req) {
+                .WillOnce([&setup](const Ydb::Topic::StreamDirectReadMessage::InitRequest& req) {
                     ASSERT_EQ(req.session_id(), SERVER_SESSION_ID);
                     ASSERT_EQ(static_cast<std::size_t>(req.topics_read_settings_size()), setup.ReadSessionSettings.Topics_.size());
                     ASSERT_EQ(req.topics_read_settings(0).path(), setup.ReadSessionSettings.Topics_[0].Path_);
                     ASSERT_EQ(req.consumer(), setup.ReadSessionSettings.ConsumerName_);
-                }));
+                });
 
             EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_))
-                .WillOnce(Invoke([&startPartitionSessionRequest](const Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionRequest& request) {
+                .WillOnce([&startPartitionSessionRequest](const Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionRequest& request) {
                     ASSERT_EQ(static_cast<std::uint64_t>(request.partition_session_id()), startPartitionSessionRequest.PartitionSessionId);
                     ASSERT_EQ(request.generation(), startPartitionSessionRequest.Generation);
-                }));
+                });
 
             // Expect OnReadRequest in case it is called before the test ends.
             // TODO(qyryq) Fix number, not 10.
@@ -1246,20 +1246,20 @@ TEST_F(DirectReadWithControlSession, StopPartitionSession) {
                 });
 
             EXPECT_CALL(*setup.MockReadProcessor, OnInitRequest(_))
-                .WillOnce(Invoke([&](const Ydb::Topic::StreamReadMessage::InitRequest& req) {
+                .WillOnce([&](const Ydb::Topic::StreamReadMessage::InitRequest& req) {
                     ASSERT_TRUE(req.direct_read());
                     ASSERT_EQ(req.topics_read_settings_size(), 1);
                     ASSERT_EQ(req.topics_read_settings(0).path(), setup.ReadSessionSettings.Topics_[0].Path_);
                     ASSERT_EQ(req.topics_read_settings(0).partition_ids_size(), 1);
                     ASSERT_EQ(req.topics_read_settings(0).partition_ids(0), startPartitionSessionRequest.PartitionId);
-                }));
+                });
 
             EXPECT_CALL(*setup.MockReadProcessor, OnReadRequest(_));
 
             EXPECT_CALL(*setup.MockReadProcessor, OnStartPartitionSessionResponse(_))
-                .WillOnce(Invoke([&startPartitionSessionRequest](const Ydb::Topic::StreamReadMessage::StartPartitionSessionResponse& resp) {
+                .WillOnce([&startPartitionSessionRequest](const Ydb::Topic::StreamReadMessage::StartPartitionSessionResponse& resp) {
                     ASSERT_EQ(static_cast<std::uint64_t>(resp.partition_session_id()), startPartitionSessionRequest.PartitionSessionId);
-                }));
+                });
 
             EXPECT_CALL(*setup.MockReadProcessor, OnDirectReadAck(_))
                 .Times(4);
@@ -1277,18 +1277,18 @@ TEST_F(DirectReadWithControlSession, StopPartitionSession) {
                 });
 
             EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitRequest(_))
-                .WillOnce(Invoke([&setup](const Ydb::Topic::StreamDirectReadMessage::InitRequest& req) {
+                .WillOnce([&setup](const Ydb::Topic::StreamDirectReadMessage::InitRequest& req) {
                     ASSERT_EQ(req.session_id(), SERVER_SESSION_ID);
                     ASSERT_EQ(static_cast<std::size_t>(req.topics_read_settings_size()), setup.ReadSessionSettings.Topics_.size());
                     ASSERT_EQ(req.topics_read_settings(0).path(), setup.ReadSessionSettings.Topics_[0].Path_);
                     ASSERT_EQ(req.consumer(), setup.ReadSessionSettings.ConsumerName_);
-                }));
+                });
 
             EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_))
-                .WillOnce(Invoke([&startPartitionSessionRequest](const Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionRequest& request) {
+                .WillOnce([&startPartitionSessionRequest](const Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionRequest& request) {
                     ASSERT_EQ(static_cast<std::uint64_t>(request.partition_session_id()), startPartitionSessionRequest.PartitionSessionId);
                     ASSERT_EQ(request.generation(), startPartitionSessionRequest.Generation);
-                }));
+                });
 
             // Expect OnReadRequest in case it is called before the test ends.
             // TODO(qyryq) Fix number, not 10.
@@ -1421,28 +1421,28 @@ TEST_F(DirectReadWithControlSession, EmptyDirectReadResponse) {
                 });
 
             EXPECT_CALL(*setup.MockReadProcessor, OnInitRequest(_))
-                .WillOnce(Invoke([&](const Ydb::Topic::StreamReadMessage::InitRequest& req) {
+                .WillOnce([&](const Ydb::Topic::StreamReadMessage::InitRequest& req) {
                     ASSERT_TRUE(req.direct_read());
                     ASSERT_EQ(req.topics_read_settings_size(), 1);
                     ASSERT_EQ(req.topics_read_settings(0).path(), setup.ReadSessionSettings.Topics_[0].Path_);
                     ASSERT_EQ(req.topics_read_settings(0).partition_ids_size(), 1);
                     ASSERT_EQ(req.topics_read_settings(0).partition_ids(0), startPartitionSessionRequest.PartitionId);
-                }));
+                });
 
             EXPECT_CALL(*setup.MockReadProcessor, OnReadRequest(_));
 
             EXPECT_CALL(*setup.MockReadProcessor, OnStartPartitionSessionResponse(_))
-                .WillOnce(Invoke([&startPartitionSessionRequest](const Ydb::Topic::StreamReadMessage::StartPartitionSessionResponse& resp) {
+                .WillOnce([&startPartitionSessionRequest](const Ydb::Topic::StreamReadMessage::StartPartitionSessionResponse& resp) {
                     ASSERT_EQ(static_cast<std::uint64_t>(resp.partition_session_id()), startPartitionSessionRequest.PartitionSessionId);
-                }));
+                });
 
             EXPECT_CALL(*setup.MockReadProcessor, OnDirectReadAck(_))
                 .Times(1);
 
             EXPECT_CALL(*setup.MockReadProcessor, OnReadRequest(_))
-                .WillOnce(Invoke([&](const Ydb::Topic::StreamReadMessage::ReadRequest& req) {
+                .WillOnce([&](const Ydb::Topic::StreamReadMessage::ReadRequest& req) {
                     ASSERT_EQ(req.bytes_size(), bytesSize);
-                }));
+                });
         }
 
         // There are two sequences, because OnCreateProcessor from the second sequence may be called
@@ -1457,18 +1457,18 @@ TEST_F(DirectReadWithControlSession, EmptyDirectReadResponse) {
                 });
 
             EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitRequest(_))
-                .WillOnce(Invoke([&setup](const Ydb::Topic::StreamDirectReadMessage::InitRequest& req) {
+                .WillOnce([&setup](const Ydb::Topic::StreamDirectReadMessage::InitRequest& req) {
                     ASSERT_EQ(req.session_id(), SERVER_SESSION_ID);
                     ASSERT_EQ(static_cast<std::size_t>(req.topics_read_settings_size()), setup.ReadSessionSettings.Topics_.size());
                     ASSERT_EQ(req.topics_read_settings(0).path(), setup.ReadSessionSettings.Topics_[0].Path_);
                     ASSERT_EQ(req.consumer(), setup.ReadSessionSettings.ConsumerName_);
-                }));
+                });
 
             EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_))
-                .WillOnce(Invoke([&startPartitionSessionRequest](const Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionRequest& request) {
+                .WillOnce([&startPartitionSessionRequest](const Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionRequest& request) {
                     ASSERT_EQ(static_cast<std::uint64_t>(request.partition_session_id()), startPartitionSessionRequest.PartitionSessionId);
                     ASSERT_EQ(request.generation(), startPartitionSessionRequest.Generation);
-                }));
+                });
         }
     }
 
@@ -1539,16 +1539,16 @@ TEST_F(DirectReadSession, InitAndStartPartitionSession) {
             .WillOnce([&]() { setup.MockDirectReadProcessorFactory->CreateProcessor(setup.MockDirectReadProcessor); });
 
         EXPECT_CALL(*setup.MockDirectReadProcessor, OnInitRequest(_))
-            .WillOnce(Invoke([&](const Ydb::Topic::StreamDirectReadMessage::InitRequest& req) {
+            .WillOnce([&](const Ydb::Topic::StreamDirectReadMessage::InitRequest& req) {
                 ASSERT_EQ(req.session_id(), SERVER_SESSION_ID);
                 ASSERT_EQ(req.consumer(), setup.ReadSessionSettings.ConsumerName_);
-            }));
+            });
 
         EXPECT_CALL(*setup.MockDirectReadProcessor, OnStartDirectReadPartitionSessionRequest(_))
-            .WillOnce(Invoke([&](const Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionRequest& req) {
+            .WillOnce([&](const Ydb::Topic::StreamDirectReadMessage::StartDirectReadPartitionSessionRequest& req) {
                 ASSERT_EQ(req.partition_session_id(), static_cast<std::int64_t>(partitionSessionId));
                 gotStart.SetValue();
-            }));
+            });
     }
 
     session->Start();

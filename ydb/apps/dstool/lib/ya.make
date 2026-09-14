@@ -3,6 +3,7 @@ PY3_LIBRARY(dstool_lib)
 PY_SRCS(
     arg_parser.py
     bs_layout.py
+    cluster_workload_config.py
     commands.py
     common.py
     grouptool.py
@@ -57,6 +58,8 @@ PY_SRCS(
 )
 
 PEERDIR(
+    contrib/python/PyYAML
+    ydb/apps/dstool/protos
     ydb/core/protos
     ydb/public/api/protos
     ydb/public/api/grpc
@@ -76,3 +79,5 @@ IF (OS_LINUX)
 ENDIF()
 
 END()
+
+RECURSE_FOR_TESTS(ut)

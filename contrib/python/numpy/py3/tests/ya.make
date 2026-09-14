@@ -18,14 +18,13 @@ SRCDIR(contrib/python/numpy/py3)
 PY_SRCS(
     TOP_LEVEL
     numpy/conftest.py
+    numpy/_core/tests/_locales.py
 )
 
 END()
 
 RECURSE_FOR_TESTS(
-    array_api
-    compat
-    core
+    _core
     # distutils
     # f2py
     fft

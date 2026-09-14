@@ -64,6 +64,10 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
             Y_DEBUG_ABORT_S(InvalidIndexType(IndexType));
             break;
     }
+
+    if (IsRebuild) {
+        result->SetIsRebuild(true);
+    }
 }
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* result) const {
@@ -360,6 +364,7 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
         case ESubState::FulltextIndexDictionary:
         case ESubState::FulltextIndexBorders:
         case ESubState::FulltextRowIdSrc:
+        case ESubState::FulltextIndexPrefixBorders:
             return true;
     }
     return false;

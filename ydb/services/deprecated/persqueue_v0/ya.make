@@ -24,6 +24,7 @@ PEERDIR(
     ydb/core/protos
     ydb/library/aclib
     ydb/library/persqueue/topic_parser
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/persqueue_v1

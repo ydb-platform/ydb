@@ -1796,7 +1796,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) 
                 continue;
             }
 
-            YDB_LOG_DEBUG("Breaking the wait edge",
+            YDB_LOG_WARN("Breaking the wait edge",
                 {"logPrefix", LogPrefix},
                 {"id", edge.Id},
                 {"awaiter", edge.Awaiter.LockInfo(SelfId())},
@@ -1870,10 +1870,15 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
     registryBuilder->SetOldestCollectionTime(RemoteSnapshotsStorage->GetOldestCollectionTime());
 
     size_t localSnapshotsCount = 0;
+    ui64 now = AppData()->TimeProvider->Now().MilliSeconds();
+    ui64 oldestSnapshotStep = now;
+    ui64 oldestLocalSnapshotStep = now;
     for (const auto& snapshotInfo : LocalSnapshotsStorage->View()) {
         registryBuilder->AddSnapshot(snapshotInfo.TableIds, snapshotInfo.Snapshot);
         ++localSnapshotsCount;
+        oldestLocalSnapshotStep = std::min(oldestLocalSnapshotStep, snapshotInfo.Snapshot.Step);
     }
+    oldestSnapshotStep = oldestLocalSnapshotStep;
 
     size_t remoteSnapshotsCount = 0;
     for (const auto& remoteSnapshotInfo : RemoteSnapshotsStorage->View()) {
@@ -1881,10 +1886,13 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
             remoteSnapshotInfo.TableIds,
             remoteSnapshotInfo.Snapshot);
         ++remoteSnapshotsCount;
+        oldestSnapshotStep = std::min(oldestSnapshotStep, remoteSnapshotInfo.Snapshot.Step);
     }
 
     if (Settings.Counters) {
         Settings.Counters->RemoteSnapshotsInRegistry->Set(remoteSnapshotsCount);
+        Settings.Counters->OldestSnapshotInRegistryAgeSeconds->Set((now - oldestSnapshotStep) / 1000);
+        Settings.Counters->OldestLocalSnapshotInRegistryAgeSeconds->Set((now - oldestLocalSnapshotStep) / 1000);
     }
 
     AppData()->SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());

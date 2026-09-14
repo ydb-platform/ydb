@@ -4,13 +4,6 @@ from .error import CDefError
 from . import model
 
 try:
-    callable
-except NameError:
-    # Python 3.1
-    from collections import Callable
-    callable = lambda x: isinstance(x, Callable)
-
-try:
     basestring
 except NameError:
     # Python 3.x
@@ -20,7 +13,7 @@ _unspecified = object()
 
 
 
-class FFI(object):
+class FFI:
     r'''
     The main top-level class that you instantiate once, or once per module.
 
@@ -414,7 +407,7 @@ class FFI(object):
         if (replace_with.startswith('*')
                 and '&[' in self._backend.getcname(cdecl, '&')):
             replace_with = '(%s)' % replace_with
-        elif replace_with and not replace_with[0] in '[(':
+        elif replace_with and replace_with[0] not in '[(':
             replace_with = ' ' + replace_with
         return self._backend.getcname(cdecl, replace_with)
 
@@ -909,7 +902,7 @@ def _make_ffi_library(ffi, libname, flags):
                     raise AttributeError(name)
             accessors[name](name)
     #
-    class FFILibrary(object):
+    class FFILibrary:
         def __getattr__(self, name):
             make_accessor(name)
             return getattr(self, name)

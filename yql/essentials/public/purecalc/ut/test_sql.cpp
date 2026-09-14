@@ -48,7 +48,7 @@ Y_UNIT_TEST(TestStructCastMessage) {
         factory->MakePullListProgram(FakeIS(), FakeStructOS(), sql, ETranslationMode::SQL);
         UNIT_ASSERT_C(false, "Unreachable");
     } catch (const NYql::NPureCalc::TCompileError& error) {
-        auto issue = error.GetIssues();
+        const auto& issue = error.GetIssues();
         UNIT_ASSERT_C(issue.Contains("Failed to convert 'Id': Int32 to Optional<Uint32>"), issue);
         UNIT_ASSERT_C(!issue.Contains("Body"), issue);
     }

@@ -1,12 +1,12 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#include <atomic>
 #include <chrono>
 #include <mutex>
 #include <utility>
 
-#include "opentelemetry/common/key_value_iterable.h"
-#include "opentelemetry/metrics/meter.h"
+#include "opentelemetry/common/key_value_iterable.h"  // IWYU pragma: keep
 #include "opentelemetry/nostd/shared_ptr.h"
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/nostd/string_view.h"
@@ -144,6 +144,11 @@ void MeterProvider::SetExemplarFilter(metrics::ExemplarFilterType exemplar_filte
  */
 bool MeterProvider::Shutdown(std::chrono::microseconds timeout) noexcept
 {
+  // Shutdown only once
+  if (shutdown_latch_.test_and_set(std::memory_order_acquire))
+  {
+    return true;
+  }
   return context_->Shutdown(timeout);
 }
 
@@ -163,7 +168,7 @@ MeterProvider::~MeterProvider()
 {
   if (context_)
   {
-    context_->Shutdown();
+    Shutdown();
   }
 }
 

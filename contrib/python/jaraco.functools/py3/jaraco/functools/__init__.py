@@ -444,6 +444,32 @@ def pass_none(func):
     return wrapper
 
 
+def signed(func):
+    """
+    Wrap a formatting function so a positive first argument is rendered
+    with an explicit leading ``+``.
+
+    A negative argument already carries a ``-`` from the wrapped
+    function, and zero is left unsigned. The sign is inferred by
+    comparing the argument to a zero of its own type.
+
+    >>> fixed = '{:.1f}'.format
+    >>> signed(fixed)(3.9)
+    '+3.9'
+    >>> signed(fixed)(-3.9)
+    '-3.9'
+    >>> signed(fixed)(0)
+    '0.0'
+    """
+
+    @functools.wraps(func)
+    def wrapper(value, /, *args, **kwargs):
+        sign = '+' if value > type(value)() else ''
+        return sign + func(value, *args, **kwargs)
+
+    return wrapper
+
+
 def none_as(value, replacement=None):
     """
     >>> none_as(None, 'foo')

@@ -4,6 +4,8 @@
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/util/address_classifier.h>
 
+#include <ydb/library/aclib/aclib.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
@@ -386,7 +388,11 @@ namespace NKikimr::NStorage {
         if (msg.ErrorReason) {
             throw TExError() << "Config proposition failed: " << *msg.ErrorReason;
         } else {
-            Finish(TResult::OK, std::nullopt);
+            Finish(TResult::OK, std::nullopt, [&](TResult *record) {
+                if (ReassignGroupDiskResult) {
+                    record->MutableReassignGroupDisk()->CopyFrom(*ReassignGroupDiskResult);
+                }
+            });
         }
     }
 

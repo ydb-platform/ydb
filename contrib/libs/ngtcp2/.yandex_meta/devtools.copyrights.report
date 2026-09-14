@@ -70,6 +70,20 @@ BELONGS ya.make
         lib/ngtcp2_transport_params.h [4:4]
         lib/ngtcp2_tstamp.h [4:4]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 355f957c3125dfe440ecc3e307868639
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2026 ngtcp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/ngtcp2_fmt.c [4:4]
+        lib/ngtcp2_fmt.h [4:4]
+        lib/ngtcp2_wf.c [4:4]
+        lib/ngtcp2_wf.h [4:4]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 3782c9399af9718cb85783105b7784ae
 BELONGS ya.make
     License text:
@@ -114,8 +128,6 @@ BELONGS ya.make
     Files with this license:
         lib/ngtcp2_bbr.c [4:4]
         lib/ngtcp2_bbr.h [4:4]
-        lib/ngtcp2_window_filter.c [4:4]
-        lib/ngtcp2_window_filter.h [4:4]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 58664e40c9f8424ff9aaf888f8b2814d
 BELONGS ya.make
@@ -288,18 +300,6 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         lib/ngtcp2_pcg.c [35:36]
-
-KEEP     COPYRIGHT_SERVICE_LABEL ed9787b1511b75f8534d2b25efbe271c
-BELONGS ya.make
-    License text:
-         * // Copyright (c) 2016 The Chromium Authors. All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        lib/ngtcp2_window_filter.c [31:31]
-        lib/ngtcp2_window_filter.h [31:31]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f467e93f3d8b0ebd3dc4ff1696f09048
 BELONGS crypto/quictls/ya.make ya.make

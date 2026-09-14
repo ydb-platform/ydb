@@ -8,6 +8,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <ostream>
 #include <utility>
 
 #include "opentelemetry/common/spin_lock_mutex.h"

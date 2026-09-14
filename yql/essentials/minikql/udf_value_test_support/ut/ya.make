@@ -1,6 +1,7 @@
 UNITTEST_FOR(yql/essentials/minikql/udf_value_test_support)
 
 SRCS(
+    struct_type_ut.cpp
     udf_value_comparator_utils_ut.cpp
 )
 

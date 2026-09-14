@@ -108,6 +108,7 @@ ui32 TKernelRequestBuilder::Udf(const TString& name, bool isPolymorphic, const T
     if (!isPolymorphic) {
         // find scalar func too
         std::vector<TType*> scalarInputTypes;
+        scalarInputTypes.reserve(inputTypes.size());
         for (const auto& t : inputTypes) {
             scalarInputTypes.push_back(AS_TYPE(TBlockType, t)->GetItemType());
         }
@@ -162,7 +163,7 @@ ui32 TKernelRequestBuilder::JsonExists(const TTypeAnnotationNode* arg1Type, cons
     auto arg1 = MakeArg(arg1Type);
     auto arg2 = MakeArg(arg2Type);
     auto scalarApply = Pb_.ScalarApply({arg1, arg2}, [&](const auto& args) {
-        auto json = args[0];
+        const auto& json = args[0];
         auto processJson = [&](auto unpacked) {
             auto input = Pb_.NewOptional(isBinaryJson ? unpacked : Pb_.Apply(parse, {unpacked}));
             auto path = Pb_.Apply(compilePath, {args[1]});
@@ -211,7 +212,7 @@ ui32 TKernelRequestBuilder::JsonValue(const TTypeAnnotationNode* arg1Type, const
     auto arg2 = MakeArg(arg2Type);
 
     auto scalarApply = Pb_.ScalarApply({arg1, arg2}, [&](const auto& args) {
-        auto json = args[0];
+        const auto& json = args[0];
         auto processJson = [&](auto unpacked) {
             auto input = Pb_.NewOptional(isBinaryJson ? unpacked : Pb_.Apply(parse, {unpacked}));
             auto path = Pb_.Apply(compilePath, {args[1]});

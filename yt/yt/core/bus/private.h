@@ -12,8 +12,8 @@ namespace NYT::NBus {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, BusLogger, "Bus");
-YT_DEFINE_GLOBAL(const NProfiling::TProfiler, BusProfiler, "/bus");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, BusLogger, "Bus");
+YT_DEFINE_LEAKY_GLOBAL(const NProfiling::TProfiler, BusProfiler, "/bus");
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,4 +1,5 @@
 #include "tablet_impl.h"
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/core/tablet/tablet_metrics.h>
@@ -188,6 +189,9 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
     const TActorId Owner;
     TIntrusivePtr<TTabletStorageInfo> Info;
+    // Restoring what these reads find is a write the tablet cannot avoid on its way up, so it is
+    // admitted as whatever the tablet itself writes.
+    const NKikimrBlobStorage::TDataKind::E DataKind;
     const ui32 BlockedGen;
 
     std::pair<ui32, ui32> LatestKnownStep;
@@ -396,7 +400,10 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             const TLogoBlobID fromId(tabletId, from.first, from.second, 0, 0, 0);
             const TLogoBlobID toId(tabletId, lastGen ? to.first : toGen - 1, lastGen ? to.second : Max<ui32>(), 0, TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
 
-            SendToBSProxy(SelfId(), group, new TEvBlobStorage::TEvRange(tabletId, fromId, toId, mustRestoreFirst, TInstant::Max(), false, BlockedGen));
+            auto request = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, fromId, toId, mustRestoreFirst,
+                TInstant::Max(), false, BlockedGen);
+            request->DataKind = DataKind;
+            SendToBSProxy(SelfId(), group, request.release());
             RangesToDiscover.insert(toId);
             if (IntrospectionTrace) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TOnDiscoverRangeRequest>(group, fromId, toId));
@@ -565,9 +572,11 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             for (ui64 i = 0; i < count; ++i) {
                 q[i].Set(refs[i + firstRequestIdx] /*must be index read*/);
             }
-            SendToBSProxy(SelfId(), group, new TEvBlobStorage::TEvGet(q, (ui32)count, TInstant::Max(),
+            auto request = std::make_unique<TEvBlobStorage::TEvGet>(q, (ui32)count, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::FastRead, true, true, TEvBlobStorage::TEvGet::TForceBlockTabletData(
-                    Info->TabletID, refs[firstRequestIdx].Generation())));
+                    Info->TabletID, refs[firstRequestIdx].Generation()));
+            request->DataKind = DataKind;
+            SendToBSProxy(SelfId(), group, request.release());
             ++RequestsLeft;
 
             firstRequestIdx = endRequestIdx;
@@ -948,6 +957,7 @@ public:
     TTabletReqRebuildHistoryGraph(const TActorId &owner, TTabletStorageInfo *info, ui32 blockedGen, NTracing::ITrace *trace, ui64 followerCookie)
         : Owner(owner)
         , Info(info)
+        , DataKind(DataKindByTabletType(info->TabletType))
         , BlockedGen(blockedGen)
         , RequestsLeft(0)
         , IntrospectionTrace(trace)

@@ -51,17 +51,21 @@ public:
 
 class TSystemMmap {
 public:
-    static void* Mmap(size_t size);
-    static int Munmap(void* addr, size_t size) noexcept;
+    void* Mmap(size_t size);
+    int Munmap(void* addr, size_t size) noexcept;
+
+    static TSystemMmap& GetInstance();
 };
 
 class TFakeMmap {
 public:
-    static std::function<void*(size_t size)> OnMmap;
-    static std::function<void(void* addr, size_t size)> OnMunmap;
+    std::function<void*(size_t size)> OnMmap;
+    std::function<void(void* addr, size_t size)> OnMunmap;
 
-    static void* Mmap(size_t size);
-    static int Munmap(void* addr, size_t size) noexcept;
+    void* Mmap(size_t size);
+    int Munmap(void* addr, size_t size) noexcept;
+
+    static TFakeMmap& GetInstance();
 };
 
 template <typename TMmap = TSystemMmap>
@@ -262,7 +266,6 @@ protected:
 
     void* GetPageImpl();
 
-protected:
     std::stack<void*, std::vector<void*>> FreePages_;
     std::unordered_set<void*> AllPages_;
     std::unordered_map<void*, size_t> ActiveBlocks_;

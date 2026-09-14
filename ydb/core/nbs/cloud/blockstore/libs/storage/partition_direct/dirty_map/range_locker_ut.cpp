@@ -1,41 +1,34 @@
 #include "range_locker.h"
 
+#include "pbuffer_key_test_helpers.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/testlib/range_locker_access.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <utility>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRangeLockAccess
+namespace {
+
+class TMockLockableRanges
+    : public ILockableRanges
+    , public std::enable_shared_from_this<TMockLockableRanges>
 {
 public:
-    static TRangeLock Make(ILockableRanges* lockableRanges, ui64 lsn)
+    void LockPBuffer(TPBufferKey pBufferKey) override
     {
-        return TRangeLock(lockableRanges, lsn);
+        ++LsnLocks[pBufferKey];
     }
 
-    static TRangeLock
-    Make(ILockableRanges* lockableRanges, TBlockRange64 range, THostMask mask)
+    void UnlockPBuffer(TPBufferKey pBufferKey) override
     {
-        return TRangeLock(lockableRanges, range, mask);
-    }
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TMockLockableRanges: public ILockableRanges
-{
-public:
-    void LockPBuffer(ui64 lsn) override
-    {
-        ++LsnLocks[lsn];
-    }
-
-    void UnlockPBuffer(ui64 lsn) override
-    {
-        auto count = --LsnLocks[lsn];
+        auto count = --LsnLocks[pBufferKey];
         if (count == 0) {
-            LsnLocks.erase(lsn);
+            LsnLocks.erase(pBufferKey);
         }
     }
 
@@ -59,12 +52,14 @@ public:
         }
     }
 
-    TMap<ui64, size_t> LsnLocks;
+    TMap<TPBufferKey, size_t> LsnLocks;
     TMap<ui64, size_t> RangeLocks;
 
 private:
     TLockRangeHandle NextHandle = 1000;
 };
+
+}   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -72,135 +67,135 @@ Y_UNIT_TEST_SUITE(TRangeLockTest)
 {
     Y_UNIT_TEST(TestNotArmed)
     {
-        TMockLockableRanges mock;
+        auto mock = std::make_shared<TMockLockableRanges>();
         THostMask mask = THostMask::MakeAll(3);
 
         {
-            TRangeLock lock1 = TRangeLockAccess::Make(&mock, 123);
+            TRangeLock lock1 = TRangeLockAccess::Make(mock, MakeKey(123));
             TRangeLock lock2 = TRangeLockAccess::Make(
-                &mock,
+                mock,
                 TBlockRange64::MakeOneBlock(100),
                 mask);
-            UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
-            UNIT_ASSERT_VALUES_EQUAL(0, mock.RangeLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(0, mock->LsnLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(0, mock->RangeLocks.size());
         }
-        UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
-        UNIT_ASSERT_VALUES_EQUAL(0, mock.RangeLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, mock->LsnLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, mock->RangeLocks.size());
     }
 
     Y_UNIT_TEST(TestLsnLock)
     {
-        TMockLockableRanges mock;
+        auto mock = std::make_shared<TMockLockableRanges>();
 
         {
-            TRangeLock lock = TRangeLockAccess::Make(&mock, 123);
+            TRangeLock lock = TRangeLockAccess::Make(mock, MakeKey(123));
 
             lock.Arm();
-            UNIT_ASSERT_VALUES_EQUAL(1, mock.LsnLocks.size());
-            UNIT_ASSERT_VALUES_EQUAL(1, mock.LsnLocks[123]);
-            UNIT_ASSERT_VALUES_EQUAL(0, mock.RangeLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, mock->LsnLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, mock->LsnLocks[MakeKey(123)]);
+            UNIT_ASSERT_VALUES_EQUAL(0, mock->RangeLocks.size());
         }
-        UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
-        UNIT_ASSERT_VALUES_EQUAL(0, mock.RangeLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, mock->LsnLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, mock->RangeLocks.size());
     }
 
     Y_UNIT_TEST(TestRangeLockConstructor)
     {
-        TMockLockableRanges mock;
+        auto mock = std::make_shared<TMockLockableRanges>();
         THostMask mask = THostMask::MakeAll(3);
 
         {
             TRangeLock lock = TRangeLockAccess::Make(
-                &mock,
+                mock,
                 TBlockRange64::MakeOneBlock(100),
                 mask);
 
             lock.Arm();
-            UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
-            UNIT_ASSERT_VALUES_EQUAL(1, mock.RangeLocks.size());
-            UNIT_ASSERT_VALUES_EQUAL(1, mock.RangeLocks[1001]);
+            UNIT_ASSERT_VALUES_EQUAL(0, mock->LsnLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, mock->RangeLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, mock->RangeLocks[1001]);
         }
-        UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
-        UNIT_ASSERT_VALUES_EQUAL(0, mock.RangeLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, mock->LsnLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, mock->RangeLocks.size());
     }
 
     Y_UNIT_TEST(TestMoveConstructor)
     {
-        TMockLockableRanges mock;
+        auto mock = std::make_shared<TMockLockableRanges>();
         THostMask mask = THostMask::MakeAll(3);
 
         {
-            TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
+            TRangeLock lock1 = TRangeLockAccess::Make(mock, MakeKey(456));
             TRangeLock lock2 = TRangeLockAccess::Make(
-                &mock,
+                mock,
                 TBlockRange64::MakeOneBlock(100),
                 mask);
             lock1.Arm();
             lock2.Arm();
 
-            UNIT_ASSERT_VALUES_EQUAL(1, mock.LsnLocks.size());
-            UNIT_ASSERT_VALUES_EQUAL(1, mock.RangeLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, mock->LsnLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, mock->RangeLocks.size());
             {
                 TRangeLock lock3(std::move(lock1));
                 TRangeLock lock4(std::move(lock2));
             }
-            UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
-            UNIT_ASSERT_VALUES_EQUAL(0, mock.RangeLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(0, mock->LsnLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(0, mock->RangeLocks.size());
         }
-        UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
-        UNIT_ASSERT_VALUES_EQUAL(0, mock.RangeLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, mock->LsnLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, mock->RangeLocks.size());
     }
 
     Y_UNIT_TEST(TestMoveAssignment)
     {
-        TMockLockableRanges mock;
+        auto mock = std::make_shared<TMockLockableRanges>();
         THostMask mask = THostMask::MakeAll(3);
 
         {
-            TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
+            TRangeLock lock1 = TRangeLockAccess::Make(mock, MakeKey(456));
             TRangeLock lock2 = TRangeLockAccess::Make(
-                &mock,
+                mock,
                 TBlockRange64::MakeOneBlock(100),
                 mask);
             lock1.Arm();
             lock2.Arm();
 
-            UNIT_ASSERT_VALUES_EQUAL(1, mock.LsnLocks.size());
-            UNIT_ASSERT_VALUES_EQUAL(1, mock.RangeLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, mock->LsnLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, mock->RangeLocks.size());
             {
-                TRangeLock lock3 = TRangeLockAccess::Make(&mock, 0);
-                TRangeLock lock4 = TRangeLockAccess::Make(&mock, 0);
+                TRangeLock lock3 = TRangeLockAccess::Make(mock, MakeKey(0));
+                TRangeLock lock4 = TRangeLockAccess::Make(mock, MakeKey(0));
                 lock3 = std::move(lock1);
                 lock4 = std::move(lock2);
             }
-            UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
-            UNIT_ASSERT_VALUES_EQUAL(0, mock.RangeLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(0, mock->LsnLocks.size());
+            UNIT_ASSERT_VALUES_EQUAL(0, mock->RangeLocks.size());
         }
-        UNIT_ASSERT_VALUES_EQUAL(0, mock.LsnLocks.size());
-        UNIT_ASSERT_VALUES_EQUAL(0, mock.RangeLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, mock->LsnLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(0, mock->RangeLocks.size());
     }
 
     Y_UNIT_TEST(TestDoubleArm)
     {
-        TMockLockableRanges mock;
+        auto mock = std::make_shared<TMockLockableRanges>();
         THostMask mask = THostMask::MakeAll(3);
 
-        TRangeLock lock1 = TRangeLockAccess::Make(&mock, 456);
+        TRangeLock lock1 = TRangeLockAccess::Make(mock, MakeKey(456));
         TRangeLock lock2 = TRangeLockAccess::Make(
-            &mock,
+            mock,
             TBlockRange64::MakeOneBlock(100),
             mask);
         lock1.Arm();
         lock2.Arm();
 
-        UNIT_ASSERT_VALUES_EQUAL(1, mock.LsnLocks.size());
-        UNIT_ASSERT_VALUES_EQUAL(1, mock.RangeLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, mock->LsnLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, mock->RangeLocks.size());
 
         lock1.Arm();
         lock2.Arm();
 
-        UNIT_ASSERT_VALUES_EQUAL(1, mock.LsnLocks.size());
-        UNIT_ASSERT_VALUES_EQUAL(1, mock.RangeLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, mock->LsnLocks.size());
+        UNIT_ASSERT_VALUES_EQUAL(1, mock->RangeLocks.size());
     }
 }
 

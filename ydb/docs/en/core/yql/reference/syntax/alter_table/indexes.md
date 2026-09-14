@@ -1,8 +1,9 @@
-# Adding, removing, and renaming a index
+# Adding, deleting, and renaming an index
 
 ## Adding an index {#add-index}
 
-`ADD INDEX` — adds an index with the specified name and type for a given set of columns. Grammar:
+`ADD INDEX` — adds an index with the specified name and type for the given set of columns in {% if backend_name == "YDB" and oss == true %}row tables.{% else %}tables.{% endif %} Grammar:
+
 
 ```yql
 ALTER TABLE `<table_name>`
@@ -17,14 +18,22 @@ ALTER TABLE `<table_name>`
   [,   ...]
 ```
 
+
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
+
+{% if backend_name == "YDB" and oss == true %}
+
+You can also add a secondary index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI command.
+
+{% endif %}
 
 Parameters for all index types:
 
-* `parallel` - maximum number of parallel [partition](../../../../concepts/glossary.md#partition)-based workers used during index build (an integer between `1` and `MaxBuildIndexShardsInFlight` from `SchemeShardConfig`).
-  - If not specified, currently defaults to `32` or `MaxBuildIndexShardsInFlight` if it's lower. Default `MaxBuildIndexShardsInFlight` is `1000`. Default parallelism selection logic may be changed in future versions.
-  - You may set a smaller limit to reduce the impact of index build on the DB performance.
-  - You may also set a larger limit to speed up the index build if you have enough hardware resources.
+* maximum number of `parallel` handlers based on [partitions](../../../../concepts/glossary.md#partition) involved in index building (an integer between `1` and `MaxBuildIndexShardsInFlight` from `SchemeShardConfig`).
+
+  - If the parameter is not specified, the default value `32` or `MaxBuildIndexShardsInFlight` is currently used, whichever is smaller. `MaxBuildIndexShardsInFlight` defaults to `1000`. In future versions, the default parallelism selection logic may change.
+  - You can set a lower limit to reduce the impact of index building on database performance.
+  - You can also set a higher limit to speed up index building if you have enough hardware resources.
 
 Parameters specific to vector indexes:
 
@@ -32,29 +41,27 @@ Parameters specific to vector indexes:
 
 {% note info %}
 
-For vector indexes, the vector_type and vector_dimension parameters can be omitted if the table is not empty — they are determined automatically based on the row contents. The levels and clusters parameters are also determined automatically, and the table may be empty for them, but this is highly unrecommended because the default values in that case are levels=1, clusters=2. It is far better to create the index on a table that already has data loaded, so that the values can be determined correctly.
+For vector indexes, the `vector_type` and `vector_dimension` parameters can be omitted if the table is not empty — they are determined automatically from the row contents. The `levels` and `clusters` parameters are also determined automatically, and for them the table can be empty, but doing so is strongly not recommended because the default values in this case are `levels`=1, `clusters`=2; it is much better to create the index on a table that already has data loaded, so that the values can be correctly determined.
 
 {% endnote %}
 
-Parameters specific to fulltext indexes:
+Parameters specific to full-text indexes:
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
 
-### Local Bloom skip index parameters {#local-bloom}
+### Parameters of local bloom indexes {#local-bloom}
 
 {% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
 
-{% if backend_name == "YDB" %}
+### Parameters of the local min_max index {#local-min-max}
 
-You can also add a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) command.
-
-{% endif %}
+{% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
 
 ### Limitations
 
-The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, and so on) and vector indexes is supported only for row-oriented tables. For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), `ADD INDEX` [supports only local Bloom skip indexes](#local-bloom).
+The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), only local indexes are supported via `ADD INDEX`: [bloom index](#local-bloom) and [min_max index](#local-min-max).
 
-Local Bloom skip index behavior:
+Features of local bloom indexes:
 
 {% include [bloom_skip_index_features.md](../_includes/bloom_skip_index_features.md) %}
 
@@ -64,9 +71,20 @@ Local Bloom skip index behavior:
 
 {% endnote %}
 
+Features of the local min_max index:
+
+{% include [min_max_index_features.md](../_includes/min_max_index_features.md) %}
+
+{% note info "Limitations" %}
+
+{% include [min_max_index_limitations.md](../_includes/min_max_index_limitations.md) %}
+
+{% endnote %}
+
 ### Examples
 
-A regular secondary index:
+Secondary index:
+
 
 ```yql
 ALTER TABLE `series`
@@ -74,7 +92,9 @@ ALTER TABLE `series`
   GLOBAL ON (`title`);
 ```
 
+
 [Vector index](../../../../dev/vector-indexes.md):
+
 
 ```yql
 ALTER TABLE `series`
@@ -85,7 +105,9 @@ ALTER TABLE `series`
   );
 ```
 
-A fulltext index:
+
+Full-text index:
+
 
 ```yql
 ALTER TABLE `series`
@@ -94,7 +116,19 @@ ALTER TABLE `series`
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
-A bloom index:
+
+[JSON index](../../../../dev/json-indexes.md):
+
+
+```yql
+ALTER TABLE `series`
+  ADD INDEX json_idx GLOBAL USING json
+  ON (metadata);
+```
+
+
+[Bloom index](../../../../dev/bloom-skip-indexes.md):
+
 
 ```yql
 ALTER TABLE `/Root/Table`
@@ -103,7 +137,9 @@ ALTER TABLE `/Root/Table`
   WITH (false_positive_probability = 0.01);
 ```
 
-A bloom ngram index:
+
+Bloom n-gram index:
+
 
 ```yql
 ALTER TABLE `/Root/Table`
@@ -116,53 +152,70 @@ ALTER TABLE `/Root/Table`
   );
 ```
 
-## Altering an index {#alter-index}
 
-Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and followers settings can be adjusted just like those of regular tables.
+min_max index:
+
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_created_at LOCAL USING min_max
+  ON (created_at);
+```
+
+
+## Changing index parameters {#alter-index}
+
+Indexes have type-dependent parameters that you can configure. Global indexes, [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and replica parameters can be adjusted in the same way as regular table settings.
 
 {% note info %}
 
-Currently, specifying secondary index partitioning settings during index creation is not supported in either the [`ALTER TABLE ADD INDEX`](#add-index) or the [`CREATE TABLE INDEX`](../create_table/secondary_index.md) statements.
+Currently, setting partitioning parameters for secondary indexes when creating an index is not supported either in the [`ALTER TABLE ADD INDEX`](#add-index) statement or in the [`CREATE TABLE INDEX`](../create_table/secondary_index.md) statement.
 
 {% endnote %}
 
-```sql
+
+```yql
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET <setting_name> <value>;
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value_1>, ...);
 ```
 
-* `<table_name>`: The name of the table whose index is to be modified.
-* `<index_name>`: The name of the index to be modified.
-* `<setting_name>`: The name of the setting to be modified. Allowed settings depend on the index type:
-    * for global secondary indexes:
-        * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
-        * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
-        * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
-        * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
-        * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
-        * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
-    * for local Bloom skip indexes (see [Local Bloom skip index parameters](#local-bloom)):
-        * `FALSE_POSITIVE_PROBABILITY`
-        * `NGRAM_SIZE` and `CASE_SENSITIVE` (for `bloom_ngram_filter` only)
 
+* `<table_name>` - name of the table whose index needs to be changed.
+* `<index_name>` - name of the index to change.
+* `<setting_name>` - name of the parameter to change. The set of allowed parameters depends on the index type:
+
+  * for global secondary indexes:
+
+    * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
+    * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
+    * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
+    * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
+    * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
+    * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
+  * for local bloom indexes (see [Parameters of local bloom indexes](#local-bloom)):
+
+    * `FALSE_POSITIVE_PROBABILITY`
+    * `NGRAM_SIZE` and `CASE_SENSITIVE` (only for `bloom_ngram_filter`)
+  * The min_max index does not support `ALTER INDEX`.
 
 {% note info %}
 
-`RESET` is not supported for `ALTER INDEX`.
+The `RESET` operation for `ALTER INDEX` is not supported.
 
 {% endnote %}
 
-* `<value>`: The new value for the setting. Possible values include:
-    * `ENABLED` or `DISABLED` for the `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` settings
-    * `"PER_AZ:<count>"` or `"ANY_AZ:<count>"` where `<count>` is the number of replicas for the `READ_REPLICAS_SETTINGS`
-    * An integer of `Uint64` type for the other settings
-    * A floating-point value in `(0, 1)` for `FALSE_POSITIVE_PROBABILITY`; smaller values usually reduce false positives but increase index size
-    * An integer value from `3` to `8` for `NGRAM_SIZE` (a typical starting point is `3`)
-    * `true` or `false` for `CASE_SENSITIVE`
+* `<value>` - new parameter value. Possible values include:
+
+  * `ENABLED` or `DISABLED` for the `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` parameters
+  * `"PER_AZ:<count>"` or `"ANY_AZ:<count>"` where `<count>` is the number of replicas for `READ_REPLICAS_SETTINGS`
+  * for other parameters — an integer of type `Uint64`
+  * for `FALSE_POSITIVE_PROBABILITY` — a floating-point number in the range `(0, 1)`; a smaller value usually reduces the number of false positives but increases the index size
+  * for `NGRAM_SIZE` — an integer in the range from `3` to `8` (usually recommended to start with `3`)
+  * for `CASE_SENSITIVE` — `true` or `false`
 
 ### Example
 
-The query in the following example enables automatic partitioning by load for the index named `title_index` of the table `series`, sets its minimum partition count to 5, and enables one follower per AZ for every partition:
+The code in the following example enables automatic partitioning by load for the index named `title_index` in the table `series`, sets the minimum number of partitions to 5, and starts one replica in each availability zone (AZ) for each partition:
 
 
 ```yql
@@ -173,7 +226,9 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 );
 ```
 
-For local Bloom skip indexes, you can also alter index-specific parameters, for example:
+
+For local bloom indexes, you can also change their specific parameters, for example:
+
 
 ```yql
 ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (
@@ -183,35 +238,37 @@ ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (
 );
 ```
 
+
 ## Deleting an index {#drop-index}
 
-`DROP INDEX`: Deletes the index with the specified name. The code below deletes the index named `title_index`.
+`DROP INDEX` — deletes the index with the specified name. The code below will delete the index named `title_index`.
+
 
 ```yql
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 
-{% if backend_name == "YDB" %}
 
-You can also remove a index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index.md#drop) command.
+{% if backend_name == "YDB" and oss == true %}
 
-{% endif %}
-
-## Renaming an index {#rename-index}
-
-`RENAME INDEX`: Renames the index with the specified name.
-
-If an index with the new name exists, an error is returned.
-
-{% if backend_name == "YDB" %}
-
-Atomically replacing an index under load is supported by the [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) command in the {{ ydb-short-name }} CLI and by {{ ydb-short-name }} SDK methods.
-
-This applies to global secondary indexes (the hidden index table and the `--replace` mode). Local Bloom skip indexes are not covered by this atomic under-load replacement flow.
+You can also delete an index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#drop) {{ ydb-short-name }} CLI command.
 
 {% endif %}
 
-Example of index renaming:
+## Renaming a secondary index {#rename-secondary-index}
+
+`RENAME INDEX` — renames the index with the specified name. If an index with the new name already exists, an error will be returned.
+
+{% if backend_name == "YDB" and oss == true %}
+
+The ability to atomically replace an index under load is supported by the [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) {{ ydb-short-name }} CLI command and specialized {{ ydb-short-name }} SDK methods.
+
+This applies to global secondary indexes (hidden index table and `--replace` mode). Local bloom indexes are not applicable to such atomic replacement under load.
+
+{% endif %}
+
+Example of renaming an index:
+
 
 ```yql
 ALTER TABLE `series` RENAME INDEX `title_index` TO `title_index_new`;

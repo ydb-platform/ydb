@@ -75,29 +75,29 @@ std::pair<TDuration, TDuration> TimestampDiffToDuration(TTimestamp loTimestamp, 
 
 ui64 UnixTimeFromTimestamp(TTimestamp timestamp)
 {
-    return timestamp >> TimestampCounterWidth;
+    return timestamp.Underlying() >> TimestampCounterWidth;
 }
 
 TTimestamp TimestampFromUnixTime(ui64 time)
 {
-    return time << TimestampCounterWidth;
+    return TTimestamp(time << TimestampCounterWidth);
 }
 
 TTimestamp EmbedCellTagIntoTimestamp(TTimestamp timestamp, TCellTag cellTag)
 {
     static_assert(sizeof(TCellTag) == 2, "Invalid TCellTag size");
 
-    YT_VERIFY((timestamp & ((1ull << TimestampCounterWidth) - 1)) == 0);
+    YT_VERIFY((timestamp.Underlying() & ((1ull << TimestampCounterWidth) - 1)) == 0);
 
-    return timestamp ^ (static_cast<ui32>(cellTag.Underlying()) << (TimestampCounterWidth - 16));
+    return TTimestamp(timestamp.Underlying() ^ (static_cast<ui32>(cellTag.Underlying()) << (TimestampCounterWidth - 16)));
 }
 
 bool CanAdvanceTimestampWithEmbeddedCellTag(TTimestamp timestamp, int delta)
 {
     static_assert(sizeof(TCellTag) == 2, "Invalid TCellTag size");
 
-    return (timestamp >> (TimestampCounterWidth - 16)) ==
-        ((timestamp + delta) >> (TimestampCounterWidth - 16));
+    return (timestamp.Underlying() >> (TimestampCounterWidth - 16)) ==
+        ((timestamp.Underlying() + delta) >> (TimestampCounterWidth - 16));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

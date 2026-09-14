@@ -9,12 +9,14 @@
 
 #include <yt/yt/core/ypath/token.h>
 
+#include <yt/yt/library/cgroup/statistics.h>
+
 #include <yt/yt/library/profiling/sensor.h>
 #include <yt/yt/library/profiling/producer.h>
 
 #include <library/cpp/yt/threading/atomic_object.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
@@ -38,14 +40,15 @@ using namespace NYPath;
 using namespace NProfiling;
 using namespace NConcurrency;
 using namespace NThreading;
+using namespace NCGroups;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "Profiling");
-YT_DEFINE_GLOBAL(const TProfiler, ResourceTrackerProfiler, "/resource_tracker");
-YT_DEFINE_GLOBAL(const TProfiler, MemoryProfiler, "/memory/cgroup");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "Profiling");
+YT_DEFINE_LEAKY_GLOBAL(const TProfiler, ResourceTrackerProfiler, "/resource_tracker");
+YT_DEFINE_LEAKY_GLOBAL(const TProfiler, MemoryProfiler, "/memory/cgroup");
 
 // Please, refer to /proc documentation to know more about available information.
 // http://www.kernel.org/doc/Documentation/filesystems/proc.txt
@@ -67,46 +70,38 @@ public:
     void CollectSensors(ISensorWriter* writer) override
     {
         try {
-            auto cgroups = GetProcessCgroups();
-            for (const auto& group : cgroups) {
-                for (const auto& controller : group.Controllers) {
-                    if (controller == "cpu") {
-                        auto stat = GetCgroupCpuStat(group.ControllersName, group.Path);
+            auto cpuStatistics = TSelfCGroupsStatisticsFetcher::Get()->GetCpuThrottlingStatistics();
 
-                        if (!FirstCgroupStat_) {
-                            FirstCgroupStat_ = stat;
-                        }
-
-                        writer->AddCounter(
-                            "/cgroup/periods",
-                            stat.NrPeriods - FirstCgroupStat_->NrPeriods);
-
-                        writer->AddCounter(
-                            "/cgroup/throttled_periods",
-                            stat.NrThrottled - FirstCgroupStat_->NrThrottled);
-
-                        writer->AddCounter(
-                            "/cgroup/throttled_cpu_percent",
-                            (stat.ThrottledTime - FirstCgroupStat_->ThrottledTime) / 10'000'000);
-
-                        writer->AddCounter(
-                            "/cgroup/wait_cpu_percent",
-                            (stat.WaitTime - FirstCgroupStat_->WaitTime) / 10'000'000);
-
-                        return;
-                    }
-                }
+            if (!FirstCpuStatistics_) {
+                FirstCpuStatistics_ = cpuStatistics;
             }
+
+            writer->AddCounter(
+                "/cgroup/periods",
+                cpuStatistics.NrPeriods - FirstCpuStatistics_->NrPeriods);
+
+            writer->AddCounter(
+                "/cgroup/throttled_periods",
+                cpuStatistics.NrThrottled - FirstCpuStatistics_->NrThrottled);
+
+            writer->AddCounter(
+                "/cgroup/throttled_cpu_percent",
+                (cpuStatistics.ThrottledTime - FirstCpuStatistics_->ThrottledTime).NanoSeconds() / 10'000'000);
+
+            writer->AddCounter(
+                "/cgroup/wait_cpu_percent",
+                (cpuStatistics.WaitTime - FirstCpuStatistics_->WaitTime).NanoSeconds() / 10'000'000);
         } catch (const std::exception& ex) {
             if (!CgroupErrorLogged_) {
-                YT_LOG_INFO(ex, "Failed to collect cgroup cpu statistics");
+                YT_TLOG_INFO("Failed to collect cgroup cpu statistics")
+                    .With(ex);
                 CgroupErrorLogged_ = true;
             }
         }
     }
 
 private:
-    std::optional<TCgroupCpuStat> FirstCgroupStat_;
+    std::optional<TCpuThrottlingStatistics> FirstCpuStatistics_;
     bool CgroupErrorLogged_ = false;
 };
 
@@ -121,32 +116,32 @@ public:
     void CollectSensors(ISensorWriter* writer) override
     {
         try {
-            auto cgroups = GetProcessCgroups();
-            for (const auto& group : cgroups) {
-                for (const auto& controller : group.Controllers) {
-                    if (controller == "memory") {
-                        auto stat = GetCgroupMemoryStat(group.Path);
+            const auto* fetcher = TSelfCGroupsStatisticsFetcher::Get();
+            auto memoryStatistics = fetcher->GetMemoryStatistics();
 
-                        writer->AddGauge("/memory_limit", stat.HierarchicalMemoryLimit);
-                        writer->AddGauge("/cache", stat.Cache);
-                        writer->AddGauge("/rss", stat.Rss);
-                        writer->AddGauge("/rss_huge", stat.RssHuge);
-                        writer->AddGauge("/mapped_file", stat.MappedFile);
-                        writer->AddGauge("/dirty", stat.Dirty);
-                        writer->AddGauge("/writeback", stat.Writeback);
+            writer->AddGauge("/cache", memoryStatistics.Cache);
+            writer->AddGauge("/rss", memoryStatistics.AnonWithSwapCached);
+            writer->AddGauge("/rss_huge", memoryStatistics.RssHuge);
+            writer->AddGauge("/mapped_file", memoryStatistics.MappedFile);
+            writer->AddGauge("/dirty", memoryStatistics.Dirty);
+            writer->AddGauge("/writeback", memoryStatistics.Writeback);
 
-                        TotalMemoryLimit_.store(stat.HierarchicalMemoryLimit);
-                        AnonymousMemoryLimit_.store(SafeGetAnonymousMemoryLimit(
-                            group.Path,
-                            stat.HierarchicalMemoryLimit));
+            auto memoryLimits = fetcher->GetMemoryLimits();
+            if (memoryLimits.MemoryLimit) {
+                writer->AddGauge("/memory_limit", *memoryLimits.MemoryLimit);
+                TotalMemoryLimit_.store(*memoryLimits.MemoryLimit);
+            }
 
-                        return;
-                    }
-                }
+            auto anonymousMemoryLimit = ComputeAnonymousMemoryLimit(
+                memoryLimits.AnonymousMemoryLimit,
+                memoryLimits.MemoryLimit);
+            if (anonymousMemoryLimit) {
+                AnonymousMemoryLimit_.store(*anonymousMemoryLimit);
             }
         } catch (const std::exception& ex) {
             if (!CgroupErrorLogged_) {
-                YT_LOG_INFO(ex, "Failed to collect cgroup memory statistics");
+                YT_TLOG_INFO("Failed to collect cgroup memory statistics")
+                    .With(ex);
                 CgroupErrorLogged_ = true;
             }
         }
@@ -164,26 +159,22 @@ public:
 
 private:
     bool CgroupErrorLogged_ = false;
-    bool AnonymousLimitErrorLogged_ = false;
 
     std::atomic<i64> TotalMemoryLimit_ = 0;
     std::atomic<i64> AnonymousMemoryLimit_ = 0;
 
-    i64 SafeGetAnonymousMemoryLimit(TStringBuf cgroupPath, i64 totalMemoryLimit)
+    static std::optional<i64> ComputeAnonymousMemoryLimit(
+        std::optional<i64> anonymousMemoryLimit,
+        std::optional<i64> totalMemoryLimit)
     {
-        try {
-            auto anonymousLimit = GetCgroupAnonymousMemoryLimit(std::string(cgroupPath));
-            auto result = anonymousLimit.value_or(totalMemoryLimit);
-            result = std::min(result, totalMemoryLimit);
-            return result != 0 ? result : totalMemoryLimit;
-        } catch (const std::exception& ex) {
-            if (!AnonymousLimitErrorLogged_) {
-                YT_LOG_INFO(ex, "Failed to collect cgroup anonymous memory limit");
-                AnonymousLimitErrorLogged_ = true;
-            }
+        if (!totalMemoryLimit) {
+            return anonymousMemoryLimit;
         }
-
-        return totalMemoryLimit;
+        if (!anonymousMemoryLimit) {
+            return totalMemoryLimit;
+        }
+        i64 result = std::min(*anonymousMemoryLimit, *totalMemoryLimit);
+        return result != 0 ? result : totalMemoryLimit;
     }
 };
 
@@ -441,13 +432,13 @@ private:
             return std::nullopt;
         }
 
-        YT_LOG_TRACE("Thread statistics (Tid: %v, ThreadName: %v, IsYtThread: %v, UserJiffies: %v, SystemJiffies: %v, CpuWaitNsec: %v)",
-            tid,
-            info.ThreadName,
-            info.IsYTThread,
-            info.Timings.UserJiffies,
-            info.Timings.SystemJiffies,
-            info.Timings.CpuWaitNsec);
+        YT_TLOG_TRACE("Thread statistics")
+            .With("Tid", tid)
+            .With("ThreadName", info.ThreadName)
+            .With("IsYtThread", info.IsYTThread)
+            .With("UserJiffies", info.Timings.UserJiffies)
+            .With("SystemJiffies", info.Timings.SystemJiffies)
+            .With("CpuWaitNsec", info.Timings.CpuWaitNsec);
 
         return info;
     }
@@ -474,7 +465,8 @@ private:
             if (info) {
                 tidToStats[tid] = *info;
             } else {
-                YT_LOG_TRACE("Failed to parse thread info (Tid: %v)", tid);
+                YT_TLOG_TRACE("Failed to parse thread info")
+                    .With("Tid", tid);
             }
         }
 
@@ -557,11 +549,11 @@ private:
 
             maxUtilization = std::max(maxUtilization, utilization);
 
-            YT_LOG_TRACE("Thread CPU timings in percent/sec (ProfilingKey: %v, UserCpu: %v, SystemCpu: %v, CpuWait: %v)",
-                profilingKey,
-                userCpuTime,
-                systemCpuTime,
-                waitTime);
+            YT_TLOG_TRACE("Thread CPU timings in percent/sec")
+                .With("ProfilingKey", profilingKey)
+                .With("UserCpu", userCpuTime)
+                .With("SystemCpu", systemCpuTime)
+                .With("CpuWait", waitTime);
         }
 
         LastUserCpu_.store(totalUserCpuTime);
@@ -569,14 +561,15 @@ private:
         LastCpuWait_.store(totalCpuWaitTime);
         MaxThreadPoolUtilization_.store(maxUtilization);
 
-        YT_LOG_DEBUG("Total CPU timings in percent/sec (UserCpu: %v, SystemCpu: %v, CpuWait: %v)",
-            totalUserCpuTime,
-            totalSystemCpuTime,
-            totalCpuWaitTime);
+        YT_TLOG_DEBUG("Total CPU timings in percent/sec")
+            .With("UserCpu", totalUserCpuTime)
+            .With("SystemCpu", totalSystemCpuTime)
+            .With("CpuWait", totalCpuWaitTime);
 
         int fileDescriptorCount = GetFileDescriptorCount();
         writer->AddGauge("/open_fds", fileDescriptorCount);
-        YT_LOG_DEBUG("Assessed open file descriptors (Count: %v)", fileDescriptorCount);
+        YT_TLOG_DEBUG("Assessed open file descriptors")
+            .With("Count", fileDescriptorCount);
     }
 };
 

@@ -3,8 +3,7 @@
 
 #include <cmath>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -31,7 +30,8 @@ struct TMax: public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMax<TLeft, 
         if constexpr (std::is_floating_point<TOutput>()) {
             auto& context = ctx.Codegen.GetContext();
             auto& module = ctx.Codegen.GetModule();
-            const auto fnType = FunctionType::get(GetTypeFor<TOutput>(context), {left->getType(), right->getType()}, false);
+            const auto fnType = FunctionType::get(
+                GetTypeFor<TOutput>(context), {left->getType(), right->getType()}, /*isVarArg=*/false);
             const auto& name = GetFuncNameForType<TOutput>("llvm.maxnum");
             const auto func = module.getOrInsertFunction(name, fnType).getCallee();
             const auto res = CallInst::Create(fnType, func, {left, right}, "maxnum", block);
@@ -227,5 +227,4 @@ void RegisterAggrMax(IBuiltinFunctionRegistry& registry) {
     RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TUuid>, TCustomMax, TBinaryArgsSameOpt>(registry, "AggrMax");
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

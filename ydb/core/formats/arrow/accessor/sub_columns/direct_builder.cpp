@@ -15,7 +15,7 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
-    TEncodingSparsedBuilder builder(GetCodecForValueType(valueType), RecordIndexes.size(), DataSize);
+    TEncodingSparsedBuilder builder(valueType, RecordIndexes.size(), DataSize);
     for (ui32 i = 0; i < RecordIndexes.size(); ++i) {
         builder.AddFromBinaryJson(RecordIndexes[i], Values[i]);
     }
@@ -24,7 +24,7 @@ void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount, const EValue
 
 void TColumnElements::BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
-    TEncodingPlainBuilder builder(GetCodecForValueType(valueType), recordsCount, DataSize);
+    TEncodingPlainBuilder builder(valueType, recordsCount, DataSize);
     for (ui32 i = 0; i < RecordIndexes.size(); ++i) {
         builder.AddFromBinaryJson(RecordIndexes[i], Values[i]);
     }
@@ -33,7 +33,7 @@ void TColumnElements::BuildPlainAccessor(const ui32 recordsCount, const EValueTy
 
 void TColumnElements::BuildDictionaryAccessor(const ui32 recordsCount, const EValueType valueType) {
     BuildPlainAccessor(recordsCount, valueType);
-    const TChunkConstructionData cData(recordsCount, nullptr, GetCodecForValueType(valueType)->GetArrowType(),
+    const TChunkConstructionData cData(recordsCount, nullptr, GetArrowTypeForValueType(valueType),
         NSerialization::TSerializerContainer::GetDefaultSerializer());
     Accessor = NDictionary::TConstructor().Construct(Accessor, cData).DetachResult();
 }

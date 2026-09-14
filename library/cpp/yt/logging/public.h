@@ -5,6 +5,9 @@
 
 #include <library/cpp/yt/memory/ref.h>
 
+#include <util/generic/strbuf.h>
+
+#include <string>
 #include <variant>
 
 namespace NYT::NLogging {
@@ -37,6 +40,7 @@ struct TLogEvent;
 struct TLoggingContext;
 
 class TLogger;
+class TLoggingTagList;
 struct ILogManager;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -48,6 +52,14 @@ YT_DEFINE_STRONG_TYPEDEF(TTaggedLogEventPayload, TSharedRef);
 //! Opaque payload of a structured log event: a raw YSON map fragment.
 //! Produced by #LogStructuredEvent.
 YT_DEFINE_STRONG_TYPEDEF(TStructuredLogEventPayload, TSharedRef);
+
+//! A serialized tag section: the |[key][value]| records of the tagged payload layout
+//! (see tagged_payload.h), with no message field. Distinct from an ordinary string so a
+//! plain one cannot be mistaken for framed bytes.
+YT_DEFINE_STRONG_TYPEDEF(TLoggingTagListPayload, std::string);
+
+//! A borrowed #TLoggingTagListPayload; see #AsView.
+YT_DEFINE_STRONG_TYPEDEF(TLoggingTagListPayloadView, TStringBuf);
 
 //! The payload carried by a #TLogEvent: exactly one of the encodings above. The active
 //! alternative both identifies the event kind and determines how the payload is decoded.

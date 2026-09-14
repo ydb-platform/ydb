@@ -55,6 +55,7 @@ const TVector<SysViewsRegistryRecord> SysViewsRegistry::SysViews = {
     {"primary_index_optimizer_stats", ESysViewType::ETablePrimaryIndexOptimizerStats, {ESource::ColumnTable},  &FillSchema<Schema::PrimaryIndexOptimizerStats>},
 
     {"streaming_queries", ESysViewType::EStreamingQueries, {ESource::Domain, ESource::SubDomain}, &FillSchema<Schema::StreamingQueries>},
+    {"udf_modules", ESysViewType::EUdfModules, {ESource::Domain, ESource::SubDomain}, &FillSchema<Schema::UdfModules>},
 };
 
 const TVector<SysViewsRegistryRecord> SysViewsRegistry::RewrittenSysViews = {

@@ -67,11 +67,11 @@ public:
         }
 
         if (status.IsFail()) {
-            YDB_LOG_ERROR("Compilation failed for request",
+            YDB_LOG_ERROR("Compilation failed",
                 {"logPrefix", LogPrefix});
             Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(status.GetStatus(), status.GetErrorDescription()), 0, Request->Cookie);
         } else {
-            YDB_LOG_TRACE("Compilation completed for request",
+            YDB_LOG_TRACE("Compilation completed",
                 {"logPrefix", LogPrefix});
             Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder)), 0, Request->Cookie);
         }
@@ -133,7 +133,7 @@ public:
     void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
         const auto requestActor = ev->Sender;
         const ui64 requestId = ev->Cookie;
-        YDB_LOG_TRACE("Add to compile queue request with id",
+        YDB_LOG_TRACE("Add to compile queue new request",
             {"logPrefix", LogPrefix},
             {"requestId", requestId},
             {"requestActor", requestActor});
@@ -150,7 +150,7 @@ public:
     }
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileAbort::TPtr& ev) {
-        YDB_LOG_TRACE("Abort compile request with id",
+        YDB_LOG_TRACE("Abort compile request",
             {"logPrefix", LogPrefix},
             {"cookie", ev->Cookie},
             {"sender", ev->Sender});
@@ -159,7 +159,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvCompileFinished::TPtr& ev) {
-        YDB_LOG_TRACE("Compile finished for request with id",
+        YDB_LOG_TRACE("Compile finished",
             {"logPrefix", LogPrefix},
             {"requestId", ev->Get()->RequestId},
             {"requestActor", ev->Get()->RequestActor});

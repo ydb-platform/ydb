@@ -176,8 +176,11 @@ public:
     // idempotent and there is no way to roll back a partially-sent batch.
     // Silently ignore checkpoint calls so the actor can coexist with
     // checkpoint-enabled pipelines.
-    void LoadState(const TSinkState&) override {}
-    void CommitState(const NDqProto::TCheckpoint&) override {}
+    void LoadState(const TSinkState&, const NDqProto::TCheckpoint&) override {}
+
+    void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
+        Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
+    }
 
     i64 GetFreeSpace() const override {
         return FreeSpace;

@@ -427,6 +427,11 @@ class TRealBlockDevice : public IBlockDevice {
         ui64 PrevEstimatedCostNs = 0;
         ui64 PrevActualCostNs = 0;
 
+        // Per-window accumulators for the merged (cross-source) device
+        // overestimation ratio; reset every ~15s window (see Exec below).
+        ui64 MergedEstimatedNs = 0;
+        ui64 MergedActualNs = 0;
+
         TCompletionAction* WaitingNoops[MaxWaitingNoops] = {nullptr};
         TRealBlockDevice &Device;
         std::shared_ptr<TPDiskCtx> &PCtx;
@@ -436,6 +441,23 @@ class TRealBlockDevice : public IBlockDevice {
             : Device(device)
             , PCtx(device.PCtx)
         {}
+
+        // Whether the merged (cross-source) overestimation metric should be published
+        // via the legacy DeviceOverestimationRatio/DeviceNonperformanceMs sensors.
+        // Backed by an ICB control (default: enabled) so it can be toggled at runtime,
+        // without a cluster restart, in case the merged metric misbehaves.
+        bool UseDeviceOverestimationRatioMerged() const {
+            if (PCtx && PCtx->ActorSystem) {
+                if (auto *appData = PCtx->ActorSystem->AppData<TAppData>()) {
+                    if (appData->Icb) {
+                        if (auto control = appData->Icb->PDiskControls.UseDeviceOverestimationRatioMerged.AtomicLoad()) {
+                            return control->Get() != 0;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
 
         void FillCompletionAction(TCompletionAction *action, IAsyncIoOperation *op, EIoResult result) {
             action->TraceId = std::move(*op->GetTraceIdPtr());
@@ -480,7 +502,9 @@ class TRealBlockDevice : public IBlockDevice {
             NHPTimer::STime totalExecutionCycles = durationCycles;
             NHPTimer::STime totalCostNs = completionAction->CostNs;
 
-            bool isSeekExpected = (completionAction->SubmitTime + (NHPTimer::STime)Device.SeekCostNs / 25ll >= PrevEventGotAtCycle);
+            bool isSeekExpected = (completionAction->SubmitTime
+                + (NHPTimer::STime)Device.SeekCostNs / (NHPTimer::STime)SeekCostNsToCyclesApproxDivisor
+                >= PrevEventGotAtCycle);
 
             if (opSize == 0) { // Special case for flush operation, which is a read operation with 0 bytes size
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
@@ -495,6 +519,22 @@ class TRealBlockDevice : public IBlockDevice {
                     isSeekExpected = true;
                 }
                 EndOffset = op->GetOffset() + opSize;
+
+                // Feed the merged (cross-source) device overestimation aggregator with
+                // a raw sample. BaseCostNs intentionally excludes any seek cost: the
+                // aggregator recomputes seek-expected based on its own merged,
+                // completion-ordered stream (which may include samples from IO_URING
+                // sources sharing the same physical device).
+                {
+                    TDeviceIoSample sample;
+                    sample.SubmitCycles = (ui64)completionAction->SubmitTime;
+                    sample.CompleteCycles = (ui64)eventGotAtCycle;
+                    sample.Offset = (ui64)op->GetOffset();
+                    sample.Size = opSize;
+                    sample.IsWrite = (op->GetType() != IAsyncIoOperation::EType::PRead);
+                    sample.BaseCostNs = completionAction->CostNs;
+                    Device.Mon.DeviceOverestimationMerged.Push(sample);
+                }
 
                 double duration = HPMilliSecondsFloat(HPNow() - completionAction->SubmitTime);
                 if (op->GetType() == IAsyncIoOperation::EType::PRead) {
@@ -547,29 +587,46 @@ class TRealBlockDevice : public IBlockDevice {
             if (PrevEstimationAtCycle > eventGotAtCycle) {
                 PrevEstimationAtCycle = eventGotAtCycle;
             }
-            if (HPMilliSeconds(eventGotAtCycle - PrevEstimationAtCycle) >= 15000) {
+            if (HPMilliSeconds(eventGotAtCycle - PrevEstimationAtCycle) >= OverestimationWindowMs) {
                 ui64 estimated = (*Device.Mon.DeviceEstimatedCostNs - PrevEstimatedCostNs);
-                ui64 actual = (*Device.Mon.DeviceActualCostNs - PrevActualCostNs + 30000000ull);
-                if (estimated != 0) {
-                    *Device.Mon.DeviceOverestimationRatio = 1000ull * actual / (estimated + 30000000ull);
-                    if (actual > estimated) {
-                        if (actual - estimated < 15000000000ull) {
-                            *Device.Mon.DeviceNonperformanceMs = (actual - estimated) / 15000000ull;
-                        } else {
-                            *Device.Mon.DeviceNonperformanceMs = 1000;
-                        }
-                    } else {
-                        *Device.Mon.DeviceNonperformanceMs = 0;
-                    }
-                } else {
-                    *Device.Mon.DeviceOverestimationRatio = 1000ull;
-                    *Device.Mon.DeviceNonperformanceMs = 0ull;
-                }
+                ui64 actual = (*Device.Mon.DeviceActualCostNs - PrevActualCostNs + OverestimationActualCostBiasNs);
+                const TOverestimationRatioResult ratioResult = ComputeOverestimationRatio(estimated, actual);
 
                 PrevEstimatedCostNs = *Device.Mon.DeviceEstimatedCostNs;
                 PrevActualCostNs = *Device.Mon.DeviceActualCostNs;
                 PrevEstimationAtCycle = eventGotAtCycle;
                 *Device.Mon.GetThreadCPU = ThreadCPUTime();
+
+                // Merge this window's samples (this PDisk block device thread plus
+                // any samples received from IO_URING sources sharing this physical
+                // device) and derive the same overestimation ratio for the merged
+                // stream. See blobstorage_pdisk_device_overestimation.h.
+                auto windowResult = Device.Mon.DeviceOverestimationMerged.ComputeAndReset(Device.SeekCostNs);
+                MergedEstimatedNs += windowResult.EstimatedNs;
+                MergedActualNs += windowResult.ActualNs + OverestimationActualCostBiasNs;
+                const TOverestimationRatioResult mergedRatioResult =
+                    ComputeOverestimationRatio(MergedEstimatedNs, MergedActualNs);
+                *Device.Mon.DeviceOverestimationRatioMerged = mergedRatioResult.OverestimationRatio;
+                *Device.Mon.DeviceNonperformanceMsMerged = mergedRatioResult.NonperformanceMs;
+                *Device.Mon.DeviceOverestimationDroppedSamples = Device.Mon.DeviceOverestimationMerged.GetDroppedSamples();
+                // Reset accumulators each window (unlike the legacy PDisk-only
+                // counters above, which are cumulative device-lifetime counters we
+                // diff against Prev*): this makes MergedEstimatedNs/MergedActualNs
+                // pure per-window sums, matching windowResult's own semantics.
+                MergedEstimatedNs = 0;
+                MergedActualNs = 0;
+
+                // The DeviceOverestimationRatio/DeviceNonperformanceMs sensors are the
+                // ones referenced by dashboards/alerts. By default (ICB control enabled)
+                // we publish the merged (cross-source) metric there instead of the
+                // legacy PDisk-only computation, since it accounts for IO_URING sources
+                // (DDisk / PersistentBuffer) sharing the same physical device. Disabling
+                // the control (no cluster restart required) reverts to the old behavior
+                // in case the new metric misbehaves.
+                const TOverestimationRatioResult& publishedResult = SelectPublishedOverestimationResult(
+                        UseDeviceOverestimationRatioMerged(), ratioResult, mergedRatioResult);
+                *Device.Mon.DeviceOverestimationRatio = publishedResult.OverestimationRatio;
+                *Device.Mon.DeviceNonperformanceMs = publishedResult.NonperformanceMs;
             }
 
             PrevEventGotAtCycle = eventGotAtCycle;
@@ -1005,6 +1062,7 @@ protected:
                 Mon.DeviceInFlightWrites->Dec();
                 (*Mon.DeviceBytesWritten) += size;
                 Mon.DeviceWrites->Inc();
+                Mon.DeviceWritesSizes.Increment(size);
                 break;
             case IAsyncIoOperation::EType::PRead:
                 (*Mon.DeviceInFlightBytesRead) -= size;

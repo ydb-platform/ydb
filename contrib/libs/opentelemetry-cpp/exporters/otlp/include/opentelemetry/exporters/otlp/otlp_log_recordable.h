@@ -6,15 +6,10 @@
 #include <stdint.h>
 
 #include "opentelemetry/common/attribute_value.h"
-#include "opentelemetry/common/timestamp.h"
-#include "opentelemetry/logs/severity.h"
-#include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/instrumentationscope/instrumentation_scope.h"
+#include "opentelemetry/sdk/logs/log_record_limits.h"
 #include "opentelemetry/sdk/logs/recordable.h"
 #include "opentelemetry/sdk/resource/resource.h"
-#include "opentelemetry/trace/span_id.h"
-#include "opentelemetry/trace/trace_flags.h"
-#include "opentelemetry/trace/trace_id.h"
 #include "opentelemetry/version.h"
 
 // clang-format off
@@ -103,6 +98,14 @@ public:
                     const opentelemetry::common::AttributeValue &value) noexcept override;
 
   /**
+   * Apply attribute count and value length limits. Must be called before any
+   * SetAttribute call to take effect. The limits are copied into this
+   * recordable.
+   */
+  void SetLogRecordLimits(
+      const opentelemetry::sdk::logs::LogRecordLimits &limits) noexcept override;
+
+  /**
    * Set Resource of this log
    * @param Resource the resource to set
    */
@@ -120,6 +123,12 @@ private:
   const opentelemetry::sdk::resource::Resource *resource_ = nullptr;
   const opentelemetry::sdk::instrumentationscope::InstrumentationScope *instrumentation_scope_ =
       nullptr;
+  // Stored by value so the recordable does not depend on the limits object
+  // outliving the LoggerContext that supplied it. Defaults to no limits; the
+  // LoggerProvider wiring injects the configured limits via SetLogRecordLimits,
+  // so a recordable used outside a provider does not cap attributes on its own.
+  opentelemetry::sdk::logs::LogRecordLimits limits_ =
+      opentelemetry::sdk::logs::LogRecordLimits::NoLimits();
 };
 
 }  // namespace otlp

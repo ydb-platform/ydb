@@ -1,4 +1,5 @@
 #include "schemeshard_impl.h"
+#include "schemeshard_generated_column_utils.h"
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_svp_migration.h"
 
@@ -227,7 +228,7 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
                     continue;
                 }
             }
-            
+
             if (indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex) {
                 continue;
             }
@@ -2351,6 +2352,19 @@ void TSchemeShard::PersistUserAttributes(NIceDb::TNiceDb& db, TPathId pathId,
     }
 }
 
+void TSchemeShard::PersistRemoveUserAttributesAlter(NIceDb::TNiceDb& db, TPathElement::TPtr pathElement) {
+    if (pathElement->UserAttrs->AlterData) {
+        const TPathId& pathId = pathElement->PathId;
+        for (const auto& name : pathElement->UserAttrs->AlterData->Attrs | std::views::keys) {
+            if (IsLocalId(pathId)) {
+                db.Table<Schema::UserAttributesAlterData>().Key(pathId.LocalPathId, name).Delete();
+            } else {
+                db.Table<Schema::MigratedUserAttributesAlterData>().Key(pathId.OwnerId, pathId.LocalPathId, name).Delete();
+            }
+        }
+        pathElement->UserAttrs->AlterData.Reset();
+    }
+}
 
 void TSchemeShard::PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
     if (path->PathId.OwnerId == TabletID()) {
@@ -2416,6 +2430,12 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
             db.Table<Schema::MigratedUserAttributes>().Key(path->PathId.OwnerId, path->PathId.LocalPathId, name).Delete();
         }
     }
+
+    // Defensively clean up any pending UserAttributesAlterData rows that may have been left
+    // orphaned if the path was dropped while AlterUserAttributes was still in progress.
+    // Normally DropNode() takes care of this, but PersistRemovePath is the final removal
+    // point and must guarantee no dangling rows survive path deletion.
+    PersistRemoveUserAttributesAlter(db, path);
 
     if (IsLocalId(path->PathId)) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Delete();
@@ -2543,6 +2563,7 @@ void TSchemeShard::PersistSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pat
     }
     PersistSubDomainAuditSettingsAlter(db, pathId, subDomain);
     PersistSubDomainServerlessComputeResourcesModeAlter(db, pathId, subDomain);
+    PersistSubDomainTablesMetricsLevelAlter(db, pathId, subDomain);
 
     for (auto shardIdx: subDomain.GetPrivateShards()) {
         db.Table<Schema::SubDomainShardsAlterData>().Key(pathId.LocalPathId, shardIdx.GetLocalId()).Update();
@@ -2613,6 +2634,7 @@ void TSchemeShard::PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, 
 
     PersistSubDomainAuditSettings(db, pathId, subDomain);
     PersistSubDomainServerlessComputeResourcesMode(db, pathId, subDomain);
+    PersistSubDomainTablesMetricsLevel(db, pathId, subDomain);
 
     db.Table<Schema::SubDomainsAlterData>().Key(pathId.LocalPathId).Delete();
 
@@ -2760,6 +2782,22 @@ void TSchemeShard::PersistSubDomainServerlessComputeResourcesModeAlter(NIceDb::T
                                                                        const TSubDomainInfo& subDomain) {
     const auto& serverlessComputeResourcesMode = subDomain.GetServerlessComputeResourcesMode();
     PersistSubDomainServerlessComputeResourcesModeImpl<Schema::SubDomainsAlterData>(db, pathId, serverlessComputeResourcesMode);
+}
+
+template <class Table>
+void PersistSubDomainTablesMetricsLevelImpl(NIceDb::TNiceDb& db, const TPathId& pathId, ETablesMetricsLevel value) {
+    using Field = typename Table::TablesMetricsLevel;
+    db.Table<Table>().Key(pathId.LocalPathId).Update(NIceDb::TUpdate<Field>(value));
+}
+
+void TSchemeShard::PersistSubDomainTablesMetricsLevel(NIceDb::TNiceDb& db, const TPathId& pathId,
+                                                      const TSubDomainInfo& subDomain) {
+    PersistSubDomainTablesMetricsLevelImpl<Schema::SubDomains>(db, pathId, subDomain.GetTablesMetricsLevel());
+}
+
+void TSchemeShard::PersistSubDomainTablesMetricsLevelAlter(NIceDb::TNiceDb& db, const TPathId& pathId,
+                                                           const TSubDomainInfo& subDomain) {
+    PersistSubDomainTablesMetricsLevelImpl<Schema::SubDomainsAlterData>(db, pathId, subDomain.GetTablesMetricsLevel());
 }
 
 void TSchemeShard::PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
@@ -5640,6 +5678,8 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     ctx.Send(TxAllocatorClient, new TEvents::TEvPoisonPill());
     ctx.Send(SysPartitionStatsCollector, new TEvents::TEvPoisonPill());
 
+    ctx.Send(StatsParserActorId, new TEvents::TEvPoisonPill());
+
     if (TabletMigrator) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
     }
@@ -5772,6 +5812,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(appData));
 
     SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
+
+    StatsParserActorId = Register(CreateStatsParserActor(SelfId()));
 
     SplitSettings.Register(appData->Icb);
 
@@ -6091,6 +6133,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         IgnoreFunc(TEvPrivate::TEvTestNotifySubdomainCleanup);
 
         HFuncTraced(TEvPrivate::TEvPersistTableStats, Handle);
+        HFuncTraced(TEvPrivate::TEvPeriodicTableStatsParsed, Handle);
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
@@ -6448,9 +6491,17 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     case TPathElement::EPathType::EPathTypeSecret:
         TabletCounters->Simple()[COUNTER_SECRET_COUNT].Sub(1);
         break;
-    case TPathElement::EPathType::EPathTypeStreamingQuery:
+    case TPathElement::EPathType::EPathTypeStreamingQuery: {
         TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Sub(1);
+        const auto it = StreamingQueries.find(node->PathId);
+        if (it != StreamingQueries.end()) {
+            const auto& props = it->second->Properties.GetProperties();
+            if (const auto runIt = props.find("run"); runIt != props.end() && runIt->second == "true") {
+                TabletCounters->Simple()[COUNTER_RUNNING_STREAMING_QUERY_COUNT].Sub(1);
+            }
+        }
         break;
+    }
     case TPathElement::EPathType::EPathTypeTestShardSet:
         TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Sub(1);
         break;
@@ -6552,10 +6603,20 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
         case TPathElement::EPathType::EPathTypeTestShardSet:
             PersistRemoveTestShardSet(db, node->PathId);
             break;
+        case TPathElement::EPathType::EPathTypeStreamingQuery:
+            PersistRemoveStreamingQuery(db, node->PathId);
+            break;
         default:
             // not all path types support removal
             break;
     }
+
+    // If there was a pending AlterUserAttributes in progress when the path was dropped,
+    // the UserAttributesAlterData rows in the local DB must be cleaned up explicitly.
+    // PersistUserAttributes(..., nullptr) only removes UserAttributes rows and returns early
+    // without touching UserAttributesAlterData, which would leave them orphaned and cause
+    // a Y_VERIFY_S crash in ReadEverything on restart.
+    PersistRemoveUserAttributesAlter(db, node);
 
     PersistUserAttributes(db, node->PathId, node->UserAttrs, nullptr);
 }
@@ -8107,6 +8168,11 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
 
     for (const auto& col : alterData->Columns) {
         const TTableInfo::TColumn& colInfo = col.second;
+        // A VIRTUAL generated column never reached the datashards, so neither its addition nor
+        // its drop may be sent there (the datashard verifies that a dropped column exists locally)
+        if (IsVirtualGeneratedColumn(colInfo)) {
+            continue;
+        }
         if (colInfo.IsDropped()) {
             auto descr = proto->AddDropColumns();
             descr->SetName(colInfo.Name);
@@ -8153,6 +8219,16 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         proto->MutableIncrementalBackupConfig()->CopyFrom(alterData->TableDescriptionFull->GetIncrementalBackupConfig());
     } else if (tableInfo->HasIncrementalBackupConfig()) {
         proto->MutableIncrementalBackupConfig()->CopyFrom(tableInfo->IncrementalBackupConfig());
+    }
+
+    // The alter body is a delta, but DataShard reads its METRICS_LEVEL override
+    // out of whatever this message carries, so the effective settings have to be
+    // restated on every alter: the pending change if there is one (including an
+    // explicit drop, which arrives as NotConfigured), otherwise the current one.
+    if (alterData->TableDescriptionFull.Defined() && alterData->TableDescriptionFull->HasDetailedMetricsSettings()) {
+        proto->MutableDetailedMetricsSettings()->CopyFrom(alterData->TableDescriptionFull->GetDetailedMetricsSettings());
+    } else if (tableInfo->HasDetailedMetricsSettings()) {
+        proto->MutableDetailedMetricsSettings()->MutableConfigured()->CopyFrom(tableInfo->GetDetailedMetricsSettings());
     }
 
     TString txBody;
@@ -9336,7 +9412,8 @@ void TSchemeShard::InitializeStatistics(const TActorContext& ctx) {
     // Give table shards some time to report statistics. This is not required for correctness,
     // but if we tried to send the statistics right away, info for all paths would probably
     // be incomplete.
-    ctx.Schedule(TDuration::Seconds(30), new TEvPrivate::TEvSendBaseStatsToSA());
+    const auto initialDelay = AppData()->StatisticsConfig.GetBaseStatsSendInitialDelaySeconds();
+    ctx.Schedule(TDuration::Seconds(initialDelay), new TEvPrivate::TEvSendBaseStatsToSA());
 }
 
 void TSchemeShard::ResolveSA() {
@@ -9424,6 +9501,8 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetOwnerId(pathId.OwnerId);
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetRowUpdates(areStatsFull ? aggregated.RowUpdates : 0);
+        entry->SetRowDeletes(areStatsFull ? aggregated.RowDeletes : 0);
         entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(false);
         entry->SetAreStatsFull(areStatsFull);
@@ -9458,6 +9537,8 @@ TDuration TSchemeShard::SendBaseStatsToSA() {
         entryPathId->SetOwnerId(pathId.OwnerId);
         entryPathId->SetLocalId(pathId.LocalPathId);
         entry->SetRowCount(areStatsFull ? aggregated.RowCount : 0);
+        entry->SetRowUpdates(areStatsFull ? aggregated.RowUpdates : 0);
+        entry->SetRowDeletes(areStatsFull ? aggregated.RowDeletes : 0);
         entry->SetBytesSize(areStatsFull ? aggregated.DataSize : 0);
         entry->SetIsColumnTable(true);
         entry->SetAreStatsFull(areStatsFull);

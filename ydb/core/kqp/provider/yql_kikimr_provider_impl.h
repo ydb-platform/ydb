@@ -379,9 +379,9 @@ TString FillAuthProperties(THashMap<TString, TString>& properties, const TExtern
 // KiReadTable nodes and the corresponding PathType values understood by
 // the .sys/show_create system view.
 bool IsShowCreateSettingName(TStringBuf name);
-// Returns the PathType ("Table" / "View" / "ExternalDataSource") for a
-// SHOW CREATE setting name, or an empty string-buf if `name` is not one
-// of the known SHOW CREATE settings.
+// Returns the PathType ("Table" / "View" / "ExternalDataSource" /
+// "ExternalTable") for a SHOW CREATE setting name, or an empty string-buf
+// if `name` is not one of the known SHOW CREATE settings.
 TStringBuf ShowCreateSettingToPathType(TStringBuf name);
 // Returns the first SHOW CREATE setting name found in `settings`, or an
 // empty string-buf if none is present. The returned view is backed by static

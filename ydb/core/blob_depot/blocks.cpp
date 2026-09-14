@@ -10,40 +10,77 @@ namespace NKikimr::NBlobDepot {
         const ui32 BlockedGeneration;
         const ui32 NodeId;
         const ui64 IssuerGuid;
+        const ui32 Version;
+        const TWriteSource WriteSource;
         const TInstant Timestamp;
         std::unique_ptr<IEventHandle> Response;
+        bool ProcessBlock = false;
 
     public:
         TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_UPDATE_BLOCK; }
 
         TTxUpdateBlock(TBlobDepot *self, ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
-                TInstant timestamp, std::unique_ptr<IEventHandle> response)
+                ui32 version, TWriteSource writeSource, TInstant timestamp, std::unique_ptr<IEventHandle> response)
             : TTransactionBase(self)
             , TabletId(tabletId)
             , BlockedGeneration(blockedGeneration)
             , NodeId(nodeId)
             , IssuerGuid(issuerGuid)
+            , Version(version)
+            , WriteSource(writeSource)
             , Timestamp(timestamp)
             , Response(std::move(response))
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            auto& block = Self->BlocksManager->Blocks[TabletId];
-            if (BlockedGeneration <= block.BlockedGeneration) {
-                Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.SetStatus(NKikimrProto::ALREADY);
+            auto& response = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
+            const bool raw = WriteSource == TWriteSource::SyncerMergeBlock;
+            const bool versionRecord = raw && TabletId >> 63;
+            const ui64 tabletId = versionRecord ? ~TabletId : TabletId;
+            const bool hasBlock = Self->BlocksManager->Blocks.contains(tabletId);
+            auto& block = Self->BlocksManager->Blocks[tabletId];
+
+            NIceDb::TNiceDb db(txc.DB);
+            if (versionRecord) {
+                if (BlockedGeneration <= block.Version) {
+                    response.SetStatus(NKikimrProto::ALREADY);
+                } else {
+                    block.Version = BlockedGeneration;
+                    db.Table<Schema::Blocks>().Key(tabletId).Update(
+                        NIceDb::TUpdate<Schema::Blocks::Version>(block.Version));
+                }
+            } else if (raw) {
+                if (hasBlock && !block.CanSetNewBlock(BlockedGeneration, IssuerGuid)) {
+                    response.SetStatus(NKikimrProto::ALREADY);
+                } else {
+                    block.BlockedGeneration = BlockedGeneration;
+                    block.IssuerGuid = IssuerGuid;
+                    db.Table<Schema::Blocks>().Key(tabletId).Update(
+                        NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(BlockedGeneration),
+                        NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(IssuerGuid),
+                        NIceDb::TUpdate<Schema::Blocks::IssuedByNode>(NodeId),
+                        NIceDb::TUpdate<Schema::Blocks::IssueTimestamp>(Timestamp));
+                }
+            } else if (Version < block.Version) {
+                response.SetStatus(NKikimrProto::ERROR);
+                response.SetErrorReason("obsolete tablet storage info version");
+                response.SetIsTabletStorageInfoVersionObsolete(true);
+            } else if (hasBlock && !block.CanSetNewBlock(BlockedGeneration, IssuerGuid)) {
+                response.SetStatus(Version == block.Version ? NKikimrProto::ALREADY : NKikimrProto::ERROR);
+                if (Version > block.Version) {
+                    response.SetErrorReason("generation check failed while increasing tablet storage info version");
+                }
             } else {
-                // update block value in memory
-                auto& block = Self->BlocksManager->Blocks[TabletId];
                 block.BlockedGeneration = BlockedGeneration;
                 block.IssuerGuid = IssuerGuid;
-
-                // and persist it
-                NIceDb::TNiceDb db(txc.DB);
-                db.Table<Schema::Blocks>().Key(TabletId).Update(
+                block.Version = Version;
+                ProcessBlock = true;
+                db.Table<Schema::Blocks>().Key(tabletId).Update(
                     NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(BlockedGeneration),
                     NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(IssuerGuid),
                     NIceDb::TUpdate<Schema::Blocks::IssuedByNode>(NodeId),
-                    NIceDb::TUpdate<Schema::Blocks::IssueTimestamp>(Timestamp)
+                    NIceDb::TUpdate<Schema::Blocks::IssueTimestamp>(Timestamp),
+                    NIceDb::TUpdate<Schema::Blocks::Version>(Version)
                 );
             }
             return true;
@@ -52,8 +89,11 @@ namespace NKikimr::NBlobDepot {
         void Complete(const TActorContext&) override {
             if (Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.GetStatus() != NKikimrProto::OK) {
                 TActivationContext::Send(Response.release());
+            } else if (ProcessBlock) {
+                Self->BlocksManager->OnBlockCommitted(TabletId, BlockedGeneration, NodeId, IssuerGuid, Version,
+                    std::move(Response));
             } else {
-                Self->BlocksManager->OnBlockCommitted(TabletId, BlockedGeneration, NodeId, IssuerGuid, std::move(Response));
+                TActivationContext::Send(Response.release());
             }
         }
     };
@@ -70,6 +110,7 @@ namespace NKikimr::NBlobDepot {
         const ui32 BlockedGeneration;
         const ui32 NodeId;
         const ui64 IssuerGuid;
+        const ui32 Version;
         std::unique_ptr<IEventHandle> Response;
         ui32 BlocksPending = 0;
         ui32 RetryCount = 0;
@@ -82,12 +123,13 @@ namespace NKikimr::NBlobDepot {
         }
 
         TBlockProcessorActor(TBlobDepot *self, ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
-                std::unique_ptr<IEventHandle> response)
+                ui32 version, std::unique_ptr<IEventHandle> response)
             : Self(self)
             , TabletId(tabletId)
             , BlockedGeneration(blockedGeneration)
             , NodeId(nodeId)
             , IssuerGuid(issuerGuid)
+            , Version(version)
             , Response(std::move(response))
             , Token(Self->Token)
         {}
@@ -97,7 +139,8 @@ namespace NKikimr::NBlobDepot {
                 return true; // tablet is dead
             }
             auto& block = Self->BlocksManager->Blocks[TabletId];
-            if (block.BlockedGeneration == BlockedGeneration && block.IssuerGuid == IssuerGuid) {
+            if (block.BlockedGeneration == BlockedGeneration && block.IssuerGuid == IssuerGuid
+                    && block.Version == Version) {
                 return false;
             } else {
                 auto& r = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
@@ -216,7 +259,7 @@ namespace NKikimr::NBlobDepot {
                 {"groupId", groupId},
                 {"issuerGuid", IssuerGuid});
             SendToBSProxy(SelfId(), groupId, new TEvBlobStorage::TEvBlock(TabletId, BlockedGeneration, TInstant::Max(),
-                IssuerGuid, TWriteSource::BlobDepotBlock), groupId);
+                IssuerGuid, TWriteSource::BlobDepotBlock, Version), groupId);
         }
 
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
@@ -243,6 +286,14 @@ namespace NKikimr::NBlobDepot {
 
                 case NKikimrProto::ERROR:
                 default:
+                    if (ev->Get()->IsTabletStorageInfoVersionObsolete) {
+                        auto& r = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
+                        r.SetStatus(NKikimrProto::ERROR);
+                        r.SetErrorReason(ev->Get()->ErrorReason);
+                        r.SetIsTabletStorageInfoVersionObsolete(true);
+                        Finish();
+                        break;
+                    }
                     if (!--RetryCount) {
                         auto& r = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
                         r.SetStatus(NKikimrProto::ERROR);
@@ -274,22 +325,32 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    void TBlobDepot::TBlocksManager::AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration, ui64 issuerGuid) {
+    void TBlobDepot::TBlocksManager::AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration, ui64 issuerGuid,
+            ui32 version) {
         Blocks[tabletId] = {
             .BlockedGeneration = blockedGeneration,
             .IssuerGuid = issuerGuid,
+            .Version = version,
         };
     }
 
     void TBlobDepot::TBlocksManager::AddBlockOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlock& block,
             NTabletFlatExecutor::TTransactionContext& txc) {
-        AddBlockOnLoad(block.TabletId, block.BlockedGeneration, 0);
-
         NIceDb::TNiceDb db(txc.DB);
-        db.Table<Schema::Blocks>().Key(block.TabletId).Update(
-            NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(block.BlockedGeneration),
-            NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(0)
-        );
+        if (block.TabletId >> 63) {
+            const ui64 tabletId = ~block.TabletId;
+            auto& item = Blocks[tabletId];
+            item.Version = Max(item.Version, block.BlockedGeneration);
+            db.Table<Schema::Blocks>().Key(tabletId).Update(
+                NIceDb::TUpdate<Schema::Blocks::Version>(item.Version));
+        } else {
+            auto& item = Blocks[block.TabletId];
+            item.BlockedGeneration = Max(item.BlockedGeneration, block.BlockedGeneration);
+            item.IssuerGuid = 0;
+            db.Table<Schema::Blocks>().Key(block.TabletId).Update(
+                NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(item.BlockedGeneration),
+                NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(0));
+        }
 
         YDB_LOG_DEBUG("Adding block through decommission",
             {"marker", "BDT44"},
@@ -297,10 +358,10 @@ namespace NKikimr::NBlobDepot {
             {"block", block});
     }
 
-    void TBlobDepot::TBlocksManager::OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
-            std::unique_ptr<IEventHandle> response) {
+    void TBlobDepot::TBlocksManager::OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId,
+            ui64 issuerGuid, ui32 version, std::unique_ptr<IEventHandle> response) {
         Self->RegisterWithSameMailbox(new TBlockProcessorActor(Self, tabletId, blockedGeneration, nodeId, issuerGuid,
-            std::move(response)));
+            version, std::move(response)));
     }
 
     void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvBlock::TPtr ev) {
@@ -308,21 +369,18 @@ namespace NKikimr::NBlobDepot {
         auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*ev, NKikimrProto::OK,
             std::nullopt, BlockLeaseTime.MilliSeconds());
 
-        if (!record.HasTabletId() || !record.HasBlockedGeneration()) {
+        const TWriteSource writeSource = WriteSourceFromProto(record.GetWriteSourceOp());
+        const bool raw = writeSource == TWriteSource::SyncerMergeBlock;
+        if (!record.HasTabletId() || !record.HasBlockedGeneration() || !record.GetTabletId()
+                || (!raw && record.GetTabletId() >> 63)) {
             responseRecord->SetStatus(NKikimrProto::ERROR);
             responseRecord->SetErrorReason("incorrect protobuf");
         } else {
             const ui64 tabletId = record.GetTabletId();
-            const ui32 blockedGeneration = record.GetBlockedGeneration();
-            const ui64 issuerGuid = record.GetIssuerGuid();
-            const auto it = Blocks.find(tabletId);
-            if (it == Blocks.end() || it->second.CanSetNewBlock(blockedGeneration, issuerGuid)) {
-                TAgent& agent = Self->GetAgent(ev->Recipient);
-                Self->Execute(std::make_unique<TTxUpdateBlock>(Self, tabletId, blockedGeneration,
-                    agent.Connection->NodeId, record.GetIssuerGuid(), TActivationContext::Now(), std::move(response)));
-            } else {
-                responseRecord->SetStatus(NKikimrProto::ALREADY);
-            }
+            TAgent& agent = Self->GetAgent(ev->Recipient);
+            Self->Execute(std::make_unique<TTxUpdateBlock>(Self, tabletId, record.GetBlockedGeneration(),
+                agent.Connection->NodeId, record.GetIssuerGuid(), record.GetVersion(), writeSource,
+                TActivationContext::Now(), std::move(response)));
         }
 
         TActivationContext::Send(response.release()); // not sent if the request got processed and response now is nullptr

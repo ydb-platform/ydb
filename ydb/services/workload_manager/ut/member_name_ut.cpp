@@ -30,8 +30,9 @@ Y_UNIT_TEST_SUITE(TQueryClassifierMemberName) {
         };
 
         auto view = TClassifierConfigsView(classifierSnap, TEST_DB);
-        auto classifier = NWorkloadManager::CreateQueryClassifier(poolSnap, view, TEST_DB, ctx);
-        auto result = classifier->PreCompileClassify();
+        auto classifier = CreateQueryClassifier(poolSnap, view, TEST_DB, ctx, std::nullopt);
+        NKqp::TUserRequestContext userRequestContext{};
+        auto result = classifier->PreCompileClassify(userRequestContext);
         UNIT_ASSERT_VALUES_EQUAL(GetPoolId(result), "pool_target");
     }
 
@@ -59,8 +60,9 @@ Y_UNIT_TEST_SUITE(TQueryClassifierMemberName) {
         };
 
         auto view = TClassifierConfigsView(classifierSnap, TEST_DB);
-        auto classifier = NWorkloadManager::CreateQueryClassifier(poolSnap, view, TEST_DB, ctx);
-        auto result = classifier->PreCompileClassify();
+        auto classifier = CreateQueryClassifier(poolSnap, view, TEST_DB, ctx, std::nullopt);
+        NKqp::TUserRequestContext userRequestContext{};
+        auto result = classifier->PreCompileClassify(userRequestContext);
         UNIT_ASSERT_VALUES_EQUAL(GetPoolId(result), "pool_target");
     }
 }

@@ -36,6 +36,7 @@ public:
 
     void RestoreReceiveAttemptPartition(const TString& receiveAttemptId, ui32 partitionId, TInstant expiry);
     std::vector<TReceiveAttemptPartitionDelete> CollectExpiredReceiveAttemptPartitions(TInstant now);
+    std::vector<TReceiveAttemptPartitionDelete> ExtractReceiveAttemptPartitions();
 
     const TMetrics& GetMetrics() const;
 
@@ -106,7 +107,7 @@ public:
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvMLPConsumerStatus::TPtr&);
 
-    void UpdateConfig(const std::vector<ui32>& addedPartitions);
+    std::vector<TReceiveAttemptPartitionDelete> UpdateConfig(const std::vector<ui32>& addedPartitions);
 
     void SetUseForReading(const TString& consumerName,
                           ui32 partitionId,

@@ -2,6 +2,7 @@
 
 #include <unordered_map>
 #include "events.h"
+#include "helpers.h"
 #include "partition_id.h"
 
 #include <ydb/library/actors/core/actorid.h>
@@ -77,13 +78,15 @@ public:
                      const TString& session, const TPartitionId& partition, ui32 generation, ui32 step,
                      const ui64 tabletID, const TTopicCounters& counters,
                      const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database, bool directRead,
-                     bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
+                     EProtocol protocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
                      const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches);
     ~TPartitionActor();
 
     void Bootstrap(const NActors::TActorContext& ctx);
     void Die(const NActors::TActorContext& ctx) override;
     bool OnUnhandledException(const std::exception& exc) override;
+    void CloseSessionAndDie(const TString& reason, PersQueue::ErrorCode::ErrorCode code,
+                            const NActors::TActorContext& ctx);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_PARTITION; }
 private:
@@ -276,7 +279,7 @@ private:
     ui64 RestoredDirectReadId = 0;
     EDirectReadRestoreStage DirectReadRestoreStage = EDirectReadRestoreStage::None;
 
-    bool UseMigrationProtocol;
+    EProtocol Protocol;
 
     bool FirstRead;
     bool ReadingFinishedSent;

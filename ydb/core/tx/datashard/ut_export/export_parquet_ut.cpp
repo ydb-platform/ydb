@@ -113,6 +113,59 @@ namespace {
         return fileData;
     }
 
+    TString ExportIntervalUuidDyNumberToParquet(EParquetExportSettings settings) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        TString fileData;
+        const i64 intervalUs = 1000000;
+        const ui8 uuidBytes[16] = {
+            0x55, 0x0e, 0x84, 0x00, 0xe2, 0x9b, 0x41, 0xd4,
+            0xa7, 0x16, 0x44, 0x66, 0x55, 0x44, 0x00, 0x00,
+        };
+
+        const TString dyNumber = ".314e1";
+
+        auto produce = [&]() {
+            IExport::TTableColumns columns;
+            columns[0] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uint32), "", "key", true);
+            columns[1] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Interval), "", "ival", false);
+            columns[2] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Uuid), "", "uid", false);
+            columns[3] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::DyNumber), "", "dyn", false);
+
+            NKikimrSchemeOp::TBackupTask task;
+            ConfigureParquetBackupTask(task, settings, /*rowGroupSize=*/1);
+
+            TS3Export exportTask(task, columns);
+            THolder<NExportScan::IBuffer> buffer(exportTask.CreateBuffer());
+            Y_ENSURE(buffer, "CreateBuffer returned null");
+
+            buffer->ColumnsOrder({0, 1, 2, 3});
+
+            NTable::IScan::TRow row;
+            row.Init(4);
+            row.Set(0, NKikimr::NTable::ECellOp::Set, NKikimr::TCell::Make<ui32>(1));
+            row.Set(1, NKikimr::NTable::ECellOp::Set, NKikimr::TCell::Make(intervalUs));
+            row.Set(2, NKikimr::NTable::ECellOp::Set, NKikimr::TCell(reinterpret_cast<const char*>(uuidBytes), sizeof(uuidBytes)));
+            row.Set(3, NKikimr::NTable::ECellOp::Set, NKikimr::TCell(dyNumber.data(), dyNumber.size()));
+            Y_ENSURE(buffer->Collect(row), "Collect failed: " << buffer->GetError());
+
+            NExportScan::IBuffer::TStats stats;
+            THolder<NActors::IEventBase> event(buffer->PrepareEvent(true, stats));
+            Y_ENSURE(event, "PrepareEvent returned null: " << buffer->GetError());
+
+            auto* evBuffer = dynamic_cast<TEvExportScan::TEvBuffer<TBuffer>*>(event.Get());
+            Y_ENSURE(evBuffer, "Unexpected event type");
+            fileData.assign(evBuffer->Buffer.Data(), evBuffer->Buffer.Size());
+        };
+
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Register(new TCbActor(produce, edge));
+        runtime.GrabEdgeEventRethrow<NActors::TEvents::TEvWakeup>(edge);
+
+        return fileData;
+    }
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(ExportParquetTest) {
@@ -173,6 +226,27 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
             UNIT_ASSERT_VALUES_EQUAL(keys->Value(i), i);
             UNIT_ASSERT_VALUES_EQUAL(values->GetString(i), TStringBuilder() << "value_" << i);
         }
+    }
+
+    Y_UNIT_TEST(ShouldProduceValidParquetWithIntervalUuidDyNumber, EParquetExportSettings) {
+        const auto settings = Arg<0>();
+
+        const TString data = ExportIntervalUuidDyNumberToParquet(settings);
+        UNIT_ASSERT_C(!data.empty(), "Parquet export for Interval/Uuid/DyNumber produced empty data");
+
+        const auto table = NTestUtils::ReadParquet(data);
+        UNIT_ASSERT_VALUES_EQUAL(table->num_rows(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(table->num_columns(), 4);
+
+        const auto ival = std::static_pointer_cast<arrow::Int64Array>(table->GetColumnByName("ival")->chunk(0));
+        UNIT_ASSERT_VALUES_EQUAL(ival->Value(0), 1000000);
+
+        const auto uid = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(table->GetColumnByName("uid")->chunk(0));
+        UNIT_ASSERT_VALUES_EQUAL(uid->byte_width(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(TString(reinterpret_cast<const char*>(uid->GetValue(0)), 16).size(), 16);
+
+        const auto dyn = std::static_pointer_cast<arrow::BinaryArray>(table->GetColumnByName("dyn")->chunk(0));
+        UNIT_ASSERT_VALUES_EQUAL(dyn->GetString(0), ".314e1");
     }
 }
 

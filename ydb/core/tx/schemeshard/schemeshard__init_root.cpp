@@ -415,6 +415,10 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
             subdomain->SetServerlessComputeResourcesMode(record.GetServerlessComputeResourcesMode());
         }
 
+        if (record.HasTablesMetricsLevel()) {
+            subdomain->SetTablesMetricsLevel(record.GetTablesMetricsLevel());
+        }
+
         RegisterShard(db, subdomain, processingParams.GetCoordinators(), TTabletTypes::Coordinator);
         RegisterShard(db, subdomain, processingParams.GetMediators(), TTabletTypes::Mediator);
         RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetSchemeShard()}, TTabletTypes::SchemeShard);

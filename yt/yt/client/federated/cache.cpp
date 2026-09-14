@@ -59,7 +59,7 @@ private:
 
         THROW_ERROR_EXCEPTION_UNLESS(
             clusters.size() == seenClusters.size(),
-            "Numbers of desired and configured clusters do not match (Desired: %v, Configured: %v)",
+            "Numbers of desired and configured clusters do not match: desired %v, configured %v",
             clusters,
             seenClusters);
 

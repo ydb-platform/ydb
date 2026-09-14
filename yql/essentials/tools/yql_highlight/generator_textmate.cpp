@@ -23,6 +23,7 @@ struct TRange {
     TRegex Begin;
     TRegex End;
     TMaybe<TRegex> Escape;
+    bool IsRecursive = false;
 };
 
 struct TMatcher {
@@ -105,14 +106,20 @@ TString ToTextMateName(EUnitKind kind, size_t index) {
     return ToString(kind) + ToString(index);
 }
 
-NTextMate::TMatcher TextMateMultilinePattern(const TUnit& unit, size_t index, const TRangePattern& range) {
+NTextMate::TMatcher TextMateMultilinePattern(const TUnit& unit, size_t index, const TRangePattern& range, bool ansi) {
+    TMaybe<TString> escape = range.EscapeRegex;
+    if (ansi && range.EscapeRegexANSI) {
+        escape = range.EscapeRegexANSI;
+    }
+
     return NTextMate::TMatcher{
         .Name = ToTextMateName(unit.Kind, index),
         .Group = ToTextMateGroup(unit.Kind),
         .Pattern = NTextMate::TRange{
             .Begin = RE2::QuoteMeta(range.BeginPlain),
             .End = RE2::QuoteMeta(range.EndPlain),
-            .Escape = range.EscapeRegex,
+            .Escape = std::move(escape),
+            .IsRecursive = (ansi && unit.Kind == EUnitKind::Comment),
         },
     };
 }
@@ -127,7 +134,7 @@ NTextMate::TMatcher ToTextMatePattern(const TUnit& unit, size_t index, const NSQ
 
 } // namespace
 
-NTextMate::TLanguage ToTextMateLanguage(const THighlighting& highlighting) {
+NTextMate::TLanguage ToTextMateLanguage(const THighlighting& highlighting, bool ansi) {
     NTextMate::TLanguage language = {
         .Name = highlighting.Name,
         .ScopeName = "source." + highlighting.Extension,
@@ -139,11 +146,17 @@ NTextMate::TLanguage ToTextMateLanguage(const THighlighting& highlighting) {
             continue;
         }
 
-        for (const NSQLTranslationV1::TRegexPattern& pattern : unit.Patterns) {
-            language.Matchers.emplace_back(ToTextMatePattern(unit, index, pattern));
+        const auto* patterns = &unit.Patterns;
+        if (ansi && unit.PatternsANSI) {
+            patterns = unit.PatternsANSI.Get();
         }
+
         for (const TRangePattern& range : unit.RangePatterns) {
-            language.Matchers.emplace_back(TextMateMultilinePattern(unit, index, range));
+            language.Matchers.emplace_back(TextMateMultilinePattern(unit, index, range, ansi));
+        }
+
+        for (const NSQLTranslationV1::TRegexPattern& pattern : *patterns) {
+            language.Matchers.emplace_back(ToTextMatePattern(unit, index, pattern));
         }
     }
 
@@ -172,6 +185,9 @@ NJson::TJsonValue ToJson(const NTextMate::TMatcher& matcher) {
         } else if constexpr (std::is_same_v<T, NTextMate::TRange>) {
             json["begin"] = pattern.Begin;
             json["end"] = pattern.End;
+            if (pattern.IsRecursive) {
+                json["patterns"].AppendValue(NJson::TJsonMap{{"include", "#" + matcher.Name}});
+            }
             if (auto embedded = EmbeddedLanguage(pattern)) {
                 json["patterns"].AppendValue(NJson::TJsonMap{{"include", *embedded}});
                 json.EraseValue("name"); // Do not use string as a default style
@@ -241,8 +257,8 @@ void WriteXML(IOutputStream& out, const NJson::TJsonValue& json, TString indent 
     }
 }
 
-void GenerateTextMateJson(IOutputStream& out, const THighlighting& highlighting, bool /* ansi */) {
-    Print(out, ToJson(ToTextMateLanguage(highlighting)));
+void GenerateTextMateJson(IOutputStream& out, const THighlighting& highlighting, bool ansi) {
+    Print(out, ToJson(ToTextMateLanguage(highlighting, ansi)));
 }
 
 static const THashMap<TString, TString> UUID = {
@@ -268,16 +284,17 @@ private:
     }
 
 public:
-    void Write(IOutputStream& out, const THighlighting& highlighting, bool /* ansi */) final {
+    void Write(IOutputStream& out, const THighlighting& highlighting, bool ansi) final {
         const auto [bundle, info, syntax] = Paths(highlighting);
+        const auto language = ToTextMateLanguage(highlighting, ansi);
 
         out << "File " << bundle << "/" << info << ":" << '\n';
-        WriteInfo(out, ToTextMateLanguage(highlighting));
+        WriteInfo(out, language);
         out << "File " << bundle << "/" << syntax << ":" << '\n';
-        WriteSyntax(out, ToTextMateLanguage(highlighting));
+        WriteSyntax(out, language);
     }
 
-    void Write(const TFsPath& path, const THighlighting& highlighting, bool /* ansi */) final {
+    void Write(const TFsPath& path, const THighlighting& highlighting, bool ansi) final {
         const auto [bundle, info, syntax] = Paths(highlighting);
 
         if (TString name = path.GetName(); !name.StartsWith(bundle)) {
@@ -287,7 +304,7 @@ public:
                 << "as an archive name";
         }
 
-        NTextMate::TLanguage language = ToTextMateLanguage(highlighting);
+        NTextMate::TLanguage language = ToTextMateLanguage(highlighting, ansi);
 
         NTar::TArchiveWriter archive(path);
         Write(archive, info, WriteInfo, language);

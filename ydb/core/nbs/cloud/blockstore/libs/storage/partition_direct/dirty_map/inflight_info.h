@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
@@ -32,13 +33,16 @@ struct IReadyQueue
 
     virtual ~IReadyQueue() = default;
 
-    // Registers an Lsn ready for cloning, flushing, or erasing.
-    // An Lsn can only be registered in one queue. The new registration deletes
-    // the old one.
-    virtual void Register(ui64 lsn, EQueueType queueType) = 0;
+    // Registers a record ready for cloning, flushing, or erasing.
+    // A record can only be registered in one queue. The new registration
+    // deletes the old one.
+    virtual void Register(TPBufferKey pBufferKey, EQueueType queueType) = 0;
 
-    // Removes all registrations from Lsn.
-    virtual void UnRegister(ui64 lsn) = 0;
+    // Removes the record's registration from the given queue.
+    virtual void UnRegister(TPBufferKey pBufferKey, EQueueType queueType) = 0;
+
+    // Notifies of flushes completion to DDisks.
+    virtual void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) = 0;
 
     // Notification about the change of byte counters in PBuffer
     virtual void DataToPBufferAdded(
@@ -57,10 +61,11 @@ struct IReadyQueue
 struct TReadSource
 {
     THostMask Mask;
-    // 0 -> read from DDisk (Mask is the set of DDisk hosts to read from).
-    // >0 -> read from a PBuffer that holds the inflight write at this lsn
+    // PBufferKey.Lsn == 0 -> read from DDisk (Mask is the set of DDisk hosts to
+    // read from).
+    // PBufferKey.Lsn > 0 -> read from a PBuffer that holds this inflight record
     // (Mask is the set of PBuffer hosts that confirmed the write).
-    ui64 Lsn = 0;
+    TPBufferKey PBufferKey;
 
     [[nodiscard]] bool Empty() const
     {
@@ -69,7 +74,7 @@ struct TReadSource
 
     [[nodiscard]] bool OnlyDDisk() const
     {
-        return Lsn == 0;
+        return PBufferKey.Lsn == 0;
     }
 };
 
@@ -83,7 +88,7 @@ public:
         // concurrent read sees the pre-write data on DDisk, as before).
         PBufferPendingWrite,
 
-        // During the recovery, a item without quorum was detected. It must be
+        // During the recovery, an item without quorum was detected. It must be
         // copied to other PBuffers.
         // Reading will be possible only after receiving a quorum.
         PBufferIncompleteWrite,
@@ -109,24 +114,33 @@ public:
         PBufferErased,
     };
 
+    // Restored from PBuffer on recovery.
     TInflightInfo(
         IReadyQueue* readyQueues,
-        ui64 lsn,
+        THostMask desiredDDisks,
+        THostMask disabled,
+        TPBufferKey pBufferKey,
         size_t byteCount,
         THostIndex host);
 
     // Pending write: lsn is generated but data is not in any PBuffer yet.
     // ReadMask is empty (reads wait on the quorum future) and the write is not
     // flushable. Call OnWritten once a quorum of PBuffers confirms the write.
-    TInflightInfo(IReadyQueue* readyQueue, ui64 lsn, size_t byteCount);
+    TInflightInfo(
+        IReadyQueue* readyQueue,
+        THostMask desiredDDisks,
+        THostMask disabled,
+        TPBufferKey pBufferKey,
+        size_t byteCount);
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
     ~TInflightInfo();
 
-    // Detach from ReadyQueue.
+    // Detach from ReadyQueue. Called before parent DirtyMap destroyed.
     void Detach();
 
+    // Instance of PBuffer record found on host during recovery.
     void RestorePBuffer(THostIndex host);
 
     // Transitions a pending write (see the byteCount-only constructor) to the
@@ -145,12 +159,10 @@ public:
     // DDisk, specified in the parameter destination. If InvalidHostIndex is
     // returned, it means that the transfer of data to destination has already
     // been requested earlier.
-    [[nodiscard]] THostIndex RequestFlush(
-        THostIndex destination,
-        THostMask disabledHosts);
+    [[nodiscard]] THostIndex RequestFlush(THostIndex destination);
     void ConfirmFlush(THostIndex host);
     void FlushFailed(THostIndex host);
-    [[nodiscard]] THostMask GetRequestedFlushes() const;
+    [[nodiscard]] THostMask GetInflightFlushes() const;
 
     void RequestErase(THostIndex host);
     // Returns true when all erases confirmed.
@@ -160,13 +172,19 @@ public:
     // requested/confirmed.
     [[nodiscard]] THostMask GetEraseNeeded() const;
 
-    // Skip removed hosts flushing and erase. Update state.
-    void RemoveHosts(THostMask removed);
+    // Update state according to the changed configuration.
+    void UpdateHosts(THostMask added, THostMask removed, THostMask disabled);
 
     // Sets a lock that prohibits erasing the PBuffer.
     void LockPBuffer();
     // Removes the lock that prohibits erasing the PBuffer.
     void UnlockPBuffer();
+
+    // The generation of the DirtyMap persisted state. If a generation has been
+    // assigned, it means that erasing can only be started after saving of data
+    // from that or higher generation in the partition local database.
+    void SetPersistGeneration(ui32 persistGeneration);
+    [[nodiscard]] ui32 GetPersistGeneration() const;
 
     TString DebugPrint(TInstant now) const;
 
@@ -182,18 +200,24 @@ private:
 
     void SetState(EState newState);
 
+    void MaybeAdvanceToFlushed();
+    void MaybeAdvanceToErased();
+    void MaybeQueryErase();
+
     EState State;
 
     IReadyQueue* ReadyQueue = nullptr;
-    ui64 Lsn = 0;
+    TPBufferKey PBufferKey;
     size_t ByteCount = 0;
     TInstant StartAt;
     size_t PBuffersLockCount = 0;
     NThreading::TPromise<void> QuorumReadyPromise;
+    ui32 PersistGeneration = 0;
 
+    THostMask DesiredDDisks;
+    THostMask Disabled;
     THostMask WriteRequested;
     THostMask WriteConfirmed;
-    THostMask FlushDesired;
     THostMask FlushRequested;
     THostMask FlushConfirmed;
     THostMask EraseRequested;

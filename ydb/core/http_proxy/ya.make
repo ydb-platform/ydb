@@ -13,6 +13,7 @@ SRCS(
     controller_base.h
     controller_registry.cpp
     custom_metrics.h
+    custom_metrics.cpp
     datastreams.cpp
     datastreams.h
     datastreams_serialization.cpp
@@ -47,6 +48,8 @@ SRCS(
 PEERDIR(
     contrib/libs/grpc
     contrib/restricted/nlohmann_json
+    library/cpp/string_utils/url
+    ydb/library/http
     ydb/library/actors/http
     ydb/library/actors/core
     ydb/library/grpc/actor_client
@@ -61,6 +64,7 @@ PEERDIR(
     ydb/library/ycloud/api
     ydb/library/ycloud/impl
     ydb/library/naming_conventions
+    ydb/library/net
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/types/core_facility
     ydb/public/sdk/cpp/src/client/datastreams

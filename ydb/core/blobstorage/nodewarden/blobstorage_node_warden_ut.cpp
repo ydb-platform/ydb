@@ -242,7 +242,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
             static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime)) :
             static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
 //            nodeWardenConfig->Monitoring = monitoring;
-        google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig.MutableServiceSet());
+        google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig->MutableServiceSet());
 
         if (nodeIndex == 0) {
             nodeWardenConfig->SectorMaps[extraPath] = extraSectorMap;
@@ -256,7 +256,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
 
 
             TString pDiskPath0 = TStringBuilder() << "SectorMap:" << baseDir << "pdisk_map";
-            nodeWardenConfig->BlobStorageConfig.MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath0);
+            nodeWardenConfig->BlobStorageConfig->MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath0);
             nodeWardenConfig->SectorMaps[pDiskPath0] = sectorMap;
 
             ui64 pDiskGuid = 1;
@@ -1601,17 +1601,17 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         NKikimrBlobStorage::TInferPDiskSlotCountSettings settings;
         settings.MutableRot()->SetSlotSize(600ull << 30);
         auto error = ValidateInferPDiskSlotCountSettings(
-            settings, "BlobStorageConfig.InferPDiskSlotCountSettings");
+            settings, "BlobStorageConfig->InferPDiskSlotCountSettings");
         UNIT_ASSERT(error);
         UNIT_ASSERT_C(error->Contains("MaxSlots is mandatory with SlotSize or UnitSize"), *error);
 
         settings.MutableRot()->SetMaxSlots(16);
         UNIT_ASSERT(!ValidateInferPDiskSlotCountSettings(
-            settings, "BlobStorageConfig.InferPDiskSlotCountSettings"));
+            settings, "BlobStorageConfig->InferPDiskSlotCountSettings"));
 
         settings.MutableRot()->SetUnitSize(100_GB);
         error = ValidateInferPDiskSlotCountSettings(
-            settings, "BlobStorageConfig.InferPDiskSlotCountSettings");
+            settings, "BlobStorageConfig->InferPDiskSlotCountSettings");
         UNIT_ASSERT(error);
         UNIT_ASSERT_C(error->Contains("SlotSize is mutually exclusive with UnitSize"), *error);
     }
@@ -2041,7 +2041,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             nodeWardenConfig->DDiskConfig.emplace();
             nodeWardenConfig->DDiskConfig->SetForcePDiskFallback(true);
 
-            auto* serviceSet = nodeWardenConfig->BlobStorageConfig.MutableServiceSet();
+            auto* serviceSet = nodeWardenConfig->BlobStorageConfig->MutableServiceSet();
             auto* pdisk = serviceSet->AddPDisks();
             pdisk->SetNodeID(NodeId);
             pdisk->SetPDiskID(PDiskId);
@@ -2168,7 +2168,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
                 static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
             ObtainStaticKey(&nodeWardenConfig->StaticKey);
 
-            auto* serviceSet = nodeWardenConfig->BlobStorageConfig.MutableServiceSet();
+            auto* serviceSet = nodeWardenConfig->BlobStorageConfig->MutableServiceSet();
             auto* group = serviceSet->AddGroups();
             group->SetGroupID(StaticGroupId);
             group->SetGroupGeneration(1);

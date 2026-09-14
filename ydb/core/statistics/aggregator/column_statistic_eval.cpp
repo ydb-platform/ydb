@@ -7,8 +7,12 @@
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
+#include <yql/essentials/core/histogram/eq_height_histogram.h>
+#include <yql/essentials/core/histogram/eq_height_histogram_reader.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 
+#include <algorithm>
+#include <cmath>
 #include <numbers>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
@@ -314,13 +318,13 @@ public:
 
     void AddAggregations(TSelectBuilder& builder) final {
         Sketch.OnAdded(
-            builder.AddUDAFAggregationTuple(ColumnNames, "CMS", Sketch.GetWidth(), Sketch.GetDepth()),
+            builder.AddUDAFAggregationTuple(ColumnNames, ETupleEncoding::StablePickle, "CMS", Sketch.GetWidth(), Sketch.GetDepth()),
             builder.IsIntermediateAggregation());
     }
 
     void Merge(const TVector<NYdb::TValue>& aggColumns) final { Sketch.Merge(aggColumns); }
 
-    TString ExtractData(const TVector<NYdb::TValue>& aggColumns) final { return Sketch.ExtractData(aggColumns); }
+    std::optional<TString> ExtractData(const TVector<NYdb::TValue>& aggColumns) final { return Sketch.ExtractData(aggColumns); }
 };
 
 struct TBorder {
@@ -330,6 +334,32 @@ struct TBorder {
     template<typename T>
     explicit TBorder(T val) : Val(val), YqlVal(val) {}
 };
+
+// Bucket-count limits shared by equi-width and equi-height histograms.
+// The upper bound leaves room for the histogram object's own bookkeeping
+// fields (see TEqWidthHistogram).
+constexpr ui32 MAX_BUCKETS = 524288;
+constexpr ui32 MIN_BUCKETS = 1;
+
+// Buckets for a column with n rows and ndv distinct values. Shared by equi-width and equi-height.
+// Preserves the existing MIN_BUCKETS / MAX_BUCKETS - 24 clamping.
+static ui32 EstimateBucketCount(double n, double ndv) {
+    n = std::max(n, 0.0);
+    ndv = std::max(ndv, 1.0);
+    const double cbrtN = std::cbrt(n);
+    const double numBucketsEstimate = std::ceil(
+        std::min(std::sqrt(n), cbrtN * n / ndv));
+    ui32 numBuckets = (numBucketsEstimate <= std::numeric_limits<ui32>::max()
+        ? numBucketsEstimate
+        : std::numeric_limits<ui32>::max());
+    if (numBuckets == 0) {
+        numBuckets = MIN_BUCKETS;
+    } else if (numBuckets > MAX_BUCKETS - 24) {
+        // to accommodate for the other class variables' memory consumption.
+        numBuckets = MAX_BUCKETS - 24;
+    }
+    return numBuckets;
+}
 
 class TEWHEval : public IStage2ColumnStatisticEval {
     NScheme::TTypeInfo ColumnType;
@@ -350,10 +380,6 @@ private:
         };
         return NAggFuncs::TEWHAggFunc::CreateState(ColumnType.GetTypeId(), params);
     }
-
-    // current upper limit is 4_MB per columnar statistics
-    static constexpr ui32 MAX_BUCKETS = 524288;
-    static constexpr ui32 MIN_BUCKETS = 1;
 
 public:
     TEWHEval(NScheme::TTypeInfo columnType, ui32 numBuckets, TBorder rangeStart, TBorder rangeEnd)
@@ -449,18 +475,7 @@ public:
         const double n = simpleStats.GetCount();
         const double ndv = simpleStats.GetCountDistinct();
 
-        const double cbrtN = std::cbrt(n);
-        const double numBucketsEstimate = std::ceil(
-            std::min(std::sqrt(n), cbrtN * n / ndv));
-        ui32 numBuckets = (numBucketsEstimate <= std::numeric_limits<ui32>::max()
-            ? numBucketsEstimate
-            : std::numeric_limits<ui32>::max());
-        if (numBuckets == 0) {
-            numBuckets = MIN_BUCKETS;
-        } else if (numBuckets > MAX_BUCKETS - 24) {
-            // to accommodate for the other class variables' memory consumption.
-            numBuckets = MAX_BUCKETS - 24;
-        }
+        ui32 numBuckets = EstimateBucketCount(n, ndv);
 
         auto domainRange = GetDomainRange(
             *histType, simpleStats.GetMin(), simpleStats.GetMax(), &numBuckets);
@@ -540,9 +555,129 @@ bool IStage2ColumnStatisticEval::AreMinMaxNeeded(const NScheme::TTypeInfo& typeI
     return TEWHEval::GetHistogramType(typeInfo.GetTypeId()).Defined();
 }
 
+// Eq-height histogram collection has three integration paths:
+//
+// 1. DataShard PK (sorted input): keys arrive in PK order → AddSorted fast path
+//    → RankUncertainty == 0 (exact). Finalize runs in the YQL query; no actor-side merge.
+//
+// 2. DataShard non-PK (unsorted input): keys arrive in PK order but the histogram
+//    is over non-PK columns → staging buffer → InterleaveInto → RankUncertainty > 0
+//    (bounded approximate). Finalize runs in the YQL query; no actor-side merge.
+//
+// 3. ColumnShard (per-shard): each shard runs Serialize in the YQL query,
+//    returning an intermediate state. The actor merges them here via
+//    IntermediateState->Merge(), then calls Finalize() to produce the final blob.
+//    IntermediateState is created only for this path (IsIntermediateAggregation).
+class TMultiColumnEqHeightHistogramEval : public IMultiColumnStatisticEval {
+    std::vector<TString> ColumnNames;
+    std::vector<ui32> ColumnIds;
+    TEqHeightHistogramBuilder::TParams Params;
+    std::optional<ui32> Seq;
+    std::unique_ptr<TEqHeightHistogramBuilder> IntermediateState;
+
+public:
+    TMultiColumnEqHeightHistogramEval(std::vector<TString> columnNames, std::vector<ui32> columnIds,
+                                     TEqHeightHistogramBuilder::TParams params)
+        : ColumnNames(std::move(columnNames))
+        , ColumnIds(std::move(columnIds))
+        , Params(std::move(params))
+    {}
+
+    static TPtr MaybeCreate(std::vector<TString> columnNames, std::vector<ui32> columnIds,
+                            ui64 rowCount, const THistogramSizing& sizing) {
+        if (rowCount == 0) {
+            return TPtr{};   // empty table
+        }
+        // Same bucket-count formula as equi-width. No tuple NDV estimate exists (as for
+        // multi-column CMS), so ndv == n, which reduces the formula to ceil(cbrt(n)) -- exactly
+        // right for a PK tuple. Finalize() then clamps to the observed distinct count.
+        const ui32 numBuckets = EstimateBucketCount(rowCount, rowCount);
+        // Compute EmissionRate in ui64 to avoid a ui32 overflow (e.g. 524264 * 10000
+        // wraps), then clamp to ui32. A factor of 0 would make
+        // Staging.size() >= EmissionRate always true and flush on every row, so
+        // force a minimum of 1.
+        const ui64 emissionRate64 = static_cast<ui64>(numBuckets) * sizing.OversampleFactor;
+        const ui32 emissionRate = static_cast<ui32>(
+            std::max<ui64>(1, std::min<ui64>(emissionRate64, std::numeric_limits<ui32>::max())));
+        return std::make_unique<TMultiColumnEqHeightHistogramEval>(
+            std::move(columnNames), std::move(columnIds),
+            TEqHeightHistogramBuilder::TParams{
+                .NumBuckets = numBuckets,
+                .EmissionRate = emissionRate,
+                .MaxStateBytes = sizing.MaxStateBytes,
+            });
+        // Deliberately no width-based rejection here: key width is unknown until the scan runs,
+        // so the MIN_ENTRIES guard lives in Finalize().
+    }
+
+    EStatType GetType() const final { return EStatType::EQ_HEIGHT_HISTOGRAM; }
+    const std::vector<ui32>& GetColumnIds() const final { return ColumnIds; }
+
+    // Scan-batch budget: typical serialized summary is ~EmissionRate entries.
+    // Cap at MaxStateBytes (Compact's hard ceiling).
+    size_t EstimateSize() const final {
+        constexpr size_t assumedAverageKeyWidth = 128;
+        const size_t typical =
+            static_cast<size_t>(std::max(Params.NumBuckets, Params.EmissionRate)) * assumedAverageKeyWidth;
+        return std::min(typical, static_cast<size_t>(Params.MaxStateBytes));
+    }
+
+    void AddAggregations(TSelectBuilder& builder) final {
+        Seq = builder.AddUDAFAggregationTuple(ColumnNames, ETupleEncoding::PresortKey, "EQH",
+            Ui32Literal(Params.NumBuckets), Ui32Literal(Params.EmissionRate),
+            Ui64Literal(Params.MaxStateBytes));
+        if (builder.IsIntermediateAggregation()) {
+            IntermediateState = std::make_unique<TEqHeightHistogramBuilder>(Params);
+        }
+    }
+
+    void Merge(const TVector<NYdb::TValue>& aggColumns) final {
+        Y_ENSURE(IntermediateState);
+        NYdb::TValueParser val(aggColumns.at(Seq.value()));
+        val.OpenOptional();
+        if (val.IsNull()) {
+            return;
+        }
+        const auto& bytes = val.GetBytes();
+        TEqHeightHistogramIntermediateState state;
+        Y_ENSURE(state.ParseFromArray(bytes.data(), bytes.size()),
+            "truncated or malformed EQ_HEIGHT_HISTOGRAM intermediate state");
+        IntermediateState->Merge(TEqHeightHistogramBuilder(state));
+    }
+
+    std::optional<TString> ExtractData(const TVector<NYdb::TValue>& aggColumns) final {
+        if (IntermediateState) {
+            Merge(aggColumns);
+            auto result = IntermediateState->Finalize();
+            return result.Defined()
+                ? std::optional(result->SerializeAsString())
+                : std::nullopt;
+        }
+        NYdb::TValueParser val(aggColumns.at(Seq.value()));
+        val.OpenOptional();
+        if (val.IsNull()) {
+            return std::nullopt;
+        }
+        const auto& bytes = val.GetBytes();
+        // Row tables finalize inside the query, so this already is the final blob; empty means
+        // TEQHAggFunc::FinalizeState saw a nullopt.
+        if (bytes.empty()) {
+            return std::nullopt;
+        }
+        TEqHeightHistogramResult result;
+        Y_ENSURE(result.ParseFromArray(bytes.data(), bytes.size()),
+            "truncated or malformed EQ_HEIGHT_HISTOGRAM result");
+        TEqHeightHistogram parsed(result);
+        Y_ENSURE(parsed.GetNumBuckets() > 0,
+            "EQ_HEIGHT_HISTOGRAM result parsed to an empty histogram");
+        return TString(bytes.data(), bytes.size());
+    }
+};
+
 TVector<EStatType> IMultiColumnStatisticEval::SupportedMultiColumnTypes() {
     return {
         EStatType::COUNT_MIN_SKETCH,
+        EStatType::EQ_HEIGHT_HISTOGRAM,
     };
 }
 
@@ -550,11 +685,15 @@ IMultiColumnStatisticEval::TPtr IMultiColumnStatisticEval::MaybeCreate(
         EStatType statType,
         std::vector<TString> columnNames,
         std::vector<ui32> columnIds,
-        ui64 rowCount) {
+        ui64 rowCount,
+        const THistogramSizing& sizing) {
     switch (statType) {
     case EStatType::COUNT_MIN_SKETCH:
         return TMultiColumnCountMinSketchEval::MaybeCreate(
             std::move(columnNames), std::move(columnIds), rowCount);
+    case EStatType::EQ_HEIGHT_HISTOGRAM:
+        return TMultiColumnEqHeightHistogramEval::MaybeCreate(
+            std::move(columnNames), std::move(columnIds), rowCount, sizing);
     default:
         return TPtr{};
     }

@@ -293,6 +293,114 @@ public:
     }
 };
 
+namespace {
+
+    using TBaseConfig = NKikimrBlobStorage::TBaseConfig;
+    using TVSlot = TBaseConfig::TVSlot;
+
+    bool SameVSlotId(const NKikimrBlobStorage::TVSlotId& lhs, const NKikimrBlobStorage::TVSlotId& rhs) {
+        return lhs.GetNodeId() == rhs.GetNodeId()
+            && lhs.GetPDiskId() == rhs.GetPDiskId()
+            && lhs.GetVSlotId() == rhs.GetVSlotId();
+    }
+
+    bool IsVSlotOnPDisk(const TVSlot& vslot, const NKikimrBlobStorage::TPDiskId& pdisk) {
+        const auto& vslotId = vslot.GetVSlotId();
+        return vslotId.GetNodeId() == pdisk.GetNodeId()
+            && vslotId.GetPDiskId() == pdisk.GetPDiskId();
+    }
+
+    TBaseConfig FetchBaseConfig(TEnvironmentSetup* env) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableQueryBaseConfig();
+        const auto response = env->Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+        UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.DebugString());
+        return response.GetStatus(0).GetBaseConfig();
+    }
+
+    TVSlot FindVSlot(const TBaseConfig& baseConfig, const NKikimrBlobStorage::TVSlotId& id) {
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            if (SameVSlotId(vslot.GetVSlotId(), id)) {
+                return vslot;
+            }
+        }
+        UNIT_ASSERT_C(false, "VSlot not found");
+        return {};
+    }
+
+    TVSlot FindActiveVSlot(const TBaseConfig& baseConfig, const TVSlot& logicalVDisk) {
+        for (const auto& group : baseConfig.GetGroup()) {
+            if (group.GetGroupId() != logicalVDisk.GetGroupId()) {
+                continue;
+            }
+            for (const auto& id : group.GetVSlotId()) {
+                const TVSlot vslot = FindVSlot(baseConfig, id);
+                if (vslot.GetFailRealmIdx() == logicalVDisk.GetFailRealmIdx()
+                        && vslot.GetFailDomainIdx() == logicalVDisk.GetFailDomainIdx()
+                        && vslot.GetVDiskIdx() == logicalVDisk.GetVDiskIdx()) {
+                    return vslot;
+                }
+            }
+        }
+        UNIT_ASSERT_C(false, "active VSlot not found");
+        return {};
+    }
+
+    NKikimrBlobStorage::TPDiskId FindSparePDisk(const TBaseConfig& baseConfig, ui32 groupId) {
+        TSet<ui32> occupiedNodes;
+        for (const auto& group : baseConfig.GetGroup()) {
+            if (group.GetGroupId() == groupId) {
+                for (const auto& id : group.GetVSlotId()) {
+                    occupiedNodes.insert(id.GetNodeId());
+                }
+                break;
+            }
+        }
+        UNIT_ASSERT_C(!occupiedNodes.empty(), "group not found");
+
+        for (const auto& pdisk : baseConfig.GetPDisk()) {
+            if (!occupiedNodes.contains(pdisk.GetNodeId())) {
+                NKikimrBlobStorage::TPDiskId target;
+                target.SetNodeId(pdisk.GetNodeId());
+                target.SetPDiskId(pdisk.GetPDiskId());
+                return target;
+            }
+        }
+        UNIT_ASSERT_C(false, "spare PDisk not found");
+        return {};
+    }
+
+    void AddVDiskId(const TVSlot& source, NKikimrBlobStorage::TPopulatePDisk* command) {
+        VDiskIDFromVDiskID(TVDiskID(
+            source.GetGroupId(),
+            source.GetGroupGeneration(),
+            source.GetFailRealmIdx(),
+            source.GetFailDomainIdx(),
+            source.GetVDiskIdx()),
+            command->AddVDiskId());
+    }
+
+    NKikimrBlobStorage::TConfigRequest MakePopulateRequest(const TVSlot& source,
+            const NKikimrBlobStorage::TPDiskId& destination, bool suppressDonorMode = false) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *command = request.AddCommand()->MutablePopulatePDisk();
+        command->MutableDestinationPDisk()->MutableTargetPDiskId()->CopyFrom(destination);
+        command->SetSuppressDonorMode(suppressDonorMode);
+        AddVDiskId(source, command);
+        return request;
+    }
+
+    void EnableDonorMode(TEnvironmentSetup* env) {
+        NKikimrBlobStorage::TConfigRequest request;
+        request.AddCommand()->MutableEnableDonorMode()->SetEnable(true);
+        const auto response = env->Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+    }
+
+}
+
 Y_UNIT_TEST_SUITE(BsControllerConfig) {
     Y_UNIT_TEST(Basic) {
         TEnvironmentSetup env(10, 1);
@@ -876,6 +984,87 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         });
     }
 
+    Y_UNIT_TEST(PopulatePDiskMovesSelectedVDiskAndCreatesDonor) {
+        TEnvironmentSetup env(12, 1);
+
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            env.DefineBox(1, "box", {
+                {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
+                {"/dev/disk2", NKikimrBlobStorage::ROT, false, false, 0},
+            }, env.GetNodes(), request);
+            env.DefineStoragePool(1, 1, "storage pool", 1, NKikimrBlobStorage::ROT, {}, request);
+            auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            EnableDonorMode(&env);
+
+            const TBaseConfig before = FetchBaseConfig(&env);
+            UNIT_ASSERT_VALUES_EQUAL(before.GroupSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(before.GetGroup(0).VSlotIdSize(), 8);
+            const TVSlot source = FindVSlot(before, before.GetGroup(0).GetVSlotId(0));
+            const auto destination = FindSparePDisk(before, source.GetGroupId());
+            UNIT_ASSERT_C(!IsVSlotOnPDisk(source, destination),
+                "test requires source VDisk not to reside on destination PDisk");
+
+            request = MakePopulateRequest(source, destination);
+            request.SetIgnoreGroupFailModelChecks(true); // the test environment does not run VDisks
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(0).ReassignedItemSize(), 1);
+
+            const TBaseConfig after = FetchBaseConfig(&env);
+            const TVSlot acceptor = FindActiveVSlot(after, source);
+            UNIT_ASSERT_VALUES_EQUAL(acceptor.GetVSlotId().GetNodeId(), destination.GetNodeId());
+            UNIT_ASSERT_VALUES_EQUAL(acceptor.GetVSlotId().GetPDiskId(), destination.GetPDiskId());
+            UNIT_ASSERT_VALUES_EQUAL(acceptor.DonorsSize(), 1);
+            UNIT_ASSERT(SameVSlotId(acceptor.GetDonors(0).GetVSlotId(), source.GetVSlotId()));
+        });
+    }
+
+    Y_UNIT_TEST(PopulatePDiskSuppressesDonorMode) {
+        TEnvironmentSetup env(12, 1);
+
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+            TFinalizer finalizer(env);
+            env.Prepare(dispatchName, setup, outActiveZone);
+
+            NKikimrBlobStorage::TConfigRequest request;
+            env.DefineBox(1, "box", {
+                {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
+                {"/dev/disk2", NKikimrBlobStorage::ROT, false, false, 0},
+            }, env.GetNodes(), request);
+            env.DefineStoragePool(1, 1, "storage pool", 1, NKikimrBlobStorage::ROT, {}, request);
+            auto response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            EnableDonorMode(&env);
+
+            const TBaseConfig before = FetchBaseConfig(&env);
+            UNIT_ASSERT_VALUES_EQUAL(before.GroupSize(), 1);
+            const TVSlot source = FindVSlot(before, before.GetGroup(0).GetVSlotId(0));
+            const auto destination = FindSparePDisk(before, source.GetGroupId());
+            UNIT_ASSERT_C(!IsVSlotOnPDisk(source, destination),
+                "test requires source VDisk not to reside on destination PDisk");
+
+            request = MakePopulateRequest(source, destination, true);
+            request.SetIgnoreGroupFailModelChecks(true); // the test environment does not run VDisks
+            response = env.Invoke(request);
+            UNIT_ASSERT_C(response.GetSuccess(), response.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            UNIT_ASSERT_C(response.GetStatus(0).GetSuccess(), response.DebugString());
+
+            const TBaseConfig after = FetchBaseConfig(&env);
+            const TVSlot acceptor = FindActiveVSlot(after, source);
+            UNIT_ASSERT_VALUES_EQUAL(acceptor.GetVSlotId().GetNodeId(), destination.GetNodeId());
+            UNIT_ASSERT_VALUES_EQUAL(acceptor.GetVSlotId().GetPDiskId(), destination.GetPDiskId());
+            UNIT_ASSERT_VALUES_EQUAL(acceptor.DonorsSize(), 0);
+        });
+    }
+
     Y_UNIT_TEST(MergeBoxes) {
         const ui32 numNodes = 50;
         const ui32 numNodes1 = 20;
@@ -1262,7 +1451,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
         UNIT_ASSERT(!group.Listable());
 
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters params;
+        NKikimrBlobStorage::TGroupMetrics::TGroupParameters params;
         UNIT_ASSERT(!group.FillInGroupParameters(&params, nullptr));
         UNIT_ASSERT_VALUES_EQUAL(params.GetGroupSizeInUnits(), 0);
     }

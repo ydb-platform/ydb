@@ -31,6 +31,7 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     NKikimrHive::TForwardRequest ForwardRequest;
 
     NKikimrHive::EBalancerPolicy BalancerPolicy;
+    bool IsBackup = false;
 
     TSideEffects SideEffects;
 
@@ -50,6 +51,7 @@ public:
         , AllowedDomains(RequestData.GetAllowedDomains().begin(), RequestData.GetAllowedDomains().end())
         , BootMode(RequestData.GetTabletBootMode())
         , BalancerPolicy(RequestData.GetBalancerPolicy())
+        , IsBackup(RequestData.GetIsBackup())
     {
         const ui32 allowedNodeIdsSize = RequestData.AllowedNodeIDsSize();
         AllowedNodeIds.reserve(allowedNodeIdsSize);
@@ -287,6 +289,10 @@ public:
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::BootMode>(BootMode);
                     tablet->BalancerPolicy = BalancerPolicy;
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::BalancerPolicy>(BalancerPolicy);
+                    if (RequestData.HasIsBackup()) {
+                        tablet->IsBackup = IsBackup;
+                        db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::IsBackup>(IsBackup);
+                    }
 
                     UpdateChannelsBinding(*tablet, db);
 
@@ -401,6 +407,7 @@ public:
         tablet.AssignDomains(ObjectDomain, AllowedDomains);
         tablet.Statistics.SetLastAliveTimestamp(now.MilliSeconds());
         tablet.BalancerPolicy = BalancerPolicy;
+        tablet.IsBackup = IsBackup;
 
         TDomainInfo* domain = Self->FindDomain(ObjectDomain);
         if (domain && domain->Stopped) {
@@ -424,7 +431,8 @@ public:
                                                         NIceDb::TUpdate<Schema::Tablet::ObjectDomain>(ObjectDomain),
                                                         NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet.Statistics),
                                                         NIceDb::TUpdate<Schema::Tablet::BalancerPolicy>(tablet.BalancerPolicy),
-                                                        NIceDb::TUpdate<Schema::Tablet::StoppedByTenant>(tablet.StoppedByTenant));
+                                                        NIceDb::TUpdate<Schema::Tablet::StoppedByTenant>(tablet.StoppedByTenant),
+                                                        NIceDb::TUpdate<Schema::Tablet::IsBackup>(tablet.IsBackup));
 
         Self->PendingCreateTablets.erase({OwnerId, OwnerIdx});
 
@@ -525,7 +533,7 @@ public:
             {"ownerIdx", ownerIdx},
             {"tabletId", TabletId},
             {"sideEffects", SideEffects});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_FREE].Set(Self->Sequencer.FreeSize());
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_ALLOCATED].Set(Self->Sequencer.AllocatedSequencesSize());
     }

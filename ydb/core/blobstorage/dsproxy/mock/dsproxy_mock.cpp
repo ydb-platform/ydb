@@ -20,49 +20,56 @@ namespace NKikimr {
             void Handle(TEvBlobStorage::TEvPut::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvPut",
                     {"marker", "BSPM01"},
-                    {"msg", ev->Get()->ToString()});
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvGet::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvGet",
                     {"marker", "BSPM02"},
-                    {"msg", ev->Get()->ToString()});
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvBlock::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvBlock",
                     {"marker", "BSPM03"},
-                    {"msg", ev->Get()->ToString()});
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvDiscover::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvDiscover",
                     {"marker", "BSPM04"},
-                    {"msg", ev->Get()->ToString()});
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvRange::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvRange",
                     {"marker", "BSPM05"},
-                    {"msg", ev->Get()->ToString()});
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvCollectGarbage",
                     {"marker", "BSPM06"},
-                    {"msg", ev->Get()->ToString()});
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvStatus::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvStatus",
                     {"marker", "BSPM07"},
-                    {"msg", ev->Get()->ToString()});
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), new TEvBlobStorage::TEvStatusResult(NKikimrProto::OK,
                     Model->GetStorageStatusFlags())), 0, ev->Cookie);
             }
@@ -70,7 +77,8 @@ namespace NKikimr {
             void Handle(TEvBlobStorage::TEvAssimilate::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvAssimilate",
                     {"marker", "BSPM09"},
-                    {"msg", ev->Get()->ToString()});
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::ERROR,
                     "not implemented")), 0, ev->Cookie);
             }
@@ -78,21 +86,24 @@ namespace NKikimr {
             void Handle(TEvBlobStorage::TEvPatch::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvPatch",
                     {"marker", "BSPM10"},
-                    {"msg", ev->Get()->ToString()});
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvGetBlock::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvGetBlock",
                     {"marker", "BSPM11"},
-                    {"msg", ev->Get()->ToString()});
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvCheckIntegrity::TPtr& ev) {
                 YDB_LOG_DEBUG("TEvCheckIntegrity",
                     {"marker", "BSPM12"},
-                    {"msg", ev->Get()->ToString()});
+                    {"msg", ev->Get()->ToString()},
+                    {"group_id", Model->GetGroupId()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 

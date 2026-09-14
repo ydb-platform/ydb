@@ -10,7 +10,7 @@ YQL_UDF_CONTRIB(math_udf)
         math_udf.cpp
     )
 
-    IF (BUILD_TYPE != "release" AND BUILD_TYPE != "relwithdebinfo")
+    IF (NOT OS_LINUX)
         CFLAGS(-DDISABLE_IR)
     ELSE()
         USE_LLVM_BC16()

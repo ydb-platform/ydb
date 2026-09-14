@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 import sqlalchemy.schema as sa_schema
 from sqlalchemy import text
 from sqlalchemy.engine.default import DefaultDialect
@@ -5,12 +7,18 @@ from sqlalchemy.exc import NoResultFound, NoSuchTableError
 
 from clickhouse_connect import dbapi
 from clickhouse_connect.cc_sqlalchemy import dialect_name, ischema_names
-from clickhouse_connect.cc_sqlalchemy.inspector import ChInspector, get_columns, get_table_metadata
+from clickhouse_connect.cc_sqlalchemy.inspector import (
+    ChInspector,
+    get_columns,
+    get_table_metadata,
+    with_internal_query_formats,
+)
 from clickhouse_connect.cc_sqlalchemy.sql import full_table
 from clickhouse_connect.cc_sqlalchemy.sql.compiler import ChStatementCompiler
 from clickhouse_connect.cc_sqlalchemy.sql.ddlcompiler import ChDDLCompiler
 from clickhouse_connect.cc_sqlalchemy.sql.preparer import ChIdentifierPreparer
-from clickhouse_connect.driver.binding import format_str, quote_identifier
+from clickhouse_connect.dbapi.cursor import Cursor
+from clickhouse_connect.driver.binding import quote_identifier
 
 
 class ClickHouseDialect(DefaultDialect):
@@ -66,6 +74,57 @@ class ClickHouseDialect(DefaultDialect):
         self.server_side_params = server_side_params
         super().__init__(**kwargs)
 
+    @staticmethod
+    def _ch_query_settings(context: Any) -> dict[str, Any] | None:
+        # Deep-merge one level of execution_options["settings"], statement wins per key.
+        if context is None:
+            return None
+        merged = context.execution_options.get("settings")
+        stmt = getattr(context, "invoked_statement", None)
+        stmt_settings = stmt.get_execution_options().get("settings") if stmt is not None else None
+        if not stmt_settings:
+            return merged
+        if not merged:
+            return dict(stmt_settings)
+        return {**merged, **stmt_settings}
+
+    @staticmethod
+    def _ch_query_formats(context: Any) -> dict[str, str] | None:
+        # Deep-merge one level of execution_options["query_formats"], statement wins per key.
+        if context is None:
+            return None
+        merged = context.execution_options.get("query_formats")
+        stmt = getattr(context, "invoked_statement", None)
+        stmt_formats = stmt.get_execution_options().get("query_formats") if stmt is not None else None
+        if not stmt_formats:
+            return merged
+        if not merged:
+            return dict(stmt_formats)
+        return {**stmt_formats, **{k: v for k, v in merged.items() if k not in stmt_formats}}
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+        cast(Cursor, cursor).execute(
+            statement,
+            parameters,
+            settings=self._ch_query_settings(context),
+            query_formats=self._ch_query_formats(context),
+        )
+
+    def do_executemany(self, cursor, statement, parameters, context=None):
+        cast(Cursor, cursor).executemany(
+            statement,
+            parameters,
+            settings=self._ch_query_settings(context),
+            query_formats=self._ch_query_formats(context),
+        )
+
+    def do_execute_no_params(self, cursor, statement, context=None):
+        cast(Cursor, cursor).execute(
+            statement,
+            settings=self._ch_query_settings(context),
+            query_formats=self._ch_query_formats(context),
+        )
+
     # SQA 1 compatibility
 
     @classmethod
@@ -79,20 +138,24 @@ class ClickHouseDialect(DefaultDialect):
         return dbapi
 
     def _get_default_schema_name(self, connection):
-        return connection.execute(text("SELECT currentDatabase()")).scalar()
+        return connection.execute(with_internal_query_formats(text("SELECT currentDatabase()"))).scalar()
 
     def get_schema_names(self, connection, **_):
-        return [row.name for row in connection.execute(text("SHOW DATABASES"))]
+        return [row.name for row in connection.execute(with_internal_query_formats(text("SHOW DATABASES")))]
 
     @staticmethod
     def has_database(connection, db_name):
-        return (connection.execute(text(f"SELECT name FROM system.databases WHERE name = {format_str(db_name)}"))).rowcount > 0
+        # EXISTS DATABASE consults DatabaseCatalog directly, so it sees DataLakeCatalog
+        # and other remote databases that system.databases omitted by default before server 26.5.
+        result = connection.execute(with_internal_query_formats(text(f"EXISTS DATABASE {quote_identifier(db_name)}")))
+        row = result.fetchone()
+        return row[0] == 1
 
     def get_table_names(self, connection, schema=None, **kw):
         cmd = "SHOW TABLES"
         if schema:
             cmd += " FROM " + quote_identifier(schema)
-        return [row.name for row in connection.execute(text(cmd))]
+        return [row.name for row in connection.execute(with_internal_query_formats(text(cmd)))]
 
     def get_columns(self, connection, table_name, schema=None, **kw):
         return get_columns(connection, table_name, schema)
@@ -135,7 +198,7 @@ class ClickHouseDialect(DefaultDialect):
         return []
 
     def has_table(self, connection, table_name, schema=None, **_kw):
-        result = connection.execute(text(f"EXISTS TABLE {full_table(table_name, schema)}"))
+        result = connection.execute(with_internal_query_formats(text(f"EXISTS TABLE {full_table(table_name, schema)}")))
         row = result.fetchone()
         return row[0] == 1
 

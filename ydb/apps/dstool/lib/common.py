@@ -26,6 +26,7 @@ import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.whiteboard_disk_states_pb2 as whiteboard_disk_states
 import ydb.core.protos.cms_pb2 as kikimr_cms
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
+import ydb.public.api.protos.ydb_bridge_common_pb2 as ydb_bridge_common
 from ydb.public.api.grpc.draft import ydb_bridge_v1_pb2_grpc as bridge_grpc_server
 from ydb.public.api.grpc.draft import ydb_nbs_v1_pb2_grpc as nbs_grpc_server
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
@@ -79,7 +80,8 @@ class EndpointInfo:
 
     @property
     def host_with_grpc_port(self):
-        return f'{self.host}:{self.grpc_port}'
+        host = '[%s]' % self.host if ':' in self.host and not self.host.startswith('[') else self.host
+        return f'{host}:{self.grpc_port}'
 
     @property
     def host_with_mon_port(self):
@@ -535,7 +537,15 @@ def fetch(path, params={}, explicit_host=None, fmt='json', host=None, cache=True
 
 
 @query_random_host_with_retry(request_type='grpc')
-def invoke_grpc(func, *params, explicit_host=None, endpoint=None, stub_factory=kikimr_grpc.TGRpcServerStub, endpoints=None):
+def invoke_grpc(
+    func,
+    *params,
+    explicit_host=None,
+    endpoint=None,
+    stub_factory=kikimr_grpc.TGRpcServerStub,
+    endpoints=None,
+    metadata=None,
+):
     options = [
         ('grpc.max_receive_message_length', 256 << 20),  # 256 MiB
     ]
@@ -547,7 +557,10 @@ def invoke_grpc(func, *params, explicit_host=None, endpoint=None, stub_factory=k
     def work(channel):
         try:
             stub = stub_factory(channel)
-            res = getattr(stub, func)(*params)
+            if metadata is None:
+                res = getattr(stub, func)(*params)
+            else:
+                res = getattr(stub, func)(*params, metadata=metadata)
             if connection_params.debug:
                 print('INFO: result <<< %s >>>' % text_format.MessageToString(res, as_one_line=True), file=sys.stderr)
             return res
@@ -600,19 +613,20 @@ def invoke_bsc_request(request, explicit_host=None, endpoint=None):
         return invoke_grpc_bsc_request(request, endpoint=endpoint)
 
 
-def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
+def cms_permission_request(user, host, reason, duration_usec, availability_mode, action_type, services=(), devices=()):
     cms_request = kikimr_msgbus.TCmsRequest()
     if connection_params.token is not None:
         cms_request.SecurityToken = connection_params.token
     cms_request.PermissionRequest.User = user
     action = cms_request.PermissionRequest.Actions.add()
-    action.Type = kikimr_cms.TAction.EType.RESTART_SERVICES
+    action.Type = action_type
     action.Host = host
-    action.Services.append('storage')
+    action.Services.extend(services)
+    action.Devices.extend(devices)
     action.Duration = duration_usec
     cms_request.PermissionRequest.Reason = reason
     cms_request.PermissionRequest.Duration = duration_usec
-    cms_request.PermissionRequest.AvailabilityMode = kikimr_cms.EAvailabilityMode.MODE_MAX_AVAILABILITY if max_avail else kikimr_cms.EAvailabilityMode.MODE_KEEP_AVAILABLE
+    cms_request.PermissionRequest.AvailabilityMode = availability_mode
     response = invoke_grpc('CmsRequest', cms_request)
     if response.Status.Code == kikimr_cms.TStatus.ECode.ALLOW:
         return None
@@ -620,71 +634,123 @@ def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
         return '%s: %s' % (kikimr_cms.TStatus.ECode.Name(response.Status.Code), response.Status.Reason)
 
 
+def cms_host_restart_request(user, host, reason, duration_usec, max_avail):
+    availability_mode = (
+        kikimr_cms.EAvailabilityMode.MODE_MAX_AVAILABILITY
+        if max_avail
+        else kikimr_cms.EAvailabilityMode.MODE_KEEP_AVAILABLE
+    )
+    return cms_permission_request(
+        user,
+        host,
+        reason,
+        duration_usec,
+        availability_mode,
+        kikimr_cms.TAction.EType.RESTART_SERVICES,
+        services=('storage',),
+    )
+
+
+def _auth_metadata():
+    if connection_params.token is None:
+        return None
+    return (('x-ydb-auth-ticket', connection_params.token),)
+
+
 def get_piles_info():
     request = ydb_bridge.GetClusterStateRequest()
-    response = invoke_grpc('GetClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+    response = invoke_grpc(
+        'GetClusterState',
+        request,
+        stub_factory=bridge_grpc_server.BridgeServiceStub,
+        metadata=_auth_metadata(),
+    )
+    if response.operation.status != StatusIds.SUCCESS:
+        raise QueryError('GetClusterState failed with status %s' % response.operation.status)
     result = ydb_bridge.GetClusterStateResult()
-    response.operation.result.Unpack(result)
+    if not response.operation.result.Unpack(result):
+        raise QueryError('GetClusterState returned an unexpected result type')
     return result
 
 
-def promote_pile(pile_id):
+def update_pile_states(updates, quorum_piles=(), endpoints=None):
     request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=pile_id,
-        state=ydb_bridge.PileState.PROMOTED
-    ))
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+    request.updates.extend(updates)
+    request.quorum_piles.extend(quorum_piles)
+    response = invoke_grpc(
+        'UpdateClusterState',
+        request,
+        stub_factory=bridge_grpc_server.BridgeServiceStub,
+        endpoints=endpoints,
+        metadata=_auth_metadata(),
+    )
+    if response.operation.status != StatusIds.SUCCESS:
+        raise QueryError('UpdateClusterState failed with status %s' % response.operation.status)
 
 
-def set_primary_pile(primary_pile_id, synchronized_piles):
-    request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=primary_pile_id,
-        state=ydb_bridge.PileState.PRIMARY
-    ))
-    for pile_id in synchronized_piles:
-        request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-            pile_id=pile_id,
-            state=ydb_bridge.PileState.SYNCHRONIZED
+def promote_pile(pile_name):
+    update_pile_states((ydb_bridge_common.PileState(
+        pile_name=pile_name,
+        state=ydb_bridge_common.PileState.PROMOTED,
+    ),))
+
+
+def set_primary_pile(primary_pile_name, synchronized_piles):
+    updates = [ydb_bridge_common.PileState(
+        pile_name=primary_pile_name,
+        state=ydb_bridge_common.PileState.PRIMARY,
+    )]
+    updates.extend(
+        ydb_bridge_common.PileState(
+            pile_name=pile_name,
+            state=ydb_bridge_common.PileState.SYNCHRONIZED,
+        )
+        for pile_name in synchronized_piles
+    )
+    update_pile_states(updates)
+
+
+def disconnect_pile(pile_name, new_primary_pile_name=None):
+    updates = []
+    if new_primary_pile_name is not None:
+        updates.append(ydb_bridge_common.PileState(
+            pile_name=new_primary_pile_name,
+            state=ydb_bridge_common.PileState.PRIMARY,
         ))
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub)
+    updates.append(ydb_bridge_common.PileState(
+        pile_name=pile_name,
+        state=ydb_bridge_common.PileState.DISCONNECTED,
+    ))
+    update_pile_states(updates)
 
 
-def disconnect_pile(pile_id, pile_to_endpoints):
-    request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=pile_id,
-        state=ydb_bridge.PileState.DISCONNECTED
-    ))
-    request.specific_pile_ids.append(pile_id)
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
-    other_pile_ids = [x for x in pile_to_endpoints.keys() if x != pile_id]
-    request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=pile_id,
-        state=ydb_bridge.PileState.DISCONNECTED,
-    ))
-    request.specific_pile_ids.extend(other_pile_ids)
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
+def connect_pile(pile_name, primary_pile_name, pile_to_endpoints):
+    update = ydb_bridge_common.PileState(
+        pile_name=pile_name,
+        state=ydb_bridge_common.PileState.NOT_SYNCHRONIZED,
+    )
+    if primary_pile_name is None or primary_pile_name == pile_name:
+        raise QueryError('Cannot reconnect a pile without a connected primary pile')
 
-
-def connect_pile(pile_id, pile_to_endpoints):
-    request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=pile_id,
-        state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
-    ))
-    request.specific_pile_ids.append(pile_id)
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[pile_id])
-    other_pile_ids = [x for x in pile_to_endpoints.keys() if x != pile_id]
-    request = ydb_bridge.UpdateClusterStateRequest()
-    request.updates.add().CopyFrom(ydb_bridge.PileStateUpdate(
-        pile_id=pile_id,
-        state=ydb_bridge.PileState.NOT_SYNCHRONIZED,
-    ))
-    request.specific_pile_ids.extend(other_pile_ids)
-    invoke_grpc('UpdateClusterState', request, stub_factory=bridge_grpc_server.BridgeServiceStub, endpoints=pile_to_endpoints[other_pile_ids[0]])
+    # A disconnected pile shuts down its gRPC servers. Both requests therefore
+    # enter through the connected primary; quorum_piles selects the witnesses
+    # for each update and does not select the RPC endpoint.
+    primary_endpoints = pile_to_endpoints.get(primary_pile_name)
+    if not primary_endpoints:
+        raise QueryError(
+            'No gRPC endpoints found for primary bridge pile %s'
+            % primary_pile_name
+        )
+    update_pile_states(
+        (update,),
+        quorum_piles=(primary_pile_name,),
+        endpoints=primary_endpoints,
+    )
+    update_pile_states(
+        (update,),
+        quorum_piles=(pile_name,),
+        endpoints=primary_endpoints,
+    )
 
 
 def create_bsc_request(args):
@@ -1212,14 +1278,28 @@ def fetch_node_mon_map(nodes=None):
 def fetch_node_to_endpoint_map(nodes=None):
     res = {}
     for node_id, sysinfo in fetch_json_info('sysinfo', nodes).items():
+        grpc_protocol = None
+        grpc_host = sysinfo.get('Host')
         grpc_port = None
         mon_port = None
         for ep in sysinfo.get('Endpoints', []):
-            if ep['Name'] == 'grpc':
-                grpc_port = int(ep['Address'][1:])
+            if ep['Name'] in ('grpc', 'grpcs') and (grpc_protocol is None or ep['Name'] == 'grpc'):
+                address_host, separator, address_port = ep['Address'].rpartition(':')
+                if separator and address_port.isdigit():
+                    grpc_protocol = ep['Name']
+                    advertised_host = address_host.strip('[]')
+                    grpc_host = (
+                        sysinfo.get('Host')
+                        if advertised_host in ('', '0.0.0.0', '::')
+                        else advertised_host
+                    )
+                    grpc_port = int(address_port)
             elif ep['Name'] == 'http-mon':
-                mon_port = int(ep['Address'][1:])
-        res[node_id] = EndpointInfo('grpc', sysinfo['Host'], grpc_port, mon_port)
+                _, separator, address_port = ep['Address'].rpartition(':')
+                if separator and address_port.isdigit():
+                    mon_port = int(address_port)
+        if grpc_protocol is not None and grpc_host:
+            res[node_id] = EndpointInfo(grpc_protocol, grpc_host, grpc_port, mon_port)
     return res
 
 
@@ -1245,6 +1325,12 @@ def vdisk_is_ok(vslot):
     return metrics.Replicated and metrics.State == whiteboard_disk_states.EVDiskState.OK
 
 
+def vslot_is_bsc_ready(vslot):
+    # BSC treats a VDisk as ready only after Status=READY is stable for ReadyStablePeriod.
+    # Degraded/fail-model checks use IsReady (BaseConfig.TVSlot.Ready), not Status alone.
+    return vslot.Status == 'READY' and vslot.Ready and vdisk_is_ok(vslot)
+
+
 def filter_healthy_groups(groups, base_config, vslot_map):
     healthy = set()
     for group in base_config.Group:
@@ -1253,9 +1339,7 @@ def filter_healthy_groups(groups, base_config, vslot_map):
         vslots = list(vslots_of_group(group, vslot_map))
         if not vslots:
             continue
-        if not all(vslot.Status == 'READY' for vslot in vslots):
-            continue
-        if all(vdisk_is_ok(vslot) for vslot in vslots):
+        if all(vslot_is_bsc_ready(vslot) for vslot in vslots):
             healthy.add(group.GroupId)
     return healthy
 

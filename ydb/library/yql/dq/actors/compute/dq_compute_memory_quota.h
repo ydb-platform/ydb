@@ -30,16 +30,27 @@ namespace NYql::NDq {
         TDqMemoryQuota(::NMonitoring::TDynamicCounters::TCounterPtr& mkqlMemoryQuota, ui64 initialMkqlMemoryLimit, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NYql::NDq::TTxId txId, ui64 taskId, bool profileStats, NActors::TActorSystem* actorSystem)
             : MkqlMemoryQuota(mkqlMemoryQuota)
             , InitialMkqlMemoryLimit(initialMkqlMemoryLimit)
-            , MkqlMemoryLimit(initialMkqlMemoryLimit)
+            , MkqlMemoryLimit(0)
             , MemoryLimits(memoryLimits)
             , TxId(txId)
             , TaskId(taskId)
             , ProfileStats(profileStats ? MakeHolder<TProfileStats>() : nullptr)
             , ActorSystem(actorSystem) {
 
-            Y_ABORT_UNLESS(MemoryLimits.MemoryQuotaManager->AllocateQuota(MkqlMemoryLimit));
+            auto memoryLimit = initialMkqlMemoryLimit;
+            if (!MemoryLimits.MemoryQuotaManager->AllocateQuota(memoryLimit)) {
+                // we don't have API call to discover current limit available in MemoryQuotaManager
+                // but at this point it'll match GetMaxMemorySize(), so we can use it as guranteed limit
+                // and allocation should never fail anymore
+                memoryLimit = std::min(InitialMkqlMemoryLimit, MemoryLimits.MemoryQuotaManager->GetMaxMemorySize());
+                if (!MemoryLimits.MemoryQuotaManager->AllocateQuota(memoryLimit)) {
+                    CAMQ_LOG_W("[Mem] initial memory allocation of " << memoryLimit << " failed, starting with 0");
+                    return;
+                }
+            }
+            MkqlMemoryLimit = memoryLimit;
             if (MkqlMemoryQuota) {
-                MkqlMemoryQuota->Add(MkqlMemoryLimit);
+                MkqlMemoryQuota->Add(memoryLimit);
             }
         }
 

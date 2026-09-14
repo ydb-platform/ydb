@@ -102,7 +102,7 @@ int TYdbUpdater::Update(bool forceUpdate) {
 
     if (!downloadResult.Success) {
         Cerr << Endl << "Failed to download from url \"" << downloadUrl << "\". " << downloadResult.ErrorMessage << Endl;
-        Cerr << "If the problem persists, consider reinstalling YDB CLI: https://ydb.tech/docs/en/reference/ydb-cli/install" << Endl;
+        Cerr << "If the problem persists, consider reinstalling YDB CLI: " << HttpsLink("ydb.tech/docs/en/reference/ydb-cli/install", NConsoleClient::AutoColors(Cerr)) << Endl;
         tmpPathToBinary.DeleteIfExists();
         return EXIT_FAILURE;
     }

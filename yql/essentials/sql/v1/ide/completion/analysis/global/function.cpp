@@ -1,6 +1,6 @@
 #include "function.h"
 
-#include "evaluate.h"
+#include <yql/essentials/sql/v1/ide/analysis/evaluate.h>
 #include "use.h"
 
 #include <yql/essentials/sql/v1/ide/pure_ast/narrowing_visitor.h>
@@ -14,7 +14,7 @@ namespace {
 class TVisitor: public NSQLPureAST::TSQLv1NarrowingVisitor {
 public:
     TVisitor(const TParsedInput& input, const INamedNodes* nodes)
-        : NSQLPureAST::TSQLv1NarrowingVisitor(input.Tokens, input.Original.CursorPosition)
+        : NSQLPureAST::TSQLv1NarrowingVisitor(&input.ParseTree->Tokens(), input.CursorPosition)
         , Nodes_(nodes)
     {
     }
@@ -87,7 +87,7 @@ TMaybe<TClusterContext> GetCluster(SQLv1::Table_refContext* ctx, const INamedNod
 } // namespace
 
 TMaybe<TFunctionContext> EnclosingFunction(TParsedInput input, const INamedNodes& nodes) {
-    std::any result = TVisitor(input, &nodes).visit(input.SqlQuery);
+    std::any result = TVisitor(input, &nodes).visit(input.ParseTree->Root());
     if (!result.has_value()) {
         return Nothing();
     }

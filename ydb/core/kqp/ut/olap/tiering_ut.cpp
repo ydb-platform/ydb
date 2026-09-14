@@ -4,6 +4,7 @@
 #include "helpers/writer.h"
 
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <util/generic/size_literals.h>
 #include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
@@ -626,6 +627,84 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         ExecuteScanQuery(tableClient, "SELECT *  FROM `/Root/olapStore/olapTable`");
     }
 
+    // Issue #26733: a ngramm bloom index whose rebuilt filter exceeds the storage MaxBlobSize used to abort
+    // the tablet with "blob size for secondary data ... bigger than limit" during tiering actualization.
+    Y_UNIT_TEST(OversizedNGrammIndexOnTiering) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        {
+            auto alterQuery =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=BLOOM_NGRAMM_FILTER,
+                    FEATURES=`{"column_name" : "uid", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 512, "records_count" : 1024}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        tieringHelper.WriteSampleData();
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        ExecuteScanQuery(tableClient, "SELECT * FROM `/Root/olapStore/olapTable`");
+    }
+
+    // 257 x 1 MiB inplace indexes on a single-shard table: schema creation and writes succeed, the
+    // aggregate is guarded by nothing.
+    Y_UNIT_TEST(LocalIndexesAboveCommitRedoLimitOneShard) {
+        constexpr ui32 IndexesCount = 257;
+        constexpr ui32 FilterSize = 1_MB;
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        testHelper.GetRuntime().GetAppData().FeatureFlags.SetEnableOlapRejectProbability(false);
+        olapHelper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        for (ui32 i = 0; i < IndexesCount; ++i) {
+            auto alterQuery = TStringBuilder()
+                << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_local_" << i
+                << ", TYPE=BLOOM_NGRAMM_FILTER, FEATURES=`{\"column_name\" : \"uid\", \"ngramm_size\" : 3, \"hashes_count\" : 2, "
+                << "\"filter_size_bytes\" : " << FilterSize << ", \"records_count\" : 1000000, "
+                << "\"storage_id\" : \"__LOCAL_METADATA\", \"inherit_portion_storage\" : false}`);";
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        WriteTestData(testHelper.GetKikimr(), DEFAULT_TABLE_PATH, 0, 3600000000, 1000);
+        auto rows = ExecuteScanQuery(tableClient, "SELECT COUNT(*) AS Cnt FROM `/Root/olapStore/olapTable`");
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Cnt")), 1000);
+
+        // TODO(#26733): enable after the aggregate inplace-index budget check in AppendIndexes. The load below
+        // wedges the shard: the first CS::GENERAL compaction persists 257 MiB of index rows in one TTxWriteIndex
+        // ("fatal commit failure: Redo commit of 269515307 bytes is more than the allowed limit",
+        // MaxCommitRedoMB = 256 MiB), the tablet dies, replays into the same compaction and restarts forever.
+        // for (ui64 i = 1; i < 10; ++i) {
+        //     WriteTestData(testHelper.GetKikimr(), DEFAULT_TABLE_PATH, 0, 3600000000 + i * 10000, 1000);
+        // }
+        // csController->WaitCompactions(TDuration::Seconds(5));
+        // csController->WaitActualization(TDuration::Seconds(5));
+        // testHelper.CreateTier(DEFAULT_TIER_NAME);
+        // testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        // csController->WaitCompactions(TDuration::Seconds(5));
+        // csController->WaitActualization(TDuration::Seconds(5));
+        // tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+    }
+
     Y_UNIT_TEST_DUO(MinMaxIndexInheritsTiering, InheritPortionStorage) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();
@@ -913,6 +992,25 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_GT(GetUint64(rows[0].at("cnt")), 0);
         }
     }
+
+    Y_UNIT_TEST(MoveTableWithTieringRejected) {
+        TTieringTestHelper tieringHelper;
+        auto& testHelper = tieringHelper.GetTestHelper();
+        const TString tablePath = "/Root/olapTable";
+
+        tieringHelper.GetOlapHelper().CreateTestOlapStandaloneTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        testHelper.SetTiering(tablePath, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(
+                "ALTER TABLE `" + tablePath + "` RENAME TO `/Root/renamedTable`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "tiering");
+        }
+    }
+
 }
 
 }   // namespace NKikimr::NKqp

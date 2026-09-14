@@ -155,7 +155,7 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
         ctx.RegisterWithSameMailbox(NKikimr::NPQ::NSchema::CreateCreateTopicActor(SelfId(), NKikimr::NPQ::NSchema::TCreateTopicSettings{
             .Database = Context->DatabasePath,
             .Request = std::move(request),
-            .UserToken = Context->UserToken,
+            .UserToken = Context->Token.UserToken,
             .IfNotExists = false,
         }));
 
@@ -175,7 +175,8 @@ void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvSchemaRespo
     YDB_LOG_DEBUG("Create topics actor. Topic's response received",
         {LogPrefix()},
         {"path", eventPtr->Path},
-        {"status", std::to_string(eventPtr->Status)});
+        {"status", std::to_string(eventPtr->Status)},
+        {"errorMessage", eventPtr->ErrorMessage});
 
     EKafkaErrors status;
     switch(eventPtr->Status) {

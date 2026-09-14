@@ -21,6 +21,9 @@ namespace NKikimr::NSqsTopic::V1 {
             case UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
                 MakeError(&result.Error.ConstructInPlace(), NKikimr::NSQS::NErrors::ACCESS_DENIED, NPQ::NDescriber::Description(topicPath, status));
                 break;
+            case BAD_REQUEST:
+                MakeError(&result.Error.ConstructInPlace(), NKikimr::NSQS::NErrors::INVALID_PARAMETER_VALUE, NPQ::NDescriber::Description(topicPath, status));
+                break;
             case UNKNOWN_ERROR:
                 MakeError(&result.Error.ConstructInPlace(), NKikimr::NSQS::NErrors::INTERNAL_FAILURE, NPQ::NDescriber::Description(topicPath, status));
                 break;

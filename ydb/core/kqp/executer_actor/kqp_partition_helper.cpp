@@ -582,8 +582,12 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyTableOperation& operat
 
 NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoPhyValue,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const NUdf::TUnboxedValue& defaultValue)
+    const NUdf::TUnboxedValue& defaultValue, NMiniKQL::TType** valueType)
 {
+    if (valueType) {
+        *valueType = nullptr;
+    }
+
     switch (protoPhyValue.GetKindCase()) {
         case NKqpProto::TKqpPhyValue::kLiteralValue: {
             const auto& literalValue = protoPhyValue.GetLiteralValue();
@@ -592,6 +596,9 @@ NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto
                 literalValue.type(), literalValue.value(), typeEnv, holderFactory);
 
             YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
+            if (valueType) {
+                *valueType = type;
+            }
             return value;
         }
 
@@ -604,6 +611,9 @@ NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto
             auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
             YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data ||
                 type->GetKind() == NMiniKQL::TType::EKind::Tagged, "Unexpected PhyValue kind " << (int)type->GetKind());
+            if (valueType) {
+                *valueType = type;
+            }
             return value;
         }
 

@@ -5,7 +5,6 @@
 #include <yql/essentials/parser/lexer_common/hints.h>
 
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/ide/completion/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/format/check/check_format.h>
@@ -14,6 +13,7 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
@@ -320,22 +320,6 @@ int BuildAST(int argc, char** argv) {
         opts.PrintUsage(argv[0], Cerr);
     }
 
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
-        res.Has("test-syntax-ambiguity"),
-        res.Has("debug-syntax-ambiguity"));
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
-        res.Has("test-syntax-ambiguity"),
-        res.Has("debug-syntax-ambiguity"));
-
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator());
-
     TVector<TString> queries;
     int errors = 0;
     for (ui32 i = 0; i <= queryFiles.size(); ++i) {
@@ -391,6 +375,27 @@ int BuildAST(int argc, char** argv) {
             settings.V0ForceDisable = false;
             settings.AssumeYdbOnClusterWithSlash = res.Has("assume-ydb-on-slash");
             settings.TestAntlr4 = res.Has("test-antlr4");
+
+            NSQLTranslationV1::TLexers lexers = {
+                .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+                .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+            };
+
+            NSQLTranslationV1::TParsers parsers = {
+                .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+                    res.Has("test-syntax-ambiguity"),
+                    res.Has("debug-syntax-ambiguity"),
+                    settings.MaxParseTreeDepth),
+                .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+                    res.Has("test-syntax-ambiguity"),
+                    res.Has("debug-syntax-ambiguity"),
+                    settings.MaxParseTreeDepth),
+            };
+
+            NSQLTranslation::TTranslators translators(
+                nullptr,
+                NSQLTranslationV1::MakeTranslator(lexers, parsers),
+                NSQLTranslationPG::MakeTranslator());
 
             if (res.Has("lexer")) {
                 NYql::TIssues issues;

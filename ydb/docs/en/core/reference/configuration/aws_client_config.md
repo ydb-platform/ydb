@@ -60,4 +60,4 @@ Other object storage tasks. Settings from these materials may override the value
 
 - [{#T}](../../yql/reference/syntax/create-external-data-source.md) for an external data source with the S3 protocol in YQL.
 - [{#T}](../../devops/deployment-options/manual/federated-queries/index.md) for federated queries and external data sources.
-- [{#T}](../../recipes/import-export-column-tables.md) for importing and exporting column-oriented tables via object storage.
+- [{#T}](../../recipes/backup/import-export-column-tables.md) for importing and exporting column-oriented tables via object storage.

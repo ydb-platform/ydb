@@ -14,4 +14,6 @@ JAR_RESOURCE(4628902878)
 
 SRC_RESOURCE(4628902847)
 
+ORIGINAL_SOURCE(https://github.com/grpc/grpc-java)
+
 END()

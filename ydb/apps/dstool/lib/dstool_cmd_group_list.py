@@ -1,4 +1,4 @@
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.blobstorage_disk_color_pb2 as kikimr_disk_color
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
@@ -98,8 +98,8 @@ def do(args):
         group_stat['Generation'] = group.GroupGeneration
         group_stat['ErasureSpecies'] = group.ErasureSpecies
         group_stat['SizeInUnits'] = group.GroupSizeInUnits
-        group_stat['ExpectedStatus'] = kikimr_bsconfig.TGroupStatus.E.Name(group.ExpectedStatus)
-        group_stat['OperatingStatus'] = kikimr_bsconfig.TGroupStatus.E.Name(group.OperatingStatus)
+        group_stat['ExpectedStatus'] = kikimr_bs3.TGroupStatus.E.Name(group.ExpectedStatus)
+        group_stat['OperatingStatus'] = kikimr_bs3.TGroupStatus.E.Name(group.OperatingStatus)
         group_stat['SeenOperational'] = group.SeenOperational
 
         if group.VirtualGroupInfo:

@@ -49,7 +49,29 @@ std::shared_ptr<TResultHolder<TResponse>> DoRequest(NActors::TTestActorRuntime& 
     return result;
 }
 
-    
+void CreateDlqTopic(
+    NActors::TTestActorRuntime& runtime,
+    const TString& dlqTopicPath,
+    const TString& database = "/Root/test_db"
+) {
+    Ydb::PersQueue::V1::CreateTopicRequest request;
+    request.set_path(dlqTopicPath);
+
+    auto& settings = *request.mutable_settings();
+    settings.set_partitions_count(1);
+    settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+    settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+    settings.mutable_attributes()->insert({"_federation_account", "account1"});
+
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime,
+        request,
+        dlqTopicPath,
+        database
+    );
+    UNIT_ASSERT(result->ResultStatus);
+    UNIT_ASSERT_VALUES_EQUAL_C(*result->ResultStatus, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+}
 
 using namespace NYdb;
 using namespace NYdb::NQuery;
@@ -61,6 +83,7 @@ Y_UNIT_TEST(SharedConsumer) {
     auto& runtime = setup->GetRuntime();
     runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
 
+    CreateDlqTopic(runtime, "/Root/test_db/test_dead_letter_queue");
 
     Ydb::PersQueue::V1::CreateTopicRequest request;
     request.set_path("/Root/test_db/topic1");
@@ -175,6 +198,37 @@ Y_UNIT_TEST(CreateTopicWithNameEqDB) {
     auto status = result->ResultStatus;
     UNIT_ASSERT(status);
     UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::SCHEME_ERROR, result->Issues.ToString());
+}
+
+Y_UNIT_TEST(ContentBasedDeduplication) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+    Ydb::PersQueue::V1::CreateTopicRequest request;
+    request.set_path("/Root/test_db/topic1");
+
+    auto& settings = *request.mutable_settings();
+    settings.set_partitions_count(1);
+    settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+    settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
+    settings.set_content_based_deduplication(true);
+
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(runtime, request);
+
+    auto status = result->ResultStatus;
+    UNIT_ASSERT(status);
+    UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
+
+    runtime.Register(NPQ::NDescriber::CreateDescriberActor(runtime.AllocateEdgeActor(), "/Root/test_db", {"/Root/test_db/topic1"}));
+    auto response = runtime.GrabEdgeEvent<NPQ::NDescriber::TEvDescribeTopicsResponse>(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 1);
+    auto topic = response->Topics.begin()->second;
+    UNIT_ASSERT_VALUES_EQUAL(topic.Status, NPQ::NDescriber::EStatus::SUCCESS);
+
+    auto config = topic.Info->Description.GetPQTabletConfig();
+    UNIT_ASSERT_VALUES_EQUAL(config.GetContentBasedDeduplication(), true);
 }
 
 };

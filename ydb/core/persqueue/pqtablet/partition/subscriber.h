@@ -17,6 +17,7 @@ struct TUserInfo;
 
 struct TReadAnswer {
     ui64 Size = 0;
+    ui64 ConsumedMessages = 0;
     THolder<IEventBase> Event;
     bool IsInternal = false;
     TActorId ReplyTo;

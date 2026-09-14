@@ -4,6 +4,7 @@
 #include <ydb/library/logger/actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <library/cpp/logger/log.h>
@@ -90,6 +91,20 @@ protected:
             case NKikimrPQ::TMirrorPartitionConfig::TCredentials::CREDENTIALS_NOT_SET: {
                 return NThreading::MakeFuture(NYdb::CreateInsecureCredentialsProviderFactory());
             }
+            case NKikimrPQ::TMirrorPartitionConfig::TCredentials::kOauthToken: {
+                return NThreading::MakeFuture(NYdb::CreateOAuthCredentialsProviderFactory(cred.GetOauthToken()));
+            }
+            case NKikimrPQ::TMirrorPartitionConfig::TCredentials::kJwtParams: {
+                NYdb::TIamJwtContent params;
+                params.JwtContent = cred.GetJwtParams();
+                return NThreading::MakeFuture(NYdb::CreateIamJwtParamsCredentialsProviderFactory(params));
+            }
+            case NKikimrPQ::TMirrorPartitionConfig::TCredentials::kIam: {
+                NYdb::TIamJwtContent params;
+                params.Endpoint = cred.GetIam().GetEndpoint();
+                params.JwtContent = cred.GetIam().GetServiceAccountKey();
+                return NThreading::MakeFuture(NYdb::CreateIamJwtParamsCredentialsProviderFactory(params));
+            }
             default: {
                 ythrow yexception() << "unsupported credentials type " << ui64(cred.GetCredentialsCase());
             }
@@ -155,4 +170,24 @@ public:
     }
 };
 
+class TPersQueueInsecureMirrorReaderFactory : public TPersQueueMirrorReaderFactory {
+protected:
+    NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr> GetCredentialsProviderImpl(
+        const NKikimrPQ::TMirrorPartitionConfig::TCredentials& /*cred*/
+    ) const override {
+        return NThreading::MakeFuture(NYdb::CreateInsecureCredentialsProviderFactory());
+    }
+
+        NYdb::NTopic::TTopicClient GetTopicClient(const NKikimrPQ::TMirrorPartitionConfig& config, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) const {
+        NYdb::NTopic::TTopicClientSettings clientSettings = NYdb::NTopic::TTopicClientSettings()
+            .DiscoveryEndpoint(TStringBuilder() << config.GetEndpoint() << ":" << config.GetEndpointPort())
+            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+            .CredentialsProviderFactory(std::move(credentialsProviderFactory))
+            .SslCredentials(NYdb::TSslCredentials(config.GetUseSecureConnection()));
+        if (config.HasDatabase()) {
+            clientSettings.Database(config.GetDatabase());
+        }
+        return NYdb::NTopic::TTopicClient(*Driver, clientSettings);
+    }
+};
 } // namespace NKikimr::NSQS

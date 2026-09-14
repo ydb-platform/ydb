@@ -78,7 +78,7 @@
       "http":{
         "method":"DELETE",
         "requestUri":"/blueprints/{blueprintArn}/",
-        "responseCode":204
+        "responseCode":200
       },
       "input":{"shape":"DeleteBlueprintRequest"},
       "output":{"shape":"DeleteBlueprintResponse"},
@@ -97,7 +97,7 @@
       "http":{
         "method":"DELETE",
         "requestUri":"/data-automation-projects/{projectArn}/",
-        "responseCode":204
+        "responseCode":200
       },
       "input":{"shape":"DeleteDataAutomationProjectRequest"},
       "output":{"shape":"DeleteDataAutomationProjectResponse"},
@@ -127,7 +127,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Gets an existing Amazon Bedrock Data Automation Blueprint</p>"
+      "documentation":"<p>Gets an existing Amazon Bedrock Data Automation Blueprint</p>",
+      "readonly":true
     },
     "GetDataAutomationProject":{
       "name":"GetDataAutomationProject",
@@ -145,7 +146,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Gets an existing Amazon Bedrock Data Automation Project</p>"
+      "documentation":"<p>Gets an existing Amazon Bedrock Data Automation Project</p>",
+      "readonly":true
     },
     "ListBlueprints":{
       "name":"ListBlueprints",
@@ -163,7 +165,8 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Lists all existing Amazon Bedrock Data Automation Blueprints</p>"
+      "documentation":"<p>Lists all existing Amazon Bedrock Data Automation Blueprints</p>",
+      "readonly":true
     },
     "ListDataAutomationProjects":{
       "name":"ListDataAutomationProjects",
@@ -181,7 +184,63 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Lists all existing Amazon Bedrock Data Automation Projects</p>"
+      "documentation":"<p>Lists all existing Amazon Bedrock Data Automation Projects</p>",
+      "readonly":true
+    },
+    "ListTagsForResource":{
+      "name":"ListTagsForResource",
+      "http":{
+        "method":"POST",
+        "requestUri":"/listTagsForResource",
+        "responseCode":200
+      },
+      "input":{"shape":"ListTagsForResourceRequest"},
+      "output":{"shape":"ListTagsForResourceResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>List tags for an Amazon Bedrock Data Automation resource</p>"
+    },
+    "TagResource":{
+      "name":"TagResource",
+      "http":{
+        "method":"POST",
+        "requestUri":"/tagResource",
+        "responseCode":200
+      },
+      "input":{"shape":"TagResourceRequest"},
+      "output":{"shape":"TagResourceResponse"},
+      "errors":[
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Tag an Amazon Bedrock Data Automation resource</p>"
+    },
+    "UntagResource":{
+      "name":"UntagResource",
+      "http":{
+        "method":"POST",
+        "requestUri":"/untagResource",
+        "responseCode":200
+      },
+      "input":{"shape":"UntagResourceRequest"},
+      "output":{"shape":"UntagResourceResponse"},
+      "errors":[
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p>Untag an Amazon Bedrock Data Automation resource</p>"
     },
     "UpdateBlueprint":{
       "name":"UpdateBlueprint",
@@ -213,6 +272,7 @@
       "input":{"shape":"UpdateDataAutomationProjectRequest"},
       "output":{"shape":"UpdateDataAutomationProjectResponse"},
       "errors":[
+        {"shape":"ServiceQuotaExceededException"},
         {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
@@ -242,7 +302,8 @@
       "required":["state"],
       "members":{
         "state":{"shape":"State"},
-        "types":{"shape":"AudioExtractionCategoryTypes"}
+        "types":{"shape":"AudioExtractionCategoryTypes"},
+        "typeConfiguration":{"shape":"AudioExtractionCategoryTypeConfiguration"}
       },
       "documentation":"<p>Category of Audio Extraction</p>"
     },
@@ -250,14 +311,55 @@
       "type":"string",
       "enum":[
         "AUDIO_CONTENT_MODERATION",
-        "CHAPTER_CONTENT_MODERATION",
-        "TRANSCRIPT"
+        "TRANSCRIPT",
+        "TOPIC_CONTENT_MODERATION"
       ]
+    },
+    "AudioExtractionCategoryTypeConfiguration":{
+      "type":"structure",
+      "members":{
+        "transcript":{"shape":"TranscriptConfiguration"}
+      },
+      "documentation":"<p>Configuration for different audio extraction category types</p>"
     },
     "AudioExtractionCategoryTypes":{
       "type":"list",
       "member":{"shape":"AudioExtractionCategoryType"},
       "documentation":"<p>List of Audio Extraction Category Type</p>"
+    },
+    "AudioGenerativeOutputLanguage":{
+      "type":"string",
+      "documentation":"<p>Configuration for Audio output language</p>",
+      "enum":[
+        "DEFAULT",
+        "EN"
+      ]
+    },
+    "AudioInputLanguages":{
+      "type":"list",
+      "member":{"shape":"Language"},
+      "documentation":"<p>List of supported audio languages</p>"
+    },
+    "AudioLanguageConfiguration":{
+      "type":"structure",
+      "members":{
+        "inputLanguages":{"shape":"AudioInputLanguages"},
+        "generativeOutputLanguage":{"shape":"AudioGenerativeOutputLanguage"},
+        "identifyMultipleLanguages":{
+          "shape":"Boolean",
+          "documentation":"<p>Enable multiple language identification in audio</p>"
+        }
+      },
+      "documentation":"<p>Optional configuration for audio language settings</p>"
+    },
+    "AudioOverrideConfiguration":{
+      "type":"structure",
+      "members":{
+        "modalityProcessing":{"shape":"ModalityProcessingConfiguration"},
+        "languageConfiguration":{"shape":"AudioLanguageConfiguration"},
+        "sensitiveDataConfiguration":{"shape":"SensitiveDataConfiguration"}
+      },
+      "documentation":"<p>Override Configuration of Audio</p>"
     },
     "AudioStandardExtraction":{
       "type":"structure",
@@ -280,8 +382,8 @@
       "type":"string",
       "enum":[
         "AUDIO_SUMMARY",
-        "CHAPTER_SUMMARY",
-        "IAB"
+        "IAB",
+        "TOPIC_SUMMARY"
       ]
     },
     "AudioStandardGenerativeFieldTypes":{
@@ -366,7 +468,6 @@
       "documentation":"<p>Schema of the blueprint</p>",
       "max":100000,
       "min":1,
-      "pattern":"[a-zA-Z0-9\\s!\"\\#\\$%'&\\(\\)\\*\\+\\,\\-\\./:;=\\?@\\[\\\\\\]\\^_`\\{\\|\\}~><]+",
       "sensitive":true
     },
     "BlueprintStage":{
@@ -414,6 +515,18 @@
       "member":{"shape":"BlueprintSummary"},
       "documentation":"<p>List of Blueprints</p>"
     },
+    "Boolean":{
+      "type":"boolean",
+      "box":true
+    },
+    "ChannelLabelingConfiguration":{
+      "type":"structure",
+      "required":["state"],
+      "members":{
+        "state":{"shape":"State"}
+      },
+      "documentation":"<p>Channel labeling configuration</p>"
+    },
     "ClientToken":{
       "type":"string",
       "documentation":"<p>Client specified token used for idempotency checks</p>",
@@ -449,7 +562,8 @@
           "shape":"ClientToken",
           "idempotencyToken":true
         },
-        "encryptionConfiguration":{"shape":"EncryptionConfiguration"}
+        "encryptionConfiguration":{"shape":"EncryptionConfiguration"},
+        "tags":{"shape":"TagList"}
       },
       "documentation":"<p>Create Blueprint Request</p>"
     },
@@ -496,6 +610,7 @@
         "projectName":{"shape":"DataAutomationProjectName"},
         "projectDescription":{"shape":"DataAutomationProjectDescription"},
         "projectStage":{"shape":"DataAutomationProjectStage"},
+        "projectType":{"shape":"DataAutomationProjectType"},
         "standardOutputConfiguration":{"shape":"StandardOutputConfiguration"},
         "customOutputConfiguration":{"shape":"CustomOutputConfiguration"},
         "overrideConfiguration":{"shape":"OverrideConfiguration"},
@@ -503,7 +618,8 @@
           "shape":"ClientToken",
           "idempotencyToken":true
         },
-        "encryptionConfiguration":{"shape":"EncryptionConfiguration"}
+        "encryptionConfiguration":{"shape":"EncryptionConfiguration"},
+        "tags":{"shape":"TagList"}
       },
       "documentation":"<p>Create DataAutomationProject Request</p>"
     },
@@ -539,6 +655,7 @@
         "lastModifiedTime":{"shape":"DateTimestamp"},
         "projectName":{"shape":"DataAutomationProjectName"},
         "projectStage":{"shape":"DataAutomationProjectStage"},
+        "projectType":{"shape":"DataAutomationProjectType"},
         "projectDescription":{"shape":"DataAutomationProjectDescription"},
         "standardOutputConfiguration":{"shape":"StandardOutputConfiguration"},
         "customOutputConfiguration":{"shape":"CustomOutputConfiguration"},
@@ -559,6 +676,8 @@
     "DataAutomationProjectDescription":{
       "type":"string",
       "documentation":"<p>Description of the DataAutomationProject</p>",
+      "max":300,
+      "min":0,
       "sensitive":true
     },
     "DataAutomationProjectFilter":{
@@ -618,10 +737,19 @@
       "members":{
         "projectArn":{"shape":"DataAutomationProjectArn"},
         "projectStage":{"shape":"DataAutomationProjectStage"},
+        "projectType":{"shape":"DataAutomationProjectType"},
         "projectName":{"shape":"DataAutomationProjectName"},
         "creationTime":{"shape":"DateTimestamp"}
       },
       "documentation":"<p>Summary of a DataAutomationProject</p>"
+    },
+    "DataAutomationProjectType":{
+      "type":"string",
+      "documentation":"<p>Type of the DataAutomationProject</p>",
+      "enum":[
+        "ASYNC",
+        "SYNC"
+      ]
     },
     "DateTimestamp":{
       "type":"timestamp",
@@ -649,8 +777,7 @@
     },
     "DeleteBlueprintResponse":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Delete Blueprint Response</p>"
     },
     "DeleteDataAutomationProjectRequest":{
@@ -674,6 +801,16 @@
         "status":{"shape":"DataAutomationProjectStatus"}
       },
       "documentation":"<p>Delete DataAutomationProject Response</p>"
+    },
+    "DesiredModality":{
+      "type":"string",
+      "documentation":"<p>Desired Modality types</p>",
+      "enum":[
+        "IMAGE",
+        "DOCUMENT",
+        "AUDIO",
+        "VIDEO"
+      ]
     },
     "DocumentBoundingBox":{
       "type":"structure",
@@ -749,7 +886,9 @@
     "DocumentOverrideConfiguration":{
       "type":"structure",
       "members":{
-        "splitter":{"shape":"SplitterConfiguration"}
+        "splitter":{"shape":"SplitterConfiguration"},
+        "modalityProcessing":{"shape":"ModalityProcessingConfiguration"},
+        "sensitiveDataConfiguration":{"shape":"SensitiveDataConfiguration"}
       },
       "documentation":"<p>Override Configuration of Document</p>"
     },
@@ -790,6 +929,20 @@
         "kmsEncryptionContext":{"shape":"KmsEncryptionContext"}
       },
       "documentation":"<p>KMS Encryption Configuration</p>"
+    },
+    "EncryptionContextKey":{
+      "type":"string",
+      "documentation":"<p>Encryption context key.</p>",
+      "max":2000,
+      "min":1,
+      "pattern":".*\\S.*"
+    },
+    "EncryptionContextValue":{
+      "type":"string",
+      "documentation":"<p>Encryption context value.</p>",
+      "max":2000,
+      "min":1,
+      "pattern":".*\\S.*"
     },
     "GetBlueprintRequest":{
       "type":"structure",
@@ -866,13 +1019,22 @@
       "type":"string",
       "enum":[
         "CONTENT_MODERATION",
-        "TEXT_DETECTION"
+        "TEXT_DETECTION",
+        "LOGOS"
       ]
     },
     "ImageExtractionCategoryTypes":{
       "type":"list",
       "member":{"shape":"ImageExtractionCategoryType"},
       "documentation":"<p>List of Image Extraction Category</p>"
+    },
+    "ImageOverrideConfiguration":{
+      "type":"structure",
+      "members":{
+        "modalityProcessing":{"shape":"ModalityProcessingConfiguration"},
+        "sensitiveDataConfiguration":{"shape":"SensitiveDataConfiguration"}
+      },
+      "documentation":"<p>Override Configuration of Image</p>"
     },
     "ImageStandardExtraction":{
       "type":"structure",
@@ -927,8 +1089,8 @@
     },
     "KmsEncryptionContext":{
       "type":"map",
-      "key":{"shape":"String"},
-      "value":{"shape":"String"},
+      "key":{"shape":"EncryptionContextKey"},
+      "value":{"shape":"EncryptionContextValue"},
       "documentation":"<p>KMS Encryption Context</p>",
       "min":1
     },
@@ -936,7 +1098,25 @@
       "type":"string",
       "documentation":"<p>KMS Key Identifier</p>",
       "max":2048,
-      "min":1
+      "min":1,
+      "pattern":"[A-Za-z0-9][A-Za-z0-9:_/+=,@.-]+"
+    },
+    "Language":{
+      "type":"string",
+      "documentation":"<p>Supported input languages</p>",
+      "enum":[
+        "EN",
+        "DE",
+        "ES",
+        "FR",
+        "IT",
+        "PT",
+        "JA",
+        "KO",
+        "CN",
+        "TW",
+        "HK"
+      ]
     },
     "ListBlueprintsRequest":{
       "type":"structure",
@@ -979,12 +1159,42 @@
       },
       "documentation":"<p>List DataAutomationProject Response</p>"
     },
+    "ListTagsForResourceRequest":{
+      "type":"structure",
+      "required":["resourceARN"],
+      "members":{
+        "resourceARN":{"shape":"TaggableResourceArn"}
+      }
+    },
+    "ListTagsForResourceResponse":{
+      "type":"structure",
+      "members":{
+        "tags":{"shape":"TagList"}
+      }
+    },
     "MaxResults":{
       "type":"integer",
       "documentation":"<p>Max Results</p>",
       "box":true,
       "max":1000,
       "min":1
+    },
+    "ModalityProcessingConfiguration":{
+      "type":"structure",
+      "members":{
+        "state":{"shape":"State"}
+      },
+      "documentation":"<p>Configuration to enable/disable processing of modality</p>"
+    },
+    "ModalityRoutingConfiguration":{
+      "type":"structure",
+      "members":{
+        "jpeg":{"shape":"DesiredModality"},
+        "png":{"shape":"DesiredModality"},
+        "mp4":{"shape":"DesiredModality"},
+        "mov":{"shape":"DesiredModality"}
+      },
+      "documentation":"<p>Configuration for routing file type to desired modality</p>"
     },
     "NextToken":{
       "type":"string",
@@ -1001,9 +1211,80 @@
     "OverrideConfiguration":{
       "type":"structure",
       "members":{
-        "document":{"shape":"DocumentOverrideConfiguration"}
+        "document":{"shape":"DocumentOverrideConfiguration"},
+        "image":{"shape":"ImageOverrideConfiguration"},
+        "video":{"shape":"VideoOverrideConfiguration"},
+        "audio":{"shape":"AudioOverrideConfiguration"},
+        "modalityRouting":{"shape":"ModalityRoutingConfiguration"}
       },
       "documentation":"<p>Override configuration</p>"
+    },
+    "PIIEntitiesConfiguration":{
+      "type":"structure",
+      "members":{
+        "piiEntityTypes":{
+          "shape":"PIIEntityTypes",
+          "documentation":"<p>Types of PII entities to detect</p>"
+        },
+        "redactionMaskMode":{
+          "shape":"PIIRedactionMaskMode",
+          "documentation":"<p>Mode for redacting detected PII</p>"
+        }
+      },
+      "documentation":"<p>Configuration for PII entities detection and redaction</p>"
+    },
+    "PIIEntityType":{
+      "type":"string",
+      "documentation":"<p>Types of PII entities that can be detected, we will support every types that Guardrails can support</p>",
+      "enum":[
+        "ALL",
+        "ADDRESS",
+        "AGE",
+        "NAME",
+        "EMAIL",
+        "PHONE",
+        "USERNAME",
+        "PASSWORD",
+        "DRIVER_ID",
+        "LICENSE_PLATE",
+        "VEHICLE_IDENTIFICATION_NUMBER",
+        "CREDIT_DEBIT_CARD_CVV",
+        "CREDIT_DEBIT_CARD_EXPIRY",
+        "CREDIT_DEBIT_CARD_NUMBER",
+        "PIN",
+        "INTERNATIONAL_BANK_ACCOUNT_NUMBER",
+        "SWIFT_CODE",
+        "IP_ADDRESS",
+        "MAC_ADDRESS",
+        "URL",
+        "AWS_ACCESS_KEY",
+        "AWS_SECRET_KEY",
+        "US_BANK_ACCOUNT_NUMBER",
+        "US_BANK_ROUTING_NUMBER",
+        "US_INDIVIDUAL_TAX_IDENTIFICATION_NUMBER",
+        "US_PASSPORT_NUMBER",
+        "US_SOCIAL_SECURITY_NUMBER",
+        "CA_HEALTH_NUMBER",
+        "CA_SOCIAL_INSURANCE_NUMBER",
+        "UK_NATIONAL_HEALTH_SERVICE_NUMBER",
+        "UK_NATIONAL_INSURANCE_NUMBER",
+        "UK_UNIQUE_TAXPAYER_REFERENCE_NUMBER"
+      ]
+    },
+    "PIIEntityTypes":{
+      "type":"list",
+      "member":{"shape":"PIIEntityType"},
+      "documentation":"<p>List of PII entity types</p>",
+      "max":32,
+      "min":1
+    },
+    "PIIRedactionMaskMode":{
+      "type":"string",
+      "documentation":"<p>Mode for redacting detected PII</p>",
+      "enum":[
+        "PII",
+        "ENTITY_TYPE"
+      ]
     },
     "ResourceNotFoundException":{
       "type":"structure",
@@ -1025,6 +1306,48 @@
         "ACCOUNT"
       ]
     },
+    "SensitiveDataConfiguration":{
+      "type":"structure",
+      "required":["detectionMode"],
+      "members":{
+        "detectionMode":{
+          "shape":"SensitiveDataDetectionMode",
+          "documentation":"<p>Mode for sensitive data detection</p>"
+        },
+        "detectionScope":{
+          "shape":"SensitiveDataDetectionScope",
+          "documentation":"<p>Scope of detection - what types of sensitive data to detect</p>"
+        },
+        "piiEntitiesConfiguration":{
+          "shape":"PIIEntitiesConfiguration",
+          "documentation":"<p>Configuration for PII entities detection and redaction</p>"
+        }
+      },
+      "documentation":"<p>Configuration for sensitive data detection and redaction</p>"
+    },
+    "SensitiveDataDetectionMode":{
+      "type":"string",
+      "documentation":"<p>Mode for sensitive data detection</p>",
+      "enum":[
+        "DETECTION",
+        "DETECTION_AND_REDACTION"
+      ]
+    },
+    "SensitiveDataDetectionScope":{
+      "type":"list",
+      "member":{"shape":"SensitiveDataDetectionScopeType"},
+      "documentation":"<p>Scope of sensitive data detection</p>",
+      "max":2,
+      "min":1
+    },
+    "SensitiveDataDetectionScopeType":{
+      "type":"string",
+      "documentation":"<p>Types of sensitive data detection scope</p>",
+      "enum":[
+        "STANDARD",
+        "CUSTOM"
+      ]
+    },
     "ServiceQuotaExceededException":{
       "type":"structure",
       "members":{
@@ -1036,6 +1359,14 @@
         "senderFault":true
       },
       "exception":true
+    },
+    "SpeakerLabelingConfiguration":{
+      "type":"structure",
+      "required":["state"],
+      "members":{
+        "state":{"shape":"State"}
+      },
+      "documentation":"<p>Speaker labeling configuration</p>"
     },
     "SplitterConfiguration":{
       "type":"structure",
@@ -1062,7 +1393,66 @@
         "DISABLED"
       ]
     },
-    "String":{"type":"string"},
+    "Tag":{
+      "type":"structure",
+      "required":[
+        "key",
+        "value"
+      ],
+      "members":{
+        "key":{"shape":"TagKey"},
+        "value":{"shape":"TagValue"}
+      },
+      "documentation":"<p>Key value pair of a tag</p>"
+    },
+    "TagKey":{
+      "type":"string",
+      "documentation":"<p>Defines the context of the tag.</p>",
+      "max":128,
+      "min":1
+    },
+    "TagKeyList":{
+      "type":"list",
+      "member":{"shape":"TagKey"},
+      "documentation":"<p>List of tag keys</p>",
+      "max":200,
+      "min":0
+    },
+    "TagList":{
+      "type":"list",
+      "member":{"shape":"Tag"},
+      "documentation":"<p>List of tags</p>",
+      "max":200,
+      "min":0
+    },
+    "TagResourceRequest":{
+      "type":"structure",
+      "required":[
+        "resourceARN",
+        "tags"
+      ],
+      "members":{
+        "resourceARN":{"shape":"TaggableResourceArn"},
+        "tags":{"shape":"TagList"}
+      }
+    },
+    "TagResourceResponse":{
+      "type":"structure",
+      "members":{}
+    },
+    "TagValue":{
+      "type":"string",
+      "documentation":"<p>Defines the value within the context. e.g. &lt;key=reason, value=training&gt;.</p>",
+      "max":256,
+      "min":0
+    },
+    "TaggableResourceArn":{
+      "type":"string",
+      "documentation":"<p>ARN of a taggable resource</p>",
+      "max":1011,
+      "min":20,
+      "pattern":"arn:aws(|-cn|-us-gov):bedrock:[a-z0-9-]*:[0-9]{12}:(blueprint|data-automation-project)/[a-zA-Z0-9-]{12,36}"
+    },
     "ThrottlingException":{
       "type":"structure",
       "members":{
@@ -1075,13 +1465,38 @@
       },
       "exception":true
     },
+    "TranscriptConfiguration":{
+      "type":"structure",
+      "members":{
+        "speakerLabeling":{"shape":"SpeakerLabelingConfiguration"},
+        "channelLabeling":{"shape":"ChannelLabelingConfiguration"}
+      },
+      "documentation":"<p>Configuration for transcript related features</p>"
+    },
     "Type":{
       "type":"string",
       "documentation":"<p>Type</p>",
       "enum":[
         "DOCUMENT",
-        "IMAGE"
+        "IMAGE",
+        "AUDIO",
+        "VIDEO"
       ]
+    },
+    "UntagResourceRequest":{
+      "type":"structure",
+      "required":[
+        "resourceARN",
+        "tagKeys"
+      ],
+      "members":{
+        "resourceARN":{"shape":"TaggableResourceArn"},
+        "tagKeys":{"shape":"TagKeyList"}
+      }
+    },
+    "UntagResourceResponse":{
+      "type":"structure",
+      "members":{}
     },
     "UpdateBlueprintRequest":{
       "type":"structure",
@@ -1097,7 +1512,8 @@
           "locationName":"blueprintArn"
         },
         "schema":{"shape":"BlueprintSchema"},
-        "blueprintStage":{"shape":"BlueprintStage"}
+        "blueprintStage":{"shape":"BlueprintStage"},
+        "encryptionConfiguration":{"shape":"EncryptionConfiguration"}
       },
       "documentation":"<p>Update Blueprint Request</p>"
     },
@@ -1126,7 +1542,8 @@
         "projectDescription":{"shape":"DataAutomationProjectDescription"},
         "standardOutputConfiguration":{"shape":"StandardOutputConfiguration"},
         "customOutputConfiguration":{"shape":"CustomOutputConfiguration"},
-        "overrideConfiguration":{"shape":"OverrideConfiguration"}
+        "overrideConfiguration":{"shape":"OverrideConfiguration"},
+        "encryptionConfiguration":{"shape":"EncryptionConfiguration"}
       },
       "documentation":"<p>Update DataAutomationProject Request</p>"
     },
@@ -1192,13 +1609,22 @@
       "enum":[
         "CONTENT_MODERATION",
         "TEXT_DETECTION",
-        "TRANSCRIPT"
+        "TRANSCRIPT",
+        "LOGOS"
       ]
     },
     "VideoExtractionCategoryTypes":{
       "type":"list",
       "member":{"shape":"VideoExtractionCategoryType"},
       "documentation":"<p>List of Video Extraction Category Type</p>"
+    },
+    "VideoOverrideConfiguration":{
+      "type":"structure",
+      "members":{
+        "modalityProcessing":{"shape":"ModalityProcessingConfiguration"},
+        "sensitiveDataConfiguration":{"shape":"SensitiveDataConfiguration"}
+      },
+      "documentation":"<p>Override Configuration of Video</p>"
     },
     "VideoStandardExtraction":{
       "type":"structure",
@@ -1225,8 +1651,8 @@
       "type":"string",
       "enum":[
         "VIDEO_SUMMARY",
-        "SCENE_SUMMARY",
-        "IAB"
+        "IAB",
+        "CHAPTER_SUMMARY"
       ]
     },
     "VideoStandardGenerativeFieldTypes":{

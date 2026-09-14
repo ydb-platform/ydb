@@ -24,7 +24,7 @@ namespace NKikimr::NStorage {
             nodesToUse.insert(allowedNodes.begin(), allowedNodes.end()); \
         } \
         const bool automaticManagement = !Self->Cfg->SelfManagementConfig || Self->Cfg->SelfManagementConfig->GetAutomatic##NAME##Management(); \
-        result &= Self->GenerateStateStorageConfig(currentConfig->Mutable##NAME##Config(), config, usedNodes, nodesToUse, config.Get##NAME##Config(), automaticManagement, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume); \
+        result &= Self->GenerateStateStorageConfig(currentConfig->Mutable##NAME##Config(), config, usedNodes, nodesToUse, &config.Get##NAME##Config(), automaticManagement, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume); \
         if (pileupReplicas) { \
             usedNodes.clear(); \
         } \

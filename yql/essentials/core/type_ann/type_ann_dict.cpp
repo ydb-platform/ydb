@@ -1,6 +1,8 @@
 #include "type_ann_dict.h"
 #include "type_ann_types.h"
 
+#include <yql/essentials/core/langver/feature.gen.h>
+
 
 namespace NYql::NTypeAnnImpl {
 
@@ -51,7 +53,7 @@ const TDictExprType* GetCachedMutDictType(const TStringBuf& resourceTag, const T
 
 IGraphTransformer::TStatus MutDictCreateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -93,7 +95,7 @@ IGraphTransformer::TStatus MutDictCreateWrapper(const TExprNode::TPtr& input, TE
 
 IGraphTransformer::TStatus ToMutDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -128,7 +130,7 @@ IGraphTransformer::TStatus ToMutDictWrapper(const TExprNode::TPtr& input, TExprN
 
 IGraphTransformer::TStatus FromMutDictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -157,7 +159,7 @@ IGraphTransformer::TStatus FromMutDictWrapper(const TExprNode::TPtr& input, TExp
 template <bool WithPayload>
 IGraphTransformer::TStatus MutDictBlindOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -197,7 +199,7 @@ IGraphTransformer::TStatus MutDictBlindOpWrapper(const TExprNode::TPtr& input, T
 
 IGraphTransformer::TStatus MutDictPopWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -234,7 +236,7 @@ IGraphTransformer::TStatus MutDictPopWrapper(const TExprNode::TPtr& input, TExpr
 
 IGraphTransformer::TStatus MutDictContainsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -271,7 +273,7 @@ IGraphTransformer::TStatus MutDictContainsWrapper(const TExprNode::TPtr& input, 
 
 IGraphTransformer::TStatus MutDictHasItemsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -303,7 +305,7 @@ IGraphTransformer::TStatus MutDictHasItemsWrapper(const TExprNode::TPtr& input, 
 
 IGraphTransformer::TStatus MutDictLengthWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -335,7 +337,7 @@ IGraphTransformer::TStatus MutDictLengthWrapper(const TExprNode::TPtr& input, TE
 
 IGraphTransformer::TStatus MutDictItemsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -373,7 +375,7 @@ IGraphTransformer::TStatus MutDictItemsWrapper(const TExprNode::TPtr& input, TEx
 
 IGraphTransformer::TStatus MutDictKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -409,7 +411,7 @@ IGraphTransformer::TStatus MutDictKeysWrapper(const TExprNode::TPtr& input, TExp
 
 IGraphTransformer::TStatus MutDictPayloadsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -446,7 +448,7 @@ IGraphTransformer::TStatus MutDictPayloadsWrapper(const TExprNode::TPtr& input, 
 template <bool WithPayload>
 IGraphTransformer::TStatus DictBlindOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+    if (!EnsureAvailable(input->Pos(), NFeature::LinearTypes, ctx.Expr, ctx.Types)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -520,4 +522,3 @@ template IGraphTransformer::TStatus DictBlindOpWrapper<false>(const TExprNode::T
 
 
 } // namespace NYql::NTypeAnnImpl
-

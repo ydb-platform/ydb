@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/tx/columnshard/blobs_action/events
     ydb/core/tx/columnshard/data_sharing/destination/events
     ydb/core/tx/columnshard/transactions/locks
+    ydb/core/tx/columnshard/tracing
 )
 
 END()

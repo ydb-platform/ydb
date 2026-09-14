@@ -24,6 +24,9 @@
 
 #include <library/cpp/yt/misc/tls.h>
 
+#include <util/string/cast.h>
+#include <util/string/split.h>
+
 #include <atomic>
 #include <mutex>
 
@@ -93,7 +96,7 @@ namespace NDetail {
 // NB: Don't use max value to avoid overflow during addition.
 std::atomic<TCpuDuration> TraceContextDefaultLeakDurationThreshold = 1LL << 60;
 
-YT_DEFINE_GLOBAL(TCounter, TraceContextsLeakedCounter, TracingProfiler().Counter("/trace_contexts_leaked"));
+YT_DEFINE_LEAKY_GLOBAL(TCounter, TraceContextsLeakedCounter, TracingProfiler().Counter("/trace_contexts_leaked"));
 
 // Expended from YT_DEFINE_THREAD_LOCAL(TTraceContext*, CurrentTraceContext);
 // with Overrides added.
@@ -132,17 +135,17 @@ TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext)
     auto delta = now - traceContextTimingCheckpoint;
 
     if (oldContext && newContext) {
-        YT_LOG_TRACE("Switching context (OldContext: %v, NewContext: %v, CpuTimeDelta: %v)",
-            oldContext,
-            newContext,
-            NProfiling::CpuDurationToDuration(delta));
+        YT_TLOG_TRACE("Switching context")
+            .With("OldContext", oldContext)
+            .With("NewContext", newContext)
+            .With("CpuTimeDelta", NProfiling::CpuDurationToDuration(delta));
     } else if (oldContext) {
-        YT_LOG_TRACE("Uninstalling context (Context: %v, CpuTimeDelta: %v)",
-            oldContext,
-            NProfiling::CpuDurationToDuration(delta));
+        YT_TLOG_TRACE("Uninstalling context")
+            .With("Context", oldContext)
+            .With("CpuTimeDelta", NProfiling::CpuDurationToDuration(delta));
     } else if (newContext) {
-        YT_LOG_TRACE("Installing context (Context: %v)",
-            newContext);
+        YT_TLOG_TRACE("Installing context")
+            .With("Context", newContext);
     }
 
     if (oldContext) {
@@ -229,6 +232,45 @@ void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStri
         (context.Sampled ? 1u : 0) | (context.Debug ? 2u : 0));
 }
 
+bool TryParseTraceParent(TStringBuf traceParent, TSpanContext& spanContext)
+{
+    // An adaptation of https://github.com/census-instrumentation/opencensus-go/blob/ae11cd04b/plugin/ochttp/propagation/tracecontext/propagation.go#L49-L106.
+
+    auto parts = StringSplitter(traceParent).Split('-').ToList<std::string>();
+    if (parts.size() < 3 || parts.size() > 4) {
+        return false;
+    }
+
+    // NB: We support the legacy three-part form in which version is assumed to be zero.
+    ui8 version = 0;
+    if (parts.size() == 4) {
+        if (parts[0].size() != 2 || !TryIntFromString<16>(parts[0], version) || version == 0xff) {
+            return false;
+        }
+        parts.erase(parts.begin());
+    }
+
+    if (!TTraceId::FromStringHex32(parts[0], &spanContext.TraceId) || spanContext.TraceId == InvalidTraceId) {
+        return false;
+    }
+
+    if (parts[1].size() != 16 ||
+        !TryIntFromString<16>(parts[1], spanContext.SpanId) ||
+        spanContext.SpanId == InvalidSpanId)
+    {
+        return false;
+    }
+
+    ui8 options = 0;
+    if (parts[2].size() != 2 || !TryIntFromString<16>(parts[2], options)) {
+        return false;
+    }
+    spanContext.Sampled = static_cast<bool>(options & 1u);
+    spanContext.Debug = static_cast<bool>(options & 2u);
+
+    return true;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TTraceContext::TTraceContext(
@@ -247,7 +289,7 @@ TTraceContext::TTraceContext(
     , SpanName_(spanName)
     , RequestId_(ParentContext_ ? ParentContext_->GetRequestId() : TRequestId{})
     , TargetEndpoint_(ParentContext_ ? ParentContext_->GetTargetEndpoint() : std::nullopt)
-    , LoggingTag_(ParentContext_ ? ParentContext_->GetLoggingTag() : std::string{})
+    , LoggingTags_(ParentContext_ ? ParentContext_->GetLoggingTags() : NLogging::TLoggingTagList{})
     , StartTime_(startTime.value_or(GetCpuInstant()))
     , LeakDeadline_(StartTime_ + NDetail::TraceContextDefaultLeakDurationThreshold.load(std::memory_order::relaxed))
     , Baggage_(ParentContext_ ? ParentContext_->GetBaggage() : TYsonString{})
@@ -269,9 +311,9 @@ void TTraceContext::SetRequestId(TRequestId requestId)
     RequestId_ = requestId;
 }
 
-void TTraceContext::SetLoggingTag(const std::string& loggingTag)
+void TTraceContext::SetLoggingTags(NLogging::TLoggingTagList loggingTags)
 {
-    LoggingTag_ = loggingTag;
+    LoggingTags_ = std::move(loggingTags);
 }
 
 TAllocationTags TTraceContext::GetAllocationTags() const
@@ -390,9 +432,9 @@ void TTraceContext::CheckForLeak(TCpuInstant now)
 {
     if (now > LeakDeadline_) [[unlikely]] {
         if (!LeakDetected_.exchange(true)) {
-            YT_LOG_DEBUG("Trace context leak detected (TraceId: %v, StartTime: %v)",
-                GetTraceId(),
-                GetStartTime());
+            YT_TLOG_DEBUG("Trace context leak detected")
+                .With("TraceId", GetTraceId())
+                .With("StartTime", GetStartTime());
             NDetail::TraceContextsLeakedCounter().Increment();
         }
     }
@@ -732,9 +774,9 @@ void FlushCurrentTraceContextElapsedTime()
 
     auto now = GetApproximateCpuInstant();
     auto delta = std::max(now - traceContextTimingCheckpoint, static_cast<TCpuInstant>(0));
-    YT_LOG_TRACE("Flushing context time (Context: %v, CpuTimeDelta: %v)",
-        context,
-        NProfiling::CpuDurationToDuration(delta));
+    YT_TLOG_TRACE("Flushing context time")
+        .With("Context", context)
+        .With("CpuTimeDelta", NProfiling::CpuDurationToDuration(delta));
     context->IncrementElapsedCpuTime(delta);
     traceContextTimingCheckpoint = now;
 }

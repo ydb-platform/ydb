@@ -69,7 +69,7 @@ public:
                 *Options_.BackgroundFlushPeriod);
         } else {
             if (!Options_.BatchOptions.RowCount && !Options_.BatchOptions.ByteSize) {
-                YT_LOG_DEBUG("None of batch row count or batch byte size are specified, batch byte size will be equal to 16 MB");
+                YT_TLOG_DEBUG("None of batch row count or batch byte size are specified, batch byte size will be equal to 16 MB");
                 Options_.BatchOptions.ByteSize = 16_MB;
             }
         }
@@ -292,7 +292,7 @@ private:
             auto guard = Guard(SpinLock_);
 
             if (Canceled_) {
-                YT_LOG_DEBUG("Producer session was canceled, flush nothing");
+                YT_TLOG_DEBUG("Producer session was canceled, flush nothing");
                 StoppedPromise_.TrySet();
                 return;
             }
@@ -307,7 +307,7 @@ private:
             backoffStrategy.Restart();
             while (backoffStrategy.Next()) {
                 if (Canceled_) {
-                    YT_LOG_DEBUG("Producer session was canceled, flush nothing");
+                    YT_TLOG_DEBUG("Producer session was canceled, flush nothing");
                     StoppedPromise_.TrySet();
                     return;
                 }
@@ -321,7 +321,7 @@ private:
                 TDelayedExecutor::WaitForDuration(backoffStrategy.GetBackoff());
             }
         } else {
-            YT_LOG_DEBUG("No buffer to flush, do nothing");
+            YT_TLOG_DEBUG("No buffer to flush, do nothing");
         }
 
         bool isStopped = false;
@@ -339,7 +339,8 @@ private:
 
     TFuture<void> FlushImpl(TBuffer buffer)
     {
-        YT_LOG_DEBUG("Trying to flush %v rows", buffer.RowCount);
+        YT_TLOG_DEBUG("Trying to flush rows")
+            .With("RowCount", buffer.RowCount);
 
         return Client_->StartTransaction(ETransactionType::Tablet)
             .Apply(BIND([buffer = std::move(buffer), this, this_ = MakeStrong(this)] (const ITransactionPtr& transaction) {

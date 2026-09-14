@@ -60,7 +60,7 @@ private:
     using TBase = NArrow::NSSA::IFetchLogic;
     virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) = 0;
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) = 0;
-    virtual void DoOnDataCollected(TFetchingResultContext& context) = 0;
+    virtual TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) = 0;
 
 protected:
     const std::shared_ptr<IStoragesManager> StoragesManager;
@@ -83,8 +83,8 @@ public:
         DoOnDataReceived(nextRead, blobs);
     }
 
-    void OnDataCollected(TFetchingResultContext& context) {
-        DoOnDataCollected(context);
+    TConclusionStatus OnDataCollected(TFetchingResultContext& context) {
+        return DoOnDataCollected(context);
     }
 };
 

@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <span>
 #include <string.h>
 #include <vector>
 
@@ -396,6 +397,85 @@ void DoSendReceiveViaBuilderInOneProcess(TString bindTo, NInterconnect::NRdma::E
     EXPECT_TRUE(rdma.Cq->DeregisterQpAsync(receiverQp->GetQpNum()));
 }
 
+void DoSendReceiveViaBuilderSgInOneProcess(TString bindTo, NInterconnect::NRdma::ECqMode mode) {
+    static constexpr ui32 ReceiveBufSz = 1024;
+    auto rdma = CreateRegistrationTestCq(bindTo, mode, TRdmaRuntimeParams{
+        .MaxCqe = 16,
+        .MaxWr = 4,
+        .MaxSrqWr = 8,
+        .RecieveBufSz = ReceiveBufSz,
+    });
+    ASSERT_TRUE(rdma.Cq);
+    ASSERT_TRUE(rdma.Cq->GetSrq());
+
+    auto senderQp = std::make_shared<TQueuePair>();
+    auto receiverQp = std::make_shared<TQueuePair>();
+    ASSERT_EQ(senderQp->Init(rdma.Ctx, rdma.Cq.get(), 16), 0);
+    ASSERT_EQ(receiverQp->Init(rdma.Ctx, rdma.Cq.get(), 16), 0);
+    ConnectQps(rdma.Ctx, *senderQp, *receiverQp);
+
+    const TActorId edge = rdma.ActorSystem->AllocateEdgeActor(0);
+    auto sendTsUs = std::make_shared<std::atomic<ui64>>(0);
+    const TActorId receiverActor = rdma.ActorSystem->Register(new TReceiveDoneProbeActor(edge, sendTsUs));
+    ASSERT_TRUE(rdma.Cq->RegisterQpAsync(receiverQp->GetQpNum(), receiverActor));
+
+    const TString part1 = "RDMA_SEND_RECEIVE_";
+    const TString part2 = "BUILDER_SG_TEST";
+    const TString payload = part1 + part2;
+    ASSERT_LT(payload.size(), ReceiveBufSz);
+
+    auto sendMemPool = CreateDummyMemPool();
+    auto sendBuf1 = sendMemPool->AllocRcBuf(part1.size(), IMemPool::EMPTY);
+    auto sendBuf2 = sendMemPool->AllocRcBuf(part2.size(), IMemPool::EMPTY);
+    ASSERT_TRUE(sendBuf1);
+    ASSERT_TRUE(sendBuf2);
+    memcpy(sendBuf1->UnsafeGetDataMut(), part1.data(), part1.size());
+    memcpy(sendBuf2->UnsafeGetDataMut(), part2.data(), part2.size());
+
+    auto memRegion1 = TryExtractFromRcBuf(*sendBuf1);
+    auto memRegion2 = TryExtractFromRcBuf(*sendBuf2);
+    ASSERT_FALSE(memRegion1.Empty());
+    ASSERT_FALSE(memRegion2.Empty());
+
+    auto sendPromise = NThreading::NewPromise<TEvRdmaIoDone*>();
+    auto sendFuture = sendPromise.GetFuture();
+
+    std::array<TSendSge, 2> sgList = {{
+        TSendSge{
+            .Data = sendBuf1->GetData(),
+            .Size = sendBuf1->GetSize(),
+            .MemRegion = memRegion1.GetMemRegion(),
+        },
+        TSendSge{
+            .Data = sendBuf2->GetData(),
+            .Size = sendBuf2->GetSize(),
+            .MemRegion = memRegion2.GetMemRegion(),
+        },
+    }};
+
+    auto builder = CreateIbVerbsBuilder(1);
+    ASSERT_TRUE(builder);
+    builder->AddSendVerb(std::span<const TSendSge>(sgList.data(), sgList.size()),
+        [sendPromise](TActorSystem*, TEvRdmaIoDone* ev) mutable {
+            sendPromise.SetValue(ev);
+        });
+
+    sendTsUs->store(TInstant::Now().MicroSeconds(), std::memory_order_release);
+    auto submitErr = rdma.Cq->DoWrBatchAsync(senderQp, std::move(builder));
+    ASSERT_FALSE(submitErr);
+
+    auto receiveEv = rdma.ActorSystem->GrabEdgeEvent<TEvSendReceiveProbeResult>(edge, TDuration::Seconds(5));
+    ASSERT_TRUE(receiveEv);
+    ASSERT_TRUE(receiveEv->Get()->Success) << receiveEv->Get()->ErrSource;
+    EXPECT_EQ(receiveEv->Get()->Payload, payload);
+
+    ASSERT_TRUE(sendFuture.Wait(TDuration::Seconds(5)));
+    std::unique_ptr<TEvRdmaIoDone> sendDone(sendFuture.GetValueSync());
+    ASSERT_TRUE(sendDone->IsSuccess()) << sendDone->GetErrSource();
+
+    EXPECT_TRUE(rdma.Cq->DeregisterQpAsync(receiverQp->GetQpNum()));
+}
+
 TEST_P(TCqMode, ReadInOneProcessIpV4) {
     DoReadInOneProcess("127.0.0.1", GetParam());
 }
@@ -418,6 +498,14 @@ TEST_P(TCqMode, SendReceiveViaBuilderInOneProcessIpV4) {
 
 TEST_P(TCqMode, SendReceiveViaBuilderInOneProcessIpV6) {
     DoSendReceiveViaBuilderInOneProcess("::1", GetParam());
+}
+
+TEST_P(TCqMode, SendReceiveViaBuilderSgInOneProcessIpV4) {
+    DoSendReceiveViaBuilderSgInOneProcess("127.0.0.1", GetParam());
+}
+
+TEST_P(TCqMode, SendReceiveViaBuilderSgInOneProcessIpV6) {
+    DoSendReceiveViaBuilderSgInOneProcess("::1", GetParam());
 }
 
 TEST_P(TCqMode, RegisterQpWithoutSrqIsRejected) {

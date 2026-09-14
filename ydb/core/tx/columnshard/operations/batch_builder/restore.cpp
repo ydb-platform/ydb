@@ -31,32 +31,39 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
 TConclusionStatus TModificationRestoreTask::DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) {
     auto result = Merger->AddExistsDataOrdered(data);
     if (result.IsFail()) {
-        YDB_LOG_WARN("",
-            {"event", "merge_data_problems"},
-            {"writeId", WriteData.GetWriteMeta().GetWriteId()},
-            {"tabletId", GetTabletId()},
-            {"message", result.GetErrorMessage()});
-        SendErrorMessage(result.GetErrorMessage(), result.GetStatus() == Ydb::StatusIds::PRECONDITION_FAILED
-                                                       ? NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::ConstraintViolation
-                                                       : NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Request);
+        OnError(result.GetErrorMessage(),
+            result.GetStatus() == Ydb::StatusIds::PRECONDITION_FAILED ? EErrorClass::ConstraintViolation : EErrorClass::Request);
         return TConclusionStatus::Fail(result.GetErrorMessage());
     }
     return TConclusionStatus::Success();
 }
 
 void TModificationRestoreTask::DoOnError(const TString& errorMessage) {
-    YDB_LOG_ERROR("",
-        {"event", "restore_data_problems"},
-        {"writeId", WriteData.GetWriteMeta().GetWriteId()},
-        {"tabletId", GetTabletId()},
-        {"message", errorMessage});
-    SendErrorMessage(errorMessage, NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
+    OnError(errorMessage, EErrorClass::Internal);
+}
+
+void TModificationRestoreTask::OnError(const TString& errorMessage, const EErrorClass errorClass) {
+    if (errorClass == EErrorClass::Internal) {
+        YDB_LOG_ERROR("",
+            {"event", "restore_data_problems"},
+            {"writeId", WriteData.GetWriteMeta().GetWriteId()},
+            {"tabletId", GetTabletId()},
+            {"message", errorMessage});
+    } else {
+        YDB_LOG_WARN("",
+            {"event", "merge_data_problems"},
+            {"writeId", WriteData.GetWriteMeta().GetWriteId()},
+            {"tabletId", GetTabletId()},
+            {"message", errorMessage});
+    }
+    SendErrorMessage(errorMessage, errorClass);
 }
 
 NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
     auto result = Merger->Finish();
     if (result.IsFail()) {
-        OnError("cannot finish merger: " + result.GetErrorMessage());
+        OnError(result.GetErrorMessage(),
+            result.GetStatus() == Ydb::StatusIds::PRECONDITION_FAILED ? EErrorClass::ConstraintViolation : EErrorClass::Request);
         return TConclusionStatus::Fail(result.GetErrorMessage());
     }
 
@@ -86,8 +93,7 @@ TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeD
     AFL_VERIFY(context.GetApplyToSnapshot().Valid());
 }
 
-void TModificationRestoreTask::SendErrorMessage(
-    const TString& errorMessage, const NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass errorClass) {
+void TModificationRestoreTask::SendErrorMessage(const TString& errorMessage, const EErrorClass errorClass) {
     auto writeDataPtr = std::make_shared<NEvWrite::TWriteData>(std::move(WriteData));
     TWritingBuffer buffer(writeDataPtr->GetBlobsAction(), { std::make_shared<TWriteAggregation>(*writeDataPtr) });
     auto evResult =

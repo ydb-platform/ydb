@@ -4,9 +4,9 @@
 #include "partition_chooser_impl__partition_helper.h"
 #include "partition_chooser_impl__table_helper.h"
 
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NPQ::NPartitionChooser {
@@ -28,8 +28,10 @@ using namespace NSourceIdEncoding;
 using namespace Ydb::PersQueue::ErrorCode;
 
 template<typename TDerived, typename TPipeCreator>
-class TAbstractPartitionChooserActor: public TActorBootstrapped<TDerived> {
+class TAbstractPartitionChooserActor: public TBaseActor<TDerived>
+                                    , public TConstantLogPrefix {
 public:
+    using TBase = TBaseActor<TDerived>;
     using TThis = TAbstractPartitionChooserActor<TDerived, TPipeCreator>;
     using TThisActor = TActor<TThis>;
 
@@ -39,19 +41,32 @@ public:
                                    NPersQueue::TTopicConverterPtr& fullConverter,
                                    const TString& sourceId,
                                    std::optional<ui32> preferedPartition,
-                                   NWilson::TTraceId traceId)
-        : Parent(parentId)
+                                   NWilson::TTraceId traceId,
+                                   const NKikimrPQ::TPQTabletConfig::TTopicId* topicId = nullptr)
+        : TBase(NKikimrServices::PQ_PARTITION_CHOOSER)
+        , Parent(parentId)
         , SourceId(sourceId)
         , PreferedPartition(preferedPartition)
         , Chooser(chooser)
         , Span(TWilsonTopic::TopicDetailed, std::move(traceId), "Topic.ChoosePartition")
-        , TableHelper(fullConverter->GetClientsideName(), fullConverter->GetTopicForSrcIdHash())
+        , TableHelper(fullConverter, topicId)
         , PartitionHelper(Span.GetTraceId())
     {
     }
 
     TActorIdentity SelfId() const {
         return TActor<TDerived>::SelfId();
+    }
+
+    TString BuildLogPrefix() const override {
+        return TStringBuilder() << " (SourceId=" << SourceId
+            << ", PreferedPartition=" << PreferedPartition << ") ";
+    }
+
+    void OnException(const std::exception& exc) override {
+        // Do not Die here: TBaseActor::OnUnhandledException will PassAway.
+        ReplyError(ErrorCode::ERROR, TStringBuilder() << "Unhandled exception: " << exc.what(),
+            this->ActorContext(), /*die=*/false);
     }
 
     [[nodiscard]] bool Initialize(const NActors::TActorContext& ctx) {
@@ -63,11 +78,11 @@ public:
         return false;
     }
 
-    void PassAway() {
+    void PassAway() override {
         auto ctx = TActivationContext::ActorContextFor(SelfId());
         TableHelper.CloseKqpSession(ctx);
         PartitionHelper.Close(ctx);
-        TActorBootstrapped<TDerived>::PassAway();
+        TBase::PassAway();
     }
 
     bool NeedTable(const NActors::TActorContext& ctx) {
@@ -146,6 +161,15 @@ protected:
     void HandleSelect(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         if (!TableHelper.HandleSelect(ev, ctx)) {
             return ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "kqp error Marker# PQ50 : " <<  ev->Get()->Record.DebugString(), ctx);
+        }
+
+        if (TableHelper.NeedLegacyKeySelect()) {
+            // No row for the id key: within the transition window look up the legacy
+            // name-based key, continuing the same transaction. Stay in StateSelect.
+            YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Select from the table by legacy topic name",
+                {"logPrefix", LOG_PREFIX});
+            TableHelper.SendLegacyKeySelectRequest(ctx);
+            return;
         }
 
         YDB_LOG_TRACE_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Selected from table",
@@ -319,14 +343,16 @@ protected:
         ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, SeqNo));
     }
 
-    void ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx) {
+    void ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx, bool die = true) {
         YDB_LOG_INFO_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Reply error",
             {"logPrefix", LOG_PREFIX},
             {"replyError", errorMessage});
         Span.EndError(errorMessage);
         ctx.Send(Parent, new TEvPartitionChooser::TEvChooseError(code, std::move(errorMessage)));
 
-        TThis::Die(ctx);
+        if (die) {
+            TThis::Die(ctx);
+        }
     }
 
 

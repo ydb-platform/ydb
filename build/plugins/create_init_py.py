@@ -4,7 +4,7 @@ from ymake import macro, Unit
 
 
 @macro
-def CREATE_INIT_PY_STRUCTURE(unit: Unit, *args: tuple[str, ...]):
+def CREATE_INIT_PY_STRUCTURE(unit: Unit, *args: str):
     if unit.get('DISTBUILD') or unit.get('AUTOCHECK'):
         return
     target_dir = unit.get('PY_PROTOS_FOR_DIR')

@@ -89,17 +89,13 @@ public:
         const auto expression = TExpression(expr.Node, expr.Ctx, &Props);
         AddInfoUnits(target, expression.GetInputIUs(false, true));
 
-        for (const auto& iu : expression.GetInputIUs(true, false)) {
-            if (!iu.IsSubplanContext()) {
+        for (const auto& iu : expression.GetRawInputIUs()) {
+            const auto* subplanEntry = Props.Subplans.Find(iu);
+            if (!subplanEntry) {
                 continue;
             }
 
-            const auto it = Props.Subplans.PlanMap.find(iu);
-            if (it == Props.Subplans.PlanMap.end()) {
-                continue;
-            }
-
-            auto subplan = CastOperator<IOperator>(it->second.Plan);
+            auto subplan = CastOperator<IOperator>(subplanEntry->Plan);
             AddLiveColumns(subplan, subplan->GetOutputIUs());
         }
     }
@@ -255,27 +251,55 @@ void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
     ctx.AddLiveInput(this, 1, rightLive);
 }
 
+void TOpDependentJoin::PropagateLiveness(ILivenessContext& ctx) {
+    const auto& liveOut = ctx.GetLiveOut(this);
+    const auto domainOutput = MakeInfoUnitSet(GetDomain()->GetOutputIUs());
+    const auto inputOutput = MakeInfoUnitSet(GetInput()->GetOutputIUs());
+
+    TInfoUnitSet domainLive;
+    TInfoUnitSet inputLive;
+
+    for (const auto& iu : liveOut) {
+        if (domainOutput.contains(iu)) {
+            AddInfoUnit(domainLive, iu);
+        }
+        if (inputOutput.contains(iu)) {
+            AddInfoUnit(inputLive, iu);
+        }
+    }
+
+    // Keep domain.
+    for (const auto& iu : Dependencies) {
+        AddInfoUnit(domainLive, iu);
+        if (inputOutput.contains(iu)) {
+            AddInfoUnit(inputLive, iu);
+        }
+    }
+
+    ctx.AddLiveInput(this, 0, domainLive);
+    ctx.AddLiveInput(this, 1, inputLive);
+}
+
 void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
     const auto& liveOut = ctx.GetLiveOut(this);
-    TInfoUnitSet leftLive;
-    TInfoUnitSet rightLive;
+    TInfoUnitSet inputLive;
     for (const auto& column : Columns) {
         if (!liveOut.contains(column)) {
             continue;
         }
-        AddInfoUnit(leftLive, column);
-        AddInfoUnit(rightLive, column);
+        AddInfoUnit(inputLive, column);
     }
 
     // The union must keep at least one column; TPruneDeadUnionAllColumnsRule
     // retains the first declared column in the same case.
-    if (leftLive.empty() && !Columns.empty()) {
-        AddInfoUnit(leftLive, Columns.front());
-        AddInfoUnit(rightLive, Columns.front());
+    if (inputLive.empty() && !Columns.empty()) {
+        AddInfoUnit(inputLive, Columns.front());
     }
 
-    ctx.AddLiveInput(this, 0, leftLive);
-    ctx.AddLiveInput(this, 1, rightLive);
+    // Every input of the union sees the same set of live columns.
+    for (ui32 childIndex = 0; childIndex < Children.size(); ++childIndex) {
+        ctx.AddLiveInput(this, childIndex, inputLive);
+    }
 }
 
 void TOpLimit::PropagateLiveness(ILivenessContext& ctx) {
@@ -294,6 +318,31 @@ void TOpSort::PropagateLiveness(ILivenessContext& ctx) {
     }
     if (LimitCond) {
         ctx.AddExpressionDeps(*LimitCond, inputLive);
+    }
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
+void TOpTableLookup::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive;
+    AddInfoUnits(inputLive, LookupKeys);
+    if (Prefix) {
+        // The prefix equalities are checked on the left row before the lookup.
+        for (const auto& [column, iu] : Prefix->Equalities) {
+            Y_UNUSED(column);
+            AddInfoUnit(inputLive, iu);
+        }
+    }
+    if (IsJoin()) {
+        const auto& liveOut = ctx.GetLiveOut(this);
+        for (const auto& iu : GetInput()->GetOutputIUs()) {
+            if (liveOut.contains(iu)) {
+                AddInfoUnit(inputLive, iu);
+            }
+        }
+        for (const auto& [leftKey, rightKey] : ResidualJoinKeys) {
+            Y_UNUSED(rightKey);
+            AddInfoUnit(inputLive, leftKey);
+        }
     }
     ctx.AddLiveInput(this, 0, inputLive);
 }

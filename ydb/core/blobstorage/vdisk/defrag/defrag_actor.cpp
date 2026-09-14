@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/common/circlebufstream.h>
 #include <ydb/core/blobstorage/vdisk/common/sublog.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
+#include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 
@@ -159,6 +160,7 @@ namespace NKikimr {
             std::shared_ptr<TDefragCtx> DCtx;
             TActorId ParentId;
             const TActorId CompactionManagerId;
+            THashSet<TChunkIdx> StripeChunks;
 
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -174,12 +176,19 @@ namespace NKikimr {
                 YDB_LOG_DEBUG_COMP(BS_VDISK_DEFRAG, VDISKP(DCtx->VCtx->VDiskLogPrefix, "Bootstrap"),
                     {"marker", "BSVDD01"});
                 ParentId = parentId;
-                Send(DCtx->SkeletonId, new TEvTakeHullSnapshot(false));
+                // sample the stripe chunks before taking the snapshot: the set has to stay fixed for the whole scan
+                TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvHugeQueryStripeChunks, 0,
+                    DCtx->HugeKeeperId, SelfId(), nullptr, 0));
                 Become(&TThis::StateFunc);
             }
 
+            void Handle(TEvHugeStripeChunks::TPtr ev) {
+                StripeChunks = std::move(ev->Get()->StripeChunks);
+                Send(DCtx->SkeletonId, new TEvTakeHullSnapshot(false));
+            }
+
             void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
-                TDefragCalcStat calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx);
+                TDefragCalcStat calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx, std::move(StripeChunks));
                 std::unique_ptr<TEvDefragStartQuantum> res;
                 if (calcStat.Scan(NDefrag::MaxSnapshotHoldDuration)) {
                     YDB_LOG_ERROR_COMP(BS_VDISK_DEFRAG, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"),
@@ -240,6 +249,7 @@ namespace NKikimr {
             }
 
             STRICT_STFUNC(StateFunc,
+                hFunc(TEvHugeStripeChunks, Handle);
                 hFunc(TEvTakeHullSnapshotResult, Handle);
                 cFunc(TEvents::TSystem::Poison, PassAway);
             )

@@ -371,7 +371,7 @@ private:
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::InitResponse& message) {
         SessionStartedAt = TInstant::Now();
         SessionId = message.session_id();
-        YDB_LOG_INFO("Session initialized with",
+        YDB_LOG_INFO("Session initialized",
             {"logPrefix", LogPrefix()},
             {"id", SessionId});
         ContinueReading();
@@ -381,9 +381,9 @@ private:
         const auto responseSize = message.bytes_size();
         ServerMemoryDelta -= responseSize;
         Counters->BytesReadCompressed->Add(responseSize);
-        YDB_LOG_TRACE("Received read response with new",
+        YDB_LOG_TRACE("Received read response",
             {"logPrefix", LogPrefix()},
-            {"size", responseSize},
+            {"responseSize", responseSize},
             {"serverMemoryDelta", ServerMemoryDelta});
 
         for (auto& partitionData : *message.mutable_partition_data()) {
@@ -483,7 +483,7 @@ private:
         for (const auto& commitOffset : message.partitions_committed_offsets()) {
             const auto partitionSessionId = commitOffset.partition_session_id();
             const auto offset = commitOffset.committed_offset();
-            YDB_LOG_DEBUG("Partition offset commited",
+            YDB_LOG_DEBUG("Partition offset committed",
                 {"logPrefix", LogPrefix()},
                 {"session", partitionSessionId},
                 {"offset", offset});
@@ -497,10 +497,10 @@ private:
 
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::PartitionSessionStatusResponse& message) {
         const auto partitionSessionId = message.partition_session_id();
-        YDB_LOG_DEBUG("Partition status",
+        YDB_LOG_DEBUG("Partition status response",
             {"logPrefix", LogPrefix()},
             {"session", partitionSessionId},
-            {"response", message});
+            {"message", message});
 
         AddOutgoingEvent(TReadSessionEvent::TPartitionSessionStatusEvent(
             GetPartitionSession(partitionSessionId),
@@ -517,12 +517,12 @@ private:
         const auto partitionSessionId = info.partition_session_id();
         const auto committedOffset = message.committed_offset();
         const auto& offsets = message.partition_offsets();
-        YDB_LOG_DEBUG("Start session with id commited offsets",
+        YDB_LOG_DEBUG("Start partition session",
             {"logPrefix", LogPrefix()},
-            {"partition", partitionId},
+            {"partitionId", partitionId},
             {"partitionSessionId", partitionSessionId},
-            {"offset", committedOffset},
-            {"range", offsets});
+            {"committedOffset", committedOffset},
+            {"partitionOffsets", offsets});
 
         auto partitionSession = MakeIntrusive<TLocalPartitionSession>(ActorContext().ActorSystem(), SelfId(), TLocalPartitionSession::TSettings{
             .PartitionSessionId = partitionSessionId,
@@ -549,10 +549,10 @@ private:
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::StopPartitionSessionRequest& message) {
         const auto partitionSessionId = message.partition_session_id();
         const auto committedOffset = message.committed_offset();
-        YDB_LOG_DEBUG("Partition received stop event, commited",
+        YDB_LOG_DEBUG("Partition received stop event",
             {"logPrefix", LogPrefix()},
             {"session", partitionSessionId},
-            {"offset", committedOffset});
+            {"committedOffset", committedOffset});
 
         if (!message.graceful()) {
             return AddOutgoingSessionClosedEvent(partitionSessionId, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost);
@@ -575,7 +575,7 @@ private:
         const auto partitionSessionId = message.partition_session_id();
         const auto& adjacentIds = message.adjacent_partition_ids();
         const auto& childIds = message.child_partition_ids();
-        YDB_LOG_DEBUG("Partition received end event adjacent child",
+        YDB_LOG_DEBUG("Partition received end event",
             {"logPrefix", LogPrefix()},
             {"session", partitionSessionId},
             {"adjacentIds", adjacentIds.size()},
@@ -607,7 +607,7 @@ private:
 
         const auto readMemoryBudget = MaxMemoryUsage - InflightMemory;
         if (ServerMemoryDelta >= readMemoryBudget) {
-            YDB_LOG_TRACE("Server already has enough memory, skip reading, read memory",
+            YDB_LOG_TRACE("Server already has enough memory, skip reading",
                 {"logPrefix", LogPrefix()},
                 {"serverMemoryDelta", ServerMemoryDelta},
                 {"budget", readMemoryBudget});

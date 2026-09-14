@@ -109,7 +109,7 @@ public:
         YDB_LOG_DEBUG("THive::TTxStopTablet::Complete",
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
         Self->ProcessPendingStopTablet();
     }
 };

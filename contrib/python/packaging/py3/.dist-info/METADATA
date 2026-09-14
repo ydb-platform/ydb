@@ -1,9 +1,9 @@
 Metadata-Version: 2.4
 Name: packaging
-Version: 26.2
+Version: 26.3
 Summary: Core utilities for Python packages
 Author-email: Donald Stufft <donald@stufft.io>
-Requires-Python: >=3.8
+Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-Expression: Apache-2.0 OR BSD-2-Clause
 Classifier: Development Status :: 5 - Production/Stable
@@ -11,13 +11,13 @@ Classifier: Intended Audience :: Developers
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
 Classifier: Programming Language :: Python :: 3 :: Only
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Programming Language :: Python :: Free Threading :: 4 - Resilient

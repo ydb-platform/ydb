@@ -31,6 +31,7 @@ namespace NKikimr {
         MaxLogoBlobDataSize = MaxVDiskBlobSize;
         HullSstSizeInChunksFresh = 1;
         HullSstSizeInChunksLevel = 1;
+        HeapAllocatorMaxSstInBytes = 1u << 20u;
         HugeBlobsFreeChunkReservation = 1;
         SetupHugeBytes();
         HugeBlobOverhead = 8u;
@@ -39,6 +40,9 @@ namespace NKikimr {
         HullCompSortedPartsNum = 8u;
         HullCompLevelRateThreshold = 1.0;
         HullCompFreeSpaceThresholdPerMille = 2000; // default ratio is 2x
+        HullCompEmergencyMaxSsts = 8; // 0 disables Emergency
+        HullCompEmergencyChunkReserve = 1;
+        HullCompEmergencyEnableAtColor = 15; // LIGHT_YELLOW
         FreshCompMaxInFlightWrites = 10;
         FreshCompMaxInFlightReads = 10; // when moving huge blobs
         HullCompMaxInFlightWrites = 10;

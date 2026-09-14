@@ -3,7 +3,6 @@
 #include <optional>
 #include <util/network/sock.h>
 #include <util/stream/file.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/core/base/appdata.h>
 #include "sock_settings.h"
@@ -160,7 +159,7 @@ public:
         : TInet64StreamSocket(std::move(socket))
     {
         Service = service;
-        if (serverCreds.has_value()) {
+        if (serverCreds.has_value() && *serverCreds) {
             ServerCreds = *serverCreds;
             UseMtlsAuth = true;
         }

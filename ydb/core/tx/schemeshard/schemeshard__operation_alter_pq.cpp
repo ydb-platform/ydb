@@ -317,7 +317,7 @@ public:
             if (auto it = attrs.find("database_id"); it != attrs.end()) {
                 alterConfig.SetYdbDatabaseId(it->second);
             }
-            if (auto it = attrs.find("monitoring_project_id"); it != attrs.end()) {
+            if (auto it = attrs.find(NSchemeShard::ATTR_MONITORING_PROJECT_ID); it != attrs.end()) {
                 alterConfig.SetMonitoringProjectId(it->second);
             }
             alterConfig.SetYdbDatabasePath(CanonizePath(context.SS->RootPathElements));
@@ -326,6 +326,19 @@ public:
                 // TODO: check validity
                 auto* pathId = alterConfig.MutableOffloadConfig()->MutableIncrementalBackup()->MutableDstPathId();
                 TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
+            }
+
+            if (tabletConfig->HasId()) {
+                // Never change an existing topic Id; preserve it together with its fill step.
+                alterConfig.MutableId()->CopyFrom(tabletConfig->GetId());
+            } else if (alterConfig.HasId() && AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()
+                && !AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                // Federation back-fill: the Id is filled by this alter only for federation topics.
+                // FirstClassCitizen topics get their Id at create time, not via alter.
+                // Leave TxStep unset, it is stamped with the exact plan step at NPQState::TPropose::PersistState.
+                alterConfig.MutableId()->ClearTxStep();
+            } else {
+                alterConfig.ClearId();
             }
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());

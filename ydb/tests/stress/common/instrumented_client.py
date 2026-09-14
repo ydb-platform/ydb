@@ -3,12 +3,20 @@ Instrumented YDB client with automatic metrics collection.
 
 This module provides InstrumentedYdbClient class that inherits from YdbClient
 and automatically collects metrics for all database operations.
+
+When YDB_STRESS_EXTENDED_RETRIES is enabled, omitted retry_settings use the
+extended stress retry policy (see instrumented_pools).
 """
 
 import inspect
 import os
 from typing import Optional
 from .common import YdbClient
+from .instrumented_pools import (
+    InstrumentedQuerySessionPool,
+    InstrumentedSessionPool,
+    maybe_extended_retry_settings,
+)
 from .publish_metrics import get_metrics_collector
 
 
@@ -20,6 +28,9 @@ class InstrumentedYdbClient(YdbClient):
     - Query execution success/failure
     - Error types
     - Statistics by operation types
+
+    Uses Instrumented* session pools so retry policy hooks apply to both
+    client.query(...) and direct session_pool.* calls.
 
     Example usage:
         client = InstrumentedYdbClient(endpoint, database, use_query_service=True)
@@ -41,6 +52,14 @@ class InstrumentedYdbClient(YdbClient):
             enable_metrics: Enable metrics collection (default True)
         """
         super().__init__(endpoint, database, use_query_service, sessions)
+
+        # Replace plain pools with instrumented ones (env-gated retries live there).
+        self.session_pool.stop()
+        self.session_pool = (
+            InstrumentedQuerySessionPool(self.driver, size=sessions, enable_metrics=enable_metrics)
+            if use_query_service
+            else InstrumentedSessionPool(self.driver, size=sessions, enable_metrics=enable_metrics)
+        )
 
         self.enable_metrics = enable_metrics
         self.metrics_collector = get_metrics_collector() if enable_metrics else None
@@ -67,6 +86,7 @@ class InstrumentedYdbClient(YdbClient):
         Returns:
             Query execution result
         """
+        retry_settings = maybe_extended_retry_settings(retry_settings)
         if operation_name is None:
             operation_name = 'ddl' if is_ddl else 'dml'
         if not self.enable_metrics:

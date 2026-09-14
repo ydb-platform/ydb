@@ -31,11 +31,14 @@ TExprNode::TPtr TPhysicalUnionAllBuilder::ProjectInput(TExprNode::TPtr input, ui
     return NPhysicalConvertionUtils::BuildRenameMap(input, renames, Ctx);
 }
 
-TExprNode::TPtr TPhysicalUnionAllBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput) {
-    TVector<TExprNode::TPtr> extendArgs{
-        ProjectInput(leftInput, 0),
-        ProjectInput(rightInput, 1)
-    };
+TExprNode::TPtr TPhysicalUnionAllBuilder::BuildPhysicalOp(const TVector<TExprNode::TPtr>& inputs) {
+    Y_ENSURE(inputs.size() == UnionAll->Children.size(), "UnionAll input count mismatch");
+
+    TVector<TExprNode::TPtr> extendArgs;
+    extendArgs.reserve(inputs.size());
+    for (ui32 childIndex = 0; childIndex < inputs.size(); ++childIndex) {
+        extendArgs.push_back(ProjectInput(inputs[childIndex], childIndex));
+    }
 
     if (UnionAll->Ordered) {
         // clang-format off

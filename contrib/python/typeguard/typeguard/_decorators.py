@@ -82,7 +82,7 @@ def instrument(f: T_CallableOrType) -> FunctionType | str:
     if not new_code:
         return "cannot find the target function in the AST"
 
-    if global_config.debug_instrumentation and sys.version_info >= (3, 9):
+    if global_config.debug_instrumentation:
         # Find the matching AST node, then unparse it to source and print to stdout
         print(
             f"Source code of {f.__qualname__}() after instrumentation:"

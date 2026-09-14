@@ -1829,7 +1829,7 @@ TVector<TTabletInfo> TRpcRawClient::GetTabletInfos(
         result.push_back(TTabletInfo{
             .TotalRowCount = info.TotalRowCount,
             .TrimmedRowCount = info.TrimmedRowCount,
-            .BarrierTimestamp = info.BarrierTimestamp,
+            .BarrierTimestamp = info.BarrierTimestamp.Underlying(),
         });
     }
     return result;
@@ -1938,7 +1938,7 @@ ui64 TRpcRawClient::GenerateTimestamp()
 
     auto future = Clients_.Light->GetTimestampProvider()->GenerateTimestamps();
     auto result = WaitAndProcess(future);
-    return result;
+    return result.Underlying();
 }
 
 IRawBatchRequestPtr TRpcRawClient::CreateRawBatchRequest()

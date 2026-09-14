@@ -38,6 +38,8 @@ void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKqpProto::TK
                 toTable.mutable_deletes()->set_rows(table.GetEraseRows());
             }
 
+            toTable.set_affected_rows(table.GetAffectedRows());
+
             toTable.set_partitions_count(table.GetAffectedPartitions());
         }
 

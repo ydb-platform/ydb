@@ -46,8 +46,9 @@ private:
             readBuffer = TSharedMutableRef(buffer, length, /*holder*/ nullptr);
         }
 
-        auto bytesRead = WaitForWithStrategy(UnderlyingStream_->Read(readBuffer), Strategy_)
-            .ValueOrThrow();
+        auto readFuture = UnderlyingStream_->Read(readBuffer);
+        WaitUntilSet(readFuture.AsVoid(), {.Strategy = Strategy_});
+        auto bytesRead = readFuture.GetOrCrash().ValueOrThrow();
 
         if (Strategy_ == EWaitForStrategy::SuspendFiber) {
             memcpy(buffer, readBuffer.Begin(), bytesRead);
@@ -90,8 +91,9 @@ private:
     size_t DoNext(const void** ptr, size_t len) override
     {
         if (Buffer_.Empty() && !Eos_) {
-            Buffer_ = WaitForWithStrategy(UnderlyingStream_->Read(), Strategy_)
-                .ValueOrThrow();
+            auto readFuture = UnderlyingStream_->Read();
+            WaitUntilSet(readFuture.AsVoid(), {.Strategy = Strategy_});
+            Buffer_ = readFuture.GetOrCrash().ValueOrThrow();
             if (!Buffer_) {
                 Eos_ = true;
             } else {
@@ -207,8 +209,8 @@ private:
     {
         auto sharedBuffer = TSharedRef::MakeCopy<TBufferTag>(TRef(data, length));
         auto future = UnderlyingStream_->Write(std::move(sharedBuffer));
-        WaitForWithStrategy(std::move(future), Strategy_)
-            .ThrowOnError();
+        WaitUntilSet(future, {.Strategy = Strategy_});
+        future.GetOrCrash().ThrowOnError();
     }
 
     size_t GetBufferSpaceLeft() const
@@ -259,8 +261,8 @@ protected:
             return;
         }
         auto writeFuture = UnderlyingStream_->Write(Buffer_.Slice(0, CurrentBufferSize_));
-        WaitForWithStrategy(std::move(writeFuture), Strategy_)
-            .ThrowOnError();
+        WaitUntilSet(writeFuture, {.Strategy = Strategy_});
+        writeFuture.GetOrCrash().ThrowOnError();
         Reset();
     }
 };
@@ -985,7 +987,7 @@ private:
                 error = TError(NYT::EErrorCode::Canceled, "Operation aborted");
             } else {
                 error = TError(NYT::EErrorCode::Timeout, "Operation timed out")
-                    << TErrorAttribute("timeout", Timeout_);
+                    .With("timeout", Timeout_);
             }
             promise.Set(error);
         }

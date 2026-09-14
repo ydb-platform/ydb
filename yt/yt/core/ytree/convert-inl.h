@@ -246,7 +246,7 @@ std::string ConvertYsonStringBufToString(const NYson::TYsonStringBuf& yson);
             default: \
                 THROW_ERROR_EXCEPTION("Cannot parse \"" #type "\" from %Qlv", \
                     token.GetType()) \
-                    << TErrorAttribute("data", str.AsStringBuf()); \
+                    .With("data", str.AsStringBuf()); \
         } \
     }
 

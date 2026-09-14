@@ -70,7 +70,6 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
     }
 
     RequestInflight = true;
-    RootPartitionsResetRequestInflight = !splitMergeRequest.SetBoundary.empty();
     YDB_LOG_DEBUG("Send split request",
         {"logPrefix", LogPrefix()});
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
@@ -99,10 +98,10 @@ struct TPartitionScaleManager::TBuildSplitScaleRequestResult {
     bool Remove = false;
 };
 
-std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> TPartitionScaleManager::ReorderSplits() const {
+std::vector<ui32> TPartitionScaleManager::ReorderSplits() const {
     // try to avoid gaps by using partitions with smaller children id
-    auto proj = [](const auto& it) {
-        const TPartitionScaleOperationInfo& info = it->second;
+    auto proj = [this](ui32 partitionId) {
+        const TPartitionScaleOperationInfo& info = PartitionsToSplit.at(partitionId);
         if (info.PartitionScaleParticipants.Defined()) {
             const auto& childPartitionIds = info.PartitionScaleParticipants->GetChildPartitionIds();
             if (!childPartitionIds.empty()) {
@@ -112,10 +111,10 @@ std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> TPart
         }
         return std::make_tuple(info.PartitionId, info.PartitionId);
     };
-    std::vector<TPartitionScaleManager::TPartitionsToSplitMap::const_iterator> result;
+    std::vector<ui32> result;
     result.reserve(PartitionsToSplit.size());
-    for (auto it = PartitionsToSplit.begin(); it != PartitionsToSplit.end(); ++it) {
-        result.push_back(it);
+    for (const auto& [partitionId, _] : PartitionsToSplit) {
+        result.push_back(partitionId);
     }
     std::ranges::sort(result, {}, proj);
     return result;
@@ -199,19 +198,22 @@ TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionSplit> TPart
     std::vector<TPartitionSplit> splitsToApply;
     const std::vector splitCandidates = ReorderSplits();
     size_t checkedSplits = 0;
-    for (const auto& partitionIt : splitCandidates) {
+    for (const ui32 partitionId : splitCandidates) {
         if (allowedSplitsCount <= 0) {
             break;
         }
         ++checkedSplits;
-        const auto& [_, splitParameters] = *partitionIt;
-        TBuildSplitScaleRequestResult req = BuildSplitScaleRequest(splitParameters);
+        auto it = PartitionsToSplit.find(partitionId);
+        if (it == PartitionsToSplit.end()) {
+            continue;
+        }
+        TBuildSplitScaleRequestResult req = BuildSplitScaleRequest(it->second);
         if (req.Split) {
             splitsToApply.push_back(std::move(*req.Split));
             --allowedSplitsCount;
         }
         if (req.Remove) {
-            PartitionsToSplit.erase(partitionIt);
+            PartitionsToSplit.erase(partitionId);
         }
     }
     return {
@@ -315,6 +317,7 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
 
 void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx) {
     RequestInflight = false;
+    CurrentScaleRequest = {};
     LastResponseTime = ctx.Now();
     auto result = ev->Get();
     YDB_LOG_DEBUG("HandleScaleRequestResult scale request",
@@ -327,6 +330,14 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     } else {
         RequestTimeout = Backoff.Next();
         ctx.Schedule(RequestTimeout, new TEvents::TEvWakeup(TRY_SCALE_REQUEST_WAKE_UP_TAG));
+    }
+}
+
+void TPartitionScaleManager::AbortInflightScaleRequest(const TActorContext& ctx) {
+    RequestInflight = false;
+    if (CurrentScaleRequest) {
+        ctx.Send(CurrentScaleRequest, new TEvents::TEvPoisonPill());
+        CurrentScaleRequest = {};
     }
 }
 
@@ -406,8 +417,9 @@ void TPartitionScaleManager::UpdateBalancerConfig(ui64 pathId, int version, cons
     }
 }
 
-void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath) {
+void TPartitionScaleManager::UpdateDatabasePath(const TString& dbPath, const TActorContext& ctx) {
     DatabasePath = dbPath;
+    TrySendScaleRequest(ctx);
 }
 
 } // namespace NPQ

@@ -385,6 +385,21 @@ DEFINE_REFCOUNTED_TYPE(TInsertRowsFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Queues have no legacy of null-to-entity conversion to preserve, so an explicit null
+//! written into an `any` column of a queue stays a null instead of silently becoming
+//! a YSON entity.
+struct TPushQueueProducerFormatConfig
+    : public TInsertRowsFormatConfig
+{
+    REGISTER_YSON_STRUCT(TPushQueueProducerFormatConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TPushQueueProducerFormatConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TChunkReaderOptions
     : public virtual NYTree::TYsonStruct
 {

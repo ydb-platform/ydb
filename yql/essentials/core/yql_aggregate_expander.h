@@ -88,7 +88,7 @@ private:
     TExprNode::TPtr MakeInputBlocks(const TExprNode::TPtr& stream, TExprNode::TListType& keyIdxs,
         TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, ui32* streamIdxColumn = nullptr);
 
-private:
+
     static constexpr TStringBuf SessionStartMemberName = "_yql_group_session_start";
 
     const TExprNode::TPtr Node_;

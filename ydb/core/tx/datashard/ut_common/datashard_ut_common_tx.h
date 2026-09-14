@@ -45,6 +45,17 @@ struct TWriteOperation {
             std::move(rows),
         };
     }
+
+    static TWriteOperation Delete(i32 key) {
+        return Delete({ { key, 0 } } );
+    }
+
+    static TWriteOperation Delete(TVector<TKeyValue> rows) {
+        return TWriteOperation{
+            NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
+            std::move(rows),
+        };
+    }
 };
 
 class TTransactionState {
@@ -121,7 +132,7 @@ public:
         req->Record.SetLockTxId(LockTxId);
         req->Record.SetLockNodeId(LockNodeId);
         req->Record.SetLockMode(LockMode);
-        if (Snapshot) {
+        if (Snapshot && LockMode != NKikimrDataEvents::ELockMode::PESSIMISTIC_NONE) {
             req->Record.MutableMvccSnapshot()->SetStep(Snapshot->Step);
             req->Record.MutableMvccSnapshot()->SetTxId(Snapshot->TxId);
         }

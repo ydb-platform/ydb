@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <algorithm>
-#include <cctype>
 #include <cstdlib>
 #include <map>
 #include <memory>
@@ -48,33 +46,29 @@ public:
   {}
 
   // Returns the value associated with the passed key.
-  // Always reads from process environment variables (with caching).
-  // The key is automatically converted to uppercase.
+  // The key is normalized per spec before lookup and caching.
   nostd::string_view Get(nostd::string_view key) const noexcept override
   {
-    std::string env_name = ToEnvName(key);
+    std::string env_name = NormalizeKey(key);
 
-    // Check cache first
-    auto cache_it = cache_.find(std::string(key));
+    // Cache is keyed by normalized name for consistent lookup
+    auto cache_it = cache_.find(env_name);
     if (cache_it != cache_.end())
     {
       return cache_it->second;
     }
 
-    // Read from environment
     const char *value = std::getenv(env_name.c_str());
     if (value != nullptr)
     {
-      // Cache for lifetime management (string_view requires stable storage)
-      cache_[std::string(key)] = std::string(value);
-      return cache_[std::string(key)];
+      cache_[env_name] = std::string(value);
+      return cache_[env_name];
     }
     return "";
   }
 
   // Stores the key-value pair in the map if one was provided at construction.
-  // Otherwise, this operation is a no-op.
-  // The key is automatically converted to uppercase.
+  // The key is normalized per spec before writing.
   void Set(nostd::string_view key, nostd::string_view value) noexcept override
   {
     if (!env_map_ptr_)
@@ -82,24 +76,39 @@ public:
       return;
     }
 
-    std::string env_name               = ToEnvName(key);
-    env_map_ptr_->operator[](env_name) = std::string(value);
+    env_map_ptr_->operator[](NormalizeKey(key)) = std::string(value);
   }
 
 private:
   std::shared_ptr<std::map<std::string, std::string>> env_map_ptr_;
   mutable std::map<std::string, std::string> cache_;
 
-  // Converts a header name to an environment variable name.
-  // e.g., "traceparent" -> "TRACEPARENT", "my-key" -> "MY_KEY",
-  //        "my.complex.key" -> "MY_COMPLEX_KEY"
-  static std::string ToEnvName(nostd::string_view key)
+  // Normalizes a key to an environment variable name per the OTel spec:
+  //   - ASCII letters are uppercased
+  //   - characters that are not ASCII letters, digits, or '_' are replaced with '_'
+  //   - a leading '_' is prepended if the first character is a digit
+  // e.g., "traceparent" -> "TRACEPARENT", "x-b3-traceid" -> "X_B3_TRACEID",
+  //        "1bad" -> "_1BAD"
+  static std::string NormalizeKey(nostd::string_view key)
   {
-    std::string env_name(key);
-    std::transform(env_name.begin(), env_name.end(), env_name.begin(), [](unsigned char c) {
-      return static_cast<char>(std::isalnum(c) ? std::toupper(c) : '_');
-    });
-    return env_name;
+    std::string result(key);
+    for (auto &c : result)
+    {
+      unsigned char uc = static_cast<unsigned char>(c);
+      if (uc >= 'a' && uc <= 'z')
+      {
+        c = static_cast<char>(uc - ('a' - 'A'));
+      }
+      else if (!((uc >= 'A' && uc <= 'Z') || (uc >= '0' && uc <= '9') || uc == '_'))
+      {
+        c = '_';
+      }
+    }
+    if (!result.empty() && result[0] >= '0' && result[0] <= '9')
+    {
+      result.insert(result.begin(), '_');
+    }
+    return result;
   }
 };
 

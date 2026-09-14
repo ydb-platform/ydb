@@ -39,10 +39,6 @@ struct TPoolInfo {
     float MinThreadCount = 0;
     float MaxThreadCount = 0;
 
-    ui16 LocalQueueSize;
-    ui16 MaxLocalQueueSize = 0;
-    ui16 MinLocalQueueSize = 0;
-
     i16 Priority = 0;
     ui8 NeedyCpuWindowSeconds = 1;
     NMonitoring::TDynamicCounters::TCounterPtr AvgPingCounter;

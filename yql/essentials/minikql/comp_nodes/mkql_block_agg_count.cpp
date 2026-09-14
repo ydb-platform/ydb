@@ -4,13 +4,12 @@
 
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 struct TState {
-    ui64 Count_ = 0;
+    ui64 Count = 0;
 };
 
 class TColumnBuilder: public IAggColumnBuilder {
@@ -22,8 +21,9 @@ public:
     }
 
     void Add(const void* state) final {
-        auto typedState = static_cast<const TState*>(state);
-        Builder_.Add(TBlockItem(typedState->Count_));
+        static_assert(std::is_trivially_copyable<TState>::value);
+        const auto stateValue = ReadUnaligned<TState>(state);
+        Builder_.Add(TBlockItem(stateValue.Count));
     }
 
     NUdf::TUnboxedValue Build() final {
@@ -65,15 +65,15 @@ public:
         auto typedState = static_cast<TState*>(state);
         Y_UNUSED(columns);
         if (filtered) {
-            typedState->Count_ += *filtered;
+            typedState->Count += *filtered;
         } else {
-            typedState->Count_ += batchLength;
+            typedState->Count += batchLength;
         }
     }
 
     NUdf::TUnboxedValue FinishOne(const void* state) final {
         auto typedState = static_cast<const TState*>(state);
-        return NUdf::TUnboxedValuePod(typedState->Count_);
+        return NUdf::TUnboxedValuePod(typedState->Count);
     }
 };
 
@@ -89,8 +89,10 @@ public:
     }
 
     void InitKey(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
-        new (state) TState();
-        UpdateKey(state, batchNum, columns, row);
+        TState stateToReturn;
+        UpdateKey(&stateToReturn, batchNum, columns, row);
+        static_assert(std::is_trivially_copyable<TState>::value);
+        WriteUnaligned<TState>(state, stateToReturn);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -102,8 +104,10 @@ public:
         Y_UNUSED(batchNum);
         Y_UNUSED(columns);
         Y_UNUSED(row);
-        auto typedState = static_cast<TState*>(state);
-        typedState->Count_ += 1;
+        static_assert(std::is_trivially_copyable<TState>::value);
+        auto stateValue = ReadUnaligned<TState>(state);
+        stateValue.Count += 1;
+        WriteUnaligned<TState>(state, stateValue);
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeStateBuilder(ui64 size) final {
@@ -123,8 +127,10 @@ public:
     }
 
     void LoadState(void* state, ui64 batchNum, const NUdf::TUnboxedValue* columns, ui64 row) final {
-        new (state) TState();
-        UpdateState(state, batchNum, columns, row);
+        TState stateToReturn;
+        UpdateState(&stateToReturn, batchNum, columns, row);
+        static_assert(std::is_trivially_copyable<TState>::value);
+        WriteUnaligned<TState>(state, stateToReturn);
     }
 
     void DestroyState(void* state) noexcept final {
@@ -138,31 +144,31 @@ public:
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             MKQL_ENSURE(datum.scalar()->is_valid, "Expected not null");
-            typedState->Count_ += datum.scalar_as<arrow::UInt64Scalar>().value;
+            typedState->Count += datum.scalar_as<arrow::UInt64Scalar>().value;
         } else {
             const auto& array = datum.array();
             auto ptr = array->GetValues<ui64>(1);
             MKQL_ENSURE(array->GetNullCount() == 0, "Expected not null");
-            typedState->Count_ += ptr[row];
+            typedState->Count += ptr[row];
         }
     }
 
     void SerializeState(void* state, NUdf::TOutputBuffer& buffer) final {
         auto typedState = static_cast<TState*>(state);
-        buffer.PushNumber(typedState->Count_);
+        buffer.PushNumber(typedState->Count);
     }
 
     void DeserializeState(void* state, NUdf::TInputBuffer& buffer) final {
         auto typedState = static_cast<TState*>(state);
-        buffer.PopNumber(typedState->Count_);
+        buffer.PopNumber(typedState->Count);
     }
 
     void DeserializeAndUpdateState(void* state, NUdf::TInputBuffer& buffer) final {
         auto typedState = static_cast<TState*>(state);
 
         TState deserializedState;
-        buffer.PopNumber(deserializedState.Count_);
-        typedState->Count_ += deserializedState.Count_;
+        buffer.PopNumber(deserializedState.Count);
+        typedState->Count += deserializedState.Count;
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
@@ -198,18 +204,18 @@ public:
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                typedState->Count_ += filtered ? *filtered : batchLength;
+                typedState->Count += filtered ? *filtered : batchLength;
             }
         } else {
             const auto& array = datum.array();
             if (!filtered) {
-                typedState->Count_ += array->length - array->GetNullCount();
+                typedState->Count += array->length - array->GetNullCount();
             } else if (array->GetNullCount() == array->length) {
                 // all nulls
                 return;
             } else if (array->GetNullCount() == 0) {
                 // no nulls
-                typedState->Count_ += *filtered;
+                typedState->Count += *filtered;
             } else {
                 const auto& filterDatum = TArrowBlock::From(columns[*FilterColumn_]).GetDatum();
                 // intersect masks from nulls and filter column
@@ -217,7 +223,7 @@ public:
                 MKQL_ENSURE(filterArray->GetNullCount() == 0, "Expected non-nullable bool column");
                 auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                 const ui8* filterBitmap = filterArray->GetValues<uint8_t>(1);
-                auto state = typedState->Count_;
+                auto state = typedState->Count;
                 for (ui32 i = 0; i < array->length; ++i) {
                     ui64 fullIndex = i + array->offset;
                     auto bit1 = ((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
@@ -225,14 +231,14 @@ public:
                     state += bit1 & bit2;
                 }
 
-                typedState->Count_ = state;
+                typedState->Count = state;
             }
         }
     }
 
     NUdf::TUnboxedValue FinishOne(const void* state) final {
         auto typedState = static_cast<const TState*>(state);
-        return NUdf::TUnboxedValuePod(typedState->Count_);
+        return NUdf::TUnboxedValuePod(typedState->Count);
     }
 
 private:
@@ -266,17 +272,17 @@ public:
         const auto& datum = TArrowBlock::From(columns[ArgColumn_]).GetDatum();
         if (datum.is_scalar()) {
             if (datum.scalar()->is_valid) {
-                typedState->Count_ += 1;
+                typedState->Count += 1;
             }
         } else {
             const auto& array = datum.array();
             if (array->GetNullCount() == 0) {
-                typedState->Count_ += 1;
+                typedState->Count += 1;
             } else {
                 auto nullBitmapPtr = array->GetValues<uint8_t>(0, 0);
                 auto fullIndex = row + array->offset;
                 auto bit = ((nullBitmapPtr[fullIndex >> 3] >> (fullIndex & 0x07)) & 1);
-                typedState->Count_ += bit;
+                typedState->Count += bit;
             }
         }
     }
@@ -437,5 +443,4 @@ std::unique_ptr<IBlockAggregatorFactory> MakeBlockCountFactory() {
     return std::make_unique<TBlockCountFactory>();
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

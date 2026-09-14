@@ -406,6 +406,13 @@ public:
         std::optional<bool> UseFilterLength;
         std::optional<int32_t> FilterLengthMin;
         std::optional<int32_t> FilterLengthMax;
+        std::optional<bool> UseFilterSnowball;
+        std::optional<bool> UseFilterSuperLemmer;
+
+        static TAnalyzers Standard();
+        static TAnalyzers Snowball(std::string language);
+        static TAnalyzers SuperLemmer(std::string language);
+        static TAnalyzers Keyword();
     };
 
     struct TColumnAnalyzers {
@@ -1039,6 +1046,7 @@ enum class EStoreType {
 enum class EMultiColumnStatisticsType {
     Unknown = 0,
     CountMinSketch = 1,
+    EqHeightHistogram = 2,
 };
 
 //! Represents multi-column table statistics description
@@ -1100,6 +1108,7 @@ public:
     const std::string& GetOwner() const;
     const std::vector<NScheme::TPermissions>& GetPermissions() const;
     const std::vector<NScheme::TPermissions>& GetEffectivePermissions() const;
+    bool GetInterruptInheritance() const;
 
     const std::vector<TKeyRange>& GetKeyRanges() const;
 

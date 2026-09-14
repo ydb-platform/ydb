@@ -94,8 +94,10 @@ for specific dates and Zoom meeting links.
 Meeting notes are available as a public
 [Google doc](https://docs.google.com/document/d/1rdF6GZcCqH9huo3oqur5x_McsPS_qQ9OPSRFjIqndm8/edit?usp=sharing).
 
-For edit access, get in touch on
-[Slack](https://cloud-native.slack.com/archives/C01N3AT62SJ).
+For edit access, get in touch on the
+[#otel-cpp](https://cloud-native.slack.com/archives/C01N3AT62SJ)
+channel on CNCF Slack. If you are new to the CNCF Slack community,
+you can [create an account](https://slack.cncf.io/).
 
 The meeting is open for all to join. We invite everyone to join our meeting,
 regardless of your experience level. Whether you're a seasoned OpenTelemetry
@@ -114,7 +116,7 @@ For more information about the maintainer role, see the [community repository](h
 
 ### Approvers
 
-* [WenTao Ou](https://github.com/owent), Tencent
+* [WenTao Ou](https://github.com/owent)
 
 For more information about the approver role, see the [community repository](https://github.com/open-telemetry/community/blob/main/guides/contributor/membership.md#approver).
 

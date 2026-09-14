@@ -8,7 +8,6 @@
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/ast/yql_expr_builder.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
-#include <yql/essentials/minikql/computation/mkql_block_impl.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_block_test_helper.h>
@@ -84,7 +83,7 @@ namespace {
 
 template <typename T>
 arrow::Datum GenerateArray(TTypeInfoHelper& typeInfoHelper, TType* type, TVector<TMaybe<T>>& array, size_t offset) {
-    auto rightArrayBuilder = MakeArrayBuilder(typeInfoHelper, type, *NYql::NUdf::GetYqlMemoryPool(), array.size() + offset, nullptr);
+    auto rightArrayBuilder = MakeArrayBuilder(typeInfoHelper, type, *NYql::NUdf::GetYqlMemoryPool(), array.size() + offset, /*pgBuilder=*/nullptr);
     for (size_t i = 0; i < offset; i++) {
         if (array[0]) {
             rightArrayBuilder->Add(TBlockItem(array[0].GetRef()));
@@ -136,7 +135,7 @@ std::unique_ptr<IArrowKernelComputationNode> GetArrowKernel(IComputationGraph* g
         }
         allKernels.push_back(std::move(kernelNode));
     }
-    UNIT_ASSERT_EQUAL(allKernels.size(), 1u);
+    UNIT_ASSERT_EQUAL(allKernels.size(), 1U);
     return std::move(allKernels[0]);
 }
 
@@ -329,7 +328,7 @@ Y_UNIT_TEST(TestBooleanType) {
     // Test with scalar right operand
     TestCoalesceKernel(
         TVector<TMaybe<bool>>{Nothing(), true, false},
-        true,
+        /*right=*/true,
         TVector<bool>{true, true, false});
 
     // Test with all non-null left operands

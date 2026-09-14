@@ -6,15 +6,15 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.27.0)
+VERSION(1.28.0)
 
-ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.27.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-cpp/archive/v1.28.0.tar.gz)
 
 PEERDIR(
     contrib/libs/curl
     contrib/libs/opentelemetry-cpp/api
-    contrib/libs/opentelemetry-proto
     contrib/libs/protobuf
+    contrib/proto/opentelemetry
     contrib/restricted/nlohmann_json
 )
 
@@ -33,6 +33,7 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 CFLAGS(
+    -DENABLE_HTTP_CLIENT_CURL
     -DENABLE_OTLP_GRPC_SSL_MTLS_PREVIEW
     -DENABLE_OTLP_RETRY_PREVIEW
     -DOPENTELEMETRY_PROTO_API=
@@ -154,6 +155,12 @@ SRCS(
     sdk/src/trace/random_id_generator_factory.cc
     sdk/src/trace/samplers/always_off_factory.cc
     sdk/src/trace/samplers/always_on_factory.cc
+    sdk/src/trace/samplers/composable_parent_threshold.cc
+    sdk/src/trace/samplers/composable_probability.cc
+    sdk/src/trace/samplers/composable_rule_based.cc
+    sdk/src/trace/samplers/composite_sampler.cc
+    sdk/src/trace/samplers/composite_sampler_factory.cc
+    sdk/src/trace/samplers/ot_trace_state.cc
     sdk/src/trace/samplers/parent.cc
     sdk/src/trace/samplers/parent_factory.cc
     sdk/src/trace/samplers/trace_id_ratio.cc

@@ -124,6 +124,12 @@ TDqConfiguration::TDqConfiguration() {
         });
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, Scheduler);
+    REGISTER_SETTING(*this, Clique)
+        .Validator([this](const TString&, const TString& value) {
+            if (CliqueValidator) {
+                CliqueValidator(value);
+            }
+        });
 }
 
 } // namespace NYql

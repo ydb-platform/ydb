@@ -563,7 +563,7 @@ class TCompositeTopicReadSession final : public IReadSession, public ICompositeT
     using TPartitionSet = std::set<TPartitionKey>;
 
 public:
-    TCompositeTopicReadSession(const TActorSystem* actorSystem, ITopicClient& topicClient, const TCompositeTopicReadSessionSettings& settings)
+    TCompositeTopicReadSession(const TActorSystem* actorSystem, ITopicDataClient& topicClient, const TCompositeTopicReadSessionSettings& settings)
         : MaxPartitionReadSkew(settings.MaxPartitionReadSkew)
         , ActorSystem(actorSystem)
         , Metrics(settings.Counters)
@@ -578,7 +578,7 @@ public:
         LogPrefix = TStringBuilder() << "[" << __func__ << "] TxId: " << settings.TxId << ", TaskId: " << settings.TaskId << ", Cluster: " << settings.Cluster << ", TopicPath: " << topic.Path_ << ". ";
 
         const auto& partitions = topic.PartitionIds_;
-        Y_VALIDATE(partitions.size() > 0, "Can not start read session without partitions");
+        Y_VALIDATE(partitions.size() > 0, "Cannot start read session without partitions");
         SRC_LOG_AS_I("Created"
             << ", MaxPartitionReadSkew: " << MaxPartitionReadSkew
             << ", IdleTimeout: " << settings.IdleTimeout
@@ -1021,7 +1021,7 @@ private:
 
 std::pair<std::shared_ptr<NYdb::NTopic::IReadSession>, ICompositeTopicReadSessionControl::TPtr> CreateCompositeTopicReadSession(
     const TActorContext& ctx,
-    ITopicClient& topicClient,
+    ITopicDataClient& topicClient,
     const TCompositeTopicReadSessionSettings& settings
 ) {
     const auto compositeReadSession = std::make_shared<TCompositeTopicReadSession>(ctx.ActorSystem(), topicClient, settings);

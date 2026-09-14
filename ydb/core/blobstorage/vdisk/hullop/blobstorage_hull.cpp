@@ -259,21 +259,47 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////
     // Blocks
     ////////////////////////////////////////////////////////////////////////
-    THullCheckStatus THull::CheckBlockCmdAndAllocLsn(ui64 tabletID, ui32 gen, ui64 issuerGuid, ui32 *actGen, TLsnSeg *seg)
-    {
+    // Blocks issued by the machinery that has no knowledge of TTabletStorageInfo are written as is: the bridge syncer
+    // just replicates already validated records between piles, and the force-block done on behalf of a reader only
+    // raises the blocked generation obtained from the state storage (the version-aware block has already been
+    // confirmed by the very same tablet instance by that time).
+    static bool ShouldCheckVersion(ui64 tabletID, TWriteSource writeSource) {
+        return (~tabletID >> 63) // the version record itself carries no version to check
+            && writeSource != TWriteSource::SyncerMergeBlock
+            && writeSource != TWriteSource::SkeletonForceBlock;
+    }
+
+    THullCheckStatus THull::CheckBlockCmdAndAllocLsn(ui64 tabletID, ui32 gen, ui64 issuerGuid, ui32 version,
+            TWriteSource writeSource, ui32 *actGen, TLsnSeg *seg, bool *versionChanged) {
         const TBlocksCache::TBlockedGen g(gen, issuerGuid);
         auto res = BlocksCache.IsBlocked(tabletID, g, actGen);
-        switch (res.Status) {
-            case TBlocksCache::EStatus::OK:
-                *actGen = gen;
-                // allocate lsn in case of success
-                *seg = Fields->LsnMngr->AllocLsnForHullAndSyncLog();
-                BlocksCache.UpdateInFlight(tabletID, g, seg->Point());
-                return {NKikimrProto::OK, "", false};
-            case TBlocksCache::EStatus::BLOCKED_PERS:
-                return {NKikimrProto::ALREADY, "already got", 0, false};
-            case TBlocksCache::EStatus::BLOCKED_INFLIGH:
-                return {NKikimrProto::ALREADY, "already got", res.Lsn, true};
+
+        if (ShouldCheckVersion(tabletID, writeSource)) {
+            const auto [actualVersion, lsn] = BlocksCache.FindMax(~tabletID);
+            if (version < actualVersion) {
+                return {NKikimrProto::ERROR, "obsolete tablet storage info version", lsn, lsn != 0, true};
+            } else if (actualVersion < version) {
+                if (res.Status != TBlocksCache::EStatus::OK) {
+                    // the version may only advance along with the block, so reject the whole command
+                    return {NKikimrProto::ERROR, "generation check failed while increasing tablet storage info version",
+                        res.Lsn, res.Status == TBlocksCache::EStatus::BLOCKED_INFLIGH};
+                }
+                *versionChanged = true;
+            }
+        }
+
+        if (res.Status == TBlocksCache::EStatus::OK) {
+            *actGen = gen;
+            *seg = *versionChanged
+                ? Fields->LsnMngr->AllocDiscreteLsnBatchForHullAndSyncLog(2)
+                : Fields->LsnMngr->AllocLsnForHullAndSyncLog();
+            if (*versionChanged) {
+                BlocksCache.UpdateInFlight(~tabletID, {version, 0}, seg->First);
+            }
+            BlocksCache.UpdateInFlight(tabletID, g, seg->Last);
+            return {NKikimrProto::OK, "", false};
+        } else {
+            return {NKikimrProto::ALREADY, "obsolete generation", res.Lsn, res.Status == TBlocksCache::EStatus::BLOCKED_INFLIGH};
         }
     }
 

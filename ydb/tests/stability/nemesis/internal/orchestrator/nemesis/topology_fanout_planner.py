@@ -20,7 +20,11 @@ from typing import ClassVar
 
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import require_external_cluster
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import (
+    NemesisPlannerBase,
+    normalize_candidates,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -75,8 +79,10 @@ class DataCenterFanoutPlanner(NemesisPlannerBase):
 
     # -- planner interface --------------------------------------------------
 
-    def scheduled_tick(self, hosts: list[str]) -> list[DispatchCommand]:
-        if not hosts:
+    def scheduled_tick(self, candidates: list[ChaosTarget]) -> list[DispatchCommand]:
+        targets = normalize_candidates(candidates)
+        host_set = {t.host for t in targets}
+        if not host_set:
             return []
         cluster = require_external_cluster()
         if cluster is None:
@@ -86,8 +92,7 @@ class DataCenterFanoutPlanner(NemesisPlannerBase):
             return []
         dc = next(self._dc_cycle_iter)
         dc_hosts = dc_map.get(dc, [])
-        # Only dispatch to hosts that are in the known agent host list
-        target_hosts = [h for h in dc_hosts if h in hosts]
+        target_hosts = [h for h in dc_hosts if h in host_set]
         if not target_hosts:
             return []
         with self._lock:
@@ -96,7 +101,7 @@ class DataCenterFanoutPlanner(NemesisPlannerBase):
         return [
             dispatch(
                 self._nemesis_type_key,
-                h,
+                ChaosTarget.for_datacenter(h, dc),
                 "inject",
                 {"datacenter": dc},
                 scenario_id=scenario_id,
@@ -162,8 +167,10 @@ class BridgePileFanoutPlanner(NemesisPlannerBase):
 
     # -- planner interface --------------------------------------------------
 
-    def scheduled_tick(self, hosts: list[str]) -> list[DispatchCommand]:
-        if not hosts:
+    def scheduled_tick(self, candidates: list[ChaosTarget]) -> list[DispatchCommand]:
+        targets = normalize_candidates(candidates)
+        host_set = {t.host for t in targets}
+        if not host_set:
             return []
         cluster = require_external_cluster()
         if cluster is None:
@@ -173,8 +180,7 @@ class BridgePileFanoutPlanner(NemesisPlannerBase):
             return []
         pile_id = random.choice(list(pile_map.keys()))
         pile_hosts = pile_map.get(pile_id, [])
-        # Only dispatch to hosts that are in the known agent host list
-        target_hosts = [h for h in pile_hosts if h in hosts]
+        target_hosts = [h for h in pile_hosts if h in host_set]
         if not target_hosts:
             return []
         with self._lock:
@@ -183,7 +189,7 @@ class BridgePileFanoutPlanner(NemesisPlannerBase):
         return [
             dispatch(
                 self._nemesis_type_key,
-                h,
+                ChaosTarget.for_pile(h, pile_id),
                 "inject",
                 {"bridge_pile_id": pile_id},
                 scenario_id=scenario_id,

@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
+from clickhouse_connect.datatypes.binary_value import _decode_binary_value
 from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.datatypes.string import String
 from clickhouse_connect.driver.bytesource import ByteArraySource
@@ -25,7 +26,12 @@ _JSON_NULL_STR = "null"
 
 logger = logging.getLogger(__name__)
 
-json_serialization_format = 0x1
+# Serialization version written in JSON insert prefixes.
+_JSON_SERIALIZATION_VERSION = 0x1
+
+# Deprecated module attribute retained for compatibility. Assigning it does not
+# change insert behavior.
+json_serialization_format = _JSON_SERIALIZATION_VERSION
 
 VariantState = namedtuple("VariantState", "discriminator_mode element_states")
 
@@ -89,6 +95,7 @@ def typed_variant(value: Any, type_name: str) -> TypedVariant:
 class Variant(ClickHouseType):
     __slots__ = ("element_types", "_python_map", "_name_index")
     python_type = object
+    valid_formats = "typed", "native"
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
@@ -128,7 +135,8 @@ class Variant(ClickHouseType):
         return VariantState(discriminator_mode, element_states)
 
     def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: VariantState) -> Sequence:
-        return read_variant_column(source, num_rows, ctx, self.element_types, read_state.element_states)
+        typed = self.read_format(ctx) == "typed"
+        return read_variant_column(source, num_rows, ctx, self.element_types, read_state.element_states, typed=typed)
 
     def write_column_prefix(self, dest: bytearray):
         write_uint64(0, dest)  # discriminator_mode = 0
@@ -181,6 +189,7 @@ def read_variant_column(
     ctx: QueryContext,
     variant_types: list[ClickHouseType],
     element_states: list[Any],
+    typed: bool = False,
 ) -> Sequence:
     v_count = len(variant_types)
     discriminators = source.read_array("B", num_rows)
@@ -199,12 +208,21 @@ def read_variant_column(
     sub_indexes = [0] * v_count
     col: list[Any] = []
     app_col = col.append
-    for disc in discriminators:
-        if disc == 255:
-            app_col(None)
-        else:
-            app_col(sub_columns[disc][sub_indexes[disc]])
-            sub_indexes[disc] += 1
+    if typed:
+        type_names = [t.name for t in variant_types]
+        for disc in discriminators:
+            if disc == 255:
+                app_col(None)
+            else:
+                app_col(TypedVariant(sub_columns[disc][sub_indexes[disc]], type_names[disc]))
+                sub_indexes[disc] += 1
+    else:
+        for disc in discriminators:
+            if disc == 255:
+                app_col(None)
+            else:
+                app_col(sub_columns[disc][sub_indexes[disc]])
+                sub_indexes[disc] += 1
     return col
 
 
@@ -380,7 +398,12 @@ def _validate_variant_length(binary_data: bytes, discriminator: int) -> bool:
     return True  # Unknown discriminator, skip validation
 
 
-def _decode_variant(binary_data: bytes, ctx: QueryContext, validate_length: bool = True):
+def _decode_variant(
+    binary_data: bytes,
+    ctx: QueryContext,
+    validate_length: bool = True,
+    decode_compound: bool = False,
+):
     """Try to decode variant-encoded binary data.
 
     Returns the decoded value on success, or the original bytes on failure
@@ -395,7 +418,18 @@ def _decode_variant(binary_data: bytes, ctx: QueryContext, validate_length: bool
 
     type_name = STANDARD_DISCRIMINATOR_TYPES.get(discriminator)
     if type_name is None:
-        return binary_data
+        # Compound decoding is opt-in. JSON shared data always stores
+        # <encoded type><serializeBinary value>, so the recursive decoder is
+        # always correct there. A Dynamic SharedVariant may instead hold a
+        # plain string, so that path keeps returning raw bytes until it has
+        # its own reproduction and tests.
+        if not decode_compound:
+            return binary_data
+        try:
+            return _decode_binary_value(binary_data, ctx)
+        except Exception as e:  # noqa: BLE001 - never raise out of a decode
+            logger.debug("Compound variant decode failed: %s", e)
+            return binary_data
 
     if validate_length and not _validate_variant_length(binary_data, discriminator):
         return None
@@ -423,7 +457,7 @@ def decode_shared_data_value(binary_data: bytes, ctx: QueryContext):
             return binary_data  # already decoded
         else:
             binary_data = bytes(binary_data)
-    return _decode_variant(binary_data, ctx)
+    return _decode_variant(binary_data, ctx, decode_compound=True)
 
 
 def decode_shared_variant_value(binary_data: bytes, ctx: QueryContext):
@@ -543,15 +577,8 @@ class JSON(ClickHouseType):
         if parts:
             self._name_suffix = f"({', '.join(parts)})"
 
-    @property
-    def insert_name(self):
-        if json_serialization_format == 0:
-            return "String"
-        return super().insert_name
-
     def write_column_prefix(self, dest: bytearray):
-        if json_serialization_format > 0:
-            write_uint64(json_serialization_format, dest)
+        write_uint64(_JSON_SERIALIZATION_VERSION, dest)
 
     def read_column_prefix(self, source: ByteSource, ctx: QueryContext) -> JSONState:
         serialize_version = source.read_uint64()

@@ -423,11 +423,15 @@ namespace NKikimr::NBlobDepot {
                     {"cookie", Ev->Cookie},
                     {"key", key},
                     {"blobId", id});
+                // This is the restore the MustRestoreFirst read asked for, so it inherits the kind of
+                // the reader: the payload is user data, but a tablet reading its own log during boot
+                // cannot get up until this copy lands.
                 SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
                         .BlobId = id,
                         .Buffer = TRope(TRcBuf(buffer)),
                         .Deadline = TInstant::Max(),
                         .WriteSource = TWriteSource::BlobDepotPut,
+                        .DataKind = Ev->Get()->Record.GetDataKind(),
                     }), (ui64)keep | (ui64)doNotKeep << 1);
                 const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
                 Y_ABORT_UNLESS(inserted);

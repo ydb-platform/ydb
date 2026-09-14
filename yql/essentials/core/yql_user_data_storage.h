@@ -16,7 +16,7 @@ class TUserDataStorage : public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TUserDataStorage>;
 
-public:
+
     TUserDataStorage(TFileStoragePtr fileStorage, TUserDataTable data, IUdfResolver::TPtr udfResolver, TUdfIndex::TPtr udfIndex);
     void SetTokenResolver(TTokenResolver tokenResolver);
     void SetUrlPreprocessor(IUrlPreprocessing::TPtr urlPreprocessing);
@@ -72,7 +72,7 @@ private:
     void TryFillUserDataUrl(TUserDataBlock& block) const;
     TUserDataBlock& RegisterLink(const TUserDataKey& key, TFileLinkPtr link);
 
-private:
+
     THoldingFileStorage FileStorage_;
     TUserDataTable UserData_;
     IUdfResolver::TPtr UdfResolver_;

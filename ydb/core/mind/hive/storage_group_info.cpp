@@ -27,7 +27,7 @@ bool TStorageGroupInfo::ReleaseAllocationUnit(const TLeaderTabletInfo::TChannel&
     return released;
 }
 
-void TStorageGroupInfo::UpdateStorageGroup(const TEvControllerSelectGroupsResult::TGroupParameters& groupParameters) {
+void TStorageGroupInfo::UpdateStorageGroup(const TGroupMetrics::TGroupParameters& groupParameters) {
     if (groupParameters.GetAssuredResources().HasIOPS()) {
         MaximumResources.IOPS = groupParameters.GetAssuredResources().GetIOPS();
     }

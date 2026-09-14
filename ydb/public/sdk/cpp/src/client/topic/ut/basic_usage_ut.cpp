@@ -28,6 +28,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <atomic>
+#include <mutex>
 #include <util/digest/murmur.h>
 #include <util/stream/zlib.h>
 
@@ -81,9 +82,19 @@ void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
         ui64 SeqNo;
         std::string Data;
     };
-    std::vector<TMessageInfo> messages;
-    messages.reserve(expectedCount);
-    NThreading::TPromise<void> donePromise = NThreading::NewPromise<void>();
+    // Handlers may still run after Close(); keep shared ownership so late callbacks are safe.
+    struct TState {
+        std::mutex Lock;
+        std::vector<TMessageInfo> Messages;
+        NThreading::TPromise<void> DonePromise = NThreading::NewPromise<void>();
+
+        std::vector<TMessageInfo> CopyMessages() {
+            std::lock_guard guard(Lock);
+            return Messages;
+        }
+    };
+    auto state = std::make_shared<TState>();
+    state->Messages.reserve(expectedCount);
 
     TTopicReadSettings topicSettings(topicPath);
     topicSettings.ReadFromTimestamp(TInstant::Zero());
@@ -93,24 +104,30 @@ void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
         .AutoPartitioningSupport(true)
         .AppendTopics(topicSettings);
 
-    readSettings.EventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) {
+    readSettings.EventHandlers_.SimpleDataHandlers([state, expectedCount](TReadSessionEvent::TDataReceivedEvent& ev) {
+        std::lock_guard guard(state->Lock);
         for (auto& msg : ev.GetMessages()) {
-            messages.push_back(TMessageInfo{
+            if (state->Messages.size() >= expectedCount) {
+                break;
+            }
+            state->Messages.push_back(TMessageInfo{
                 msg.GetPartitionSession()->GetPartitionId(),
                 TString(msg.GetProducerId()),
                 msg.GetSeqNo(),
                 TString(msg.GetData()),
             });
         }
-        if (messages.size() >= expectedCount) {
-            donePromise.SetValue();
+        if (state->Messages.size() >= expectedCount) {
+            state->DonePromise.TrySetValue();
         }
     }, true);
 
     auto readSession = client.CreateReadSession(readSettings);
-    UNIT_ASSERT_C(donePromise.GetFuture().Wait(timeout),
-        "Expected to read " << expectedCount << " messages within " << timeout << ", got " << messages.size());
+    UNIT_ASSERT_C(state->DonePromise.GetFuture().Wait(timeout),
+        "Expected to read " << expectedCount << " messages within " << timeout);
     readSession->Close(TDuration::Seconds(5));
+
+    const auto messages = state->CopyMessages();
 
     UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), expectedCount,
         "Read message count mismatch: got " << messages.size() << ", expected " << expectedCount);
@@ -336,6 +353,11 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
     ReadSession->Close(TDuration::MilliSeconds(10));
 }
 
+void CreateEmptyTopic(TTopicClient& client, const TString& topicName) {
+    auto status = client.CreateTopic(topicName, TCreateTopicSettings()).GetValueSync();
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+}
+
 Y_UNIT_TEST_SUITE(BasicUsage) {
     Y_UNIT_TEST(CreateTopicWithCustomName) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
@@ -430,6 +452,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         TCreateTopicSettings topics;
         topics.BeginAddConsumer()
@@ -586,6 +609,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         {
             TCreateTopicSettings topics;
@@ -606,6 +630,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto status = client.CreateTopic("topic_name", topics).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
         }
+
+        CreateEmptyTopic(client, "deadLetterQueue-topic-new");
 
         {
             TAlterTopicSettings topics;
@@ -644,6 +670,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         {
             TCreateTopicSettings topics;
@@ -702,6 +729,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "deadLetterQueue-topic");
 
         {
             TCreateTopicSettings topics;
@@ -776,6 +804,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
         }
 
+        CreateEmptyTopic(client, "dlq-topic");
+
         {
             TAlterTopicSettings topics;
             topics.BeginAlterConsumer()
@@ -808,6 +838,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
 
         TTopicClient client(setup.MakeDriver());
+        CreateEmptyTopic(client, "dlq-topic");
 
         {
             TCreateTopicSettings topics;
@@ -828,6 +859,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto status = client.CreateTopic("topic_name", topics).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
         }
+
+        CreateEmptyTopic(client, "dlq-topic-new");
 
         {
             TAlterTopicSettings topics;
@@ -1977,6 +2010,49 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
     }
 
+    Y_UNIT_TEST(Producer_WriteAfterSmallSessionIdleTimeout) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("producer_write_after_idle_timeout");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.SubSessionIdleTimeout(TDuration::MilliSeconds(500));
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+
+        auto describeResult = client.DescribeTopic(TEST_TOPIC).GetValueSync();
+        const auto& partitions = describeResult.GetTopicDescription().GetPartitions();
+        UNIT_ASSERT_EQUAL(partitions.size(), 1);
+        const auto partitionId = partitions.front().GetPartitionId();
+
+        auto producer = client.CreateProducer(writeSettings);
+        auto producerRaw = dynamic_cast<TProducer*>(producer.get());
+        auto msgData = TString(10_KB, 'a');
+
+        UNIT_ASSERT(producer->Write(TWriteMessage(partitionId, msgData)).IsQueued());
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+
+        for (int i = 0; i < 5; ++i) {
+            if (producerRaw->GetIdleSessionsCount() == 0 && producerRaw->GetSessionsCount() == 0) {
+                break;
+            }
+
+            Sleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(producerRaw->GetIdleSessionsCount(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(producerRaw->GetSessionsCount(), 0);
+
+        UNIT_ASSERT(producer->Write(TWriteMessage(partitionId, msgData)).IsQueued());
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, 2);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
+    }
+
     Y_UNIT_TEST(Producer_BlockingWrite) {
         auto settings = TTopicSdkTestSetup::MakeServerSettings();
         settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
@@ -2023,6 +2099,255 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsQueued());
         UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsTimeout());
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
+    }
+
+    Y_UNIT_TEST(Producer_WriteThenFlush) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("write_then_flush_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+
+        auto producer = client.CreateProducer(writeSettings);
+        auto msgData = TString(1_KB, 'a');
+
+        UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsQueued());
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, 1);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
+    }
+
+    Y_UNIT_TEST(Producer_WriteThenMultipleFlushes) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("write_then_multiple_flushes_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+        writeSettings.AsyncExecutionMode(true);
+
+        auto producer = client.CreateProducer(writeSettings);
+        auto msgData = TString(1_KB, 'a');
+
+        UNIT_ASSERT(producer->Write(TWriteMessage(msgData)).IsQueued());
+        auto flushFuture1 = producer->Flush();
+        auto flushFuture2 = producer->Flush();
+
+        UNIT_ASSERT(flushFuture1.GetValueSync().IsSuccess());
+        UNIT_ASSERT(flushFuture2.GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, 1);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
+    }
+
+    Y_UNIT_TEST(Producer_FlushAfterCloseAsyncMainWorker) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("flush_after_close_async_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+        writeSettings.AsyncExecutionMode(true);
+
+        auto producer = client.CreateProducer(writeSettings);
+
+        UNIT_ASSERT(producer->Close(TDuration::Zero()).IsSuccess());
+
+        auto flushFuture = producer->Flush();
+        UNIT_ASSERT(flushFuture.Wait(TDuration::Seconds(1)));
+        UNIT_ASSERT(flushFuture.GetValueSync().IsSuccess());
+    }
+
+    Y_UNIT_TEST(Producer_FlushWithoutMessagesAsyncMainWorker) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("flush_without_messages_async_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+        writeSettings.AsyncExecutionMode(true);
+
+        auto producer = client.CreateProducer(writeSettings);
+
+        auto flushFuture = producer->Flush();
+        UNIT_ASSERT(flushFuture.Wait(TDuration::Seconds(1)));
+        UNIT_ASSERT(flushFuture.GetValueSync().IsSuccess());
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
+    }
+
+    Y_UNIT_TEST(Producer_WriteFlushCloseMultiplePartitionsAsyncMainWorker) {
+        constexpr ui64 messagesCount = 32;
+
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("write_flush_close_multiple_partitions_async_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+        writeSettings.AsyncExecutionMode(true);
+
+        auto producer = client.CreateProducer(writeSettings);
+        auto msgData = TString(1_KB, 'a');
+
+        for (ui64 i = 0; i < messagesCount; ++i) {
+            TWriteMessage message("key-" + ToString(i), msgData);
+            UNIT_ASSERT_C(producer->Write(std::move(message)).IsQueued(), "Failed to write message " << i);
+        }
+
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, messagesCount);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
+    }
+
+    Y_UNIT_TEST(Producer_WriteAfterCloseAsyncMainWorker) {
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("write_after_close_async_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+        writeSettings.AsyncExecutionMode(true);
+
+        auto producer = client.CreateProducer(writeSettings);
+
+        UNIT_ASSERT(producer->Close(TDuration::Zero()).IsSuccess());
+
+        auto writeResult = producer->Write(TWriteMessage(TString(1_KB, 'a')));
+        UNIT_ASSERT(writeResult.IsError());
+        UNIT_ASSERT_VALUES_EQUAL(writeResult.ErrorMessage, "producer is closed");
+    }
+
+    Y_UNIT_TEST(Producer_ConcurrentZeroTimeoutWrites) {
+        constexpr size_t writersCount = 16;
+
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("concurrent_zero_timeout_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxMemoryUsage(10_MB);
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+
+        auto producer = client.CreateProducer(writeSettings);
+        auto msgData = TString(1_KB, 'a');
+        std::atomic<bool> start = false;
+        std::vector<std::thread> threads;
+        std::vector<std::optional<TWriteResult>> results(writersCount);
+
+        threads.reserve(writersCount);
+        for (size_t i = 0; i < writersCount; ++i) {
+            threads.emplace_back([&, i] {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                results[i] = producer->Write(TWriteMessage(msgData));
+            });
+        }
+
+        start.store(true, std::memory_order_release);
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        for (const auto& result : results) {
+            UNIT_ASSERT(result.has_value());
+            UNIT_ASSERT_C(result->IsQueued(), "Unexpected write status: " << static_cast<int>(result->Status));
+        }
+
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, writersCount);
+        UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
+    }
+
+    Y_UNIT_TEST(Producer_ConcurrentZeroTimeoutWritesAsyncMainWorker) {
+        constexpr size_t writersCount = 16;
+
+        auto settings = TTopicSdkTestSetup::MakeServerSettings();
+        settings.PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, settings, false};
+        TTopicClient client = setup.MakeClient();
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 4);
+
+        TProducerSettings writeSettings;
+        writeSettings.Path(setup.GetTopicPath(TEST_TOPIC));
+        writeSettings.Codec(ECodec::RAW);
+        writeSettings.ProducerIdPrefix("concurrent_zero_timeout_async_producer");
+        writeSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+        writeSettings.MaxMemoryUsage(10_MB);
+        writeSettings.MaxBlockTimeout(TDuration::Zero());
+        writeSettings.AsyncExecutionMode(true);
+
+        auto producer = client.CreateProducer(writeSettings);
+        auto msgData = TString(1_KB, 'a');
+        std::atomic<bool> start = false;
+        std::vector<std::thread> threads;
+        std::vector<std::optional<TWriteResult>> results(writersCount);
+
+        threads.reserve(writersCount);
+        for (size_t i = 0; i < writersCount; ++i) {
+            threads.emplace_back([&, i] {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                results[i] = producer->Write(TWriteMessage(msgData));
+            });
+        }
+
+        start.store(true, std::memory_order_release);
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        for (const auto& result : results) {
+            UNIT_ASSERT(result.has_value());
+            UNIT_ASSERT_C(result->IsQueued(), "Unexpected write status: " << static_cast<int>(result->Status));
+        }
+
+        UNIT_ASSERT(producer->Flush().GetValueSync().IsSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(producer->GetWriteStats().MessagesWritten, writersCount);
         UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
     }
 } // Y_UNIT_TEST_SUITE(BasicUsage)

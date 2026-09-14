@@ -1,0 +1,28 @@
+{
+  "module_name": "Oob",
+  "calling_convention": "unversioned_value",
+  "module_extension": "wasm",
+  "required_libraries": [],
+  "functions": [
+    {
+      "name": "crash",
+      "argument_types": [],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    },
+    {
+      "name": "bad_index",
+      "argument_types": [],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    },
+    {
+      "name": "null_deref",
+      "argument_types": [],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    },
+    {
+      "name": "bad_ref",
+      "argument_types": [],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    }
+  ]
+}

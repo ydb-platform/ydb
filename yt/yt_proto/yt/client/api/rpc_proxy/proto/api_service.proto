@@ -787,8 +787,8 @@ message TReqPushQueueProducer
     optional int64 epoch = 5;
     optional bytes user_meta = 6; // YSON
     optional int64 sequence_number = 7;
-
     optional bool require_sync_replica = 8;
+    optional bytes format = 9; // YSON-serialized TFormat
 
     required TRowsetDescriptor rowset_descriptor = 200;
 }
@@ -2840,6 +2840,51 @@ message TReadFileMeta
 }
 
 message TRspReadFile
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqPartitionFile
+{
+    message TFileReadRange
+    {
+        required int64 begin = 1;
+        optional int64 end = 2; // Missing means the range extends to the end of file.
+    }
+
+    required bytes path = 1; // YPath
+    repeated TFileReadRange ranges = 2;
+
+    optional TFetchChunkSpecConfig fetch_chunk_spec_config = 3;
+    optional bool fetch_cookie_node_descriptors = 4 [default = true];
+
+    optional TTransactionalOptions transactional_options = 100;
+}
+
+message TFilePartition
+{
+    required bytes cookie = 1; // YSON-serialized TFilePartitionCookiePtr
+    required int64 length = 2;
+}
+
+message TRspPartitionFile
+{
+    repeated TFilePartition partitions = 1;
+}
+
+message TReqReadFilePartition
+{
+    required bytes cookie = 1; // YSON-serialized TFilePartitionCookiePtr
+
+    optional bytes config = 2; // YSON-serialized TFileReaderConfig
+}
+
+message TRspReadFilePartition
+{
+}
+
+message TRspReadFilePartitionMeta
 {
 }
 

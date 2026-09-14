@@ -2,11 +2,11 @@
 
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
+#include <library/cpp/yt/containers/static_ring_queue.h>
+
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
-
-#include <yt/yt/core/misc/static_ring_queue.h>
 
 namespace NYT::NConcurrency {
 
@@ -152,10 +152,7 @@ TPropagatingStorage TPropagatingStorageManager::SwitchPropagatingStorage(TPropag
         if (newStorage.IsNull()) {
             return TPropagatingStorage();
         }
-        {
-            static const TPropagatingStorage Empty;
-            RunSwitchHandlers(Empty, newStorage, SwitchHandlerCount_.load(std::memory_order::acquire));
-        }
+        RunSwitchHandlers(EmptyPropagatingStorage(), newStorage, SwitchHandlerCount_.load(std::memory_order::acquire));
         // Lazily allocates the slot via GetOrCreate (does its own TLS lookup).
         // This branch is only taken once per fiber, so the extra lookup is
         // negligible.

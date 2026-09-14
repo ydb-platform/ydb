@@ -30,6 +30,7 @@ private:
             HFunc(TEvPQ::TEvInitCredentials, HandleInitCredentials);
             HFunc(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             HFunc(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+            HFunc(TEvPQ::TEvMirrorTopicDescription, HandleDescriptionResult);
             HFunc(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -40,6 +41,7 @@ private:
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+            HFunc(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFunc(TEvents::TEvPoisonPill, Handle);
             HFunc(TEvPQ::TEvMirrorTopicDescription, HandleDescriptionResult);
@@ -62,7 +64,6 @@ private:
     void DescribeTopic(const TActorContext& ctx);
 
     TString BuildLogPrefix() const override;
-    TString GetCurrentState() const;
 
 public:
     TMirrorDescriber(
@@ -90,6 +91,7 @@ private:
 
     bool CredentialsRequestInFlight = false;
     bool DescribeTopicRequestInFlight = false;
+    ui64 DescribeGeneration = 0;
 };
 
 }// NKikimr

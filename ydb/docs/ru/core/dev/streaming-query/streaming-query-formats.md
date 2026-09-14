@@ -69,6 +69,8 @@ END DO
 
 Подробнее о функциях: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
 
+Если в одном потоковом запросе используется запись в несколько топиков, все выходные топики должны быть различны.
+
 ## Форматы при чтении данных {#read_formats}
 
 ### Формат csv_with_names {#csv_with_names}

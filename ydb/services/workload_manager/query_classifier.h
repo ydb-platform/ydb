@@ -4,9 +4,14 @@
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
 #include <ydb/services/workload_manager/common/helpers.h>
+#include <ydb/services/workload_manager/common/resolver.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/snapshot.h>
 #include <ydb/library/aclib/aclib.h>
 
+
+namespace NKikimr {
+struct TAppData;
+}  // namespace NKikimr
 
 namespace NKikimr::NKqp {
 struct TUserRequestContext;
@@ -42,7 +47,7 @@ public:
 
     struct TResolvedPoolId {
         TString PoolId;
-        TString Resolver;
+        TResolver Resolver;
         // If true, session actor should apply PoolConfig directly and skip WMS admission actor.
         // Used when the pool has per-node caps (TotalCpu/TotalMemory) but no admission gating.
         bool SkipAdmission = false;
@@ -70,7 +75,7 @@ public:
 
     /// Pre compile classification
     [[nodiscard]]
-    virtual TPreCompileClassifyResult PreCompileClassify() = 0;
+    virtual TPreCompileClassifyResult PreCompileClassify(const NKqp::TUserRequestContext& userRequestContext) = 0;
 
     /// Refines classification once the query plan is available
     [[nodiscard]]
@@ -84,6 +89,14 @@ public:
 std::shared_ptr<IQueryClassifier> CreateQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
                                                         TClassifierConfigsView classifierView,
                                                         const TString& databaseId,
-                                                        TClassifyContext context);
+                                                        TClassifyContext context,
+                                                        std::optional<TString> resourcePoolForSharedReading);
+
+std::shared_ptr<IQueryClassifier> CreateQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
+                                                        TClassifierConfigsView classifierView,
+                                                        const TString& databaseId,
+                                                        TClassifyContext context,
+                                                        const TAppData& appData);
+
 
 } // namespace NKikimr::NWorkloadManager

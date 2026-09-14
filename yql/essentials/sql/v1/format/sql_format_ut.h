@@ -205,12 +205,24 @@ Y_UNIT_TEST(SecretOperations) {
         {// create with more than one setting
          "use plato; create secret `secret-name` with (value=\"secret_value\",inherit_permissions=fALSe);\n",
          "USE plato;\n\nCREATE SECRET `secret-name` WITH (value = 'secret_value', inherit_permissions = FALSE);\n"},
+        {// create if not exists
+         "use plato; create secret if not exists `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nCREATE SECRET IF NOT EXISTS `secret-name` WITH (value = 'secret_value');\n"},
+        {// create or replace
+         "use plato; create or replace secret `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nCREATE OR REPLACE SECRET `secret-name` WITH (value = 'secret_value');\n"},
         {// alter
          "use plato; alter secret `secret-name` with (value=\"secret_value\");\n",
          "USE plato;\n\nALTER SECRET `secret-name` WITH (value = 'secret_value');\n"},
+        {// alter if exists
+         "use plato; alter secret if exists `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nALTER SECRET IF EXISTS `secret-name` WITH (value = 'secret_value');\n"},
         {// drop
          "use plato; drop secret `secret-name`;\n",
          "USE plato;\n\nDROP SECRET `secret-name`;\n"},
+        {// drop if exists
+         "use plato; drop secret if exists `secret-name`;\n",
+         "USE plato;\n\nDROP SECRET IF EXISTS `secret-name`;\n"},
     };
 
     TSetup setup;
@@ -229,6 +241,15 @@ Y_UNIT_TEST(ShowCreateView) {
 Y_UNIT_TEST(ShowCreateExternalDataSource) {
     TCases cases = {
         {"use plato;show create external data source source;", "USE plato;\n\nSHOW CREATE EXTERNAL DATA SOURCE source;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(ShowCreateExternalTable) {
+    TCases cases = {
+        {"use plato;show create external table mytable;", "USE plato;\n\nSHOW CREATE EXTERNAL TABLE mytable;\n"},
     };
 
     TSetup setup;
@@ -1786,50 +1807,51 @@ Y_UNIT_TEST(UnaryOp) {
 }
 
 Y_UNIT_TEST(MatchRecognize) {
-    TCases cases = {{R"(
-pragma FeatureR010="prototype";
-USE plato;
-SELECT
-    *
-FROM Input MATCH_RECOGNIZE(
-    PARTITION BY a, b, c
-    ORDER BY ts
-    MEASURES LAST(B1.ts) AS b1, LAST(B3.ts) AS b3
-    ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW INITIAL
-    PATTERN ( A B2 + B3 )
-    SUBSET U = (C, D), W = (Q, P)
-    DEFINE A as A, B as B
-);
-)",
-                     R"(PRAGMA FeatureR010 = 'prototype';
+    TCases cases = {
+        {TrimIndent(R"sql(
+                USE plato;
+                SELECT
+                    *
+                FROM Input MATCH_RECOGNIZE(
+                    PARTITION BY a, b, c
+                    ORDER BY ts
+                    MEASURES LAST(B1.ts) AS b1, LAST(B3.ts) AS b3
+                    ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW INITIAL
+                    PATTERN ( A B2 + B3 )
+                    SUBSET U = (C, D), W = (Q, P)
+                    DEFINE A as A, B as B
+                );
+        )sql"),
+         TrimIndent(R"sql(
+                USE plato;
 
-USE plato;
+                SELECT
+                    *
+                FROM
+                    Input MATCH_RECOGNIZE (
+                        PARTITION BY
+                            a,
+                            b,
+                            c
+                        ORDER BY
+                            ts
+                        MEASURES
+                            LAST(B1.ts) AS b1,
+                            LAST(B3.ts) AS b3
+                        ONE ROW PER MATCH
+                        AFTER MATCH SKIP TO NEXT ROW
+                        INITIAL PATTERN (A B2 + B3)
+                        SUBSET
+                            U = (C, D),
+                            W = (Q, P)
+                        DEFINE
+                            A AS A,
+                            B AS B
+                    )
+                ;
 
-SELECT
-    *
-FROM
-    Input MATCH_RECOGNIZE (
-        PARTITION BY
-            a,
-            b,
-            c
-        ORDER BY
-            ts
-        MEASURES
-            LAST(B1.ts) AS b1,
-            LAST(B3.ts) AS b3
-        ONE ROW PER MATCH
-        AFTER MATCH SKIP TO NEXT ROW
-        INITIAL PATTERN (A B2 + B3)
-        SUBSET
-            U = (C, D),
-            W = (Q, P)
-        DEFINE
-            A AS A,
-            B AS B
-    )
-;
-)"}};
+        )sql")},
+    };
     TSetup setup;
     setup.Run(cases);
 }

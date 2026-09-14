@@ -269,6 +269,7 @@ const std::string& TClientRequest::GetUser() const
 
 void TClientRequest::SetUser(const std::string& user)
 {
+    YT_VERIFY(!user.empty());
     User_ = user;
 }
 
@@ -412,17 +413,17 @@ void TClientRequest::OnPullRequestAttachmentsStream()
     auto control = RequestControl_.Lock();
     if (!control) {
         RequestAttachmentsStream_->Abort(TError("Client request control is finalized")
-            << TErrorAttribute("request_id", GetRequestId()));
+            .With("request_id", GetRequestId()));
         return;
     }
 
-    YT_LOG_DEBUG("Request streaming attachments pulled (RequestId: %v, SequenceNumber: %v, Sizes: %v, Closed: %v)",
-        GetRequestId(),
-        payload->SequenceNumber,
-        MakeFormattableView(payload->Attachments, [] (auto* builder, const auto& attachment) {
+    YT_TLOG_DEBUG("Request streaming attachments pulled")
+        .With("RequestId", GetRequestId())
+        .With("SequenceNumber", payload->SequenceNumber)
+        .With("Sizes", MakeFormattableView(payload->Attachments, [] (auto* builder, const auto& attachment) {
             builder->AppendFormat("%v", GetStreamingAttachmentSize(attachment));
-        }),
-        !payload->Attachments.back());
+        }))
+        .With("Closed", !payload->Attachments.back());
 
     control->SendStreamingPayload(*payload).Subscribe(
         BIND(&TClientRequest::OnRequestStreamingPayloadAcked, MakeStrong(this), payload->SequenceNumber));
@@ -431,13 +432,14 @@ void TClientRequest::OnPullRequestAttachmentsStream()
 void TClientRequest::OnRequestStreamingPayloadAcked(int sequenceNumber, const TError& error)
 {
     if (error.IsOK()) {
-        YT_LOG_DEBUG("Request streaming payload delivery acknowledged (RequestId: %v, SequenceNumber: %v)",
-            GetRequestId(),
-            sequenceNumber);
+        YT_TLOG_DEBUG("Request streaming payload delivery acknowledged")
+            .With("RequestId", GetRequestId())
+            .With("SequenceNumber", sequenceNumber);
     } else {
-        YT_LOG_DEBUG(error, "Response streaming payload delivery failed (RequestId: %v, SequenceNumber: %v)",
-            GetRequestId(),
-            sequenceNumber);
+        YT_TLOG_DEBUG("Response streaming payload delivery failed")
+            .With("RequestId", GetRequestId())
+            .With("SequenceNumber", sequenceNumber)
+            .With(error);
         RequestAttachmentsStream_->Abort(error);
     }
 }
@@ -449,13 +451,13 @@ void TClientRequest::OnResponseAttachmentsStreamRead()
     auto control = RequestControl_.Lock();
     if (!control) {
         ResponseAttachmentsStream_->Abort(TError("Client request control is finalized")
-            << TErrorAttribute("request_id", GetRequestId()));
+            .With("request_id", GetRequestId()));
         return;
     }
 
-    YT_LOG_DEBUG("Response streaming attachments read (RequestId: %v, ReadPosition: %v)",
-        GetRequestId(),
-        feedback.ReadPosition);
+    YT_TLOG_DEBUG("Response streaming attachments read")
+        .With("RequestId", GetRequestId())
+        .With("ReadPosition", feedback.ReadPosition);
 
     control->SendStreamingFeedback(feedback).Subscribe(
         BIND(&TClientRequest::OnResponseStreamingFeedbackAcked, MakeStrong(this), feedback));
@@ -464,12 +466,13 @@ void TClientRequest::OnResponseAttachmentsStreamRead()
 void TClientRequest::OnResponseStreamingFeedbackAcked(const TStreamingFeedback& feedback, const TError& error)
 {
     if (error.IsOK()) {
-        YT_LOG_DEBUG("Response streaming feedback delivery acknowledged (RequestId: %v, ReadPosition: %v)",
-            GetRequestId(),
-            feedback.ReadPosition);
+        YT_TLOG_DEBUG("Response streaming feedback delivery acknowledged")
+            .With("RequestId", GetRequestId())
+            .With("ReadPosition", feedback.ReadPosition);
     } else {
-        YT_LOG_DEBUG(error, "Response streaming feedback delivery failed (RequestId: %v)",
-            GetRequestId());
+        YT_TLOG_DEBUG("Response streaming feedback delivery failed")
+            .With("RequestId", GetRequestId())
+            .With(error);
         ResponseAttachmentsStream_->Abort(error);
     }
 }
@@ -512,7 +515,7 @@ void TClientRequest::PrepareHeader()
         ToProto(Header_.mutable_response_attachments_dpt_parameters(), ResponseAttachmentsDptParameters_);
     }
 
-    if (!User_.empty() && User_ != RootUserName) {
+    if (User_ != RootUserName) {
         Header_.set_user(User_);
     }
 
@@ -608,7 +611,7 @@ IDirectPlacementTransferPtr TClientResponse::TryGetResponseAttachmentsTransfer()
     return ResponseAttachmentsTransfer_;
 }
 
-void TClientResponse::HandleError(TError error)
+void TClientResponse::HandleError(TError error, const std::string& address)
 {
     auto prevState = State_.exchange(EState::Done);
     if (prevState == EState::Done) {
@@ -622,19 +625,21 @@ void TClientResponse::HandleError(TError error)
         ClientContext_->GetFeatureIdFormatter());
 
     GetInvoker()->Invoke(
-        BIND(&TClientResponse::DoHandleError, MakeStrong(this), std::move(error)));
+        BIND(&TClientResponse::DoHandleError, MakeStrong(this), std::move(error), address));
 }
 
-void TClientResponse::DoHandleError(TError error)
+void TClientResponse::DoHandleError(TError error, const std::string& address)
 {
     NProfiling::TWallTimer timer;
+
+    Address_ = address;
 
     Finish(error);
 
     if (!ClientContext_->GetResponseHeavy() && timer.GetElapsedTime() > LightInvokerDurationWarningThreshold) {
-        YT_LOG_DEBUG("Handling light request error took too long (RequestId: %v, Duration: %v)",
-            ClientContext_->GetRequestId(),
-            timer.GetElapsedTime());
+        YT_TLOG_DEBUG("Handling light request error took too long")
+            .With("RequestId", ClientContext_->GetRequestId())
+            .With("Duration", timer.GetElapsedTime());
     }
 }
 
@@ -789,9 +794,9 @@ void TClientResponse::DoHandleResponse(
             Finish(error);
 
             if (!ClientContext_->GetResponseHeavy() && timer.GetElapsedTime() > LightInvokerDurationWarningThreshold) {
-                YT_LOG_DEBUG("Handling light response took too long (RequestId: %v, Duration: %v)",
-                    ClientContext_->GetRequestId(),
-                    timer.GetElapsedTime());
+                YT_TLOG_DEBUG("Handling light response took too long")
+                    .With("RequestId", ClientContext_->GetRequestId())
+                    .With("Duration", timer.GetElapsedTime());
             }
         }));
 }
@@ -800,8 +805,8 @@ void TClientResponse::HandleStreamingPayload(const TStreamingPayload& payload)
 {
     const auto& stream = ClientContext_->GetResponseAttachmentsStream();
     if (!stream) {
-        YT_LOG_DEBUG("Received streaming attachments payload for request with disabled streaming; ignored (RequestId: %v)",
-            ClientContext_->GetRequestId());
+        YT_TLOG_DEBUG("Received streaming attachments payload for request with disabled streaming; ignored")
+            .With("RequestId", ClientContext_->GetRequestId());
         return;
     }
 
@@ -812,8 +817,8 @@ void TClientResponse::HandleStreamingFeedback(const TStreamingFeedback& feedback
 {
     const auto& stream = ClientContext_->GetRequestAttachmentsStream();
     if (!stream) {
-        YT_LOG_DEBUG("Received streaming attachments feedback for request with disabled streaming; ignored (RequestId: %v)",
-            ClientContext_->GetRequestId());
+        YT_TLOG_DEBUG("Received streaming attachments feedback for request with disabled streaming; ignored")
+            .With("RequestId", ClientContext_->GetRequestId());
         return;
     }
 

@@ -12,6 +12,10 @@
 
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 
+#include <cerrno>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
+
 using namespace NActors;
 
 namespace NInterconnect::NRdma {
@@ -88,8 +92,9 @@ public:
                 CqMap.emplace(rdmaCtx, TWaitPollerReg(ev));
                 return;
             }
-            LOG_ERROR_IC("ICRDMA", "Unable to register async_fd: %d",
-                rdmaCtx->GetContext()->async_fd);
+            YDB_LOG_ERROR("Unable to register",
+                {"marker", "ICRDMA"},
+                {"asyncFd", rdmaCtx->GetContext()->async_fd});
         } else if (it->second.index() == 0) {
             cqPtr = std::get<0>(it->second).Cq;
         } else {
@@ -106,8 +111,9 @@ public:
     }
 
     void Handle(NActors::TEvPollerRegisterResult::TPtr& ev) {
-        LOG_DEBUG_IC("ICRDMA", "Got TEvPollerRegisterResult for fd: %d",
-                ev->Get()->Socket.Get()->GetDescriptor());
+        YDB_LOG_DEBUG("Got TEvPollerRegisterResult",
+            {"marker", "ICRDMA"},
+            {"fd", ev->Get()->Socket.Get()->GetDescriptor()});
         auto rdmaCtx = static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get())->GetContext();
         auto cqPtr = CqFactory(rdmaCtx, MemPool);
         auto it = CqMap.find(rdmaCtx);
@@ -133,8 +139,26 @@ public:
     }
 
     void Handle(NActors::TEvPollerReady::TPtr& ev) {
-        auto res = ProcessIbvAsyncEvents(static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get()));
-        Y_ABORT_UNLESS(res, "unable to get async event while poller told us is's ready");
+        auto* desc = static_cast<TAsyncEventDesctiptor*>(ev->Get()->Socket.Get());
+        for (;;) {
+            switch (ProcessIbvAsyncEvent(desc)) {
+                case EProcessAsyncEventResult::Processed:
+                    continue;
+
+                case EProcessAsyncEventResult::WouldBlock: {
+                    auto it = CqMap.find(desc->GetContext());
+                    Y_ABORT_UNLESS(it != CqMap.end());
+                    Y_ABORT_UNLESS(it->second.index() == 0);
+                    if (std::get<0>(it->second).AsyncEventToken->RequestReadNotificationAfterWouldBlock()) {
+                        continue;
+                    }
+                    return;
+                }
+
+                case EProcessAsyncEventResult::ContextRemoved:
+                    return;
+            }
+        }
     }
 
     void Handle(TEvents::TEvWakeup::TPtr&) {
@@ -204,22 +228,41 @@ private:
 
     void ProcessCqErr(auto it) {
         TCtxData& c = std::get<0>(it->second);
-        LOG_ERROR_IC("ICRDMA", "CQ/SRQ error issued on ctx %s, notify all pending cq callbacks",
-            it->first->ToString().data());
+        YDB_LOG_ERROR("CQ/SRQ error issued on ctx notify all pending cq callbacks",
+            {"marker", "ICRDMA"},
+            {"rdmaCtx", it->first->ToString().data()});
         c.Cq->NotifyErr();
     }
 
-    bool ProcessIbvAsyncEvents(const TAsyncEventDesctiptor* desc) {
+    enum class EProcessAsyncEventResult {
+        Processed,
+        WouldBlock,
+        ContextRemoved,
+    };
+
+    EProcessAsyncEventResult ProcessIbvAsyncEvent(const TAsyncEventDesctiptor* desc) {
         auto rdmaCtx = desc->GetContext();
         ibv_async_event async_event;
-        if (ibv_get_async_event(rdmaCtx->GetContext(), &async_event)) {
-            return false;
+        for (;;) {
+            if (!ibv_get_async_event(rdmaCtx->GetContext(), &async_event)) {
+                break;
+            }
+            const int error = errno;
+            if (error == EINTR) {
+                continue;
+            }
+            Y_ABORT_UNLESS(error == EAGAIN || error == EWOULDBLOCK,
+                "ibv_get_async_event failed with errno# %d", error);
+            return EProcessAsyncEventResult::WouldBlock;
         }
+
         auto it = CqMap.find(rdmaCtx);
         Y_ABORT_UNLESS(it != CqMap.end());
 
-        LOG_DEBUG_IC("ICRDMA", "RDMA async event issued on ctx %s, %s",
-            rdmaCtx->ToString().data(), GetAsyncEventDbg(rdmaCtx, async_event).data());
+        YDB_LOG_DEBUG("RDMA async event issued on ctx",
+            {"marker", "ICRDMA"},
+            {"rdmaCtx", rdmaCtx->ToString().data()},
+            {"eventDbg", GetAsyncEventDbg(rdmaCtx, async_event).data()});
 
         switch (async_event.event_type) {
             case IBV_EVENT_CQ_ERR:
@@ -237,13 +280,12 @@ private:
                 ProcessCqErr(it);
                 ibv_ack_async_event(&async_event);
                 CqMap.erase(it);
-                return true;
+                return EProcessAsyncEventResult::ContextRemoved;
             default:
-                std::get<0>(it->second).AsyncEventToken->Request(true, false);
-            break;
+                break;
         }
         ibv_ack_async_event(&async_event);
-        return true;
+        return EProcessAsyncEventResult::Processed;
     }
 
     struct TCtxData {

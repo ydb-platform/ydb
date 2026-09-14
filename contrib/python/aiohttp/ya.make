@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.10.6)
+VERSION(3.11.18)
 
 LICENSE(Apache-2.0)
 
@@ -12,6 +12,7 @@ PEERDIR(
     contrib/python/attrs
     contrib/python/frozenlist
     contrib/python/multidict
+    contrib/python/propcache
     contrib/python/yarl
     contrib/restricted/llhttp
 )
@@ -38,7 +39,13 @@ SRCS(
 PY_SRCS(
     TOP_LEVEL
     aiohttp/__init__.py
-    aiohttp/_helpers.pyi
+    aiohttp/_websocket/__init__.py
+    aiohttp/_websocket/helpers.py
+    aiohttp/_websocket/models.py
+    aiohttp/_websocket/reader.py
+    aiohttp/_websocket/reader_c.py
+    aiohttp/_websocket/reader_py.py
+    aiohttp/_websocket/writer.py
     aiohttp/abc.py
     aiohttp/base_protocol.py
     aiohttp/client.py
@@ -57,7 +64,6 @@ PY_SRCS(
     aiohttp/http_parser.py
     aiohttp/http_websocket.py
     aiohttp/http_writer.py
-    aiohttp/locks.py
     aiohttp/log.py
     aiohttp/multipart.py
     aiohttp/payload.py
@@ -85,16 +91,19 @@ PY_SRCS(
     aiohttp/web_ws.py
     aiohttp/worker.py
     CYTHON_C
-    aiohttp/_helpers.pyx
     aiohttp/_http_parser.pyx
     aiohttp/_http_writer.pyx
-    aiohttp/_websocket.pyx
+    CYTHON_CPP
+    aiohttp/_websocket/mask.pyx
 )
 
 RESOURCE_FILES(
     PREFIX contrib/python/aiohttp/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    aiohttp/_websocket/.hash/mask.pxd.hash
+    aiohttp/_websocket/.hash/mask.pyx.hash
+    aiohttp/_websocket/.hash/reader_c.pxd.hash
     aiohttp/py.typed
 )
 

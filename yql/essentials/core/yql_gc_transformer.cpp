@@ -7,21 +7,21 @@ namespace {
 
 class TGcNodeTransformer : public TSyncTransformerBase {
 public:
-    TGcNodeTransformer()
-    {}
+    TGcNodeTransformer() = default;
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         output = input;
 
-        if (!CurrentThreshold_)
+        if (!CurrentThreshold_) {
             CurrentThreshold_ = ctx.GcConfig.Settings.NodeCountThreshold;
+        }
 
         if (ctx.NodeAllocationCounter < LastGcCount_ + CurrentThreshold_) {
             return TStatus::Ok;
         }
 
         const auto oldSize = ctx.ExprNodes.size();
-        const auto zombies = std::partition(ctx.ExprNodes.begin(), ctx.ExprNodes.end(), std::bind(std::logical_not<bool>(), std::bind(&TExprNode::Dead, std::placeholders::_1)));
+        const auto zombies = std::partition(ctx.ExprNodes.begin(), ctx.ExprNodes.end(), std::bind(std::logical_not<>(), std::bind(&TExprNode::Dead, std::placeholders::_1)));
 
         for (auto it = zombies; ctx.ExprNodes.cend() != it; ++it) {
             const auto dead = it->get();

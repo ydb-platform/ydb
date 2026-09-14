@@ -39,6 +39,11 @@ struct TSpillerSettings {
 // 3};
 constexpr TSpillerSettings TestStorageSettings{.Buckets = 64, .BucketSizeBytes = (1 << 16), .SpillingPagesAtTime = 8};
 
+enum class EBucketAssign {
+    Hash,
+    RoundRobin,
+};
+
 enum ESpillResult {
     Spilling,
     FinishedSpilling,
@@ -88,15 +93,24 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
         return num;
     }
 
+    int NextRoundRobinBucket() {
+        const int index = RoundRobinCursor_;
+        RoundRobinCursor_ = (RoundRobinCursor_ + 1) % Settings.Buckets;
+        return index;
+    }
+
   public:
-    TBucketsSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout)
+    TBucketsSpiller(ISpiller::TPtr spiller, const NPackedTuple::TTupleLayout* layout,
+                    EBucketAssign assign = EBucketAssign::Hash)
         : Buckets_(Settings.Buckets)
         , Spiller_(spiller)
         , Layout_(layout)
+        , Assign_(assign)
     {}
 
     void AddRow(TSingleTuple tuple) {
-        int bucketIndex = Settings.BucketIndex(tuple);
+        const int bucketIndex =
+            Assign_ == EBucketAssign::RoundRobin ? NextRoundRobinBucket() : Settings.BucketIndex(tuple);
         TBucket& thisBucket = Buckets_[bucketIndex];
         thisBucket.BuildingPage.AppendTuple(tuple, Layout_);
         thisBucket.DetatchBuildingPageIfLimitReached<Settings.BucketSizeBytes>();
@@ -155,6 +169,8 @@ template <TSpillerSettings Settings> class TBucketsSpiller {
     ISpiller::TPtr Spiller_;
     std::optional<TMKQLVector<BlobIdAndBucketIndex>> SpillingPages_;
     const NPackedTuple::TTupleLayout* Layout_;
+    EBucketAssign Assign_ = EBucketAssign::Hash;
+    int RoundRobinCursor_ = 0;
 };
 
 template <TSpillerSettings Settings> class TProbeSpiller {
@@ -234,8 +250,17 @@ template <TSpillerSettings Settings> class TProbeSpiller {
         }
     }
 
-    bool IsBucketSpilled(int index) {
+    bool IsBucketSpilled(int index) const {
         return std::holds_alternative<TSides<TBucket>>(State_.Buckets[index]);
+    }
+
+    std::optional<int> FirstSpilledBucket() const {
+        for (int index = 0; index < std::ssize(State_.Buckets); ++index) {
+            if (IsBucketSpilled(index)) {
+                return index;
+            }
+        }
+        return std::nullopt;
     }
 
     State& GetState() {

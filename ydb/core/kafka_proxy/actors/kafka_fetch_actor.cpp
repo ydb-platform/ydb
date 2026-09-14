@@ -74,7 +74,7 @@ void TKafkaFetchActor::SendFetchRequests(const TActorContext& ctx) {
             .CanReadBatches = true,
             .RequestId = 0,
             .RlCtx = Context->RlContext,
-            .UserToken = Context->UserToken
+            .UserToken = Context->Token.UserToken
         };
         auto fetchActor = NKikimr::NPQ::CreatePQFetchRequestActor(request, NKikimr::MakeSchemeCacheID(), ctx.SelfID);
         auto actorId = ctx.Register(fetchActor);
@@ -178,6 +178,9 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
         partKafkaResponse.HighWatermark = partPQResponse.GetReadResult().GetMaxOffset();
         partKafkaResponse.LastStableOffset = partPQResponse.GetReadResult().GetMaxOffset();
         Response->ThrottleTimeMs = std::max(Response->ThrottleTimeMs, static_cast<i32>(partPQResponse.GetReadResult().GetWaitQuotaTimeMs()));
+        if (partPQResponse.GetReadResult().GetErrorCode() == NPersQueue::NErrorCode::EErrorCode::OK && topicResponse.Topic.has_value()) {
+            Context->RememberTopicAclOk(TString(topicResponse.Topic.value()));
+        }
         if (partPQResponse.GetReadResult().GetResult().size() == 0) {
             continue;
         }
@@ -258,7 +261,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     };
 
     for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
-        const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+        auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
         if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue;
         }
@@ -279,6 +282,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         if (isKafkaBatch) {
             flushRecordsBatch();
+            SetKafkaBatchBaseOffset(*dataChunk.MutableData(), result.GetOffset());
             addRawKafkaBatch(dataChunk, result.GetLogicalMessageCount());
             continue;
         }

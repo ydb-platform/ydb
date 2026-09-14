@@ -1,4 +1,5 @@
 #include "create_external_data_source_formatter.h"
+#include "create_external_table_formatter.h"
 #include "create_table_formatter.h"
 #include "create_view_formatter.h"
 #include "show_create.h"
@@ -14,6 +15,8 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
 
 
 namespace NKikimr {
@@ -32,6 +35,8 @@ TString ToString(NKikimrSchemeOp::EPathType pathType) {
             return "View";
         case NKikimrSchemeOp::EPathTypeExternalDataSource:
             return "ExternalDataSource";
+        case NKikimrSchemeOp::EPathTypeExternalTable:
+            return "ExternalTable";
         default:
             Y_ENSURE(false, "No user-friendly name for a path type: " << pathType);
             return "";
@@ -75,8 +80,8 @@ public:
             hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TScanActorBase: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -86,8 +91,8 @@ public:
             hFunc(NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult, Handle);
             sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TScanActorBase: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -106,8 +111,8 @@ private:
 
         AllowedByLimiter = true;
 
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Scan prepared, actor: " << TBase::SelfId());
+        YDB_LOG_INFO("TShowCreateScan::ProceedToScan: scan prepared",
+            {"actorId", TBase::SelfId()});
 
         ProceedToScan();
         return;
@@ -157,7 +162,7 @@ private:
         Path = cellsFrom[0].AsBuf();
         PathType = cellsFrom[1].AsBuf();
 
-        if (!IsIn({"Table", "View", "ExternalDataSource"}, PathType)) {
+        if (!IsIn({"Table", "View", "ExternalDataSource", "ExternalTable"}, PathType)) {
             return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                 << "Unsupported path type: " << PathType
             );
@@ -265,6 +270,7 @@ private:
                     case NKikimrSchemeOp::EPathTypeColumnTable:
                     case NKikimrSchemeOp::EPathTypeView:
                     case NKikimrSchemeOp::EPathTypeExternalDataSource:
+                    case NKikimrSchemeOp::EPathTypeExternalTable:
                         break;
 
                     default: {
@@ -363,6 +369,19 @@ private:
                         path = pathPair.second;
 
                         TCreateExternalDataSourceFormatter formatter;
+                        auto formatterResult = formatter.Format(*path, description, pathDescription.GetSelf());
+                        if (formatterResult.IsSuccess()) {
+                            createQuery = formatterResult.ExtractOut();
+                        } else {
+                            return ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
+                        }
+                        break;
+                    }
+                    case NKikimrSchemeOp::EPathTypeExternalTable: {
+                        const auto& description = pathDescription.GetExternalTableDescription();
+                        path = pathPair.second;
+
+                        TCreateExternalTableFormatter formatter;
                         auto formatterResult = formatter.Format(*path, description, pathDescription.GetSelf());
                         if (formatterResult.IsSuccess()) {
                             createQuery = formatterResult.ExtractOut();

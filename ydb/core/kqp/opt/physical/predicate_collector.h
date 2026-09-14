@@ -18,15 +18,17 @@ struct TOLAPPredicateNode {
 };
 
 struct TPushdownOptions {
-    TPushdownOptions(bool allowOlapApply, bool pushdownSubstring, bool stripAliasPrefixFromColName = false)
+    TPushdownOptions(bool allowOlapApply, bool pushdownSubstring, bool stripAliasPrefixFromColName = false, bool pushdownRegexp = false)
         : AllowOlapApply(allowOlapApply)
         , PushdownSubstring(pushdownSubstring)
-        , StripAliasPrefixFromColName(stripAliasPrefixFromColName) {
+        , StripAliasPrefixFromColName(stripAliasPrefixFromColName)
+        , PushdownRegexp(pushdownRegexp) {
     }
 
     bool AllowOlapApply{false};
     bool PushdownSubstring{false};
     bool StripAliasPrefixFromColName{false};
+    bool PushdownRegexp{false};
 };
 
 extern THashMap<TString, TString> IgnoreCaseSubstringMatchFunctions;

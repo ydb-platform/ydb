@@ -275,6 +275,10 @@ public:
                 case EYtWriteMode::Replace:
                     tableDesc.Intents |= TYtTableIntent::Replace;
                     break;
+                case EYtWriteMode::Create:
+                case EYtWriteMode::CreateIfNotExists:
+                    tableDesc.Intents |= TYtTableIntent::Create;
+                    break;
                 default:
                     ctx.AddError(TIssue(ctx.GetPosition(mode->Child(1)->Pos()), TStringBuilder() << "Unsupported "
                         << TYtPublish::CallableName() << " mode: " << mode->Child(1)->Content()));

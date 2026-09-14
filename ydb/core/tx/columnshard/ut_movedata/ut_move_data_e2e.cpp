@@ -422,8 +422,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
             }
         });
 
-        // Cleanup and GC stay off, so the answer cannot come before the later retirements exist.
-        // Compaction stays off too: anything it retired before the watermark froze would count as target.
+        // Cleanup and GC stay off so the answer waits for the later retirements; compaction off keeps earlier ones out.
         f.Controller->DisableBackground(EBackground::Compaction);
         f.Controller->DisableBackground(EBackground::Cleanup);
         f.Controller->DisableBackground(EBackground::GC);

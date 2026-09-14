@@ -62,7 +62,7 @@ public:
             const auto& id = it->first;
             const auto& version = it->second;
 
-            if (!Self->Workers.contains(id)) {
+            if (!Self->Workers.contains(id) || Self->RemoveQueue.contains(id)) {
                 Self->PendingHeartbeats.erase(it);
                 continue;
             }

@@ -24,6 +24,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/common/events
     ydb/core/kqp/common/simple
+    ydb/core/persqueue/common
     ydb/core/persqueue/events
     ydb/core/persqueue/public/codecs
     ydb/core/persqueue/writer

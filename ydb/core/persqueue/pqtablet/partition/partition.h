@@ -539,8 +539,8 @@ private:
     void ChangeScaleStatusIfNeeded(NKikimrPQ::EScaleStatus scaleStatus);
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
 
-    TLogPrefix LogPrefix() const;
-    const TLogPrefix& GetLogPrefix() const override;
+    TStructuredMessage BuildLogPrefix() const;
+    const TStructuredMessage& GetLogPrefix() const override;
 
     void Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr& ev, const TActorContext& ctx);
     void StartProcessChangeOwnerRequests(const TActorContext& ctx);
@@ -625,7 +625,6 @@ private:
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
         LOG_T("Handle event",
-            {"actorState", "StateInit"},
             {"event", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
@@ -685,7 +684,6 @@ private:
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
         LOG_T("Handle event",
-            {"actorState", "StateIdle"},
             {"event", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
@@ -871,9 +869,9 @@ private:
 
     TMaybe<TUsersInfoStorage> UsersInfoStorage;
 
-    mutable TMaybe<TLogPrefix> IdleLogPrefix;
-    mutable TMaybe<TLogPrefix> InitLogPrefix;
-    mutable TMaybe<TLogPrefix> UnknownLogPrefix;
+    mutable TMaybe<TStructuredMessage> IdleLogPrefix;
+    mutable TMaybe<TStructuredMessage> InitLogPrefix;
+    mutable TMaybe<TStructuredMessage> UnknownLogPrefix;
 
     struct TAffectedSourceIdsAndConsumers {
         TVector<TString> TxWriteSourcesIds;

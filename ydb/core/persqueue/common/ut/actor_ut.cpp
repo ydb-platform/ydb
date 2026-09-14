@@ -7,6 +7,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -17,6 +18,13 @@ using namespace NKikimr;
 using namespace NKikimr::NPQ;
 
 namespace {
+
+TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
+    TStringBuilder out;
+    NActors::NStructuredLog::TTextWriter writer;
+    writer.Write(out, prefix);
+    return out;
+}
 
 enum EEv {
     EvHandled = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -42,14 +50,14 @@ struct TEvText : TEventLocal<TEvText, EvText> {
 class TPrefixActor : public TBaseActor<TPrefixActor>
                    , public TConstantLogPrefix {
 public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::OTHER;
+    }
+
     explicit TPrefixActor(TActorId parent)
         : TBaseActor<TPrefixActor>(NKikimrServices::PERSQUEUE)
         , Parent(parent)
     {
-    }
-
-    TLogPrefix BuildLogPrefix() const override {
-        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "prefix"});
     }
 
     void Bootstrap() {
@@ -62,10 +70,11 @@ public:
         LOG_E("error");
         LOG_C("crit");
         LOG_A("alert");
-        const TLogPrefix& first = GetLogPrefix();
-        const TLogPrefix& second = GetLogPrefix();
+        const TStructuredMessage& first = GetLogPrefix();
+        const TStructuredMessage& second = GetLogPrefix();
+        Y_UNUSED(first);
         Y_UNUSED(second);
-        Send(Parent, new TEvText(TStringBuilder() << StructuredLogPrefixText(LogBuilder()) << StructuredLogPrefixText(first)));
+        Send(Parent, new TEvText(StructuredLogPrefixText(NPQ_LOG_PREFIX)));
     }
 
     void Handle(TEvents::TEvWakeup::TPtr& ev) {
@@ -94,10 +103,6 @@ public:
     {
     }
 
-    TLogPrefix BuildLogPrefix() const override {
-        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "exc"});
-    }
-
     void Bootstrap() {
         Become(&TThis::StateWork);
         std::runtime_error exc("boom");
@@ -114,6 +119,39 @@ public:
 
 private:
     const TActorId Parent;
+};
+
+class TRebuildActor : public TBaseActor<TRebuildActor> {
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::OTHER;
+    }
+
+    explicit TRebuildActor(TActorId parent)
+        : TBaseActor<TRebuildActor>(NKikimrServices::PERSQUEUE)
+        , Parent(parent)
+    {
+    }
+
+    TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE({"tag", Tag});
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        Send(Parent, new TEvText(StructuredLogPrefixText(NPQ_LOG_PREFIX)));
+        Tag = "second";
+        Send(Parent, new TEvText(StructuredLogPrefixText(NPQ_LOG_PREFIX)));
+        PassAway();
+    }
+
+    STRICT_STFUNC(StateWork,
+        cFunc(TEvents::TEvPoison::EventType, PassAway);
+    )
+
+private:
+    const TActorId Parent;
+    TString Tag = "first";
 };
 
 class TDefaultHooksActor : public TBaseActor<TDefaultHooksActor>
@@ -144,13 +182,13 @@ private:
 class TTabletExceptionActor : public TBaseTabletActor<TTabletExceptionActor>
                             , public TConstantLogPrefix {
 public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::OTHER;
+    }
+
     TTabletExceptionActor(ui64 tabletId, TActorId tabletActorId)
         : TBaseTabletActor<TTabletExceptionActor>(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     {
-    }
-
-    TLogPrefix BuildLogPrefix() const override {
-        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "tablet"});
     }
 
     void Bootstrap() {
@@ -173,10 +211,6 @@ public:
         , Pipes(this)
         , Parent(parent)
     {
-    }
-
-    TLogPrefix BuildLogPrefix() const override {
-        return YDB_LOG_CREATE_MESSAGE({"actorClassName", "pipe"});
     }
 
     void Bootstrap() {
@@ -227,7 +261,8 @@ Y_UNIT_TEST(LogPrefixEventStrAndMacros) {
 
     auto prefix = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
     UNIT_ASSERT(prefix);
-    UNIT_ASSERT(prefix->Get()->Value.Contains("actorClassName=prefix"));
+    UNIT_ASSERT(prefix->Get()->Value.Contains("actorActivityType=OTHER"));
+    UNIT_ASSERT(prefix->Get()->Value.Contains("selfId="));
 
     runtime.Send(new IEventHandle(actorId, edge, new TEvents::TEvWakeup()), 0, true);
     auto eventStr = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
@@ -237,6 +272,21 @@ Y_UNIT_TEST(LogPrefixEventStrAndMacros) {
     UNIT_ASSERT(eventStr->Get()->Value.Contains("Cookie"));
 
     runtime.Send(new IEventHandle(actorId, edge, new TEvents::TEvPoison()), 0, true);
+}
+
+Y_UNIT_TEST(RebuildLogPrefix) {
+    NActors::TTestBasicRuntime runtime(1, false);
+    InitRuntime(runtime, false);
+    auto edge = runtime.AllocateEdgeActor();
+    runtime.Register(new TRebuildActor(edge));
+
+    auto first = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
+    UNIT_ASSERT(first);
+    UNIT_ASSERT(first->Get()->Value.Contains("tag=first"));
+
+    auto second = runtime.GrabEdgeEvent<TEvText>(edge, TDuration::Seconds(5));
+    UNIT_ASSERT(second);
+    UNIT_ASSERT(second->Get()->Value.Contains("tag=second"));
 }
 
 Y_UNIT_TEST(UnhandledExceptionDisabled) {
@@ -288,7 +338,9 @@ Y_UNIT_TEST(TabletActorRestartsOnException) {
 
     auto prefix = runtime.GrabEdgeEvent<TEvText>(tablet, TDuration::Seconds(5));
     UNIT_ASSERT(prefix);
+    UNIT_ASSERT(prefix->Get()->Value.Contains("actorActivityType=OTHER"));
     UNIT_ASSERT(prefix->Get()->Value.Contains("tabletId=42"));
+    UNIT_ASSERT(prefix->Get()->Value.Contains("selfId="));
 
     auto poison = runtime.GrabEdgeEvent<TEvents::TEvPoison>(tablet, TDuration::Seconds(5));
     UNIT_ASSERT(poison);

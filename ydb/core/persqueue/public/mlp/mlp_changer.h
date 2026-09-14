@@ -50,9 +50,8 @@ public:
         TBase::PassAway();
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredMessage BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "MLPChanger"},
             {"topic", Settings.TopicName},
             {"consumer", Settings.Consumer});
     }

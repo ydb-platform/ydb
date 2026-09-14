@@ -21,9 +21,8 @@ public:
     void PassAway() override;
 
 protected:
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredMessage BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "MLPWriter"},
             {"topic", Settings.TopicName});
     }
 

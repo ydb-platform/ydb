@@ -41,6 +41,7 @@ TString EncodeAnchor(const TString& v) {
 TPersQueueReadBalancer::TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
+        , TLogPrefix(NKikimrServices::PERSQUEUE_READ_BALANCER)
         , Inited(false)
         , PathId(0)
         , Generation(0)
@@ -154,9 +155,7 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
         }
         return s;
     };
-    YDB_LOG_DEBUG("BALANCER INIT DONE dump logPrefix, getInitLog",
-        {"logPrefix", LogPrefix()},
-        {"getInitLog", getInitLog()});
+    LOG_D("BALANCER INIT DONE dump logPrefix, getInitLog", {"getInitLog", getInitLog()});
 
     for (auto &ev : UpdateEvents) {
         ctx.Send(ctx.SelfID, ev.Release());
@@ -178,8 +177,7 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
 }
 
 void TPersQueueReadBalancer::HandleWakeup(TEvents::TEvWakeup::TPtr& ev, const TActorContext &ctx) {
-    YDB_LOG_DEBUG("TPersQueueReadBalancer::HandleWakeup",
-        {"logPrefix", LogPrefix()});
+    LOG_D("TPersQueueReadBalancer::HandleWakeup");
 
     switch (ev->Get()->Tag) {
         case TPartitionScaleManager::TRY_SCALE_REQUEST_WAKE_UP_TAG: {
@@ -239,11 +237,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         if (!WaitingResponse.empty()) { //got transaction infly
             WaitingResponse.push_back(ev->Sender);
         } else { //version already applied
-            YDB_LOG_DEBUG("BALANCER Topic Tablet Config already applied version actor txId",
-                {"logPrefix", LogPrefix()},
-                {"topic", Topic},
-                {"tabletID", TabletID()},
-                {"version", record.GetVersion()},
+            LOG_D("BALANCER Topic Tablet Config already applied version actor txId", {"version", record.GetVersion()},
                 {"sender", ev->Sender},
                 {"txId", record.GetTxId()});
             THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
@@ -425,8 +419,9 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
 }
 
 
-TStringBuilder TPersQueueReadBalancer::LogPrefix() const {
-    return TStringBuilder() << "[" << TabletID() << "][" << Topic << "] ";
+TStructuredMessage TPersQueueReadBalancer::LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"topic", Topic});
 }
 
 
@@ -435,16 +430,12 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
     auto tabletId = ev->Get()->TabletId;
     auto it = TabletPipes.find(tabletId);
     if (it == TabletPipes.end() || it->second.PipeActor != ev->Get()->ClientId) {
-        YDB_LOG_DEBUG("TEvClientDestroyed for stale pipe",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId},
+        LOG_D("TEvClientDestroyed for stale pipe", {"partitionTabletId", tabletId},
             {"clientId", ev->Get()->ClientId});
         return;
     }
 
-    YDB_LOG_DEBUG("TEvClientDestroyed",
-        {"logPrefix", LogPrefix()},
-        {"tabletId", tabletId});
+    LOG_D("TEvClientDestroyed", {"partitionTabletId", tabletId});
 
     ClosePipe(tabletId, ctx);
     RequestTabletIfNeeded(tabletId, ctx, true);
@@ -456,9 +447,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
     auto tabletId = ev->Get()->TabletId;
     auto it = TabletPipes.find(tabletId);
     if (it == TabletPipes.end() || it->second.PipeActor != ev->Get()->ClientId) {
-        YDB_LOG_DEBUG("TEvClientConnected for stale pipe",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId},
+        LOG_D("TEvClientConnected for stale pipe", {"partitionTabletId", tabletId},
             {"clientId", ev->Get()->ClientId});
         return;
     }
@@ -469,10 +458,8 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         ClosePipe(ev->Get()->TabletId, ctx);
         RequestTabletIfNeeded(ev->Get()->TabletId, ctx, true);
 
-        YDB_LOG_ERROR("TEvClientConnected Status TabletId",
-            {"logPrefix", LogPrefix()},
-            {"status", ev->Get()->Status},
-            {"tabletId", tabletId});
+        LOG_E("TEvClientConnected Status TabletId", {"status", ev->Get()->Status},
+            {"partitionTabletId", tabletId});
         return;
     }
 
@@ -486,9 +473,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         ++ReadyPartitionTablets;
     }
 
-    YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
-        {"logPrefix", LogPrefix()},
-        {"tabletId", tabletId},
+    LOG_D("TEvClientConnected TabletId NodeId Generation", {"partitionTabletId", tabletId},
         {"nodeId", ev->Get()->ServerId.NodeId()},
         {"generation", ev->Get()->Generation});
 
@@ -545,9 +530,7 @@ void TPersQueueReadBalancer::RequestTabletIfNeeded(const ui64 tabletId, const TA
             StatsRequestTracker.Cookies[tabletId] = cookie;
         }
 
-        YDB_LOG_DEBUG("Send TEvPersQueue::TEvStatus",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId},
+        LOG_D("Send TEvPersQueue::TEvStatus", {"partitionTabletId", tabletId},
             {"cookie", cookie});
         NTabletPipe::SendData(ctx, pipeClient, new TEvPersQueue::TEvStatus("", true), cookie);
     }
@@ -629,9 +612,7 @@ void TPersQueueReadBalancer::CheckStat(const TActorContext& ctx) {
     UpdateCounters(ctx);
 
     TEvPersQueue::TEvPeriodicTopicStats* ev = GetStatsEvent();
-    YDB_LOG_DEBUG("Send TEvPeriodicTopicStats",
-        {"logPrefix", LogPrefix()},
-        {"pathId", PathId},
+    LOG_D("Send TEvPeriodicTopicStats", {"pathId", PathId},
         {"generation", Generation},
         {"statsReportRound", StatsReportRound},
         {"dataSize", TopicMetricsHandler->GetTopicMetrics().TotalDataSize},
@@ -750,10 +731,7 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPa
     if (SchemeShardId == msg->SchemeShardId &&
        (!SubDomainPathId || SubDomainPathId->OwnerId != msg->SchemeShardId))
     {
-        YDB_LOG_DEBUG("Discovered subdomain at RB",
-            {"logPrefix", LogPrefix()},
-            {"localPathId", msg->LocalPathId},
-            {"tabletID", TabletID()});
+        LOG_D("Discovered subdomain at RB", {"localPathId", msg->LocalPathId});
 
         SubDomainPathId.emplace(msg->SchemeShardId, msg->LocalPathId);
         Execute(new TTxWriteSubDomainPathId(this), ctx);
@@ -807,11 +785,8 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
             .GetDomainState()
             .GetDiskQuotaExceeded();
 
-        YDB_LOG_DEBUG("Discovered subdomain state, at RB",
-            {"logPrefix", LogPrefix()},
-            {"pathId", msg->PathId},
-            {"outOfSpace", outOfSpace},
-            {"tabletID", TabletID()});
+        LOG_D("Discovered subdomain state, at RB", {"pathId", msg->PathId},
+            {"outOfSpace", outOfSpace});
 
         SubDomainOutOfSpace = outOfSpace;
 
@@ -890,9 +865,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev, const TActorContext& ctx)
 {
     Y_UNUSED(ctx);
-    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerStatus",
-        {"logPrefix", LogPrefix()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+    LOG_D("Handle TEvPQ::TEvMLPConsumerStatus", {"ev", ev->Get()->Record.ShortDebugString()});
     MLPBalancer->Handle(ev);
 }
 
@@ -919,16 +892,13 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr&
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx) {
     if (!SplitMergeEnabled(TabletConfig)) {
-        YDB_LOG_DEBUG("Skip TEvPartitionScaleStatusChanged: autopartitioning disabled",
-            {"logPrefix", LogPrefix()});
+        LOG_D("Skip TEvPartitionScaleStatusChanged: autopartitioning disabled");
         return;
     }
     auto& record = ev->Get()->Record;
     auto* node = PartitionGraph.GetPartition(record.GetPartitionId());
     if (!node) {
-        YDB_LOG_DEBUG("Skip TEvPartitionScaleStatusChanged: partition not found",
-            {"logPrefix", LogPrefix()},
-            {"partitionId", record.GetPartitionId()});
+        LOG_D("Skip TEvPartitionScaleStatusChanged: partition not found", {"partitionId", record.GetPartitionId()});
         return;
     }
 
@@ -941,8 +911,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
             ctx
         );
     } else {
-        YDB_LOG_NOTICE("Skip TEvPartitionScaleStatusChanged: scale manager isn`t initialized",
-            {"logPrefix", LogPrefix()});
+        LOG_N("Skip TEvPartitionScaleStatusChanged: scale manager isn`t initialized");
     }
 }
 
@@ -958,8 +927,7 @@ void TPersQueueReadBalancer::Handle(TPartitionScaleRequest::TEvPartitionScaleReq
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx) {
-    YDB_LOG_DEBUG("Received TEvMirrorTopicDescription",
-        {"logPrefix", LogPrefix()});
+    LOG_D("Received TEvMirrorTopicDescription");
     if (!MirroringEnabled(TabletConfig)) {
         return;
     }
@@ -980,9 +948,7 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPGetPartitionRequest",
-        {"logPrefix", LogPrefix()},
-        {"ev", ev->Get()->Record.ShortDebugString()});
+    LOG_D("Handle TEvPQ::TEvMLPGetPartitionRequest", {"ev", ev->Get()->Record.ShortDebugString()});
     PendingMLPGetPartitionRequests.push_back(std::move(ev));
     if (!Inited) {
         return;
@@ -991,9 +957,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) 
 }
 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle",
-        {"logPrefix", LogPrefix()},
-        {"mlpGetRuntimeAttributesRequest", ev->Get()->Record.ShortDebugString()});
+    LOG_D("Handle", {"mlpGetRuntimeAttributesRequest", ev->Get()->Record.ShortDebugString()});
     if (StatsRequestTracker.StatsReceived) {
         return MLPBalancer->Handle(ev);
     }

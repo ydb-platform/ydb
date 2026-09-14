@@ -38,9 +38,8 @@ public:
         }
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredMessage BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "CreateTopic"},
             {"topic", Settings.Strategy->GetTopicName()});
     }
 

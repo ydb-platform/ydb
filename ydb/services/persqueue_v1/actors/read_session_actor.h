@@ -7,12 +7,11 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
-
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
@@ -22,7 +21,6 @@
 #include <google/protobuf/util/time_util.h>
 
 #include <type_traits>
-#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -163,10 +161,10 @@ struct TFormedReadResponse: public TSimpleRefCount<TFormedReadResponse<TServerMe
 
 template <EProtocol Protocol>
 class TReadSessionActor
-    : public TActorBootstrapped<TReadSessionActor<Protocol>>
+    : public NPQ::TBaseActor<TReadSessionActor<Protocol>>
     , private NPQ::TRlHelpers
-    , public NActors::IActorExceptionHandler
 {
+    using TBase = NPQ::TBaseActor<TReadSessionActor<Protocol>>;
     using TClientMessage = typename std::conditional_t<Protocol == EProtocol::PQv1,
         PersQueue::V1::MigrationStreamingReadClientMessage,
         Topic::StreamReadMessage::FromClient>;
@@ -227,6 +225,13 @@ public:
     }
 
     bool OnUnhandledException(const std::exception& exc) override;
+
+    NPQ::TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"sessionCookie", Cookie},
+            {"consumer", ClientPath},
+            {"session", Session});
+    }
 
 private:
     STFUNC(StateFunc) {
@@ -356,7 +361,7 @@ private:
     void SendReleaseSignal(TPartitionActorInfo& partition, bool kill, const TActorContext& ctx);
     void InformBalancerAboutRelease(TPartitionsMapIterator it, const TActorContext& ctx);
 
-    std::tuple<TString, ui32, ui64> GetReadFrom(const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) const;
+    std::tuple<TString, ui32, ui64> GetReadFrom(const NPersQueue::TTopicConverterPtr& topic) const;
 
     static ui32 NormalizeMaxReadMessagesCount(ui32 sourceValue);
     static ui32 NormalizeMaxReadSize(ui32 sourceValue);

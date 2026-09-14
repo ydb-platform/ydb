@@ -25,6 +25,7 @@ LIBRARY()
     )
 
     PEERDIR(
+        ydb/core/actorlib_impl
         ydb/core/protos
         ydb/core/blobstorage/vdisk/common
         ydb/library/pdisk_io

@@ -1,6 +1,7 @@
 #include "ddisk_actor.h"
 #include "direct_io_op.h"
 
+#include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/util/hp_timer_helpers.h>
@@ -28,6 +29,27 @@ namespace NKikimr::NDDisk {
             + dataSectorsCnt * sizeof(TPersistentBufferSectorInfo)
             + (hasPayloadChecksums ? dataSectorsCnt * sizeof(ui64) : 0);
     }
+
+    ui64 TDDiskActor::TPersistentBufferRegistrationToken::Generate(TMonotonic now) {
+        // Shared across PB incarnations in this process. A process restart invalidates
+        // the connection credentials required to obtain and use registration tokens.
+        static std::atomic<ui64> lastToken{0};
+        ui64 previous = lastToken.load(std::memory_order_relaxed);
+        for (;;) {
+            const ui64 token = Max(now.MicroSeconds(), previous + 1);
+            if (lastToken.compare_exchange_weak(previous, token, std::memory_order_relaxed)) {
+                return token;
+            }
+        }
+    }
+
+    TDDiskActor::TPersistentBufferRegistrationToken::TPersistentBufferRegistrationToken(
+            TMonotonic now, const TQueryCredentials& creds)
+        : Token(Generate(now))
+        , IssuedAt(now)
+        , Key{creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)}
+        , Generation(creds.Generation)
+    {}
 
     void TDDiskActor::IssuePersistentBufferChunkAllocation() {
         Y_ABORT_UNLESS(IsPersistentBufferActor);
@@ -723,7 +745,7 @@ namespace NKikimr::NDDisk {
                 if (barrier.Generation == Max<ui32>() && barrier.Lsn == Max<ui64>()) {
                     auto& removal = PersistentBufferRemovals[key];
                     removal.Stage = TPersistentBufferRemoval::EStage::Wait;
-                    const auto delay = TDuration::MilliSeconds(ui64(PersistentBufferFormat.RegistrationTimeoutMilliseconds) * 2);
+                    const auto delay = TDuration::Seconds(ui64(PersistentBufferFormat.RegistrationTimeoutSeconds) * 2);
                     // A restart starts a fresh grace interval; no pre-restart request may revive it.
                     removal.Deadline = TActivationContext::Now() + delay;
                     Schedule(delay, new TEvPrivate::TEvProcessPersistentBufferRemoval(key));
@@ -988,7 +1010,7 @@ namespace NKikimr::NDDisk {
                 auto& removal = PersistentBufferRemovals.at(key);
                 if (success && operation == EOperation::Close) {
                     removal.Stage = TPersistentBufferRemoval::EStage::Wait;
-                    const auto delay = TDuration::MilliSeconds(ui64(PersistentBufferFormat.RegistrationTimeoutMilliseconds) * 2);
+                    const auto delay = TDuration::Seconds(ui64(PersistentBufferFormat.RegistrationTimeoutSeconds) * 2);
                     removal.Deadline = TActivationContext::Now() + delay;
                     Schedule(delay, new TEvPrivate::TEvProcessPersistentBufferRemoval(key));
                 } else {
@@ -1906,40 +1928,30 @@ namespace NKikimr::NDDisk {
             reply(TStatus::OVERLOADED, "registration token limit reached");
             return;
         }
-        // Keep numbers unique across PB actor restarts within this process.
-        // A process restart invalidates the connection credentials checked above.
-        static std::atomic<ui64> nextToken{0};
-        const ui64 token = nextToken.fetch_add(1, std::memory_order_relaxed) + 1;
-        Y_ABORT_UNLESS(token, "registration token counter overflow");
-        PersistentBufferRegistrationTokens.emplace(token, TPersistentBufferRegistrationToken{
-            TActivationContext::Monotonic(),
-            {creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)},
-            creds.Generation});
+        const auto& token = PersistentBufferRegistrationTokens.emplace_back(TActivationContext::Monotonic(), creds);
         // Consumed tokens free their slots immediately, without accumulating expiry timers.
         if (!PersistentBufferRegistrationTokenExpiryScheduled) {
             PersistentBufferRegistrationTokenExpiryScheduled = true;
-            Schedule(TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds),
-                new TEvPrivate::TEvExpirePersistentBufferRegistrationToken);
+            CreateLongTimer(TDuration::Seconds(PersistentBufferFormat.RegistrationTimeoutSeconds),
+                new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvExpirePersistentBufferRegistrationToken));
         }
-        reply(TStatus::OK, {}, token);
+        reply(TStatus::OK, {}, token.Token);
     }
 
     void TDDiskActor::Handle(TEvPrivate::TEvExpirePersistentBufferRegistrationToken::TPtr) {
         const auto now = TActivationContext::Monotonic();
-        const auto timeout = TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds);
-        auto nextExpiry = TMonotonic::Max();
-        for (auto it = PersistentBufferRegistrationTokens.begin(); it != PersistentBufferRegistrationTokens.end();) {
-            const auto expiry = it->second.IssuedAt + timeout;
-            if (expiry <= now) {
-                PersistentBufferRegistrationTokens.erase(it++);
-            } else {
-                nextExpiry = Min(nextExpiry, expiry);
-                ++it;
-            }
-        }
+        const auto timeout = TDuration::Seconds(PersistentBufferFormat.RegistrationTimeoutSeconds);
+        const auto firstLive = std::lower_bound(PersistentBufferRegistrationTokens.begin(),
+            PersistentBufferRegistrationTokens.end(), now,
+            [timeout](const TPersistentBufferRegistrationToken& token, TMonotonic deadline) {
+                return token.IssuedAt + timeout <= deadline;
+            });
+        PersistentBufferRegistrationTokens.erase(PersistentBufferRegistrationTokens.begin(), firstLive);
         PersistentBufferRegistrationTokenExpiryScheduled = !PersistentBufferRegistrationTokens.empty();
         if (PersistentBufferRegistrationTokenExpiryScheduled) {
-            Schedule(nextExpiry - now, new TEvPrivate::TEvExpirePersistentBufferRegistrationToken);
+            const auto nextExpiry = PersistentBufferRegistrationTokens.front().IssuedAt + timeout;
+            CreateLongTimer(nextExpiry - now,
+                new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvExpirePersistentBufferRegistrationToken));
         }
     }
 
@@ -1954,16 +1966,20 @@ namespace NKikimr::NDDisk {
             SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(TStatus::INCORRECT_REQUEST, "invalid persistent buffer registration"));
             return;
         }
-        const auto tokenIt = PersistentBufferRegistrationTokens.find(record.GetToken());
-        if (tokenIt == PersistentBufferRegistrationTokens.end()
-                || TActivationContext::Monotonic() - tokenIt->second.IssuedAt
-                    >= TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds)) {
-            PersistentBufferRegistrationTokens.erase(record.GetToken());
+        const auto tokenIt = std::lower_bound(PersistentBufferRegistrationTokens.begin(),
+            PersistentBufferRegistrationTokens.end(), record.GetToken(),
+            [](const TPersistentBufferRegistrationToken& token, ui64 value) { return token.Token < value; });
+        const bool found = tokenIt != PersistentBufferRegistrationTokens.end() && tokenIt->Token == record.GetToken();
+        if (!found || TActivationContext::Monotonic() - tokenIt->IssuedAt
+                >= TDuration::Seconds(PersistentBufferFormat.RegistrationTimeoutSeconds)) {
+            if (found) {
+                PersistentBufferRegistrationTokens.erase(tokenIt);
+            }
             SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(
                 TStatus::OUTDATED, "registration token is unknown, expired or already used"));
             return;
         }
-        const auto& token = tokenIt->second;
+        const auto& token = *tokenIt;
         if (token.Key.TabletId != creds.TabletId || token.Key.DirectBlockGroupIndex != creds.DirectBlockGroupIndex
                 || token.Generation != creds.Generation) {
             SendReply(*ev, std::make_unique<TEvRegisterPersistentBufferResult>(

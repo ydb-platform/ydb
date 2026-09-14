@@ -78,6 +78,8 @@ message TPBufferConfig
     optional bool EnableChecksums = 18;
     // Registration token lifetime on the persistent buffer's monotonic clock.
     // Retirement waits twice this interval.
-    // Default 5000 milliseconds.
-    optional uint32 RegistrationTimeoutMilliseconds = 19;
+    // Default 5 seconds.
+    optional uint32 RegistrationTimeoutSeconds = 20;
+    reserved 19; // former RegistrationTimeoutMilliseconds, measured in milliseconds
+    reserved "RegistrationTimeoutMilliseconds";
 }

@@ -2262,7 +2262,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     Y_UNIT_TEST(PersistentBufferRemovalProgressesDuringAnotherTabletsBarrierWrite) {
         TTestContext ctx;
         NDDisk::TPersistentBufferFormat format;
-        format.RegistrationTimeoutMilliseconds = 100;
+        format.RegistrationTimeoutSeconds = 1;
         const auto disk = ctx.CreateDDisk(96, 1, format);
         const auto first = Connect(ctx, disk.PBServiceId, 100, 1);
         const auto second = Connect(ctx, disk.PBServiceId, 101, 1);
@@ -2283,7 +2283,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     Y_UNIT_TEST(PersistentBufferRemovalWithOneFreeSector) {
         TTestContext ctx;
         NDDisk::TPersistentBufferFormat format;
-        format.RegistrationTimeoutMilliseconds = 100;
+        format.RegistrationTimeoutSeconds = 1;
         const auto disk = ctx.CreateDDisk(96, 1, format);
         const auto creds = Connect(ctx, disk.PBServiceId, 100, 1);
         const auto actorId = ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.PBServiceId);
@@ -2348,11 +2348,63 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             "Persistent buffer must stop after receiving poison");
     }
 
+    Y_UNIT_TEST(PersistentBufferRegistrationTokenMonotonicSequence) {
+        using TToken = NDDisk::TDDiskActor::TPersistentBufferRegistrationToken;
+        const auto first = TToken::Generate(TMonotonic::Zero());
+        UNIT_ASSERT(first > 0);
+        const auto now = TMonotonic::MicroSeconds(first + 1000);
+        UNIT_ASSERT_VALUES_EQUAL(TToken::Generate(now), now.MicroSeconds());
+        for (ui64 i = 1; i <= 100; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(TToken::Generate(now), now.MicroSeconds() + i);
+        }
+        // Another PB can supply an earlier clock sample; tokens still increase.
+        UNIT_ASSERT_VALUES_EQUAL(TToken::Generate(TMonotonic::Zero()), now.MicroSeconds() + 101);
+    }
+
+    Y_UNIT_TEST(PersistentBufferRegistrationTokenQueueOrderAndExpiry) {
+        for (ui32 timeoutSeconds : {1, 30}) {
+            TTestContext ctx;
+            NDDisk::TPersistentBufferFormat format;
+            format.RegistrationTimeoutSeconds = timeoutSeconds;
+            const auto disk = ctx.CreateDDisk(121, 1, format);
+            const auto creds = Connect(ctx, disk.PBServiceId, 100, 1);
+            const auto first = GetRegistrationToken(ctx, disk.PBServiceId, creds);
+            const auto middle = GetRegistrationToken(ctx, disk.PBServiceId, creds);
+            const auto last = GetRegistrationToken(ctx, disk.PBServiceId, creds);
+            auto registerToken = [&](ui64 token, TReplyStatus::E status) {
+                AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
+                    new NDDisk::TEvRegisterPersistentBuffer(creds, token)), status);
+            };
+            registerToken(middle, TReplyStatus::INCORRECT_REQUEST);
+            registerToken(middle, TReplyStatus::OUTDATED);
+            registerToken(last, TReplyStatus::INCORRECT_REQUEST);
+            registerToken(first, TReplyStatus::INCORRECT_REQUEST);
+            const auto expired = GetRegistrationToken(ctx, disk.PBServiceId, creds);
+            const auto halfTimeout = TDuration::Seconds(timeoutSeconds) / 2;
+            auto advance = [&] {
+                ctx.Runtime.Schedule(halfTimeout,
+                    new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
+                WaitFromDDisk<TEvents::TEvWakeup>(ctx);
+            };
+            advance();
+            const auto live = GetRegistrationToken(ctx, disk.PBServiceId, creds);
+            advance();
+            const auto actorId = ctx.Runtime.GetNode(NodeId)->ActorSystem->LookupLocalService(disk.PBServiceId);
+            UNIT_ASSERT(ctx.Runtime.WrapInActorContext(actorId, [&](IActor* actor) {
+                const auto& tokens = static_cast<NDDisk::TDDiskActor*>(actor)->PersistentBufferRegistrationTokens;
+                UNIT_ASSERT_VALUES_EQUAL(tokens.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(tokens.front().Token, live);
+            }));
+            registerToken(expired, TReplyStatus::OUTDATED);
+            registerToken(live, TReplyStatus::INCORRECT_REQUEST);
+        }
+    }
+
     Y_UNIT_TEST(PersistentBufferRegistrationTokenLimit) {
         TTestContext ctx;
         NDDisk::TPersistentBufferFormat format;
         format.MaxRegistrationTokens = 2;
-        format.RegistrationTimeoutMilliseconds = 100;
+        format.RegistrationTimeoutSeconds = 1;
         const auto disk = ctx.CreateDDisk(118, 1, format);
         const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 0, false);
         const auto token = GetRegistrationToken(ctx, disk.PBServiceId, creds);
@@ -2374,7 +2426,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
                 == NDDisk::TDDiskActor::TEvPrivate::TEvExpirePersistentBufferRegistrationToken::EventType;
             return true;
         };
-        ctx.Runtime.Schedule(TDuration::MilliSeconds(100),
+        ctx.Runtime.Schedule(TDuration::Seconds(1),
             new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
         WaitFromDDisk<TEvents::TEvWakeup>(ctx);
         UNIT_ASSERT_VALUES_EQUAL(expiryEvents, 1);
@@ -2400,7 +2452,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TTestContext ctx;
         NDDisk::TPersistentBufferFormat format;
         format.MaxRegistrationTokens = 1;
-        format.RegistrationTimeoutMilliseconds = 100;
+        format.RegistrationTimeoutSeconds = 1;
         const auto disk = ctx.CreateDDisk(120, 1, format);
         const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 0, false);
         const auto token = GetRegistrationToken(ctx, disk.PBServiceId, creds);
@@ -2409,7 +2461,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         ctx.SendPDiskResponse(disk, *registration, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         AssertStatus(WaitFromDDisk<NDDisk::TEvRegisterPersistentBufferResult>(ctx), TReplyStatus::OK);
         auto advance = [&] {
-            ctx.Runtime.Schedule(TDuration::MilliSeconds(50),
+            ctx.Runtime.Schedule(TDuration::MilliSeconds(500),
                 new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
             WaitFromDDisk<TEvents::TEvWakeup>(ctx);
         };
@@ -2439,7 +2491,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         for (bool delayExpiryEvent : {false, true}) {
             TTestContext ctx;
             NDDisk::TPersistentBufferFormat format;
-            format.RegistrationTimeoutMilliseconds = 100;
+            format.RegistrationTimeoutSeconds = 1;
             const auto disk = ctx.CreateDDisk(114, 1, format);
             const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 0, false);
             const auto token = GetRegistrationToken(ctx, disk.PBServiceId, creds);
@@ -2456,7 +2508,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
                 return !delayExpiryEvent || event->GetTypeRewrite()
                     != NDDisk::TDDiskActor::TEvPrivate::TEvExpirePersistentBufferRegistrationToken::EventType;
             };
-            ctx.Runtime.Schedule(TDuration::MilliSeconds(100),
+            ctx.Runtime.Schedule(TDuration::Seconds(1),
                 new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
             WaitFromDDisk<TEvents::TEvWakeup>(ctx);
             // Cleanup happens without registrations. Even if its event is delayed,
@@ -2498,7 +2550,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     Y_UNIT_TEST(PersistentBufferQueuedRegistrationTokenExpires) {
         TTestContext ctx;
         NDDisk::TPersistentBufferFormat format;
-        format.RegistrationTimeoutMilliseconds = 100;
+        format.RegistrationTimeoutSeconds = 1;
         const auto disk = ctx.RegisterDDisk(116, 1, format);
         ctx.BeforePersistentBufferReady = [&] {
             const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 0, false);
@@ -2507,7 +2559,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             auto info = SendToDDiskAndWait<NDDisk::TEvPersistentBufferInfo>(ctx, disk.PBServiceId,
                 new NDDisk::TEvGetPersistentBufferInfo(false, false));
             UNIT_ASSERT_VALUES_EQUAL(info->Get()->PendingEvents, 1);
-            ctx.Runtime.Schedule(TDuration::MilliSeconds(100),
+            ctx.Runtime.Schedule(TDuration::Seconds(1),
                 new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
             WaitFromDDisk<TEvents::TEvWakeup>(ctx);
         };
@@ -2519,7 +2571,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         TTestContext ctx;
         // The timeout must not be the reason for rejecting the old token.
         NDDisk::TPersistentBufferFormat format;
-        format.RegistrationTimeoutMilliseconds = 3600000;
+        format.RegistrationTimeoutSeconds = 3600;
         const auto disk = ctx.CreateDDisk(117, 1, format);
         const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 0, false);
         const auto token = GetRegistrationToken(ctx, disk.PBServiceId, creds);
@@ -2530,7 +2582,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         ctx.Runtime.WaitForEdgeActorEvent<TEvents::TEvGone>(warden, false);
         const auto restarted = ctx.CreateDDisk(117, 1, format);
         const auto newCreds = Connect(ctx, restarted.PBServiceId, 100, 1, 0, false);
-        UNIT_ASSERT(ctx.Runtime.GetClock() - issuedAt < TDuration::MilliSeconds(format.RegistrationTimeoutMilliseconds));
+        UNIT_ASSERT(ctx.Runtime.GetClock() - issuedAt < TDuration::Seconds(format.RegistrationTimeoutSeconds));
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, restarted.PBServiceId,
             new NDDisk::TEvRegisterPersistentBuffer(newCreds, token)), TReplyStatus::OUTDATED);
         UNIT_ASSERT_UNEQUAL(token, GetRegistrationToken(ctx, restarted.PBServiceId, newCreds));
@@ -2539,7 +2591,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
     Y_UNIT_TEST(PersistentBufferRegistrationAndRemovalLifecycle) {
         TTestContext ctx;
         NDDisk::TPersistentBufferFormat format;
-        format.RegistrationTimeoutMilliseconds = 100;
+        format.RegistrationTimeoutSeconds = 1;
         const auto disk = ctx.CreateDDisk(97, 1, format);
         const auto creds = Connect(ctx, disk.PBServiceId, 100, 1, 7, false);
         ctx.Runtime.Schedule(TDuration::Seconds(10), new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
@@ -2598,7 +2650,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvRegisterPersistentBuffer(creds, GetRegistrationToken(ctx, disk.PBServiceId, creds))), TReplyStatus::INCORRECT_REQUEST);
         auto removal = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-        UNIT_ASSERT(ctx.Runtime.GetClock() - closeTime >= TDuration::MilliSeconds(200));
+        UNIT_ASSERT(ctx.Runtime.GetClock() - closeTime >= TDuration::Seconds(2));
         const auto removedData = removal->Get()->Data.ConvertToString();
         const auto* removed = reinterpret_cast<const NDDisk::TPersistentBufferBarriers*>(removedData.data());
         UNIT_ASSERT_VALUES_EQUAL(removed->Barriers[0].TabletId, 0);
@@ -2617,7 +2669,7 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         const auto creds = Connect(ctx, disk.PBServiceId, 101, 1, 0, false);
         ctx.Runtime.Schedule(TDuration::Seconds(10), new IEventHandle(ctx.Edge, ctx.Edge, new TEvents::TEvWakeup()), nullptr, NodeId);
         WaitFromDDisk<TEvents::TEvWakeup>(ctx);
-        UNIT_ASSERT_VALUES_EQUAL(NDDisk::TPersistentBufferFormat{}.RegistrationTimeoutMilliseconds, 5000);
+        UNIT_ASSERT_VALUES_EQUAL(NDDisk::TPersistentBufferFormat{}.RegistrationTimeoutSeconds, 5);
         AssertStatus(SendToDDiskAndWait<NDDisk::TEvRegisterPersistentBufferResult>(ctx, disk.PBServiceId,
             new NDDisk::TEvRegisterPersistentBuffer(creds, Max<ui64>())), TReplyStatus::OUTDATED);
         SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvRegisterPersistentBuffer(creds, GetRegistrationToken(ctx, disk.PBServiceId, creds)));

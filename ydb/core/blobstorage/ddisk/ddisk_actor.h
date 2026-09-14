@@ -30,6 +30,7 @@
 
 #include <array>
 #include <atomic>
+#include <deque>
 #include <optional>
 #include <queue>
 
@@ -1226,12 +1227,17 @@ namespace NKikimr::NDDisk {
         void CompletePersistentBufferBarrierWrite(TPersistentBufferDiskOperationInFlight& inflight);
         NKikimrBlobStorage::NDDisk::TReplyStatus::E CheckPersistentBufferOwnership(const TQueryCredentials& creds) const;
         struct TPersistentBufferRegistrationToken {
-            TMonotonic IssuedAt;
-            TPersistentBufferTabletKey Key;
-            ui32 Generation;
+            ui64 Token = 0;
+            TMonotonic IssuedAt = TMonotonic::Zero();
+            TPersistentBufferTabletKey Key{};
+            ui32 Generation = 0;
+
+            TPersistentBufferRegistrationToken() = default;
+            TPersistentBufferRegistrationToken(TMonotonic now, const TQueryCredentials& creds);
+            static ui64 Generate(TMonotonic now);
         };
-        // Actor-local only: tokens must never survive a persistent buffer restart.
-        absl::flat_hash_map<ui64, TPersistentBufferRegistrationToken> PersistentBufferRegistrationTokens;
+        // Actor-local, ordered by token and issue time; never survives a PB restart.
+        std::deque<TPersistentBufferRegistrationToken> PersistentBufferRegistrationTokens;
         bool PersistentBufferRegistrationTokenExpiryScheduled = false;
         void Handle(TEvGetPersistentBufferRegistrationToken::TPtr ev);
         void Handle(TEvPrivate::TEvExpirePersistentBufferRegistrationToken::TPtr ev);

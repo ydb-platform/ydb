@@ -655,6 +655,7 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
         NPrivate::Read<RecordsMeta>(body, _version, Records);
         for (auto& record : Records) {
             record.OwnPayload();
+            ValidateTimestampDelta(record.TimestampDelta);
         }
     } else {
         const TKafkaInt32 recordsCount = NPrivate::ReadArraySize<RecordsMeta>(body, _version);
@@ -676,6 +677,7 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
         }
         for (auto& record : Records) {
             record.OwnPayload();
+            ValidateTimestampDelta(record.TimestampDelta);
         }
     }
 }
@@ -732,6 +734,14 @@ i32 TKafkaRecordBatch::Size(TKafkaVersion _version) const {
     }
 
     return _collector.Size;
+}
+
+void TKafkaRecordBatch::ValidateTimestampDelta(TKafkaRecord::TimestampDeltaMeta::Type delta) const {
+    if ((delta > 0 && BaseTimestamp > std::numeric_limits<i64>::max() - delta) ||
+        (delta < 0 && BaseTimestamp < std::numeric_limits<i64>::min() - delta))
+    {
+        ythrow yexception() << "Kafka record timestamp overflow";
+    }
 }
 
 

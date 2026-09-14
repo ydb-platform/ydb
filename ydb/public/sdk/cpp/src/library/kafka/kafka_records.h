@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace NKafka {
 
@@ -443,6 +444,9 @@ public:
 
     void Compress(TKafkaVersion version = MessageMeta::PresentVersions.Max);
     void Decompress(TKafkaVersion version = MessageMeta::PresentVersions.Max);
+
+private:
+    void ValidateTimestampDelta(TKafkaRecord::TimestampDeltaMeta::Type delta) const;
 };
 
 

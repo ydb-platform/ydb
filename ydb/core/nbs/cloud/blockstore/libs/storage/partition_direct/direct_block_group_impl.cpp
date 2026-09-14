@@ -169,6 +169,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
+    const TVector<EHostHealth>& hostHealths,
     ui32 dbgConnectionsConfigGeneration,
     NTransport::TStorageTransportPtr storageTransport,
     NMonitoring::TDynamicCounterPtr counters)
@@ -192,11 +193,12 @@ TDirectBlockGroup::TDirectBlockGroup(
           TabletGeneration,
           static_cast<ui32>(DirectBlockGroupIndex),
           dbgConnectionsConfigGeneration)
-    , Oracle(StorageConfig, this)
+    , Oracle(StorageConfig, this, hostHealths)
     , Counters(std::move(counters))
 {
     Y_ABORT_UNLESS(IsSupportedBlockSize(BlockSize));
     Y_ASSERT(pbufferIds.size() == ddisksIds.size());
+    Y_ASSERT(hostHealths.size() == ddisksIds.size());
     Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
 
     for (THostIndex host = 0; host < ddisksIds.size(); ++host) {

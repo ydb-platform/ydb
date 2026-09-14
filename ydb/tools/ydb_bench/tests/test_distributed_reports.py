@@ -139,6 +139,15 @@ class DistributedReportsTest(unittest.TestCase):
         self.assertEqual(1, len(value["samples"]))
         self.assertIn("/distributed-ydb/same/", value["artifacts"][0]["url"])
         self.assertEqual([], service.local_ydb_metrics("run", "same", "verification")["samples"])
+        entries = service.local_ydb_comparison(["run"])["entries"]
+        self.assertEqual(
+            {("local-ydb", "same"), ("distributed-ydb", "same")},
+            {(item["benchmark"], item["profile"]) for item in entries},
+        )
+        pairs = [["run", "same"], ["run", "same", "distributed-ydb"]]
+        saved = service.save_comparison({"name": "Mixed benchmarks", "profiles": pairs, "baseline": pairs[1]})
+        self.assertEqual(pairs, saved["profiles"])
+        self.assertEqual(pairs[1], service.saved_comparisons()[0]["baseline"])
 
     @unittest.skipUnless(shutil.which("node"), "node is required for report route tests")
     def test_report_routes_preserve_benchmark_and_nested_profile(self):

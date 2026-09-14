@@ -302,6 +302,12 @@ _CSS += """
 .new-run-page .profile-list{display:flex;flex-wrap:wrap;gap:.2rem;border-bottom:1px solid #d0d5dd;margin:.8rem 0 1rem}
 .new-run-page .profile-list button{width:auto;margin:0 0 -1px;padding:.6rem .8rem;border:1px solid transparent;border-radius:5px 5px 0 0}
 .new-run-page .profile-list button.selected{background:#fff;color:var(--text);border-color:#d0d5dd;border-bottom-color:#fff;font-weight:650}
+.new-run-page .profile-tab{display:flex;align-items:center;max-width:100%;border:1px solid transparent;border-bottom:0;border-radius:5px 5px 0 0}
+.new-run-page .profile-tab.selected{border-color:#d0d5dd;background:#fff;margin-bottom:-1px}
+.new-run-page .profile-tab button{margin:0;border:0;border-radius:4px;padding:.5rem;overflow-wrap:anywhere}
+.new-run-page .profile-tab.selected [data-profile]{font-weight:650}
+.new-run-page .profile-tab .profile-action{width:2rem;padding:.35rem;display:inline-flex;justify-content:center}
+.new-run-page .profile-tab input{width:12rem;max-width:100%;margin:.25rem}
 .new-run-page .editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.5rem 2rem}
 .new-run-page .editor-grid h3{margin-top:0}.new-run-page .editor-wide{grid-column:1/-1}
 .new-run-page .editor-options{margin:1rem 0}.new-run-page .editor-options summary{cursor:pointer;color:var(--muted)}
@@ -850,7 +856,7 @@ function localYdbProfileEditor(profile){
   return '<div id=local-editor><div class=editor-grid><section><h3>Workload</h3>'+
     '<div class=form-grid>'+localSelect(
       'benchmark','Benchmark',profile.benchmark,editor.model.benchmarks.map(item=>item.name)
-    )+localField('profile-name','Profile name',profile.name,'letters, digits, . _ and -')+'</div>'+
+    )+'</div>'+
     '<div class=form-grid>'+localSelect(
       'local-workload-type','Type',workload.type,editor.model.local_ydb_workloads.map(item=>item.type)
     )+localSelect(
@@ -879,7 +885,7 @@ function localYdbProfileEditor(profile){
     localSelect('local-geometry-preset','Preset',geometry.preset,['single','storage','custom'])+geometryFields+
     '</div><h3>Actor system (static and dynamic nodes)</h3><div class=actor-flags>'+actorSystemFields+
     '</div><div class=form-grid>'+actorCpuFields+'</div></section><section class=editor-wide><h3>CPU placement</h3>'+affinity+'</section></div>'+
-    '<div class=toolbar><button class=danger id=delete-profile>Delete profile</button></div></div>'
+    '</div>'
 }
 function localNumber(id,minimum=1){
   const value=Number(document.querySelector('#'+id).value);
@@ -905,7 +911,7 @@ function localCpu(id,mode){
 function bindLocalYdbEditor(profile){
   const message=()=>document.querySelector('#editor-message');
   const update=event=>{try{
-    const benchmarkName=document.querySelector('#benchmark').value,name=document.querySelector('#profile-name').value.trim();
+    const benchmarkName=document.querySelector('#benchmark').value,name=profile.name;
     if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(name))throw Error('Profile name is unsafe.');
     if(editor.model.profiles.some(item=>
       item.key!==profile.key&&item.benchmark===benchmarkName&&item.name===name
@@ -1079,11 +1085,6 @@ function bindLocalYdbEditor(profile){
     if(event.target.id==='local-ydbd-binary'||localYdbNeedsRerender(event.target.id,loadLimitInputs))renderNew()
   }catch(error){message().innerHTML=displayError(error)}};
   for(const input of document.querySelectorAll('#local-editor input,#local-editor select'))input.onchange=update;
-  document.querySelector('#delete-profile').onclick=()=>{
-    editor.model.profiles=editor.model.profiles.filter(item=>item.key!==profile.key);
-    editor.selected=editor.model.profiles[0]?.key||null;editor.yaml=serializeConfig(editor.model);
-    saveDraft();renderNew()
-  }
 }
 """
     'function profileEditor(profile){\n'
@@ -1106,16 +1107,15 @@ function bindLocalYdbEditor(profile){
     "  return (memoryMb?'<div class=notice>Max"
     "imum private-buffer footprint per process: <strong>'+esc(memoryMb)+' MiB</strong>.</div>':'')+'<div class=form-grid><div"
     ' class=field><label>Benchmark</label><select id=benchmark>\'+editor.model.benchmarks.map(item=>\'<option value="\'+esc(item'
-    '.name)+\'" \'+(item.name===profile.benchmark?\'selected\':\'\')+\'>\'+esc(item.name)+\'</option>\').join(\'\')+\'</select></div>\'+fie'
-    "ld('profile-name','Profile name',profile.name,'letters, digits, . _ and -')+field('threads','Threads',compactIntegerRang"
+    '.name)+\'" \'+(item.name===profile.benchmark?\'selected\':\'\')+\'>\'+esc(item.name)+\'</option>\').join(\'\')+\'</select></div>\'+'
+    "field('threads','Threads',compactIntegerRang"
     "es(profile.threads),'values and ranges, for example 1-16')+parameterFields+field('duration','Duration (seconds)',profile"
     ".duration)+field('repetitions','Repetitions',profile.repetitions)+'</div><div class=field><label>Affinity modes</label><"
     'div class=checkboxes>\'+editor.model.affinity_modes.map(mode=>\'<label><input class=affinity type=checkbox value="\'+esc(mo'
     'de)+\'" \'+(profile.affinity.includes(mode)?\'checked\':\'\')+\'> \'+esc(mode)+\'</label>\').join(\'\')+\'</div></div><div class=tool'
     "bar><div class=field><label>Background load</label><div class=checkboxes>'+editor.model.background_load_modes.map(mode=>"
     "'<label><input class=background-load type=checkbox value=\"'+esc(mode)+'\" '+((profile.background_load||['none']).inclu"
-    "des(mode)?'checked':'')+'> '+esc(mode)+'</label>').join('')+'</div></div><button class=danger id=delete-profile>Delete pro"
-    "file</button></div>'\n"
+    "des(mode)?'checked':'')+'> '+esc(mode)+'</label>').join('')+'</div></div></div>'\n"
     '}\n'
     'function arrayField(value,minimum=1){\n'
     "  const parts=value.split(',').map(part=>part.trim()).filter(Boolean),values=[],seen=new Set;\n"
@@ -1138,7 +1138,7 @@ function bindLocalYdbEditor(profile){
     """
 function bindProfileEditor(profile){
   const update=event=>{try{
-    const name=document.querySelector('#profile-name').value.trim();
+    const name=profile.name;
     const benchmarkName=document.querySelector('#benchmark').value;
     const benchmark=editor.model.benchmarks.find(item=>item.name===benchmarkName);
     const benchmarkChanged=event?.target?.id==='benchmark';
@@ -1183,11 +1183,6 @@ function bindProfileEditor(profile){
     '#benchmark,#profile-name,#threads,[id^=parameter-],.parameter-choice,'+
     '#duration,#repetitions,.affinity,.background-load';
   for(const input of document.querySelectorAll(selector))input.onchange=update;
-  document.querySelector('#delete-profile').onclick=()=>{
-    editor.model.profiles=editor.model.profiles.filter(item=>item.key!==profile.key);
-    editor.selected=editor.model.profiles[0]?.key||null;editor.yaml=serializeConfig(editor.model);
-    saveDraft();renderNew()
-  }
 }
 """
     """
@@ -1211,6 +1206,56 @@ function addProfile(){
 """
     """
 const editorDetailState=new Map();
+function renameEditorProfile(profile,name){
+  name=name.trim();
+  if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(name))throw Error('Use 1–64 letters, digits, dots, underscores or hyphens; start with a letter or digit.');
+  if(editor.model.profiles.some(p=>p!==profile&&p.benchmark===profile.benchmark&&p.name===name)){
+    throw Error('A profile with this benchmark and name already exists.');
+  }
+  const oldKey=profile.key;profile.name=name;profile.key=profile.benchmark+'/'+name;
+  if(distributedView.has(oldKey)){const view=distributedView.get(oldKey);distributedView.delete(oldKey);distributedView.set(profile.key,view)}
+  editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();
+}
+function duplicateEditorProfile(profile){
+  const copy=JSON.parse(JSON.stringify(profile)),base=profile.name.slice(0,52);let suffix=1;
+  copy.name=base+'-copy';
+  while(editor.model.profiles.some(p=>p.benchmark===copy.benchmark&&p.name===copy.name))copy.name=base+'-copy-'+suffix++;
+  copy.key=copy.benchmark+'/'+copy.name;editor.model.profiles.push(copy);
+  editor.selected=copy.key;editor.yaml=serializeConfig(editor.model);saveDraft();return copy;
+}
+function removeEditorProfile(profile){
+  if(editor.model.profiles.length<=1)return;
+  const index=editor.model.profiles.indexOf(profile);if(index<0)return;
+  editor.model.profiles.splice(index,1);distributedView.delete(profile.key);
+  editor.selected=editor.model.profiles[Math.min(index,editor.model.profiles.length-1)].key;
+  editor.yaml=serializeConfig(editor.model);saveDraft();
+}
+function editorProfileTabs(selected){
+  const action=(id,label,symbol,extra='')=>'<button type=button class="profile-action '+extra+'" id="'+id+
+    '" aria-label="'+label+'" title="'+label+'" '+(id==='delete-profile'&&editor.model.profiles.length===1?'disabled':'')+'>'+symbol+'</button>';
+  return editor.model.profiles.map(profile=>'<div class="profile-tab '+(profile.key===selected?.key?'selected':'')+'">'+
+    '<button type=button data-profile="'+esc(profile.key)+'" aria-pressed="'+(profile.key===selected?.key)+'">'+
+    esc(profile.benchmark)+' / '+esc(profile.name)+'</button>'+(profile.key===selected?.key?
+      action('rename-profile','Rename profile','&#9998;')+action('duplicate-profile','Duplicate profile','&#10697;')+
+      action('delete-profile','Delete profile','&times;','danger'):'')+'</div>').join('');
+}
+function bindEditorProfileActions(profile){
+  document.querySelector('#duplicate-profile').onclick=()=>{duplicateEditorProfile(profile);renderNew()};
+  document.querySelector('#delete-profile').onclick=()=>{
+    if(editor.model.profiles.length>1&&confirm('Delete profile '+profile.name+'?')){removeEditorProfile(profile);renderNew()}
+  };
+  document.querySelector('#rename-profile').onclick=()=>{
+    const button=document.querySelector('.profile-tab.selected [data-profile]');
+    const input=document.createElement('input');input.value=profile.name;input.maxLength=64;input.setAttribute('aria-label','Profile name');
+    button.replaceWith(input);input.focus();input.select();
+    const commit=()=>{try{renameEditorProfile(profile,input.value);renderNew()}catch(error){
+      document.querySelector('#editor-message').innerHTML=displayError(error);input.focus();
+    }};
+    input.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();commit()}
+      if(event.key==='Escape'){event.preventDefault();renderNew()}};
+    document.querySelector('#rename-profile').onclick=commit;
+  };
+}
 function rememberEditorDetails(){
   const page=document.querySelector('.new-run-page');
   if(!page)return;
@@ -1252,12 +1297,11 @@ async function renderNew(tab){
     "(editor.model.profiles.some(profile=>profile.local_ydb&&!profile.local_ydb.load.values)?' · Duration depends on load search and verification':"
     "editor.model.profiles.some(profile=>profile.local_ydb)?' · Per-point measurement; startup and verification are additional':"
     "' · '+Math.ceil(summary.seconds)+' s measurement')+'</div>'"
-    '+\'<section class=profile-list>\'+editor.model.profiles.map(profile=>\'<button data-profile="\'+esc(profile.key)+\'" class="\'+(profi'
-    'le.key===selected?.key?\'selected\':\'\')+\'">\'+esc(profile.benchmark)+\' / \'+esc(profile.name)+\'</button>\').join(\'\')+'
+    '+\'<section class=profile-list>\'+editorProfileTabs(selected)+'
     "'<button id=add-profile>+ Add profile</button></section><section>'+ (selected?profileEditor(selected):'<div class=empty>Add a benchmark profile to begin.</div>')+"
     "'</section>'+editorRunOptions()+'</div>';app.innerHTML=shell('new',content);restoreEditorDetails();bindEditorControls();document.querySelector('#add-profile').onclic"
     "k=addProfile;for(const button of document.querySelectorAll('[data-profile]'))button.onclick=()=>{editor.selected=button."
-    "dataset.profile;renderNew()};if(selected){const benchmark=editor.model.benchmarks.find(item=>item.name===selected.bench"
+    "dataset.profile;renderNew()};if(selected){bindEditorProfileActions(selected);const benchmark=editor.model.benchmarks.find(item=>item.name===selected.bench"
     "mark);if(benchmark?.profile_kind==='distributed-ydb')bindDistributedEditor(selected);"
     "else if(benchmark?.profile_kind==='local-ydb')bindLocalYdbEditor(selected);else if(benchmark?.builder_supported)bindPro"
     "fileEditor(selected)}}\n"
@@ -1698,7 +1742,8 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     'rt.open=false}}\n'
     '  renderBoard()\n'
     '}\n'
-    "function localComparisonKey(item){return JSON.stringify([item.run,item.profile])}\n"
+    "function localComparisonPair(item){return item.benchmark==='distributed-ydb'?[item.run,item.profile,item.benchmark]:[item.run,item.profile]}\n"
+    "function localComparisonKey(item){return JSON.stringify(localComparisonPair(item))}\n"
     "function localComparisonId(item){return (item.host_name?item.host_name+' / ':'')+(item.run_id||item.run)+' / '+item.profile}\n"
     'function localComparisonConfig(item){\n'
     '  const parameters=item.parameters||{},workload=parameters.workload||{},geometry=parameters.geometry||{},client=parameters.client||{};\n'
@@ -1724,6 +1769,10 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     "    'Static CPUs':JSON.stringify(localComparisonStable(item.role_affinity?.static_nodes??null)),\n"
     "    'Dynamic CPUs':JSON.stringify(localComparisonStable(item.role_affinity?.dynamic_nodes??null))\n"
     "  };for(const [name,value] of Object.entries(workload.options||{}))values['Option '+name]=value;\n"
+    "  if(parameters.distributed){const distributed=parameters.distributed;values['Measurement scope']=item.measurement_scope;\n"
+    "    values['Cluster placement']=JSON.stringify(localComparisonStable(distributed.template??null));\n"
+    "    for(const [name,value] of Object.entries(distributed.cli_nodes||{}))values['CLI '+name]=JSON.stringify(localComparisonStable(value));\n"
+    "    for(const [name,value] of Object.entries(parameters.actor_system?.tenants||{}))values['Tenant '+name]=JSON.stringify(localComparisonStable(value));}\n"
     "  for(const [name,value] of Object.entries(load.search||{}))values['Search '+name]=value;\n"
     "  for(const [name,value] of Object.entries(objective))values['Objective '+name]=value;\n"
     "  values['Allow errors']=Boolean(load.allow_errors);return values\n"
@@ -1745,7 +1794,8 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     'function localComparisonSemantic(item){\n'
     '  const parameters=item.parameters||{},load=parameters.load||{},objective=load.objective||{type:\'points\'};\n'
     '  const schema=localResultSchema(item);return localComparisonStable({\n'
-    '    workload:parameters.workload||{},parameter:load.parameter,objective:objective.type,\n'
+    '    workload:parameters.workload||{},measurement_kind:item.measurement_kind||"single-cli",parameter:load.parameter,objective:objective.type,\n'
+    "    aggregate_workloads:item.measurement_kind==='aggregate'?Object.values(parameters.distributed?.cli_nodes||{}).map(c=>c.workload):null,\n"
     "    latency_percentile:objective.type==='latency-slo'?objective.percentile:null,\n"
     "    slo_metric:objective.type==='latency-slo'?localSloMetric(schema,objective.percentile):null,\n"
     '    result_schema_id:schema.schema_id,throughput_unit:schema.throughput_unit\n'
@@ -1792,7 +1842,7 @@ function bindChartTooltips(container,xName,xValues,seriesRows,metrics,colors,syn
     """
 function mountLocalYdbComparison(container,data,chartData=null){
   const all=data.entries||[];
-  if(!all.length){container.innerHTML='<div class=empty>No local YDB profiles in the selected runs.</div>';return}
+  if(!all.length){container.innerHTML='<div class=empty>No YDB profiles in the selected runs.</div>';return}
   const stateKey='ydb-bench-comparison-profiles:'+JSON.stringify([...new Set(all.map(item=>item.run))].sort());
   if(!container.dataset.restored&&!data.readonly){
     try{Object.assign(container.dataset,JSON.parse(sessionStorage.getItem(stateKey)||'{}'))}catch{}
@@ -1830,9 +1880,10 @@ function mountLocalYdbComparison(container,data,chartData=null){
       const slo=objective.type==='latency-slo';
       const known=latency!==null&&latency!==undefined&&Number.isFinite(Number(latency));
       const passing=known&&Number(latency)<=Number(objective.max_ms);
-      const href='#run/'+enc(item.run)+'/profile/'+enc('local-ydb/'+item.profile);
+      const href='#run/'+enc(item.run)+'/profile/'+enc((item.benchmark||'local-ydb')+'/'+item.profile);
       return '<tr><td><a href="'+esc(href)+'"><strong>'+esc(item.profile)+'</strong></a>'+
         (item===baseline?' <span class=muted>Baseline</span>':'')+
+        '<div class=muted>'+esc(item.benchmark||'local-ydb')+' · '+esc(item.measurement_scope||'Single CLI')+'</div>'+
         '<div class=muted>'+esc(item.host_name||'')+'</div><div class=muted title="'+esc(item.run_id||item.run)+'">'+
         esc(item.started_at?humanTime(item.started_at):(item.run_id||item.run))+' · '+esc(currentView.source)+'</div>'+
         '<div class=muted>'+esc(localSearchAxisLabel(item.parameters?.load?.parameter||'load',
@@ -2690,10 +2741,12 @@ function renderLocalYdbProfile(container,data){
       )).join('')+
       localChart('CPU by role','cpu_percent',xName,xValues,cpuSeries)+
       (errorSeries.length?localChart('Errors and retries','errors',xName,xValues,errorSeries):'')+'</div>';
-    const displayedMetrics=localDisplayedMetrics(resultSchema,objective);
+    const displayedMetrics=[...localDisplayedMetrics(resultSchema,objective)];
+    const retries=localMetricDescriptor(resultSchema,'retries');
+    if(retries&&!displayedMetrics.some(metric=>metric.name==='retries'))displayedMetrics.push(retries);
     const workloadHeaders=displayedMetrics.map(metric=>'<th title="'+
       esc(metric.description||'')+'">'+esc(localMetricLabel(resultSchema,metric.name))+
-      (metric.unit?' ('+esc(metric.unit)+')':'')+'</th>').join('');
+      (metric.unit&&!['errors','retries'].includes(metric.name)?' ('+esc(metric.unit)+')':'')+'</th>').join('');
     html+='<h3>Attempts</h3><div class=local-attempts-scroll tabindex=0 role=region aria-label="Search attempts">'+
       '<table class="local-attempts discovery-attempts"><thead><tr><th>#</th><th>'+esc(searchAxisLabel)+'</th>'+
       workloadHeaders+'<th>Verdict</th><th>Duration</th></tr></thead><tbody>'+
@@ -3299,24 +3352,29 @@ async function renderSavedComparisons(){
         '<label>Sort <select id=comparison-sort><option value=newest>Newest first</option><option value=oldest>Oldest first</option>'+
         '<option value=longest>Longest first</option></select></label></div><div class=table-scroll><table><thead><tr>'+
         '<th></th><th>Run / profiles</th><th>Started</th><th>Duration</th><th>Status</th></tr></thead><tbody id=comparison-runs></tbody></table></div>'+
-        '<h3 id=comparison-profiles-title>Profiles</h3><div id=comparison-load-status aria-live=polite></div>'+
-        '<div id=comparison-profile-options></div><label>Baseline <select id=comparison-baseline></select></label>');
+        '<section id=comparison-picked-profiles><h3 id=comparison-profiles-title>Profiles</h3><div id=comparison-load-status aria-live=polite></div>'+
+        '<div id=comparison-profile-options></div><label>Baseline <select id=comparison-baseline></select></label></section>');
+      app.querySelector('.filters').before(app.querySelector('#comparison-picked-profiles'));
       const element=id=>document.querySelector('#'+id);
       const drawProfiles=()=>{
         const available=[...chosenRuns].flatMap(id=>cache.get(id)||[]);
-        const choices=new Map(available.map(item=>[localComparisonKey(item),[item.run,item.profile]]));
+        const choices=new Map(available.map(item=>[localComparisonKey(item),localComparisonPair(item)]));
         for(const [key,pair] of selected)if(!choices.has(key))choices.set(key,pair);
         element('comparison-profile-options').innerHTML=[...choices].map(([key,pair])=>
           '<label class=comparison-profile-choice><input type=checkbox data-saved-profile value="'+esc(key)+'" '+(selected.has(key)?'checked':'')+'>'+
-          '<span>'+esc(pair[1])+'</span><span class=muted>'+esc(runs.find(run=>run.id===pair[0])?.host_name||'')+' · '+esc(runDisplay(pair[0]))+'</span></label>').join('')||
-          '<div class=muted>Select runs above to load profiles.</div>';
+          '<span>'+esc(pair[2]||'local-ydb')+' / '+esc(pair[1])+'</span><span class=muted>'+
+          esc(runs.find(run=>run.id===pair[0])?.host_name||'')+' · '+esc(runDisplay(pair[0]))+'</span></label>').join('')||
+          '<div class=muted>'+(chosenRuns.size?'No profiles available from the selected runs.':'Select runs below to load profiles.')+'</div>';
         element('comparison-profiles-title').textContent='Profiles · '+selected.size;
         if(!selected.has(baseline))baseline=selected.keys().next().value||'';
         element('comparison-baseline').innerHTML=[...selected].map(([key,pair])=>'<option value="'+esc(key)+'" '+
-          (key===baseline?'selected':'')+'>'+esc((runs.find(run=>run.id===pair[0])?.host_name||'')+' / '+runDisplay(pair[0])+' / '+pair[1])+'</option>').join('');
+          (key===baseline?'selected':'')+'>'+esc((runs.find(run=>run.id===pair[0])?.host_name||'')+' / '+runDisplay(pair[0])+
+          ' / '+(pair[2]||'local-ydb')+' / '+pair[1])+'</option>').join('');
         const loading=[...chosenRuns].filter(id=>pending.has(id));
         element('save-saved-comparison').disabled=saving||!!loading.length||!selected.size||!element('comparison-name').value.trim();
         element('comparison-load-status').innerHTML=(loading.length?'<div class=muted>Loading profiles for '+loading.length+' runs…</div>':'')+
+          [...chosenRuns].filter(id=>cache.has(id)&&!cache.get(id).length&&!errors.has(id)&&!pending.has(id))
+            .map(id=>'<div class=notice>'+esc(runDisplay(id))+': No local-ydb or distributed-ydb profiles in this run.</div>').join('')+
           [...chosenRuns].filter(id=>errors.has(id)).map(id=>'<div class=notice>'+esc(id+': '+errors.get(id))+
           ' <button data-retry-run="'+esc(id)+'">Retry</button></div>').join('');
         for(const input of app.querySelectorAll('[data-saved-profile]'))input.onchange=()=>{
@@ -3354,10 +3412,10 @@ async function renderSavedComparisons(){
           const result=await request;if(!active())return;
           cache.set(id,result.entries||[]);
           if(chosenRuns.has(id)&&autoSelect.has(id)){
-            for(const item of result.entries||[])selected.set(localComparisonKey(item),[item.run,item.profile]);
+            for(const item of result.entries||[])selected.set(localComparisonKey(item),localComparisonPair(item));
             autoSelect.delete(id)
           }
-          if(!(result.entries||[]).length)errors.set(id,'No local YDB profiles in this run')
+          if(!(result.entries||[]).length)cache.set(id,[])
         }catch(error){if(active())errors.set(id,error.message)}
         finally{pending.delete(id);if(active())drawProfiles()}
       };
@@ -3370,7 +3428,7 @@ async function renderSavedComparisons(){
           if(chosenRuns.size>=20){element('comparison-error').textContent='Select at most 20 runs.';return}
           chosenRuns.add(id);autoSelect.add(id);
           if(cache.has(id)){
-            for(const item of cache.get(id))selected.set(localComparisonKey(item),[item.run,item.profile]);
+            for(const item of cache.get(id))selected.set(localComparisonKey(item),localComparisonPair(item));
             autoSelect.delete(id)
           }else loadRun(id)
         }
@@ -5298,7 +5356,7 @@ class RunService:
             client = project(value.get("client"), ("threads",))
             actor_system = project(
                 value.get("actor_system"),
-                ("use_shared_threads", "use_united_pool", "use_ring_queue", "static_nodes", "dynamic_nodes"),
+                ("use_shared_threads", "use_united_pool", "use_ring_queue", "static_nodes", "dynamic_nodes", "tenants"),
             )
             load = project(value.get("load"), ("parameter", "allow_errors", "values", "search", "objective"))
             measurement = project(
@@ -5316,6 +5374,10 @@ class RunService:
                     ("load", load),
                     ("measurement", measurement),
                     ("affinity", affinity),
+                    (
+                        "distributed",
+                        project(value.get("distributed"), ("template", "tenant", "cli_nodes", "search_cli")),
+                    ),
                 )
                 if item
             }
@@ -5362,13 +5424,13 @@ class RunService:
                 raise BenchmarkError("run not found: {}".format(run_id))
             profiles = sorted(
                 {
-                    str(item["profile"])
+                    (item["benchmark"], str(item["profile"]))
                     for item in record.get("runs", []) + record.get("steps", [])
-                    if item.get("benchmark") == "local-ydb" and item.get("profile") is not None
+                    if item.get("benchmark") in ("local-ydb", "distributed-ydb") and item.get("profile") is not None
                 }
             )
-            for profile in profiles:
-                value = self.local_ydb_profile(run_id, profile)
+            for benchmark, profile in profiles:
+                value = self.local_ydb_profile(run_id, profile, benchmark)
                 result_schema = value.get("workload_result_schema")
                 compact_fields = (
                     "status",
@@ -5381,8 +5443,17 @@ class RunService:
                 entry = {
                     "run": run_id,
                     "profile": profile,
+                    "benchmark": benchmark,
                     **{name: value[name] for name in compact_fields if name in value},
                 }
+                distributed = value.get("parameters", {}).get("distributed", {})
+                aggregate = bool(distributed.get("cli_nodes")) and not distributed.get("search_cli")
+                entry["measurement_kind"] = "aggregate" if aggregate else "single-cli"
+                entry["measurement_scope"] = (
+                    "All CLI generators (sum throughput)"
+                    if aggregate
+                    else "CLI: " + distributed["search_cli"] if distributed.get("search_cli") else "Single CLI"
+                )
                 if isinstance(result_schema, dict):
                     entry["workload_result_schema"] = result_schema
                 projections = {
@@ -5510,7 +5581,8 @@ class RunService:
             raise BenchmarkError("Select between 1 and 100 profiles")
         if any(
             not isinstance(item, list)
-            or len(item) != 2
+            or len(item) not in (2, 3)
+            or (len(item) == 3 and item[2] != "distributed-ydb")
             or any(not isinstance(part, str) or not part or len(part) > 500 for part in item)
             for item in profiles
         ):

@@ -170,7 +170,12 @@ for(const tab of ['Cluster','Storage','Tenants','Load generators','Run policy'])
   distributedView.set(profile.key,{tab,item:''});
   globalThis.localYdbWorkloadDefinition=()=>({options:[],operations:['upsert'],slo_metrics:{p99:'p99_ms'}});
   const html=distributedProfileEditor(profile);assert(!html.includes('>YAML<'));
-  assert(html.includes('id=delete-profile>Delete profile</button>'));
+  assert(!html.includes('id=delete-profile'));
+  if(tab==='Cluster'){
+    assert(html.includes('<th>Tenant</th>'));assert(html.includes('<th>Affinity</th>'));
+    assert(html.includes('dc / dc-R1'));assert(html.includes('/Root/db'));
+    assert(html.includes('bundled'));assert(html.includes('No pinning'));
+  }
   assert(html.includes('<div class=tabs>'));
   assert(html.includes('class="active" data-distributed-tab="'+tab+'"'));
   assert(!html.includes('class=view-tabs'));
@@ -190,22 +195,39 @@ assert(distributedProfileEditor(searchProfile).includes('Maximum latency (ms)'))
 distributedSetLoadMode(draft,'c2','fixed');
 assert(!draft['cli-nodes'].c2.load.search);
 const legacy={...profile,distributed_config:{}};
-assert(distributedProfileEditor(legacy).includes('id=delete-profile'));
-let saved=0,rendered=0;const removeButton={};
-globalThis.document={querySelector:s=>s==='#delete-profile'?removeButton:null,querySelectorAll:()=>[]};
-globalThis.serializeConfig=model=>JSON.stringify(model.profiles);
-globalThis.saveDraft=()=>saved++;
-globalThis.renderNew=()=>rendered++;
-const other={key:'other'};
-editor.model={profiles:[profile,other]};
-bindDistributedEditor(profile);removeButton.onclick();
-assert.deepStrictEqual(editor.model.profiles,[other]);assert.equal(editor.selected,'other');
-assert.equal(editor.yaml,JSON.stringify([other]));assert(!distributedView.has(profile.key));
-editor.model.profiles=[legacy];
-bindDistributedEditor(legacy);removeButton.onclick();
-assert.deepStrictEqual(editor.model.profiles,[]);assert.equal(editor.selected,null);
-assert.equal(editor.yaml,'[]');assert.equal(saved,2);assert.equal(rendered,2);
+assert(!distributedProfileEditor(legacy).includes('id=delete-profile'));
 process.stdout.write('distributed-ydb:\\n  test:\\n'+lines.join('\\n'));
 """
         result = subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10)
         self.assertEqual({"distributed-ydb": {"test": self.raw}}, yaml.safe_load(result))
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required")
+    def test_common_profile_actions(self):
+        script = web._JS[
+            web._JS.index("function renameEditorProfile(") : web._JS.index("function rememberEditorDetails(")
+        ]
+        script = (
+            "const assert=require('assert');const editor={};const distributedView=new Map();const esc=String;" + script
+        )
+        script += """
+globalThis.serializeConfig=model=>JSON.stringify(model.profiles);
+let saved=0;globalThis.saveDraft=()=>saved++;
+for(const benchmark of ['local-ydb','distributed-ydb','ping-bench']){
+  const p={benchmark,name:'main',key:benchmark+'/main',config:{load:{values:[1,2]}}};
+  editor.model={profiles:[p]};distributedView.set(p.key,{tab:'Storage'});
+  assert(editorProfileTabs(p).includes('disabled'));
+  renameEditorProfile(p,'renamed');assert.equal(p.key,benchmark+'/renamed');
+  assert.equal(editor.selected,p.key);assert(distributedView.has(p.key));assert(!distributedView.has(benchmark+'/main'));
+  assert.throws(()=>renameEditorProfile(p,'bad/name'));
+  const copy=duplicateEditorProfile(p);assert.equal(copy.name,'renamed-copy');
+  copy.config.load.values.push(3);assert.deepStrictEqual(p.config.load.values,[1,2]);
+  assert.throws(()=>renameEditorProfile(copy,'renamed'));
+  const second=duplicateEditorProfile(p);assert.equal(second.name,'renamed-copy-1');
+  const html=editorProfileTabs(copy);assert.equal((html.match(/id="delete-profile"/g)||[]).length,1);
+  removeEditorProfile(second);removeEditorProfile(copy);removeEditorProfile(p);
+  assert.deepStrictEqual(editor.model.profiles,[p]);assert.equal(editor.selected,p.key);
+  assert.deepStrictEqual(JSON.parse(editor.yaml),[p]);
+}
+assert(saved>0);
+"""
+        subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)

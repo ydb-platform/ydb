@@ -89,7 +89,7 @@ function serializeDistributedYdb(lines,profile){
 }
 function distributedProfileEditor(profile){
   const raw=profile.distributed_config;
-  const actions='<div class=toolbar><button type=button class=danger id=delete-profile>Delete profile</button></div>';
+  const actions='';
   if(!raw?.['cli-nodes'])return '<div class=notice>This profile uses the legacy single-CLI load controller. Its YAML is preserved.</div>'+
     '<button type=button id=distributed-convert>Convert to fixed-load Builder</button>'+actions;
   const view=distributedView.get(profile.key)||{tab:'Cluster',item:''};distributedView.set(profile.key,view);
@@ -114,8 +114,17 @@ function distributedProfileEditor(profile){
     values.map(v=>'<option '+(v===value?'selected':'')+'>'+esc(v)+'</option>').join('')+'</select></label></div>';
   if(view.tab==='Cluster'){
     content='<strong>'+esc(template.name)+'</strong>'+template.host_ids.map(host=>
-      '<div class=distributed-host><strong>'+esc(hostRecord(host)?.name||host)+'</strong><div>'+
-      template.nodes.filter(n=>n.host_id===host).map(n=>esc(n.name)+' · '+esc(n.role)).join('<br>')+'</div></div>').join('');
+      '<div class=distributed-host><strong>'+esc(hostRecord(host)?.name||host)+'</strong><div class=table-scroll><table>'+
+      '<thead><tr><th>Node</th><th>Type</th><th>Tenant</th><th>DC / rack</th><th>Affinity</th><th>Binary</th></tr></thead><tbody>'+
+      template.nodes.filter(n=>n.host_id===host).map(n=>{
+        const affinity=n.affinity||{},location=n.location||{};
+        const placement=affinity.kind==='manual'?'CPUs: '+(affinity.cpus||[]).join(', '):
+          affinity.mode==='none'?'No pinning':(affinity.mode||'—')+(affinity.count?' · '+affinity.count+' CPUs':'');
+        return '<tr><td>'+esc(n.name)+'</td><td>'+esc(n.role)+'</td><td>'+
+          esc(n.role==='cli'?'—':n.role==='static'?'Shared infrastructure':n.tenant||'Unassigned')+'</td><td>'+
+          esc(n.role==='cli'?'—':[location.data_center,location.rack].filter(Boolean).join(' / ')||'Unassigned')+
+          '</td><td>'+esc(placement)+'</td><td>'+esc(n.binary||'—')+'</td></tr>';
+      }).join('')+'</tbody></table></div></div>').join('');
   }else if(view.tab==='Storage'||view.tab==='Tenants'){
     content='<div class=distributed-summary>'+template.nodes.filter(n=>view.tab==='Storage'?n.role==='static':n.role==='dynamic'&&n.tenant===view.item)
       .map(n=>esc(n.name)).join(' · ')+'</div><div class=form-grid>'+input('vCPU per node',[...path,'cpu-count'],object['cpu-count']??4,'number')+
@@ -165,12 +174,6 @@ function distributedProfileEditor(profile){
     '</div>':'')+'<section>'+content+'</section></div>'+actions+'</div>';
 }
 function bindDistributedEditor(profile){
-  document.querySelector('#delete-profile').onclick=()=>{
-    editor.model.profiles=editor.model.profiles.filter(item=>item.key!==profile.key);
-    distributedView.delete(profile.key);
-    editor.selected=editor.model.profiles[0]?.key||null;editor.yaml=serializeConfig(editor.model);
-    saveDraft();renderNew();
-  };
   const convert=document.querySelector('#distributed-convert');
   if(convert){convert.onclick=async()=>{
     if(!confirm('Replace the legacy workload/search settings with fixed-load defaults? The placement snapshot is retained.'))return;

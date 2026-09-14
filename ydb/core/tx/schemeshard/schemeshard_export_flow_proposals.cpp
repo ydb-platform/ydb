@@ -357,6 +357,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
             task.SetEnableChecksums(exportInfo.EnableChecksums);
             task.SetEnablePermissions(exportInfo.EnablePermissions);
+            task.SetEnableTableBackupAsSql(exportInfo.EnableTableBackupAsSql);
 
             FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx);
         }
@@ -379,6 +380,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
             task.SetEnableChecksums(exportInfo.EnableChecksums);
             task.SetEnablePermissions(exportInfo.EnablePermissions);
+            task.SetEnableTableBackupAsSql(exportInfo.EnableTableBackupAsSql);
 
             FillEncryptionSettings(task, exportSettings, exportInfo, itemIdx);
         }

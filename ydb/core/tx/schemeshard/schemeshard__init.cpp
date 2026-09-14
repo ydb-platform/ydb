@@ -861,7 +861,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString, TString> TBackupSettingsRec;
+    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString, TString, bool> TBackupSettingsRec;
     typedef TDeque<TBackupSettingsRec> TBackupSettingsRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -877,7 +877,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::EnableChecksums>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::EnablePermissions>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::ChangefeedUnderlyingTopics>(""),
-            rowSet.template GetValueOrDefault<typename SchemaTable::FSSettings>("")
+            rowSet.template GetValueOrDefault<typename SchemaTable::FSSettings>(""),
+            rowSet.template GetValueOrDefault<typename SchemaTable::EnableTableBackupAsSql>(false)
         );
     }
 
@@ -4543,6 +4544,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 bool enablePermissions = std::get<9>(rec);
                 TString changefeedUnderlyingTopics = std::get<10>(rec);
                 TString fsSerializedSettings = std::get<11>(rec);
+                bool enableTableBackupAsSql = std::get<12>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
 
@@ -4552,6 +4554,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
                     tableInfo->BackupSettings.SetEnableChecksums(enableChecksums);
                     tableInfo->BackupSettings.SetEnablePermissions(enablePermissions);
+                    tableInfo->BackupSettings.SetEnableTableBackupAsSql(enableTableBackupAsSql);
 
                     if (ytSerializedSettings) {
                         auto settings = tableInfo->BackupSettings.MutableYTSettings();

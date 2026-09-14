@@ -86,7 +86,7 @@ class Federation:
         def decorate(record, host):
             def pair(value):
                 owner, run = split_reference(value[0], host['id'])
-                return [reference(owner, run), value[1]]
+                return [reference(owner, run), *value[1:]]
 
             return {
                 **record,

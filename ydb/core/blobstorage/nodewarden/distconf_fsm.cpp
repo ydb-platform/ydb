@@ -22,16 +22,14 @@ namespace NKikimr::NStorage {
                 connected.push_back(nodeId);
             }
 
-            ui32 numConnected = 0;
-            ui32 numDisconnected = 0;
-            for (const auto& [nodeId, node] : AllNodeIds) {
-                ++(AllBoundNodes.contains(node) ? numConnected : numDisconnected);
-            }
-            MajorityOfNodesConnected = numConnected > numDisconnected;
-
             // recalculate global and local pile quorums
             Y_ABORT_UNLESS(StorageConfig);
             GlobalQuorum = HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, true);
+            const bool allNodesConnected = std::ranges::all_of(AllNodeIds, [&](const auto& node) {
+                return AllBoundNodes.contains(node.second);
+            });
+            NeedMoreNodes = !allNodesConnected
+                            && !HasNodeQuorum(*StorageConfig, connected, BridgePileNameMap, TBridgePileId(), *Cfg, nullptr, false);
 
             // recalculate unsynced piles' quorum too
             if (BridgeInfo) {
@@ -49,7 +47,10 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TDistributedConfigKeeper::CheckRootNodeStatus() {
+    void TDistributedConfigKeeper::ReconcileNodeRole() {
+        UpdateQuorums();
+        IssueNextBindRequest();
+
         Y_VERIFY_S(Binding ? (RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT) && !Scepter :
             RootState == ERootState::INITIAL || RootState == ERootState::ERROR_TIMEOUT ? !Scepter :
             static_cast<bool>(Scepter),
@@ -68,6 +69,8 @@ namespace NKikimr::NStorage {
         } else if (Scepter && !GlobalQuorum) {
             // if we have local pile quorum, then do not switch into error state, we'll start collecting configs locally
             SwitchToError("quorum lost");
+        } else if (Scepter && NeedMoreNodes && InvokeQ.empty()) {
+            Invoke(TCollectConfigsAndPropose{});
         }
     }
 

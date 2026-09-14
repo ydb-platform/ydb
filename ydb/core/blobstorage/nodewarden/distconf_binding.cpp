@@ -195,7 +195,7 @@ namespace NKikimr::NStorage {
         }
 
         Y_ABORT_UNLESS(QuorumValid);
-        if (MajorityOfNodesConnected) {
+        if (!NeedMoreNodes && GlobalQuorum) {
             return;
         }
 

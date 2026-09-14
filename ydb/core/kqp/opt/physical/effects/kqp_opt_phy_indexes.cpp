@@ -139,6 +139,7 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndex
                 case TIndexDescription::EType::GlobalJsonCompact:
                     YQL_ENSURE(useStreamIndex, "Compact fulltext index update requires EnableIndexStreamWrite");
                     continue;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw:
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                     if (index.KeyColumns.size() == 1) {
                         YQL_ENSURE(implTable->Next && !implTable->Next->Next);

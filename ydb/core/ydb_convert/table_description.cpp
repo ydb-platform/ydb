@@ -1993,6 +1993,28 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTreeHnsw: {
+            FillGlobalIndexSettings(
+                *index->mutable_global_vector_kmeans_tree_hnsw_index()->mutable_level_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NHnsw::LevelTablePosition)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_vector_kmeans_tree_hnsw_index()->mutable_hnsw_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NHnsw::HnswTablePosition)
+            );
+            const bool prefixVectorIndex = tableIndex.GetKeyColumnNames().size() > 1;
+            if (prefixVectorIndex) {
+                FillGlobalIndexSettings(
+                    *index->mutable_global_vector_kmeans_tree_hnsw_index()->mutable_prefix_table_settings(),
+                    tableIndex.GetIndexImplTableDescriptions(NTableIndex::NHnsw::PrefixTablePosition)
+                );
+            }
+
+            *index->mutable_global_vector_kmeans_tree_hnsw_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
+
+            *index->mutable_global_vector_kmeans_tree_hnsw_index()->mutable_hnsw_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetHnswSettings();
+            break;
+        }
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree: {
             FillGlobalIndexSettings(
                 *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
@@ -2252,6 +2274,11 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique);
             break;
 
+        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeHnswIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTreeHnsw);
+            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_hnsw_index().vector_settings();
+            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableHnswSettings() = index.global_vector_kmeans_tree_hnsw_index().hnsw_settings();
+            break;
         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
             *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();

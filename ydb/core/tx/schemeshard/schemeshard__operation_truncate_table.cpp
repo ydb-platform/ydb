@@ -411,6 +411,7 @@ bool DfsOnTableChildrenTree(
                                 result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Cannot truncate table with async indexes")};
                                 return false;
                             }
+                            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
                             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
                                 const auto& index = context.SS->Indexes.at(childPathId);
                                 bool isGlobalVectorIndex = index->IndexKeys.size() == 1;

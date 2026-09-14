@@ -221,6 +221,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 case NKikimrSchemeOp::EIndexTypeGlobal:
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
                 case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
@@ -251,6 +252,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
                 return TPathElement::EPathSubType::EPathSubTypeSyncIndexImplTable;
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
@@ -1592,7 +1594,12 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     const auto& indexPath = *indexPathPtr->Get();
 
     ui64 dataSize = 0;
+    const bool hnsw = indexInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw;
+    if (hnsw) {
+        for (size_t i = 0; i < 2 + (indexInfo->IndexKeys.size() > 1); ++i) entry.AddIndexImplTableDescriptions();
+    }
     for (const auto& indexImplTablePathId : indexPath.GetChildren()) {
+        if (hnsw && NTableIndex::IsBuildImplTable(indexImplTablePathId.first)) continue;
         const auto* tableInfoPtr = Tables.FindPtr(indexImplTablePathId.second);
         if (!tableInfoPtr) {
             // The impl table info may be legitimately absent while the table itself is being dropped:
@@ -1612,7 +1619,11 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         const auto& tableStats = tableInfo.GetStats().Aggregated;
         dataSize += tableStats.DataSize + tableStats.IndexSize;
 
-        auto* tableDescription = entry.AddIndexImplTableDescriptions();
+        auto* tableDescription = hnsw
+            ? entry.MutableIndexImplTableDescriptions(indexImplTablePathId.first == NTableIndex::NHnsw::HnswTable
+                ? NTableIndex::NHnsw::HnswTablePosition : indexImplTablePathId.first == NTableIndex::NKMeans::LevelTable
+                    ? NTableIndex::NHnsw::LevelTablePosition : NTableIndex::NHnsw::PrefixTablePosition)
+            : entry.AddIndexImplTableDescriptions();
         if (fillConfig) {
             FillPartitionConfig(tableInfo.PartitionConfig(), *tableDescription->MutablePartitionConfig());
         }
@@ -1644,6 +1655,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
                 Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
             }
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *entry.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
             break;

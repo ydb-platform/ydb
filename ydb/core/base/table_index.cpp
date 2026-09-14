@@ -44,6 +44,8 @@ const TString ImplTables[] = {
     ImplTable,
     TString{ImplTable} + NFulltext::RowIdSrcBuildSuffix,
     TString{ImplTable} + NKMeans::BuildSuffix0,
+    NHnsw::HnswTable,
+    NHnsw::BuildTable,
     NKMeans::LevelTable,
     NKMeans::PostingTable,
     NKMeans::PrefixTable,
@@ -68,6 +70,11 @@ constexpr std::string_view PrefixedGlobalKMeansTreeImplTables[] = {
     NKMeans::LevelTable, NKMeans::PostingTable, NKMeans::PrefixTable,
 };
 static_assert(std::is_sorted(std::begin(PrefixedGlobalKMeansTreeImplTables), std::end(PrefixedGlobalKMeansTreeImplTables)));
+
+constexpr std::string_view GlobalHnswImplTables[] = { NHnsw::HnswTable, NKMeans::LevelTable };
+static_assert(std::is_sorted(std::begin(GlobalHnswImplTables), std::end(GlobalHnswImplTables)));
+constexpr std::string_view PrefixedGlobalHnswImplTables[] = { NHnsw::HnswTable, NKMeans::LevelTable, NKMeans::PrefixTable };
+static_assert(std::is_sorted(std::begin(PrefixedGlobalHnswImplTables), std::end(PrefixedGlobalHnswImplTables)));
 
 constexpr std::string_view GlobalFulltextPlainImplTables[] = {
     ImplTable,
@@ -95,6 +102,7 @@ bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             return true;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
@@ -117,7 +125,8 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
 
     auto takeKeyColumns = index.KeyColumns.size();
     if (!isSecondaryIndex) { // vector and fulltext indexes have special embedding and text key columns
-        Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+        Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
@@ -172,6 +181,8 @@ std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::Table
             return NKikimrSchemeOp::EIndexTypeGlobalAsync;
         case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
             return NKikimrSchemeOp::EIndexTypeGlobalUnique;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeHnswIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw;
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
             return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex:
@@ -202,6 +213,7 @@ bool IsLocalTableIndex(Ydb::Table::TableIndex::TypeCase type) {
         case Ydb::Table::TableIndex::kGlobalIndex:
         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeHnswIndex:
         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
@@ -288,7 +300,8 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
         tmp.insert(index.KeyColumns.begin(), index.KeyColumns.end());
     } else {
         // Vector and fulltext indexes allow to add all columns both to index & data
-        Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+        Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
@@ -310,6 +323,7 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             return true;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
@@ -333,6 +347,8 @@ std::span<const std::string_view> GetImplTables(
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             return GlobalSecondaryImplTables;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
+            return indexKeys.size() == 1 ? std::span<const std::string_view>(GlobalHnswImplTables) : std::span<const std::string_view>(PrefixedGlobalHnswImplTables);
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             if (indexKeys.size() == 1) {
                 return GlobalKMeansTreeImplTables;
@@ -360,7 +376,8 @@ bool IsImplTable(std::string_view tableName) {
 
 bool IsBuildImplTable(std::string_view tableName) {
     // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
-    return tableName.ends_with(NKMeans::BuildSuffix0)
+    return tableName == NHnsw::BuildTable
+        || tableName.ends_with(NKMeans::BuildSuffix0)
         || tableName.ends_with(NKMeans::BuildSuffix1)
         // transient compact-fulltext rowid-mode source table - dropped on apply like the *build tables
         || tableName.ends_with(NFulltext::RowIdSrcBuildSuffix);

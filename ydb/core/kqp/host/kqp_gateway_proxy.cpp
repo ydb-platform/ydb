@@ -1194,8 +1194,12 @@ public:
                                 // no specialized index description
                                 Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
                                 break;
+                            case TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw:
                             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                                 *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                                if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw) {
+                                    *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableHnswSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetHnswSettings();
+                                }
                                 break;
                             case TIndexDescription::EType::GlobalFulltextPlain:
                             case TIndexDescription::EType::GlobalFulltextRelevance:

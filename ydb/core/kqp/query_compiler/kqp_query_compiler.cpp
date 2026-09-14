@@ -2586,7 +2586,7 @@ private:
 
         const TIndexDescription *indexDesc = nullptr;
         for (const auto& index: mainTable->Metadata->Indexes) {
-            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree &&
+            if (index.IsVectorIndex() &&
                 index.Name == settings.VectorTopIndex) {
                 indexDesc = &index;
             }
@@ -3120,10 +3120,19 @@ private:
             tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::CentroidColumn);
 
             // Index posting table
-            auto postingTableMeta = fillImplTable(NTableIndex::NKMeans::PostingTable, *proto.MutablePostingTable());
+            const bool hnsw = indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw;
+            if (hnsw) {
+                *proto.MutableHnswSettings() = kmeansDesc.GetHnswSettings();
+            }
+            auto postingTableMeta = fillImplTable(hnsw ? NTableIndex::NHnsw::HnswTable : NTableIndex::NKMeans::PostingTable,
+                *proto.MutablePostingTable());
             const TString postingTablePath = proto.GetPostingTable().GetPath();
             for (const auto& keyColumn : postingTableMeta->KeyColumnNames) {
                 tablesMap[postingTablePath].emplace(keyColumn);
+            }
+
+            if (hnsw) {
+                for (const auto& column : tableMeta->KeyColumnNames) tablesMap[postingTablePath].emplace(column);
             }
 
             // Input and output types

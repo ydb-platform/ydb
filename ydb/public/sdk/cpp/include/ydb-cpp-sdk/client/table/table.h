@@ -32,6 +32,7 @@ class ExplicitPartitions;
 class GlobalIndexSettings;
 class VectorIndexSettings;
 class KMeansTreeSettings;
+class HnswSettings;
 class FulltextIndexSettings;
 class PartitioningSettings;
 class ReadReplicasSettings;
@@ -352,6 +353,16 @@ public:
     void Out(IOutputStream &o) const;
 };
 
+struct THnswSettings {
+    std::optional<uint32_t> M;
+    std::optional<uint32_t> EfConstruction;
+    std::optional<uint32_t> EfSearch;
+    std::optional<uint64_t> Seed;
+
+    static THnswSettings FromProto(const Ydb::Table::HnswSettings& proto);
+    void SerializeTo(Ydb::Table::HnswSettings& proto) const;
+};
+
 struct TKMeansTreeSettings {
 public:
     enum class EMetric {
@@ -376,6 +387,8 @@ public:
     uint32_t Levels = 0;
     uint32_t OverlapClusters = 0;
     double OverlapRatio = 0;
+    // Used only by GlobalVectorKMeansTreeHnsw; absent fields retain server defaults.
+    std::optional<THnswSettings> Hnsw;
 
     static TKMeansTreeSettings FromProto(const Ydb::Table::KMeansTreeSettings& proto);
 

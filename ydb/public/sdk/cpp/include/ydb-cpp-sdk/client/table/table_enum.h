@@ -41,6 +41,7 @@ enum class EIndexType {
     LocalBloomFilter,
     LocalBloomNgramFilter,
     LocalMinMax,
+    GlobalVectorKMeansTreeHnsw,
 
     Unknown = std::numeric_limits<int>::max()
 };

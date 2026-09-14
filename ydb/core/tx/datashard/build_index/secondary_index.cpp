@@ -743,6 +743,9 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
         buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, targetIndexColumns, targetDataColumns, tableInfo, scanSettings);
 }
 
+NTable::IScan* CreateHnswBuildScan(const TUserTable& table,
+    const NKikimrTxDataShard::TEvBuildIndexCreateRequest& request, TActorId responseActor);
+
 class TDataShard::TTxHandleSafeBuildIndexScan: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxHandleSafeBuildIndexScan(TDataShard* self, TEvDataShard::TEvBuildIndexCreateRequest::TPtr&& ev)
@@ -851,7 +854,9 @@ void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, cons
 void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) {
     auto& request = ev->Get()->Record;
     const ui64 id = request.GetId();
-    TRowVersion rowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId());
+    TRowVersion rowVersion = request.HasHnswSettings()
+        ? GetMvccTxVersion(EMvccTxMode::ReadOnly)
+        : TRowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId());
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
 
     try {
@@ -905,9 +910,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         const auto& userTable = *GetUserTables().at(tableId.PathId.LocalPathId);
 
         // 2. Validating request fields
-        if (!request.HasSnapshotStep() || !request.HasSnapshotTxId()) {
+        if (!request.HasHnswSettings() && (!request.HasSnapshotStep() || !request.HasSnapshotTxId())) {
             badRequest(TStringBuilder() << "Missing snapshot");
-        } else {
+        } else if (!request.HasHnswSettings()) {
             const TSnapshotKey snapshotKey(tableId.PathId, rowVersion.Step, rowVersion.TxId);
             if (!SnapshotManager.FindAvailable(snapshotKey)) {
                 badRequest(TStringBuilder() << "Unknown snapshot for path id " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
@@ -946,6 +951,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
         }
 
         // 3. Creating scan
+        if (request.HasHnswSettings()) {
+            TAutoPtr<NTable::IScan> scan = CreateHnswBuildScan(userTable, request, SelfId());
+            StartScan(this, std::move(scan), id, seqNo, rowVersion, userTable.LocalTid);
+            return;
+        }
         TAutoPtr<NTable::IScan> scan = CreateBuildIndexScan(id,
             request.GetDatabaseName(),
             request.GetTargetName(),

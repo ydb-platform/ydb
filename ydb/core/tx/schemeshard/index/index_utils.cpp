@@ -19,6 +19,7 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
             const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
             res.IndexTableCount = (prefixVectorIndex ? 3 : 2);
@@ -377,6 +378,56 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     implTableDesc.SetSystemColumnNamesAllowed(true);
 
     return implTableDesc;
+}
+
+auto CalcVectorKmeansTreeHnswImplTableDescImpl(
+    const auto& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseConfig,
+    const THashSet<TString>& dataColumns,
+    const NKikimrSchemeOp::TTableDescription& userDesc)
+{
+    auto desc = CalcVectorKmeansTreePostingImplTableDescImpl(baseTable, baseConfig, dataColumns, userDesc, "", false);
+    desc.SetName(NHnsw::HnswTable);
+    desc.ClearKeyColumnNames();
+    for (auto& column : *desc.MutableColumns()) {
+        column.SetNotNull(column.GetName() == NKMeans::ParentColumn);
+        column.ClearFamilyName();
+        column.SetFamily(0);
+    }
+    desc.AddKeyColumnNames(NKMeans::ParentColumn);
+    auto addColumn = [&](const char* name, NScheme::TTypeId type, bool key = false) {
+        auto* column = desc.AddColumns();
+        column->SetName(name);
+        column->SetType(NScheme::TypeName(type));
+        column->SetTypeId(type);
+        column->SetNotNull(key);
+        if (key) desc.AddKeyColumnNames(name);
+    };
+    addColumn(NHnsw::RecordTypeColumn, NScheme::NTypeIds::Uint8, true);
+    addColumn(NHnsw::NodeIdColumn, NScheme::NTypeIds::Uint64, true);
+    addColumn(NHnsw::KeyColumn, NScheme::NTypeIds::String, true);
+    addColumn(NHnsw::SourceKeyColumn, NScheme::NTypeIds::String);
+    addColumn(NHnsw::NeighborsColumn, NScheme::NTypeIds::String);
+    addColumn(NHnsw::NodeLevelColumn, NScheme::NTypeIds::Uint32);
+    addColumn(NHnsw::EntryIdColumn, NScheme::NTypeIds::Uint64);
+    addColumn(NHnsw::MaxLevelColumn, NScheme::NTypeIds::Uint32);
+    addColumn(NHnsw::BaseCountColumn, NScheme::NTypeIds::Uint64);
+    addColumn(NHnsw::FormatVersionColumn, NScheme::NTypeIds::Uint32);
+    auto* config = desc.MutablePartitionConfig();
+    config->SetSpecialTableType(NKikimrSchemeOp::ESpecialTableTypeHnsw);
+    config->ClearColumnFamilies();
+    auto* family = config->AddColumnFamilies();
+    family->SetId(0);
+    family->SetName("default");
+    family->SetColumnCacheMode(NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory);
+    // Initially one partition. A graph must never be split inside a parent.
+    config->MutablePartitioningPolicy()->SetSizeToSplit(0);
+    config->MutablePartitioningPolicy()->SetMinPartitionsCount(1);
+    config->MutablePartitioningPolicy()->SetMaxPartitionsCount(1);
+    config->MutablePartitioningPolicy()->MutableSplitByLoadSettings()->SetEnabled(false);
+    desc.ClearUniformPartitionsCount();
+    desc.ClearSplitBoundary();
+    return desc;
 }
 
 auto CalcVectorKmeansTreePrefixImplTableDescImpl(
@@ -886,6 +937,24 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
     std::string_view suffix)
 {
     return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix, false);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeHnswImplTableDesc(
+    const NKikimrSchemeOp::TTableDescription& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseConfig,
+    const THashSet<TString>& dataColumns,
+    const NKikimrSchemeOp::TTableDescription& userDesc)
+{
+    return CalcVectorKmeansTreeHnswImplTableDescImpl(baseTable, baseConfig, dataColumns, userDesc);
+}
+
+NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeHnswImplTableDesc(
+    const NSchemeShard::TTableInfo::TPtr& baseTable,
+    const NKikimrSchemeOp::TPartitionConfig& baseConfig,
+    const THashSet<TString>& dataColumns,
+    const NKikimrSchemeOp::TTableDescription& userDesc)
+{
+    return CalcVectorKmeansTreeHnswImplTableDescImpl(baseTable, baseConfig, dataColumns, userDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(

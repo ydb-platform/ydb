@@ -9,6 +9,7 @@ bool IsIndexSupported(NYql::TIndexDescription::EType type, bool enabledIndexStre
             return true;
         case NYql::TIndexDescription::EType::GlobalSyncUnique:
             return enabledIndexStreamWrite;
+        case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw:
         case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
         case NYql::TIndexDescription::EType::GlobalFulltextPlain:
         case NYql::TIndexDescription::EType::GlobalFulltextRelevance:

@@ -895,3 +895,29 @@ TEST(TableTest, AlterTableSetMetricsSettings) {
         Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION
     );
 }
+
+TEST(TableIndex, HnswProtoRoundTrip) {
+    Ydb::Table::TableIndex input;
+    input.set_name("ann");
+    input.add_index_columns("embedding");
+    auto* settings = input.mutable_global_vector_kmeans_tree_hnsw_index();
+    settings->mutable_vector_settings()->set_clusters(4);
+    settings->mutable_vector_settings()->set_levels(2);
+    settings->mutable_hnsw_settings()->set_m(8);
+    settings->mutable_hnsw_settings()->set_ef_construction(100);
+    settings->mutable_hnsw_settings()->set_seed(0);
+    auto index = TProtoAccessor::FromProto(input);
+    EXPECT_EQ(index.GetIndexType(), NTable::EIndexType::GlobalVectorKMeansTreeHnsw);
+    const auto& vector = std::get<NTable::TKMeansTreeSettings>(index.GetIndexSettings());
+    ASSERT_TRUE(vector.Hnsw);
+    EXPECT_EQ(vector.Hnsw->M, 8);
+    EXPECT_FALSE(vector.Hnsw->EfSearch);
+    ASSERT_TRUE(vector.Hnsw->Seed);
+    EXPECT_EQ(*vector.Hnsw->Seed, 0);
+    Ydb::Table::TableIndex output;
+    index.SerializeTo(output);
+    EXPECT_TRUE(output.has_global_vector_kmeans_tree_hnsw_index());
+    EXPECT_FALSE(output.has_global_vector_kmeans_tree_index());
+    EXPECT_EQ(output.global_vector_kmeans_tree_hnsw_index().hnsw_settings().SerializeAsString(),
+        settings->hnsw_settings().SerializeAsString());
+}

@@ -123,6 +123,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
         FulltextRowIdSrc = 203,
         FulltextIndexPrefixBorders = 204,
+        HnswBuild = 300,
     };
 
     struct TColumnBuildInfo {
@@ -234,6 +235,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         ui32 OverlapClusters = 0;
         double OverlapRatio = 0;
         bool IsPrefixed = false;
+        bool Hnsw = false;
         bool Adaptive = false;
 
         // progress
@@ -725,6 +727,7 @@ public:
                     indexInfo->KMeans.K = desc.settings().clusters();
                     indexInfo->KMeans.Levels = indexInfo->IsBuildPrefixedVectorIndex() + desc.settings().levels();
                     indexInfo->KMeans.IsPrefixed = indexInfo->IsBuildPrefixedVectorIndex();
+                    indexInfo->KMeans.Hnsw = indexInfo->IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw;
                     indexInfo->KMeans.Adaptive = desc.settings().adaptive_clusters() && indexInfo->IsBuildPrefixedVectorIndex();
                     indexInfo->KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
                     indexInfo->KMeans.OverlapClusters = desc.settings().overlap_clusters()

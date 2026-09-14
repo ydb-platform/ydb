@@ -1634,6 +1634,8 @@ private:
                 indexType = TIndexDescription::EType::GlobalAsync;
             } else if (type == "syncGlobalUnique") {
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
+            } else if (type == "globalVectorKmeansTreeHnsw") {
+                indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw;
             } else if (type == "globalVectorKmeansTree") {
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
             } else if (type == "globalFulltextPlain") {
@@ -1746,10 +1748,16 @@ private:
 
                 TString error;
                 switch (indexType) {
+                    case TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw:
                     case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
-                        NKikimr::NKMeans::FillSetting(
-                            *vectorIndexKmeansTreeDescription.MutableSettings(),
-                            nameLower, value.StringValue(), error);
+                        if (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw && nameLower.StartsWith("hnsw_")) {
+                            NKikimr::NTableIndex::NHnsw::FillSetting(*vectorIndexKmeansTreeDescription.MutableHnswSettings(),
+                                nameLower, value.StringValue(), error);
+                        } else {
+                            NKikimr::NKMeans::FillSetting(
+                                *vectorIndexKmeansTreeDescription.MutableSettings(),
+                                nameLower, value.StringValue(), error);
+                        }
                         break;
                     }
                     case TIndexDescription::EType::GlobalFulltextPlain:
@@ -1797,9 +1805,12 @@ private:
                     // no specialized index description
                     // no settings validation
                     break;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw:
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                     TString error;
-                    if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
+                    if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)
+                        || (indexType == TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw
+                            && !NKikimr::NTableIndex::NHnsw::ValidateSettings(vectorIndexKmeansTreeDescription.GetHnswSettings(), error))) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
                         return IGraphTransformer::TStatus::Error;
                     }

@@ -1134,6 +1134,9 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
     *settings->MutableIndexSettings() = vectorSearch.GetIndexSettings();
     settings->SetOverlapClusters(vectorSearch.GetOverlapClusters());
     settings->SetIndexLevels(vectorSearch.GetLevels());
+    if (vectorSearch.HasHnswSettings()) {
+        *settings->MutableHnswSettings() = vectorSearch.GetHnswSettings();
+    }
     {
         // TopK (LIMIT) may be a literal or a query parameter; resolve it to a value here.
         // Saturate to ui32: the pushdown chain is ui32, and a larger LIMIT just means "all".
@@ -1186,8 +1189,16 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
 
     // Posting table: key columns are (__ydb_parent, <main PK columns>)
     fillTableMeta(settings->MutablePostingTable(), vectorSearch.GetPostingTable(), postingTableInfo);
+    if (vectorSearch.HasHnswSettings()) {
+        // Logical result keys; HNSW's physical key is constructed by the reader.
+        settings->AddPostingTableKeyColumnIds(postingTableInfo->Columns.at(NTableIndex::NKMeans::ParentColumn).Id);
+        for (const auto& keyColumn : mainTableInfo->KeyColumns) {
+            settings->AddPostingTableKeyColumnIds(postingTableInfo->Columns.at(keyColumn).Id);
+        }
+    } else {
     for (const auto& keyColumn : postingTableInfo->KeyColumns) {
         settings->AddPostingTableKeyColumnIds(postingTableInfo->Columns.at(keyColumn).Id);
+    }
     }
 
     // Main table: PK columns, output columns

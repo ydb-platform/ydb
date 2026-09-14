@@ -208,7 +208,7 @@ struct TKiExploreTxResults {
             TString indexTable;
             TString dictTable;
             TString dataTable;
-            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+            if (index.IsVectorIndex()) {
                 YQL_ENSURE(indexTables.size() >= 2, "K-means tree index should have at least 2 tables");
                 dataTable = indexTable = indexTables[1];
                 YQL_ENSURE(indexTable.EndsWith(NKikimr::NTableIndex::NKMeans::PostingTable));

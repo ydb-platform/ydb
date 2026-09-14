@@ -184,6 +184,7 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
             }
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
             break;
@@ -317,6 +318,8 @@ TString TIndexBuildInfo::TKMeans::WriteTo(bool needsBuildTable) const {
     TString name = PostingTable;
     if (needsBuildTable || NeedsAnotherLevel() || OverlapClusters > 1 && Levels > 1 && State != Filter && State != FilterBorders) {
         name += NextBuildIndex() == 0 ? BuildSuffix0 : BuildSuffix1;
+    } else if (Hnsw) {
+        name = NTableIndex::NHnsw::BuildTable;
     }
     return name;
 }
@@ -498,6 +501,7 @@ bool TIndexBuildInfo::IsValidSubState(ESubState value)
         case ESubState::FulltextIndexDictionary:
         case ESubState::FulltextIndexBorders:
         case ESubState::FulltextRowIdSrc:
+        case ESubState::HnswBuild:
         case ESubState::FulltextIndexPrefixBorders:
             return true;
     }

@@ -69,6 +69,11 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Adding a unique index to an existing table is disabled")};
             }
             break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
+            if (context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS))) {
+                return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "HNSW vector indexes are not supported in serverless domains")};
+            }
+            [[fallthrough]];
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
             break;
         }
@@ -92,11 +97,16 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
-    if (isRebuild && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+    if (isRebuild && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
+        && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw) {
         return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "REBUILD INDEX is only supported for vector_kmeans_tree indexes")};
     }
 
     auto counts = GetIndexObjectCounts(indexDesc);
+    if (GetIndexType(indexDesc) == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw) {
+        ++counts.IndexTableCount;
+        ++counts.IndexTableShards;
+    }
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
     auto tableInfo = context.SS->Tables.at(table.Base()->PathId);
@@ -177,6 +187,9 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     TVector<ISubOperation::TPtr> result;
 
     if (isRebuild) {
+        if (context.SS->Indexes.at(index.Base()->PathId)->Type != GetIndexType(indexDesc)) {
+            return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, "REBUILD INDEX cannot change index type")};
+        }
         // For rebuild: set existing index to WriteOnly. Impl table drop and recreation
         // is handled in the build state machine after Initiating completes.
         {
@@ -231,7 +244,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
         if (GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalUnique ||
             context.SS->EnableOnlineAddUniqueIndex) {
-            implTableDesc.MutablePartitionConfig()->SetShadowData(true);
+            implTableDesc.MutablePartitionConfig()->SetShadowData(implTableDesc.GetName() != NTableIndex::NHnsw::BuildTable);
         }
 
         auto outTx = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpInitiateBuildIndexImplTable);
@@ -259,6 +272,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             result.push_back(createImplTable(std::move(implTableDesc)));
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
             const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
             NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc, indexPrefixTableDesc;
@@ -272,7 +286,21 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
             result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
-            result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTreeHnsw) {
+                auto hnswColumns = indexDataColumns;
+                hnswColumns.insert(*indexDesc.GetKeyColumnNames().rbegin());
+                result.push_back(createImplTable(CalcVectorKmeansTreeHnswImplTableDesc(tableInfo, tableInfo->PartitionConfig(), hnswColumns, indexPostingTableDesc)));
+                auto input = CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), hnswColumns, {});
+                input.SetName(NTableIndex::NHnsw::BuildTable);
+                auto* policy = input.MutablePartitionConfig()->MutablePartitioningPolicy();
+                policy->SetSizeToSplit(0);
+                policy->SetMinPartitionsCount(1);
+                policy->SetMaxPartitionsCount(1);
+                policy->MutableSplitByLoadSettings()->SetEnabled(false);
+                result.push_back(createImplTable(std::move(input)));
+            } else {
+                result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
+            }
             if (prefixVectorIndex) {
                 const THashSet<TString> prefixColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
                 result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(

@@ -103,6 +103,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 // deleteIndexKeys are already correct
                 break;
             }
+            case TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw:
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                 if (indexDesc->KeyColumns.size() > 1) {
                     const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
@@ -199,6 +200,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
             case TIndexDescription::EType::GlobalFulltextCompactRelevance:
             case TIndexDescription::EType::GlobalJsonCompact:
                 return false;
+            case TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw:
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
             case TIndexDescription::EType::GlobalFulltextPlain:
             case TIndexDescription::EType::GlobalFulltextRelevance:

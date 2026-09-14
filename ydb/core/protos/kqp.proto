@@ -204,6 +204,8 @@ message TQueryRequest {
 
 message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
+    optional Ydb.Table.HnswSettings HnswSettings = 2;
+    optional uint32 HnswFormatVersion = 3 [default = 1];
 }
 
 
@@ -950,6 +952,7 @@ message TReadVectorTopK {
     optional string TargetVector = 3;
     optional uint32 Limit = 4;
     repeated uint32 DistinctColumns = 5;
+    optional Ydb.Table.HnswSettings HnswSettings = 6;
 }
 
 message TKqpStreamLookupSettings {

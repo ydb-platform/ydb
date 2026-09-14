@@ -655,6 +655,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
         || !columnsWithDefaultsSet.empty()
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
             switch (index.second->Type) {
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw:
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                 case TIndexDescription::EType::GlobalFulltextPlain:
                 case TIndexDescription::EType::GlobalFulltextRelevance:
@@ -1003,6 +1004,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 case TIndexDescription::EType::GlobalSyncUnique:
                     // deleteIndexKeys are already correct
                     break;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw:
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                     if (indexDesc->KeyColumns.size() > 1) {
                         deleteIndexKeys = BuildVectorIndexPrefixRows(table, *prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumnsWithoutData, pos, ctx);
@@ -1083,6 +1085,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 case TIndexDescription::EType::GlobalSyncUnique:
                     // upsertIndexRows are already correct
                     break;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw:
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
                     if (indexDesc->KeyColumns.size() > 1) {
                         if (prefixTable->Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {

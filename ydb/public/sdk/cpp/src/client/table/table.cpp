@@ -3016,6 +3016,38 @@ void TKMeansTreeSettings::SerializeTo(Ydb::Table::KMeansTreeSettings& settings) 
     settings.set_overlap_ratio(OverlapRatio);
 }
 
+THnswSettings THnswSettings::FromProto(const Ydb::Table::HnswSettings& proto) {
+    THnswSettings result;
+    if (proto.has_m()) {
+        result.M = proto.m();
+    }
+    if (proto.has_ef_construction()) {
+        result.EfConstruction = proto.ef_construction();
+    }
+    if (proto.has_ef_search()) {
+        result.EfSearch = proto.ef_search();
+    }
+    if (proto.has_seed()) {
+        result.Seed = proto.seed();
+    }
+    return result;
+}
+
+void THnswSettings::SerializeTo(Ydb::Table::HnswSettings& proto) const {
+    if (M) {
+        proto.set_m(*M);
+    }
+    if (EfConstruction) {
+        proto.set_ef_construction(*EfConstruction);
+    }
+    if (EfSearch) {
+        proto.set_ef_search(*EfSearch);
+    }
+    if (Seed) {
+        proto.set_seed(*Seed);
+    }
+}
+
 void TKMeansTreeSettings::Out(IOutputStream& o) const {
     o << *this;
 }
@@ -3237,6 +3269,24 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         type = EIndexType::GlobalUnique;
         globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(proto.global_unique_index().settings()));
         break;
+    case TProto::kGlobalVectorKmeansTreeHnswIndex: {
+        type = EIndexType::GlobalVectorKMeansTreeHnsw;
+        const auto &vectorProto = proto.global_vector_kmeans_tree_hnsw_index();
+        const bool prefixVectorIndex = indexColumns.size() > 1;
+        globalIndexSettings.resize(prefixVectorIndex ? 3 : 2);
+        globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreeLevelTablePosition] =
+            TGlobalIndexSettings::FromProto(vectorProto.level_table_settings());
+        globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreePostingTablePosition] =
+            TGlobalIndexSettings::FromProto(vectorProto.hnsw_table_settings());
+        if (prefixVectorIndex) {
+            globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreePrefixTablePosition] =
+                TGlobalIndexSettings::FromProto(vectorProto.prefix_table_settings());
+        }
+        auto settings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
+        settings.Hnsw = THnswSettings::FromProto(vectorProto.hnsw_settings());
+        specializedIndexSettings = std::move(settings);
+        break;
+    }
     case TProto::kGlobalVectorKmeansTreeIndex: {
         type = EIndexType::GlobalVectorKMeansTree;
         const auto &vectorProto = proto.global_vector_kmeans_tree_index();
@@ -3335,6 +3385,28 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         auto& settings = *proto.mutable_global_unique_index()->mutable_settings();
         if (GlobalIndexSettings_.size() == 1)
             GlobalIndexSettings_.at(0).SerializeTo(settings);
+        break;
+    }
+    case EIndexType::GlobalVectorKMeansTreeHnsw: {
+        auto* global_vector_kmeans_tree_hnsw_index = proto.mutable_global_vector_kmeans_tree_hnsw_index();
+        auto& level_settings = *global_vector_kmeans_tree_hnsw_index->mutable_level_table_settings();
+        auto& posting_settings = *global_vector_kmeans_tree_hnsw_index->mutable_hnsw_table_settings();
+        auto& vector_settings = *global_vector_kmeans_tree_hnsw_index->mutable_vector_settings();
+        const bool is_prefixed = IndexColumns_.size() > 1;
+        if (GlobalIndexSettings_.size() == (is_prefixed ? 3 : 2)) {
+            GlobalIndexSettings_.at(TGlobalIndexSettings::VectorKMeansTreeLevelTablePosition).SerializeTo(level_settings);
+            GlobalIndexSettings_.at(TGlobalIndexSettings::VectorKMeansTreePostingTablePosition).SerializeTo(posting_settings);
+            if (is_prefixed) {
+                auto& prefix_settings = *global_vector_kmeans_tree_hnsw_index->mutable_prefix_table_settings();
+                GlobalIndexSettings_.at(TGlobalIndexSettings::VectorKMeansTreePrefixTablePosition).SerializeTo(prefix_settings);
+            }
+        }
+        if (const auto* settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
+            settings->SerializeTo(vector_settings);
+            if (settings->Hnsw) {
+                settings->Hnsw->SerializeTo(*global_vector_kmeans_tree_hnsw_index->mutable_hnsw_settings());
+            }
+        }
         break;
     }
     case EIndexType::GlobalVectorKMeansTree: {
@@ -3442,6 +3514,7 @@ void TIndexDescription::Out(IOutputStream& o) const {
     case EIndexType::LocalMinMax:
     case EIndexType::Unknown:
         break;
+    case EIndexType::GlobalVectorKMeansTreeHnsw:
     case EIndexType::GlobalVectorKMeansTree:
         if (auto settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
             o << ", vector_settings: " << *settings;

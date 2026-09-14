@@ -2513,6 +2513,8 @@ public:
                                 add_index->mutable_global_unique_index();
                             } else if (type == "asyncGlobal") {
                                 add_index->mutable_global_async_index();
+                            } else if (type == "globalVectorKmeansTreeHnsw") {
+                                add_index->mutable_global_vector_kmeans_tree_hnsw_index();
                             } else if (type == "globalVectorKmeansTree") {
                                 add_index->mutable_global_vector_kmeans_tree_index();
                             } else if (type == "globalFulltextPlain") {
@@ -2629,6 +2631,15 @@ public:
                                     }
                                 } else {
                                     switch (add_index->type_case()) {
+                                        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeHnswIndex: {
+                                            auto* desc = add_index->mutable_global_vector_kmeans_tree_hnsw_index();
+                                            if (name.StartsWith("hnsw_")) {
+                                                NKikimr::NTableIndex::NHnsw::FillSetting(*desc->mutable_hnsw_settings(), name, value.StringValue(), error);
+                                            } else {
+                                                NKikimr::NKMeans::FillSetting(*desc->mutable_vector_settings(), name, value.StringValue(), error);
+                                            }
+                                            break;
+                                        }
                                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
                                             NKikimr::NKMeans::FillSetting(
                                                 *add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings(),
@@ -2709,6 +2720,16 @@ public:
                         case Ydb::Table::TableIndex::kGlobalJsonIndex:
                             // no settings validation
                             break;
+                        case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeHnswIndex: {
+                            TString error;
+                            const auto& desc = add_index->global_vector_kmeans_tree_hnsw_index();
+                            if (!NKikimr::NKMeans::ValidateSettingsPartial(desc.vector_settings(), error)
+                                || !NKikimr::NTableIndex::NHnsw::ValidateSettings(desc.hnsw_settings(), error)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            break;
+                        }
                         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex: {
                             TString error;
                             if (!NKikimr::NKMeans::ValidateSettingsPartial(add_index->global_vector_kmeans_tree_index().vector_settings(), error)) {
@@ -3282,14 +3303,16 @@ public:
                     }
 
                     // Only vector_kmeans_tree is supported for rebuild
-                    if (existingIndex->Type != NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                    if (!existingIndex->IsVectorIndex()) {
                         ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
                             TStringBuilder() << "REBUILD INDEX is only supported for vector_kmeans_tree indexes"));
                         return SyncError();
                     }
 
                     // Set the index type
-                    add_index->mutable_global_vector_kmeans_tree_index();
+                    const bool hnsw = existingIndex->Type == NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTreeHnsw;
+                    if (hnsw) add_index->mutable_global_vector_kmeans_tree_hnsw_index();
+                    else add_index->mutable_global_vector_kmeans_tree_index();
 
                     // If user didn't provide ON columns, inherit from existing index
                     if (!hasUserColumns) {
@@ -3306,7 +3329,9 @@ public:
 
                     // Parse user-provided index settings (don't pre-populate with existing;
                     // schemeshard will merge with existing settings in Prepare)
-                    auto* vectorSettings = add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+                    auto* vectorSettings = hnsw
+                        ? add_index->mutable_global_vector_kmeans_tree_hnsw_index()->mutable_vector_settings()
+                        : add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
@@ -3335,6 +3360,10 @@ public:
                                     } else {
                                         error = TStringBuilder() << "Invalid " << settingName << ": " << value.StringValue();
                                     }
+                                } else if (hnsw && settingName.StartsWith("hnsw_")) {
+                                    NKikimr::NTableIndex::NHnsw::FillSetting(
+                                        *add_index->mutable_global_vector_kmeans_tree_hnsw_index()->mutable_hnsw_settings(),
+                                        settingName, value.StringValue(), error);
                                 } else {
                                     NKikimr::NKMeans::FillSetting(
                                         *vectorSettings,

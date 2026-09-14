@@ -364,6 +364,7 @@ message TKqpPhyCnVectorSearch {
     // Prefixed index: the transform input carries, per prefix group, the root
     // __ydb_parent id alongside the target vector.
     bool HasPrefix = 13;
+    optional Ydb.Table.HnswSettings HnswSettings = 14;
 }
 
 message TKqpPhyCnSequencer {

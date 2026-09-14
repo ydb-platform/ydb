@@ -32,6 +32,7 @@ SRCS(
     read_table_scan.h
     setup_sys_locks.h
     build_index/filter_kmeans.cpp
+    build_index/hnsw.cpp
     build_index/fulltext.cpp
     build_index/fulltext_dict.cpp
     build_index/recompute_kmeans.cpp

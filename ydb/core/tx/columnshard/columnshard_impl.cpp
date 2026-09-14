@@ -1701,6 +1701,10 @@ public:
         }
 
         for (auto&& i : Constructors) {
+            // A portion erased between restarts of this transaction is never revisited and would reach parsing without its records.
+            if (!i.second.IsReady()) {
+                continue;
+            }
             FetchedAccessors.emplace_back(std::move(i.second));
         }
 

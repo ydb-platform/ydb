@@ -15,8 +15,6 @@ You need to have a GitHub account to suggest any changes to the {{ ydb-short-nam
 
 {% include [ssh-key-pair-internal.md](_includes/suggest_change_overlay/ssh-key-pair-internal.md) %}
 
-* If you have a yubikey, you can use its key: upload the ssh key to GitHub [via UI](https://github.com/settings/keys).
-
 #### Remote development
 
 If you are developing on a remote host, you can use the key from your laptop. Configure SSH agent forwarding using [GitHub's guide](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/using-ssh-agent-forwarding).

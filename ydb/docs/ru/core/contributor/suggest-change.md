@@ -15,8 +15,6 @@
 
 {% include [ssh-key-pair-internal.md](_includes/suggest_change_overlay/ssh-key-pair-internal.md) %}
 
-* Если у вас есть yubikey, вы можете использовать его ключ: загрузите ssh-ключ на GitHub через [пользовательский интерфейс](https://github.com/settings/keys).
-
 #### Удаленная разработка
 
 Если вы разрабатываете на удалённом компьютере, вы можете использовать ключ со своего ноутбука. Настройте переадресацию SSH-агента по [инструкции GitHub](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/using-ssh-agent-forwarding).

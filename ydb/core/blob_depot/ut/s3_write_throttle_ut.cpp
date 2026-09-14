@@ -99,11 +99,17 @@ namespace {
             return *locator;
         }
 
-        void DiscardWithSlowDown(const TS3Locator& locator) {
+        void Discard(const TS3Locator& locator, bool slowDown) {
             auto ev = std::make_unique<TEvBlobDepot::TEvDiscardSpoiledBlobSeq>();
             locator.ToProto(ev->Record.AddS3Locators());
-            ev->Record.SetS3SlowDown(true);
+            if (slowDown) {
+                ev->Record.SetS3SlowDown(true);
+            }
             Send(std::move(ev));
+        }
+
+        void DiscardWithSlowDown(const TS3Locator& locator) {
+            Discard(locator, /*slowDown=*/true);
         }
 
         void Disconnect() {
@@ -208,30 +214,31 @@ Y_UNIT_TEST_SUITE(BlobDepotS3WriteThrottle) {
         UNIT_ASSERT(agent.GrabPrepareWriteS3Result(TDuration::Seconds(60)));
     }
 
-    Y_UNIT_TEST(ParkedRequestOfDisconnectingAgentDoesNotLeakSlot) {
+    Y_UNIT_TEST(ParkedRequestOfDisconnectedAgentIsDropped) {
         TTestBasicRuntime runtime(2);
         StartBlobDepotWithS3(runtime);
 
-        // Agent A brings the gate down to CurrentMaxWritesInFlight == 1 and lets the backoff expire.
+        // Agent A brings the gate down to CurrentMaxWritesInFlight == 1, lets the backoff expire and takes the only slot.
         TFakeAgent agentA(runtime, /*agentInstanceId=*/1, /*nodeIndex=*/0);
         agentA.Register();
         agentA.DiscardWithSlowDown(agentA.PrepareWriteS3(/*cookie=*/1));
         runtime.SimulateSleep(TDuration::Seconds(5));
+        const TS3Locator held = agentA.PrepareWriteS3(/*cookie=*/2);
 
-        // Agent B (another node) takes the only slot, then parks a second request behind the closed gate and dies.
+        // Agent B (another node) parks a request behind the closed gate and dies without holding any slot.
         {
             TFakeAgent agentB(runtime, /*agentInstanceId=*/2, /*nodeIndex=*/1);
             agentB.Register();
-            agentB.PrepareWriteS3(/*cookie=*/2);
             agentB.SendPrepareWriteS3(/*cookie=*/3);
             runtime.SimulateSleep(TDuration::Seconds(1));
             agentB.Disconnect();
         }
 
-        // B's slot must be released and B's parked request must be gone, so A's write goes through. If the release
-        // drains the queue while B still looks connected, B's parked request grabs the freed slot and leaks it.
+        // A frees the slot: the tablet drains the queue. B's stale request must be gone by now, otherwise the tablet
+        // trips on a pipe server that no longer exists. Then A's next write must go through.
+        agentA.Discard(held, /*slowDown=*/false);
         agentA.SendPrepareWriteS3(/*cookie=*/4);
         UNIT_ASSERT_C(agentA.GrabPrepareWriteS3Result(TDuration::Seconds(60)),
-            "slot leaked through a parked request of the disconnecting agent");
+            "parked request of a disconnected agent was not dropped");
     }
 }

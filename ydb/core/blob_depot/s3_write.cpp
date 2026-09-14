@@ -250,4 +250,16 @@ namespace NKikimr::NBlobDepot {
         RunPendingPrepareWritesIfPossible();
     }
 
+    void TS3Manager::OnAgentDisconnect(const TActorId& pipeServerId, TAgent& agent) {
+        std::erase_if(PendingPrepareWrites, [&](const auto& ev) { return ev->Recipient == pipeServerId; });
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_PENDING_QUEUE_SIZE] = PendingPrepareWrites.size();
+
+        for (TS3Locator locator : std::exchange(agent.S3WritesInFlight, {})) {
+            AddTrashToCollect(locator);
+            Y_ABORT_UNLESS(S3WritesInFlight);
+            --S3WritesInFlight;
+        }
+        Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_WRITES_IN_FLIGHT] = S3WritesInFlight;
+    }
+
 } // NKikimr::NBlobDepot

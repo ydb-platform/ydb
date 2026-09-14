@@ -307,8 +307,17 @@ public:
     void UnLockDDiskRange(TLockRangeHandle handle) override;
 
     // IReadyQueue implementation
+<<<<<<< HEAD
     void Register(ui64 lsn, EQueueType queueType) override;
     void UnRegister(ui64 lsn) override;
+=======
+    void Register(TPBufferKey pBufferKey, EQueueType queueType) override;
+    void UnRegister(TPBufferKey pBufferKey, EQueueType queueType) override;
+    void InflightFlushFinished(
+        TPBufferKey pBufferKey,
+        THostIndex host) override;
+    void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) override;
+>>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
     void DataToPBufferAdded(
         THostIndex host,
         EPBufferCounter counter,
@@ -397,7 +406,6 @@ private:
         THostMask ddisks);
 
     [[nodiscard]] bool HasInflightFlush(THostIndex host, TBlockRange64 range);
-    void InflightFlushFinished(TBlockRange64 range);
 
     [[nodiscard]] bool HasOlderUnflushedOverlap(
         TPBufferKey pBufferKey,

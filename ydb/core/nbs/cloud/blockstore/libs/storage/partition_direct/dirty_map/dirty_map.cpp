@@ -923,9 +923,60 @@ void TBlocksDirtyMap::Register(ui64 lsn, EQueueType queueType)
 
 void TBlocksDirtyMap::UnRegister(ui64 lsn)
 {
+<<<<<<< HEAD
     ReadyToErase.erase(lsn);
     ReadyToClone.erase(lsn);
     ReadyToFlush.erase(lsn);
+=======
+    switch (queueType) {
+        case IReadyQueue::EQueueType::Clone: {
+            ReadyToClone.erase(pBufferKey);
+            break;
+        }
+        case IReadyQueue::EQueueType::Flush: {
+            ReadyToFlush.erase(pBufferKey);
+            break;
+        }
+        case IReadyQueue::EQueueType::Erase: {
+            ReadyToErase.erase(pBufferKey);
+            break;
+        }
+    }
+}
+
+void TBlocksDirtyMap::InflightFlushFinished(
+    TPBufferKey pBufferKey,
+    THostIndex host)
+{
+    if (InflightDDiskSyncMap.Empty()) {
+        return;
+    }
+
+    auto inflight = Inflight.GetValue(pBufferKey);
+    Y_ABORT_UNLESS(inflight);
+
+    InflightDDiskSyncMap.EnumerateOverlapping(
+        inflight->Range,
+        [&](TInflightDDiskSyncMap::TFindItem& item)
+        {
+            auto& sync = item.Value;
+            if (!sync.SyncStartTrigger.IsReady() &&
+                sync.DestinationHost == host &&
+                !HasInflightFlush(host, item.Range))
+            {
+                sync.SyncStartTrigger.TrySetValue();
+            }
+
+            return TInflightDDiskSyncMap::EEnumerateContinuation::Continue;
+        });
+}
+
+void TBlocksDirtyMap::FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks)
+{
+    Y_DEBUG_ABORT_UNLESS(Inflight.GetValue(pBufferKey));
+
+    AddToAheadAndBehindOnFlushCompleted(pBufferKey, ddisks);
+>>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
 }
 
 void TBlocksDirtyMap::DataToPBufferAdded(
@@ -1312,21 +1363,6 @@ bool TBlocksDirtyMap::HasInflightFlush(THostIndex host, TBlockRange64 range)
             return TInflightMap::EEnumerateContinuation::Continue;
         });
     return hasOverlaps;
-}
-
-void TBlocksDirtyMap::InflightFlushFinished(TBlockRange64 range)
-{
-    InflightDDiskSyncMap.EnumerateOverlapping(
-        range,
-        [&](TInflightDDiskSyncMap::TFindItem& item)
-        {
-            auto& sync = item.Value;
-            if (!HasInflightFlush(sync.DestinationHost, item.Range)) {
-                sync.SyncStartTrigger.TrySetValue();
-            }
-
-            return TInflightDDiskSyncMap::EEnumerateContinuation::Continue;
-        });
 }
 
 bool TBlocksDirtyMap::CheckEraseAbility(

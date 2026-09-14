@@ -17,6 +17,8 @@
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
 namespace NKikimr::NKqp {
@@ -538,6 +540,53 @@ TTableMetadataResult GetSysViewMetadataResult(const NSchemeCache::TSchemeCacheNa
     }
 
     return result;
+}
+
+bool IsYdbDataSourceRoutedToConnector(const TString& databaseName,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+{
+    if (!federatedQuerySetup) {
+        return true;
+    }
+
+    const auto& gatewayConfig = federatedQuerySetup->GenericGatewayConfig;
+
+    if (gatewayConfig.HasConnector()) {
+        const auto& dbNames = gatewayConfig.GetConnector().GetDatabaseNames();
+        if (dbNames.empty() || std::find(dbNames.begin(), dbNames.end(), databaseName) != dbNames.end()) {
+            return true;
+        }
+    }
+
+    for (const auto& connector : gatewayConfig.GetConnectors()) {
+        const auto& dbNames = connector.GetDatabaseNames();
+        if (dbNames.empty() || std::find(dbNames.begin(), dbNames.end(), databaseName) != dbNames.end()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool HasDatabaseNamesConfigured(const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+{
+    if (!federatedQuerySetup) {
+        return false;
+    }
+
+    const auto& gatewayConfig = federatedQuerySetup->GenericGatewayConfig;
+
+    if (gatewayConfig.HasConnector() && !gatewayConfig.GetConnector().GetDatabaseNames().empty()) {
+        return true;
+    }
+
+    for (const auto& connector : gatewayConfig.GetConnectors()) {
+        if (!connector.GetDatabaseNames().empty()) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& cluster,
@@ -1224,7 +1273,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         schemeCacheId,
         ev.Release(),
         [userToken, database, cluster, mainCluster = Cluster, table, settings,
-            expectedSchemaVersion, ptr, queryName, externalPath, enableOnlineAddUniqueIndex]
+            expectedSchemaVersion, ptr, queryName, externalPath, enableOnlineAddUniqueIndex,
+            federatedQuerySetup = FederatedQuerySetup]
             (TPromise<TResult> promise, TResponse&& response) mutable
         {
             try {
@@ -1281,11 +1331,26 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             promise.SetValue(externalDataSourceMetadata);
                             return;
                         }
+
+                        const bool useNewRouting = HasDatabaseNamesConfigured(federatedQuerySetup);
+                        if (useNewRouting &&
+                            resolveEntityInsideDataSource &&
+                            externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb))
+                        {
+                            const auto& props = externalDataSourceMetadata.Metadata->ExternalSource.Properties.GetProperties();
+                            auto it = props.find("database_name");
+                            const TString databaseName = (it != props.end()) ? it->second : TString();
+                            if (!IsYdbDataSourceRoutedToConnector(databaseName, federatedQuerySetup)) {
+                                // Route to PQ provider (topic access).
+                                externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NYql::EDatabaseType::YdbTopics);
+                            }
+                        }
+
                         if (externalPath) {
                             externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         }
                         LoadExternalDataSourceSecretValues(entry, userToken, database, locked->ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, ptr](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, ptr, useNewRouting, federatedQuerySetup](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             if (!externalDataSourceMetadata.Success()) {
@@ -1343,7 +1408,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     promise.SetValue(externalDataSourceMetadata);
                                 }
                             };
-                            if (externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath &&
+                            if (!useNewRouting &&
+                                externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath &&
                                 settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
                                 auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
                                 THashMap<TString, TString> properties = {source.Properties.GetProperties().begin(), source.Properties.GetProperties().end()};
@@ -1361,7 +1427,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 }
 
                                 GetSchemeEntryType(
-                                    locked->FederatedQuerySetup,
+                                    federatedQuerySetup,
                                     source.DataSourceLocation,
                                     databaseName,
                                     useTls,

@@ -63,7 +63,7 @@ struct TExternalDataSource : public IExternalSource {
             throw TExternalSourceException() << proto.GetSourceType() << " source must provide service_name";
         }
 
-        // Ydb source requires at least one non-empty database_name or database_id.
+        // Ydb sources require at least one non-empty database_name or database_id.
         if (proto.GetSourceType() == ToString(NYql::EDatabaseType::Ydb)) {
             const auto& props = proto.GetProperties().GetProperties();
             const bool hasDatabaseName = props.contains("database_name") && !props.at("database_name").empty();
@@ -75,7 +75,9 @@ struct TExternalDataSource : public IExternalSource {
         }
 
         if (proto.GetSourceType() == ToString(NYql::EDatabaseType::YdbTopics)) {
-            throw TExternalSourceException() << "External source with type " << proto.GetSourceType() << " is not allowed, use " << ToString(NYql::EDatabaseType::Ydb)  << " source type to read from topics ";
+            throw TExternalSourceException() << "External source with type " << proto.GetSourceType()
+                << " is not allowed, use " << ToString(NYql::EDatabaseType::Ydb)
+                << " source type to read from topics or tables via connector";
         }
         ValidateHostname(HostnamePatterns, proto.GetLocation());
     }

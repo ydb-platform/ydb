@@ -286,6 +286,9 @@ INode::TPtr CreateTableSettings(const TTableSettings& tableSettings, ETableSetti
             for (const auto& tier : ttlSettings.Tiers) {
                 auto tierDesc = Y();
                 tierDesc = L(tierDesc, Q(Y(Q("evictionDelay"), tier.EvictionDelay)));
+                if (tier.ObjectKeyPrefix) {
+                    tierDesc = L(tierDesc, Q(Y(Q("objectKeyPrefix"), BuildQuotedAtom(tier.ObjectKeyPrefix->Pos, tier.ObjectKeyPrefix->Name))));
+                }
                 if (tier.StorageName) {
                     tierDesc = L(tierDesc, Q(Y(Q("storageName"), BuildQuotedAtom(tier.StorageName->Pos, tier.StorageName->Name))));
                 }

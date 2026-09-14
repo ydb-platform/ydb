@@ -266,6 +266,8 @@ message TTTLSettings {
 
     message TEvictionToExternalStorageSettings {
         optional string Storage = 1;
+        // Presence opts into tree object keys below this S3 prefix.
+        optional string ObjectKeyPrefix = 2;
     }
 
     message TTier {

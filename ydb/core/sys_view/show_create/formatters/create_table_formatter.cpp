@@ -1176,6 +1176,10 @@ bool TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings, T
                         break;
                     case Ydb::Table::TtlTier::kEvictToExternalStorage:
                         Format(expireAfterSeconds, tier.evict_to_external_storage().storage());
+                        if (tier.evict_to_external_storage().has_object_key_prefix()) {
+                            Stream << '.';
+                            EscapeName(tier.evict_to_external_storage().object_key_prefix(), Stream);
+                        }
                         break;
                     case Ydb::Table::TtlTier::ACTION_NOT_SET:
                         ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Tier action is undefined");
@@ -1801,6 +1805,10 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
                     break;
                 case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
                     Format(tier.GetApplyAfterSeconds(), tier.GetEvictToExternalStorage().GetStorage());
+                    if (tier.GetEvictToExternalStorage().HasObjectKeyPrefix()) {
+                        Stream << '.';
+                        EscapeName(tier.GetEvictToExternalStorage().GetObjectKeyPrefix(), Stream);
+                    }
                     break;
                 case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
                     ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Undefined tier action");

@@ -3725,6 +3725,37 @@ Y_UNIT_TEST(TtlTieringParseCorrect) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+
+Y_UNIT_TEST(TtlTieringObjectKeyPrefix) {
+    for (const TString ddl : {
+            "CREATE TABLE tableName (CreatedAt Timestamp, PRIMARY KEY (CreatedAt)) WITH (TTL = ",
+            "ALTER TABLE tableName SET (TTL = "}) {
+        const auto res = SqlToYql(TString("USE ydb; ") + ddl + R"(
+            Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/eds`.`archive//2026:09/`,
+            Interval("P2D") TO EXTERNAL DATA SOURCE `/Root/eds`.`cold`,
+            Interval("P30D") DELETE ON CreatedAt);)");
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+        TWordCountHive stats = {{TString("Write"), 0}};
+        VerifyProgram(res, stats, [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_C(line.Contains("objectKeyPrefix"), line);
+                UNIT_ASSERT_C(line.Contains("archive//2026:09/"), line);
+                UNIT_ASSERT_C(line.Contains("cold"), line);
+                UNIT_ASSERT_C(line.Contains("/Root/eds"), line);
+            }
+        });
+        UNIT_ASSERT_VALUES_EQUAL(stats["Write"], 1);
+    }
+}
+
+Y_UNIT_TEST(TtlTieringRejectsIncompletePath) {
+    for (const TString target : {"`eds`.", "`eds`.`path`.`extra`"}) {
+        const auto res = SqlToYql(TString("USE ydb; ALTER TABLE t SET TTL Interval(\"P1D\") TO EXTERNAL DATA SOURCE ")
+            + target + " ON ts;");
+        UNIT_ASSERT(!res.IsOk());
+    }
+}
+
 Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
         R"( USE ydb;

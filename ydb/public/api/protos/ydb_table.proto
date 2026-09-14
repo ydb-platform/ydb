@@ -831,6 +831,8 @@ message ColumnMeta {
 message EvictionToExternalStorageSettings {
     // Path to external data source
     string storage = 1;
+    // Presence opts into tree object keys below this S3 prefix.
+    optional string object_key_prefix = 2;
 }
 
 message DateTypeColumnModeSettings {

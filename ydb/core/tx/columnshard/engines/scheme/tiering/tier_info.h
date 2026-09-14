@@ -75,7 +75,7 @@ public:
 
     TString GetDebugString() const {
         TStringBuilder sb;
-        sb << "storage=" << (ExternalStorageId ? ExternalStorageId->GetConfigPath() : NTiering::NCommon::DeleteTierName)
+        sb << "storage=" << (ExternalStorageId ? ExternalStorageId->ToString() : NTiering::NCommon::DeleteTierName)
            << ";duration=" << EvictDuration << ";column=" << EvictColumnName << ";serializer=";
         if (Serializer) {
             sb << Serializer->DebugString();
@@ -229,7 +229,9 @@ public:
                     tierInfo = TTierInfo::MakeTtl(TDuration::Seconds(tier.GetApplyAfterSeconds()), ttlColumnName, unitsInSecond);
                     break;
                 case NKikimrSchemeOp::TTTLSettings_TTier::kEvictToExternalStorage:
-                    tierInfo = std::make_shared<TTierInfo>(CanonizePath(tier.GetEvictToExternalStorage().GetStorage()),
+                    tierInfo = std::make_shared<TTierInfo>(NColumnShard::NTiers::TExternalStorageId(
+                        tier.GetEvictToExternalStorage().GetStorage(), tier.GetEvictToExternalStorage().HasObjectKeyPrefix()
+                            ? std::make_optional(tier.GetEvictToExternalStorage().GetObjectKeyPrefix()) : std::nullopt),
                         TDuration::Seconds(tier.GetApplyAfterSeconds()), ttlColumnName, unitsInSecond);
                     break;
                 case NKikimrSchemeOp::TTTLSettings_TTier::ACTION_NOT_SET:
@@ -271,7 +273,9 @@ public:
         THashSet<NColumnShard::NTiers::TExternalStorageId> usedTiers;
         for (const auto& tier : ttlSettings.GetTiers()) {
             if (tier.HasEvictToExternalStorage()) {
-                usedTiers.emplace(CanonizePath(tier.GetEvictToExternalStorage().GetStorage()));
+                usedTiers.emplace(tier.GetEvictToExternalStorage().GetStorage(),
+                    tier.GetEvictToExternalStorage().HasObjectKeyPrefix()
+                        ? std::make_optional(tier.GetEvictToExternalStorage().GetObjectKeyPrefix()) : std::nullopt);
             }
         }
         return usedTiers;

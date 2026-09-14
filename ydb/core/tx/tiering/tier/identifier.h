@@ -5,36 +5,59 @@
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/str_stl.h>
+#include <util/string/cast.h>
+
+#include <optional>
+#include <tuple>
 
 namespace NKikimr::NColumnShard::NTiers {
 
 class TExternalStorageId {
 private:
     YDB_READONLY_DEF(TString, ConfigPath);
+    YDB_READONLY_DEF(std::optional<TString>, ObjectKeyPrefix);
 
 public:
-    TExternalStorageId(const TString& path)
-        : ConfigPath(CanonizePath(path)) {
+    TExternalStorageId(const TString& configPath, const std::optional<TString>& objectKeyPrefix = std::nullopt)
+        : ConfigPath(CanonizePath(configPath))
+        , ObjectKeyPrefix(objectKeyPrefix)
+    {
+    }
+
+    // Legacy serialized identifiers are canonical schema paths. A tagged,
+    // length-prefixed representation keeps punctuation in both parts unambiguous.
+    // Schema lookup always uses ConfigPath; S3 keys keep ObjectKeyPrefix verbatim.
+    static TExternalStorageId FromString(const TString& serialized) {
+        if (!serialized.StartsWith("s3:")) {
+            return TExternalStorageId(serialized);
+        }
+        TStringBuf value(serialized);
+        value.Skip(3);
+        TStringBuf length;
+        Y_ABORT_UNLESS(value.TrySplit(':', length, value));
+        const size_t pathSize = ::FromString<size_t>(length);
+        Y_ABORT_UNLESS(pathSize <= value.size());
+        return TExternalStorageId(TString(value.SubStr(0, pathSize)), TString(value.SubStr(pathSize)));
     }
 
     TString ToString() const {
-        return ConfigPath;
+        return ObjectKeyPrefix ? "s3:" + ::ToString(ConfigPath.size()) + ":" + ConfigPath + *ObjectKeyPrefix : ConfigPath;
     }
     friend IOutputStream& operator<<(IOutputStream& out, const TExternalStorageId& storageId) {
         return out << storageId.ToString();
     }
 
     std::strong_ordering operator<=>(const TExternalStorageId& other) const {
-        if (ConfigPath < other.ConfigPath) {
+        if (std::tie(ConfigPath, ObjectKeyPrefix) < std::tie(other.ConfigPath, other.ObjectKeyPrefix)) {
             return std::strong_ordering::less;
         }
-        if (ConfigPath > other.ConfigPath) {
+        if (std::tie(ConfigPath, ObjectKeyPrefix) > std::tie(other.ConfigPath, other.ObjectKeyPrefix)) {
             return std::strong_ordering::greater;
         }
         return std::strong_ordering::equal;
     }
     bool operator==(const TExternalStorageId& other) const {
-        return ConfigPath == other.ConfigPath;
+        return ConfigPath == other.ConfigPath && ObjectKeyPrefix == other.ObjectKeyPrefix;
     }
 };
 

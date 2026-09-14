@@ -1,6 +1,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/testlib/cs_helper.h>
+#include <ydb/core/tx/columnshard/blobs_action/tier/object_key.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/ro_controller.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -12,6 +13,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/av_bootstrapped.h>
+#include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/services/metadata/manager/alter.h>
@@ -53,6 +55,26 @@ private:
     using TBase = Tests::NCS::THelper;
 public:
     using TBase::TBase;
+
+    TString ReadScanResult(const TString& query) const {
+        auto& runtime = *Server.GetRuntime();
+        NYdb::NTable::TTableClient client(*Driver);
+        auto iterator = runtime.WaitFuture(client.StreamExecuteScanQuery(query));
+        UNIT_ASSERT_C(iterator.IsSuccess(), iterator.GetIssues().ToString());
+        TString result;
+        while (true) {
+            auto part = runtime.WaitFuture(iterator.ReadNext());
+            if (part.EOS()) {
+                break;
+            }
+            UNIT_ASSERT_C(part.IsSuccess(), part.GetIssues().ToString());
+            if (part.HasResultSet()) {
+                result += NYdb::FormatResultSetYson(part.GetResultSet());
+            }
+        }
+        return result;
+    }
+
     void CreateTestOlapTable(TString tableName = "olapTable", ui32 tableShardsCount = 3,
         TString storeName = "olapStore", ui32 storeShardsCount = 4,
         TString shardingFunction = "HASH_FUNCTION_CONSISTENCY_64") {
@@ -357,7 +379,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     }
 
 
-    Y_UNIT_TEST(TierBecomesReadyAfterLateSecretsSnapshot) {
+    void TierBecomesReadyAfterLateSecretsSnapshotImpl(const bool Tree) {
         TPortManager pm;
 
         ui32 grpcPort = pm.GetPort();
@@ -400,8 +422,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        const NTiers::TExternalStorageId tierId("/Root/tier1");
-        TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1" });
+        const NTiers::TExternalStorageId tierId("/Root/tier1", Tree ? std::make_optional(TString("archive")) : std::nullopt);
+        const NTiers::TExternalStorageId otherTierId("/Root/tier1", Tree ? std::make_optional(TString("cold")) : std::nullopt);
+        TTestCSEmulator* emulator = new TTestCSEmulator({ tierId, otherTierId });
         runtime.Register(emulator);
         emulator->CheckRuntime(runtime);
         for (const TInstant start = Now(); !emulator->GetTierConfigs().at(tierId).HasConfig() && Now() - start < TDuration::Seconds(30);) {
@@ -428,6 +451,17 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         }
         UNIT_ASSERT_VALUES_EQUAL(manager.GetAwaitedConfigsCount(), 0);
         UNIT_ASSERT(tierManager->IsReady());
+        const auto* otherTierManager = manager.GetManagerOptional(otherTierId);
+        UNIT_ASSERT(otherTierManager && otherTierManager->IsReady());
+        UNIT_ASSERT_VALUES_EQUAL(otherTierManager->GetS3Settings().GetBucket(), "abc");
+    }
+
+    Y_UNIT_TEST(TierBecomesReadyAfterLateSecretsSnapshot) {
+        TierBecomesReadyAfterLateSecretsSnapshotImpl(false);
+    }
+
+    Y_UNIT_TEST(TreeTierBecomesReadyAfterLateSecretsSnapshot) {
+        TierBecomesReadyAfterLateSecretsSnapshotImpl(true);
     }
 
 //#define S3_TEST_USAGE
@@ -467,7 +501,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     const TString TierEndpoint = "fake.fake";
 #endif
 
-    Y_UNIT_TEST(TieringUsage) {
+    void TieringUsageImpl(const bool Tree) {
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TFastTTLCompactionController>();
 
         TPortManager pm;
@@ -493,6 +527,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::NCommon::TLoggerInit(server->GetRuntime()).Clear().SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
 
         auto& runtime = *server->GetRuntime();
+        runtime.GetAppData().FeatureFlags.SetEnableTieringObjectKeyTree(Tree);
         runtime.DisableBreakOnStopCondition();
 //        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
 //        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
@@ -566,6 +601,46 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             UNIT_ASSERT(check);
         }
         Cerr << "storage initialized..." << Endl;
+#ifndef S3_TEST_USAGE
+        if (Tree) {
+            using TObjectKey = NOlap::NBlobOperations::NTier::TObjectKey;
+            const auto* storage = Singleton<NWrappers::NExternalStorage::TFakeExternalStorage>();
+            // Compare the old rows, excluding the recent sentinel used to drive compaction.
+            const TString oldRowsQuery = TStringBuilder() << "SELECT COUNT(*) AS count, SUM(LENGTH(message)) AS bytes FROM `/Root/olapStore/olapTable` WHERE timestamp < CAST("
+                << now.GetValue() << "ul AS Timestamp)";
+            const TString expectedRows = lHelper.ReadScanResult(oldRowsQuery);
+            UNIT_ASSERT(expectedRows);
+            // Move legacy flat blobs into a tree and then change its prefix.
+            // Both tiers deliberately share one EDS to exercise config fanout.
+            for (const TString prefix : {"archive/data", "another//path"}) {
+                lHelper.StartSchemaRequest(TStringBuilder()
+                    << "ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `/Root/tier1`.`"
+                    << prefix << "`, Interval(\"P10000D\") TO EXTERNAL DATA SOURCE `/Root/tier1`.`cold` ON timestamp");
+                const TObjectKey keys(NTiers::TExternalStorageId("/Root/tier1", prefix).ToString());
+                bool migrated = false;
+                const auto deadline = Now() + TDuration::Seconds(120);
+                while (Now() < deadline) {
+                    runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+                    lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batchSmall);
+                    const auto& bucket = storage->GetBucket("fake");
+                    migrated = bucket.GetSize() != 0;
+                    for (auto it = bucket.begin(); it != bucket.end(); ++it) {
+                        TLogoBlobID blob;
+                        TString error;
+                        if (!keys.Parse(it->first, blob, error) || blob.Channel() != TObjectKey::TreeLayoutChannel) {
+                            migrated = false;
+                            break;
+                        }
+                    }
+                    if (migrated) {
+                        break;
+                    }
+                }
+                UNIT_ASSERT_C(migrated, "Legacy objects were not migrated and collected for prefix " + prefix);
+                UNIT_ASSERT_VALUES_EQUAL(lHelper.ReadScanResult(oldRowsQuery), expectedRows);
+            }
+        }
+#endif
 /*
         lHelper.DropTable("/Root/olapStore/olapTable");
         lHelper.StartDataRequest("DELETE FROM `/Root/olapStore/olapTable`");
@@ -594,6 +669,14 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 #ifndef S3_TEST_USAGE
         UNIT_ASSERT_EQUAL(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucketsCount(), 1);
 #endif
+    }
+
+    Y_UNIT_TEST(TieringUsage) {
+        TieringUsageImpl(false);
+    }
+
+    Y_UNIT_TEST(TreeTieringUsage) {
+        TieringUsageImpl(true);
     }
 
     std::optional<NYdb::TValue> GetValueResult(const THashMap<TString, NYdb::TValue>& hMap, const TString& fName) {

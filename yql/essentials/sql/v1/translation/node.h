@@ -1247,6 +1247,7 @@ struct TTtlSettings {
     struct TTierSettings {
         TNodePtr EvictionDelay;
         std::optional<TIdentifier> StorageName;
+        std::optional<TIdentifier> ObjectKeyPrefix;
 
         explicit TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
     };

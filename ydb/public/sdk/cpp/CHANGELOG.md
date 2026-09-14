@@ -1,3 +1,5 @@
+* Added an optional S3 object key prefix to TTL eviction settings for column tables.
+
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 
 # v3.22.0

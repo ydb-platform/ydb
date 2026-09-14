@@ -94,6 +94,7 @@ ydb/core/mind/hive/ut THiveTestWithTenants.TestShrinkStoragePool
 ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut ArenaAllocatorTest.Multithreaded
 ydb/core/nbs/cloud/blockstore/libs/common/memory/ut unittest.[*/*] chunk
+ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldKeepWatermarkWhenCopyFails
 ydb/core/nbs/cloud/blockstore/libs/vhost/ut TServerTest.ShouldCancelRequestsInFlightWhenStopEndpointOrStopServer
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashInName
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
@@ -110,6 +111,9 @@ ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Date
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Decimal
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Double
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int16
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int32
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int64
@@ -127,6 +131,7 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingCDCMessage
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingJsonMessage
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTable
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ProcessingTargetTableOtherType
+ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToKeyColumn
 ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote

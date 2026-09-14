@@ -602,7 +602,7 @@ public:
             tableInfo->Stats = {};
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());
         }
-        context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId, "copy table info");
+        context.SS->AcquireOwnDbRef(dstPath.Base()->PathId, "copy table info");
 
         const auto tabletType = ETabletType::ColumnShard;
         const auto dstPathId = dstPath.Base()->PathId;

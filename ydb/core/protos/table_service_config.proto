@@ -590,4 +590,8 @@ message TTableServiceConfig {
     // the full YQL peephole; false uses focused KQP compatibility lowering and prunes unused aggregation
     // outputs. Can be overridden per query with PRAGMA ydb.EnableNewRBOPhysicalStagePeephole.
     optional bool EnableNewRBOPhysicalStagePeephole = 147 [default = true, (InvalidateCompileCache) = true];
+
+    // Cluster default for window functions v2 (partition + sort via WideSort/Chopper instead of SqueezeToDict).
+    // Overridable per query via PRAGMA ydb.WindowFunctionsV2.
+    optional bool EnableWindowFunctionsV2 = 148 [default = false, (InvalidateCompileCache) = true];
 };

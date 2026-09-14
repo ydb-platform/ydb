@@ -477,6 +477,9 @@
     "name": "yt.PythonCpu"
   },
   {
+    "name": "yt.QLFilterDepthLimit"
+  },
+  {
     "name": "yt.QueryCacheChunkLimit"
   },
   {

@@ -178,7 +178,7 @@ public:
     }
 
     std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(const TInstant now) {
-        return ActualizationIndex->CollectMoveDataMetadataRequests(Portions, now);
+        return ActualizationIndex->CollectMoveDataMetadataRequests(Portions, InsertedPortionsById, now);
     }
 
     TInsertWriteId BuildNextInsertWriteId() {
@@ -251,6 +251,8 @@ public:
     }
 
     void AbortPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
+        // Actualizers never see a portion that carries a remove snapshot, so the move session learns of the abort here.
+        ActualizationIndex->OnUncommittedPortionAborted(GetInsertedPortionVerifiedPtr(insertWriteId)->GetPortionId());
         CommitPortionOnComplete(insertWriteId, engine);
     }
 
@@ -274,7 +276,7 @@ public:
 
     void StartMoveData(const THashSet<ui32>& targetGroups) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
-        ActualizationIndex->StartMoveData(targetGroups, context);
+        ActualizationIndex->StartMoveData(targetGroups, context, InsertedPortionsById);
     }
 
     void StopMoveData() {

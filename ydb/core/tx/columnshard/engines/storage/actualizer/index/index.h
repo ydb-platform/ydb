@@ -10,6 +10,7 @@
 namespace NKikimr::NOlap {
 class TVersionedIndex;
 class TTiering;
+class TWrittenPortionInfo;
 }   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NActualizer {
@@ -32,7 +33,8 @@ private:
 
 public:
     std::vector<TCSMetadataRequest> CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions);
-    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions, const TInstant now);
+    std::vector<TCSMetadataRequest> CollectMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
+        const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const TInstant now);
 
     bool IsStarted() const {
         return Actualizers.size();
@@ -48,8 +50,10 @@ public:
     void RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context);
     void RefreshScheme(const TAddExternalContext& context);
 
-    void StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context);
+    void StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context,
+        const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
     void StopMoveData();
+    void OnUncommittedPortionAborted(const ui64 portionId);
     TMoveDataQueueSizes GetMoveDataQueueSizes() const;
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TAddExternalContext& context);

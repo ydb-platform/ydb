@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/actualization/construction/context.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
@@ -42,7 +43,8 @@ private:
     }
 
 public:
-    TMoveDataActualizationReply(const std::shared_ptr<TMoveDataActualizer>& actualizer, std::vector<ui64>&& portionIds, const TInstant requestedAt)
+    TMoveDataActualizationReply(
+        const std::shared_ptr<TMoveDataActualizer>& actualizer, std::vector<ui64>&& portionIds, const TInstant requestedAt)
         : MoveDataActualizer(actualizer)
         , PortionIds(std::move(portionIds))
         , RequestedAt(requestedAt)
@@ -69,6 +71,9 @@ void TMoveDataActualizer::RemoveFromActiveQueue(ui64 portionId) {
 
 void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& context) {
     const ui64 portionId = info.GetPortionId();
+    // A seeded uncommitted portion has committed, so from here on it moves like any other.
+    UncommittedPortionIds.erase(portionId);
+    UncommittedOnTarget.erase(portionId);
     if (!InitialPortionIds.contains(portionId)) {
         if (context.GetNow() >= AdmissionDeadline) {
             return;
@@ -90,6 +95,8 @@ void TMoveDataActualizer::DoRemovePortion(const ui64 portionId) {
     PendingPortionIds.erase(portionId);
     RequestedAt.erase(portionId);
     InFlightPortionIds.erase(portionId);
+    UncommittedPortionIds.erase(portionId);
+    UncommittedOnTarget.erase(portionId);
     RemoveFromActiveQueue(portionId);
 }
 
@@ -168,6 +175,11 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
             {"targets", JoinSeq(",", TargetGroups)});
         return;
     }
+    // An uncommitted write cannot be rewritten, so the gate holds until it commits or aborts.
+    if (UncommittedPortionIds.contains(portionId)) {
+        UncommittedOnTarget.emplace(portionId);
+        return;
+    }
     auto portionSchema = accessor.GetPortionInfo().GetSchema(VersionedIndex);
     const TString tierName = accessor.GetPortionInfo().GetTierNameDef(IStoragesManager::DefaultStorageId);
     auto readStorages = portionSchema->GetIndexInfo().GetUsedStorageIds(tierName);
@@ -186,8 +198,9 @@ void TMoveDataActualizer::OnMetadataRequestAnswered(const std::vector<ui64>& por
     }
 }
 
-std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataRequests(
-    const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self, const TInstant now) {
+std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
+    const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self,
+    const TInstant now) {
     if (PendingPortionIds.empty()) {
         return {};
     }
@@ -201,17 +214,21 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
         if (const auto* requestedAt = RequestedAt.FindPtr(portionId); requestedAt && now < *requestedAt + MetadataRequestExpiry) {
             continue;
         }
-        auto it = portions.find(portionId);
-        if (it == portions.end()) {
+        TPortionInfo::TPtr portion;
+        if (const auto it = portions.find(portionId); it != portions.end()) {
+            portion = it->second;
+        } else if (const auto itUncommitted = uncommitted.find(portionId); itUncommitted != uncommitted.end()) {
+            portion = itUncommitted->second;
+        } else {
             continue;
         }
         if (!currentRequest) {
             currentRequest = std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::MOVE_DATA);
         }
-        currentRequest->AddPortion(it->second);
+        currentRequest->AddPortion(portion);
         currentPortionIds.emplace_back(portionId);
         RequestedAt[portionId] = now;
-        if (currentRequest->PredictAccessorsMemory(it->second->GetSchema(VersionedIndex)) >= batchMemorySoftLimit) {
+        if (currentRequest->PredictAccessorsMemory(portion->GetSchema(VersionedIndex)) >= batchMemorySoftLimit) {
             requests.emplace_back(currentRequest, std::make_shared<TMoveDataActualizationReply>(self, std::move(currentPortionIds), now));
             currentRequest.reset();
             currentPortionIds.clear();
@@ -225,6 +242,7 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
 
 TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
     TMoveDataQueueSizes result{ .Pending = PendingPortionIds.size(), .ConfirmedToMove = 0, .InFlight = InFlightPortionIds.size(),
+        .Uncommitted = UncommittedOnTarget.size(),
         .Rejected = RejectedPortions };
     for (auto& [addr, portions] : PortionsToMove) {
         result.ConfirmedToMove += portions.size();
@@ -232,7 +250,8 @@ TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
     return result;
 }
 
-void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
+void TMoveDataActualizer::Refresh(
+    const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
     AdmissionDeadline =
         externalContext.GetNow() + NYDBTest::TControllers::GetColumnShardController()->GetMoveDataAdmissionWindow(AdmissionWindow);
     InitialPortionIds.clear();
@@ -241,6 +260,8 @@ void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
     PortionAddress.clear();
     InFlightPortionIds.clear();
     RequestedAt.clear();
+    UncommittedPortionIds.clear();
+    UncommittedOnTarget.clear();
     RejectedPortions = 0;
 
     for (auto& [portionId, portion] : externalContext.GetPortions()) {
@@ -249,6 +270,15 @@ void TMoveDataActualizer::Refresh(const TAddExternalContext& externalContext) {
         }
         InitialPortionIds.emplace(portionId);
         AddPortion(portion, externalContext);
+    }
+    // Initial membership lets a write that commits after the admission window still move.
+    for (const auto& [portionId, portion] : uncommitted) {
+        if (portion->HasRemoveSnapshot() || portion->GetTierNameDef(IStoragesManager::DefaultStorageId) != IStoragesManager::DefaultStorageId) {
+            continue;
+        }
+        InitialPortionIds.emplace(portionId);
+        UncommittedPortionIds.emplace(portionId);
+        PendingPortionIds.emplace(portionId);
     }
 }
 

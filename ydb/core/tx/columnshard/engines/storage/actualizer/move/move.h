@@ -11,7 +11,8 @@
 
 namespace NKikimr::NOlap {
 class TPortionDataAccessor;
-}
+class TWrittenPortionInfo;
+}   // namespace NKikimr::NOlap
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -32,6 +33,10 @@ private:
     THashSet<ui64> InFlightPortionIds;
     // Pending portions with an unanswered accessor request; the expiry re-asks for a request that got lost.
     THashMap<ui64, TInstant> RequestedAt;
+    // Uncommitted at the session start: a commit hands them to the normal path, an abort drops them.
+    THashSet<ui64> UncommittedPortionIds;
+    // Uncommitted portions with blobs in TargetGroups, held until the write commits or aborts.
+    THashSet<ui64> UncommittedOnTarget;
     ui64 RejectedPortions = 0;
 
     // Keeps InitialPortionIds intact so an aborted change can re-enter PendingPortionIds.
@@ -85,8 +90,9 @@ protected:
     }
 
 public:
-    std::vector<TCSMetadataRequest> BuildMoveDataMetadataRequests(
-        const THashMap<ui64, TPortionInfo::TPtr>& portions, const std::shared_ptr<TMoveDataActualizer>& self, const TInstant now);
+    std::vector<TCSMetadataRequest> BuildMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
+        const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self,
+        const TInstant now);
 
     TMoveDataQueueSizes GetMoveDataQueueSizes() const;
 
@@ -97,7 +103,7 @@ public:
     static constexpr TDuration AdmissionWindow = TDuration::Minutes(10);
     static constexpr TDuration MetadataRequestExpiry = TDuration::Minutes(5);
 
-    void Refresh(const TAddExternalContext& externalContext);
+    void Refresh(const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
 
     TMoveDataActualizer(const THashSet<ui32>& targetGroups, const TVersionedIndex& versionedIndex)
         : TargetGroups(targetGroups)

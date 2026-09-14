@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/algorithm.h>
@@ -86,18 +87,41 @@ public:
         PlanCommit(Runtime, Sender, TabletId, ReadStep, TSet<ui64>{ txId });
     }
 
+    // A write whose commit never arrives, as when the tablet restarts before its result reaches the client.
+    std::vector<ui64> WriteUncommitted(const ui64 writeId, const ui64 fromRow, const ui64 toRow, const ui64 lockId) {
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(WriteData(Runtime, Sender, TabletId, writeId, TableId, MakeTestBlob({ fromRow, toRow }, Table.Schema), Table.Schema,
+            &writeIds, NEvWrite::EModificationType::Upsert, lockId));
+        return writeIds;
+    }
+
+    void CommitLock(const ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
+        ReadStep = ProposeCommit(Runtime, Sender, TabletId, txId, writeIds, lockId);
+        PlanCommit(Runtime, Sender, TabletId, ReadStep, TSet<ui64>{ txId });
+    }
+
+    // What the lock service answers once the lock's owner is gone: the shard aborts the writes under it.
+    void ReportLockGone(const ui64 lockId) {
+        Runtime.SendToPipe(TabletId, Sender, new NLongTxService::TEvLongTxService::TEvLockStatus(lockId, /*lockNode=*/1,
+                                                 NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND), 0, GetPipeConfigWithRetries());
+    }
+
     // Reassign past everything written so far: those portions stay behind in OldGroup.
     size_t ReassignPastWrittenData() {
         const std::vector<TLogoBlobID> before = LivePortionBlobs(*OldGroupProxy, TabletId);
         UNIT_ASSERT_C(before.size(), "nothing was written into OldGroup - the test would pass vacuously");
-        ui32 reassignedFrom = 0;
         for (const auto& id : before) {
-            reassignedFrom = Max(reassignedFrom, id.Generation() + 1);
+            ReassignedFrom = Max(ReassignedFrom, id.Generation() + 1);
         }
-        Runtime.Send(new IEventHandle(TabletActorId, TabletActorId, new TKikimrEvents::TEvPoisonPill));
-        TabletActorId = BootTablet(Runtime, MakeTabletInfo(TabletId, { { 0, OldGroup }, { reassignedFrom, NewGroup } }));
+        Restart();
         UNIT_ASSERT_VALUES_EQUAL_C(LivePortionBlobs(*NewGroupProxy, TabletId).size(), 0u, "no portion data may exist in the target group yet");
         return before.size();
+    }
+
+    // Boots the next generation with the current channel history, as Hive does after MoveData.
+    void Restart() {
+        Runtime.Send(new IEventHandle(TabletActorId, TabletActorId, new TKikimrEvents::TEvPoisonPill));
+        TabletActorId = BootTablet(Runtime, MakeTabletInfo(TabletId, { { 0, OldGroup }, { ReassignedFrom, NewGroup } }));
     }
 
     void StartMove() {
@@ -137,6 +161,8 @@ private:
     TActorId TabletActorId;
     TestTableDescription Table;
     TPlanStep ReadStep;
+    // First generation in NewGroup, once ReassignPastWrittenData has run.
+    ui32 ReassignedFrom = 0;
 
     NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController> SetupRuntime(const bool moveDataEnabled) {
         Runtime.SetScheduledLimit(10'000);
@@ -193,6 +219,77 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     // Flag off: TEvMoveData goes straight to the executor, which leaves the portions alone.
     Y_UNIT_TEST(MoveDataDisabledLeavesPortionsInPlace) {
         RunMoveDataToCompletion(/*ttlBackgroundDisabled=*/false, /*moveDataEnabled=*/false);
+    }
+
+    // An uncommitted write cannot be rewritten, yet its blobs sit in the old group until it commits and moves.
+    Y_UNIT_TEST(SuccessWaitsForUncommittedWriteToCommit) {
+        TMoveDataFixture f;
+        f.Write(1, 0, 1000);
+        const auto writeIds = f.WriteUncommitted(100, 5000, 5010, 7);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+
+        f.StartMove();
+        UNIT_ASSERT_C(!f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(2, 1000, 1001);
+            }
+        }), "answered Success while an uncommitted write held blobs in the old group");
+
+        f.CommitLock(3, writeIds, 7);
+        const auto response = f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(4, 1001, 1002);
+            }
+        });
+        UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the write committed");
+        f.AssertDrainedSuccess(response);
+        // Write 4 lands in the plan step ReadRows skips.
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1011);
+    }
+
+    // An aborted write leaves its blobs in the old group until cleanup deletes them.
+    Y_UNIT_TEST(SuccessWaitsForAbortedWriteToBeCleanedUp) {
+        TMoveDataFixture f;
+        f.Write(1, 0, 1000);
+        f.WriteUncommitted(100, 5000, 5010, 7);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+
+        f.StartMove();
+        UNIT_ASSERT_C(!f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(2, 1000, 1001);
+            }
+        }), "answered Success while an uncommitted write held blobs in the old group");
+
+        f.ReportLockGone(7);
+        const auto response = f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(3, 1001, 1002);
+            }
+        });
+        UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the write aborted");
+        f.AssertDrainedSuccess(response);
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 1001);
+    }
+
+    // An uncommitted write whose blobs are already in the new group must not hold the move back.
+    Y_UNIT_TEST(UncommittedWriteInTheNewGroupDoesNotHoldSuccess) {
+        TMoveDataFixture f;
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+        f.WriteUncommitted(100, 5000, 5010, 7);
+
+        f.StartMove();
+        const auto response = f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(2, 1000, 1001);
+            }
+        });
+        UNIT_ASSERT_C(response, "an uncommitted write outside the moved group held the answer back");
+        f.AssertDrainedSuccess(response);
     }
 
     // A running cleanup has taken its portions out of CleanupPortions but not yet queued their blobs for GC.

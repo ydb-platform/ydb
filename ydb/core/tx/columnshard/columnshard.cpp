@@ -752,6 +752,11 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
             return;
         case NOlap::NActualizer::EMoveDataGate::BlockedByPortions:
             Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
+            if (queues.Uncommitted) {
+                LOG_S_INFO("TColumnShard::CheckMoveDataGate: "
+                           << queues.Uncommitted << " uncommitted writes hold blobs in the target groups, waiting for commit or abort at tablet "
+                           << TabletID());
+            }
             return;
         case NOlap::NActualizer::EMoveDataGate::BlockedByCleanup:
             Counters.GetCSCounters().OnMoveDataGateBlockedByCleanup();

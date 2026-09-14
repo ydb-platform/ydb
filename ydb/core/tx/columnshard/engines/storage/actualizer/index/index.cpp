@@ -60,11 +60,18 @@ void TGranuleActualizationIndex::Start() {
     Actualizers.emplace_back(SchemeActualizer);
 }
 
-void TGranuleActualizationIndex::StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context) {
+void TGranuleActualizationIndex::StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context,
+    const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
     AFL_VERIFY(!MoveDataActualizer);
     MoveDataActualizer = std::make_shared<TMoveDataActualizer>(targetGroups, VersionedIndex);
     Actualizers.emplace_back(MoveDataActualizer);
-    MoveDataActualizer->Refresh(context);
+    MoveDataActualizer->Refresh(context, uncommitted);
+}
+
+void TGranuleActualizationIndex::OnUncommittedPortionAborted(const ui64 portionId) {
+    if (MoveDataActualizer) {
+        MoveDataActualizer->RemovePortion(portionId);
+    }
 }
 
 void TGranuleActualizationIndex::StopMoveData() {
@@ -89,12 +96,12 @@ std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataReque
     return TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
 }
 
-std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMoveDataMetadataRequests(
-    const THashMap<ui64, TPortionInfo::TPtr>& portions, const TInstant now) {
+std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMoveDataMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions,
+    const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const TInstant now) {
     if (!MoveDataActualizer) {
         return {};
     }
-    return MoveDataActualizer->BuildMoveDataMetadataRequests(portions, MoveDataActualizer, now);
+    return MoveDataActualizer->BuildMoveDataMetadataRequests(portions, uncommitted, MoveDataActualizer, now);
 }
 
 }   // namespace NKikimr::NOlap::NActualizer

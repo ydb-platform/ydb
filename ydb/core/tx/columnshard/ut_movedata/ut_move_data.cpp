@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         TMoveDataActualizerTestable actualizer(THashSet<ui32>{ 100 }, versionedIndex);
         const TInstant start = TInstant::Seconds(1000);
-        actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, {}));
+        actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, {}), {});
 
         auto makePortion = [&](const ui64 portionId) {
             return NOlap::NTest::MakeTestCompactedPortion(pathId, portionId, 10, 19, 10, NOlap::TSnapshot(1, 1), std::nullopt);
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             for (ui64 portionId = 1; portionId <= PortionsCount; ++portionId) {
                 actualizer->AddToInitialAndPendingForTest(portionId);
             }
-            return actualizer->BuildMoveDataMetadataRequests(knownPortions, actualizer, TInstant::Seconds(1000));
+            return actualizer->BuildMoveDataMetadataRequests(knownPortions, {}, actualizer, TInstant::Seconds(1000));
         };
 
         auto batchSizes = [](const std::vector<NOlap::TCSMetadataRequest>& requests) {
@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         {
             auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(3 * portionMemory);
             auto actualizer = std::make_shared<TMoveDataActualizerTestable>(targetGroups, versionedIndex);
-            UNIT_ASSERT(actualizer->BuildMoveDataMetadataRequests(portions, actualizer, TInstant::Seconds(1000)).empty());
+            UNIT_ASSERT(actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, TInstant::Seconds(1000)).empty());
         }
     }
 
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         }
         auto requested = [&](const TInstant now) {
             TVector<ui64> result;
-            for (auto&& request : actualizer->BuildMoveDataMetadataRequests(portions, actualizer, now)) {
+            for (auto&& request : actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, now)) {
                 for (auto&& portionId : request.GetRequest()->GetPortionIds()) {
                     result.emplace_back(portionId);
                 }
@@ -412,7 +412,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         auto actualizer = std::make_shared<TMoveDataActualizerTestable>(THashSet<ui32>{ 100 }, versionedIndex);
         actualizer->AddToInitialAndPendingForTest(1);
         auto requestCount = [&](const TInstant now) {
-            return actualizer->BuildMoveDataMetadataRequests(portions, actualizer, now).size();
+            return actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, now).size();
         };
 
         const TInstant first = TInstant::Seconds(1000);

@@ -509,7 +509,7 @@ struct TPersistentBufferFormat {
     bool EnableChecksums = true;
     // Registration token lifetime on the PB monotonic clock.
     // Closed registrations are retained for twice this interval.
-    ui32 RegistrationTimeoutSeconds = 5;
+    ui32 RegistrationTimeoutMilliseconds = 5000;
     // Actor-wide admission limit; token exhaustion returns OVERLOADED.
     ui32 MaxRegistrationTokens = 1024;
 };

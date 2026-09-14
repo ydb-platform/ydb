@@ -1,7 +1,6 @@
 #include "ddisk_actor.h"
 #include "direct_io_op.h"
 
-#include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/util/hp_timer_helpers.h>
@@ -745,7 +744,7 @@ namespace NKikimr::NDDisk {
                 if (barrier.Generation == Max<ui32>() && barrier.Lsn == Max<ui64>()) {
                     auto& removal = PersistentBufferRemovals[key];
                     removal.Stage = TPersistentBufferRemoval::EStage::Wait;
-                    const auto delay = TDuration::Seconds(ui64(PersistentBufferFormat.RegistrationTimeoutSeconds) * 2);
+                    const auto delay = TDuration::MilliSeconds(ui64(PersistentBufferFormat.RegistrationTimeoutMilliseconds) * 2);
                     // A restart starts a fresh grace interval; no pre-restart request may revive it.
                     removal.Deadline = TActivationContext::Now() + delay;
                     Schedule(delay, new TEvPrivate::TEvProcessPersistentBufferRemoval(key));
@@ -1010,7 +1009,7 @@ namespace NKikimr::NDDisk {
                 auto& removal = PersistentBufferRemovals.at(key);
                 if (success && operation == EOperation::Close) {
                     removal.Stage = TPersistentBufferRemoval::EStage::Wait;
-                    const auto delay = TDuration::Seconds(ui64(PersistentBufferFormat.RegistrationTimeoutSeconds) * 2);
+                    const auto delay = TDuration::MilliSeconds(ui64(PersistentBufferFormat.RegistrationTimeoutMilliseconds) * 2);
                     removal.Deadline = TActivationContext::Now() + delay;
                     Schedule(delay, new TEvPrivate::TEvProcessPersistentBufferRemoval(key));
                 } else {
@@ -1932,15 +1931,15 @@ namespace NKikimr::NDDisk {
         // Consumed tokens free their slots immediately, without accumulating expiry timers.
         if (!PersistentBufferRegistrationTokenExpiryScheduled) {
             PersistentBufferRegistrationTokenExpiryScheduled = true;
-            CreateLongTimer(TDuration::Seconds(PersistentBufferFormat.RegistrationTimeoutSeconds),
-                new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvExpirePersistentBufferRegistrationToken));
+            Schedule(TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds),
+                new TEvPrivate::TEvExpirePersistentBufferRegistrationToken);
         }
         reply(TStatus::OK, {}, token.Token);
     }
 
     void TDDiskActor::Handle(TEvPrivate::TEvExpirePersistentBufferRegistrationToken::TPtr) {
         const auto now = TActivationContext::Monotonic();
-        const auto timeout = TDuration::Seconds(PersistentBufferFormat.RegistrationTimeoutSeconds);
+        const auto timeout = TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds);
         const auto firstLive = std::lower_bound(PersistentBufferRegistrationTokens.begin(),
             PersistentBufferRegistrationTokens.end(), now,
             [timeout](const TPersistentBufferRegistrationToken& token, TMonotonic deadline) {
@@ -1950,8 +1949,7 @@ namespace NKikimr::NDDisk {
         PersistentBufferRegistrationTokenExpiryScheduled = !PersistentBufferRegistrationTokens.empty();
         if (PersistentBufferRegistrationTokenExpiryScheduled) {
             const auto nextExpiry = PersistentBufferRegistrationTokens.front().IssuedAt + timeout;
-            CreateLongTimer(nextExpiry - now,
-                new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvExpirePersistentBufferRegistrationToken));
+            Schedule(nextExpiry - now, new TEvPrivate::TEvExpirePersistentBufferRegistrationToken);
         }
     }
 
@@ -1971,7 +1969,7 @@ namespace NKikimr::NDDisk {
             [](const TPersistentBufferRegistrationToken& token, ui64 value) { return token.Token < value; });
         const bool found = tokenIt != PersistentBufferRegistrationTokens.end() && tokenIt->Token == record.GetToken();
         if (!found || TActivationContext::Monotonic() - tokenIt->IssuedAt
-                >= TDuration::Seconds(PersistentBufferFormat.RegistrationTimeoutSeconds)) {
+                >= TDuration::MilliSeconds(PersistentBufferFormat.RegistrationTimeoutMilliseconds)) {
             if (found) {
                 PersistentBufferRegistrationTokens.erase(tokenIt);
             }

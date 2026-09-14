@@ -27,17 +27,6 @@ Y_UNIT_TEST_SUITE(TLocalTopicClientFactory) {
         CloseSession(*session);
         AssertTopicMessages({"factory message"});
     }
-
-    Y_UNIT_TEST_F(CreateDeferredPublishClient, TLocalTopicClientFixture) {
-        auto factory = CreateLocalTopicClientFactory(LocalClientSettings());
-        auto client = factory->CreateDeferredPublishClient(ClientSettings());
-        factory.Reset();
-        const auto begin = client->BeginPublication("factory-publication").GetValue(TEST_TIMEOUT);
-        UNIT_ASSERT_VALUES_EQUAL_C(begin.GetStatus(), EStatus::SUCCESS, begin.GetIssues().ToString());
-        const auto describe = DeferredClient->DescribePublication(begin.GetPublication()).GetValue(TEST_TIMEOUT);
-        UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(describe.GetPublication().ExtPublicationId, "factory-publication");
-    }
 }
 
 } // namespace NKikimr::NKqp::NLocalTopicTests

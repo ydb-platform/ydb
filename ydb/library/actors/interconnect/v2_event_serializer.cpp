@@ -158,10 +158,9 @@ namespace NActors {
         Y_DEBUG_ABORT_UNLESS(mainProducedOnEntry + xdcProducedOnEntry + totalBytesProduced
             == CumulativeProducedMain + CumulativeProducedXdc);
 
-        buffer.TrimFront(main.Buffer.size() - main.Buffer.size() % 64);
-        const size_t scratchBytesUsed = bufferSizeOnEntry - buffer.size();
-
         if (mainBufferProduced) {
+            buffer.TrimFront(main.Buffer.size() - main.Buffer.size() % 64);
+            const size_t scratchBytesUsed = bufferSizeOnEntry - buffer.size();
             RefcountItems.push_back({
                 .MainEndOffset = mainBufferProduced,
                 .XdcEndOffset = 0,
@@ -170,25 +169,19 @@ namespace NActors {
                 .EventReceivedTimestamp = 0,
             });
             NumBytesInScratchBuffers += scratchBytesUsed;
-        } else {
-            Y_DEBUG_ABORT_UNLESS(scratchBytesUsed == 0);
         }
 
-        if (xdc && xdcBuffer) {
+        if (xdc && xdcBuffer && xdcBufferProduced) {
             xdcBuffer->TrimFront(xdcState.Buffer.size() - xdcState.Buffer.size() % 64);
             const size_t xdcScratchUsed = xdcBufferSizeOnEntry - xdcBuffer->size();
-            if (xdcBufferProduced) {
-                RefcountItems.push_back({
-                    .MainEndOffset = 0,
-                    .XdcEndOffset = xdcBufferProduced,
-                    .Scratch = *xdcBuffer,
-                    .ScratchBytesUsed = xdcScratchUsed,
-                    .EventReceivedTimestamp = 0,
-                });
-                NumBytesInScratchBuffers += xdcScratchUsed;
-            } else {
-                Y_DEBUG_ABORT_UNLESS(xdcScratchUsed == 0);
-            }
+            RefcountItems.push_back({
+                .MainEndOffset = 0,
+                .XdcEndOffset = xdcBufferProduced,
+                .Scratch = *xdcBuffer,
+                .ScratchBytesUsed = xdcScratchUsed,
+                .EventReceivedTimestamp = 0,
+            });
+            NumBytesInScratchBuffers += xdcScratchUsed;
         }
 
         return totalBytesProduced;

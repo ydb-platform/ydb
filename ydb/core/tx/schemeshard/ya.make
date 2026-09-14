@@ -247,6 +247,7 @@ SRCS(
     schemeshard_audit_log_fragment.cpp
     schemeshard_backup.cpp
     schemeshard_full_backup.cpp
+    schemeshard_idempotency.cpp
     schemeshard_full_backup__progress.cpp
     schemeshard_full_backup__get.cpp
     schemeshard_full_backup__list.cpp

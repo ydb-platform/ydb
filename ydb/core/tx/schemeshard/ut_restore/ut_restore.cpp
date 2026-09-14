@@ -5320,7 +5320,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             OperationParams {
               labels {
                 key: "uid"
-                value: "foo"
+                value: "ключ with spaces/and?symbols!"
               }
             }
             ImportFromS3Settings {
@@ -5337,7 +5337,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImport(runtime, ++txId, "/MyRoot", request);
         const ui64 importId = txId;
         // create operation again with same uid
-        TestImport(runtime, ++txId, "/MyRoot", request);
+        TString differentBody = request;
+        SubstGlobal(differentBody, "/MyRoot/Table", "/MyRoot/OtherTable");
+        TestImport(runtime, ++txId, "/MyRoot", differentBody);
         // new operation was not created
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         // check previous operation

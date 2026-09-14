@@ -175,6 +175,11 @@ void TMemoryChanges::GrabNewFullBackupOp(TSchemeShard* ss, ui64 id) {
     FullBackups.emplace(id, nullptr);
 }
 
+void TMemoryChanges::GrabNewBackupOperationUidKey(TSchemeShard* ss, const TBackupOperationUidKey& key) {
+    Y_ABORT_UNLESS(!ss->BackupOperationsByUid.contains(key));
+    BackupOperationUidKeys.push(key);
+}
+
 void TMemoryChanges::GrabNewBCPathToFullBackup(TSchemeShard* ss, const TPathId& bcPathId) {
     Y_ABORT_UNLESS(!ss->BCPathToFullBackup.contains(bcPathId));
     BCPathToFullBackup.emplace(bcPathId, std::nullopt);
@@ -419,6 +424,15 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
             ss->IncrementalBackups.erase(id);
         }
         IncrementalBackups.pop();
+    }
+
+    while (BackupOperationUidKeys) {
+        const auto& key = BackupOperationUidKeys.top();
+        if (key.first == NKikimrSchemeOp::ESchemeOpRestoreBackupCollection) {
+            ss->IncrementalRestoreStates.erase(ss->BackupOperationsByUid.at(key));
+        }
+        ss->BackupOperationsByUid.erase(key);
+        BackupOperationUidKeys.pop();
     }
 
     while (FullBackups) {

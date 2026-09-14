@@ -512,6 +512,13 @@ enum ECumulativeCounters {
 
     // Total time spent in TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats), in nanoseconds.
     COUNTER_PERIODIC_TABLE_STATS_HANDLE_TIME_NS = 151 [(CounterOpts) = {Name: "PeriodicTableStatsHandleTimeNs"}];
+
+    // Durable backup UID decisions; incremented after the local transaction commits.
+    COUNTER_BACKUP_UID_ADMITTED = 152 [(CounterOpts) = {Name: "BackupUid/Admitted"}];
+    COUNTER_BACKUP_UID_REPLAYED = 153 [(CounterOpts) = {Name: "BackupUid/Replayed"}];
+    COUNTER_BACKUP_UID_CONFLICTS = 154 [(CounterOpts) = {Name: "BackupUid/Conflicts"}];
+    // Backup and restore operation records loaded into the UID index during tablet startup.
+    COUNTER_BACKUP_UID_RECOVERED_RECORDS = 155 [(CounterOpts) = {Name: "BackupUid/RecoveredRecords"}];
 }
 
 enum EPercentileCounters {

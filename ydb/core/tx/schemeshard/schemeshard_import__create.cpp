@@ -236,9 +236,12 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         const TString& uid = GetUid(request.GetRequest().GetOperationParams());
         if (uid) {
-            if (auto it = Self->ImportsByUid.find(uid); it != Self->ImportsByUid.end()) {
-                if (IsSameDomain(it->second, request.GetDatabaseName())) {
-                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *it->second);
+            if (const auto* existing = FindOperationByUid(Self->ImportsByUid, uid)) {
+                const auto domain = DomainPathId(request.GetDatabaseName());
+                // Preserve legacy requests without a database binding.
+                const auto expectedDomain = domain ? domain : (*existing)->DomainPathId;
+                if (CompareOperationUid({(*existing)->DomainPathId, {}, {}}, {expectedDomain, {}, {}}) == EUidReplayMatch::Match) {
+                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), **existing);
                     return Reply(std::move(response));
                 } else {
                     return Reply(

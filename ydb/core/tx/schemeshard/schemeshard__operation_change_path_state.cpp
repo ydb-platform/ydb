@@ -72,6 +72,9 @@ public:
         Y_VERIFY_S(!context.SS->FindTx(OperationId), 
             "TChangePathStateOp Propose: operation already exists"
             << ", opId: " << OperationId);
+        auto guard = context.DbGuard();
+        context.MemChanges.GrabPath(context.SS, path.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxChangePathState, path.Base()->PathId);
         
         txState.TargetPathId = path.Base()->PathId;
@@ -93,7 +96,7 @@ public:
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TChangePathStateOp AbortPropose"
             << ", opId: " << OperationId);
-        // Nothing to cleanup since Propose hasn't committed anything yet
+        // TMemoryChanges restores the path and removes the staged transaction.
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -110,8 +113,8 @@ ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransactio
     return MakeSubOperation<TChangePathStateOp>(opId, tx);
 }
 
-ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state) {
-    return MakeSubOperation<TChangePathStateOp>(opId, state);
+ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state, TOperationContext& context) {
+    return MakeSubOperation<TChangePathStateOp>(opId, state, context);
 }
 
 bool CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result) {

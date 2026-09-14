@@ -1997,6 +1997,15 @@ message TSetColumnConstraintSettings {
 
 // End Set Column Constraints
 
+// Idempotency metadata for an operation submission. Child operations must
+// retain their parent's operation identity rather than admit this key again.
+message TOperationIdempotency {
+    optional string Uid = 1 [(Ydb.sensitive) = true];
+    optional bytes OriginalDdl = 3 [(Ydb.sensitive) = true];
+    // Read retained identity without admitting an operation on a miss.
+    optional bool LookupOnly = 4 [default = false];
+}
+
 // Request for scheme modification
 // Has only one of the operations
 message TModifyScheme {
@@ -2134,6 +2143,8 @@ message TModifyScheme {
     optional TCreateFullBackupOp CreateFullBackupOp = 95;
 
     optional TCreateTestShardSet CreateTestShardSet = 96;
+
+    optional TOperationIdempotency OperationIdempotency = 97;
 
     // Some entries are grouped by semantics, so are out of order
 }

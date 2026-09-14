@@ -12,6 +12,7 @@
 #include "schemeshard_export.h"
 #include "schemeshard_forced_compaction.h"
 #include "schemeshard_import.h"
+#include "schemeshard_idempotency.h"
 #include "schemeshard_info_types.h"
 #include "schemeshard_path.h"
 #include "schemeshard_path_element.h"
@@ -1794,6 +1795,13 @@ public:
     // Persisted in Schema::FullBackups (Table<136>) + Schema::FullBackupItems (Table<137>).
     // Items are keyed by destination TPathId because CCT children are not 1-1 with user-visible items.
     TMap<ui64, TFullBackupInfo::TPtr> FullBackups;
+
+    // UID index keyed by operation type and UID, rebuilt from backup and restore operation records.
+    TMap<TBackupOperationUidKey, ui64> BackupOperationsByUid;
+    TMaybe<TBackupOperationReplay> FindBackupOperationByUid(const TBackupOperationUidKey& key) const;
+    void BindBackupOperationUid(const TBackupOperationUidKey& key, ui64 id,
+        const NKikimrSchemeOp::TModifyScheme& tx, const TString& userSID);
+    void PersistBackupOperationUidKey(NIceDb::TNiceDb& db, const TBackupOperationUidKey& key);
 
     // Reverse index: backup-collection TPathId -> running control op id.
     // Rebuilt at TTxInit from non-terminal rows; used by the control op's Propose

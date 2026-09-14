@@ -6064,6 +6064,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 bool retryNeeded = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::RetryNeeded>(false);
 
                 auto& state = Self->IncrementalRestoreStates[operationId];
+                state.Uid = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::Uid>();
+                state.OriginalDdl = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::OriginalDdl>();
+                state.UserSID = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::UserSID>();
+                state.BackupCollectionPathId = TPathId(rowset.GetValueOrDefault<Schema::IncrementalRestoreState::BackupCollectionPathOwnerId>(),
+                    rowset.GetValueOrDefault<Schema::IncrementalRestoreState::BackupCollectionPathId>());
+                state.OriginalOperationId = operationId;
+                state.AwaitingInitialRestore = rowset.GetValueOrDefault<Schema::IncrementalRestoreState::AwaitingInitialRestore>();
+                if (state.Uid) {
+                    Self->BackupOperationsByUid[{NKikimrSchemeOp::ESchemeOpRestoreBackupCollection, state.Uid}] = operationId;
+                }
                 state.State = static_cast<TIncrementalRestoreState::EState>(stateValue);
                 state.CurrentIncrementalIdx = currentIdx;
                 state.FinalStatus = finalStatus;
@@ -6192,7 +6202,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TTxId txId = opId.GetTxId();
 
                 // Skip orphan recovery for ops whose state was already loaded above.
-                if (Self->IncrementalRestoreStates.contains(ui64(txId))) {
+                const auto* state = Self->IncrementalRestoreStates.FindPtr(ui64(txId));
+                if (state && !state->AwaitingInitialRestore) {
                     continue;
                 }
 
@@ -6274,6 +6285,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
 
         for (auto& [operationId, state] : Self->IncrementalRestoreStates) {
+            if (state.AwaitingInitialRestore) {
+                continue; // The backup control operation or orphan recovery starts this stage.
+            }
             // Finalizing without a surviving finalize sub-op: reset to Running so the
             // orchestrator re-triggers it (SyncIndexSchemaVersions/ReleasePathState are idempotent).
             if (state.State == TIncrementalRestoreState::EState::Finalizing) {
@@ -6334,6 +6348,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     backupInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::IncrementalBackups::EndTime>());
                     if (rowset.HaveValue<Schema::IncrementalBackups::UserSID>()) {
                         backupInfo->UserSID = rowset.GetValue<Schema::IncrementalBackups::UserSID>();
+                    }
+
+                    backupInfo->Uid = rowset.GetValueOrDefault<Schema::IncrementalBackups::Uid>();
+                    backupInfo->OriginalDdl = rowset.GetValueOrDefault<Schema::IncrementalBackups::OriginalDdl>();
+                    if (backupInfo->Uid) {
+                        Self->BackupOperationsByUid[{NKikimrSchemeOp::ESchemeOpBackupIncrementalBackupCollection, backupInfo->Uid}] = id;
                     }
 
                     Self->IncrementalBackups[id] = backupInfo;
@@ -6406,6 +6426,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     backupInfo->ExpectedItemCount =
                         rowset.GetValueOrDefault<Schema::FullBackups::ExpectedItemCount>(0);
+
+                    backupInfo->Uid = rowset.GetValueOrDefault<Schema::FullBackups::Uid>();
+                    backupInfo->OriginalDdl = rowset.GetValueOrDefault<Schema::FullBackups::OriginalDdl>();
+                    if (backupInfo->Uid) {
+                        Self->BackupOperationsByUid[{NKikimrSchemeOp::ESchemeOpBackupBackupCollection, backupInfo->Uid}] = id;
+                    }
 
                     Self->FullBackups[id] = backupInfo;
 
@@ -6733,6 +6759,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         if (Broken) {
             return;
         }
+
+        Self->TabletCounters->Cumulative()[COUNTER_BACKUP_UID_RECOVERED_RECORDS].Increment(Self->BackupOperationsByUid.size());
 
         auto delayPublications = OnComplete.ExtractPublicationsToSchemeBoard(); //there no Populator exist jet
         for (auto& [txId, pathIds] : Publications) {

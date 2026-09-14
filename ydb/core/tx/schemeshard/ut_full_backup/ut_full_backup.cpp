@@ -12,7 +12,11 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/grpc_services/rpc_backup_base.h>
+#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <type_traits>
@@ -436,6 +440,728 @@ NKikimrBackup::TEvForgetFullBackupResponse InternalForgetFullBackup(
 }
 
 }  // namespace
+
+Y_UNIT_TEST_SUITE(TBackupIdempotency) {
+    THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeRequest(
+        ui64 txId, const TString& key,
+        const TString& ddl = "BACKUP `FullBackupCol1`;",
+        NKikimrSchemeOp::EOperationType kind = NKikimrSchemeOp::ESchemeOpBackupBackupCollection)
+    {
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
+        auto& tx = *request->Record.AddTransaction();
+        tx.SetWorkingDir("/MyRoot");
+        tx.SetOperationType(kind);
+        if (kind == NKikimrSchemeOp::ESchemeOpMkDir) {
+            tx.MutableMkDir()->SetName("MustNotExist");
+        } else {
+            tx.MutableBackupBackupCollection()->SetName(".backups/collections/" DEFAULT_NAME_1);
+        }
+        auto& identity = *tx.MutableOperationIdempotency();
+        identity.SetUid(key);
+        identity.SetOriginalDdl(ddl);
+        return request;
+    }
+
+    NKikimrScheme::TEvModifySchemeTransactionResult Submit(
+        TTestBasicRuntime& runtime, THolder<TEvSchemeShard::TEvModifySchemeTransaction> request)
+    {
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        const auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
+        return response->Get()->Record;
+    }
+
+    NKikimrScheme::TEvModifySchemeTransactionResult Submit(
+        TTestBasicRuntime& runtime, ui64 txId, const TString& key,
+        const TString& ddl = "BACKUP `FullBackupCol1`;",
+        NKikimrSchemeOp::EOperationType kind = NKikimrSchemeOp::ESchemeOpBackupBackupCollection)
+    {
+        return Submit(runtime, MakeRequest(txId, key, ddl, kind));
+    }
+
+    void Prepare(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
+        PrepareDirs(runtime, env, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", CollectionWithOneTable(DEFAULT_NAME_1));
+        env.TestWaitNotification(runtime, txId);
+        PrepareTable(runtime, env, txId, "Table1");
+    }
+
+    NKikimrScheme::TEvModifySchemeTransactionResult LookupBackupOperation(
+        TTestBasicRuntime& runtime, THolder<TEvSchemeShard::TEvModifySchemeTransaction> request)
+    {
+        request->Record.MutableTransaction(0)->MutableOperationIdempotency()->SetLookupOnly(true);
+        return Submit(runtime, std::move(request));
+    }
+
+    Y_UNIT_TEST_TWIN(RetryRacingForgetHasOneConsistentOutcome, ForgetFirst) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        const ui64 originalId = ++txId;
+        UNIT_ASSERT_VALUES_EQUAL(Submit(runtime, originalId, "backup:forget-race").GetStatus(), NKikimrScheme::StatusAccepted);
+        env.TestWaitNotification(runtime, originalId);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        const auto forgetSender = runtime.AllocateEdgeActor();
+        const auto retrySender = runtime.AllocateEdgeActor();
+        const ui64 forgetId = ++txId;
+        const ui64 retryId = ++txId;
+        const auto sendForget = [&] {
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, forgetSender,
+                new TEvBackup::TEvForgetFullBackupRequest(forgetId, "/MyRoot", originalId), 0, GetPipeConfigWithRetries());
+        };
+        const auto sendRetry = [&] {
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, retrySender,
+                MakeRequest(retryId, "backup:forget-race").Release(), 0, GetPipeConfigWithRetries());
+        };
+        if constexpr (ForgetFirst) {
+            sendForget();
+            sendRetry();
+        } else {
+            sendRetry();
+            sendForget();
+        }
+        const auto retry = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(retrySender);
+        const auto forgotten = runtime.GrabEdgeEventRethrow<TEvBackup::TEvForgetFullBackupResponse>(forgetSender);
+        UNIT_ASSERT_VALUES_EQUAL_C(forgotten->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS, forgotten->Get()->Record.ShortDebugString());
+        const auto& result = retry->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NKikimrScheme::StatusAccepted, result.ShortDebugString());
+        UNIT_ASSERT(result.GetTxId() == originalId || result.GetTxId() == retryId);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetOperationId(), ToString(result.GetTxId()));
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, originalId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        ui64 activeId = retryId;
+        TString activeDdl = "BACKUP `FullBackupCol1`;";
+        const TString differentDdl = activeDdl + " -- after forget";
+        if (result.GetTxId() == originalId) {
+            // Replay linearized before deletion; the UID is now free.
+            UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, retryId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+            activeId = ++txId;
+            activeDdl = differentDdl;
+            const auto admitted = Submit(runtime, activeId, "backup:forget-race", activeDdl);
+            UNIT_ASSERT_VALUES_EQUAL_C(admitted.GetStatus(), NKikimrScheme::StatusAccepted, admitted.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(admitted.GetOperationId(), ToString(activeId));
+        } else {
+            // Deletion linearized first; this retry owns the next operation.
+            const auto conflict = Submit(runtime, ++txId, "backup:forget-race", differentDdl);
+            UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), NKikimrScheme::StatusPreconditionFailed, conflict.ShortDebugString());
+        }
+        env.TestWaitNotification(runtime, activeId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto replay = Submit(runtime, ++txId, "backup:forget-race", activeDdl);
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(activeId));
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, originalId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(UidNamespaceIsIndependentAcrossSchemeShardTablets) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", R"(Name: "Tenant")");
+        env.TestWaitNotification(runtime, txId);
+        TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+            ExternalSchemeShard: true
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            StoragePools { Name: "pool-1" Kind: "hdd" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Tenant"), {NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
+        UNIT_ASSERT(tenantSchemeShard && tenantSchemeShard != TTestTxConfig::SchemeShard);
+        TestMkDir(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", ".backups");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        TestMkDir(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant/.backups", "collections");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        TestCreateBackupCollection(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant/.backups/collections", R"(
+            Name: ")" DEFAULT_NAME_1 R"("
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Tenant/Table1" } }
+            Cluster: {}
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+        const TString rootDdl = "BACKUP `FullBackupCol1`;";
+        const TString tenantDdl = rootDdl + " -- tenant request";
+        const auto submitTo = [&](ui64 tablet, const TString& database, ui64 id, const TString& ddl) {
+            auto ordinary = MakeRequest(id, "backup:independent-tablets", ddl);
+            ordinary->Record.SetTabletId(tablet);
+            ordinary->Record.MutableTransaction(0)->SetWorkingDir(database);
+            auto request = std::move(ordinary);
+            const auto sender = runtime.AllocateEdgeActor();
+            runtime.SendToPipe(tablet, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            const auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
+            return response->Get()->Record;
+        };
+        const ui64 rootId = ++txId;
+        const auto root = submitTo(TTestTxConfig::SchemeShard, "/MyRoot", rootId, rootDdl);
+        UNIT_ASSERT_VALUES_EQUAL_C(root.GetStatus(), NKikimrScheme::StatusAccepted, root.ShortDebugString());
+        const ui64 tenantId = ++txId;
+        const auto tenant = submitTo(tenantSchemeShard, "/MyRoot/Tenant", tenantId, tenantDdl);
+        UNIT_ASSERT_VALUES_EQUAL_C(tenant.GetStatus(), NKikimrScheme::StatusAccepted, tenant.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(root.GetOperationId(), ToString(rootId));
+        UNIT_ASSERT_VALUES_EQUAL(tenant.GetOperationId(), ToString(tenantId));
+        env.TestWaitNotification(runtime, rootId);
+        env.TestWaitNotification(runtime, tenantId, tenantSchemeShard);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+        const auto rootReplay = submitTo(TTestTxConfig::SchemeShard, "/MyRoot", ++txId, rootDdl);
+        const auto tenantReplay = submitTo(tenantSchemeShard, "/MyRoot/Tenant", ++txId, tenantDdl);
+        UNIT_ASSERT_VALUES_EQUAL_C(rootReplay.GetStatus(), NKikimrScheme::StatusAccepted, rootReplay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(tenantReplay.GetStatus(), NKikimrScheme::StatusAccepted, tenantReplay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(rootReplay.GetOperationId(), ToString(rootId));
+        UNIT_ASSERT_VALUES_EQUAL(tenantReplay.GetOperationId(), ToString(tenantId));
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(tenantSchemeShard, sender,
+            new TEvBackup::TEvForgetFullBackupRequest(++txId, "/MyRoot/Tenant", tenantId), 0, GetPipeConfigWithRetries());
+        const auto forgotten = runtime.GrabEdgeEventRethrow<TEvBackup::TEvForgetFullBackupResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(forgotten->Get()->Record.GetStatus(), Ydb::StatusIds::SUCCESS, forgotten->Get()->Record.ShortDebugString());
+        const auto retainedRoot = submitTo(TTestTxConfig::SchemeShard, "/MyRoot", ++txId, rootDdl);
+        UNIT_ASSERT_VALUES_EQUAL_C(retainedRoot.GetStatus(), NKikimrScheme::StatusAccepted, retainedRoot.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(retainedRoot.GetOperationId(), ToString(rootId));
+    }
+
+    Y_UNIT_TEST(OriginalDdlCountsTowardCommitRedoLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        TControlWrapper redoLimit;
+        TControlBoard::RegisterSharedControl(redoLimit, runtime.GetAppData().Icb->TabletControls.MaxCommitRedoMB);
+        redoLimit.Reset(200, 1, 4096);
+        redoLimit = 2; // SchemeShard reserves one MiB for executor overhead.
+        const TString largeDdl = "-- " + TString(1 << 20, 'a') + "\nBACKUP `FullBackupCol1`;";
+        const auto rejected = Submit(runtime, ++txId, "backup:ddl-limit", largeDdl);
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), NKikimrScheme::StatusSchemeError, rejected.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetReason(), "local tx commit redo size");
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, txId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        const ui64 originalId = ++txId;
+        const auto accepted = Submit(runtime, originalId, "backup:ddl-limit");
+        UNIT_ASSERT_VALUES_EQUAL_C(accepted.GetStatus(), NKikimrScheme::StatusAccepted, accepted.ShortDebugString());
+        env.TestWaitNotification(runtime, originalId);
+        redoLimit = 200;
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto replay = Submit(runtime, ++txId, "backup:ddl-limit");
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetTxId(), originalId);
+    }
+
+    Y_UNIT_TEST(ReplayAtCapacityAndActiveForgetKeepOriginalUid) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", CollectionWithOneTable(DEFAULT_NAME_2));
+        env.TestWaitNotification(runtime, txId);
+        auto* limit = runtime.GetAppData().SchemeShardConfig.AddInFlightCounterConfig();
+        limit->SetType(COUNTER_IN_FLIGHT_OPS_TxCreateFullBackupOp);
+        limit->SetInFlightLimit(1);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const ui64 originalId = ++txId;
+        TBlockEvents<TEvPrivate::TEvProgressOperation> progress(runtime, [originalId](const auto& event) {
+            return event->Get()->TxId == originalId;
+        });
+        const auto admitted = Submit(runtime, originalId, "backup:capacity");
+        UNIT_ASSERT_VALUES_EQUAL_C(admitted.GetStatus(), NKikimrScheme::StatusAccepted, admitted.ShortDebugString());
+        const auto forget = InternalForgetFullBackup(runtime, originalId, ++txId);
+        UNIT_ASSERT_VALUES_EQUAL_C(forget.GetStatus(), Ydb::StatusIds::PRECONDITION_FAILED, forget.ShortDebugString());
+        const auto replay = Submit(runtime, ++txId, "backup:capacity");
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetTxId(), originalId);
+        auto request = MakeRequest(++txId, "backup:capacity-new", "BACKUP `FullBackupCol2`;");
+        request->Record.MutableTransaction(0)->MutableBackupBackupCollection()->SetName(".backups/collections/" DEFAULT_NAME_2);
+        const auto rejected = Submit(runtime, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), NKikimrScheme::StatusResourceExhausted, rejected.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetReason(), "limit of operations");
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, txId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        progress.Stop().Unblock();
+        env.TestWaitNotification(runtime, originalId);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        // The quota-rejected UID was never reserved, so a different body is valid.
+        const ui64 acceptedId = ++txId;
+        const auto accepted = Submit(runtime, acceptedId, "backup:capacity-new");
+        UNIT_ASSERT_VALUES_EQUAL_C(accepted.GetStatus(), NKikimrScheme::StatusAccepted, accepted.ShortDebugString());
+        env.TestWaitNotification(runtime, acceptedId);
+    }
+
+    Y_UNIT_TEST(FailedOperationReplaysAfterCollectionDropAndReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        const auto collection = DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1);
+        const ui64 collectionPathId = collection.GetPathDescription().GetSelf().GetPathId();
+        const ui64 originalId = ++txId;
+        TBlockEvents<TEvPrivate::TEvProgressOperation> progress(runtime, [originalId](const auto& event) {
+            return event->Get()->TxId == originalId;
+        });
+        const auto admitted = Submit(runtime, originalId, "backup:failed");
+        UNIT_ASSERT_VALUES_EQUAL_C(admitted.GetStatus(), NKikimrScheme::StatusAccepted, admitted.ShortDebugString());
+        const ui64 dropId = ++txId;
+        AsyncForceDropUnsafe(runtime, dropId, collectionPathId);
+        env.TestWaitNotification(runtime, dropId);
+        progress.Stop().Unblock();
+        env.TestWaitNotification(runtime, originalId);
+        const auto failed = InternalGetFullBackup(runtime, originalId);
+        UNIT_ASSERT_VALUES_EQUAL_C(failed.GetStatus(), Ydb::StatusIds::SUCCESS, failed.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL_C(failed.GetFullBackup().GetStatus(), Ydb::StatusIds::GENERIC_ERROR, failed.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(failed.GetFullBackup().GetProgress(), Ydb::Backup::BackupProgress::PROGRESS_DONE);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto replay = Submit(runtime, ++txId, "backup:failed");
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(originalId));
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, txId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, originalId).GetFullBackup().GetStatus(), Ydb::StatusIds::GENERIC_ERROR);
+        const auto conflict = Submit(runtime, ++txId, "backup:failed", "BACKUP  `FullBackupCol1`;");
+        UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), NKikimrScheme::StatusPreconditionFailed, conflict.ShortDebugString());
+        // A new collection at the same SQL path must not turn this retained
+        // failed operation into a new capture.
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", CollectionWithOneTable(DEFAULT_NAME_1));
+        env.TestWaitNotification(runtime, txId);
+        const auto recreated = DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1);
+        UNIT_ASSERT(recreated.GetPathDescription().GetSelf().GetPathId() != collectionPathId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto afterRecreation = Submit(runtime, ++txId, "backup:failed");
+        UNIT_ASSERT_VALUES_EQUAL_C(afterRecreation.GetStatus(), NKikimrScheme::StatusAccepted, afterRecreation.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(afterRecreation.GetOperationId(), ToString(originalId));
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, txId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, originalId).GetFullBackup().GetStatus(), Ydb::StatusIds::GENERIC_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(
+            DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1).GetPathDescription().ChildrenSize(), 0);
+    }
+
+    Y_UNIT_TEST(UidMetricsDistinguishAdmissionReplayConflictAndRecovery) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        const ui64 originalId = ++txId;
+        const auto accepted = Submit(runtime, originalId, "backup:metrics");
+        UNIT_ASSERT_VALUES_EQUAL_C(accepted.GetStatus(), NKikimrScheme::StatusAccepted, accepted.ShortDebugString());
+        env.TestWaitNotification(runtime, originalId);
+        const auto replay = LookupBackupOperation(runtime, MakeRequest(++txId, "backup:metrics"));
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        const auto conflict = Submit(runtime, ++txId, "backup:metrics", "BACKUP  `FullBackupCol1`;");
+        UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), NKikimrScheme::StatusPreconditionFailed, conflict.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/BackupUid/Admitted"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/BackupUid/Replayed"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/BackupUid/Conflicts"), 1);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/BackupUid/RecoveredRecords"), 1);
+    }
+
+    Y_UNIT_TEST(LookupMissDoesNotReserveUidAndReplaySurvivesReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        const ui64 lookupId = ++txId;
+        const auto missing = LookupBackupOperation(
+            runtime, MakeRequest(lookupId, "backup:lookup"));
+        UNIT_ASSERT_VALUES_EQUAL_C(missing.GetStatus(), NKikimrScheme::StatusSuccess, missing.ShortDebugString());
+        UNIT_ASSERT(!missing.HasOperationId());
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, lookupId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+
+        const ui64 originalId = ++txId;
+        const TString ddl = "BACKUP `FullBackupCol1`; -- different from the lookup";
+        const auto admitted = Submit(
+            runtime, MakeRequest(originalId, "backup:lookup", ddl));
+        UNIT_ASSERT_VALUES_EQUAL_C(admitted.GetStatus(), NKikimrScheme::StatusAccepted, admitted.ShortDebugString());
+        env.TestWaitNotification(runtime, originalId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto replay = LookupBackupOperation(
+            runtime, MakeRequest(++txId, "backup:lookup", ddl));
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(originalId));
+        const auto conflict = LookupBackupOperation(
+            runtime, MakeRequest(++txId, "backup:lookup"));
+        UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), NKikimrScheme::StatusPreconditionFailed, conflict.ShortDebugString());
+        UNIT_ASSERT(!conflict.HasOperationId());
+        const auto forgotten = InternalForgetFullBackup(runtime, originalId, ++txId);
+        UNIT_ASSERT_VALUES_EQUAL_C(forgotten.GetStatus(), Ydb::StatusIds::SUCCESS, forgotten.ShortDebugString());
+        const auto released = LookupBackupOperation(
+            runtime, MakeRequest(++txId, "backup:lookup"));
+        UNIT_ASSERT_VALUES_EQUAL_C(released.GetStatus(), NKikimrScheme::StatusSuccess, released.ShortDebugString());
+        UNIT_ASSERT(!released.HasOperationId());
+    }
+
+    Y_UNIT_TEST(IdempotencyRequestsDoNotExposeIdentityInLogs) {
+        const auto check = []<typename TEvent>() {
+            TEvent request;
+            request.Record.SetUserToken("backup-token-secret");
+            auto* identity = request.Record.AddTransaction()->MutableOperationIdempotency();
+            identity->SetUid("backup-uid-secret");
+            identity->SetOriginalDdl("backup-ddl-secret");
+            const auto printed = request.ToString();
+            UNIT_ASSERT(!printed.Contains("backup-token-secret"));
+            UNIT_ASSERT(!printed.Contains("backup-uid-secret"));
+            UNIT_ASSERT(!printed.Contains("backup-ddl-secret"));
+        };
+        check.template operator()<TEvSchemeShard::TEvModifySchemeTransaction>();
+    }
+
+    Y_UNIT_TEST(ReplayKeepsOriginalOperationAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+
+        const ui64 originalId = ++txId;
+        const auto first = Submit(runtime, originalId, "backup:stable");
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), NKikimrScheme::StatusAccepted, first.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(first.GetOperationId(), ToString(originalId));
+        env.TestWaitNotification(runtime, originalId);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const ui64 retryId = ++txId;
+        const auto replay = Submit(runtime, retryId, "backup:stable");
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), first.GetOperationId());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetTxId(), originalId);
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, retryId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, originalId).GetStatus(), Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(IdempotencyUidReleasedAfterForgetAndReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        const ui64 originalId = ++txId;
+        const auto admitted = Submit(runtime, originalId, "backup:forget");
+        UNIT_ASSERT_VALUES_EQUAL_C(admitted.GetStatus(), NKikimrScheme::StatusAccepted, admitted.ShortDebugString());
+        env.TestWaitNotification(runtime, originalId);
+        const auto forget = InternalForgetFullBackup(runtime, originalId, ++txId);
+        UNIT_ASSERT_VALUES_EQUAL_C(forget.GetStatus(), Ydb::StatusIds::SUCCESS, forget.ShortDebugString());
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, originalId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        const TString newDdl = "BACKUP `FullBackupCol1`; -- a new intentional operation";
+        const ui64 nextId = ++txId;
+        const auto next = Submit(runtime, nextId, "backup:forget", newDdl);
+        UNIT_ASSERT_VALUES_EQUAL_C(next.GetStatus(), NKikimrScheme::StatusAccepted, next.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(next.GetTxId(), nextId);
+        UNIT_ASSERT_VALUES_EQUAL(next.GetOperationId(), ToString(nextId));
+        env.TestWaitNotification(runtime, nextId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto replay = Submit(runtime, ++txId, "backup:forget", newDdl);
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetTxId(), nextId);
+        const auto oldBody = Submit(runtime, ++txId, "backup:forget");
+        UNIT_ASSERT_VALUES_EQUAL_C(oldBody.GetStatus(), NKikimrScheme::StatusPreconditionFailed, oldBody.ShortDebugString());
+    }
+
+    Y_UNIT_TEST(DifferentDdlConflicts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        const ui64 originalId = ++txId;
+        const auto first = Submit(runtime, originalId, "backup:stable");
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), NKikimrScheme::StatusAccepted, first.ShortDebugString());
+        env.TestWaitNotification(runtime, originalId);
+
+        const auto conflict = Submit(runtime, ++txId, "backup:stable", "BACKUP  `FullBackupCol1`;");
+        UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), NKikimrScheme::StatusPreconditionFailed, conflict.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(conflict.GetReason(), "UID_CONFLICT");
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, txId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(InvalidKeyRejectedBeforeExecution) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        for (const TString& key : TVector<TString>{"", TString(129, 'a'), TString(127, 'a') + "я"}) {
+            const auto response = Submit(runtime, ++txId, key);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), NKikimrScheme::StatusInvalidParameter, response.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, txId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        }
+    }
+
+    Y_UNIT_TEST(UnsupportedOperationRejectedBeforeExecution) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        const auto response = Submit(runtime, 100, "mkdir:key", "CREATE DIRECTORY `MustNotExist`;", NKikimrSchemeOp::ESchemeOpMkDir);
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), NKikimrScheme::StatusInvalidParameter, response.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetReason(), "IDEMPOTENCY_NOT_SUPPORTED");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/MustNotExist"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(ConcurrentRequestsKeepOneOperation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        const ui64 firstId = ++txId;
+        const ui64 secondId = ++txId;
+        const auto sender = runtime.AllocateEdgeActor();
+        for (const auto id : {firstId, secondId}) {
+            auto request = MakeRequest(id, "backup:concurrent");
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        }
+        TString operationId;
+        for (unsigned i = 0; i != 2; ++i) {
+            auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
+            const auto& record = response->Get()->Record;
+            UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrScheme::StatusAccepted, record.ShortDebugString());
+            if (i == 0) {
+                operationId = record.GetOperationId();
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), operationId);
+            }
+        }
+        const ui64 admittedId = FromString<ui64>(operationId);
+        UNIT_ASSERT(admittedId == firstId || admittedId == secondId);
+        env.TestWaitNotification(runtime, admittedId);
+        const ui64 unusedId = admittedId == firstId ? secondId : firstId;
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, unusedId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(ConcurrentDifferentBodiesAdmitOneOperation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        const ui64 firstId = ++txId;
+        const ui64 secondId = ++txId;
+        const TString firstDdl = "BACKUP `FullBackupCol1`;";
+        const TString secondDdl = firstDdl + " -- a different request";
+        const auto sender = runtime.AllocateEdgeActor();
+        for (const auto id : {firstId, secondId}) {
+            auto request = MakeRequest(id, "backup:concurrent-conflict", id == firstId ? firstDdl : secondDdl);
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        }
+        ui64 admittedId = 0;
+        ui64 rejectedId = 0;
+        for (unsigned i = 0; i != 2; ++i) {
+            auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
+            const auto& record = response->Get()->Record;
+            if (record.GetStatus() == NKikimrScheme::StatusAccepted) {
+                UNIT_ASSERT_VALUES_EQUAL(admittedId, 0);
+                admittedId = record.GetTxId();
+                UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), ToString(admittedId));
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrScheme::StatusPreconditionFailed, record.ShortDebugString());
+                UNIT_ASSERT_STRING_CONTAINS(record.GetReason(), "UID_CONFLICT");
+                UNIT_ASSERT_VALUES_EQUAL(rejectedId, 0);
+                rejectedId = record.GetTxId();
+            }
+        }
+        UNIT_ASSERT(admittedId == firstId || admittedId == secondId);
+        UNIT_ASSERT_VALUES_EQUAL(rejectedId, admittedId == firstId ? secondId : firstId);
+        env.TestWaitNotification(runtime, admittedId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, rejectedId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        const auto replay = Submit(runtime, ++txId, "backup:concurrent-conflict", admittedId == firstId ? firstDdl : secondDdl);
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetTxId(), admittedId);
+    }
+
+    Y_UNIT_TEST(ReplayChecksOwnerBeforeBodyAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        const ui64 originalId = ++txId;
+        auto request = MakeRequest(originalId, "backup:owned");
+        request->Record.SetUserSID("alice");
+        const auto admitted = Submit(runtime, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL_C(admitted.GetStatus(), NKikimrScheme::StatusAccepted, admitted.ShortDebugString());
+        env.TestWaitNotification(runtime, originalId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        for (const auto& ddl : {TString("BACKUP `FullBackupCol1`;"), TString("BACKUP `private-other-collection`;")}) {
+            request = MakeRequest(++txId, "backup:owned", ddl);
+            request->Record.SetUserSID("bob");
+            const auto denied = Submit(runtime, std::move(request));
+            UNIT_ASSERT_VALUES_EQUAL_C(denied.GetStatus(), NKikimrScheme::StatusAccessDenied, denied.ShortDebugString());
+            UNIT_ASSERT(denied.GetOperationId().empty());
+            UNIT_ASSERT(!denied.GetReason().Contains("FullBackupCol1"));
+            UNIT_ASSERT(!denied.GetReason().Contains("private-other-collection"));
+        }
+        request = MakeRequest(++txId, "backup:owned");
+        request->Record.SetUserSID("alice");
+        const auto replay = Submit(runtime, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetTxId(), originalId);
+    }
+
+    Y_UNIT_TEST(SameTabletUidDoesNotBindDatabaseAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+            Name: "Tenant"
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+        const ui64 originalId = ++txId;
+        const auto admitted = Submit(runtime, originalId, "backup:tablet-scope");
+        UNIT_ASSERT_VALUES_EQUAL_C(admitted.GetStatus(), NKikimrScheme::StatusAccepted, admitted.ShortDebugString());
+        env.TestWaitNotification(runtime, originalId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        auto request = MakeRequest(++txId, "backup:tablet-scope");
+        request->Record.MutableTransaction(0)->SetWorkingDir("/MyRoot/Tenant");
+        const auto acrossDatabase = Submit(runtime, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL_C(acrossDatabase.GetStatus(), NKikimrScheme::StatusAccepted, acrossDatabase.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(acrossDatabase.GetOperationId(), ToString(originalId));
+        auto changedBody = MakeRequest(++txId, "backup:tablet-scope", "BACKUP `FullBackupCol1`; -- changed");
+        changedBody->Record.MutableTransaction(0)->SetWorkingDir("/MyRoot/Tenant");
+        const auto conflict = Submit(runtime, std::move(changedBody));
+        UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), NKikimrScheme::StatusPreconditionFailed, conflict.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(conflict.GetReason(), "UID_CONFLICT");
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, txId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        const auto replay = Submit(runtime, ++txId, "backup:tablet-scope");
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetTxId(), originalId);
+    }
+
+    Y_UNIT_TEST(CommittedUndispatchedOperationRecoversWithoutRetry) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        const ui64 originalId = ++txId;
+        const auto oldActor = ResolveTablet(runtime, TTestTxConfig::SchemeShard);
+        const auto sender = runtime.AllocateEdgeActor();
+        bool responseLost = false;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvPrivate::TEvProgressOperation::EventType
+                && ev->GetRecipientRewrite() == oldActor
+                && ev->Get<TEvPrivate::TEvProgressOperation>()->TxId == originalId)
+            {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == TEvSchemeShard::TEvModifySchemeTransactionResult::EventType
+                && ev->GetRecipientRewrite() == sender)
+            {
+                const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransactionResult>()->Record;
+                UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrScheme::StatusAccepted, record.ShortDebugString());
+                responseLost = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        auto request = MakeRequest(originalId, "backup:lost-response");
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        runtime.WaitFor("durable admission response lost", [&] { return responseLost; });
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        // No submit/replay is sent until the recovered operation finishes.
+        env.TestWaitNotification(runtime, originalId);
+        const auto original = InternalGetFullBackup(runtime, originalId);
+        UNIT_ASSERT_VALUES_EQUAL_C(original.GetStatus(), Ydb::StatusIds::SUCCESS, original.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(original.GetFullBackup().GetProgress(), Ydb::Backup::BackupProgress::PROGRESS_DONE);
+        const auto replay = Submit(runtime, ++txId, "backup:lost-response");
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(originalId));
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, txId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(RedoRejectionRollsBackKeyAndOperation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+
+        TControlWrapper redoLimit;
+        TControlBoard::RegisterSharedControl(redoLimit, runtime.GetAppData().Icb->TabletControls.MaxCommitRedoMB);
+        redoLimit.Reset(200, 1, 4096);
+        redoLimit = 1;
+        const ui64 rejectedId = ++txId;
+        const auto rejected = Submit(runtime, rejectedId, "backup:rollback");
+        UNIT_ASSERT_VALUES_EQUAL_C(rejected.GetStatus(), NKikimrScheme::StatusSchemeError, rejected.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetReason(), "local tx commit redo size");
+        UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, rejectedId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+
+        redoLimit = 200;
+        // A different request body proves the rejected admission did not leave
+        // an in-memory conflict record. Reboot then verifies the durable mapping.
+        const ui64 acceptedId = ++txId;
+        const TString ddl = "BACKUP  `FullBackupCol1`;";
+        const auto accepted = Submit(runtime, acceptedId, "backup:rollback", ddl);
+        UNIT_ASSERT_VALUES_EQUAL_C(accepted.GetStatus(), NKikimrScheme::StatusAccepted, accepted.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(accepted.GetOperationId(), ToString(acceptedId));
+        env.TestWaitNotification(runtime, acceptedId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        const auto replay = Submit(runtime, ++txId, "backup:rollback", ddl);
+        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(acceptedId));
+    }
+
+    Y_UNIT_TEST(MissingIdentityRejectedBeforeExecution) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        for (unsigned i = 0; i != 2; ++i) {
+            auto request = MakeRequest(++txId, "backup:identity");
+            auto* identity = request->Record.MutableTransaction(0)->MutableOperationIdempotency();
+            if (i == 0) {
+                identity->ClearOriginalDdl();
+            } else {
+                identity->SetOriginalDdl("");
+            }
+            const auto response = Submit(runtime, std::move(request));
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), NKikimrScheme::StatusInvalidParameter, response.ShortDebugString());
+            UNIT_ASSERT_STRING_CONTAINS(response.GetReason(), "INVALID_IDEMPOTENCY_IDENTITY");
+            UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, txId).GetStatus(), Ydb::StatusIds::NOT_FOUND);
+        }
+    }
+
+    Y_UNIT_TEST(KeyedBatchRejectedBeforeAnyOperation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        auto request = MakeRequest(100, "backup:batch");
+        auto* first = request->Record.AddTransaction();
+        first->SetWorkingDir("/MyRoot");
+        first->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
+        first->MutableMkDir()->SetName("BeforeKeyedBackup");
+        request->Record.MutableTransaction()->SwapElements(0, 1);
+        const auto response = Submit(runtime, std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), NKikimrScheme::StatusInvalidParameter, response.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(response.GetReason(), "IDEMPOTENCY_NOT_SUPPORTED");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BeforeKeyedBackup"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(ValidBoundaryKeysRemainCaseSensitive) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        Prepare(runtime, env, txId);
+        for (const TString& key : TVector<TString>{"0", "A", "a", "a-_.:Z019", "with spaces/and?symbols!", "ключ", TString("a\0b", 3), TString(128, 'x'), TString(126, 'x') + "я"}) {
+            const auto response = Submit(runtime, ++txId, key);
+            UNIT_ASSERT_VALUES_EQUAL_C(response.GetStatus(), NKikimrScheme::StatusAccepted, response.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(response.GetOperationId(), ToString(txId));
+            env.TestWaitNotification(runtime, txId);
+            UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, txId).GetFullBackup().GetProgress(),
+                Ydb::Backup::BackupProgress::PROGRESS_DONE);
+            const ui64 originalId = txId;
+            RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            const auto replay = Submit(runtime, ++txId, key);
+            UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL(replay.GetOperationId(), ToString(originalId));
+            // Backup destination names have second precision. Ordinary workflow
+            // admission still applies independently of the external key.
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        }
+    }
+}
 
 // ---------------------------------------------------------------------
 // M2 + M3 - Aggregator + decomposition behavior.

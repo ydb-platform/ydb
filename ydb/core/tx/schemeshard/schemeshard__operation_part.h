@@ -739,7 +739,7 @@ ISubOperation::TPtr CreateLongIncrementalRestoreOpControlPlane(TOperationId opId
 // ChangePathState
 TVector<ISubOperation::TPtr> CreateChangePathState(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 ISubOperation::TPtr CreateChangePathState(TOperationId opId, const TTxTransaction& tx);
-ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state);
+ISubOperation::TPtr CreateChangePathState(TOperationId opId, TTxState::ETxState state, TOperationContext& context);
 
 // Incremental restore path-state lock/unlock ops. Propose-only; fan out to TChangePathState sub-ops.
 TVector<ISubOperation::TPtr> CreateIncrementalRestoreLockTargets(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);

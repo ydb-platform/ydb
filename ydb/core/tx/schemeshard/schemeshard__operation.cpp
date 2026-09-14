@@ -1,11 +1,14 @@
 #include "schemeshard__operation.h"
 
+#include "common/operation_idempotency.h"
+
 #include "schemeshard__dispatch_op.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard__operation_side_effects.h"
 #include "schemeshard_audit_log.h"
+#include "schemeshard_idempotency.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_operation_factory.h"
 
@@ -235,6 +238,9 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // It may fill or clear particular fields based on some runtime SS state.
 
     for (auto tx : record.GetTransaction()) {
+        // Only the external proposal owns the registry entry. Generated child
+        // transactions must not attempt to admit the external key again.
+        tx.ClearOperationIdempotency();
         if (DispatchOp(tx, [&](auto traits) { return traits.NeedRewrite && !Rewrite(traits, tx); })) {
             response.Reset(new TProposeResponse(NKikimrScheme::StatusPreconditionFailed, ui64(txId), ui64(selfId)));
             response->SetError(NKikimrScheme::StatusPreconditionFailed, "Invalid schema rewrite rule.");
@@ -372,12 +378,78 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
 
     TSideEffects OnComplete;
 
+    const bool LookupOnly;
+    TMaybe<ECumulativeCounters> BackupUidCounter;
+
     TTxOperationPropose(TSchemeShard* self, TProposeRequest::TPtr request)
         : TBase(self)
         , Request(request)
+        , LookupOnly(Request->Get()->Record.TransactionSize() == 1
+            && Request->Get()->Record.GetTransaction(0).GetOperationIdempotency().GetLookupOnly())
     {}
 
     TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
+
+    // Returns false when validation or an existing receipt has answered the
+    // request. This runs before IgniteOperation can rewrite or stage any work.
+    bool PrepareIdempotency(TMaybe<TBackupOperationUidKey>& key) {
+        const auto& record = Request->Get()->Record;
+        const auto reject = [&](NKikimrScheme::EStatus status, const TString& reason) {
+            Response = MakeHolder<TProposeResponse>(status, record.GetTxId(), Self->TabletID(), reason);
+            return false;
+        };
+        for (const auto& tx : record.GetTransaction()) {
+            if (!tx.HasOperationIdempotency()) {
+                continue;
+            }
+            if (record.TransactionSize() != 1) {
+                return reject(NKikimrScheme::StatusInvalidParameter,
+                    "IDEMPOTENCY_NOT_SUPPORTED: exactly one statement supporting idempotency is required");
+            }
+            if (!SupportsOperationIdempotency(tx.GetOperationType())) {
+                return reject(NKikimrScheme::StatusInvalidParameter,
+                    "IDEMPOTENCY_NOT_SUPPORTED: unsupported operation kind");
+            }
+            const auto& identity = tx.GetOperationIdempotency();
+            if (!IsValidOperationUid(identity.GetUid())) {
+                return reject(NKikimrScheme::StatusInvalidParameter,
+                    "INVALID_OPERATION_UID: expected 1-128 bytes with no UID-specific character restrictions");
+            }
+            if (!identity.HasOriginalDdl() || identity.GetOriginalDdl().empty())
+            {
+                return reject(NKikimrScheme::StatusInvalidParameter,
+                    "INVALID_IDEMPOTENCY_IDENTITY: exact original DDL is required");
+            }
+            key = TBackupOperationUidKey{ui32(tx.GetOperationType()), identity.GetUid()};
+            if (const auto receipt = Self->FindBackupOperationByUid(*key)) {
+                // A known key is not authority to read another user's receipt.
+                // Check this before comparing or exposing the original request.
+                const auto match = CompareOperationUid(
+                    {{}, TStringBuf(receipt->UserSID), TStringBuf(receipt->OriginalDdl)},
+                    {{}, TStringBuf(UserSID), TStringBuf(identity.GetOriginalDdl())});
+                if (match == EUidReplayMatch::OwnerMismatch) {
+                    return reject(NKikimrScheme::StatusAccessDenied, "Access to the operation receipt is denied");
+                }
+                if (match == EUidReplayMatch::RequestMismatch) {
+                    BackupUidCounter = COUNTER_BACKUP_UID_CONFLICTS;
+                    return reject(NKikimrScheme::StatusPreconditionFailed,
+                        "UID_CONFLICT: the key belongs to a different request");
+                }
+                Response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
+                    receipt->OperationId, Self->TabletID());
+                Response->Record.SetOperationId(ToString(receipt->OperationId));
+                BackupUidCounter = COUNTER_BACKUP_UID_REPLAYED;
+                return false;
+            }
+            // IgniteOperation's legacy tx-id replay does not compare request
+            // bodies. It cannot admit a new external identity for that work.
+            if (Self->Operations.contains(TTxId(record.GetTxId()))) {
+                return reject(NKikimrScheme::StatusInvalidParameter,
+                    "IDEMPOTENCY_TX_ID_CONFLICT: transaction ID is already in use");
+            }
+        }
+        return true;
+    }
 
     bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) override {
         TTabletId selfId = Self->SelfTabletId();
@@ -405,6 +477,19 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         }
         PeerName = record.GetPeerName();
 
+        BackupUidCounter.Clear();
+        TMaybe<TBackupOperationUidKey> uid;
+        if (!PrepareIdempotency(uid)) {
+            return true;
+        }
+        if (LookupOnly) {
+            // Success without OperationId is a lookup miss. It must never
+            // reach IgniteOperation or reserve the UID.
+            Response = MakeHolder<TProposeResponse>(uid ? NKikimrScheme::StatusSuccess : NKikimrScheme::StatusInvalidParameter,
+                ui64(txId), ui64(selfId));
+            return true;
+        }
+
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
         TOperationContext context{Self, txc, ctx, OnComplete, memChanges, dbChanges, std::move(userToken)};
@@ -413,6 +498,14 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         //NOTE: Successful IgniteOperation will leave created operation in Self->Operations and accumulated changes in the context.
         // Unsuccessful IgniteOperation will leave no operation and context will also be clean.
         Response = Self->IgniteOperation(*Request->Get(), context);
+
+        if (uid && Self->Operations.contains(txId)) {
+            const auto& tx = record.GetTransaction(0);
+            memChanges.GrabNewBackupOperationUidKey(Self, *uid);
+            Self->BindBackupOperationUid(*uid, ui64(txId), tx, UserSID);
+            dbChanges.PersistBackupOperationUidKey(*uid);
+            BackupUidCounter = COUNTER_BACKUP_UID_ADMITTED;
+        }
 
         //NOTE: Successfully created operation also must be checked for the size of this local tx.
         //
@@ -437,6 +530,7 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             // Check local tx commit redo size
             TString reason;
             if (IsCommitRedoSizeOverLimit(&reason, context)) {
+                BackupUidCounter.Clear();
                 Response = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSchemeError, ui64(txId), ui64(selfId), reason);
 
                 AbortOperation(context, txId, reason);
@@ -470,6 +564,15 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                         << ", txId: " << txId
                         << ", response: " << Response->Record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
+
+        if (BackupUidCounter) {
+            Self->TabletCounters->Cumulative()[*BackupUidCounter].Increment(1);
+        }
+
+        if (LookupOnly) {
+            ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
+            return;
+        }
 
         AuditLogModifySchemeTransaction(record, Response->Record, Self, PeerName, UserSID, SanitizedToken);
         SendTopicCloudEventIfNeeded(record, Response->Record, Self, PeerName, UserSID);
@@ -1302,7 +1405,7 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
 
     // ChangePathState
     case TTxState::ETxType::TxChangePathState:
-        return CreateChangePathState(NextPartId(), txState);
+        return CreateChangePathState(NextPartId(), txState, context);
 
     // Incremental Restore Finalization
     case TTxState::ETxType::TxIncrementalRestoreFinalize:

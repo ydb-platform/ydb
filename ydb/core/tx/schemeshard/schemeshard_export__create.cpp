@@ -137,9 +137,12 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
 
         const TString& uid = GetUid(request.GetRequest().GetOperationParams());
         if (uid) {
-            if (auto it = Self->ExportsByUid.find(uid); it != Self->ExportsByUid.end()) {
-                if (IsSameDomain(it->second, request.GetDatabaseName())) {
-                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *it->second);
+            if (const auto* existing = FindOperationByUid(Self->ExportsByUid, uid)) {
+                const auto domain = DomainPathId(request.GetDatabaseName());
+                // Preserve legacy requests without a database binding.
+                const auto expectedDomain = domain ? domain : (*existing)->DomainPathId;
+                if (CompareOperationUid({(*existing)->DomainPathId, {}, {}}, {expectedDomain, {}, {}}) == EUidReplayMatch::Match) {
+                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), **existing);
                     return Reply(std::move(response));
                 } else {
                     return Reply(

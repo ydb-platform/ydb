@@ -6780,8 +6780,6 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             return;
         }
 
-        Self->TabletCounters->Cumulative()[COUNTER_BACKUP_UID_RECOVERED_RECORDS].Increment(Self->BackupOperationsByUid.size());
-
         auto delayPublications = OnComplete.ExtractPublicationsToSchemeBoard(); //there no Populator exist jet
         for (auto& [txId, pathIds] : Publications) {
             std::move(pathIds.begin(), pathIds.end(), std::back_inserter(delayPublications[txId]));

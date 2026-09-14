@@ -1,4 +1,4 @@
-#include "operation_idempotency.h"
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp_physical.pb.h>

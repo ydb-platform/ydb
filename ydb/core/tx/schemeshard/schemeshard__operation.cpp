@@ -399,7 +399,6 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
     TSideEffects OnComplete;
 
     const bool LookupOnly;
-    TMaybe<ECumulativeCounters> BackupUidCounter;
 
     TTxOperationPropose(TSchemeShard* self, TEvSchemeShard::TEvModifySchemeTransaction::TPtr request)
         : TBase(self)
@@ -451,14 +450,12 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
                     return reject(NKikimrScheme::StatusAccessDenied, "Access to the operation receipt is denied");
                 }
                 if (match == EUidReplayMatch::RequestMismatch) {
-                    BackupUidCounter = COUNTER_BACKUP_UID_CONFLICTS;
                     return reject(NKikimrScheme::StatusPreconditionFailed,
                         "UID_CONFLICT: the key belongs to a different request");
                 }
                 Response = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(NKikimrScheme::StatusAccepted,
                     receipt->OperationId, Self->TabletID());
                 Response->Record.SetOperationId(ToString(receipt->OperationId));
-                BackupUidCounter = COUNTER_BACKUP_UID_REPLAYED;
                 return false;
             }
             // IgniteOperation's legacy tx-id replay does not compare request
@@ -497,7 +494,6 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
         }
         PeerName = record.GetPeerName();
 
-        BackupUidCounter.Clear();
         TMaybe<TBackupOperationUidKey> uid;
         if (!PrepareIdempotency(uid)) {
             return true;
@@ -524,7 +520,6 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             memChanges.GrabNewBackupOperationUidKey(Self, *uid);
             Self->BindBackupOperationUid(*uid, ui64(txId), tx, UserSID);
             dbChanges.PersistBackupOperationUidKey(*uid);
-            BackupUidCounter = COUNTER_BACKUP_UID_ADMITTED;
         }
 
         //NOTE: Successfully created operation also must be checked for the size of this local tx.
@@ -550,7 +545,6 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             // Check local tx commit redo size
             TString reason;
             if (IsCommitRedoSizeOverLimit(&reason, context)) {
-                BackupUidCounter.Clear();
                 Response = MakeHolder<TEvSchemeShard::TEvModifySchemeTransactionResult>(NKikimrScheme::StatusSchemeError, ui64(txId), ui64(selfId), reason);
 
                 AbortOperation(context, txId, reason);
@@ -582,10 +576,6 @@ struct TSchemeShard::TTxOperationPropose: public NTabletFlatExecutor::TTransacti
             {"response", Response->Record.ShortDebugString()},
             {"schemeshard", Self->TabletID()},
         );
-
-        if (BackupUidCounter) {
-            Self->TabletCounters->Cumulative()[*BackupUidCounter].Increment(1);
-        }
 
         if (LookupOnly) {
             ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);

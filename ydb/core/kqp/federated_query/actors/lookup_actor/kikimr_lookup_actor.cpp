@@ -220,14 +220,15 @@ namespace {
             , SelectWithKeys(MakeSelectWithKeys())
         {
             switch(statsLevel) {
+                // Shift prorities by one level (minumum level is Basic)
 #define TRANSLATE(DQ, PROTO) \
                 case TCollectStatsLevel::DQ: \
                     StatsMode = Ydb::Query::STATS_MODE_##PROTO; \
                     break
                 TRANSLATE(None, NONE);
-                TRANSLATE(Basic, BASIC);
-                TRANSLATE(Full, FULL);
-                TRANSLATE(Profile, PROFILE);
+                TRANSLATE(Basic, NONE);
+                TRANSLATE(Full, BASIC);
+                TRANSLATE(Profile, FULL);
 #undef TRANSLATE
             }
             if (auto token = LookupSource.GetToken(); !token.empty()) {
@@ -989,10 +990,10 @@ namespace {
                 tx_control.mutable_begin_tx()->mutable_snapshot_read_only();
                 tx_control.set_commit_tx(true);
             }
-
-            YDB_LOG_DEBUG("QueryStatsMode",
-                    COMMON_LOG,
-                    {"mode", (request.set_stats_mode(StatsMode), Ydb::Query::StatsMode_Name(StatsMode))}); // intentional side effects, there are no point to collect stats unless we enabled debug logs
+            if (IS_DEBUG_LOG_ENABLED(YDB_LOG_THIS_FILE_COMPONENT)) {
+                // unless debug log enabled, stats collection is useless
+                request.set_stats_mode(StatsMode == Ydb::Query::STATS_MODE_FULL && IS_TRACE_LOG_ENABLED(YDB_LOG_THIS_FILE_COMPONENT) ? Ydb::Query::STATS_MODE_PROFILE : StatsMode);
+            }
             YDB_LOG_TRACE("Query",
                     COMMON_LOG,
                     {"query", request.DebugString()});

@@ -53,8 +53,6 @@ TInflightInfo::~TInflightInfo()
 
     Y_ABORT_UNLESS(PBuffersLockCount == 0);
     Y_ABORT_UNLESS(WriteConfirmed.Exclude(WriteRequested).Empty());
-
-    ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, false);
 }
 
 void TInflightInfo::Detach()
@@ -443,6 +441,9 @@ void TInflightInfo::SetState(EState newState)
     if (State == EState::PBufferFlushed) {
         ReadyQueue->UnRegister(*this, IReadyQueue::EQueueType::Flush);
         ReadyQueue->FlushCompleted(*this, FlushConfirmed);
+    }
+    if (State == EState::PBufferErased) {
+        ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, false);
     }
 }
 

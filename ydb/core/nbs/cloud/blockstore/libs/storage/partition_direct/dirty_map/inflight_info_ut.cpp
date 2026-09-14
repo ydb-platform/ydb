@@ -466,7 +466,20 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             UNIT_ASSERT_VALUES_EQUAL(
                 4096,
                 readyQueue.GetTotalBytes(THostIndex{2}));
+
+            FlushAll(inflightInfo);
+            EraseAll(inflightInfo);
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{0}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{1}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{2}));
         }
+        // Destruction must not release the bytes a second time.
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
@@ -491,7 +504,20 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             UNIT_ASSERT_VALUES_EQUAL(
                 4096,
                 readyQueue.GetTotalBytes(THostIndex{2}));
+
+            FlushAll(inflightInfo);
+            EraseAll(inflightInfo);
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{0}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{1}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{2}));
         }
+        // Destruction must not release the bytes a second time.
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));
@@ -720,8 +746,20 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             UNIT_ASSERT_VALUES_EQUAL(
                 4096,
                 readyQueue.GetTotalBytes(THostIndex{2}));
+
+            FlushAll(inflightInfo);
+            EraseAll(inflightInfo);
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{0}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{1}));
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                readyQueue.GetTotalBytes(THostIndex{2}));
         }
-        // After destruction, bytes should be released.
+        // Destruction must not release the bytes a second time.
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{1}));
         UNIT_ASSERT_VALUES_EQUAL(0, readyQueue.GetTotalBytes(THostIndex{2}));

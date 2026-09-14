@@ -20,12 +20,25 @@ The PB namespace contains a generation, while its erase barrier spans generation
 
 ## Registration and Retirement
 
-Before issuing data operations, a client connects to the PB and sends
-`TEvRegisterPersistentBuffer` for `(TabletId, DirectBlockGroupIndex)`, with its
-current timestamp in microseconds. `TPBufferConfig.RegistrationTimeoutMilliseconds`
-defaults to 5000; NodeWarden passes it to `TPersistentBufferFormat::RegistrationTimeoutMilliseconds`.
-Registration rejects timestamps older than this interval,
-as well as timestamps in the future. A successful reply follows a durable
+Before issuing data operations, a client connects to the PB and requests a
+single-use token with `TEvGetPersistentBufferRegistrationToken`. The token is
+bound to `(TabletId, Generation, DirectBlockGroupIndex)` and is passed in the
+`Token` field of `TEvRegisterPersistentBuffer`. It is separate from the
+connection token. `TPBufferConfig.RegistrationTimeoutMilliseconds` defaults to
+5000; NodeWarden passes it to `TPersistentBufferFormat::RegistrationTimeoutMilliseconds`.
+The token lifetime is measured by the PB's local monotonic clock, so it does
+not depend on clock synchronization between nodes. Tokens are kept in memory
+and are invalidated when the PB actor restarts. The PB limits outstanding
+tokens to `TPersistentBufferFormat::MaxRegistrationTokens` (1024 by default);
+issuing a token at this limit returns `OVERLOADED`.
+
+Registration returns `OUTDATED` for an unknown, expired or already used token,
+and `INCORRECT_REQUEST` if the token belongs to another tablet, generation or
+DBG. A queued registration retains its token and checks expiration again when
+the PB becomes ready; queue overflow does not consume the token. Once the
+ready PB processes registration, it consumes the token even if an existing
+barrier or insufficient space prevents registration. Retries must reuse the
+same token without extending its lifetime. A successful reply follows a durable
 barrier write with generation and LSN zero. An existing barrier rejects
 registration, including when it has no live records. On reconnect, a client
 can use `TEvListPersistentBuffer` to verify that an existing registration is
@@ -38,13 +51,15 @@ stops admitting its operations, drains outstanding work and writes a barrier
 with maximum generation and LSN. It then waits twice the registration timeout
 (10 seconds by default), durably removes the barrier entry and replies `OK`.
 Registration is rejected throughout retirement. The delay makes registration
-messages sent before retirement too old to recreate the registration after the
-barrier is removed. If recovery finds the maximum barrier, it resumes retirement
+tokens issued before retirement expire before the barrier is removed, so
+registration messages carrying those tokens cannot recreate the registration.
+If recovery finds the maximum barrier, it resumes retirement
 with a full waiting interval. Failed barrier writes require recovery before
 the PB can resume normal operations.
 
 The NBS direct-partition transport completes a PB connection only after
-`TEvConnect`, registration, and a successful list probe. The probe also verifies
+`TEvConnect`, token acquisition, registration, and a successful list probe.
+The probe also verifies
 an existing registration after duplicate registration is rejected on reconnect.
 Partition deletion unregisters every tablet/DBG registration, including separate
 registrations sharing one PB, before deleting DDisk chunks and deallocating the

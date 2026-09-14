@@ -33,11 +33,15 @@ Blocked-generation errors cause the partition to stop rather than serving
 with stale ownership.
 
 For a PB connection, `TICStorageTransportActor` retains the successful
-`TEvConnect` response while it sends `TEvRegisterPersistentBuffer` with the
-current timestamp and the connection's tablet/DBG identity. Registration
+`TEvConnect` response while it obtains a single-use token through
+`TEvGetPersistentBufferRegistrationToken` and sends `TEvRegisterPersistentBuffer`
+with that token and the connection's tablet/generation/DBG identity. Registration
 `BUSY` or `OVERLOADED` responses retry after 100 ms within the same connection
-attempt. After registration succeeds or is rejected as a duplicate, the
-transport probes with `TEvListPersistentBuffer`. Only a successful probe
+attempt, reusing the token without extending its lifetime. Token acquisition
+errors complete the connection attempt with an error. An expired or consumed
+token produces `OUTDATED`; the caller must start a new connection attempt to
+obtain a fresh token. After registration succeeds or is rejected as a duplicate,
+the transport probes with `TEvListPersistentBuffer`. Only a successful probe
 completes the connection promise successfully. This prevents an existing
 but retiring registration from being published as a usable PB connection.
 The later recovery listing still supplies the records to the dirty map.

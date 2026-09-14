@@ -260,8 +260,10 @@ protected:
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
+    // starts a new reassign for every tablet in the list
     void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
-    void StartReassignActor(std::vector<TReassignOperation> operations);
+    // continues reassigns of tablets that were left in the middle of it (e.g. by a Hive restart)
+    void ContinueInterruptedReassigns(std::vector<TReassignOperation> operations);
     void StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();

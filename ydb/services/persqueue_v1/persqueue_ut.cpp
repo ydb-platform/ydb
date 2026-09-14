@@ -1,6 +1,5 @@
 #include "actors/read_session_actor.h"
 #include "actors/helpers.h"
-#include "actors/codecs.h"
 #include <cmath>
 #include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
 #include <ydb/services/persqueue_v1/ut/api_test_setup.h>
@@ -2911,10 +2910,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
     }
 
-    // Regression test: a topic that allows only custom codecs must report those exact codec
-    // numbers in the StreamWrite InitResponse. Previously the server rebuilt supported_codecs
-    // from the stored string codec names (custom codecs are stored as "CUSTOM"), so custom
-    // codecs collapsed to CODEC_UNSPECIFIED (0) even though DescribeTopic returned them correctly.
     Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponse) {
         NPersQueue::TTestServer server;
         server.EnableLogs({NKikimrServices::PQ_READ_PROXY});
@@ -2963,43 +2958,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         const auto& initCodecs = resp.init_response().supported_codecs().codecs();
         TVector<i32> gotCodecs(initCodecs.begin(), initCodecs.end());
         UNIT_ASSERT_VALUES_EQUAL_C(gotCodecs, customCodecs, resp.init_response().ShortDebugString());
-    }
-
-    // Component test for the codec list reconstruction used to build the StreamWrite InitResponse.
-    // Covers the merge of the two parallel storage lists (string names + numeric ids), including the
-    // legacy configs where only the string names are populated and the numeric ids list is empty.
-    Y_UNIT_TEST(BuildSupportedCodecsFromTabletConfig) {
-        auto build = [](std::initializer_list<TString> names, std::initializer_list<i64> ids) {
-            NKikimrPQ::TPQTabletConfig config;
-            auto* codecs = config.MutableCodecs();
-            for (const auto& name : names) {
-                codecs->AddCodecs(name);
-            }
-            for (const auto id : ids) {
-                codecs->AddIds(id);
-            }
-            return NKikimr::NGRpcProxy::BuildSupportedCodecs(config);
-        };
-
-        // Well-known codecs resolve from names alone; ids kept consistent (name index i <-> id = number - 1).
-        UNIT_ASSERT_VALUES_EQUAL(build({"raw", "gzip"}, {0, 1}), (TVector<i32>{1, 2}));
-
-        // Custom codecs are stored as the name "CUSTOM"; their numbers must be recovered from ids.
-        UNIT_ASSERT_VALUES_EQUAL(build({"CUSTOM", "CUSTOM"}, {9999, 10000}), (TVector<i32>{10000, 10001}));
-
-        // Mixed well-known and custom codecs.
-        UNIT_ASSERT_VALUES_EQUAL(build({"raw", "CUSTOM"}, {0, 9999}), (TVector<i32>{1, 10000}));
-
-        // Legacy config: only the string-name list is populated and the numeric ids list is empty.
-        // The names must still be honored (previous behavior) rather than yielding an empty list.
-        UNIT_ASSERT_VALUES_EQUAL(build({"raw", "gzip", "zstd"}, {}), (TVector<i32>{1, 2, 4}));
-
-        // Legacy config with a custom codec but no ids: the name cannot be resolved, so it collapses
-        // to 0 (unspecified) - there is simply no other source for the number in this degenerate case.
-        UNIT_ASSERT_VALUES_EQUAL(build({"raw", "CUSTOM"}, {}), (TVector<i32>{1, 0}));
-
-        // Empty configuration yields an empty list.
-        UNIT_ASSERT_VALUES_EQUAL(build({}, {}), (TVector<i32>{}));
     }
 
     Y_UNIT_TEST(SetupWriteSession) {

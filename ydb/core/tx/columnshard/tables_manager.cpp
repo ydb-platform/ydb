@@ -878,7 +878,6 @@ void TTablesManager::TruncateTableProgress(
     AFL_VERIFY(HasTable(oldInternalPathId));
     AFL_VERIFY(!GetTable(oldInternalPathId).IsReadOnly(schemeShardLocalPathId));
 
-
     // Perform the generation swap.
     auto* oldTable = Tables.FindPtr(oldInternalPathId);
     AFL_VERIFY(oldTable);

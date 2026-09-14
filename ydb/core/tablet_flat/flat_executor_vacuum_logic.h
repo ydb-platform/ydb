@@ -52,7 +52,7 @@ public:
 
 private:
     void CompleteVacuum(const TActorContext& ctx);
-    void StartFinalSnapshot();
+    void StartThirdSnapshot();
     void ChangeState(EVacuumState to);
     bool UpdateMaxGeneration(TVacuumTag tag);
 

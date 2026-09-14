@@ -208,7 +208,7 @@ void TVacuumLogic::OnCollectedGarbage(const TActorContext& ctx) {
         }
         case EVacuumState::WaitTabletGC: {
             if (!GcLogic->HasGarbageBefore(FirstLogSnaphotStep)) {
-                StartFinalSnapshot();
+                StartThirdSnapshot();
             }
             break;
         }
@@ -241,7 +241,7 @@ void TVacuumLogic::OnGcForStepAckResponse(ui32 generation, ui32 step, const TAct
         }
         case EVacuumState::WaitLogGC: {
             if (FirstLogSnaphotStep <= TGCTime(generation, step)) {
-                StartFinalSnapshot();
+                StartThirdSnapshot();
             }
             break;
         }
@@ -283,7 +283,7 @@ void TVacuumLogic::CompleteVacuum(const TActorContext& ctx) {
 }
 
 
-void TVacuumLogic::StartFinalSnapshot() {
+void TVacuumLogic::StartThirdSnapshot() {
     ChangeState(EVacuumState::PendingThirdSnapshot);
 }
 

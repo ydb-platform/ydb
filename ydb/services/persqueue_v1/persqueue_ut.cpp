@@ -2910,7 +2910,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
     }
 
-    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponse) {
+    enum class ECustomCodecsMode {
+        None,
+        Known,
+        Mixed,
+        CustomOnly,
+    };
+
+    static void TopicServiceCustomCodecsInInitResponse(const ECustomCodecsMode customCodecsMode) {
         NPersQueue::TTestServer server;
         server.EnableLogs({NKikimrServices::PQ_READ_PROXY});
 
@@ -2918,8 +2925,20 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         auto topicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
 
         const TString topicShortName = "acc/custom-codecs-topic";
-        const TVector<i32> customCodecs{Ydb::Topic::CODEC_CUSTOM, Ydb::Topic::CODEC_CUSTOM + 1};
-
+        TVector<i32> customCodecs;
+        switch (customCodecsMode) {
+            case ECustomCodecsMode::None:
+                break;
+            case ECustomCodecsMode::Known:
+                customCodecs = {Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_ZSTD};
+                break;
+            case ECustomCodecsMode::Mixed:
+                customCodecs = {Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_CUSTOM + 5, Ydb::Topic::CODEC_ZSTD, Ydb::Topic::CODEC_CUSTOM + 7};
+                break;
+            case ECustomCodecsMode::CustomOnly:
+                customCodecs = {Ydb::Topic::CODEC_CUSTOM, Ydb::Topic::CODEC_CUSTOM + 1};
+                break;
+        }
         {
             Ydb::Topic::CreateTopicRequest request;
             Ydb::Topic::CreateTopicResponse response;
@@ -2957,7 +2976,25 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
         const auto& initCodecs = resp.init_response().supported_codecs().codecs();
         TVector<i32> gotCodecs(initCodecs.begin(), initCodecs.end());
+        Sort(customCodecs);
+        Sort(gotCodecs);
         UNIT_ASSERT_VALUES_EQUAL_C(gotCodecs, customCodecs, resp.init_response().ShortDebugString());
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseNone) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::None);
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseKnown) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::Known);
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseMixed) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::Mixed);
+    }
+
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponseCustomOnly) {
+        TopicServiceCustomCodecsInInitResponse(ECustomCodecsMode::CustomOnly);
     }
 
     Y_UNIT_TEST(SetupWriteSession) {

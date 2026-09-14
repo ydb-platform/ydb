@@ -5,7 +5,7 @@ from ydb.tests.stress.topic_reset_offset.workload import MEGABYTE, Workload
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Topic ResetOffset stress: preload mixed-size messages, then rewind in a loop",
+        description="Topic ResetOffset stress: stagger per-partition write times, then rewind consumers independently",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--endpoint", default="grpc://localhost:2135", help="YDB endpoint")

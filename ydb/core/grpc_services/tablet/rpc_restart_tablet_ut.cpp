@@ -4,6 +4,7 @@
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 namespace NKikimr::NGRpcService {
 

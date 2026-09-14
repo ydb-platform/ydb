@@ -138,7 +138,7 @@ class TYdbSetup::TImpl : public TKikimrSetupBase {
 
     class TPortGenerator {
     public:
-        TPortGenerator(TPortManager& portManager, ui32 firstPort)
+        TPortGenerator(NTesting::TPortManager& portManager, ui32 firstPort)
             : PortManager_(portManager)
             , Port_(firstPort)
         {}
@@ -151,7 +151,7 @@ class TYdbSetup::TImpl : public TKikimrSetupBase {
         }
 
     private:
-        TPortManager& PortManager_;
+        NTesting::TPortManager& PortManager_;
         ui32 Port_;
     };
 

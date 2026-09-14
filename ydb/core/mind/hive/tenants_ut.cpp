@@ -7,6 +7,7 @@
 #include <ydb/public/api/grpc/draft/ydb_maintenance_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/threading/future/async.h>
 
 #include "ut_common.h"

@@ -6,6 +6,7 @@
 #include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.grpc.pb.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 using namespace NMVP::NOIDC;
 using namespace NActors;

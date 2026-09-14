@@ -11,6 +11,7 @@
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/string/printf.h>
 

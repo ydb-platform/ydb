@@ -9,7 +9,6 @@ SRCS(
 
 PEERDIR(
     library/cpp/regex/pcre
-    library/cpp/testing/unittest
     ydb/core/base
     ydb/core/blobstorage
     ydb/core/blobstorage/crypto

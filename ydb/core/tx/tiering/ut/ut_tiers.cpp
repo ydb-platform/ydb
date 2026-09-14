@@ -22,6 +22,7 @@
 
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <util/system/hostname.h>
 
 namespace NKikimr {

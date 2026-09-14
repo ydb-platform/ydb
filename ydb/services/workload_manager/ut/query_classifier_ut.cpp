@@ -1,6 +1,7 @@
 #include <fmt/format.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/services/workload_manager/query_classifier.h>

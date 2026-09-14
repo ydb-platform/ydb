@@ -13,7 +13,6 @@
 #include <ydb/library/actors/interconnect/mock/ic_mock.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/datetime/base.h>

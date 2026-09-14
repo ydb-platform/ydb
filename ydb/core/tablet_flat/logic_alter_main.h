@@ -37,12 +37,7 @@ namespace NTabletFlatExecutor {
             for (const auto &logo : Log)
                 LogoBlobIDFromLogoBlobID(logo, items->Add());
 
-            auto deleted = snap.MutableGcSnapLeft();
-            for (const auto &logo : ObsoleteLog) {
-                LogoBlobIDFromLogoBlobID(logo, deleted->Add());
-            }
-
-            // Collected in this generation: listed in every later snapshot, they would pin their history entry after a restart.
+            // The commit's GcLeft collects them in this generation; GcSnapLeft must not list them again or boot deletes them twice.
             commit.GcDelta.Deleted.insert(commit.GcDelta.Deleted.end(), ObsoleteLog.begin(), ObsoleteLog.end());
             ObsoleteLog.clear();
         }

@@ -24,8 +24,8 @@ Before issuing data operations, a client connects to the PB and requests a
 single-use token with `TEvGetPersistentBufferRegistrationToken`. The token is
 bound to `(TabletId, Generation, DirectBlockGroupIndex)` and is passed in the
 `Token` field of `TEvRegisterPersistentBuffer`. It is separate from the
-connection token. `TPBufferConfig.RegistrationTimeoutMilliseconds` defaults to
-5000; NodeWarden passes it to `TPersistentBufferFormat::RegistrationTimeoutMilliseconds`.
+connection token. `TPBufferConfig.RegistrationTimeoutSeconds` defaults to
+5 seconds; NodeWarden passes it to `TPersistentBufferFormat::RegistrationTimeoutSeconds`.
 The token lifetime is measured by the PB's local monotonic clock, so it does
 not depend on clock synchronization between nodes. Tokens are kept in memory
 and are invalidated when the PB actor restarts. The PB limits outstanding

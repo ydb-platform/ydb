@@ -24,8 +24,8 @@ PB — дочерний актор [DDisk](ddisk.md), реализованный
 токен через `TEvGetPersistentBufferRegistrationToken`. Токен привязан к
 `(TabletId, Generation, DirectBlockGroupIndex)` и передаётся в поле `Token`
 сообщения `TEvRegisterPersistentBuffer`. Это отдельный токен, отличный от токена
-соединения. `TPBufferConfig.RegistrationTimeoutMilliseconds` по умолчанию равен
-5000; NodeWarden передаёт его в `TPersistentBufferFormat::RegistrationTimeoutMilliseconds`.
+соединения. `TPBufferConfig.RegistrationTimeoutSeconds` по умолчанию равен
+5 секундам; NodeWarden передаёт его в `TPersistentBufferFormat::RegistrationTimeoutSeconds`.
 Срок действия токена измеряется локальными монотонными часами PB и не зависит
 от синхронизации часов между узлами. Токены хранятся в памяти и становятся
 недействительными при перезапуске актора PB. Число выданных и ещё действующих

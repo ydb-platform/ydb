@@ -16,6 +16,8 @@
 
 namespace {
 
+constexpr int ItemsPerProducer = 1 << 20;
+
 struct TNode
     : NThreading::TIntrusiveNode
     , TIntrusiveFunnelQueueItem<TNode>
@@ -245,7 +247,6 @@ void BM_TLockFreeQueue(benchmark::State& state)
 
 void MpscArguments(benchmark::Benchmark* benchmark)
 {
-    constexpr int ItemsPerProducer = 4096;
     for (int producers : {1, 4, 16}) {
         benchmark->Args({producers, ItemsPerProducer});
     }
@@ -256,7 +257,6 @@ void PooledFunnelQueueArguments(benchmark::Benchmark* benchmark)
     // The freelist in TPooledFunnelQueue is subject to ABA when multiple
     // producers take entries while the consumer returns entries to the pool.
     // Keep this benchmark single-producer until the freelist is fixed.
-    constexpr int ItemsPerProducer = 4096;
     benchmark->Args({1, ItemsPerProducer});
 }
 

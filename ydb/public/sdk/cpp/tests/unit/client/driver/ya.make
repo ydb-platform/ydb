@@ -10,6 +10,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
+    library/cpp/monlib/metrics
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/extension_common
     ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections

@@ -237,4 +237,81 @@ Y_UNIT_TEST_SUITE(SharedNetworkTests) {
         UNIT_ASSERT(completed.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
         UNIT_ASSERT(!completed.get().InternalError);
     }
+
+    Y_UNIT_TEST(DefaultSizedNetworkWithSeparateQueuesDeliversEvents) {
+        TGRpcClientLow client(0, true);
+        client.AddWorkerThreadForTest();
+        auto context = client.CreateContext();
+        auto child = context->CreateContext();
+        UNIT_ASSERT_VALUES_EQUAL(child->CompletionQueue(), context->CompletionQueue());
+        auto probe = MakeIntrusive<TAlarmProbe>();
+        auto completed = probe->Start(child->CompletionQueue());
+        UNIT_ASSERT(completed.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+        UNIT_ASSERT(completed.get());
+    }
+
+    Y_UNIT_TEST(ExpiredChildrenDoNotInterfereWithCancellation) {
+        TGRpcClientLow client(1);
+        auto root = client.CreateContext();
+        auto child = root->CreateContext();
+        auto grandchild = child->CreateContext();
+        unsigned calls = 0;
+        child->SubscribeCancel([&calls] { ++calls; });
+        grandchild->SubscribeCancel([&calls] { ++calls; });
+        for (unsigned i = 0; i < 32; ++i) {
+            std::weak_ptr<IQueueClientContext> expired = root->CreateContext();
+            UNIT_ASSERT(expired.expired());
+        }
+        root->SubscribeCancel([&] {
+            UNIT_ASSERT(root->IsCancelled());
+            UNIT_ASSERT(!root->Cancel());
+            root->SubscribeCancel([&calls] { ++calls; });
+            UNIT_ASSERT(root->CreateContext()->IsCancelled());
+        });
+        UNIT_ASSERT(root->Cancel());
+        UNIT_ASSERT(child->IsCancelled());
+        UNIT_ASSERT(grandchild->IsCancelled());
+        UNIT_ASSERT_VALUES_EQUAL(calls, 3);
+        UNIT_ASSERT(!root->Cancel());
+    }
+
+    Y_UNIT_TEST(ChildRetainsParentWithoutOwnershipCycle) {
+        std::weak_ptr<IQueueClientContext> weakParent;
+        IQueueClientContextPtr child;
+        {
+            TGRpcClientLow client(1);
+            auto parent = client.CreateContext();
+            weakParent = parent;
+            child = parent->CreateContext();
+        }
+        UNIT_ASSERT(!weakParent.expired());
+        UNIT_ASSERT(!child->IsCancelled());
+        UNIT_ASSERT(weakParent.lock()->Cancel());
+        UNIT_ASSERT(child->IsCancelled());
+        child.reset();
+        UNIT_ASSERT(weakParent.expired());
+    }
+
+    Y_UNIT_TEST(UnstartedUnaryProcessorsReportUnhandledRequestsOnce) {
+        unsigned simpleCalls = 0;
+        unsigned advancedCalls = 0;
+        bool simpleInternal = false;
+        bool advancedInternal = false;
+        {
+            auto simple = MakeIntrusive<TSimpleRequestProcessor<TGenericTestService::Stub, grpc::ByteBuffer, grpc::ByteBuffer>>(
+                [&](TGrpcStatus&& status, grpc::ByteBuffer&&) {
+                    ++simpleCalls;
+                    simpleInternal = status.InternalError;
+                });
+            auto advanced = MakeIntrusive<TAdvancedRequestProcessor<TGenericTestService::Stub, grpc::ByteBuffer, grpc::ByteBuffer>>(
+                [&](const grpc::ClientContext&, TGrpcStatus&& status, grpc::ByteBuffer&&) {
+                    ++advancedCalls;
+                    advancedInternal = status.InternalError;
+                });
+        }
+        UNIT_ASSERT_VALUES_EQUAL(simpleCalls, 1);
+        UNIT_ASSERT_VALUES_EQUAL(advancedCalls, 1);
+        UNIT_ASSERT(simpleInternal);
+        UNIT_ASSERT(advancedInternal);
+    }
 }

@@ -1,5 +1,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extension_common/extension.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/runtime/runtime.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
@@ -7,6 +8,9 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/monlib/metrics/metric_registry.h>
+
+#include <util/generic/scope.h>
 
 #include <array>
 #include <atomic>
@@ -234,6 +238,119 @@ Y_UNIT_TEST_SUITE(SharedResponseExecutorTest) {
         executor->RunAll();
         UNIT_ASSERT(destroyedFuture.wait_for(0s) == std::future_status::ready);
         UNIT_ASSERT(weak.expired());
+    }
+
+    SIMPLE_UNIT_FORKED_TEST(PublicRuntimeFuturesOutliveDriverHandles) {
+        auto executor = std::make_shared<TManualExecutor>();
+        auto inner = NThreading::NewPromise<int>();
+        Y_SCOPE_EXIT(inner) {
+            inner.TrySetValue(42);
+        };
+        auto entered = NThreading::NewPromise();
+        NThreading::TFuture<int> scheduled;
+        std::weak_ptr<TGRpcConnectionsImpl> weak;
+        {
+            TDriver driver(DriverConfig(executor));
+            weak = CreateInternalInterface(driver);
+            executor->Reject.store(true);
+            scheduled = GetRuntime().ScheduleFuture(TDuration::Zero(),
+                [future = inner.GetFuture(), entered]() mutable {
+                    entered.SetValue();
+                    return future;
+                });
+            UNIT_ASSERT(entered.GetFuture().Wait(TDuration::Seconds(5)));
+            UNIT_ASSERT(!scheduled.IsReady());
+            driver.Stop(true);
+        }
+        UNIT_ASSERT(weak.expired());
+        UNIT_ASSERT(!scheduled.IsReady());
+        inner.SetValue(42);
+        UNIT_ASSERT(scheduled.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(scheduled.GetValue(), 42);
+        auto afterDestruction = GetRuntime().ScheduleFuture(TDuration::Zero(), [] { return 42; });
+        UNIT_ASSERT(afterDestruction.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(afterDestruction.GetValue(), 42);
+    }
+
+    SIMPLE_UNIT_FORKED_TEST(ExpiredDelayedTaskUsesResponseExecutorAfterStop) {
+        auto executor = std::make_shared<TManualExecutor>();
+        TDriver driver(DriverConfig(executor));
+        auto connections = CreateInternalInterface(driver);
+        bool called = false;
+        driver.Stop(true);
+        connections->ScheduleDelayedTask([&called] { called = true; }, TDeadline::Now());
+        UNIT_ASSERT(!called);
+        auto posted = executor->Take();
+        UNIT_ASSERT(posted);
+        posted();
+        UNIT_ASSERT(called);
+    }
+
+    SIMPLE_UNIT_FORKED_TEST(PeriodicTaskRepeatsAndReleasesCaptureAfterDriverDestruction) {
+        auto executor = std::make_shared<TManualExecutor>();
+        auto driver = std::make_unique<TDriver>(DriverConfig(executor));
+        auto connections = CreateInternalInterface(*driver);
+        auto calls = std::make_shared<unsigned>(0);
+        auto driverDestroyed = std::make_shared<std::atomic_bool>(false);
+        auto released = NThreading::NewPromise<unsigned>();
+        auto marker = std::shared_ptr<void>(nullptr, [calls, released](void*) mutable {
+            released.SetValue(*calls);
+        });
+        connections->AddPeriodicTask([calls, driverDestroyed, marker = std::move(marker)](NIssue::TIssues&& issues, EStatus status) {
+            Y_UNUSED(marker);
+            if (!driverDestroyed->load()) {
+                return true;
+            }
+            if (status != EStatus::SUCCESS || !issues.Empty()) {
+                return false;
+            }
+            return ++*calls < 2;
+        }, std::chrono::milliseconds(1));
+        driver->Stop(false);
+        driver->Stop(true);
+        driver.reset();
+        connections.reset();
+        driverDestroyed->store(true);
+        UNIT_ASSERT(released.GetFuture().Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(released.GetFuture().GetValue(), 2);
+    }
+
+    SIMPLE_UNIT_FORKED_TEST(CredentialWaitCreatesCancellableContext) {
+        auto executor = std::make_shared<TManualExecutor>();
+        TDriver driver(DriverConfig(executor));
+        auto connections = CreateInternalInterface(driver);
+        auto ready = NThreading::NewPromise();
+        Y_SCOPE_EXIT(ready) {
+            ready.TrySetValue();
+        };
+        IQueueClientContextPtr context;
+        auto result = NThreading::NewPromise<TGRpcConnectionsImpl::TCredentialsWaitResult>();
+        connections->DeferUntilCredentialsReady(TRpcRequestSettings{}, context, ready.GetFuture(),
+            [result](TGRpcConnectionsImpl::TCredentialsWaitResult status) mutable {
+                result.SetValue(std::move(status));
+            });
+        UNIT_ASSERT(context);
+        driver.Stop(true);
+        UNIT_ASSERT(!result.GetFuture().IsReady());
+        context->Cancel();
+        UNIT_ASSERT(result.GetFuture().Wait(TDuration::Seconds(10)));
+        const auto status = result.GetFuture().GetValue();
+        UNIT_ASSERT(status);
+        UNIT_ASSERT_VALUES_EQUAL(status->Status, EStatus::CLIENT_CANCELLED);
+        ready.SetValue();
+    }
+
+    SIMPLE_UNIT_FORKED_TEST(MetricRegistryAttachesToExistingDatabaseState) {
+        ::NMonitoring::TMetricRegistry registry;
+        auto executor = std::make_shared<TManualExecutor>();
+        TDriver driver(DriverConfig(executor));
+        auto connections = CreateInternalInterface(driver);
+        auto state = connections->GetDriverState({}, {}, {}, {}, {});
+        UNIT_ASSERT(!state->StatCollector.IsCollecting());
+        UNIT_ASSERT(connections->StartStatCollecting(&registry));
+        UNIT_ASSERT(state->StatCollector.IsCollecting());
+        UNIT_ASSERT(connections->GetMetricRegistry() == &registry);
+        UNIT_ASSERT(!connections->StartStatCollecting(&registry));
     }
 
     SIMPLE_UNIT_FORKED_TEST(ExplicitCancellationSurvivesDriverDestruction) {

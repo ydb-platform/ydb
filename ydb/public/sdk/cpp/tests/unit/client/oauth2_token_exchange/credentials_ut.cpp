@@ -585,6 +585,104 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         UNIT_ASSERT(released->get_future().wait_for(std::chrono::seconds(10)) == std::future_status::ready);
     }
 
+    class TTestResponseFacility final : public ICoreFacility {
+    public:
+        void AddPeriodicTask(TPeriodicCb&&, TDeadline::Duration) override {
+        }
+
+        void PostToResponseQueue(TPostTaskCb&&) override {
+            ythrow yexception() << "Rejected token completion";
+        }
+    };
+
+    Y_UNIT_TEST(ExpiredFacilityCompletesTokenWithError) {
+        auto factory = CreateOauth2TokenExchangeCredentialsProviderFactory(
+            TOauth2TokenExchangeParams()
+                .TokenEndpoint("http://localhost:1/exchange/token")
+                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")));
+        auto provider = factory->CreateProvider(std::weak_ptr<ICoreFacility>{});
+        UNIT_ASSERT(provider->IsValid());
+        auto token = provider->GetAuthInfoAsync();
+        UNIT_ASSERT(token.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_EXCEPTION_CONTAINS(token.GetValue(), yexception, "stopped");
+    }
+
+    Y_UNIT_TEST(RejectedResponseTaskCompletesTokenWithError) {
+        TTestTokenExchangeServer server;
+        server.WithLock([&] {
+            server.Check.Response = R"({"access_token":"token","token_type":"bearer","expires_in":60})";
+        });
+        auto facility = std::make_shared<TTestResponseFacility>();
+        auto factory = CreateOauth2TokenExchangeCredentialsProviderFactory(
+            TOauth2TokenExchangeParams()
+                .TokenEndpoint(server.GetEndpoint())
+                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")));
+        auto provider = factory->CreateProvider(facility);
+        auto token = provider->GetAuthInfoAsync();
+        UNIT_ASSERT(token.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_EXCEPTION_CONTAINS(token.GetValue(), yexception, "Rejected token completion");
+    }
+
+    Y_UNIT_TEST(FacilityDestructionDuringRequestCompletesTokenWithError) {
+        auto entered = std::make_shared<std::promise<void>>();
+        auto requested = entered->get_future();
+        std::promise<void> release;
+        auto released = release.get_future().share();
+        TTestTokenExchangeServer server;
+        server.WithLock([&] {
+            server.Check.Response = R"({"access_token":"token","token_type":"bearer","expires_in":60})";
+            server.BeforeReply = [entered, released] {
+                entered->set_value();
+                released.wait();
+            };
+        });
+        bool requestReleased = false;
+        Y_DEFER {
+            if (!requestReleased) {
+                release.set_value();
+            }
+        };
+        auto facility = std::make_shared<TTestResponseFacility>();
+        auto factory = CreateOauth2TokenExchangeCredentialsProviderFactory(
+            TOauth2TokenExchangeParams()
+                .TokenEndpoint(server.GetEndpoint())
+                .SubjectTokenSource(CreateFixedTokenSource("test_token", "test_token_type")));
+        auto provider = factory->CreateProvider(facility);
+        auto token = provider->GetAuthInfoAsync();
+        UNIT_ASSERT(requested.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+        UNIT_ASSERT(!token.IsReady());
+        facility.reset();
+        release.set_value();
+        requestReleased = true;
+        UNIT_ASSERT(token.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_EXCEPTION_CONTAINS(token.GetValue(), yexception, "stopped");
+    }
+
+    Y_UNIT_TEST(NonStandardTokenSourceExceptionReachesFuture) {
+        struct TSourceError {
+            int Code;
+        };
+        class TThrowingTokenSource final : public ITokenSource {
+        public:
+            TToken GetToken() const override {
+                throw TSourceError{42};
+            }
+        };
+        auto factory = CreateOauth2TokenExchangeCredentialsProviderFactory(
+            TOauth2TokenExchangeParams()
+                .TokenEndpoint("http://localhost:1/exchange/token")
+                .SubjectTokenSource(std::make_shared<TThrowingTokenSource>()));
+        auto provider = factory->CreateProvider(CreateSimpleCoreFacility());
+        auto token = provider->GetAuthInfoAsync();
+        UNIT_ASSERT(token.Wait(TDuration::Seconds(10)));
+        try {
+            token.GetValue();
+            UNIT_FAIL("The token-source exception was lost");
+        } catch (const TSourceError& error) {
+            UNIT_ASSERT_VALUES_EQUAL(error.Code, 42);
+        }
+    }
+
     Y_UNIT_TEST(RefreshContinuesAfterAnInlineCompletionThrows) {
         class TThrowingFacility final : public ICoreFacility {
         public:
@@ -649,6 +747,11 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
             }
         };
         UNIT_ASSERT(entered.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+        auto continued = std::make_shared<std::atomic<bool>>(false);
+        token.Subscribe([continued](const auto&) {
+            continued->store(true);
+            ythrow yexception() << "Exception in shutdown continuation";
+        });
         auto stopped = std::async(std::launch::async, [provider = std::move(provider)]() mutable {
             provider.reset();
         });
@@ -661,6 +764,7 @@ Y_UNIT_TEST_SUITE(TestTokenExchange) {
         };
         UNIT_ASSERT(stopped.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
         stopped.get();
+        UNIT_ASSERT(continued->load());
         UNIT_ASSERT(token.IsReady());
         UNIT_ASSERT_EXCEPTION(token.GetValue(), yexception);
 

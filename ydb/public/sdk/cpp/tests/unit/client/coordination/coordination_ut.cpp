@@ -7,6 +7,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 
+#include <atomic>
+#include <memory>
+#include <optional>
+
 using namespace NYdb;
 using namespace NYdb::NCoordination;
 using namespace NCoordinationTest;
@@ -219,6 +223,80 @@ Y_UNIT_TEST_SUITE(Coordination) {
         auto res = client->StartSession("/Some/Path", settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         UNIT_ASSERT(droppedFuture.Wait(TDuration::Seconds(10)));
+    }
+
+    Y_UNIT_TEST(SessionCallbacksSurviveDriverDestruction) {
+        TPortManager pm;
+        TMockCoordinationService service;
+        const auto port = pm.GetPort();
+        auto server = StartGrpcServer(TStringBuilder() << "0.0.0.0:" << port, service);
+        std::optional<TDriver> driver(std::in_place, TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << port)
+            .SetDiscoveryMode(EDiscoveryMode::Off));
+        std::optional<TClient> client(std::in_place, *driver);
+        auto detached = NThreading::NewPromise();
+        auto reattached = NThreading::NewPromise();
+        auto expired = NThreading::NewPromise();
+        auto attachments = std::make_shared<std::atomic<unsigned>>(0);
+        auto started = client->StartSession("/Some/Path", TSessionSettings()
+            .Timeout(TDuration::Seconds(30))
+            .OnStateChanged([detached, reattached, expired, attachments](ESessionState state) mutable {
+                if (state == ESessionState::DETACHED) {
+                    detached.TrySetValue();
+                } else if (state == ESessionState::EXPIRED) {
+                    expired.TrySetValue();
+                } else if (state == ESessionState::ATTACHED && ++*attachments == 2) {
+                    reattached.SetValue();
+                }
+            }));
+        UNIT_ASSERT(started.Wait(TDuration::Seconds(10)));
+        auto session = started.ExtractValue().ExtractResult();
+        client.reset();
+        driver->Stop(true);
+        driver.reset();
+
+        service.SendNextAcquirePending = true;
+        auto accepted = NThreading::NewPromise();
+        auto acquired = session.AcquireSemaphore("semaphore", TAcquireSemaphoreSettings()
+            .Exclusive()
+            .OnAccepted([accepted]() mutable { accepted.SetValue(); }));
+        UNIT_ASSERT(accepted.GetFuture().Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(acquired.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(acquired.GetValue().GetResult());
+
+        service.TriggerNextWatch = true;
+        auto changed = NThreading::NewPromise<bool>();
+        auto watched = session.DescribeSemaphore("semaphore", TDescribeSemaphoreSettings()
+            .WatchData(true)
+            .OnChanged([changed](bool triggered) mutable { changed.SetValue(triggered); }));
+        UNIT_ASSERT(watched.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(watched.GetValue().IsSuccess());
+        UNIT_ASSERT(changed.GetFuture().Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(changed.GetFuture().GetValue());
+
+        service.FailNextPingStatus = Ydb::StatusIds::OVERLOADED;
+        auto interrupted = session.Ping();
+        UNIT_ASSERT(detached.GetFuture().Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(reattached.GetFuture().Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(interrupted.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(interrupted.GetValue().GetStatus(), EStatus::OVERLOADED);
+
+        auto cancelled = NThreading::NewPromise<bool>();
+        auto pendingWatch = session.DescribeSemaphore("semaphore", TDescribeSemaphoreSettings()
+            .WatchData(true)
+            .OnChanged([cancelled](bool triggered) mutable { cancelled.SetValue(triggered); }));
+        UNIT_ASSERT(pendingWatch.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(pendingWatch.GetValue().IsSuccess());
+        service.FailNextPingStatus = Ydb::StatusIds::SESSION_EXPIRED;
+        auto failed = session.Ping();
+        UNIT_ASSERT(expired.GetFuture().Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(failed.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT_VALUES_EQUAL(failed.GetValue().GetStatus(), EStatus::SESSION_EXPIRED);
+        UNIT_ASSERT(cancelled.GetFuture().Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(!cancelled.GetFuture().GetValue());
+        auto closed = session.Close();
+        UNIT_ASSERT(closed.Wait(TDuration::Seconds(10)));
+        UNIT_ASSERT(closed.GetValue().IsSuccess());
     }
 
 }

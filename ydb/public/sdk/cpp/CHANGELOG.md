@@ -2,7 +2,7 @@
 
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 
-* SDK drivers share a process-wide runtime for network, callbacks and scheduled tasks. `TDriver::Stop()` is now a no-op and will be deprecated; close sessions and cancel operations explicitly. `GetRuntime()` exposes background task submission and scheduling.
+* SDK drivers share a process-wide runtime for network, callbacks and scheduled tasks. `TDriver::Stop()` is now a no-op and will be deprecated; close sessions and cancel operations explicitly. `GetRuntime()` exposes background task submission and scheduling; `ScheduleFuture` accepts callable arguments and returns the result as a future.
 
 # v3.22.0
 

@@ -29,6 +29,13 @@ public:
 } // namespace
 
 Y_UNIT_TEST_SUITE(CodecRegistryLifetime) {
+    Y_UNIT_TEST(WireCodecIdsRemainStable) {
+        UNIT_ASSERT_VALUES_EQUAL(GetCodecId(ECodec::RAW), std::string(1, '\0'));
+        UNIT_ASSERT_VALUES_EQUAL(GetCodecId(ECodec::GZIP), std::string(1, '\1'));
+        UNIT_ASSERT_VALUES_EQUAL(GetCodecId(ECodec::LZOP), std::string(1, '\2'));
+        UNIT_ASSERT_VALUES_EQUAL(GetCodecId(ECodec::ZSTD), std::string(1, '\3'));
+    }
+
     Y_UNIT_TEST(RegisteredCodecSurvivesProcessTeardown) {
         // This target forks subtests. Its child returns from main normally, so a
         // finite registry would destroy this codec and fail the child at exit.

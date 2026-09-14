@@ -45,6 +45,9 @@ public:
 
 class TMockCoordinationService : public Ydb::Coordination::V1::CoordinationService::Service {
 public:
+    std::atomic<bool> SendNextAcquirePending{false};
+    std::atomic<bool> TriggerNextWatch{false};
+    std::atomic<int> FailNextPingStatus{0};
     std::atomic<bool> FailNextAcquire{false};
     std::atomic<bool> FailNextRelease{false};
     std::atomic<bool> BreakNextPingWithoutSessionLoss{false};
@@ -83,6 +86,12 @@ public:
         size_t pingsReceived = 0;
         while (stream->Read(&request)) {
             if (request.has_ping()) {
+                if (const int status = FailNextPingStatus.exchange(0)) {
+                    Ydb::Coordination::SessionResponse response;
+                    response.mutable_failure()->set_status(static_cast<Ydb::StatusIds::StatusCode>(status));
+                    stream->Write(response);
+                    return grpc::Status::OK;
+                }
                 if (BreakNextPingWithoutSessionLoss.exchange(false)) {
                     return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Injected recoverable transport failure");
                 }
@@ -95,6 +104,11 @@ public:
                 }
             } else if (request.has_acquire_semaphore()) {
                 const auto& acquire = request.acquire_semaphore();
+                if (SendNextAcquirePending.exchange(false)) {
+                    Ydb::Coordination::SessionResponse response;
+                    response.mutable_acquire_semaphore_pending()->set_req_id(acquire.req_id());
+                    stream->Write(response);
+                }
                 Ydb::Coordination::SessionResponse response;
                 auto* result = response.mutable_acquire_semaphore_result();
                 result->set_req_id(acquire.req_id());
@@ -143,6 +157,7 @@ public:
                 const auto& describe = request.describe_semaphore();
                 Ydb::Coordination::SessionResponse response;
                 auto* result = response.mutable_describe_semaphore_result();
+                result->set_watch_added(describe.watch_data() || describe.watch_owners());
                 result->set_req_id(describe.req_id());
                 result->set_status(Ydb::StatusIds::SUCCESS);
                 auto* desc = result->mutable_semaphore_description();
@@ -156,6 +171,14 @@ public:
                     owner->set_data(sem->Data);
                 }
                 stream->Write(response);
+                if (result->watch_added() && TriggerNextWatch.exchange(false)) {
+                    Ydb::Coordination::SessionResponse changed;
+                    auto* event = changed.mutable_describe_semaphore_changed();
+                    event->set_req_id(describe.req_id());
+                    event->set_data_changed(describe.watch_data());
+                    event->set_owners_changed(describe.watch_owners());
+                    stream->Write(changed);
+                }
             } else if (request.has_session_stop()) {
                 Ydb::Coordination::SessionResponse response;
                 response.mutable_session_stopped();

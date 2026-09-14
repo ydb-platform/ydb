@@ -15,10 +15,13 @@ namespace NYdb::inline Dev {
 
 namespace {
 
+void PostTask(THolder<IObjectInQueue> task);
+
 class TScheduledTask final : public TThrRefBase {
 public:
-    explicit TScheduledTask(TRuntime::TTask task)
+    TScheduledTask(THolder<IObjectInQueue> task, std::function<void(std::exception_ptr)> onError)
         : Task_(std::move(task))
+        , OnError_(std::move(onError))
     {
     }
 
@@ -28,13 +31,25 @@ public:
 
 private:
     void OnAlarm(bool ok) {
-        if (ok) {
-            GetRuntime().Post(std::move(Task_));
+        if (!ok) {
+            if (OnError_) {
+                OnError_(std::make_exception_ptr(NThreading::TFutureException() << "Scheduled runtime task was cancelled"));
+            }
+            return;
+        }
+        try {
+            PostTask(std::move(Task_));
+        } catch (...) {
+            if (!OnError_) {
+                throw;
+            }
+            OnError_(std::current_exception());
         }
     }
 
     grpc::Alarm Alarm_;
-    TRuntime::TTask Task_;
+    THolder<IObjectInQueue> Task_;
+    std::function<void(std::exception_ptr)> OnError_;
     NYdbGrpc::TQueueClientFixedEvent<TScheduledTask> OnAlarmTag_ = {
         this, &TScheduledTask::OnAlarm};
 };
@@ -69,15 +84,7 @@ private:
     }
 };
 
-} // namespace
-
-NYdbGrpc::TGRpcClientLow& NRuntime::GetNetwork(std::size_t threadCount) {
-    static auto* network = new NYdbGrpc::TGRpcClientLow(
-        threadCount ? threadCount : NYdbGrpc::DEFAULT_NUM_THREADS);
-    return *network;
-}
-
-IExecutor::TPtr NRuntime::CreateExecutor(std::size_t threadCount, std::size_t maxQueueSize) {
+std::shared_ptr<IThreadPool> CreateThreadPool(std::size_t threadCount, std::size_t maxQueueSize) {
     static auto* factory = new TThreadFactory;
     TThreadPoolParams params(factory);
     std::shared_ptr<IThreadPool> pool;
@@ -87,20 +94,44 @@ IExecutor::TPtr NRuntime::CreateExecutor(std::size_t threadCount, std::size_t ma
         pool = std::make_shared<TAdaptiveThreadPool>(params);
     }
     pool->Start(threadCount, maxQueueSize);
-    return std::make_shared<TThreadPoolExecutor>(std::move(pool));
+    return pool;
+}
+
+void PostTask(THolder<IObjectInQueue> task) {
+    static const auto* pool = new std::shared_ptr<IThreadPool>(CreateThreadPool(0, 0));
+    // MakeThrFuncObj deletes itself after execution; transfer only on admission.
+    (*pool)->SafeAdd(task.Get());
+    Y_UNUSED(task.Release());
+}
+
+} // namespace
+
+NYdbGrpc::TGRpcClientLow& NRuntime::GetNetwork(std::size_t threadCount) {
+    static auto* network = new NYdbGrpc::TGRpcClientLow(
+        threadCount ? threadCount : NYdbGrpc::DEFAULT_NUM_THREADS);
+    return *network;
+}
+
+IExecutor::TPtr NRuntime::CreateExecutor(std::size_t threadCount, std::size_t maxQueueSize) {
+    return std::make_shared<TThreadPoolExecutor>(CreateThreadPool(threadCount, maxQueueSize));
 }
 
 void TRuntime::Post(TTask task) const {
-    static const auto* executor = new IExecutor::TPtr(NRuntime::CreateExecutor(0));
-    (*executor)->Post(std::move(task));
+    PostTask(THolder<IObjectInQueue>(MakeThrFuncObj(std::move(task))));
 }
 
 void TRuntime::Schedule(TDeadline deadline, TTask task) const {
+    ScheduleTask(deadline, THolder<IObjectInQueue>(MakeThrFuncObj(std::move(task))));
+}
+
+void TRuntime::ScheduleTask(TDeadline deadline, THolder<IObjectInQueue> task,
+    std::function<void(std::exception_ptr)> onError) const
+{
     if (deadline <= TDeadline::Now()) {
-        Post(std::move(task));
+        PostTask(std::move(task));
         return;
     }
-    MakeIntrusive<TScheduledTask>(std::move(task))->Start(deadline);
+    MakeIntrusive<TScheduledTask>(std::move(task), std::move(onError))->Start(deadline);
 }
 
 void TRuntime::Schedule(TDuration delay, TTask task) const {

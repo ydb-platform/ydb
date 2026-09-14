@@ -531,7 +531,6 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
     }
     ev->Record.SetStatsMode(RuntimeSettings.StatsMode);
     ev->Record.SetScanId(scanId);
-    AFL_ENSURE(std::holds_alternative<ui64>(TxId)); // FIXME
     ev->Record.SetTxId(std::get<ui64>(TxId));
     if (LockTxId) {
         ev->Record.SetLockTxId(*LockTxId);
@@ -834,7 +833,7 @@ void TKqpScanFetcherActor::OnMonitoringPage(NActors::NMon::TEvHttpInfo::TPtr& ev
     HTML(str) {
         PRE() {
             str << "TKqpScanFetcherActor, SelfId=" << SelfId() << Endl;
-            str << "ScanId: " << ScanId << ", TxId: " << TxId << Endl;
+            str << "ScanId: " << ScanId << ", TxId: " << std::get<ui64>(TxId) << Endl;
             str << "Elapsed: " << elapsed << Endl;
             str << "PendingScanData: " << PendingScanData.size()
                 << ", PendingShards: " << PendingShards.size()

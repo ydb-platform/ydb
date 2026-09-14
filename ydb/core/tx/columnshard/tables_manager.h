@@ -177,7 +177,7 @@ public:
                 if (existing.DropVersion) {
                     if (pathInfo.DropVersion) {
                         AFL_VERIFY(*existing.DropVersion == *pathInfo.DropVersion)("existing", existing.DropVersion->DebugString())(
-                                                                "incoming", pathInfo.DropVersion->DebugString())("ss", schemeShardLocalPathId);
+                                                              "incoming", pathInfo.DropVersion->DebugString())("ss", schemeShardLocalPathId);
                     } else {
                         pathInfo.DropVersion = existing.DropVersion;
                     }
@@ -185,7 +185,7 @@ public:
                 if (existing.CopyVersion) {
                     if (pathInfo.CopyVersion) {
                         AFL_VERIFY(*existing.CopyVersion == *pathInfo.CopyVersion)("existing", existing.CopyVersion->DebugString())(
-                                                                "incoming", pathInfo.CopyVersion->DebugString())("ss", schemeShardLocalPathId);
+                                                              "incoming", pathInfo.CopyVersion->DebugString())("ss", schemeShardLocalPathId);
                     } else {
                         pathInfo.CopyVersion = existing.CopyVersion;
                     }
@@ -195,9 +195,8 @@ public:
                 }
                 if (existing.LastCompletedBackupTransaction) {
                     if (pathInfo.LastCompletedBackupTransaction) {
-                        AFL_VERIFY(*existing.LastCompletedBackupTransaction == *pathInfo.LastCompletedBackupTransaction)(
-                            "existing", *existing.LastCompletedBackupTransaction)("incoming", *pathInfo.LastCompletedBackupTransaction)(
-                            "ss", schemeShardLocalPathId);
+                        AFL_VERIFY(*existing.LastCompletedBackupTransaction == *pathInfo.LastCompletedBackupTransaction)("existing", *existing.LastCompletedBackupTransaction)(
+                                       "incoming", *pathInfo.LastCompletedBackupTransaction)("ss", schemeShardLocalPathId);
                     } else {
                         pathInfo.LastCompletedBackupTransaction = existing.LastCompletedBackupTransaction;
                     }

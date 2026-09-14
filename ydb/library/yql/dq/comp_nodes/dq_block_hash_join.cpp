@@ -25,7 +25,7 @@ constexpr ui32 BaseInputs = 8;
 struct TDqBlockJoinContext {
     TSides<TVector<TBlockType*>> InputTypes;
     TSides<TVector<ui32>> KeyColumns;
-    TVector<TBlockType*> ResultItemTypes;
+    TVector<TType*> OutputItemTypes;
     TDqJoinImplRenames Renames;
     EJoinKind Kind;
     TSides<i32> TempStateIndes;
@@ -148,7 +148,7 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConv
 
     TRenamesPackedTupleOutput(const TDqBlockJoinContext* meta, TSides<IBlockLayoutConverter*> converters,
                               const TVector<TType*>& userNullTypes, arrow::MemoryPool& arrowPool)
-        : TBase(&meta->Renames, converters)
+        : TBase(&meta->Renames, converters, meta->OutputItemTypes)
     {
         if constexpr (!std::is_same_v<typename TBase::BuildNullIfNeeded, typename TBase::Empty>) {
             TVector<arrow::Datum> nulls;
@@ -312,9 +312,12 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     const auto joinStreamType = AS_TYPE(TStreamType, joinType);
     MKQL_ENSURE(joinStreamType->GetItemType()->IsMulti(), "Expected Multi as a resulting item type");
     const auto joinComponents = GetWideComponents(joinStreamType);
-    for (auto* blockType : joinComponents) {
+    for (int index = 0; index < std::ssize(joinComponents); ++index) {
+        auto* blockType = joinComponents[index];
         MKQL_ENSURE(blockType->IsBlock(), "Expected block types as wide components of result stream");
-        meta.ResultItemTypes.push_back(AS_TYPE(TBlockType, blockType));
+        if (index + 1 < std::ssize(joinComponents)) {
+            meta.OutputItemTypes.push_back(AS_TYPE(TBlockType, blockType)->GetItemType());
+        }
     }
 
     const auto leftType = callable.GetInput(0).GetStaticType();

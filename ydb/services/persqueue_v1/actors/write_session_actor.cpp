@@ -932,7 +932,10 @@ void TWriteSessionActor<Protocol>::MakeAndSendInitResponse(
         init->set_block_format_version(0);
         if (InitialPQTabletConfig.HasCodecs()) {
             for (const auto codecId : InitialPQTabletConfig.GetCodecs().GetIds()) {
-                init->add_supported_codecs(static_cast<ECodec<Protocol>>(codecId + 1));
+                const int value = codecId + 1;
+                if (Ydb::PersQueue::V1::Codec_IsValid(value)) {
+                    init->add_supported_codecs(static_cast<Ydb::PersQueue::V1::Codec>(value));
+                }
             }
         }
     } else {

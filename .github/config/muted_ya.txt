@@ -12,7 +12,6 @@ ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-SchemeQuery
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
-ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsMultipleColumns
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest

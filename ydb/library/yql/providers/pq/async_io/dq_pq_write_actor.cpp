@@ -1196,6 +1196,11 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
             NPq::NProto::TDqPqTopicSink&& settings,
             IDqAsyncIoFactory::TSinkArguments&& args)
         {
+            auto txId = args.TxId;
+            if (const auto it = args.TaskParams.find("query_path"); it != args.TaskParams.end()) {
+                txId = it->second;
+            }
+
             i64 currentExecutionGeneration = 0;
             if (const auto it = args.TaskParams.find("current_execution_generation"); it != args.TaskParams.end()) {
                 currentExecutionGeneration = FromString<i64>(it->second);
@@ -1211,7 +1216,7 @@ void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver dri
                 std::move(settings),
                 args.OutputIndex,
                 args.StatsLevel,
-                args.TxId,
+                txId,
                 args.TaskId,
                 args.SecureParams,
                 driver,

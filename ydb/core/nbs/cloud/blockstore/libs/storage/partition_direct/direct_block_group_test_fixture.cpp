@@ -90,7 +90,14 @@ TDBGFixture::MakeDirectBlockGroup(
         0,
         ddisksIds,
         pbufferIds,
+<<<<<<< HEAD
         std::move(transport));
+=======
+        TVector(ddisksIds.size(), EHostHealth::Online),
+        dbgConnectionsConfigGeneration,
+        std::move(transport),
+        nullptr);
+>>>>>>> f5807c51a12 (NBS-7513: Add oracle's initial health load (#52831))
 }
 
 bool TDBGFixture::DoExecutorAndRuntimeWorkWithPredicate(

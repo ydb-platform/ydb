@@ -52,7 +52,14 @@ public:
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
+<<<<<<< HEAD
         std::unique_ptr<NTransport::IStorageTransport> storageTransport);
+=======
+        const TVector<EHostHealth>& hostHealths,
+        ui32 dbgConnectionsConfigGeneration,
+        NTransport::TStorageTransportPtr storageTransport,
+        NMonitoring::TDynamicCounterPtr counters);
+>>>>>>> f5807c51a12 (NBS-7513: Add oracle's initial health load (#52831))
 
     ~TDirectBlockGroup() override = default;
 

@@ -275,6 +275,8 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             persistentBufferDDiskIds.push_back(NBsController::TDDiskId(
                 connection.GetPersistentBufferDDiskId()));
         }
+        // Temporarily preserving original behavior
+        TVector<EHostHealth> hostHealths(ddiskIds.size(), EHostHealth::Online);
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
@@ -286,11 +288,18 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
+<<<<<<< HEAD:ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.cpp
             std::make_unique<NTransport::TICStorageTransport>(
                 TActivationContext::ActorSystem(),
                 NTransport::CreateTransportActor(
                     VolumeConfig.GetDiskId(),
                     dbgIndex)));
+=======
+            std::move(hostHealths),
+            conn.GetDBGConnectionsConfigGeneration(),
+            std::move(transport),
+            dbgCountersRoot);
+>>>>>>> f5807c51a12 (NBS-7513: Add oracle's initial health load (#52831)):ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct_actor.cpp
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }

@@ -1,8 +1,15 @@
 #pragma once
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
+#include <util/generic/string.h>
+
+namespace Ydb::Operations {
+class OperationParams;
+}
 
 namespace NKikimrSchemeOp {
 class TModifyScheme;
@@ -14,6 +21,37 @@ class TKqpSchemeOperation;
 
 namespace NKikimr::NSchemeShard {
 
+inline bool IsValidOperationUid(TStringBuf key) {
+    return !key.empty() && key.size() <= 128;
+}
+
+TString GetUid(const Ydb::Operations::OperationParams& operationParams);
+
+// Each operation type has an independent UID index; UIDs live with their operation records.
+template <typename TIndex, typename TKey>
+const typename TIndex::mapped_type* FindOperationByUid(const TIndex& index, const TKey& key) {
+    const auto it = index.find(key);
+    return it == index.end() ? nullptr : &it->second;
+}
+
+struct TOperationUidIdentity {
+    TMaybe<TPathId> DomainPathId;
+    TMaybe<TStringBuf> UserSID;
+    TMaybe<TStringBuf> RequestBody;
+};
+
+enum class EUidReplayMatch {
+    Match,
+    OwnerMismatch,
+    DomainMismatch,
+    RequestMismatch,
+};
+
+// Import/export compare domains; backup/restore SQL compares owner and DDL.
+EUidReplayMatch CompareOperationUid(const TOperationUidIdentity& stored, const TOperationUidIdentity& requested);
+
+// Capabilities of keyed TModifyScheme submissions and their SQL/KQP forms.
+// Legacy RPC admission paths use the UID helpers above.
 bool SupportsOperationIdempotency(NKikimrSchemeOp::EOperationType operationType);
 bool SupportsSqlOperationIdempotency(TStringBuf writeMode);
 

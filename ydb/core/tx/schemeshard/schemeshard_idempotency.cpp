@@ -1,29 +1,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
-#include <ydb/public/api/protos/ydb_operation.pb.h>
-
 namespace NKikimr::NSchemeShard {
-
-TString GetUid(const Ydb::Operations::OperationParams& operationParams) {
-    if (const auto* uid = FindOperationByUid(operationParams.labels(), "uid")) {
-        return *uid;
-    }
-    return {};
-}
-
-EUidReplayMatch CompareOperationUid(const TOperationUidIdentity& stored, const TOperationUidIdentity& requested) {
-    if (requested.UserSID && stored.UserSID != requested.UserSID) {
-        return EUidReplayMatch::OwnerMismatch;
-    }
-    if (requested.DomainPathId && stored.DomainPathId != requested.DomainPathId) {
-        return EUidReplayMatch::DomainMismatch;
-    }
-    if (requested.RequestBody && stored.RequestBody != requested.RequestBody) {
-        return EUidReplayMatch::RequestMismatch;
-    }
-    return EUidReplayMatch::Match;
-}
-
 
 TMaybe<TBackupOperationReplay> TSchemeShard::FindBackupOperationByUid(const TBackupOperationUidKey& key) const {
     const auto* id = FindOperationByUid(BackupOperationsByUid, key);

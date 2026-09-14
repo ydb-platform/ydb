@@ -3,7 +3,7 @@
 #include "schemeshard_audit_log_fragment.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_path.h"
-#include "schemeshard_xxport__helpers.h"
+#include "common/operation_idempotency.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>

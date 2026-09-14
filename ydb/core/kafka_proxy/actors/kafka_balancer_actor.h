@@ -143,7 +143,9 @@ public:
         InstanceId = JoinGroupRequestData->GroupInstanceId.value_or("");
         MemberId = JoinGroupRequestData->MemberId.value_or("");
 
-        KAFKA_LOG_D(TStringBuilder() << "JOIN_GROUP request. MemberId# " << MemberId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::KAFKA_PROXY, "JOIN_GROUP request",
+            {LogPrefix()},
+            {"memberId", MemberId});
 
         if (JoinGroupRequestData->SessionTimeoutMs) {
             SessionTimeoutMs = JoinGroupRequestData->SessionTimeoutMs;
@@ -308,7 +310,7 @@ private:
     void SendLeaveGroupResponseFail(const TActorContext&, ui64 corellationId,
                                     EKafkaErrors error, TString message = "");
 
-    TString LogPrefix();
+    NActors::NStructuredLog::TStructuredMessage LogPrefix();
     void SendResponseFail(const TActorContext& ctx, EKafkaErrors error, const TString& message);
 
     std::optional<TGroupStatus> ParseGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);

@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxDropReplication: public TTxBase {
@@ -26,6 +28,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         if (PubEv) {
             return ExecutePub(txc, ctx);
         } else if (PrivEv) {
@@ -36,7 +39,8 @@ public:
     }
 
     bool ExecutePub(TTransactionContext& txc, const TActorContext& ctx) {
-        CLOG_D(ctx, "Execute: " << PubEv->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", PubEv->Get()->ToString()});
 
         const auto& record = PubEv->Get()->Record;
         const auto pathId = TPathId::FromProto(record.GetPathId());
@@ -44,8 +48,8 @@ public:
         Replication = Self->Find(pathId);
 
         if (!Replication) {
-            CLOG_W(ctx, "Cannot drop unknown replication"
-                << ": pathId# " << pathId);
+            YDB_LOG_WARN_CTX(ctx, "Cannot drop unknown replication",
+                {"pathId", pathId});
 
             auto ev = MakeHolder<TEvController::TEvDropReplicationResult>();
             ev->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
@@ -89,30 +93,31 @@ public:
             }
         }
 
-        CLOG_N(ctx, "Drop replication"
-            << ": rid# " << Replication->GetId()
-            << ", pathId# " << pathId);
+        YDB_LOG_NOTICE_CTX(ctx, "Drop replication",
+            {"rid", Replication->GetId()},
+            {"pathId", pathId});
 
         Replication->SetDropOp(PubEv->Sender, std::make_pair(opId.GetTxId(), opId.GetPartId()));
         return true;
     }
 
     bool ExecutePriv(TTransactionContext& txc, const TActorContext& ctx) {
-        CLOG_D(ctx, "Execute: " << PrivEv->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", PrivEv->Get()->ToString()});
 
         const auto rid = PrivEv->Get()->ReplicationId;
         Replication = Self->Find(rid);
 
         if (!Replication) {
-            CLOG_W(ctx, "Cannot drop unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_WARN_CTX(ctx, "Cannot drop unknown replication",
+                {"rid", rid});
             return true;
         }
 
         if (Replication->GetState() != TReplication::EState::Removing) {
-            CLOG_W(ctx, "Replication state mismatch"
-                << ": rid# " << rid
-                << ", state# " << Replication->GetState());
+            YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
+                {"rid", rid},
+                {"state", Replication->GetState()});
             return true;
         }
 
@@ -135,7 +140,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Result) {
             ctx.Send(Result.Release());

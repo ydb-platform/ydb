@@ -16,6 +16,8 @@
 #include "kafka_list_groups_actor.h"
 #include "kafka_state_name_to_int.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
+
 
 namespace NKafka {
 
@@ -33,7 +35,8 @@ void TKafkaListGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
         }
         Become(&TKafkaListGroupsActor::StateWork);
     } else {
-        KAFKA_LOG_ERROR("No EnableKafkaNativeBalancing FeatureFlag set.");
+        YDB_LOG_ERROR("No EnableKafkaNativeBalancing FeatureFlag set",
+            {LogPrefix()});
         TListGroupsResponseData consumerGroupsResponseWithError;
         Send(Context->ConnectionId,
             new TEvKafka::TEvResponse(CorrelationId,
@@ -43,12 +46,14 @@ void TKafkaListGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
 }
 
 void TKafkaListGroupsActor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx) {
-    KAFKA_LOG_D("Received TEvManagerPrepared. Sending create session request to KQP.");
+    YDB_LOG_DEBUG("Received TEvManagerPrepared. Sending create session request to KQP",
+        {LogPrefix()});
     StartKqpSession(ctx);
 }
 
 void TKafkaListGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
-    KAFKA_LOG_D("KQP session created");
+    YDB_LOG_DEBUG("KQP session created",
+        {LogPrefix()});
     if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
         SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
         Die(ctx);
@@ -59,9 +64,11 @@ void TKafkaListGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr&
 }
 
 void TKafkaListGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-    KAFKA_LOG_D("Received query response from KQP ListGroups request");
+    YDB_LOG_DEBUG("Received query response from KQP ListGroups request",
+        {LogPrefix()});
     if (auto error = GetErrorFromYdbResponse(ev)) {
-        KAFKA_LOG_W(error);
+        YDB_LOG_WARN(error,
+            {LogPrefix()});
         SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
         Die(ctx);
         return;
@@ -71,10 +78,14 @@ void TKafkaListGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, con
 }
 
 void TKafkaListGroupsActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx) {
-    KAFKA_LOG_D("Handling Select Response " << response.Record.GetResponse().GetYdbResults().size());
+    YDB_LOG_DEBUG("Handling Select Response",
+        {LogPrefix()},
+        {"responseResults", response.Record.GetResponse().GetYdbResults().size()});
     if (response.Record.GetResponse().GetYdbResults().size() != 1) {
         TString errorMessage = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected 1, got " << response.Record.GetResponse().GetYdbResults().size() << ".";
-        KAFKA_LOG_W(errorMessage);
+        YDB_LOG_WARN("KQP returned wrong number of result sets size!=1 on SELECT query",
+            {LogPrefix()},
+            {"responseResults", response.Record.GetResponse().GetYdbResults().size()});
         SendFailResponse(EKafkaErrors::BROKER_NOT_AVAILABLE, errorMessage);
         Die(ctx);
         return;
@@ -88,7 +99,8 @@ void TKafkaListGroupsActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQueryRes
 }
 
 void TKafkaListGroupsActor::Die(const TActorContext &ctx) {
-    KAFKA_LOG_D("Dying.");
+    YDB_LOG_DEBUG("Dying",
+        {LogPrefix()});
     if (Kqp) {
         Kqp->CloseKqpSession(ctx);
     }
@@ -96,12 +108,15 @@ void TKafkaListGroupsActor::Die(const TActorContext &ctx) {
 }
 
 void TKafkaListGroupsActor::StartKqpSession(const TActorContext& ctx) {
-    KAFKA_LOG_D("Sending create session request to KQP for database " << DatabasePath);
+    YDB_LOG_DEBUG("Sending create session request to KQP for database",
+        {LogPrefix()},
+        {"databasePath", DatabasePath});
     Kqp->SendCreateSessionRequest(ctx);
 }
 
 TListGroupsResponseData TKafkaListGroupsActor::ParseGroupsMetadata(const NKqp::TEvKqp::TEvQueryResponse& response) {
-    KAFKA_LOG_D("Parsing KQP response");
+    YDB_LOG_DEBUG("Parsing KQP response",
+        {LogPrefix()});
     TListGroupsResponseData listGroupsResponse;
 
     NYdb::TResultSetParser parser(response.Record.GetResponse().GetYdbResults(0));
@@ -159,7 +174,9 @@ std::shared_ptr<TListGroupsResponseData> TKafkaListGroupsActor::BuildResponse(TL
 };
 
 void TKafkaListGroupsActor::SendToKqpConsumerGroupsRequest(const TActorContext& ctx) {
-    KAFKA_LOG_W("Sending select request to KQP for database " << DatabasePath);
+    YDB_LOG_WARN("Sending select request to KQP for database",
+        {LogPrefix()},
+        {"databasePath", DatabasePath});
     Kqp->SendYqlRequest(
     GetYqlWithTableNames(ListGroupsRequestData->StatesFilter.size() > 0 ?
                                     SELECT_GROUPS_WITH_FILTER :
@@ -173,9 +190,14 @@ void TKafkaListGroupsActor::SendToKqpConsumerGroupsRequest(const TActorContext& 
 
 void TKafkaListGroupsActor::SendFailResponse(EKafkaErrors errorCode, const std::optional<TString>& errorMessage = std::nullopt) {
     if (errorMessage.has_value()) {
-        KAFKA_LOG_W("Sending fail response with error code: " << errorCode << ". Reason:  " << errorMessage);
+        YDB_LOG_WARN("Sending fail response with error",
+            {LogPrefix()},
+            {"code", errorCode},
+            {"reason", errorMessage});
     } else {
-        KAFKA_LOG_W("Sending fail response with error code: " << errorCode);
+        YDB_LOG_WARN("Sending fail response with error",
+            {LogPrefix()},
+            {"code", errorCode});
     }
 
     TListGroupsResponseData consumerGroupsResponseWithError;

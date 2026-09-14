@@ -246,6 +246,7 @@ public:
         const ui64 MaxKeys;
         const std::pair<TString, TString> CurrentLogContextPath;
         const NActors::TActorSystem* ActorSystem;
+        const IHttpRequestContext::TPtr RequestContext;
     };
 
     TS3Lister(
@@ -255,7 +256,8 @@ public:
         const TMaybe<TString>& delimiter,
         size_t maxFilesPerQuery,
         TSharedListingContextPtr sharedCtx,
-        NActors::TActorSystem* actorSystem)
+        NActors::TActorSystem* actorSystem,
+        IHttpRequestContext::TPtr requestContext)
         : MaxFilesPerQuery(maxFilesPerQuery) {
         Y_ENSURE(
             listingRequest.Url.substr(0, 7) != "file://",
@@ -281,7 +283,8 @@ public:
             Nothing(),
             MaxFilesPerQuery,
             NLog::CurrentLogContextPath(),
-            actorSystem};
+            actorSystem,
+            std::move(requestContext)};
 
         YQL_CLOG(TRACE, ProviderS3)
             << "[TS3Lister] Got URL: '" << ctx.ListingRequest.Url
@@ -345,7 +348,8 @@ private:
             0U,
             std::move(httpCallback),
             /*data=*/"",
-            retryPolicy);
+            retryPolicy,
+            ctx.RequestContext);
     }
 
     static IHTTPGateway::TOnResult CallbackFactoryMethod(TListingContext&& listingContext) {
@@ -540,10 +544,11 @@ IS3Lister::TPtr MakeS3Lister(
     const TMaybe<TString>& delimiter,
     bool allowLocalFiles,
     NActors::TActorSystem* actorSystem,
-    TSharedListingContextPtr sharedCtx) {
+    TSharedListingContextPtr sharedCtx,
+    IHttpRequestContext::TPtr requestContext) {
     if (listingRequest.Url.substr(0, 7) != "file://") {
         return std::make_shared<TS3Lister>(
-            httpGateway, retryPolicy, listingRequest, delimiter, 1000, std::move(sharedCtx), actorSystem);
+            httpGateway, retryPolicy, listingRequest, delimiter, 1000, std::move(sharedCtx), actorSystem, std::move(requestContext));
     }
 
     if (!allowLocalFiles) {

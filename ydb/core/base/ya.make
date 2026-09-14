@@ -72,6 +72,7 @@ SRCS(
     storage_pools.h
     subdomain.h
     subdomain.cpp
+    superlemmer.h
     table_index.cpp
     tablet.cpp
     tablet.h
@@ -130,6 +131,10 @@ PEERDIR(
     library/cpp/json
 )
 
+PEERDIR(
+    ydb/library/superlemmer_stub
+)
+
 YQL_LAST_ABI_VERSION()
 
 IF (NOT OS_WINDOWS)
@@ -155,4 +160,3 @@ RECURSE_FOR_TESTS(
     ut_board_subscriber
 )
 ENDIF()
-

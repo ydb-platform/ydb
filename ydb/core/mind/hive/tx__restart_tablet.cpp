@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -31,9 +33,14 @@ public:
         TTabletInfo* tablet = Self->FindTablet(TabletId);
         if (tablet != nullptr) {
             if (PreferredNodeId == 0) {
-                BLOG_D("THive::TTxRestartTablet(" << tablet->ToString() << ")::Execute");
+                YDB_LOG_DEBUG("THive::TTxRestartTablet::Execute restarting tablet",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletInfo", tablet->ToString()});
             } else {
-                BLOG_D("THive::TTxRestartTablet(" << tablet->ToString() << " to node " << PreferredNodeId << ")::Execute");
+                YDB_LOG_DEBUG("THive::TTxRestartTablet::Execute restarting tablet on preferred node",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletInfo", tablet->ToString()},
+                    {"preferredNodeId", PreferredNodeId});
             }
             if (!tablet->IsStopped()) {
                 NIceDb::TNiceDb db(txc.DB);
@@ -59,7 +66,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxRestartTablet(" << TabletId << ")::Complete SideEffects: " << SideEffects);
+        YDB_LOG_DEBUG("THive::TTxRestartTablet::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"sideEffects", SideEffects});
         SideEffects.Complete(ctx);
     }
 };

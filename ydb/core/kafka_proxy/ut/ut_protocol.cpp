@@ -1157,14 +1157,17 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
-            // Check empty topic (no records)
+            // Check empty topic (no records).
+            // Empty Fetch must return zero-length records bytes, not null:
+            // librdkafka fails on MessageSetSize=-1 (LOGBROKER-10644).
             std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
             auto msg = client.Fetch(topics);
 
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), false);
+            UNIT_ASSERT(msg->Responses[0].Partitions[0].Records.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records->size(), 0);
         }
 
         {
@@ -1355,7 +1358,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::vector<std::pair<TString, std::vector<i32>>> topics {{feedPath, {0}}};
             auto msg = client.Fetch(topics);
 
-            if (msg->Responses.empty() || msg->Responses[0].Partitions.empty() || !msg->Responses[0].Partitions[0].Records.has_value()) {
+            if (msg->Responses.empty() || msg->Responses[0].Partitions.empty()
+                    || !msg->Responses[0].Partitions[0].Records.has_value()
+                    || msg->Responses[0].Partitions[0].Records->empty()) {
                 UNIT_ASSERT_C(i, "Timeout");
                 Sleep(TDuration::Seconds(1));
                 continue;
@@ -1478,15 +1483,16 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         client.PlainAuthenticateToKafka();
 
         {
-            // Check FETCH
+            // Check FETCH on an empty topic: records must be zero-length bytes,
+            // not null. librdkafka rejects MessageSetSize=-1 (LOGBROKER-10644);
+            // Java clients also normalize null records to MemoryRecords.EMPTY.
             std::vector<std::pair<TString, std::vector<i32>>> topics {{topicName, {0}}};
             auto msg = client.Fetch(topics);
             UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
-            // To protect the clients from failing due to null records,
-            // Java SDK always convert null records to MemoryRecords.EMPTY
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records.has_value(), false);
+            UNIT_ASSERT(msg->Responses[0].Partitions[0].Records.has_value());
+            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions[0].Records->size(), 0);
         }
     } // Y_UNIT_TEST(FetchEmptyTopicScenario)
 
@@ -5223,7 +5229,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         // validate data is still not assessible in target topic
         auto fetchResponse1 = kafkaClient.Fetch({{outputTopicName, {0}}});
         UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
-        UNIT_ASSERT(!fetchResponse1->Responses[0].Partitions[0].Records.has_value());
+        UNIT_ASSERT(fetchResponse1->Responses[0].Partitions[0].Records.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(fetchResponse1->Responses[0].Partitions[0].Records->size(), 0);
     }
 
     Y_UNIT_TEST(AbortTransactionScenario) {

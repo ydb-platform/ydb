@@ -17,6 +17,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
@@ -32,6 +33,7 @@
 #include <util/string/builder.h>
 
 #include <algorithm>
+#include <limits>
 #include <queue>
 #include <variant>
 
@@ -342,13 +344,28 @@ private:
     }
 
     NYdb::NTopic::TWriteSessionSettings GetWriteSessionSettings() {
+        auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
+            /* minDelay           */ TDuration::MilliSeconds(500),
+            /* minLongRetryDelay  */ TDuration::Seconds(5),
+            /* maxDelay           */ TDuration::Seconds(20),
+            /* maxRetries         */ 100,
+            /* maxTime            */ TDuration::Seconds(60),
+            /* scaleFactor        */ 2.0,
+            /* customRetryClass   */ [](NYdb::EStatus status) {
+                if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+                    return ERetryErrorClass::LongRetry;
+                }
+                return NYdb::NTopic::GetRetryErrorClass(status);
+            });
+
         auto settings = NYdb::NTopic::TWriteSessionSettings()
             .Path(SinkParams.GetTopicPath())
             .TraceId(LogPrefix)
             .MaxMemoryUsage(FreeSpace)
             .Codec(SinkParams.GetClusterType() == NPq::NProto::DataStreams
                 ? NYdb::NTopic::ECodec::RAW
-                : NYdb::NTopic::ECodec::GZIP);
+                : NYdb::NTopic::ECodec::GZIP)
+            .RetryPolicy(retryPolicy);
 
         settings.DeduplicationEnabled(EnableDeduplication);
         if (EnableDeduplication) {

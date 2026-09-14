@@ -2848,6 +2848,15 @@ Y_UNIT_TEST(GroupByHopRtmr) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(DataWatermarksPragmaIsAccepted) {
+    auto res = SqlToYql(R"sql(
+        PRAGMA DataWatermarks = "obsolete";
+        SELECT COUNT(*) AS value FROM plato.Input
+        GROUP BY HOP(Data, "PT10S", "PT30S", "PT20S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(GroupByHopRtmrSubquery) {
     // 'use plato' intentially avoided
     NYql::TAstParseResult res = SqlToYql(R"(
@@ -12043,35 +12052,27 @@ Y_UNIT_TEST(Distinct) {
 } // Y_UNIT_TEST_SUITE(AggregationPhases)
 
 Y_UNIT_TEST_SUITE(Watermarks) {
-Y_UNIT_TEST(InsertAs) {
-    auto res = SqlToYql(R"sql(
-        USE plato;
+Y_UNIT_TEST(InsertAsDeprecated) {
+    ExpectFailWithError(
+        R"sql(
+            USE plato;
 
-        INSERT INTO Output
-        SELECT * FROM Input
-        WITH WATERMARK AS (ts - Interval("PT1S"));
-    )sql");
-    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-
-    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
-    VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
-    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
+            INSERT INTO Output
+            SELECT * FROM Input
+            WITH WATERMARK AS (ts - Interval("PT1S"));
+        )sql",
+        "<main>:6:18: Error: WATERMARK AS (expr) syntax is deprecated and no longer supported, use WATERMARK = expr\n");
 }
 
-Y_UNIT_TEST(SelectAs) {
-    auto res = SqlToYql(R"sql(
-        USE plato;
+Y_UNIT_TEST(SelectAsDeprecated) {
+    ExpectFailWithError(
+        R"sql(
+            USE plato;
 
-        SELECT * FROM Input
-        WITH WATERMARK AS (ts - Interval("PT1S"));
-    )sql");
-    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-
-    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
-    VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
-    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
+            SELECT * FROM Input
+            WITH WATERMARK AS (ts - Interval("PT1S"));
+        )sql",
+        "<main>:5:18: Error: WATERMARK AS (expr) syntax is deprecated and no longer supported, use WATERMARK = expr\n");
 }
 
 Y_UNIT_TEST(InsertEquals) {

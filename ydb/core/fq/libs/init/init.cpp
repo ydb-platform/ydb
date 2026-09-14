@@ -246,6 +246,7 @@ void Init(
     if (protoConfig.GetPrivateApi().GetEnabled()) {
         auto s3HttpRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         NYql::NDq::TS3ReadActorFactoryConfig readActorFactoryCfg = NYql::NDq::CreateReadActorFactoryConfig(protoConfig.GetGateways().GetS3());
+        readActorFactoryCfg.EnableScheduling = appData->FeatureFlags.GetEnableS3Scheduling();
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
 

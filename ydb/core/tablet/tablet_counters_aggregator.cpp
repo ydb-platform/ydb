@@ -33,6 +33,8 @@
 #include <util/string/vector.h>
 #include <util/string/split.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_AGGREGATOR
+
 #ifdef _darwin_
 #pragma GCC diagnostic ignored "-Wformat"
 #endif
@@ -274,7 +276,8 @@ public:
 
     void QueryLabeledCounters(const NKikimrLabeledCounters::TEvTabletLabeledCountersRequest& request, NKikimrLabeledCounters::TEvTabletLabeledCountersResponse& response, const TActorContext& ctx) {
 
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "got request v" << request.GetVersion());
+        YDB_LOG_INFO_CTX(ctx, "Received labeled counters request",
+            {"requestVersion", request.GetVersion()});
 
         TString group = request.HasGroup() ? request.GetGroup() : "";
         TTabletTypes::EType tabletType = request.GetTabletType();
@@ -308,7 +311,8 @@ public:
                 ++cc;
             }
         }
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "request processed, " << cc << " groups processed");
+        YDB_LOG_INFO_CTX(ctx, "Request processed",
+            {"groupsProcessed", cc});
     }
 
     void RecalcAll() {
@@ -1284,21 +1288,21 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddCounte
 void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddLabeledCounters::TPtr &ev, const TActorContext &ctx) {
     TEvTabletCounters::TEvTabletAddLabeledCounters* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                "got labeledCounters " << msg->LabeledCounters.Get()->GetDatabasePath() << " " <<
-                msg->LabeledCounters.Get()->GetGroup() << " " <<
-                (msg->TabletType == TTabletTypes::PersQueue ? "PQ" : "different"));
+    YDB_LOG_DEBUG_CTX(ctx, "Received labeled counters",
+        {"databasePath", msg->LabeledCounters.Get()->GetDatabasePath()},
+        {"group", msg->LabeledCounters.Get()->GetGroup()},
+        {"tabletTypeLabel", (msg->TabletType == TTabletTypes::PersQueue ? "PQ" : "other")});
     if (msg->LabeledCounters.Get()->GetDatabasePath()) {
         if (msg->TabletType == TTabletTypes::PersQueue) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                        "got labeledCounters from db: " << msg->LabeledCounters.Get()->GetDatabasePath() <<
-                        "; tablet: " << msg->TabletID);
+            YDB_LOG_DEBUG_CTX(ctx, "Applying labeled counters from database",
+                {"databasePath", msg->LabeledCounters.Get()->GetDatabasePath()},
+                {"tabletId", msg->TabletID});
             TabletMon->ApplyLabeledDbCounters(msg->LabeledCounters.Get()->GetDatabasePath().GetRef(), msg->TabletID, msg->LabeledCounters.Get(), ctx);
         } else {
-            LOG_ERROR_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                        "got labeledCounters from unknown Tablet Type: " << msg->TabletType <<
-                        "; db: " << msg->LabeledCounters.Get()->GetDatabasePath() <<
-                        "; tablet: " << msg->TabletID);
+            YDB_LOG_ERROR_CTX(ctx, "Labeled counters from unsupported tablet type",
+                {"tabletType", msg->TabletType},
+                {"databasePath", msg->LabeledCounters.Get()->GetDatabasePath()},
+                {"tabletId", msg->TabletID});
             return;
         }
     } else {
@@ -1667,7 +1671,9 @@ public:
             flags |= IEventHandle::FlagSubscribeOnSession;
         }
         ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor request to node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Sent request to node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         ++NodesRequested;
     }
 
@@ -1678,9 +1684,13 @@ public:
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
-            LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V1 Initiator " << Initiator << " self " << ctx.SelfID << " worker " << WorkerId);
+            YDB_LOG_INFO_CTX(ctx, "Started cluster aggregation request v1",
+                {"initiator", Initiator},
+                {"selfId", ctx.SelfID},
+                {"workerId", WorkerId});
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V1 " << ctx.SelfID);
+            YDB_LOG_INFO_CTX(ctx, "Spawning worker actors v1",
+                {"selfId", ctx.SelfID});
             for (ui32 i = 0; i < WorkerId; ++i) {
                 ctx.Register(new TClusterLabeledCountersAggregatorActorV1(ctx.SelfID, TabletType, WorkerId, i));
             }
@@ -1725,7 +1735,9 @@ public:
 
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor undelivered node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Request undelivered to node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
             SessionSubscriptions->Unsubscribe(nodeId);
         }
@@ -1740,7 +1752,9 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor disconnected node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Node disconnected",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         SessionSubscriptions->Handle(ev);
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
@@ -1749,7 +1763,9 @@ public:
 
     void HandleResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Received response from node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
             SessionSubscriptions->Unsubscribe(nodeId);
         }
@@ -1766,14 +1782,15 @@ public:
     }
 
     void HandleTimeout(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor got TIMEOUT");
+        YDB_LOG_DEBUG_CTX(ctx, "Aggregation request timed out");
         ReplyAndDie(ctx);
     }
 
     void ReplyAndDie(const TActorContext& ctx) {
         TAutoPtr<TEvTabletCounters::TEvTabletLabeledCountersResponse> response(new TEvTabletCounters::TEvTabletLabeledCountersResponse);
 
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator all answers received - replying " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "All node responses received, sending reply",
+            {"selfId", ctx.SelfID});
 
         TVector<ui8> types;
         TVector<ui8> aggrFuncs;
@@ -1899,7 +1916,11 @@ public:
                 labeledCounter.SetName(g.second->GetCounterName(i));
             }
         }
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator request processed  - got " << numGroups << " groups and " << numCounters << " counters " << ctx.SelfID << " Initiator " << Initiator);
+        YDB_LOG_INFO_CTX(ctx, "Request processed",
+            {"numGroups", numGroups},
+            {"numCounters", numCounters},
+            {"selfId", ctx.SelfID},
+            {"initiator", Initiator});
         ui64 cookie = NumWorkers ? WorkerId : 0;
         ctx.Send(Initiator, response.Release(), 0, cookie);
         TBase::Die(ctx);
@@ -1958,7 +1979,9 @@ public:
             flags |= IEventHandle::FlagSubscribeOnSession;
         }
         ctx.Send(aggregatorServiceId, request.Release(), flags, nodeId);
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor request to node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Sent request to node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         ++NodesRequested;
     }
 
@@ -1969,9 +1992,13 @@ public:
             ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
             TBase::Become(&TThis::StateRequestedBrowse);
             ctx.Schedule(TDuration::Seconds(AGGREGATOR_TIMEOUT_SECONDS), new TEvents::TEvWakeup());
-            LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V2 Initiator " << Initiator << " self " << ctx.SelfID << " worker " << WorkerId);
+            YDB_LOG_INFO_CTX(ctx, "Started cluster aggregation request v2",
+                {"initiator", Initiator},
+                {"selfId", ctx.SelfID},
+                {"workerId", WorkerId});
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator new request V2 " << ctx.SelfID);
+            YDB_LOG_INFO_CTX(ctx, "Spawning worker actors v2",
+                {"selfId", ctx.SelfID});
             for (ui32 i = 0; i < WorkerId; ++i) {
                 ctx.Register(new TClusterLabeledCountersAggregatorActorV2(ctx.SelfID, TabletType, Group, WorkerId, i));
             }
@@ -2016,7 +2043,9 @@ public:
 
     void Undelivered(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev.Get()->Cookie;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor undelivered node " << nodeId << " "  << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Request undelivered to node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
             SessionSubscriptions->Unsubscribe(nodeId);
         }
@@ -2031,7 +2060,9 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
         ui32 nodeId = ev->Get()->NodeId;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor disconnected node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Node disconnected",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         SessionSubscriptions->Handle(ev);
         if (PerNodeResponse.emplace(nodeId, nullptr).second) {
             NodeResponseReceived(ctx);
@@ -2040,16 +2071,18 @@ public:
 
     void HandleResponse(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx) {
         ui64 nodeId = ev.Get()->Cookie;
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                   "aggregator actor got response node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Received response from node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
         if (SessionSubscriptions->IsSubscribed(nodeId)) {
             SessionSubscriptions->Unsubscribe(nodeId);
         }
         PreProcessResponse(ev->Get());
 
         auto [it, emplaced] = PerNodeResponse.emplace(nodeId, ev->Release().Release());
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                   "aggregator actor merged response node " << nodeId << " " << ctx.SelfID);
+        YDB_LOG_INFO_CTX(ctx, "Merged response from node",
+            {"nodeId", nodeId},
+            {"selfId", ctx.SelfID});
 
         if (emplaced) {
             Merger.Merge(it->second->Record);
@@ -2065,13 +2098,14 @@ public:
     }
 
     void HandleTimeout(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator actor got TIMEOUT");
+        YDB_LOG_DEBUG_CTX(ctx, "Aggregation request timed out");
         ReplyAndDie(ctx);
     }
 
     virtual void ReplyAndDie(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
-                   "aggregator request processed " << ctx.SelfID << " Initiator " << Initiator);
+        YDB_LOG_INFO_CTX(ctx, "Request processed",
+            {"selfId", ctx.SelfID},
+            {"initiator", Initiator});
         ui64 cookie = NumWorkers ? WorkerId : 0;
         ctx.Send(Initiator, Response.Release(), 0, cookie);
         TBase::Die(ctx);
@@ -2086,7 +2120,9 @@ public:
     {}
 
     void ReplyAndDie(const TActorContext& ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "aggregator request processed " << ctx.SelfID << " Initiator " << Initiator);
+        YDB_LOG_INFO_CTX(ctx, "Request processed",
+            {"selfId", ctx.SelfID},
+            {"initiator", Initiator});
         ui64 cookie = NumWorkers ? WorkerId : 0;
         for (auto& counters : *Response->Record.MutableLabeledCountersByGroup()) {
             TVector<TString> groups;

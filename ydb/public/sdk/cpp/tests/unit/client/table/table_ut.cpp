@@ -4,6 +4,7 @@
 #include <library/cpp/testing/common/network.h>
 
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
@@ -202,6 +203,30 @@ namespace {
     }
 
 } // namespace <anonymous>
+
+TEST(TableTest, FulltextSuperLemmerAnalyzerRoundTrip) {
+    NTable::TFulltextIndexSettings settings;
+    NTable::TFulltextIndexSettings::TColumnAnalyzers column;
+    column.Column = "Text";
+    column.Analyzers = NTable::TFulltextIndexSettings::TAnalyzers::SuperLemmer("russian");
+    settings.Columns.push_back(column);
+
+    Ydb::Table::FulltextIndexSettings proto;
+    settings.SerializeTo(proto);
+    ASSERT_EQ(proto.columns_size(), 1);
+    ASSERT_TRUE(proto.columns(0).has_analyzers());
+    ASSERT_TRUE(proto.columns(0).analyzers().use_filter_superlemmer());
+
+    const auto restored = NTable::TFulltextIndexSettings::FromProto(proto);
+    ASSERT_EQ(restored.Columns.size(), 1);
+    ASSERT_TRUE(restored.Columns[0].Analyzers.has_value());
+    const auto& analyzers = *restored.Columns[0].Analyzers;
+    ASSERT_EQ(analyzers.Language.value_or(""), "russian");
+    ASSERT_TRUE(analyzers.UseFilterLowercase.value_or(false));
+    ASSERT_TRUE(analyzers.UseFilterStopwords.value_or(false));
+    ASSERT_TRUE(analyzers.UseFilterSuperLemmer.value_or(false));
+    ASSERT_NE(ToString(restored).find("use_filter_superlemmer: true"), TString::npos);
+}
 
 TEST(TableTest, SessionHandleDestructionSendsDeleteSession) {
     TMockTableService tableService;

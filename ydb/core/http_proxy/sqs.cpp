@@ -99,6 +99,7 @@ namespace NKikimr::NHttpProxy {
             }
 
             void SendGrpcRequestNoDriver(const TActorContext& ctx) {
+                ReportInputCounters(ctx);
                 YDB_LOG_INFO_CTX(ctx, "Sending grpc request to database: iam token",
                     {"logPrefix", LogPrefix()},
                     {"discoveryEndpoint", HttpContext.DiscoveryEndpoint},
@@ -144,13 +145,14 @@ namespace NKikimr::NHttpProxy {
                 Y_UNUSED(ev);
             }
 
-            void TryUpdateDbInfo(const TDatabase& db) {
+            void TryUpdateDbInfo(const TDatabase& db, const TActorContext& ctx) {
                 if (db.Path) {
                     HttpContext.DatabasePath = db.Path;
                     HttpContext.DatabaseId = db.Id;
                     HttpContext.CloudId = db.CloudId;
                     HttpContext.FolderId = db.FolderId;
                 }
+                ReportInputCounters(ctx);
             }
 
             void HandleSecurityTokenAuth(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev, const TActorContext& ctx) {
@@ -187,18 +189,24 @@ namespace NKikimr::NHttpProxy {
                         return;
                     }
                 }
-                TryUpdateDbInfo(ev->Get()->Database);
+                TryUpdateDbInfo(ev->Get()->Database, ctx);
 
                 SendGrpcRequestNoDriver(ctx);
             }
 
             void HandleErrorWithIssue(TEvServerlessProxy::TEvErrorWithIssue::TPtr& ev, const TActorContext& ctx) {
-                TryUpdateDbInfo(ev->Get()->Database);
+                TryUpdateDbInfo(ev->Get()->Database, ctx);
                 ReplyWithYdbError(ctx, ev->Get()->Status, ev->Get()->Response, ev->Get()->IssueCode);
             }
 
             TVector<std::pair<TString, TString>> AddCommonLabels(TVector<std::pair<TString, TString>>&& labels) const {
-                return NSqsTopic::GetMetricsLabels(HttpContext.DatabasePath, TopicPath, ConsumerName, Method, std::move(labels));
+                return NSqsTopic::GetMetricsLabels(
+                    HttpContext.DatabasePath,
+                    TopicPath,
+                    ConsumerName,
+                    Method,
+                    std::move(labels),
+                    HttpContext.DatabaseId);
             }
 
             void ReplyWithYdbError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
@@ -266,6 +274,7 @@ namespace NKikimr::NHttpProxy {
             void ReplyToHttpContext(THttpResponseData&& data, size_t messageSize, TStringBuf errorText = "") {
                 const TActorContext& ctx = TlsActivationContext->AsActorContext();
 
+                ReportInputCounters(ctx);
                 ReportLatencyCounters(ctx);
                 ReportResponseSizeCounters(TStringBuilder() << data.HttpCode, messageSize, ctx);
                 LogHttpRequestResponse(ctx, data.HttpCode, errorText);
@@ -436,7 +445,6 @@ namespace NKikimr::NHttpProxy {
                     {"databasePath", HttpContext.DatabasePath},
                     {"request", MaybeGetQueueUrl<TProtoRequest>(Request)});
 
-                ReportInputCounters(ctx);
                 if (!HttpContext.SecurityToken.empty()) {
                     ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
                         .Ticket = HttpContext.SecurityToken,

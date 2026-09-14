@@ -80,7 +80,8 @@ private:
         }
     }
 
-    TString LogPrefix() const;
+
+    NStructuredLog::TStructuredMessage LogPrefix() const;
 
 private:
     static constexpr TDuration RequestTimeout = TDuration::Seconds(30);

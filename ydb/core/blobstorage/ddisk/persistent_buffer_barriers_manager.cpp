@@ -45,6 +45,14 @@ namespace NKikimr::NDDisk {
         return result;
     }
 
+    // Uncompact stops at a zero raw LSN / zero LEB128 delta, so unused CompactLsns
+    // bytes have to be zeros rather than leftover / uninitialized padding.
+    static void ZeroCompactLsnsTail(TPersistentBufferFastErases& header, size_t used) {
+        if (used < TPersistentBufferFastErases::ErasesBufferSize) {
+            memset(header.CompactLsns + used, 0, TPersistentBufferFastErases::ErasesBufferSize - used);
+        }
+    }
+
     void TPersistentBufferBarriersManager::Initialize(ui64 uniqueId, ui32 nodeId, ui32 pdiskId, ui32 slotId) {
         PersistentBufferUniqueId = uniqueId;
         NodeId = nodeId;
@@ -235,7 +243,9 @@ namespace NKikimr::NDDisk {
 
         if (cnt * sizeof(oldLsns[0]) <= TPersistentBufferFastErases::ErasesBufferSize) {
             oldLsns = MergeUnique(oldLsns, newLsns);
-            memcpy(header.CompactLsns, oldLsns.data(), oldLsns.size() * sizeof(oldLsns[0]));
+            const size_t used = oldLsns.size() * sizeof(oldLsns[0]);
+            memcpy(header.CompactLsns, oldLsns.data(), used);
+            ZeroCompactLsnsTail(header, used);
             return true;
         }
 
@@ -269,33 +279,36 @@ namespace NKikimr::NDDisk {
         }
         oldLsns = std::move(lsns);
         header.Header.Flags |= TPersistentBufferHeader::IS_ERASE_COMPACT;
+        ZeroCompactLsnsTail(header, resPos);
         return true;
     }
 
     std::vector<ui64> TPersistentBufferBarriersManager::Uncompact(const ui8* data, bool isCompact) {
         std::vector<ui64> res;
+        constexpr size_t lsnSize = sizeof(ui64);
         ui64 first = 0;
-        memcpy(&first, data, sizeof(res[0]));
+        memcpy(&first, data, lsnSize);
         if (first == 0) {
             return res;
         }
         res.push_back(first);
 
         if (!isCompact) {
-            size_t pos = sizeof(res[0]);
-            while (pos < TPersistentBufferFastErases::ErasesBufferSize) {
+            size_t pos = lsnSize;
+            // ErasesBufferSize is not a multiple of 8; never memcpy a ui64 past the buffer.
+            while (pos + lsnSize <= TPersistentBufferFastErases::ErasesBufferSize) {
                 ui64 v = 0;
-                memcpy(&v, data + pos, sizeof(res[0]));
+                memcpy(&v, data + pos, lsnSize);
                 if (v == 0) {
                     return res;
                 }
                 res.push_back(v);
-                pos += sizeof(res[0]);
+                pos += lsnSize;
             }
             return res;
         }
         ui64 prev = first;
-        size_t pos = sizeof(res[0]);
+        size_t pos = lsnSize;
         while (pos < TPersistentBufferFastErases::ErasesBufferSize) {
             ui64 delta = 0;
             int shift = 0;

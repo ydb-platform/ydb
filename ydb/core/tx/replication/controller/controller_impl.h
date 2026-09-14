@@ -92,6 +92,7 @@ private:
     void Handle(TEvPrivate::TEvUpdateTenantNodes::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvProcessQueues::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRemoveWorker::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvDescribeTargetsResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestCreateStream::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvRequestDropStream::TPtr& ev, const TActorContext& ctx);
@@ -147,6 +148,9 @@ private:
     class TTxAssignTxId;
     class TTxHeartbeat;
     class TTxCommitChanges;
+    class TTxRunWorker;
+    class TTxRemoveWorker;
+    class TTxCompleteWorkerSet;
 
     // tx runners
     void RunTxInitSchema(const TActorContext& ctx);
@@ -170,6 +174,9 @@ private:
     void RunTxWorkerError(const TWorkerId& id, const TString& error, const TActorContext& ctx);
     void RunTxAssignTxId(const TActorContext& ctx);
     void RunTxHeartbeat(const TActorContext& ctx);
+    void RunTxRunWorker(TEvService::TEvRunWorker::TPtr& ev, const TActorContext& ctx);
+    void RunTxRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
+    void RunTxCompleteWorkerSet(TEvPrivate::TEvCompleteWorkerSet::TPtr& ev, const TActorContext& ctx);
 
     // other
     template <typename T>
@@ -207,6 +214,7 @@ private:
     TNodesManager NodesManager;
     THashMap<ui32, TSessionInfo> Sessions;
     THashMap<TWorkerId, TWorkerInfo> Workers;
+    THashSet<std::pair<ui64, ui64>> CompleteWorkerSets;
     THashSet<TWorkerId> BootQueue;
     THashSet<std::pair<TWorkerId, ui32>> StopQueue;
     THashSet<TWorkerId> RemoveQueue;

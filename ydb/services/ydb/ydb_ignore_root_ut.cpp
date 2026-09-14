@@ -477,7 +477,8 @@ Y_UNIT_TEST_SUITE(YdbIgnoreRoot) {
     Y_UNIT_TEST_TWIN(MissingAndRelativeDatabases, SingleComponent) {
         for (bool ignoreRoot : {false, true}) {
             TEnvironment env(SingleComponent, ignoreRoot);
-            for (const TString& database : {env.Name, TString("missing"), TString("team/missing"),
+            env.TableSession(env.Name);
+            for (const TString& database : {TString("missing"), TString("team/missing"),
                 "/" + env.Root + "/missing", TString("/old/missing"), TString("/missing")}) {
                 env.Call(*env.Table, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, database, false);
             }

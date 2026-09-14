@@ -828,7 +828,9 @@ bool TWriteSessionActor<Protocol>::CreatePartitionWriterCache(const TActorContex
         if (Request->GetDatabaseName()) {
             opts.WithDatabase(*Request->GetDatabaseName());
         }
-        opts.WithTopicPath(InitRequest.path());
+        opts.WithTopicPath(TopicsController.GetConverterFactory()->GetNoDCMode() && IsStartWithSlash(InitRequest.path())
+            ? Request->GetDatabaseRelativePath(InitRequest.path())
+            : InitRequest.path());
         if (Request->GetSerializedToken()) {
             opts.WithToken(Request->GetSerializedToken());
         }

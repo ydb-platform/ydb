@@ -469,7 +469,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument().Hidden().SetFlag(&SuppressVersionCheck);
 
         opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT").StoreResult(&GRpcPort);
-        opts.AddLongOption("ignore-root", "resolve old absolute database roots against this cluster (does not rewrite resource paths)").NoArgument().SetFlag(&IgnoreRoot);
+        opts.AddLongOption("ignore-root", "resolve old absolute database and resource paths against this cluster (does not rewrite SQL text)").NoArgument().SetFlag(&IgnoreRoot);
         opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT").StoreResult(&GRpcsPort);
         opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);

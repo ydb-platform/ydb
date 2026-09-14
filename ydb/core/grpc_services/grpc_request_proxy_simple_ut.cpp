@@ -107,6 +107,8 @@ public:
     TRequest Request;
     const TString Database;
     TString EffectiveDatabase;
+    TString Resource;
+    TString EffectiveResource;
     NYdbGrpc::TAuthState AuthState{false};
     TMaybe<ui32> Status;
     std::function<void()> OnReply;
@@ -158,6 +160,7 @@ struct TSimpleProxySetup {
     void Send(TEvent* request, const TIntrusivePtr<TContext>& context) {
         context->OnReply = [request, context = context.Get()] {
             context->EffectiveDatabase = request->GetDatabaseName().GetOrElse("");
+            context->EffectiveResource = request->GetDatabaseRelativePath(context->Resource);
         };
         Runtime.Send(new IEventHandle(Proxy, {}, request));
         TDispatchOptions options;
@@ -166,9 +169,12 @@ struct TSimpleProxySetup {
         UNIT_ASSERT(context->Status);
     }
 
-    TIntrusivePtr<TRuntimeContext> RuntimeRequest(const TString& database, bool internal = false, bool authFailure = false) {
+    TIntrusivePtr<TRuntimeContext> RuntimeRequest(const TString& database, bool internal = false,
+        bool authFailure = false, const TString& resource = "")
+    {
         auto context = MakeIntrusive<TRuntimeContext>(database);
         context->Request.set_id("operation-id");
+        context->Resource = resource;
         if (authFailure) {
             context->AuthState.NeedAuth = true;
             context->AuthState.State = NYdbGrpc::TAuthState::AS_FAIL;
@@ -222,11 +228,54 @@ Y_UNIT_TEST_SUITE(TGrpcRequestProxySimpleIgnoreRoot) {
         UNIT_ASSERT_VALUES_EQUAL(context->EffectiveDatabase, "/backup/db");
     }
 
-    Y_UNIT_TEST(SkipsInternalRequests) {
+    Y_UNIT_TEST(ResolvesResourceRootWithDatabase) {
         TSimpleProxySetup setup(true);
-        auto context = setup.RuntimeRequest("/ru/db", true);
+        for (const auto& resource : TVector<TString>{"/ru/team/db/dir/table", "/backup/team/db/dir/table", "dir/table"}) {
+            auto context = setup.RuntimeRequest("/ru/team/db", false, false, resource);
+            UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(context->EffectiveDatabase, "/backup/team/db");
+            UNIT_ASSERT_VALUES_EQUAL(context->EffectiveResource, "/backup/team/db/dir/table");
+        }
+        auto context = setup.RuntimeRequest("/kfront", false, false, "/kfront/dir/table");
+        UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(context->EffectiveResource, "/backup/kfront/dir/table");
+
+        context = setup.RuntimeRequest("/ru/team/db", false, false, "backup/team/db/table");
+        UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(context->EffectiveResource, "/backup/team/db/backup/team/db/table");
+    }
+
+    Y_UNIT_TEST(PreservesResourceAliasWhenResolvedAgain) {
+        TSimpleProxySetup setup(true);
+        auto context = MakeIntrusive<TRuntimeContext>("/ru/team/db");
+        context->Request.set_id("operation-id");
+        context->Resource = "/ru/team/db/dir/table";
+        auto* request = new TRuntimeRequest(context.Get(),
+            [](std::unique_ptr<IRequestNoOpCtx> request, const IFacilityProvider&) {
+                request->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
+            });
+        UNIT_ASSERT(ResolveRequestDatabase(request, "/backup", true));
+        setup.Send(request, context);
+        UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(context->Database, "/ru/team/db");
+        UNIT_ASSERT_VALUES_EQUAL(context->EffectiveDatabase, "/backup/team/db");
+        UNIT_ASSERT_VALUES_EQUAL(context->EffectiveResource, "/backup/team/db/dir/table");
+    }
+
+    Y_UNIT_TEST(DisabledPreservesResourceRoot) {
+        TSimpleProxySetup setup(false);
+        auto context = setup.RuntimeRequest("/ru/db", false, false, "/ru/db/table");
         UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(context->EffectiveDatabase, "/ru/db");
+        UNIT_ASSERT_VALUES_EQUAL(context->EffectiveResource, "/ru/db/table");
+    }
+
+    Y_UNIT_TEST(SkipsInternalRequests) {
+        TSimpleProxySetup setup(true);
+        auto context = setup.RuntimeRequest("/ru/db", true, false, "/ru/db/table");
+        UNIT_ASSERT(*context->Status == Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(context->EffectiveDatabase, "/ru/db");
+        UNIT_ASSERT_VALUES_EQUAL(context->EffectiveResource, "/ru/db/table");
     }
 
     Y_UNIT_TEST(DisabledDoesNotRequireDomain) {

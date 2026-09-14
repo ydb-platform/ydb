@@ -211,11 +211,28 @@ TString NormalizePath(const TString& database, const TString& path) {
     return NormalizePathJoin(database, path);
 }
 
-TString ResolvePathToDatabase(TStringBuf database, TStringBuf path) {
-    if (path.empty() || path.StartsWith('/')) {
+TString ResolvePathToDatabase(TStringBuf database, TStringBuf path, TStringBuf databaseFromRequest) {
+    if (path.empty()) {
         return TString{path};
     }
-    return NormalizePathJoin(database, path);
+    if (!path.StartsWith('/')) {
+        return NormalizePathJoin(database, path);
+    }
+    if (!database.StartsWith('/') || !databaseFromRequest.StartsWith('/')) {
+        return TString{path};
+    }
+
+    const TString target = CanonizePath(TString{database});
+    const TString source = CanonizePath(TString{databaseFromRequest});
+    const TString resource = CanonizePath(TString{path});
+    // A target path can also be under the old alias, for example /root -> /root/db.
+    if (target.empty() || source.empty() || resource == target || IsPathUnderDatabase(target, resource)) {
+        return TString{path};
+    }
+    if (resource == source || IsPathUnderDatabase(source, resource)) {
+        return target + resource.substr(source.size());
+    }
+    return TString{path};
 }
 
 ui32 CanonizedPathLen(const TVector<TString>& path) {

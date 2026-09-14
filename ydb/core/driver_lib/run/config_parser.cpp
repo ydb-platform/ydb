@@ -67,7 +67,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH");
     opts.AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
     opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT");
-    opts.AddLongOption("ignore-root", "resolve old absolute database roots against this cluster (does not rewrite resource paths)").NoArgument();
+    opts.AddLongOption("ignore-root", "resolve old absolute database and resource paths against this cluster (does not rewrite SQL text)").NoArgument();
     opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT");
     opts.AddLongOption("kafka-port", "enable kafka proxy server on port").OptionalArgument("PORT");
     opts.AddLongOption("kafka-address", "set kafka proxy listen address").RequiredArgument("ADDR");

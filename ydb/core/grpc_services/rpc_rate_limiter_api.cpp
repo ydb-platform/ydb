@@ -101,12 +101,14 @@ public:
     }
 
     bool ValidateCoordinationNodePath(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) {
-        const auto databaseName = this->Request_->GetDatabaseName().GetOrElse("");
+        const auto databaseName = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
+        const auto coordinationNodePath = CanonizePath(GetCoordinationNodePath());
 
-        if (!NKikimr::CanonizePath(GetCoordinationNodePath()).StartsWith(NKikimr::CanonizePath(databaseName))) {
+        if (!databaseName.empty() && coordinationNodePath != databaseName
+            && !coordinationNodePath.StartsWith(databaseName + '/')) {
             status = StatusIds::BAD_REQUEST;
             issues.AddIssue(TStringBuilder()
-                << "Coordination node path: " << GetCoordinationNodePath()
+                << "Coordination node path: " << coordinationNodePath
                 << " does not belong to current database: " << databaseName
                 << ".");
             return false;

@@ -32,7 +32,8 @@ bool TrySplitPathByDb(const TString& path, const TString& database,
  */
 TString NormalizePath(TStringBuf database, TStringBuf path);
 TString NormalizePath(const TString& database, const TString& path);
-TString ResolvePathToDatabase(TStringBuf database, TStringBuf path);
+// Resolve relative resources and, when supplied, the original absolute database alias.
+TString ResolvePathToDatabase(TStringBuf database, TStringBuf path, TStringBuf databaseFromRequest = {});
 
 template <typename TIter>
 TString CombinePath(TIter begin, TIter end, bool canonize = true) {

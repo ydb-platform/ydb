@@ -356,7 +356,12 @@ public:
                 NKikimr::CanonizePath(database.GetOrElse(TString())),
                 NKikimr::CanonizePath(TString{path}));
         }
-        return NKikimr::ResolvePathToDatabase(database.GetOrElse(TString()), path);
+        return NKikimr::ResolvePathToDatabase(database.GetOrElse(TString()), path, GetDatabaseRootAlias());
+    }
+
+protected:
+    virtual TString GetDatabaseRootAlias() const {
+        return {};
     }
 };
 
@@ -537,15 +542,20 @@ public:
 
     bool UseStrictDatabaseRelativePaths() const final {
         const auto providedDatabase = GetDatabaseNameFromRequest();
-        // Use strict relative paths only when the database itself is relative to the cluster root.
+        // An explicitly resolved database makes slashless resource names relative,
+        // even when they start with the target database name.
         return providedDatabase && !providedDatabase->empty()
-            && !IsStartWithSlash(*providedDatabase)
+            && (!IsStartWithSlash(*providedDatabase) || UseDatabaseRootAlias)
             && CanonizePath(*providedDatabase) != GetDatabaseName().GetOrElse(TString());
     }
 
     // Store the resolved database for request processing without updating counters.
     void SetDatabaseName(const TString& database) {
         ResolvedDatabaseName = database;
+    }
+
+    void SetUseDatabaseRootAlias(bool enabled) {
+        UseDatabaseRootAlias = enabled;
     }
 
     // counters
@@ -584,9 +594,15 @@ public:
 
     virtual TString GetRpcMethodName() const = 0;
 
+protected:
+    TString GetDatabaseRootAlias() const override {
+        return UseDatabaseRootAlias ? GetDatabaseNameFromRequest().GetOrElse(TString()) : TString();
+    }
+
 private:
     NWilson::TTraceId UserFacingTraceId;
     TMaybe<TString> ResolvedDatabaseName;
+    bool UseDatabaseRootAlias = false;
 };
 
 // Request context

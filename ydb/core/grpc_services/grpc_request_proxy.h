@@ -34,6 +34,7 @@ bool ResolveRequestDatabase(TEvent* request, const TString& rootDatabase, bool i
     if (request->IsInternalCall() || rootDatabase.empty()) {
         return true;
     }
+    request->SetUseDatabaseRootAlias(ignoreRoot);
 
     const auto resolve = [&](const TString& database) {
         // Preserve invalid all-slash names for the normal empty-path validation.

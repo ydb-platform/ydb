@@ -259,6 +259,42 @@ Y_UNIT_TEST_SUITE(Path) {
             NormalizePath(TString{"/Root/Db"}, TString{"account//topic"}),
             "/Root/Db/account/topic");
     }
+
+    Y_UNIT_TEST(ResolveResourcePathIgnoreRoot) {
+        for (const auto& [path, expected] : TVector<std::pair<TString, TString>>{
+            {"", ""},
+            {"dir/table", "/backup/team/db/dir/table"},
+            {"backup/team/db/table", "/backup/team/db/backup/team/db/table"},
+            {"/ru/team/db", "/backup/team/db"},
+            {"/ru/team/db/dir/table", "/backup/team/db/dir/table"},
+            {"//ru//team/db//dir/table/", "/backup/team/db/dir/table"},
+            {"/backup/team/db/dir/table", "/backup/team/db/dir/table"},
+            {"/ru/team/db2/table", "/ru/team/db2/table"},
+            {"/ru/other/table", "/ru/other/table"},
+            {"/ru/team", "/ru/team"},
+        }) {
+            const auto result = ResolvePathToDatabase("/backup/team/db", path, "/ru/team/db/");
+            UNIT_ASSERT_VALUES_EQUAL_C(result, expected, path);
+            UNIT_ASSERT_VALUES_EQUAL_C(ResolvePathToDatabase("/backup/team/db", result, "/ru/team/db"), expected, path);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/root/kfront", "/kfront/dir/table", "/kfront"),
+            "/root/kfront/dir/table");
+    }
+
+    Y_UNIT_TEST(ResolveResourcePathIgnoreRootPreservesTargetPrefix) {
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/root/db", "/root/db/table", "/root"), "/root/db/table");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/root/db", "/root/db", "/root"), "/root/db");
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/root/db", "/root/table", "/root"), "/root/db/table");
+    }
+
+    Y_UNIT_TEST(ResolveResourcePathWithoutAbsoluteAlias) {
+        const TString path = "/ru/db/dir/table";
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/backup/db", path), path);
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/backup/db", path, "ru/db"), path);
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/backup/db", path, "/"), path);
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("", path, "/ru/db"), path);
+        UNIT_ASSERT_VALUES_EQUAL(ResolvePathToDatabase("/backup/db", "dir/table"), "/backup/db/dir/table");
+    }
 }
 
 }

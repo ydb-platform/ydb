@@ -29,6 +29,7 @@ SRCS(
     ydb_monitoring_ut.cpp
     ydb_query_ut.cpp
     ydb_ignore_root_ut.cpp
+    ydb_ignore_resource_root_ut.cpp
     ydb_read_rows_ut.cpp
     ydb_relative_database_ut.cpp
     ydb_ldap_login_ut.cpp
@@ -67,6 +68,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/export
     ydb/public/sdk/cpp/src/client/extension_common
     ydb/public/sdk/cpp/src/client/operation
+    ydb/public/sdk/cpp/src/client/rate_limiter
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/monitoring

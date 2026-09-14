@@ -209,6 +209,7 @@ void TInflightInfo::ConfirmFlush(THostIndex host)
     Y_ABORT_UNLESS(!FlushConfirmed.Get(host));
 
     FlushConfirmed.Set(host);
+<<<<<<< HEAD
 
     if (FlushDesired == FlushConfirmed) {
         SetState(EState::PBufferFlushed);
@@ -217,6 +218,10 @@ void TInflightInfo::ConfirmFlush(THostIndex host)
     if (State == EState::PBufferFlushed && PBuffersLockCount == 0) {
         ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Erase);
     }
+=======
+    ReadyQueue->InflightFlushFinished(PBufferKey, host);
+    MaybeAdvanceToFlushed();
+>>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
 }
 
 void TInflightInfo::FlushFailed(THostIndex host)
@@ -226,12 +231,17 @@ void TInflightInfo::FlushFailed(THostIndex host)
     Y_ABORT_UNLESS(!FlushConfirmed.Get(host));
 
     FlushRequested.Reset(host);
+<<<<<<< HEAD
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
+=======
+    ReadyQueue->Register(PBufferKey, IReadyQueue::EQueueType::Flush);
+    ReadyQueue->InflightFlushFinished(PBufferKey, host);
+>>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
 }
 
 THostMask TInflightInfo::GetRequestedFlushes() const
 {
-    return FlushRequested;
+    return FlushRequested.Exclude(FlushConfirmed);
 }
 
 void TInflightInfo::RequestErase(THostIndex host)
@@ -290,6 +300,7 @@ void TInflightInfo::RemoveHosts(THostMask removed)
         return;
     }
 
+<<<<<<< HEAD
     // Release byte counters for removed hosts that had writes.
     ApplyBytes(removedFromWrite, IReadyQueue::EPBufferCounter::Total, false);
 
@@ -322,7 +333,61 @@ void TInflightInfo::RemoveHosts(THostMask removed)
     // Check if erase became complete after removing hosts.
     if (State == EState::PBufferErasing && EraseConfirmed == WriteRequested) {
         SetState(EState::PBufferErased);
+=======
+    switch (State) {
+        case EState::PBufferPendingWrite:
+        case EState::PBufferIncompleteWrite:
+        case EState::PBufferWritten: {
+            // Just update DesiredDDisks and Disabled.
+            DesiredDDisks = DesiredDDisks.Include(added).Exclude(removed);
+            Disabled = disabled;
+            break;
+        }
+        case EState::PBufferFlushing: {
+            // Just update DesiredDDisks and Disabled.
+            const auto droppedFlushes =
+                GetInflightFlushes().LogicalAnd(disabled);
+
+            DesiredDDisks = DesiredDDisks.Include(added).Exclude(removed);
+            Disabled = disabled;
+            FlushRequested = FlushRequested.Exclude(disabled);
+
+            auto notRequestsFlushes =
+                DesiredDDisks.Exclude(Disabled).Exclude(FlushRequested);
+            if (!notRequestsFlushes.Empty()) {
+                // New desired added. Will flush to it.
+                ReadyQueue->Register(
+                    PBufferKey,
+                    IReadyQueue::EQueueType::Flush);
+            }
+
+            for (const auto host: droppedFlushes) {
+                ReadyQueue->InflightFlushFinished(PBufferKey, host);
+            }
+
+            MaybeAdvanceToFlushed();
+            break;
+        }
+        case EState::PBufferFlushed: {
+            // Already flushed to DDisk quorum, do not reconfigure
+            // DesiredDDisks.
+            Disabled = disabled;
+            break;
+        }
+        case EState::PBufferErasing: {
+            // Already flushed to DDisk quorum, do not reconfigure
+            // DesiredDDisks.
+            Disabled = disabled;
+            MaybeAdvanceToErased();
+            break;
+        }
+        case EState::PBufferErased: {
+            // Nothing to do.
+        } break;
+>>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
     }
+
+    CheckInvariants();
 }
 
 void TInflightInfo::LockPBuffer()
@@ -434,19 +499,82 @@ void TInflightInfo::SetState(EState newState)
     }
 
     State = newState;
+    CheckInvariants();
 
     if (State == EState::PBufferFlushed) {
+        ReadyQueue->UnRegister(PBufferKey, IReadyQueue::EQueueType::Flush);
         ReadyQueue->FlushCompleted(PBufferKey, FlushConfirmed);
     }
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+void TInflightInfo::CheckInvariants() const
+{
+    Y_ABORT_UNLESS(WriteConfirmed.Exclude(WriteRequested).Empty());
+    Y_ABORT_UNLESS(
+        FlushConfirmed.Exclude(Disabled).Exclude(FlushRequested).Empty());
+    Y_ABORT_UNLESS(
+        FlushRequested.Exclude(Disabled).Exclude(DesiredDDisks).Empty());
+    Y_ABORT_UNLESS(EraseConfirmed.Exclude(EraseRequested).Empty());
+    Y_ABORT_UNLESS(EraseRequested.Exclude(WriteRequested).Empty());
+
+    switch (State) {
+        case EState::PBufferPendingWrite:
+            Y_ABORT_UNLESS(WriteRequested.Empty());
+            Y_ABORT_UNLESS(WriteConfirmed.Empty());
+            Y_ABORT_UNLESS(FlushRequested.Empty());
+            Y_ABORT_UNLESS(FlushConfirmed.Empty());
+            Y_ABORT_UNLESS(EraseRequested.Empty());
+            Y_ABORT_UNLESS(EraseConfirmed.Empty());
+            break;
+        case EState::PBufferIncompleteWrite:
+            Y_ABORT_UNLESS(FlushRequested.Empty());
+            Y_ABORT_UNLESS(FlushConfirmed.Empty());
+            Y_ABORT_UNLESS(EraseRequested.Empty());
+            Y_ABORT_UNLESS(EraseConfirmed.Empty());
+            Y_ABORT_UNLESS(
+                WriteConfirmed.Count() < QuorumDirectBlockGroupHostCount);
+            break;
+        case EState::PBufferWritten:
+            Y_ABORT_UNLESS(
+                WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
+            Y_ABORT_UNLESS(FlushRequested.Empty());
+            Y_ABORT_UNLESS(FlushConfirmed.Empty());
+            Y_ABORT_UNLESS(EraseRequested.Empty());
+            Y_ABORT_UNLESS(EraseConfirmed.Empty());
+            break;
+        case EState::PBufferFlushing:
+            Y_ABORT_UNLESS(
+                WriteConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
+            Y_ABORT_UNLESS(EraseRequested.Empty());
+            Y_ABORT_UNLESS(EraseConfirmed.Empty());
+            break;
+        case EState::PBufferFlushed:
+        case EState::PBufferErasing:
+        case EState::PBufferErased:
+            Y_ABORT_UNLESS(
+                FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
+            Y_ABORT_UNLESS(GetInflightFlushes().Empty());
+            break;
+    }
+
+    if (State == EState::PBufferErased) {
+        Y_ABORT_UNLESS(
+            EraseConfirmed.Exclude(Disabled) ==
+            WriteRequested.Exclude(Disabled));
+        Y_ABORT_UNLESS(PBuffersLockCount == 0);
+    }
+}
+
+>>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
 void TInflightInfo::MaybeAdvanceToFlushed()
 {
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
 
-    if (DesiredDDisks.Exclude(Disabled) == FlushConfirmed &&
+    if (DesiredDDisks.Exclude(Disabled) == FlushConfirmed.Exclude(Disabled) &&
         FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount)
     {
         SetState(EState::PBufferFlushed);

@@ -41,8 +41,23 @@ struct IReadyQueue
     // the old one.
     virtual void Register(ui64 lsn, EQueueType queueType) = 0;
 
+<<<<<<< HEAD
     // Removes all registrations from Lsn.
     virtual void UnRegister(ui64 lsn) = 0;
+=======
+    // Removes the record's registration from the given queue.
+    virtual void UnRegister(TPBufferKey pBufferKey, EQueueType queueType) = 0;
+
+    // Notifies that a flush request to the specified host stopped being
+    // in-flight. The request may have completed successfully, failed, or been
+    // dropped because the host was disabled.
+    virtual void InflightFlushFinished(
+        TPBufferKey pBufferKey,
+        THostIndex host) = 0;
+
+    // Notifies of flushes completion to DDisks.
+    virtual void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) = 0;
+>>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
 
     // Notification about the change of byte counters in PBuffer
     virtual void DataToPBufferAdded(
@@ -192,6 +207,7 @@ private:
         bool add) const;
 
     void SetState(EState newState);
+    void CheckInvariants() const;
 
     EState State;
 

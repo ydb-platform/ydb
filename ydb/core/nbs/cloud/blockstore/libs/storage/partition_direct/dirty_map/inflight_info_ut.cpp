@@ -60,6 +60,12 @@ struct TTestReadyQueue: public IReadyQueue
         }
     }
 
+    void InflightFlushFinished(TPBufferKey pBufferKey, THostIndex host) override
+    {
+        ++InflightFlushFinishedCalls[pBufferKey];
+        InflightFlushFinishedHosts[pBufferKey].Set(host);
+    }
+
     void FlushCompleted(TPBufferKey pBufferKey, THostMask ddisks) override
     {
         ++FlushCompletedCalls[pBufferKey];
@@ -107,7 +113,17 @@ struct TTestReadyQueue: public IReadyQueue
         return it == FlushCompletedCalls.end() ? 0 : it->second;
     }
 
+<<<<<<< HEAD
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
+=======
+    [[nodiscard]] size_t GetInflightFlushFinishedCalls(
+        TPBufferKey pBufferKey) const
+    {
+        auto it = InflightFlushFinishedCalls.find(pBufferKey);
+        return it == InflightFlushFinishedCalls.end() ? 0 : it->second;
+    }
+
+>>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
     size_t GetLockedBytes(THostIndex host)
     {
         return PBufferCounters[host][EPBufferCounter::Locked];
@@ -128,7 +144,12 @@ struct TTestReadyQueue: public IReadyQueue
     THashSet<TPBufferKey> ReadyToErase;
     THashMap<TPBufferKey, THostMask> FlushCompletions;
     THashMap<TPBufferKey, size_t> FlushCompletedCalls;
+<<<<<<< HEAD
 >>>>>>> 78a20188184 (Field map set optimization (#52565))
+=======
+    THashMap<TPBufferKey, size_t> InflightFlushFinishedCalls;
+    THashMap<TPBufferKey, THostMask> InflightFlushFinishedHosts;
+>>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
     TMap<THostIndex, TMap<EPBufferCounter, size_t>> PBufferCounters;
 };
 
@@ -229,7 +250,19 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
 
         // Confirm flushes
         inflightInfo.ConfirmFlush(THostIndex{0});
+<<<<<<< HEAD
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
+=======
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            readyQueue.ReadyToErase.contains(MakeKey(123)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            inflightInfo.GetInflightFlushes().Get(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            1u,
+            readyQueue.GetInflightFlushFinishedCalls(MakeKey(123)));
+>>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
         inflightInfo.ConfirmFlush(THostIndex{1});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
         inflightInfo.ConfirmFlush(THostIndex{2});
@@ -324,7 +357,16 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         inflightInfo.ConfirmFlush(THostIndex{1});
         UNIT_ASSERT_VALUES_EQUAL(false, readyQueue.ReadyToErase.contains(123));
         inflightInfo.ConfirmFlush(THostIndex{2});
+<<<<<<< HEAD
         UNIT_ASSERT_VALUES_EQUAL(true, readyQueue.ReadyToErase.contains(123));
+=======
+        UNIT_ASSERT_VALUES_EQUAL(
+            4u,
+            readyQueue.GetInflightFlushFinishedCalls(MakeKey(123)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            true,
+            readyQueue.ReadyToErase.contains(MakeKey(123)));
+>>>>>>> 670e22678de ([NBS-7383] Fixed ddisk sync hung (#52938))
 
         // Erase started
         inflightInfo.RequestErase(THostIndex{0});
@@ -912,6 +954,78 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
             inflightInfo.GetState());
     }
 
+    Y_UNIT_TEST(ShouldCompleteFlushWhenConfirmedHostIsDisabled)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(4),
+            THostMask::MakeEmpty(),
+            MakeKey(123),
+            4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+
+        for (THostIndex host: MakeDDisks(4)) {
+            Y_UNUSED(inflightInfo.RequestFlush(host));
+        }
+
+        // Confirm three hosts, then disable one of the confirmed hosts.
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
+        inflightInfo.ConfirmFlush(THostIndex{2});
+
+        const auto disabled = THostMask::MakeMask({THostIndex{2}});
+        inflightInfo.UpdateHosts(THostMask::MakeEmpty(), disabled, disabled);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushing,
+            inflightInfo.GetState());
+
+        // The remaining enabled desired hosts are 0, 1 and 3.
+        inflightInfo.ConfirmFlush(THostIndex{3});
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+    }
+
+    Y_UNIT_TEST(ShouldKeepFlushedStateWhenDisabledHostIsEnabledAgain)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(4),
+            THostMask::MakeEmpty(),
+            MakeKey(123),
+            4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+
+        for (THostIndex host: MakeDDisks(4)) {
+            Y_UNUSED(inflightInfo.RequestFlush(host));
+        }
+
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
+        inflightInfo.ConfirmFlush(THostIndex{2});
+
+        const auto disabled = THostMask::MakeMask({THostIndex{3}});
+        inflightInfo.UpdateHosts(THostMask::MakeEmpty(), disabled, disabled);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+
+        // The PBuffer is already flushed. Re-enabling the host must not make
+        // the old PBuffer flush again or invalidate its completed state.
+        inflightInfo.UpdateHosts(
+            THostMask::MakeEmpty(),
+            THostMask::MakeEmpty(),
+            THostMask::MakeEmpty());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+    }
+
     // In the erasing state, disabling the last non-erased host lets the erase
     // complete because EraseConfirmed\Disabled == WriteRequested\Disabled.
     Y_UNIT_TEST(ShouldUpdateHostsCompleteEraseWhenDisablingPendingHost)
@@ -1172,6 +1286,88 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
         UNIT_ASSERT_VALUES_EQUAL(
             TInflightInfo::EState::PBufferErased,
             inflightInfo.GetState());
+    }
+
+    Y_UNIT_TEST(ShouldNotifyInflightFlushFinishedWhenHostDisabled)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(4),
+            THostMask::MakeEmpty(),
+            MakeKey(123),
+            4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+
+        for (THostIndex host: MakeDDisks(4)) {
+            Y_UNUSED(inflightInfo.RequestFlush(host));
+        }
+
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
+
+        const auto disabled = THostMask::MakeMask({THostIndex{2}});
+        inflightInfo.UpdateHosts(THostMask::MakeEmpty(), disabled, disabled);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            3u,
+            readyQueue.GetInflightFlushFinishedCalls(MakeKey(123)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushing,
+            inflightInfo.GetState());
+
+        inflightInfo.ConfirmFlush(THostIndex{3});
+        UNIT_ASSERT_VALUES_EQUAL(
+            4u,
+            readyQueue.GetInflightFlushFinishedCalls(MakeKey(123)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            1u,
+            readyQueue.GetFlushCompletedCalls(MakeKey(123)));
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+    }
+
+    Y_UNIT_TEST(ShouldRemoveFlushRegistrationWhenFlushCompletesAfterFailure)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(4),
+            THostMask::MakeEmpty(),
+            MakeKey(123),
+            4096);
+        inflightInfo.OnWritten(MakePrimaryHosts(4), MakePrimaryHosts(4));
+
+        for (THostIndex host: MakeDDisks(4)) {
+            Y_UNUSED(inflightInfo.RequestFlush(host));
+        }
+
+        // Keep the PBuffer locked so erase registration cannot hide a stale
+        // flush registration.
+        inflightInfo.LockPBuffer();
+        inflightInfo.FlushFailed(THostIndex{3});
+        inflightInfo.ConfirmFlush(THostIndex{0});
+        inflightInfo.ConfirmFlush(THostIndex{1});
+        inflightInfo.ConfirmFlush(THostIndex{2});
+
+        const auto disabled = THostMask::MakeMask({THostIndex{3}});
+        inflightInfo.UpdateHosts(THostMask::MakeEmpty(), disabled, disabled);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TInflightInfo::EState::PBufferFlushed,
+            inflightInfo.GetState());
+        UNIT_ASSERT_VALUES_EQUAL(
+            false,
+            readyQueue.ReadyToFlush.contains(MakeKey(123)));
+
+        inflightInfo.UnlockPBuffer();
+        for (THostIndex host: MakeDDisks(3)) {
+            inflightInfo.RequestErase(host);
+        }
+        for (THostIndex host: MakeDDisks(3)) {
+            inflightInfo.ConfirmErase(host);
+        }
     }
 
     // FlushCompleted is emitted when the PBuffer becomes flushed even if it is

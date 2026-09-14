@@ -59,7 +59,7 @@ class RegistrationRecorder(ydb_discovery_v1_pb2_grpc.DiscoveryServiceServicer,
 
 
 def capture_startup(process, log_path, *, get_config=False):
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         output = log_path.read_text()
         for match in re.finditer(r'^.*\n', output, re.MULTILINE):

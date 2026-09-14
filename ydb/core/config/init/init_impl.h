@@ -60,6 +60,8 @@ constexpr TStringBuf NODE_KIND_YDB = "ydb";
 constexpr TStringBuf NODE_KIND_YQ = "yq";
 constexpr const char *CONFIG_NAME = "config.yaml";
 constexpr const char *STORAGE_CONFIG_NAME = "storage.yaml";
+constexpr const char *AUTH_FILE = "auth-file";
+constexpr const char *AUTH_TOKEN_FILE = "auth-token-file";
 
 constexpr static ui32 DefaultLogLevel = NActors::NLog::PRI_WARN; // log settings
 constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log settings
@@ -1217,7 +1219,7 @@ public:
 
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
 
-        Option("auth-file", TCfg::TAuthConfigFieldTag{});
+        Option(AUTH_FILE, TCfg::TAuthConfigFieldTag{});
         LoadBootstrapConfig(ProtoConfigFileProvider, ErrorCollector, freeArgs, BaseConfig);
 
         TYamlConfigs yamlConfigs;
@@ -1279,7 +1281,7 @@ public:
             ApplyMainYamlConfig(refs, yamlConfigs, AppConfig);
         }
 
-        OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
+        OptionMerge(AUTH_TOKEN_FILE, TCfg::TAuthConfigFieldTag{});
 
         // start memorylog as soon as possible
         Option("memorylog-file", TCfg::TMemoryLogConfigFieldTag{}, &TInitialConfiguratorImpl::InitMemLog);
@@ -1331,8 +1333,8 @@ public:
         Option("pq-file", TCfg::TPQConfigFieldTag{});
         Option("pqcd-file", TCfg::TPQClusterDiscoveryConfigFieldTag{});
         Option("netclassifier-file", TCfg::TNetClassifierConfigFieldTag{});
-        Option("auth-file", TCfg::TAuthConfigFieldTag{});
-        OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
+        Option(AUTH_FILE, TCfg::TAuthConfigFieldTag{});
+        OptionMerge(AUTH_TOKEN_FILE, TCfg::TAuthConfigFieldTag{});
         Option("key-file", TCfg::TKeyConfigFieldTag{});
         Option("pdisk-key-file", TCfg::TPDiskKeyConfigFieldTag{});
         Option("sqs-file", TCfg::TSqsConfigFieldTag{});
@@ -1498,7 +1500,7 @@ public:
         }
 
         const auto& authConfig = AppConfig.GetAuthConfig();
-        const bool useToken = HasStaticConfig || ProtoConfigFileProvider.Has("auth-file") || ProtoConfigFileProvider.Has("auth-token-file");
+        const bool useToken = HasStaticConfig || ProtoConfigFileProvider.Has(AUTH_FILE) || ProtoConfigFileProvider.Has(AUTH_TOKEN_FILE);
         const TNodeRegistrationSettings settings {
             domainName,
             cf.NodeHost,

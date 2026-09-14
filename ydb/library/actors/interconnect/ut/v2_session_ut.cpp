@@ -1046,6 +1046,44 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         return FromString<ui64>(ExtractPattern(cluster, me, peer, TString(start), "<"));
     }
 
+    Y_UNIT_TEST(ReadBufferShrinksAfterBulkTraffic) {
+        if (!TUringContext::IsAvailable()) {
+            Cerr << "io_uring not available; skipping" << Endl;
+            return;
+        }
+        auto customizer = [](ui32, TInterconnectSettings& settings) {
+            settings.V2.Enable = true;
+            settings.V2.ChecksumEvents = true;
+            settings.EnableExternalDataChannel = false;
+            settings.V2.EnableProvidedBuffers = false;
+            settings.V2.MaxReadBufferSize = 64 * 1024;
+        };
+        TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::EMPTY,
+            {}, TDuration::Seconds(10), TNode::DefaultInflight(), customizer);
+        UNIT_ASSERT(GrabDirectSession(cluster, 1, 2));
+        auto* collector = new TPayloadCollectorActor;
+        const TActorId recipient = cluster.RegisterActor(collector, 2);
+        const TActorId sender(1, 0, 0xBEEF, 0);
+        const TString payload = MakeLoadPayload(1, 1024 * 1024);
+        cluster.GetNode(1)->GetActorSystem()->Send(
+            new IEventHandle(recipient, sender, new TEvTest(0, payload)));
+        WaitFor(TDuration::Seconds(10), [&] { return collector->GetCount() == 1; }, "bulk event received");
+        UNIT_ASSERT_VALUES_EQUAL(collector->GetLastPayload(), payload);
+        UNIT_ASSERT_GT(SessionHtmlCounter(cluster, 2, 1, "ReadBufferSize"), 4096);
+
+        // Wait for each event to arrive before sending the next one so these are
+        // separate short reads, irrespective of TCP's packet coalescing.
+        for (size_t i = 1; i <= 32; ++i) {
+            cluster.GetNode(1)->GetActorSystem()->Send(
+                new IEventHandle(recipient, sender, new TEvTest(i, "small")));
+            WaitFor(TDuration::Seconds(10), [&] { return collector->GetCount() == i + 1; },
+                "small event received");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(cluster, 2, 1, "ReadBufferSize"), 4096);
+        UNIT_ASSERT_LE(SessionHtmlCounter(cluster, 2, 1, "ReadBuffer size"), 4096);
+        UNIT_ASSERT_VALUES_EQUAL(collector->GetLastPayload(), "small");
+    }
+
     Y_UNIT_TEST(XdcPayloadRoundTrip) {
         if (!TUringContext::IsAvailable()) {
             Cerr << "io_uring not available; skipping" << Endl;

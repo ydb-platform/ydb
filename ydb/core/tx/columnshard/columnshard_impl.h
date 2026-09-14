@@ -588,6 +588,8 @@ private:
         const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
     void RunCopyTable(
         const NKikimrTxColumnShard::TCopyTable& proto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunTruncateTable(
+        const NKikimrTxColumnShard::TTruncateTable& body, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc);
 
     void SetupCompaction(const std::set<TInternalPathId>& pathIds);
     void TryScheduleCompaction(const std::set<TInternalPathId>& pathIds);

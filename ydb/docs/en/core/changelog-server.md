@@ -14,7 +14,7 @@ Release date: September 16, 2026.
 * QueryService can [notify SDKs when a node or session is shutting down](https://github.com/ydb-platform/ydb/pull/39274), allowing clients to stop sending new queries there. This capability is disabled by default and can be enabled by the cluster administrator.
 * Added database-level [limits on the count and volume of small blobs](https://github.com/ydb-platform/ydb/pull/43393) for column-oriented tables. New writes are rejected when the hard limit is exceeded. This capability is disabled by default and can be enabled by the cluster administrator.
 * [Streaming queries](./dev/streaming-query/index.md?version=v26.2) can read from local topics, write to local topics, read local tables, and contain multiple `INSERT` statements.
-* Streaming queries gained [watermarks](./dev/streaming-query/watermarks.md?version=v26.2).
+* Streaming queries support [watermarks](./dev/streaming-query/watermarks.md?version=v26.2).
 * [Watermark](./dev/streaming-query/watermarks.md?version=v26.2) expressions can be evaluated outside the context of an individual message. This capability is disabled by default and can be enabled by the cluster administrator.
 * Streaming queries can read [user attributes of topic messages](https://github.com/ydb-platform/ydb/pull/40378). This capability is disabled by default and can be enabled by the cluster administrator.
 * Added [Bloom skip indexes](./dev/bloom-skip-indexes.md?version=v26.2): Bloom and Bloom n-gram indexes for column-oriented tables, and prefix Bloom indexes for row-oriented tables.

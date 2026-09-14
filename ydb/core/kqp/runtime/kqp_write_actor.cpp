@@ -419,16 +419,18 @@ class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
 
     struct TEvPrivate {
         enum EEv {
-            EvShardRequestTimeout = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+            EvShardRetry = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
             EvResolveRequestPlanned,
             EvReattachToShard,
         };
 
-        struct TEvShardRequestTimeout : public TEventLocal<TEvShardRequestTimeout, EvShardRequestTimeout> {
+        struct TEvShardRetry : public TEventLocal<TEvShardRetry, EvShardRetry> {
             ui64 ShardId;
+            ui64 Cookie;
 
-            TEvShardRequestTimeout(ui64 shardId)
-                : ShardId(shardId) {
+            TEvShardRetry(ui64 shardId, ui64 cookie)
+                : ShardId(shardId)
+                , Cookie(cookie) {
             }
         };
 
@@ -679,7 +681,7 @@ public:
                 hFunc(TEvPrivate::TEvReattachToShard, Handle);
                 hFunc(TEvDataShard::TEvProposeTransactionRestart, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-                hFunc(TEvPrivate::TEvShardRequestTimeout, Handle);
+                hFunc(TEvPrivate::TEvShardRetry, Handle);
                 hFunc(TEvPrivate::TEvResolveRequestPlanned, Handle);
                 hFunc(TEvDataShard::TEvOverloadReady, Handle);
                 hFunc(TEvColumnShard::TEvOverloadReady, Handle);
@@ -940,6 +942,10 @@ public:
                     {"tablePath", TablePath},
                     {"shardID", ev->Get()->Record.GetOrigin()},
                     {"sink", this->SelfId()});
+                // The shard acknowledged the wait: don't let resends burn the bounded
+                // retry budget while the shard is legitimately overloaded. TEvOverloadReady
+                // will reset the attempts again right before the resend.
+                ResetShardRetries(ev->Get()->Record.GetOrigin(), ev->Cookie);
             }
             return;
         }
@@ -1346,13 +1352,21 @@ public:
         // A resend is safe when the shard deduplicates by uncommitted write seq num
         // (AttachWriteSeqNum) or when the write is inconsistent.
         YQL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
-        if (InconsistentTx && metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
+        if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
+            // The resend budget for this shard is exhausted. Inconsistent writes re-resolve
+            // straight away; consistent (WriteSeqNum) writes go through RetryShard so the
+            // number of consecutive re-resolves per shard stays bounded before failing.
             YDB_LOG_WARN("Write retry limit exceeded for table.",
                 {"logPrefix", this->LogPrefix},
                 {"shardId", shardId},
                 {"tablePath", TablePath},
                 {"sink", this->SelfId()});
-            RetryResolve();
+            if (InconsistentTx) {
+                RetryResolve();
+            } else {
+                AFL_ENSURE(AttachWriteSeqNum);
+                RetryShard(shardId, metadata->Cookie);
+            }
             return false;
         }
 
@@ -1487,17 +1501,6 @@ public:
 
         ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
 
-        if (InconsistentTx) {
-            TlsActivationContext->Schedule(
-                CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts),
-                new IEventHandle(
-                    SelfId(),
-                    SelfId(),
-                    new TEvPrivate::TEvShardRequestTimeout(shardId),
-                    0,
-                    metadata->Cookie));
-        }
-
         return true;
     }
 
@@ -1555,19 +1558,26 @@ public:
             {"cookie", ifCookieEqual.value_or(0)},
             {"attempt", metadata->SendAttempts},
             {"delay", CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts)});
-        SendDataToShard(shardId);
+
+        Schedule(CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts),
+            new TEvPrivate::TEvShardRetry(shardId, metadata->Cookie));
     }
 
     void ResetShardRetries(const ui64 shardId, const ui64 cookie) {
         ShardedWriteController->ResetRetries(shardId, cookie);
     }
 
-    void Handle(TEvPrivate::TEvShardRequestTimeout::TPtr& ev) {
-        YDB_LOG_INFO("Timeout",
-            {"logPrefix", this->LogPrefix},
-            {"shardID", ev->Get()->ShardId});
-        YQL_ENSURE(InconsistentTx);
-        RetryShard(ev->Get()->ShardId, ev->Cookie);
+    void Handle(TEvPrivate::TEvShardRetry::TPtr& ev) {
+        const auto& msg = ev->Get();
+        const auto metadata = ShardedWriteController->GetMessageMetadata(msg->ShardId);
+        if (!metadata || metadata->Cookie != msg->Cookie) {
+            // The batch was acknowledged (its cookie advanced) or is no longer
+            // pending: nothing to resend.
+            return;
+        }
+        // The resend budget is enforced in SendDataToShard: once the attempts are
+        // exhausted it routes to the re-resolve path instead of sending again.
+        SendDataToShard(msg->ShardId);
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {

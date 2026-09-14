@@ -1884,16 +1884,14 @@ public:
     }
 
     void AfterPartitioningChanged() {
-        if (Settings.Inconsistent) {
-            if (!WriteInfos.empty()) {
-                // A changed shard set means split/merge: only the removed shards are
-                // affected. Re-route their pending batches to the new shards (which
-                // cover exactly the removed shards' key ranges); shards whose tablet id
-                // survived keep their in-flight batches untouched and are never re-sent.
-                auto deletedShards = GetDeletedShards();
-                if (!deletedShards.empty()) {
-                    ReRouteShardsData(std::move(deletedShards));
-                }
+        if (!WriteInfos.empty()) {
+            // A changed shard set means split/merge: only the removed shards are
+            // affected. Re-route their pending batches to the new shards (which
+            // cover exactly the removed shards' key ranges); shards whose tablet id
+            // survived keep their in-flight batches untouched and are never re-sent.
+            auto deletedShards = GetDeletedShards();
+            if (!deletedShards.empty()) {
+                ReRouteShardsData(std::move(deletedShards));
             }
         }
 
@@ -2291,15 +2289,16 @@ private:
     // shards. Only the removed shards are affected: the batches are re-partitioned
     // through the (new) payload serializers, which map them to the new shards that
     // cover exactly the removed shards' key ranges. Surviving shards keep their
-    // in-flight batches untouched. Resharding is supported only for inconsistent
-    // writes, so covering empty batches don't exist here.
+    // in-flight batches untouched. Empty covering batches of a removed shard cannot
+    // be re-partitioned and are dropped: they carry no data.
     void ReRouteShardsData(TVector<ui64>&& deletedShards) {
-        AFL_ENSURE(Settings.Inconsistent);
         THashSet<TWriteToken> affectedTokens;
         for (const ui64 shardId : deletedShards) {
             auto batches = ShardsInfo.ExtractShard(shardId);
             for (auto& batch : batches) {
-                AFL_ENSURE(batch.Data);
+                if (!batch.Data) {
+                    continue;
+                }
                 WriteInfos.at(batch.Token).Serializer->AddBatch(std::move(batch.Data));
                 affectedTokens.insert(batch.Token);
             }

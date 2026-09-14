@@ -1177,9 +1177,9 @@ class TestJoinStreaming(TestYdsBase):
         "mvp_external_ydb_endpoint", [{"endpoint": "tests-fq-generic-streaming-ydb:2136"}], indirect=True
     )
     @pytest.mark.parametrize("fq_client", [{"folder_id": "my_folder_slj"}], indirect=True)
-    @pytest.mark.parametrize("wide_channels", [False, True] if DEBUG else [True])
+    @pytest.mark.parametrize("wide_channels", [False, True] if DEBUG else [True], ids=["narrow", "wide"] if DEBUG else ["wide"])
     @pytest.mark.parametrize("partitions_count", [1, 3] if DEBUG else [3])
-    @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True])
+    @pytest.mark.parametrize("streamlookup", [False, True] if DEBUG else [True], ids=["map", "slj"] if DEBUG else ["slj"])
     @pytest.mark.parametrize("testcase", [*range(len(TESTCASES))])
     def test_streamlookup(
         self,
@@ -1191,7 +1191,7 @@ class TestJoinStreaming(TestYdsBase):
         fq_client: FederatedQueryClient,
         yq_version,
     ):
-        title = f"slj_{partitions_count}{streamlookup:!s:.1}w{wide_channels!s:.1}{testcase}{yq_version}"
+        title = f"slj_{partitions_count}{streamlookup!s:.1}w{wide_channels!s:.1}{testcase}{yq_version}"
         self.init_topics(title, partitions_count=partitions_count)
         fq_client.create_yds_connection("myyds", os.getenv("YDB_DATABASE"), os.getenv("YDB_ENDPOINT"))
 

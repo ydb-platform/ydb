@@ -1,6 +1,8 @@
 RECURSE(
     api
     audit
+    automatic_partitioning_doc_audit
+    backup_collection_doc_audit
     topic
     autoconfig
     backup
@@ -9,15 +11,20 @@ RECURSE(
     blobstorage
     bridge
     canonical
+    cdc_doc_audit
     clickbench
     cms
     config
     dstool
     encryption
+    fulltext_hybrid_doc_audit
+    global_index_doc_audit
     hive
+    json_index_doc_audit
     kqp
     large_serializable
     limits
+    local_index_doc_audit
     minidumps
     mvp
     nbs

@@ -16,14 +16,12 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-static NKikimrConfig::TAppConfig GeneratedColumnsAppConfig(bool enableIndexStreamWrite = true,
-    bool enableStreamWrite = true)
-{
+static NKikimrConfig::TAppConfig GeneratedColumnsAppConfig(bool enableIndexStreamWrite = true) {
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableFeatureFlags()->SetEnableGeneratedStored(true);
     appConfig.MutableFeatureFlags()->SetEnableGeneratedVirtual(true);
     appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(enableIndexStreamWrite);
-    appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(enableStreamWrite);
+    appConfig.MutableTableServiceConfig()->SetEnableStreamWrite(true);
     return appConfig;
 }
 
@@ -488,7 +486,7 @@ bool HasPlanOperator(const NJson::TJsonValue& plan, TStringBuf name) {
         || CountPlanNodesByKv(plan, "Name", TString(name)) > 0;
 }
 
-void CheckVirtualGeneratedReturning(bool enableIndexStreamWrite) {
+void CheckVirtualGeneratedReturning() {
     TTestFixture fixture(R"(
         CREATE TABLE VReturning (
             a Int32,
@@ -498,7 +496,7 @@ void CheckVirtualGeneratedReturning(bool enableIndexStreamWrite) {
             PRIMARY KEY (k),
             INDEX idx_b GLOBAL ON (b)
         );
-    )", "", enableIndexStreamWrite);
+    )");
 
     fixture.CheckReturning(
         "INSERT INTO VReturning (k, a, b) VALUES (1, 1, 2) RETURNING k, v;",
@@ -1145,31 +1143,26 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         }
     }
 
-    Y_UNIT_TEST(StreamWriteDisabled) {
+    Y_UNIT_TEST(IndexStreamWriteDisabled) {
         auto appConfig = GeneratedColumnsAppConfig(
-            /* enableIndexStreamWrite */ true,
-            /* enableStreamWrite */ false);
+            /* enableIndexStreamWrite */ false);
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        for (const auto* storage : {"STORED", "VIRTUAL"}) {
-            const TString query = TStringBuilder() << R"(
-                CREATE TABLE TGenerated (
-                    k Int32 NOT NULL,
-                    v Int32 GENERATED ALWAYS AS (k + 1) )" << storage << R"(,
-                    PRIMARY KEY (k)
-                );
-            )";
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(!result.IsSuccess(),
-                storage << " generated column must be rejected when stream writes are disabled");
-            UNIT_ASSERT_STRING_CONTAINS(
-                result.GetIssues().ToString(),
-                "Generated columns require EnableStreamWrite");
-        }
+        auto result = session.ExecuteQuery(R"(
+            CREATE TABLE TGenerated (
+                k Int32 NOT NULL,
+                v Int32 GENERATED ALWAYS AS (k + 1) STORED,
+                PRIMARY KEY (k)
+            );
+        )", TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(),
+            "STORED generated column must be rejected when index stream writes are disabled");
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.GetIssues().ToString(),
+            "Generated columns require EnableIndexStreamWrite");
     }
 
     Y_UNIT_TEST(NonDeterministicAccepted) {
@@ -2543,11 +2536,24 @@ Y_UNIT_TEST_SUITE(GeneratedStoredStreamLookup) {
         }
 
         Y_UNIT_TEST(ReturningWithIndexStreamWrite) {
-            CheckVirtualGeneratedReturning(true);
+            CheckVirtualGeneratedReturning();
         }
 
-        Y_UNIT_TEST(ReturningWithoutIndexStreamWrite) {
-            CheckVirtualGeneratedReturning(false);
+        Y_UNIT_TEST(IndexStreamWriteDisabled) {
+            TTestFixture fixture(R"(
+                CREATE TABLE BaseTable (
+                    k Int32 NOT NULL,
+                    PRIMARY KEY (k)
+                );
+            )", "", GeneratedColumnsAppConfig(/* enableIndexStreamWrite */ false));
+
+            fixture.Rejects(R"(
+                CREATE TABLE VGenerated (
+                    k Int32 NOT NULL,
+                    v Int32 GENERATED ALWAYS AS (k + 1) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )", "Generated columns require EnableIndexStreamWrite");
         }
 
         Y_UNIT_TEST(ReturningReplaceExistingRowUsesPostReplaceDefault) {

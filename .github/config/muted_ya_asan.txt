@@ -170,6 +170,7 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.TopicInDatabaseWithSlashI
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithEmptyDatabaseAbsolutePath
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootIgnoredForFirstClassCitizen
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootMultipleAccounts
+ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootNotFound
 ydb/core/persqueue/public/describer/ut TDescriberTests.TopicWithFederationRootSingleComponentPath
 ydb/core/persqueue/public/describer/ut TDescriberTests.UnauthorizedWithDescribe
 ydb/core/persqueue/public/describer/ut unittest.sole chunk
@@ -445,6 +446,7 @@ ydb/tests/datashard/set_column_constraint/functional test_set_not_null.py.TestSe
 ydb/tests/datashard/truncate/concurrency py3test.[test_truncate_table_concurrency.py */*] chunk
 ydb/tests/datashard/truncate/concurrency test_truncate_table_concurrency.py.TestTruncateTableConcurrency.test_truncate_with_concurrent_rw_operations
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
+ydb/tests/fq/pq_async_io/ut TPqWriterTest.TestCheckpoints
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/dstool py3test.sole chunk
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_balance_skips_not_bsc_ready
@@ -626,4 +628,5 @@ ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelection
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_agents_tab_navigation_matches_state_machine
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_reopening_active_operation_deactivates_pane_before_removal
 ydb/tools/ydb_bench/tests py3test.sole chunk
+ydb/tools/ydb_bench/tests test_process_recovery.py.ProcessRecoveryTest.test_cleanup_stops_only_tagged_process_and_is_repeatable
 ydb/tools/ydb_bench/tests test_ydb_bench.py.YdbBenchTest.test_local_ydb_verification_failure_preserves_search_and_partial_holdout

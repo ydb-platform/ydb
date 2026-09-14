@@ -193,14 +193,6 @@ namespace {
         }
     };
 
-    void AddUnknownFields(TDataWithChecksum& data) {
-        data = TStringBuilder() << data.Data << R"(
-            future_setting: 1048576
-            future_settings { enabled: true }
-            999: 100
-        )";
-    }
-
     struct TImportChangefeed {
         TDataWithChecksum Changefeed;
         TDataWithChecksum Topic;
@@ -3731,10 +3723,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         Run(runtime, env, std::move(data), request, expectedStatus, dbName, serverless, userSID);
     }
 
-    Y_UNIT_TEST_FLAG(ShouldSucceedOnSingleShardTable, EnableDataShardDirectPartImport) {
+    void TestImportTable(bool enableDataShardDirectPartImport, const TString& extraSchemeFields = "",
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
         TTestBasicRuntime runtime;
 
-        const auto data = GenerateTestData(R"(
+        auto data = GenerateTestData(R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -3745,6 +3738,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
             primary_key: "key"
         )", {{"a", 1}});
+        data.Scheme = TStringBuilder() << data.Scheme.Data << extraSchemeFields;
 
         Run(runtime, ConvertTestData(data), R"(
             ImportFromS3Settings {
@@ -3755,10 +3749,38 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 destination_path: "/MyRoot/Table"
               }
             }
-        )", EnableDataShardDirectPartImport);
+        )", enableDataShardDirectPartImport, expectedStatus);
 
-        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
-        NKqp::CompareYson(data.Data[0].YsonStr, content);
+        if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+            NKqp::CompareYson(data.Data[0].YsonStr, content);
+        }
+    }
+
+    Y_UNIT_TEST_FLAG(ShouldSucceedOnSingleShardTable, EnableDataShardDirectPartImport) {
+        TestImportTable(EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(TableWithUnknownFields, EnableDataShardDirectPartImport) {
+        TestImportTable(EnableDataShardDirectPartImport, R"(
+            future_table_setting: 100
+            future_settings {
+                enabled: true
+            }
+            partitioning_settings {
+                min_partitions_count: 1
+                future_partitioning_setting: true
+            }
+            999: 100
+        )");
+    }
+
+    Y_UNIT_TEST_FLAG(TableWithInvalidKnownField, EnableDataShardDirectPartImport) {
+        TestImportTable(EnableDataShardDirectPartImport, R"(
+            partitioning_settings {
+                min_partitions_count: "invalid"
+            }
+        )", Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST_FLAG(ShouldSucceedOnMultiShardTable, EnableDataShardDirectPartImport) {
@@ -6567,13 +6589,16 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     TVector<std::function<void(TTestBasicRuntime&)>> GenChangefeeds(
         THashMap<TString, TTestDataWithScheme>& bucketContent,
-        const TTableWithChangefeeds& table)
+        const TTableWithChangefeeds& table,
+        const TString& extraTopicFields)
     {
         TVector<std::function<void(TTestBasicRuntime&)>> checkers;
         checkers.reserve(table.ChangefeedCount);
         bool isPartitioningAvailable = table.PkType == "UINT32" || table.PkType == "UINT64";
         for (ui64 i = 1; i <= table.ChangefeedCount; ++i) {
-            const auto genChangefeed = GenChangefeed(i, isPartitioningAvailable, table.TableName, table.MaxPartitions);
+            auto genChangefeed = GenChangefeed(i, isPartitioningAvailable, table.TableName, table.MaxPartitions);
+            auto& topic = genChangefeed.Changefeed.second.Changefeed.Topic;
+            topic = TStringBuilder() << topic.Data << extraTopicFields;
             bucketContent.emplace(genChangefeed.Changefeed);
             checkers.push_back(genChangefeed.Checker);
         }
@@ -6645,7 +6670,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         return AddedSchemeCommon(bucketContent, permissions, pkType, tableName);
     }
 
-    void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables, bool enableDataShardDirectPartImport) {
+    void TestImportChangefeeds(const TVector<TTableWithChangefeeds>& tables, bool enableDataShardDirectPartImport,
+            const TString& extraTopicFields = "", Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -6661,7 +6687,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             allCheckers.push_back(checkerTable);
 
             if (table.ChangefeedCount > 0) {
-                auto checkersChangefeeds = GenChangefeeds(bucketContent, table);
+                auto checkersChangefeeds = GenChangefeeds(bucketContent, table, extraTopicFields);
                 allCheckers.insert(allCheckers.end(), checkersChangefeeds.begin(), checkersChangefeeds.end());
             }
         }
@@ -6684,10 +6710,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 }
             )", port, table.TableName.c_str(), table.TableName.c_str()));
             env.TestWaitNotification(runtime, txId);
+            TestGetImport(runtime, txId, "/MyRoot", expectedStatus);
         }
 
-        for (const auto& checker : allCheckers) {
-            checker(runtime);
+        if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+            for (const auto& checker : allCheckers) {
+                checker(runtime);
+            }
         }
     }
 
@@ -6699,53 +6728,15 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds(EnableDataShardDirectPartImport, 1, AddedScheme);
     }
 
-    void TestImportChangefeedTopic(const TString& extraTopicFields, Ydb::StatusIds::StatusCode expectedStatus,
-            bool enableDataShardDirectPartImport) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
-        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
-
-        THashMap<TString, TTestDataWithScheme> bucketContent;
-        const TString tableName = "Table";
-        const auto checkTable = AddedSchemeWithPermissions(bucketContent, "UINT32", tableName);
-        auto& table = bucketContent.at("/Table");
-        AddUnknownFields(table.Scheme);
-        AddUnknownFields(table.Permissions);
-        auto changefeed = GenChangefeed();
-        AddUnknownFields(changefeed.Changefeed.second.Changefeed.Changefeed);
-        auto& topic = changefeed.Changefeed.second.Changefeed.Topic;
-        topic = TStringBuilder() << topic.Data << extraTopicFields;
-        bucketContent.emplace(std::move(changefeed.Changefeed));
-
-        Run(runtime, env, ConvertTestData(bucketContent), R"(
-            ImportFromS3Settings {
-                endpoint: "localhost:%d"
-                scheme: HTTP
-                items {
-                    source_prefix: "Table"
-                    destination_path: "/MyRoot/Table"
-                }
-            }
-        )", expectedStatus);
-
-        if (expectedStatus == Ydb::StatusIds::SUCCESS) {
-            checkTable(runtime);
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
-                NLs::HasOwner("eve"),
-                NLs::HasRight("+R:alice"),
-                NLs::HasRight("+W:alice"),
-                NLs::HasRight("+R:bob"),
-            });
-            changefeed.Checker(runtime);
-            TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/updates_feed1/streamImpl", false, false, true), {
-                NLs::ConsumerExist("future_consumer"),
-            });
-        }
+    // Explicit specification of the number of partitions when creating CDC
+    // is possible only if the first component of the primary key
+    // of the source table is Uint32 or Uint64
+    Y_UNIT_TEST_FLAG(ChangefeedWithPartitioning, EnableDataShardDirectPartImport) {
+        TestImportChangefeeds(EnableDataShardDirectPartImport, 1, AddedScheme, "UINT32");
     }
 
-    Y_UNIT_TEST_FLAG(TableAndChangefeedWithUnknownFields, EnableDataShardDirectPartImport) {
-        TestImportChangefeedTopic(R"(
+    Y_UNIT_TEST_FLAG(ChangefeedTopicWithUnknownFields, EnableDataShardDirectPartImport) {
+        TestImportChangefeeds({{"Table", "UTF8", 1, AddedScheme, 3}}, EnableDataShardDirectPartImport, R"(
             future_write_limit: 1048576
             future_settings {
                 enabled: true
@@ -6755,27 +6746,13 @@ Y_UNIT_TEST_SUITE(TImportTests) {
                 future_consumer_setting: true
             }
             999: 100
-        )", Ydb::StatusIds::SUCCESS, EnableDataShardDirectPartImport);
+        )");
     }
 
     Y_UNIT_TEST_FLAG(ChangefeedTopicWithInvalidKnownField, EnableDataShardDirectPartImport) {
-        TestImportChangefeedTopic(R"(
-            retention_storage_mb: "invalid"
-        )", Ydb::StatusIds::CANCELLED, EnableDataShardDirectPartImport);
-    }
-
-    Y_UNIT_TEST_FLAG(ChangefeedTopicWithMalformedUnknownField, EnableDataShardDirectPartImport) {
-        TestImportChangefeedTopic(R"(
-            future_settings {
-                enabled:
-        )", Ydb::StatusIds::CANCELLED, EnableDataShardDirectPartImport);
-    }
-
-    // Explicit specification of the number of partitions when creating CDC
-    // is possible only if the first component of the primary key
-    // of the source table is Uint32 or Uint64
-    Y_UNIT_TEST_FLAG(ChangefeedWithPartitioning, EnableDataShardDirectPartImport) {
-        TestImportChangefeeds(EnableDataShardDirectPartImport, 1, AddedScheme, "UINT32");
+        TestImportChangefeeds({{"Table", "UTF8", 1, AddedScheme, 3}}, EnableDataShardDirectPartImport, R"(
+            partition_write_speed_messages_per_second: "invalid"
+        )", Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST_FLAG(ChangefeedsWithPartitioning, EnableDataShardDirectPartImport) {
@@ -7138,20 +7115,17 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         });
     }
 
-    void TestTopic(bool isCorrupted = false, bool unknownFields = false) {
+    void TestTopic(bool isCorrupted = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         auto topic = NDescUT::TSimpleTopic(0, 2);
 
-        auto data = GenerateTestData({
+        const auto data = GenerateTestData({
                 EPathTypePersQueueGroup,
                 isCorrupted ? topic.GetCorruptedPublicFile() : topic.GetPublicProto().DebugString()
         });
-        if (unknownFields) {
-            AddUnknownFields(data.Topic);
-        }
 
         THashMap<TString, TTestDataWithScheme> bucketContent;
 
@@ -7186,10 +7160,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST(CorruptedTopicImport) {
         TestTopic(true);
-    }
-
-    Y_UNIT_TEST(TopicImportWithUnknownFields) {
-        TestTopic(false, true);
     }
 
     Y_UNIT_TEST(TopicExportImport) {
@@ -7534,8 +7504,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_EQUAL(issues.begin()->message(), "Unsupported scheme object type");
     }
 
-    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool enableDataShardDirectPartImport,
-            const TString& metadata = R"({"version": 1})", bool unknownFields = false) {
+    void MaterializedIndex(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool enableDataShardDirectPartImport, const TString& metadata = R"({"version": 1})") {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableIndexMaterialization(true));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
@@ -7557,7 +7526,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )", {{"a", 1}}, "", metadata);
 
-        auto b = GenerateTestData(R"(
+        const auto b = GenerateTestData(R"(
             columns {
               name: "key"
               type { optional_type { item { type_id: UTF8 } } }
@@ -7569,10 +7538,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             primary_key: "value"
             primary_key: "key"
         )", {{"b", 1}}, "", metadata);
-
-        if (unknownFields) {
-            AddUnknownFields(b.Scheme);
-        }
 
         Run(runtime, env, ConvertTestData({{"/a", a}, {"/a/by_value/indexImplTable", b}}), Sprintf(R"(
             ImportFromS3Settings {
@@ -7598,11 +7563,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_FLAG(MaterializedIndexImport, EnableDataShardDirectPartImport) {
         MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, EnableDataShardDirectPartImport);
-    }
-
-    Y_UNIT_TEST_FLAG(MaterializedIndexImportWithUnknownFields, EnableDataShardDirectPartImport) {
-        MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
-            EnableDataShardDirectPartImport, R"({"version": 1})", true);
     }
 
     Y_UNIT_TEST_FLAG(MaterializedIndexAuto, EnableDataShardDirectPartImport) {
@@ -8915,7 +8875,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
-    Y_UNIT_TEST_FLAG(ShouldRestoreSystemViewPermissions, UnknownFields) {
+    Y_UNIT_TEST(ShouldRestoreSystemViewPermissions) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableSysViewPermissionsExport(true);
@@ -8940,7 +8900,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             }
         )";
 
-        auto data = GenerateTestData(
+        const auto data = GenerateTestData(
             {
                 EPathTypeSysView,
                 R"(
@@ -8951,11 +8911,6 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             {},
             permissions
         );
-
-        if (UnknownFields) {
-            AddUnknownFields(data.SysViewDescription);
-            AddUnknownFields(data.Permissions);
-        }
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

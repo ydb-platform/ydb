@@ -629,7 +629,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             item.SysView = sysView;
         } else if (IsTable(SchemeKey)) {
             Ydb::Table::CreateTableRequest request;
-            if (!NYdb::NBackup::ParseProto(content, request)) {
+            if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse scheme");
             }
             item.Table = request;

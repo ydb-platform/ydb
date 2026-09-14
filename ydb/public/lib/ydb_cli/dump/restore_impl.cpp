@@ -2,7 +2,6 @@
 #include "restore_impl.h"
 #include "restore_import_data.h"
 
-#include <ydb/library/backup/proto/proto.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
@@ -40,6 +39,8 @@
 #include <util/system/hp_timer.h>
 #include <util/system/info.h>
 #include <util/thread/pool.h>
+
+#include <google/protobuf/text_format.h>
 
 namespace NYdb::NDump {
 
@@ -92,7 +93,7 @@ TString ReadExternalTableQuery(const TFsPath& fsDirPath, const TLog* log) {
 template <typename TProtoType>
 TProtoType ReadProtoFromFile(const TFsPath& fsDirPath, const TLog* log, const NFiles::TFileInfo& fileInfo) {
     TProtoType proto;
-    Y_ENSURE(NBackup::ParseProto(ReadFromFile(fsDirPath, log, fileInfo), proto));
+    Y_ENSURE(google::protobuf::TextFormat::ParseFromString(ReadFromFile(fsDirPath, log, fileInfo), &proto));
     return proto;
 }
 

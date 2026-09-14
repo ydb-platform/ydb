@@ -1183,6 +1183,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
 
     Y_UNIT_TEST(UpsertWithReturningPlan) {
         TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

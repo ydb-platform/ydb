@@ -114,6 +114,66 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TRefreshableErrorExpiringCache
+    : public TAsyncExpiringCache<int, int>
+{
+public:
+    explicit TRefreshableErrorExpiringCache(TAsyncExpiringCacheConfigPtr config)
+        : TAsyncExpiringCache<int, int>(
+            std::move(config),
+            NRpc::TDispatcher::Get()->GetHeavyInvoker(),
+            TestLogger())
+    { }
+
+    int GetCount() const
+    {
+        return Count_;
+    }
+
+    TFuture<void> GetPeriodicUpdateFuture() const
+    {
+        return PeriodicUpdatePromise_.ToFuture();
+    }
+
+    bool GetPeriodicUpdateSawError() const
+    {
+        return PeriodicUpdateSawError_;
+    }
+
+protected:
+    TFuture<int> DoGet(const int& /*key*/, bool isPeriodicUpdate) noexcept override
+    {
+        ++Count_;
+        if (isPeriodicUpdate) {
+            PeriodicUpdatePromise_.TrySet();
+        }
+        return MakeFuture<int>(TError("refreshable error"));
+    }
+
+    TFuture<int> DoGet(
+        const int& key,
+        const TErrorOr<int>* oldValue,
+        EUpdateReason reason) noexcept override
+    {
+        if (reason == EUpdateReason::PeriodicUpdate) {
+            PeriodicUpdateSawError_ = oldValue && !oldValue->IsOK();
+        }
+        return DoGet(key, reason != EUpdateReason::InitialFetch);
+    }
+
+    bool CanRefreshError(const TError& /*error*/) noexcept override
+    {
+        return true;
+    }
+
+private:
+    std::atomic<int> Count_ = 0;
+    std::atomic<bool> PeriodicUpdateSawError_ = false;
+    TPromise<void> PeriodicUpdatePromise_ = NewPromise<void>();
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 TEST(TAsyncExpiringCacheTest, TestBackgroundUpdate)
 {
     auto config = New<TAsyncExpiringCacheConfig>();
@@ -285,6 +345,55 @@ TEST(TAsyncExpiringCacheTest, TestUpdateTime2)
     }
 
     EXPECT_EQ(10, cache->GetCount());
+}
+
+TEST(TAsyncExpiringCacheTest, RefreshableErrorUsesSuccessfulUpdateTime)
+{
+    auto config = New<TAsyncExpiringCacheConfig>();
+    config->BatchUpdate = true;
+    config->ExpireAfterAccessTime = TDuration::Seconds(1);
+    config->ExpireAfterSuccessfulUpdateTime = TDuration::Seconds(1);
+    config->ExpireAfterFailedUpdateTime = TDuration::MilliSeconds(20);
+    config->ExpirationPeriod = TDuration::MilliSeconds(10);
+    config->RefreshTime = TDuration::MilliSeconds(100);
+
+    auto cache = New<TRefreshableErrorExpiringCache>(config);
+    EXPECT_FALSE(WaitForFast(cache->Get(0)).IsOK());
+    EXPECT_EQ(1, cache->GetCount());
+
+    Sleep(TDuration::MilliSeconds(50));
+    auto cachedError = cache->Find(0);
+    ASSERT_TRUE(cachedError.has_value());
+    EXPECT_FALSE(cachedError->IsOK());
+
+    WaitFor(cache->GetPeriodicUpdateFuture().WithTimeout(TDuration::Seconds(1)))
+        .ThrowOnError();
+    EXPECT_GE(cache->GetCount(), 2);
+}
+
+TEST(TAsyncExpiringCacheTest, RefreshableErrorIsUpdatedWithoutBatching)
+{
+    auto config = New<TAsyncExpiringCacheConfig>();
+    config->BatchUpdate = false;
+    config->ExpireAfterAccessTime = TDuration::Seconds(1);
+    config->ExpireAfterSuccessfulUpdateTime = TDuration::Seconds(1);
+    config->ExpireAfterFailedUpdateTime = TDuration::MilliSeconds(20);
+    config->ExpirationPeriod = TDuration::MilliSeconds(10);
+    config->RefreshTime = TDuration::MilliSeconds(100);
+
+    auto cache = New<TRefreshableErrorExpiringCache>(config);
+    EXPECT_FALSE(WaitForFast(cache->Get(0)).IsOK());
+    EXPECT_EQ(1, cache->GetCount());
+
+    Sleep(TDuration::MilliSeconds(50));
+    auto cachedError = cache->Find(0);
+    ASSERT_TRUE(cachedError.has_value());
+    EXPECT_FALSE(cachedError->IsOK());
+
+    WaitFor(cache->GetPeriodicUpdateFuture().WithTimeout(TDuration::Seconds(1)))
+        .ThrowOnError();
+    EXPECT_GE(cache->GetCount(), 2);
+    EXPECT_TRUE(cache->GetPeriodicUpdateSawError());
 }
 
 TEST(TAsyncExpiringCacheTest, TestZeroCache1)

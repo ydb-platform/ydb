@@ -22,7 +22,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregate() {
     if (result) {
         auto outputColumns = GetSetting(*Node_->Child(NNodes::TCoAggregate::idx_Settings), "output_columns");
         if (outputColumns) {
-            result = Ctx_.NewCallable(result->Pos(), "ExtractMembers", { result, outputColumns->ChildPtr(1) });
+            result = Ctx_.NewCallable(result->Pos(), "ExtractMembers", {result, outputColumns->ChildPtr(1)});
         }
     }
     return result;
@@ -44,7 +44,7 @@ TExprNode::TPtr TAggregateExpander::ExpandAggregateWithFullOutput()
     }
 
     HaveDistinct_ = AnyOf(AggregatedColumns_->ChildrenList(),
-        [](const auto& child) { return child->ChildrenSize() == 3; });
+                          [](const auto& child) { return child->ChildrenSize() == 3; });
     EffectiveCompact_ = (HaveDistinct_ && CompactForDistinct_ && !UseBlocks_) || ForceCompact_ || HasSetting(*settings, "compact");
     for (const auto& trait : Traits_) {
         auto mergeLambda = trait->Child(5);
@@ -147,13 +147,11 @@ TExprNode::TPtr TAggregateExpander::ExpandAggApply(const TExprNode::TPtr& node)
     TNodeOnNodeOwnedMap deepClones;
     auto lambda = Ctx_.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, /*internStrings=*/true, /*copyTypes=*/false);
 
-    auto listTypeNode = Ctx_.NewCallable(node->Pos(), "ListType", { node->ChildPtr(node->ChildrenSize() == 4 && !node->Child(3)->IsCallable("Void") ? 3 : 1) });
+    auto listTypeNode = Ctx_.NewCallable(node->Pos(), "ListType", {node->ChildPtr(node->ChildrenSize() == 4 && !node->Child(3)->IsCallable("Void") ? 3 : 1)});
     auto extractor = node->ChildPtr(2);
 
-    auto traits = Ctx_.ReplaceNodes(lambda->TailPtr(), {
-        {lambda->Head().Child(0), listTypeNode},
-        {lambda->Head().Child(1), extractor}
-        });
+    auto traits = Ctx_.ReplaceNodes(lambda->TailPtr(), {{lambda->Head().Child(0), listTypeNode},
+                                                        {lambda->Head().Child(1), extractor}});
 
     Ctx_.Step.Repeat(TExprStep::ExpandApplyForLambdas);
     auto status = ExpandApplyNoRepeat(traits, traits, Ctx_);
@@ -165,7 +163,7 @@ bool TAggregateExpander::CollectTraits() {
     bool allTraitsCollected = true;
     for (ui32 index = 0; index < AggregatedColumns_->ChildrenSize(); ++index) {
         auto trait = AggregatedColumns_->Child(index)->ChildPtr(1);
-        if (trait->IsCallable({ "AggApply", "AggApplyState", "AggApplyManyState" })) {
+        if (trait->IsCallable({"AggApply", "AggApplyState", "AggApplyManyState"})) {
             trait = ExpandAggApply(trait);
             allTraitsCollected = false;
         }
@@ -182,6 +180,7 @@ TExprNode::TPtr TAggregateExpander::RebuildAggregate()
         if (trait->IsCallable("AggApply")) {
             newAggregatedColumnsItems[index] = Ctx_.ChangeChild(*(newAggregatedColumnsItems[index]), 1, std::move(Traits_[index]));
         } else if (trait->IsCallable("AggApplyState") || trait->IsCallable("AggApplyManyState")) {
+            // clang-format off
             auto newTrait = Ctx_.Builder(Node_->Pos())
                 .Callable("AggregationTraits")
                     .Add(0, trait->ChildPtr(1))
@@ -199,6 +198,7 @@ TExprNode::TPtr TAggregateExpander::RebuildAggregate()
                     .Add(7, Traits_[index]->ChildPtr(7))
                 .Seal()
                 .Build();
+            // clang-format on
 
             newAggregatedColumnsItems[index] = Ctx_.ChangeChild(*(newAggregatedColumnsItems[index]), 1, std::move(newTrait));
         }
@@ -210,6 +210,7 @@ TExprNode::TPtr TAggregateExpander::RebuildAggregate()
 TExprNode::TPtr TAggregateExpander::GetContextLambda()
 {
     return HasContextFuncs(*AggregatedColumns_) ?
+                                                // clang-format off
         Ctx_.Builder(Node_->Pos())
             .Lambda()
                 .Param("stream")
@@ -225,6 +226,7 @@ TExprNode::TPtr TAggregateExpander::GetContextLambda()
                 .Arg("stream")
             .Seal()
             .Build();
+    // clang-format on
 }
 
 void TAggregateExpander::ProcessSessionSetting(TExprNode::TPtr sessionSetting)
@@ -249,8 +251,9 @@ void TAggregateExpander::ProcessSessionSetting(TExprNode::TPtr sessionSetting)
     if (HaveDistinct_) {
         auto keySelector = BuildKeySelector(Node_->Pos(), *OriginalRowType_, KeyColumns_, Ctx_);
         const auto sessionStartMemberLambda = AddSessionParamsMemberLambda(Node_->Pos(), SessionStartMemberName, keySelector,
-            SessionWindowParams_, Ctx_);
+                                                                           SessionWindowParams_, Ctx_);
 
+        // clang-format off
         AggList_ = Ctx_.Builder(Node_->Pos())
             .Callable("PartitionsByKeys")
                 .Add(0, AggList_)
@@ -265,6 +268,7 @@ void TAggregateExpander::ProcessSessionSetting(TExprNode::TPtr sessionSetting)
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         auto keyColumnsList = KeyColumns_->ChildrenList();
         keyColumnsList.push_back(Ctx_.NewAtom(Node_->Pos(), SessionStartMemberName));
@@ -287,7 +291,6 @@ TVector<const TTypeAnnotationNode*> TAggregateExpander::GetKeyItemTypes()
         YQL_ENSURE(index, "Unknown column: " << keyColumn->Content());
         auto type = RowType_->GetItems()[*index]->GetItemType();
         keyItemTypes.push_back(type);
-
     }
     return keyItemTypes;
 }
@@ -303,17 +306,16 @@ bool TAggregateExpander::IsNeedPickle(const TVector<const TTypeAnnotationNode*>&
 
 TExprNode::TPtr TAggregateExpander::GetKeyExtractor(bool needPickle)
 {
+    // clang-format off
     TExprNode::TPtr keyExtractor = Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("item")
             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                 if (KeyColumns_->ChildrenSize() == 0) {
                     return parent.Callable("Uint32").Atom(0, "0", TNodeFlags::Default).Seal();
-                }
-                else if (KeyColumns_->ChildrenSize() == 1) {
+                } else if (KeyColumns_->ChildrenSize() == 1) {
                     return parent.Callable("Member").Arg(0, "item").Add(1, KeyColumns_->HeadPtr()).Seal();
-                }
-                else {
+                } else {
                     auto listBuilder = parent.List();
                     ui32 pos = 0;
                     for (ui32 i = 0; i < KeyColumns_->ChildrenSize(); ++i) {
@@ -328,8 +330,10 @@ TExprNode::TPtr TAggregateExpander::GetKeyExtractor(bool needPickle)
             })
         .Seal()
         .Build();
+    // clang-format on
 
     if (needPickle) {
+        // clang-format off
         keyExtractor = Ctx_.Builder(Node_->Pos())
             .Lambda()
                 .Param("item")
@@ -340,6 +344,7 @@ TExprNode::TPtr TAggregateExpander::GetKeyExtractor(bool needPickle)
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
     return keyExtractor;
 }
@@ -375,6 +380,7 @@ void TAggregateExpander::BuildNothingStates()
         auto saveLambda = trait->Child(3);
         auto saveLambdaType = saveLambda->GetTypeAnn();
         auto typeNode = ExpandType(Node_->Pos(), *saveLambdaType, Ctx_);
+        // clang-format off
         NothingStates_.push_back(Ctx_.Builder(Node_->Pos())
             .Callable("Nothing")
                 .Callable(0, "OptionalType")
@@ -383,11 +389,12 @@ void TAggregateExpander::BuildNothingStates()
             .Seal()
             .Build()
         );
+        // clang-format on
     }
 }
 
 TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TPtr& keyExtractor,
-    const TVector<const TTypeAnnotationNode*>& keyItemTypes, bool needPickle)
+                                                             const TVector<const TTypeAnnotationNode*>& keyItemTypes, bool needPickle)
 {
     TExprNode::TPtr pickleTypeNode = nullptr;
     if (needPickle) {
@@ -407,12 +414,14 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TP
         if (!partialAgg) {
             partialAgg = std::move(distinctGrouper);
         } else {
+            // clang-format off
             partialAgg = Ctx_.Builder(Node_->Pos())
                 .Callable("Extend")
                     .Add(0, std::move(partialAgg))
                     .Add(1, std::move(distinctGrouper))
                 .Seal()
                 .Build();
+            // clang-format on
         }
     }
     // If no aggregation functions then add additional combiner
@@ -422,6 +431,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TP
         }
 
         auto uniqCombineInit = ReturnKeyAsIsForCombineInit(pickleTypeNode);
+        // clang-format off
         auto uniqCombineUpdate = Ctx_.Builder(Node_->Pos())
             .Lambda()
                 .Param("key")
@@ -430,8 +440,10 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TP
                 .Arg("state")
             .Seal()
             .Build();
+        // clang-format on
 
         // Return state as-is
+        // clang-format off
         auto uniqCombineSave = Ctx_.Builder(Node_->Pos())
             .Lambda()
                 .Param("key")
@@ -441,7 +453,9 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TP
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
+        // clang-format off
         partialAgg = Ctx_.Builder(Node_->Pos())
             .Callable("CombineByKey")
                 .Add(0, std::move(partialAgg))
@@ -452,17 +466,19 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregate(const TExprNode::TP
                 .Add(5, std::move(uniqCombineSave))
             .Seal()
             .Build();
+        // clang-format on
     }
     return partialAgg;
 }
 
-std::function<TExprNodeBuilder& (TExprNodeBuilder&)> TAggregateExpander::GetPartialAggArgExtractor(ui32 i, bool deserialize) {
+std::function<TExprNodeBuilder&(TExprNodeBuilder&)> TAggregateExpander::GetPartialAggArgExtractor(ui32 i, bool deserialize) {
     return [&, i, deserialize](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
         auto trait = Traits_[i];
         auto extractorLambda = trait->Child(1);
         auto loadLambda = trait->Child(4);
         if (Suffix_ == "CombineState") {
             if (deserialize) {
+                // clang-format off
                 parent.Apply(*loadLambda)
                     .With(0)
                         .Apply(*extractorLambda)
@@ -475,7 +491,9 @@ std::function<TExprNodeBuilder& (TExprNodeBuilder&)> TAggregateExpander::GetPart
                         .Seal()
                     .Done()
                     .Seal();
+                // clang-format on
             } else {
+                // clang-format off
                 parent.Apply(*extractorLambda)
                     .With(0)
                         .Callable("CastStruct")
@@ -484,12 +502,15 @@ std::function<TExprNodeBuilder& (TExprNodeBuilder&)> TAggregateExpander::GetPart
                         .Seal()
                     .Done()
                     .Seal();
+                // clang-format on
             }
         } else {
+            // clang-format off
             parent.Callable("CastStruct")
                 .Arg(0, "item")
                 .Add(1, ExpandType(Node_->Pos(), *extractorLambda->Head().Head().GetTypeAnn(), Ctx_))
                 .Seal();
+            // clang-format on
         }
 
         return parent;
@@ -505,6 +526,7 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
         }
 
         if (lambda->Tail().IsCallable("Unwrap")) {
+            // clang-format off
             return Ctx_.Builder(Node_->Pos())
                 .Lambda()
                 .Param("item")
@@ -513,7 +535,9 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
                 .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         } else {
+            // clang-format off
             return Ctx_.Builder(Node_->Pos())
                 .Lambda()
                 .Param("item")
@@ -524,11 +548,13 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
                 .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
     }
 
     bool aggregateOnly = (!Suffix_.empty());
     const auto& columnNames = aggregateOnly ? FinalColumnNames_ : InitialColumnNames_;
+    // clang-format off
     return Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("item")
@@ -538,12 +564,13 @@ TExprNode::TPtr TAggregateExpander::GetFinalAggStateExtractor(ui32 i) {
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& stream, TExprNode::TListType& keyIdxs,
-    TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, ui32* streamIdxColumn) {
+                                                    TVector<TString>& outputColumns, TExprNode::TListType& aggs, bool overState, bool many, ui32* streamIdxColumn) {
     TVector<TString> inputColumns;
-    auto flow = Ctx_.NewCallable(Node_->Pos(), "ToFlow", { stream });
+    auto flow = Ctx_.NewCallable(Node_->Pos(), "ToFlow", {stream});
     for (ui32 i = 0; i < RowType_->GetSize(); ++i) {
         inputColumns.push_back(TString(RowType_->GetItems()[i]->GetName()));
     }
@@ -554,7 +581,7 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
     TExprNode::TListType newRowItems;
     for (ui32 i = 0; i < RowType_->GetSize(); ++i) {
         extractorArgs.push_back(Ctx_.NewArgument(Node_->Pos(), "field" + ToString(i)));
-        newRowItems.push_back(Ctx_.NewList(Node_->Pos(), { Ctx_.NewAtom(Node_->Pos(), RowType_->GetItems()[i]->GetName()), extractorArgs.back() }));
+        newRowItems.push_back(Ctx_.NewList(Node_->Pos(), {Ctx_.NewAtom(Node_->Pos(), RowType_->GetItems()[i]->GetName()), extractorArgs.back()}));
     }
 
     const TExprNode::TPtr newRow = Ctx_.NewCallable(Node_->Pos(), "AsStruct", std::move(newRowItems));
@@ -610,7 +637,7 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
         }
 
         auto rowArg = &trait->Child(2)->Head().Head();
-        const TNodeOnNodeOwnedMap remaps{ { rowArg, newRow } };
+        const TNodeOnNodeOwnedMap remaps{{rowArg, newRow}};
 
         TVector<TExprNode::TPtr> roots;
         for (ui32 i = 1; i < argsCount + 1; ++i) {
@@ -623,6 +650,7 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
             roots.push_back(root);
         }
 
+        // clang-format off
         aggs.push_back(Ctx_.Builder(Node_->Pos())
             .List()
                 .Callable(0, TString("AggBlockApply") + (overState ? "State" : ""))
@@ -657,17 +685,20 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
                 })
             .Seal()
             .Build());
+        // clang-format on
 
         for (auto root : roots) {
             if (many) {
                 if (root->IsCallable("Unwrap")) {
                     root = root->HeadPtr();
                 } else {
+                    // clang-format off
                     root = Ctx_.Builder(Node_->Pos())
                         .Callable("Just")
                             .Add(0, root)
                         .Seal()
                         .Build();
+                    // clang-format on
                 }
             }
 
@@ -687,7 +718,8 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
     }
 
     auto extractorLambda = Ctx_.NewLambda(Node_->Pos(), Ctx_.NewArguments(Node_->Pos(), std::move(extractorArgs)), std::move(extractorRoots));
-    auto mappedWideFlow = Ctx_.NewCallable(Node_->Pos(), "WideMap", { wideFlow, extractorLambda });
+    auto mappedWideFlow = Ctx_.NewCallable(Node_->Pos(), "WideMap", {wideFlow, extractorLambda});
+    // clang-format off
     return Ctx_.Builder(Node_->Pos())
         .Callable("WideToBlocks")
             .Callable(0, "FromFlow")
@@ -695,6 +727,7 @@ TExprNode::TPtr TAggregateExpander::MakeInputBlocks(const TExprNode::TPtr& strea
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
@@ -722,6 +755,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
 
     TExprNode::TPtr aggWideFlow;
     if (hashed) {
+        // clang-format off
         aggWideFlow = Ctx_.Builder(Node_->Pos())
             .Callable("ToFlow")
                 .Callable(0, "WideFromBlocks")
@@ -735,7 +769,9 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     } else {
+        // clang-format off
         aggWideFlow = Ctx_.Builder(Node_->Pos())
             .Callable("ToFlow")
                 .Callable(0, "BlockCombineAll")
@@ -746,13 +782,15 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 
     auto finalFlow = MakeNarrowMap(Node_->Pos(), outputColumns, aggWideFlow, Ctx_);
     if (isInputList) {
-        auto root = Ctx_.NewCallable(Node_->Pos(), "FromFlow", { finalFlow });
-        auto lambdaStream = Ctx_.NewLambda(Node_->Pos(), Ctx_.NewArguments(Node_->Pos(), { stream }), std::move(root));
+        auto root = Ctx_.NewCallable(Node_->Pos(), "FromFlow", {finalFlow});
+        auto lambdaStream = Ctx_.NewLambda(Node_->Pos(), Ctx_.NewArguments(Node_->Pos(), {stream}), std::move(root));
 
+        // clang-format off
         return Ctx_.Builder(Node_->Pos())
             .Callable("LMap")
                 .Add(0, AggList_)
@@ -768,6 +806,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockCombineAllOrHashed() {
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     } else {
         return finalFlow;
     }
@@ -780,6 +819,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
     auto initLambdaIndex = (Suffix_ == "CombineState") ? 4 : 1;
     auto updateLambdaIndex = (Suffix_ == "CombineState") ? 5 : 2;
 
+    // clang-format off
     auto combineInit = Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("key")
@@ -787,7 +827,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
             .Callable("AsStruct")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     ui32 ndx = 0;
-                    for (ui32 i: NonDistinctColumns_) {
+                    for (ui32 i : NonDistinctColumns_) {
                         auto trait = Traits_[i];
                         auto initLambda = trait->Child(initLambdaIndex);
                         if (initLambda->Head().ChildrenSize() == 1) {
@@ -820,7 +860,9 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     auto combineUpdate = Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("key")
@@ -829,7 +871,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
             .Callable("AsStruct")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     ui32 ndx = 0;
-                    for (ui32 i: NonDistinctColumns_) {
+                    for (ui32 i : NonDistinctColumns_) {
                         auto trait = Traits_[i];
                         auto updateLambda = trait->Child(updateLambdaIndex);
                         if (updateLambda->Head().ChildrenSize() == 2) {
@@ -874,7 +916,9 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     auto combineSave = Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("key")
@@ -963,7 +1007,9 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     return Ctx_.Builder(Node_->Pos())
         .Callable("CombineByKey")
             .Add(0, AggList_)
@@ -974,13 +1020,15 @@ TExprNode::TPtr TAggregateExpander::GeneratePartialAggregateForNonDistinct(const
             .Add(5, std::move(combineSave))
         .Seal()
         .Build();
+    // clang-format on
 }
 
 void TAggregateExpander::GenerateInitForDistinct(TExprNodeBuilder& parent, ui32& ndx, const TIdxSet& indicies, const TExprNode::TPtr& distinctField) {
-    for (ui32 i: indicies) {
+    for (ui32 i : indicies) {
         auto trait = Traits_[i];
         auto initLambda = trait->Child(1);
         if (initLambda->Head().ChildrenSize() == 1) {
+            // clang-format off
             parent.List(ndx++)
                 .Add(0, InitialColumnNames_[i])
                 .Apply(1, *initLambda)
@@ -992,7 +1040,9 @@ void TAggregateExpander::GenerateInitForDistinct(TExprNodeBuilder& parent, ui32&
                     .Done()
                 .Seal()
             .Seal();
+            // clang-format on
         } else {
+            // clang-format off
             parent.List(ndx++)
                 .Add(0, InitialColumnNames_[i])
                 .Apply(1, *initLambda)
@@ -1009,12 +1059,13 @@ void TAggregateExpander::GenerateInitForDistinct(TExprNodeBuilder& parent, ui32&
                     .Done()
                 .Seal()
             .Seal();
+            // clang-format on
         }
     }
 }
 
 TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPtr& distinctField,
-    const TVector<const TTypeAnnotationNode*>& keyItemTypes, bool needDistinctPickle)
+                                                            const TVector<const TTypeAnnotationNode*>& keyItemTypes, bool needDistinctPickle)
 {
     auto& indicies = Distinct2Columns_[distinctField->Content()];
     auto distinctIndex = RowType_->FindItem(distinctField->Content());
@@ -1033,14 +1084,17 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
     }
 
     const auto expandedValueType = needDistinctPickle ?
+                                                      // clang-format off
         Ctx_.Builder(Node_->Pos())
             .Callable("DataType")
                 .Atom(0, "String", TNodeFlags::Default)
             .Seal()
         .Build()
         : ExpandType(Node_->Pos(), *valueType, Ctx_);
+    // clang-format on
 
     DistinctFieldNeedsPickle_[distinctField->Content()] = needDistinctPickle;
+    // clang-format off
     auto udfSetCreateValue = Ctx_.Builder(Node_->Pos())
         .Callable("Udf")
             .Atom(0, "Set.Create")
@@ -1057,8 +1111,10 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
     UdfSetCreate_[distinctField->Content()] = udfSetCreateValue;
+    // clang-format off
     auto resourceType = Ctx_.Builder(Node_->Pos())
         .Callable("TypeOf")
             .Callable(0, "Apply")
@@ -1072,7 +1128,9 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     UdfAddValue_[distinctField->Content()] = Ctx_.Builder(Node_->Pos())
         .Callable("Udf")
             .Atom(0, "Set.AddValue")
@@ -1087,7 +1145,9 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     UdfWasChanged_[distinctField->Content()] = Ctx_.Builder(Node_->Pos())
         .Callable("Udf")
             .Atom(0, "Set.WasChanged")
@@ -1101,7 +1161,9 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     auto distinctKeyExtractor = Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("item")
@@ -1133,15 +1195,17 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
             })
         .Seal()
         .Build();
+    // clang-format on
 
     const TTypeAnnotationNode* distinctPickleType = nullptr;
     TExprNode::TPtr distinctPickleTypeNode;
     if (needDistinctPickle) {
-        distinctPickleType = KeyColumns_->ChildrenSize() > 0  ? Ctx_.MakeType<TTupleExprType>(distinctKeyItemTypes) : distinctKeyItemTypes.front();
+        distinctPickleType = KeyColumns_->ChildrenSize() > 0 ? Ctx_.MakeType<TTupleExprType>(distinctKeyItemTypes) : distinctKeyItemTypes.front();
         distinctPickleTypeNode = ExpandType(Node_->Pos(), *distinctPickleType, Ctx_);
     }
 
     if (needDistinctPickle) {
+        // clang-format off
         distinctKeyExtractor = Ctx_.Builder(Node_->Pos())
             .Lambda()
                 .Param("item")
@@ -1150,8 +1214,10 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
 
+    // clang-format off
     auto distinctCombineInit = Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("key")
@@ -1165,7 +1231,9 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     auto distinctCombineUpdate = Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("key")
@@ -1174,8 +1242,10 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
             .Arg("state")
         .Seal()
         .Build();
+    // clang-format on
 
     ui32 ndx = 0;
+    // clang-format off
     auto distinctCombineSave = Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("key")
@@ -1183,7 +1253,7 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
             .Callable("Just")
                 .Callable(0, "AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        for (ui32 i: indicies) {
+                        for (ui32 i : indicies) {
                             auto trait = Traits_[i];
                             auto saveLambda = trait->Child(3);
                             parent.List(ndx++)
@@ -1268,7 +1338,9 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     auto distinctCombiner = Ctx_.Builder(Node_->Pos())
         .Callable("CombineByKey")
             .Add(0, AggList_)
@@ -1279,7 +1351,9 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
             .Add(5, std::move(distinctCombineSave))
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     auto distinctGrouper = Ctx_.Builder(Node_->Pos())
         .Callable("PartitionsByKeys")
             .Add(0, std::move(distinctCombiner))
@@ -1354,11 +1428,13 @@ TExprNode::TPtr TAggregateExpander::GenerateDistinctGrouper(const TExprNode::TPt
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
     return distinctGrouper;
 }
 
 TExprNode::TPtr TAggregateExpander::ReturnKeyAsIsForCombineInit(const TExprNode::TPtr& pickleTypeNode)
 {
+    // clang-format off
     return Ctx_.Builder(Node_->Pos())
             .Lambda()
                 .Param("key")
@@ -1403,9 +1479,11 @@ TExprNode::TPtr TAggregateExpander::ReturnKeyAsIsForCombineInit(const TExprNode:
                 .Seal()
             .Seal()
             .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr TAggregateExpander::BuildFinalizeByKeyLambda(const TExprNode::TPtr& preprocessLambda, const TExprNode::TPtr& keyExtractor) {
+    // clang-format off
     return Ctx_.Builder(Node_->Pos())
     .Lambda()
         .Param("stream")
@@ -1445,8 +1523,8 @@ TExprNode::TPtr TAggregateExpander::BuildFinalizeByKeyLambda(const TExprNode::TP
             .Seal()
         .Seal()
     .Seal().Build();
+    // clang-format on
 }
-
 
 TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggregate& node, TExprContext& ctx, bool useBlocks) {
     auto keyColumns = node.Keys();
@@ -1486,7 +1564,7 @@ TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggre
             init.Body().Ref().Head().Content() == "1") {
             onlyZero = false;
         } else if (init.Body().Ref().IsCallable("Uint64") &&
-            init.Body().Ref().Head().Content() == "0") {
+                   init.Body().Ref().Head().Content() == "0") {
             onlyColumn = false;
         } else if (init.Body().Ref().IsCallable("AggrCountInit")) {
             initVal = init.Body().Ref().HeadPtr();
@@ -1523,12 +1601,12 @@ TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggre
         auto merge = NNodes::TCoLambda(traits->Child(5));
         {
             auto& plus = merge.Body().Ref();
-            if (!plus.IsCallable({ "+", "AggrAdd" }) ) {
+            if (!plus.IsCallable({"+", "AggrAdd"})) {
                 return node.Ptr();
             }
 
             if (!(plus.Child(0) == merge.Args().Arg(0).Raw() &&
-                plus.Child(1) == merge.Args().Arg(1).Raw())) {
+                  plus.Child(1) == merge.Args().Arg(1).Raw())) {
                 return node.Ptr();
             }
         }
@@ -1581,19 +1659,24 @@ TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggre
     const bool isOptionalColumn = inputItemType->GetKind() == ETypeAnnotationKind::Optional;
 
     if (!isDistinct) {
+        // clang-format off
         auto length = ctx.Builder(node.Pos())
             .Callable("Length")
                 .Add(0, node.Input().Ptr())
             .Seal()
             .Build();
+        // clang-format on
 
         if (onlyZero) {
+            // clang-format off
             length = ctx.Builder(node.Pos())
                 .Callable("Uint64")
                     .Atom(0, "0", TNodeFlags::Default)
                 .Seal()
                 .Build();
+            // clang-format on
         } else if (!onlyColumn && initVal) {
+            // clang-format off
             length = ctx.Builder(node.Pos())
                 .Callable("If")
                     .Callable(0, "Exists")
@@ -1605,8 +1688,10 @@ TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggre
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
+        // clang-format off
         auto ret = ctx.Builder(node.Pos())
             .Callable("AsList")
                 .Callable(0, "AsStruct")
@@ -1617,6 +1702,7 @@ TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggre
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         return ret;
     }
@@ -1633,6 +1719,7 @@ TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggre
     auto pickleTypeNode = ExpandType(node.Pos(), *inputItemType, ctx);
 
     auto distictColumn = aggregatedColumn.Ref().ChildPtr(2);
+    // clang-format off
     auto combine = ctx.Builder(node.Pos())
         .Callable("CombineByKey")
             .Callable(0, "ExtractMembers")
@@ -1706,7 +1793,9 @@ TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggre
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     auto groupByKey = ctx.Builder(node.Pos())
         .Callable("PartitionByKey")
             .Add(0, combine)
@@ -1734,7 +1823,9 @@ TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggre
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
+    // clang-format off
     auto ret = ctx.Builder(node.Pos())
         .Callable("AsList")
             .Callable(0, "AsStruct")
@@ -1747,6 +1838,7 @@ TExprNode::TPtr TAggregateExpander::CountAggregateRewrite(const NNodes::TCoAggre
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
     return ret;
 }
@@ -1756,6 +1848,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr&
     auto preprocessLambda = GeneratePreprocessLambda(keyExtractor);
     TExprNode::TPtr postAgg;
     if (!UsePartitionsByKeys_ && UseFinalizeByKeys_ && !HaveSessionSetting_) {
+        // clang-format off
         postAgg = Ctx_.Builder(Node_->Pos())
             .Callable("ShuffleByKeys")
                 .Add(0, preAgg)
@@ -1771,8 +1864,10 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr&
                     .Seal()
                 .Seal()
             .Seal().Build();
+        // clang-format on
     } else {
         auto condenseSwitch = GenerateCondenseSwitch(keyExtractor);
+        // clang-format off
         postAgg = Ctx_.Builder(Node_->Pos())
             .Callable("PartitionsByKeys")
                 .Add(0, preAgg)
@@ -1798,12 +1893,12 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregate(const TExprNode::TPtr&
                     .Seal()
                 .Seal()
             .Seal().Build();
+        // clang-format on
     }
     if (KeyColumns_->ChildrenSize() == 0 && !HaveSessionSetting_ && (Suffix_.empty() || Suffix_.EndsWith("Finalize"))) {
         return MakeSingleGroupRow(*Node_, postAgg, Ctx_);
     }
     return postAgg;
-
 }
 
 TExprNode::TPtr TAggregateExpander::GeneratePreprocessLambda(const TExprNode::TPtr& keyExtractor)
@@ -1816,7 +1911,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePreprocessLambda(const TExprNode::TP
         YQL_ENSURE(SessionWindowParams_.Init);
 
         preprocessLambda = AddSessionParamsMemberLambda(Node_->Pos(), SessionStartMemberName, "", keyExtractor,
-            SessionWindowParams_.Key, SessionWindowParams_.Init, SessionWindowParams_.Update, Ctx_);
+                                                        SessionWindowParams_.Key, SessionWindowParams_.Init, SessionWindowParams_.Update, Ctx_);
     } else {
         YQL_ENSURE(!SessionWindowParams_.Key);
         preprocessLambda = MakeIdentityLambda(Node_->Pos(), Ctx_);
@@ -1833,6 +1928,7 @@ TExprNode::TPtr TAggregateExpander::GenerateCondenseSwitch(const TExprNode::TPtr
         YQL_ENSURE(SessionWindowParams_.KeyType);
         YQL_ENSURE(SessionWindowParams_.Init);
 
+        // clang-format off
         condenseSwitch = Ctx_.Builder(Node_->Pos())
             .Lambda()
                 .Param("item")
@@ -1859,8 +1955,10 @@ TExprNode::TPtr TAggregateExpander::GenerateCondenseSwitch(const TExprNode::TPtr
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     } else {
         YQL_ENSURE(!SessionWindowParams_.Key);
+        // clang-format off
         condenseSwitch = Ctx_.Builder(Node_->Pos())
             .Lambda()
                 .Param("item")
@@ -1873,6 +1971,7 @@ TExprNode::TPtr TAggregateExpander::GenerateCondenseSwitch(const TExprNode::TPtr
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
     }
     return condenseSwitch;
 }
@@ -1883,6 +1982,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateInitPhase()
     const auto& columnNames = aggregateOnly ? FinalColumnNames_ : InitialColumnNames_;
 
     ui32 index = 0U;
+    // clang-format off
     return Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("item")
@@ -1975,7 +2075,6 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateInitPhase()
                                         return parent;
                                     })
                                 .Seal();
-
                                 return parent;
                             };
 
@@ -2038,6 +2137,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateInitPhase()
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr TAggregateExpander::GeneratePostAggregateSavePhase()
@@ -2046,6 +2146,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateSavePhase()
     const auto& columnNames = aggregateOnly ? FinalColumnNames_ : InitialColumnNames_;
 
     ui32 index = 0U;
+    // clang-format off
     return Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("state")
@@ -2055,6 +2156,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateSavePhase()
                         if (KeyColumns_->Child(i)->Content() == SessionStartMemberName) {
                             continue;
                         }
+
                         parent
                             .List(index++)
                                 .Add(0, KeyColumns_->ChildPtr(i))
@@ -2120,7 +2222,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateSavePhase()
                         } else {
                             auto distinctField = (child->ChildrenSize() == 3) ? child->Child(2) : nullptr;
                             auto stateExtractor = [&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                const bool isFirst = distinctField  ? (*Distinct2Columns_[distinctField->Content()].begin() == i) : false;
+                                const bool isFirst = distinctField ? (*Distinct2Columns_[distinctField->Content()].begin() == i) : false;
                                 if (distinctField && isFirst) {
                                     parent.Callable("Nth")
                                         .Callable(0, "Member")
@@ -2171,6 +2273,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateSavePhase()
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr TAggregateExpander::GeneratePostAggregateMergePhase()
@@ -2179,6 +2282,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateMergePhase()
     const auto& columnNames = aggregateOnly ? FinalColumnNames_ : InitialColumnNames_;
 
     ui32 index = 0U;
+    // clang-format off
     return Ctx_.Builder(Node_->Pos())
         .Lambda()
             .Param("item")
@@ -2313,7 +2417,6 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateMergePhase()
                                         return parent;
                                     })
                                 .Seal();
-
                                 return parent;
                             };
 
@@ -2425,9 +2528,11 @@ TExprNode::TPtr TAggregateExpander::GeneratePostAggregateMergePhase()
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr TAggregateExpander::GenerateJustOverStates(const TExprNode::TPtr& input, const TIdxSet& indicies) {
+    // clang-format off
     return Ctx_.Builder(Node_->Pos())
         .Callable("Map")
             .Add(0, input)
@@ -2466,9 +2571,11 @@ TExprNode::TPtr TAggregateExpander::GenerateJustOverStates(const TExprNode::TPtr
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr TAggregateExpander::SerializeIdxSet(const TIdxSet& indicies) {
+    // clang-format off
     return Ctx_.Builder(Node_->Pos())
         .List()
             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -2481,6 +2588,7 @@ TExprNode::TPtr TAggregateExpander::SerializeIdxSet(const TIdxSet& indicies) {
             })
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr TAggregateExpander::GeneratePhases() {
@@ -2490,6 +2598,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
     TExprNode::TListType mergeTraits;
     for (ui32 index = 0; index < AggregatedColumns_->ChildrenSize(); ++index) {
         auto originalTrait = AggregatedColumns_->Child(index)->ChildPtr(1);
+        // clang-format off
         auto extractor = Ctx_.Builder(Node_->Pos())
             .Lambda()
                 .Param("row")
@@ -2499,8 +2608,10 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         if (many) {
+            // clang-format off
             extractor = Ctx_.Builder(Node_->Pos())
                 .Lambda()
                     .Param("row")
@@ -2511,6 +2622,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
 
         bool isAggApply = originalTrait->IsCallable("AggApply");
@@ -2524,6 +2636,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
             serializedStateType = Ctx_.MakeType<TOptionalExprType>(serializedStateType);
         }
 
+        // clang-format off
         auto extractorTypeNode = Ctx_.Builder(Node_->Pos())
             .Callable("StructType")
                 .List(0)
@@ -2532,6 +2645,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Seal()
             .Seal()
             .Build();
+        // clang-format on
 
         if (isAggApply) {
             auto initialType = originalTrait->GetTypeAnn();
@@ -2539,6 +2653,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 initialType = Ctx_.MakeType<TOptionalExprType>(initialType);
             }
 
+            // clang-format off
             auto originalExtractorTypeNode = Ctx_.Builder(Node_->Pos())
                 .Callable("StructType")
                     .List(0)
@@ -2547,6 +2662,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
 
             auto name = TString(originalTrait->ChildPtr(0)->Content());
             if (name.StartsWith("pg_")) {
@@ -2561,6 +2677,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 name = "pg_" + aggDesc.Name + "#" + ToString(aggDesc.AggId);
             }
 
+            // clang-format off
             mergeTraits.push_back(Ctx_.Builder(Node_->Pos())
                 .Callable(many ? "AggApplyManyState" : "AggApplyState")
                     .Atom(0, name)
@@ -2569,8 +2686,10 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                     .Add(3, originalExtractorTypeNode)
                 .Seal()
                 .Build());
+            // clang-format on
         } else {
             YQL_ENSURE(originalTrait->IsCallable("AggregationTraits"));
+            // clang-format off
             mergeTraits.push_back(Ctx_.Builder(Node_->Pos())
                 .Callable("AggregationTraits")
                     .Add(0, extractorTypeNode)
@@ -2588,31 +2707,37 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                     .Add(7, originalTrait->ChildPtr(7))
                 .Seal()
                 .Build());
+            // clang-format on
         }
     }
 
     TExprNode::TListType finalizeColumns;
     for (ui32 index = 0; index < AggregatedColumns_->ChildrenSize(); ++index) {
+        // clang-format off
         finalizeColumns.push_back(Ctx_.Builder(Node_->Pos())
             .List()
                 .Add(0, AggregatedColumns_->Child(index)->ChildPtr(0))
                 .Add(1, mergeTraits[index])
             .Seal()
             .Build());
+        // clang-format on
     }
 
     if (!many) {
         // simple Combine + MergeFinalize
         TExprNode::TListType combineColumns;
         for (ui32 index = 0; index < AggregatedColumns_->ChildrenSize(); ++index) {
+            // clang-format off
             combineColumns.push_back(Ctx_.Builder(Node_->Pos())
                 .List()
                     .Add(0, InitialColumnNames_[index])
                     .Add(1, AggregatedColumns_->Child(index)->ChildPtr(1))
                 .Seal()
                 .Build());
+            // clang-format on
         }
 
+        // clang-format off
         auto combine = Ctx_.Builder(Node_->Pos())
             .Callable("AggregateCombine")
                 .Add(0, AggList_)
@@ -2621,7 +2746,9 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
+        // clang-format on
 
+        // clang-format off
         auto mergeFinalize = Ctx_.Builder(Node_->Pos())
             .Callable("AggregateMergeFinalize")
                 .Add(0, combine)
@@ -2630,6 +2757,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
+        // clang-format on
 
         return mergeFinalize;
     }
@@ -2648,14 +2776,17 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
     if (!NonDistinctColumns_.empty()) {
         TExprNode::TListType combineColumns;
         for (ui32 i : NonDistinctColumns_) {
+            // clang-format off
             combineColumns.push_back(Ctx_.Builder(Node_->Pos())
                 .List()
                     .Add(0, InitialColumnNames_[i])
                     .Add(1, AggregatedColumns_->Child(i)->ChildPtr(1))
                 .Seal()
                 .Build());
+            // clang-format on
         }
 
+        // clang-format off
         auto combine = Ctx_.Builder(Node_->Pos())
             .Callable("AggregateCombine")
                 .Add(0, AggList_)
@@ -2664,6 +2795,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
+        // clang-format on
 
         unionAllInputs.push_back(GenerateJustOverStates(combine, NonDistinctColumns_));
         streams.push_back(SerializeIdxSet(NonDistinctColumns_));
@@ -2674,6 +2806,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
         TExprNode::TListType allKeyColumns = KeyColumns_->ChildrenList();
         allKeyColumns.push_back(distinctField);
 
+        // clang-format off
         auto distinct = Ctx_.Builder(Node_->Pos())
             .Callable("Aggregate")
                 .Add(0, AggList_)
@@ -2683,12 +2816,14 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
+        // clang-format on
 
         TExprNode::TListType combineColumns;
         for (ui32 i : indicies) {
             auto trait = AggregatedColumns_->Child(i)->ChildPtr(1);
             bool isAggApply = trait->IsCallable("AggApply");
             if (isAggApply) {
+                // clang-format off
                 trait = Ctx_.Builder(Node_->Pos())
                     .Callable("AggApply")
                         .Add(0, trait->ChildPtr(0))
@@ -2711,9 +2846,11 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                         .Seal()
                     .Seal()
                     .Build();
+                // clang-format on
             } else {
                 TExprNode::TPtr newInit;
                 if (trait->ChildPtr(1)->Head().ChildrenSize() == 1) {
+                    // clang-format off
                     newInit = Ctx_.Builder(Node_->Pos())
                         .Lambda()
                             .Param("row")
@@ -2727,7 +2864,9 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                             .Seal()
                         .Seal()
                         .Build();
+                    // clang-format on
                 } else {
+                    // clang-format off
                     newInit = Ctx_.Builder(Node_->Pos())
                         .Lambda()
                             .Param("row")
@@ -2743,10 +2882,12 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                             .Seal()
                         .Seal()
                         .Build();
+                    // clang-format on
                 }
 
                 TExprNode::TPtr newUpdate;
                 if (trait->ChildPtr(2)->Head().ChildrenSize() == 2) {
+                    // clang-format off
                     newUpdate = Ctx_.Builder(Node_->Pos())
                         .Lambda()
                             .Param("row")
@@ -2762,7 +2903,9 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                             .Seal()
                         .Seal()
                         .Build();
+                    // clang-format on
                 } else {
+                    // clang-format off
                     newUpdate = Ctx_.Builder(Node_->Pos())
                         .Lambda()
                             .Param("row")
@@ -2780,8 +2923,10 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                             .Seal()
                         .Seal()
                         .Build();
+                    // clang-format on
                 }
 
+                // clang-format off
                 trait = Ctx_.Builder(Node_->Pos())
                     .Callable("AggregationTraits")
                         .Callable(0, "StructType")
@@ -2799,16 +2944,20 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                         .Add(7, trait->ChildPtr(7))
                     .Seal()
                     .Build();
+                // clang-format on
             }
 
+            // clang-format off
             combineColumns.push_back(Ctx_.Builder(Node_->Pos())
                 .List()
                 .Add(0, InitialColumnNames_[i])
                 .Add(1, trait)
                 .Seal()
                 .Build());
+            // clang-format on
         }
 
+        // clang-format off
         auto combine = Ctx_.Builder(Node_->Pos())
             .Callable("AggregateCombine")
                 .Add(0, distinct)
@@ -2817,6 +2966,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                 .Add(3, cleanOutputSettings)
             .Seal()
             .Build();
+        // clang-format on
 
         unionAllInputs.push_back(GenerateJustOverStates(combine, indicies));
         streams.push_back(SerializeIdxSet(indicies));
@@ -2824,6 +2974,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
 
     if (UseBlocks_) {
         for (ui32 i = 0; i < unionAllInputs.size(); ++i) {
+            // clang-format off
             unionAllInputs[i] = Ctx_.Builder(Node_->Pos())
                 .Callable("Map")
                     .Add(0, unionAllInputs[i])
@@ -2839,6 +2990,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
                     .Seal()
                 .Seal()
                 .Build();
+            // clang-format on
         }
     }
 
@@ -2848,6 +3000,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
     }
 
     auto unionAll = Ctx_.NewCallable(Node_->Pos(), "UnionAll", std::move(unionAllInputs));
+    // clang-format off
     auto mergeManyFinalize = Ctx_.Builder(Node_->Pos())
         .Callable("AggregateMergeManyFinalize")
             .Add(0, unionAll)
@@ -2856,6 +3009,7 @@ TExprNode::TPtr TAggregateExpander::GeneratePhases() {
             .Add(3, settings)
         .Seal()
         .Build();
+    // clang-format on
 
     return mergeManyFinalize;
 }
@@ -2886,7 +3040,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalize() {
 
     for (const auto& x : AggregatedColumns_->Children()) {
         auto trait = x->ChildPtr(1);
-        if (!trait->IsCallable({ "AggApplyState", "AggApplyManyState" })) {
+        if (!trait->IsCallable({"AggApplyState", "AggApplyManyState"})) {
             return nullptr;
         }
     }
@@ -2916,6 +3070,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
 
     TExprNode::TPtr aggBlocks;
     if (!isMany) {
+        // clang-format off
         aggBlocks = Ctx_.Builder(Node_->Pos())
             .Callable("BlockMergeFinalizeHashed")
                 .Add(0, blocks)
@@ -2923,10 +3078,12 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
                 .Add(2, Ctx_.NewList(Node_->Pos(), std::move(aggs)))
             .Seal()
             .Build();
+        // clang-format on
     } else {
         auto manyStreamsSetting = GetSetting(*Node_->Child(3), "many_streams");
         YQL_ENSURE(manyStreamsSetting, "Missing many_streams setting");
 
+        // clang-format off
         aggBlocks = Ctx_.Builder(Node_->Pos())
             .Callable("BlockMergeManyFinalizeHashed")
                 .Add(0, blocks)
@@ -2936,8 +3093,10 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
                 .Add(4, manyStreamsSetting->TailPtr())
             .Seal()
             .Build();
+        // clang-format on
     }
 
+    // clang-format off
     auto aggWideFlow = Ctx_.Builder(Node_->Pos())
         .Callable("ToFlow")
             .Callable(0, "WideFromBlocks")
@@ -2945,11 +3104,13 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
     auto finalFlow = MakeNarrowMap(Node_->Pos(), outputColumns, aggWideFlow, Ctx_);
-    auto root = Ctx_.NewCallable(Node_->Pos(), "FromFlow", { finalFlow });
-    auto lambdaStream = Ctx_.NewLambda(Node_->Pos(), Ctx_.NewArguments(Node_->Pos(), { streamArg }), std::move(root));
+    auto root = Ctx_.NewCallable(Node_->Pos(), "FromFlow", {finalFlow});
+    auto lambdaStream = Ctx_.NewLambda(Node_->Pos(), Ctx_.NewArguments(Node_->Pos(), {streamArg}), std::move(root));
 
     auto keySelector = BuildKeySelector(Node_->Pos(), *OriginalRowType_, KeyColumns_, Ctx_);
+    // clang-format off
     return Ctx_.Builder(Node_->Pos())
         .Callable("ShuffleByKeys")
             .Add(0, AggList_)
@@ -2966,6 +3127,7 @@ TExprNode::TPtr TAggregateExpander::TryGenerateBlockMergeFinalizeHashed() {
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr ExpandAggregatePeephole(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {

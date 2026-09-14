@@ -3157,22 +3157,19 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 }
             }
             if (captureWipeTraffic) {
-                if (type == NDDisk::TEvErasePersistentBuffer::EventType) {
-                    const auto& record =
-                        ev->Get<NDDisk::TEvErasePersistentBuffer>()->Record;
-                    // Partition wipe sends Max<ui64>(); background cleanup uses
-                    // a finite watermark and must not be counted here.
-                    if (record.GetLsn() == Max<ui64>()) {
-                        pendingWipeBarriers.insert({ev->Sender, ev->Cookie});
-                    }
+                if (type == NDDisk::TEvUnregisterPersistentBuffer::EventType) {
+                    pendingWipeBarriers.insert({ev->Sender, ev->Cookie});
                 }
-                if (type == NDDisk::TEvErasePersistentBufferResult::EventType) {
+                if (type ==
+                    NDDisk::TEvUnregisterPersistentBufferResult::EventType)
+                {
                     const TTransportCookie key{
                         ev->GetRecipientRewrite(),
                         ev->Cookie};
                     if (pendingWipeBarriers.contains(key)) {
                         const auto& record =
-                            ev->Get<NDDisk::TEvErasePersistentBufferResult>()
+                            ev->Get<
+                                  NDDisk::TEvUnregisterPersistentBufferResult>()
                                 ->Record;
                         if (record.GetStatus() ==
                             NKikimrBlobStorage::NDDisk::TReplyStatus::OK)
@@ -3241,12 +3238,12 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             0,
             NUnitTest::RandomString(DefaultBlockSize, 7));
 
-        // Every unique allocated PBuffer got a Max-lsn barrier erase and
-        // replied OK.
+        // Each allocated PB registration is retired before deallocating the
+        // DBG.
         UNIT_ASSERT_VALUES_EQUAL_C(
-            UniqueDDiskCount(allocatedPBuffers),
+            allocatedPBuffers.size(),
             wipeBarrierOks.size(),
-            "wipe barrier-erase OK replies vs unique allocated PBuffers");
+            "unregister OK replies vs allocated PB registrations");
         UNIT_ASSERT_C(
             pendingWipeBarriers.empty(),
             "unanswered wipe barrier-erase keys: "
@@ -3410,7 +3407,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL_C(0u, error2.GetCode(), FormatError(error2));
     }
 
-    Y_UNIT_TEST(ShouldFailDeleteWhenPBufferEraseIsOverloaded)
+    Y_UNIT_TEST(ShouldSucceedDeleteWhenPBufferEraseIsOverloaded)
     {
         TEnvironmentSetup env{{
             .NodeCount = 8,
@@ -3427,16 +3424,12 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev)
         {
             const ui32 type = ev->GetTypeRewrite();
-            if (type == NDDisk::TEvErasePersistentBuffer::EventType) {
-                const auto& record =
-                    ev->Get<NDDisk::TEvErasePersistentBuffer>()->Record;
-                if (record.GetLsn() == Max<ui64>()) {
-                    wipeCookies.insert({ev->Sender, ev->Cookie});
-                }
+            if (type == NDDisk::TEvUnregisterPersistentBuffer::EventType) {
+                wipeCookies.insert({ev->Sender, ev->Cookie});
                 return true;
             }
             if (!injectOverload ||
-                type != NDDisk::TEvErasePersistentBufferResult::EventType)
+                type != NDDisk::TEvUnregisterPersistentBufferResult::EventType)
             {
                 return true;
             }
@@ -3446,7 +3439,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             if (!wipeCookies.contains(key)) {
                 return true;
             }
-            auto* msg = ev->Get<NDDisk::TEvErasePersistentBufferResult>();
+            auto* msg = ev->Get<NDDisk::TEvUnregisterPersistentBufferResult>();
             if (msg->Record.GetStatus() !=
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OK)
             {
@@ -3468,14 +3461,10 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             __LINE__);
         Y_UNUSED(GetLoadActorAdapterActorId(env, partition, edge));
 
+        // A single OVERLOADED reply is transparently retried by the cleanup
+        // actor, so the delete must still succeed on the first call.
         const auto error = DeletePartition(env, partition, edge);
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            E_REJECTED,
-            error.GetCode(),
-            FormatError(error));
-
-        const auto error2 = DeletePartition(env, partition, edge);
-        UNIT_ASSERT_VALUES_EQUAL_C(0u, error2.GetCode(), FormatError(error2));
+        UNIT_ASSERT_VALUES_EQUAL_C(0u, error.GetCode(), FormatError(error));
     }
 
     Y_UNIT_TEST(ShouldFailDeleteWhenDDiskDeleteChunksIsUndelivered)

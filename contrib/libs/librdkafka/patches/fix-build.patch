@@ -1,0 +1,22 @@
+--- contrib/libs/librdkafka/src/rdkafka.h	(index)
++++ contrib/libs/librdkafka/src/rdkafka.h	(working tree)
+@@ -8202,7 +8202,7 @@ const rd_kafka_TopicPartitionInfo_t **rd_kafka_TopicDescription_partitions(
+  * @return The partition id.
+  */
+ RD_EXPORT
+-const int rd_kafka_TopicPartitionInfo_partition(
++int rd_kafka_TopicPartitionInfo_partition(
+     const rd_kafka_TopicPartitionInfo_t *partition);
+ 
+ 
+--- contrib/libs/librdkafka/src/rdkafka_admin.c	(index)
++++ contrib/libs/librdkafka/src/rdkafka_admin.c	(working tree)
+@@ -8518,7 +8518,7 @@ static void rd_kafka_TopicDescription_free(void *ptr) {
+         rd_kafka_TopicDescription_destroy(ptr);
+ }
+ 
+-const int rd_kafka_TopicPartitionInfo_partition(
++int rd_kafka_TopicPartitionInfo_partition(
+     const rd_kafka_TopicPartitionInfo_t *partition) {
+         return partition->partition;
+ }

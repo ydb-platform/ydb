@@ -79,9 +79,9 @@
             {"Index": 5, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
             {"Index": 6, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"},
             {"Index": 7, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-            {"Index": 8, "Name": "LeftFilter", "Type": "TCoLambda"},
-            {"Index": 9, "Name": "RightFilter", "Type": "TCoLambda"},
-            {"Index": 10, "Name": "CommonFilter", "Type": "TCoLambda"}
+            {"Index": 8, "Name": "LeftFilter", "Type": "TCoLambda", "Optional": true},
+            {"Index": 9, "Name": "RightFilter", "Type": "TCoLambda", "Optional": true},
+            {"Index": 10, "Name": "CommonFilter", "Type": "TCoLambda", "Optional": true}
         ]
     },
     {

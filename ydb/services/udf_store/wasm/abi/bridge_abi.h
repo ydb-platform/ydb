@@ -112,19 +112,40 @@ TBridgeHandle BridgeMakeString(uint64_t srcOff, int64_t len);
 //! Does not consume `inner`, and may return `inner` itself with an added ref
 //! when MiniKQL represents the Optional exactly like its payload.
 TBridgeHandle BridgeMakeOptional(TBridgeHandle inner);
-//! Build a Tuple from an array of handles in linear memory. The result is
-//! typed from the declared result type when that type holds a Tuple of the
-//! same arity; otherwise it stays untyped and BridgeGetElement /
-//! BridgeGetMemberCount on it will fail.
+//! Build a Tuple from an array of handles in linear memory, typed from the
+//! declared result type: the Tuples of this arity it names are the candidates,
+//! and the members pick which one is being built. A member that fits no
+//! candidate is an error naming the slot. Candidates the members cannot tell
+//! apart -- same arity, same member kinds -- leave the result untyped, and
+//! BridgeGetElement / BridgeGetMemberCount on it will fail. Prefer
+//! BridgeMakeArrayTyped when the result nests or repeats same-arity Tuples.
 TBridgeHandle BridgeMakeArray(uint64_t elemsOff, int32_t n);
 //! Same layout and the same typing rule, but the result reads back as a
-//! Struct; members follow the declared member order of the result type.
+//! Struct; members follow the declared member order of the result type. Prefer
+//! BridgeMakeStructTyped when the result nests or repeats same-arity Structs.
 TBridgeHandle BridgeMakeStruct(uint64_t membersOff, int32_t n);
+//! Same inference as BridgeMakeArray for List types in the result. Prefer
+//! BridgeMakeListTyped when the result nests Lists or holds sibling Lists.
 TBridgeHandle BridgeMakeList(uint64_t itemsOff, int32_t n);
 //! Does not consume `item`: the caller still owns the handle it passed in.
 TBridgeHandle BridgeMakeVariant(int32_t index, TBridgeHandle item);
 //! Type of the value the running UDF must return, as a value-less handle.
 TBridgeHandle BridgeGetResultType(void);
+//! Peel one Optional wrapper from a type handle (BridgeGetResultType or a
+//! member reached through BridgeTypeMember / BridgeTypeListItem).
+TBridgeHandle BridgeTypeOptionalItem(TBridgeHandle typeHandle);
+//! Item type of a List type handle.
+TBridgeHandle BridgeTypeListItem(TBridgeHandle typeHandle);
+//! Member / element type of a Struct or Tuple type handle at `index`.
+TBridgeHandle BridgeTypeMember(TBridgeHandle typeHandle, int32_t index);
+//! Build a Tuple of the type named by `typeHandle`, same layout as
+//! BridgeMakeArray. Does not consume `typeHandle`.
+TBridgeHandle BridgeMakeArrayTyped(TBridgeHandle typeHandle, uint64_t elemsOff, int32_t n);
+//! Same as BridgeMakeArrayTyped for a Struct type.
+TBridgeHandle BridgeMakeStructTyped(TBridgeHandle typeHandle, uint64_t membersOff, int32_t n);
+//! Build a List of the type named by `typeHandle`. Does not consume
+//! `typeHandle`.
+TBridgeHandle BridgeMakeListTyped(TBridgeHandle typeHandle, uint64_t itemsOff, int32_t n);
 //! Build a dict of the type named by `typeHandle` (BridgeGetResultType or an
 //! input dict) from 2*n handles laid out as key, payload, key, payload, ...
 TBridgeHandle BridgeMakeDict(TBridgeHandle typeHandle, uint64_t pairsOff, int32_t n);

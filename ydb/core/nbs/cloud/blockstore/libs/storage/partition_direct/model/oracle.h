@@ -88,7 +88,8 @@ class TOracle: public IOracle
 public:
     TOracle(
         TStorageConfigPtr storageConfig,
-        IHostStateController* hostStateController);
+        IHostStateController* hostStateController,
+        const TVector<EHostHealth>& hostHealths);
     ~TOracle() override;
 
     void Think(TInstant now);

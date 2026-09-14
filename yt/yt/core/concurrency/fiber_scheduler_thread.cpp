@@ -1174,7 +1174,8 @@ void BlockThreadUntilSet(TFuture<void> future, std::optional<TInstant> deadline)
 void SuspendFiberUntilSet(TFuture<void> future, IInvokerPtr invoker)
 {
     YT_VERIFY(invoker);
-    YT_VERIFY(!IsContextSwitchForbidden());
+    // NB: Spin-lock affinity and #IsContextSwitchForbidden are verified up front in
+    // WaitUntilSet (before the fast-path early-return), so they are not repeated here.
 
     auto* currentFiber = NDetail::TryGetCurrentFiber();
     if (!currentFiber) {
@@ -1286,12 +1287,16 @@ void WaitUntilSet(TFuture<void> future, TWaitOptions options)
 {
     YT_VERIFY(future);
 
+    // NB: These preconditions should be verified before fast-path to prevent unsafe waits.
+    NThreading::VerifyNoSpinLockAffinity();
+    if (options.Strategy == EWaitForStrategy::SuspendFiber) {
+        YT_VERIFY(!IsContextSwitchForbidden());
+    }
+
     auto mustYield = options.Strategy == EWaitForStrategy::SuspendFiber && options.AlwaysYieldFiber;
     if (future.IsSet() && !mustYield) {
         return;
     }
-
-    NThreading::VerifyNoSpinLockAffinity();
 
     switch (options.Strategy) {
         case EWaitForStrategy::SuspendFiber:

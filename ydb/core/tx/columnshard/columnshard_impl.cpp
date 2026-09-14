@@ -1674,9 +1674,13 @@ public:
                         auto rowset = db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(i.first.GetRawValue(), p).Select();
                         if (!rowset.IsReady()) {
                             reask = true;
-                        } else {
-                            AFL_VERIFY(!rowset.EndOfSet())("path_id", i.first)("portion_id", p)(
+                        } else if (rowset.EndOfSet()) {
+                            // Cleanup erased the rows while the object lingers: only remove-marked portions may lack them.
+                            AFL_VERIFY(itPortionConstructor->second.GetPortionInfo()->HasRemoveSnapshot())("path_id", i.first)("portion_id", p)(
                                 "debug", itPortionConstructor->second.GetPortionInfo()->DebugString(true));
+                            Constructors.erase(itPortionConstructor);
+                            continue;
+                        } else {
                             NOlap::TColumnChunkLoadContextV2 info(rowset, selector);
                             itPortionConstructor->second.SetRecords(std::move(info));
                         }
@@ -1712,6 +1716,10 @@ public:
         }
 
         for (auto&& i : Constructors) {
+            // A portion erased between restarts of this transaction is never revisited and would reach parsing without its records.
+            if (!i.second.IsReady()) {
+                continue;
+            }
             FetchedAccessors.emplace_back(std::move(i.second));
         }
 

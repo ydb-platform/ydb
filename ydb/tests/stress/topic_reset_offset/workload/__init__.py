@@ -4,8 +4,7 @@
 1. Create a topic with N partitions and preload each with mixed-size messages
    (small / medium / large). Each partition is paced on its own schedule so
    write timestamps — and therefore FROM_WRITTEN_AT offsets — differ across
-   partitions. Preload writes enough data that a partition holds several PQ
-   blobs (head compactifies at 8 MiB).
+   partitions. Preload writes enough data that Head compactifies (8 MiB).
 2. For `--duration` seconds rewind consumers independently: each consumer has
    its own reset loop with a random start delay and pause, so rewinds are not
    aligned. Kinds: earliest, latest, a timestamp inside the written range, and
@@ -246,8 +245,10 @@ class Workload:
         )
         return written
 
-    def _assert_several_blobs(self):
-        min_size = min(MAX_PQ_BLOB_SIZE + 1, max(2 * self.large_message_bytes, 2 * MEGABYTE))
+    def _assert_preload_visible(self):
+        # Do not use store_size_bytes as a blob-count proxy: UserDataSize() is 0
+        # until CompactionBlobEncoder has more than one body blob (~16 MiB).
+        # Sanitizer preload writes ~9 MiB, so that metric stays 0 after compactify.
         deadline = time.time() + 15
         problems = ["describe not received"]
         while time.time() < deadline:
@@ -262,13 +263,6 @@ class Workload:
                     "partition %s store_size=%s start=%s end=%s",
                     partition.partition_id, stats.store_size_bytes, stats.partition_start, stats.partition_end,
                 )
-                # One PQ blob is at most 8 MiB. More stored bytes means several blobs
-                # (a 10 MiB message is already multiple formed blobs).
-                if stats.store_size_bytes < min_size:
-                    problems.append(
-                        f"partition={partition.partition_id} store_size={stats.store_size_bytes} "
-                        f"< {min_size} (need several blobs)"
-                    )
                 if stats.partition_end - stats.partition_start < 2:
                     problems.append(
                         f"partition={partition.partition_id} has fewer than 2 messages "
@@ -278,7 +272,7 @@ class Workload:
                 return
             time.sleep(0.5)
         raise AssertionError(
-            "preload did not produce several blobs per partition: " + "; ".join(problems)
+            "preload is not visible in describe_topic: " + "; ".join(problems)
         )
 
     def _preload(self):
@@ -300,7 +294,7 @@ class Workload:
             self.first_write_ts,
             self.last_write_ts,
         )
-        self._assert_several_blobs()
+        self._assert_preload_visible()
 
     def _write_loop(self, writer_id):
         producer_id = f"live-{writer_id}"

@@ -12,10 +12,11 @@ ADDINCL(
     contrib/libs/librdkafka/include
 )
 
-SRCDIR(ydb/tests/functional/kafka)
-
 SRCS(
     helpers.cpp
+)
+
+GLOBAL_SRCS(
     produce_ut.cpp
     consume_ut.cpp
     balance_ut.cpp

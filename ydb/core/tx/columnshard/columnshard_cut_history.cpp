@@ -151,6 +151,10 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
                 for (const auto& [portionId, _] : granule->GetPortions()) {
                     ids.emplace_back(pathId, portionId);
                 }
+                // An uncommitted write keeps its blobs until it commits or aborts, so it pins its range like a committed portion.
+                for (const auto& [_, portion] : granule->GetInsertedPortions()) {
+                    ids.emplace_back(pathId, portion->GetPortionId());
+                }
             }
         }
         CutHistoryCutter->SetPortionSnapshot(std::move(ids));
@@ -164,7 +168,6 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         return;
     }
 
-    // A portion deleted since the sweep started cannot pin blobs in an old group.
     if (!HasIndex()) {
         CutHistoryCutter->OnBatchComplete({}, /*exhausted=*/true, ctx);
         return;
@@ -176,8 +179,9 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         if (!granule) {
             continue;
         }
-        const auto portion = granule->GetPortionOptional(portionId);
-        if (!portion || portion->HasRemoveSnapshot()) {
+        // A removed portion pins its blobs until cleanup erases it; by then they sit in the GC queues that IsDrained checks.
+        const auto portion = granule->GetPortionOptional(portionId, /*committedOnly=*/false);
+        if (!portion) {
             continue;
         }
         portionsMap[pathId].UpsertConsumer(NOlap::NBlobOperations::EConsumer::SCAN).AddPortion(portionId);

@@ -924,13 +924,11 @@ public:
 
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
-#ifdef KQP_WRITE_TABLE_TARGET_SHARD_IDS_CHECK
-        AFL_VERIFY(ev->Sender.NodeId() == SelfId().NodeId())
-            ("shardNodeId", ev->Sender.NodeId())
-            ("localNodeId", SelfId().NodeId())
-            ("shardId", ev->Get()->Record.GetOrigin())
-            ("msg", "CS Write Affinity: shard must be on local node");
-#endif
+        if (ev->Sender.NodeId() == SelfId().NodeId()) {
+            Counters->WriteActorLocalShardWrites->Inc();
+        } else {
+            Counters->WriteActorRemoteShardWrites->Inc();
+        }
         const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
 

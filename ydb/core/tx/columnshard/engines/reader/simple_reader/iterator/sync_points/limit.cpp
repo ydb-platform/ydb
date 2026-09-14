@@ -1,6 +1,6 @@
 #include "limit.h"
 
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/limit_sorted.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/ordered_result_with_limit.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NReader::NSimple {
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 TSyncPointLimitControl::TSyncPointLimitControl(const ui32 limit, const ui32 pointIndex, const std::shared_ptr<TSpecialReadContext>& context,
-    const std::shared_ptr<TScanWithLimitCollection>& collection)
+    const std::shared_ptr<TOrderedResultWithLimitCollection>& collection)
     : TBase(pointIndex, "SYNC_LIMIT", context, collection)
     , Limit(limit)
     , Collection(collection)
@@ -52,7 +52,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
     const NActors::TLogContextGuard verifyContext =
         NActors::TLogContextBuilder::Build()("source_schema", source->GetSourceSchema()->DebugString());
     LWTRACK(LimitSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
-        source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
+        source->GetSourceId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
         source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
     if (FetchedCount >= Limit) {
         return ESourceAction::Finish;

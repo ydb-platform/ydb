@@ -247,11 +247,6 @@ std::string TClientRequest::GetMethod() const
     return FromProto<std::string>(Header_.method());
 }
 
-const std::string& TClientRequest::GetRequestInfo() const
-{
-    return RequestInfo_;
-}
-
 void TClientRequest::DeclareClientFeature(int featureId)
 {
     Header_.add_declared_client_feature_ids(featureId);
@@ -398,9 +393,14 @@ TClientContextPtr TClientRequest::CreateClientContext()
         MemoryUsageTracker_ ? MemoryUsageTracker_ : Channel_->GetChannelMemoryTracker());
 }
 
-void TClientRequest::SetRawRequestInfo(std::string requestInfo)
+NLogging::TLoggingTagListBuilder TClientRequest::Annotate()
 {
-    RequestInfo_ = std::move(requestInfo);
+    return NLogging::TLoggingTagListBuilder(&LoggingTags_);
+}
+
+const NLogging::TLoggingTagList& TClientRequest::GetLoggingTags() const
+{
+    return LoggingTags_;
 }
 
 void TClientRequest::OnPullRequestAttachmentsStream()

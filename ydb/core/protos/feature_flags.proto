@@ -386,8 +386,9 @@ message TFeatureFlags {
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
     optional bool EnableStreamingAggregation = 328 [default = false];
     optional bool EnableTableBackupAsSql = 329 [default = false];
+    optional bool EnableRowDispatcherMemoryLimiting = 330 [default = true];
     // Creates the per-tenant WasmCompileController tablet for new and migrated
     // databases. Without it nothing compiles WASM modules to native code:
     // dinodes only ever compile what this tablet assigns them.
-    optional bool EnableWasmCompileController = 330 [default = false];
+    optional bool EnableWasmCompileController = 331 [default = false];
 }

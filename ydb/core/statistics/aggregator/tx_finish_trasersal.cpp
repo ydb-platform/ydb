@@ -108,6 +108,10 @@ struct TStatisticsAggregator::TTxFinishTraversal : public TTxBase {
 void TStatisticsAggregator::DispatchFinishTraversalTx(
         NKikimrStat::TEvAnalyzeResponse::EStatus status,
         NYql::TIssues issues) {
+    if (FinishingTraversal || (!TraversalPathId && !ForceTraversalOperationId)) {
+        return;
+    }
+    FinishingTraversal = true;
     Execute(
         new TTxFinishTraversal(this, status, std::move(issues)),
         TActivationContext::AsActorContext());

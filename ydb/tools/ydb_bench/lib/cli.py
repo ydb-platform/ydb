@@ -113,21 +113,25 @@ def _benchmark_record(benchmark):
         "defaults": {item.name: list(item.default) for item in benchmark.parameters},
         "affinity_modes": list(AFFINITY_MODES),
         "csv_columns": list(benchmark.csv_columns),
-        "examples": [
-            {
-                benchmark.name: {
-                    "example": (
-                        {
-                            "workload": {"type": "kv", "operation": "upsert"},
-                            "geometry": {"preset": "single"},
-                            "load": {"parameter": "rate", "values": [1000]},
-                        }
-                        if benchmark.profile_kind == "local-ydb"
-                        else {"threads": [1], "duration": 1, "repetitions": 1, "affinity": ["none"]}
-                    )
+        "examples": (
+            []
+            if benchmark.profile_kind == "distributed-ydb"
+            else [
+                {
+                    benchmark.name: {
+                        "example": (
+                            {
+                                "workload": {"type": "kv", "operation": "upsert"},
+                                "geometry": {"preset": "single"},
+                                "load": {"parameter": "rate", "values": [1000]},
+                            }
+                            if benchmark.profile_kind == "local-ydb"
+                            else {"threads": [1], "duration": 1, "repetitions": 1, "affinity": ["none"]}
+                        )
+                    }
                 }
-            }
-        ],
+            ]
+        ),
     }
 
 
@@ -201,6 +205,8 @@ def _run(arguments, resource_loader, tool_revision):
         perf_enabled=arguments.perf,
         perf_frequency=arguments.perf_frequency,
     )
+    if any(configuration.benchmark.executor == "distributed-ydb" for configuration in loaded_config.runs):
+        raise BenchmarkError("distributed-ydb requires the web coordinator; submit this YAML through New run")
     planned_runs = len(loaded_config.runs)
     plan = build_run_plan(loaded_config)
     output_directory = _prepare_output(arguments.output)
@@ -462,6 +468,7 @@ def main(argv=None, resource_loader=None, tool_revision=None):
                 arguments.no_open,
                 arguments.allow_remote,
                 executor=production_executor(resource_loader, revision),
+                resource_loader=resource_loader,
                 perf_available=str(revision.get("build_type", "")).lower() == "profile",
                 binaries_dir=arguments.binaries_dir,
             )

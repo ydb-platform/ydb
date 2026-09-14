@@ -139,12 +139,12 @@ void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
     AFL_VERIFY(!AbortFlag);
     source->MutableAs<IDataSource>()->SetPurposeSyncPointIndex(GetPointIndex());
     AFL_VERIFY(!!source);
-    if (!LastSourceIdx) {
+    // Sources arrive in increasing SourceIdx order, which is what keeps the result stream ordered.
+    // Conflicting sources are scanned first and produce no rows, so they carry no place in that order.
+    if (!source->IsConflicting()) {
+        AFL_VERIFY(!LastSourceIdx || *LastSourceIdx < source->GetSourceIdx())("idx_last", LastSourceIdx)("idx_new", source->GetSourceIdx());
         LastSourceIdx = source->GetSourceIdx();
-    } else {
-        AFL_VERIFY(*LastSourceIdx < source->GetSourceIdx())("idx_last", *LastSourceIdx)("idx_new", source->GetSourceIdx());
     }
-    LastSourceIdx = source->GetSourceIdx();
     if (auto genSource = OnAddSource(source)) {
         genSource->MutableAs<IDataSource>()->StartProcessing(genSource);
     }

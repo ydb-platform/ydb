@@ -356,7 +356,7 @@ NActors::IActor* CreateKafkaReadSessionProxyActor(const TContext::TPtr context, 
 NActors::IActor* CreateKafkaReadSessionActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaBalancerActor(const TContext::TPtr context, ui64 cookie);
 NActors::IActor* CreateKafkaSaslHandshakeActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TSaslHandshakeRequestData>& message);
-NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address);
+NActors::IActor* CreateKafkaSaslAuthActor(const TContext::TPtr context, const NKikimr::NRawSocket::TSocketDescriptor::TSocketAddressType address, TString requestId);
 NActors::IActor* CreateKafkaListOffsetsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TListOffsetsRequestData>& message);
 NActors::IActor* CreateKafkaListGroupsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TListGroupsRequestData>& message);
 NActors::IActor* CreateKafkaDescribeGroupsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TDescribeGroupsRequestData>& message);

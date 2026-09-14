@@ -14,6 +14,14 @@
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
 #include <util/system/hp_timer.h>
+#include <util/generic/scope.h>
+#if defined(__linux__)
+#include "blobstorage_pdisk_test_peer.h"
+#include <ydb/library/pdisk_io/uring_router_test_peer.h>
+#include <ydb/library/pdisk_io/uring_test_support.h>
+#include <thread>
+#include <sys/file.h>
+#endif
 
 namespace NKikimr {
 
@@ -68,6 +76,121 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
         pDisk->Wakeup();
     }
+
+#if defined(__linux__)
+    Y_UNIT_TEST(TestProductionStopRetiresRouterWithRetainedInitResult) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = false;
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        TManualEvent callback, release, joining;
+        std::shared_ptr<NPDisk::TUringRouter> router;
+        ctx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            NPDisk::TPDiskTestPeer::ConfigureRouter(*pdisk, [&](NPDisk::TUringRouter& instance) {
+                NPDisk::NUringPrivate::TRouterHooks hooks;
+                hooks.BeforeTerminalCallback = [&] { callback.Signal(); release.WaitI(); };
+                hooks.BeforeJoin = [&] { joining.Signal(); };
+                NPDisk::TUringRouterTestPeer::SetHooks(instance, std::move(hooks));
+            });
+        });
+        auto init = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0, true), NKikimrProto::OK);
+        UNIT_ASSERT(init->UringRouter);
+        router = std::dynamic_pointer_cast<NPDisk::TUringRouter>(init->UringRouter);
+        UNIT_ASSERT(router);
+        struct TRead : NPDisk::TUringOperationBase {
+            ui32 Completed = 0;
+            ui32 Dropped = 0;
+            void OnComplete(TActorSystem*) noexcept override { ++Completed; }
+            void OnDrop(TActorSystem*) noexcept override { ++Dropped; }
+        } op;
+        alignas(4096) char buffer[4096];
+        auto* pdisk = ctx.GetPDisk();
+        std::atomic<bool> stopped = false;
+        std::thread stop;
+        Y_DEFER {
+            release.Signal();
+            if (stop.joinable()) { stop.join(); }
+        };
+        op.SetOperationType(NPDisk::TUringOperationBase::EREAD);
+        op.PrepareIov(buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(router->Read(&op));
+        callback.WaitI();
+        stop = std::thread([&] { pdisk->Stop(); stopped.store(true); });
+        joining.WaitI();
+        // The native callback owns one inflight operation until released.
+        const bool premature = stopped.load();
+        release.Signal();
+        stop.join();
+        UNIT_ASSERT(!premature);
+        UNIT_ASSERT_VALUES_EQUAL(op.Completed, 1);
+        UNIT_ASSERT_VALUES_EQUAL(op.Dropped, 0);
+        UNIT_ASSERT_VALUES_EQUAL(router->GetInflight(), 0);
+        UNIT_ASSERT(NPDisk::TUringRouterTestPeer::Retired(*router));
+        UNIT_ASSERT(!pdisk->BlockDevice->DuplicateFd().IsOpen());
+        UNIT_ASSERT(!init->UringRouter->Read(&op));
+        UNIT_ASSERT_VALUES_EQUAL(op.Completed, 1);
+        TFile independent(ctx.TestCtx.Path, OpenExisting | RdWr);
+        UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_EX | LOCK_NB), 0);
+        UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_UN), 0);
+    }
+
+    Y_UNIT_TEST(TestUringSampleSinkOutlivesPDiskAndMonitor) {
+        auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
+            TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        auto pdisk = MakeHolder<NPDisk::TPDisk>(std::make_shared<NPDisk::TPDiskCtx>(), cfg,
+            MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        auto sink = pdisk->MakeUringSampleSink();
+        std::weak_ptr<NPDisk::TDeviceOverestimationAggregator> aggregator = pdisk->Mon.DeviceOverestimationMerged;
+        pdisk.Reset();
+        UNIT_ASSERT(!aggregator.expired());
+        NPDisk::TDeviceIoSample sample;
+        sample.Size = 4096;
+        sample.SubmitCycles = 1;
+        sample.CompleteCycles = 2;
+        sink(sample);
+        UNIT_ASSERT_VALUES_EQUAL(aggregator.lock()->ComputeAndReset(0).SampleCount, 1);
+        sink = {};
+        UNIT_ASSERT(aggregator.expired());
+    }
+
+    Y_UNIT_TEST(TestSharedUringRouterFailureNotification) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+        const TActorId recipient = runtime.AllocateEdgeActor();
+
+        auto pCtx = std::make_shared<NPDisk::TPDiskCtx>(runtime.GetActorSystem(0), 12345, recipient);
+        auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
+            TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        auto pDisk = MakeHolder<NPDisk::TPDisk>(pCtx, cfg, counters);
+
+        pDisk->CheckSharedUringRouter();
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId()).empty());
+
+        // No worker or I/O is started, so this also works without kernel io_uring support.
+        pDisk->SharedUringRouter = std::make_shared<NPDisk::TUringRouter>(TFileHandle{}, pCtx->ActorSystem);
+        pDisk->SharedUringRouter->StopAsync(true);
+        UNIT_ASSERT(pDisk->SharedUringRouter->IsBroken());
+        for (ui32 i = 0; i < 3; ++i) {
+            pDisk->CheckSharedUringRouter();
+        }
+
+        auto events = runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId());
+        UNIT_ASSERT_VALUES_EQUAL(events.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(events.front()->GetTypeRewrite(), NPDisk::TEvDeviceError::EventType);
+        UNIT_ASSERT_VALUES_EQUAL(events.front()->Get<NPDisk::TEvDeviceError>()->Info,
+            "shared TUringRouter entered broken state");
+
+        pDisk->CheckSharedUringRouter();
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(recipient.Hint(), recipient.NodeId()).empty());
+    }
+#endif
 
     Y_UNIT_TEST(TestThatEveryValueOfEStateEnumKeepsItIntegerValue) {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

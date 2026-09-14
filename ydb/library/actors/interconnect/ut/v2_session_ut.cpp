@@ -40,11 +40,12 @@ namespace {
         }
     };
 
-    // Collects TEvTestResponse delivered through the normal actor system.
+    // Collects replies and retries definitely undelivered requests with their original payload.
     class TResponseCollectorActor: public TActor<TResponseCollectorActor> {
     public:
-        TResponseCollectorActor()
+        explicit TResponseCollectorActor(const TString& retryPayload = {})
             : TActor(&TThis::StateFunc)
+            , RetryPayload(retryPayload)
         {}
 
         size_t GetCount() const {
@@ -59,7 +60,22 @@ namespace {
     private:
         STRICT_STFUNC(StateFunc,
             hFunc(TEvTestResponse, Handle)
+            hFunc(TEvents::TEvUndelivered, HandleUndelivered)
         )
+
+        void HandleUndelivered(const TEvents::TEvUndelivered::TPtr& ev) {
+            const auto* msg = ev->Get();
+            Y_ABORT_UNLESS(msg->SourceType == TEvTest::EventType);
+            Y_ABORT_UNLESS(msg->Reason == TEvents::TEvUndelivered::Disconnected && !msg->Unsure);
+            // Initial handshake failure is definite nondelivery. Back off while the proxy
+            // leaves its error state, then retry the same request through the actor system.
+            auto request = MakeHolder<TEvTest>(ev->Cookie);
+            if (!RetryPayload.empty()) {
+                request->Record.SetPayload(RetryPayload);
+            }
+            TActivationContext::Schedule(TDuration::MilliSeconds(100), new IEventHandle(
+                ev->Sender, SelfId(), request.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie));
+        }
 
         void Handle(TEvTestResponse::TPtr& ev) {
             {
@@ -69,6 +85,7 @@ namespace {
             Count.fetch_add(1, std::memory_order_release);
         }
 
+        const TString RetryPayload;
         mutable TMutex Lock;
         TVector<ui64> Received;
         std::atomic<size_t> Count = 0;
@@ -298,11 +315,18 @@ namespace {
 
         void Bootstrap() {
             Become(&TThis::StateFunc);
-            Send(TActivationContext::ActorSystem()->InterconnectProxy(PeerNodeId), new TEvInterconnect::TEvConnectNode);
+            Connect();
         }
 
     private:
+        void Connect() {
+            if (!Resolved) {
+                Send(TActivationContext::ActorSystem()->InterconnectProxy(PeerNodeId), new TEvInterconnect::TEvConnectNode);
+            }
+        }
+
         STRICT_STFUNC(StateFunc,
+            cFunc(TEvents::TEvWakeup::EventType, Connect)
             hFunc(TEvInterconnect::TEvNodeConnected, Handle)
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, HandleDisconnected)
         )
@@ -314,7 +338,12 @@ namespace {
             }
         }
 
-        void HandleDisconnected() {}
+        void HandleDisconnected() {
+            if (!Resolved) {
+                // The failed handshake consumed our request; retry within the original deadline.
+                Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup);
+            }
+        }
 
         const ui32 PeerNodeId;
         NThreading::TPromise<std::shared_ptr<IDirectSession>> Promise;
@@ -425,7 +454,8 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
 
         constexpr ui64 N = 32;
         for (ui64 i = 0; i < N; ++i) {
-            cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(echoId, collectorId, new TEvTest(i)));
+            cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(
+                echoId, collectorId, new TEvTest(i), IEventHandle::FlagTrackDelivery, i));
         }
 
         WaitFor(TDuration::Seconds(20), [&] { return collector->GetCount() >= N; },
@@ -489,8 +519,9 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             payload[i] = static_cast<char>('a' + (i % 26));
         }
 
-        const TActorId sender(1, 0, 0xBEEF, 0);
-        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(collectorId, sender, new TEvTest(1, payload)));
+        const TActorId sender = cluster->RegisterActor(new TResponseCollectorActor(payload), 1);
+        cluster->GetNode(1)->GetActorSystem()->Send(new IEventHandle(
+            collectorId, sender, new TEvTest(1, payload), IEventHandle::FlagTrackDelivery, 1));
 
         WaitFor(TDuration::Seconds(20), [&] { return collector->GetCount() >= 1; },
             "large payload event received over v2");
@@ -906,8 +937,10 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         runLoad(2000, "initial load stalled");
         WaitFor(TDuration::Seconds(20), [&] { return monitor->Connects() >= 1; }, "connection observed");
 
+        // Initial connection attempts may already have produced disconnect notifications.
+        const size_t disconnectsBeforeClose = monitor->Disconnects();
         cluster->GetNode(1)->Send(cluster->InterconnectProxy(2, 1), new TEvInterconnect::TEvClosePeerSocket);
-        WaitFor(TDuration::Seconds(20), [&] { return monitor->Disconnects() >= 1; },
+        WaitFor(TDuration::Seconds(20), [&] { return monitor->Disconnects() > disconnectsBeforeClose; },
             "disconnect observed after ClosePeerSocket");
 
         runLoad(2000, "load after ClosePeerSocket stalled -- reconnect broken");
@@ -1013,12 +1046,52 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
         return FromString<ui64>(ExtractPattern(cluster, me, peer, TString(start), "<"));
     }
 
+    Y_UNIT_TEST(ReadBufferShrinksAfterBulkTraffic) {
+        if (!TUringContext::IsAvailable()) {
+            Cerr << "io_uring not available; skipping" << Endl;
+            return;
+        }
+        auto customizer = [](ui32, TInterconnectSettings& settings) {
+            settings.V2.Enable = true;
+            settings.V2.ChecksumEvents = true;
+            settings.EnableExternalDataChannel = false;
+            settings.V2.EnableProvidedBuffers = false;
+            settings.V2.MaxReadBufferSize = 64 * 1024;
+        };
+        TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::EMPTY,
+            {}, TDuration::Seconds(10), TNode::DefaultInflight(), customizer);
+        UNIT_ASSERT(GrabDirectSession(cluster, 1, 2));
+        auto* collector = new TPayloadCollectorActor;
+        const TActorId recipient = cluster.RegisterActor(collector, 2);
+        const TActorId sender(1, 0, 0xBEEF, 0);
+        const TString payload = MakeLoadPayload(1, 1024 * 1024);
+        cluster.GetNode(1)->GetActorSystem()->Send(
+            new IEventHandle(recipient, sender, new TEvTest(0, payload)));
+        WaitFor(TDuration::Seconds(10), [&] { return collector->GetCount() == 1; }, "bulk event received");
+        UNIT_ASSERT_VALUES_EQUAL(collector->GetLastPayload(), payload);
+        UNIT_ASSERT_GT(SessionHtmlCounter(cluster, 2, 1, "ReadBufferSize"), 4096);
+
+        // Wait for each event to arrive before sending the next one so these are
+        // separate short reads, irrespective of TCP's packet coalescing.
+        for (size_t i = 1; i <= 32; ++i) {
+            cluster.GetNode(1)->GetActorSystem()->Send(
+                new IEventHandle(recipient, sender, new TEvTest(i, "small")));
+            WaitFor(TDuration::Seconds(10), [&] { return collector->GetCount() == i + 1; },
+                "small event received");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(cluster, 2, 1, "ReadBufferSize"), 4096);
+        UNIT_ASSERT_LE(SessionHtmlCounter(cluster, 2, 1, "ReadBuffer size"), 4096);
+        UNIT_ASSERT_VALUES_EQUAL(collector->GetLastPayload(), "small");
+    }
+
     Y_UNIT_TEST(XdcPayloadRoundTrip) {
         if (!TUringContext::IsAvailable()) {
             Cerr << "io_uring not available; skipping" << Endl;
             return;
         }
         auto cluster = MakeV2Cluster();
+        // Establish the session before sending an untracked, single-shot payload.
+        UNIT_ASSERT(GrabDirectSession(*cluster, 1, 2));
         auto* collector = new TPayloadCollectorActor;
         const TActorId collectorId = cluster->RegisterActor(collector, 2);
 
@@ -1042,6 +1115,10 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             }
         }, "XDC bytes observed on both sides");
         UNIT_ASSERT_VALUES_EQUAL(SessionHtmlCounter(*cluster, 1, 2, "Params.UseExternalDataChannel"), 1);
+        // Per-socket caps start at the configured max (sndbuf-bounded). A large XDC payload must
+        // not collapse the session window back to 4 KiB.
+        UNIT_ASSERT_GT(SessionHtmlCounter(*cluster, 1, 2, "SerializeWindowSize"), 8192);
+        UNIT_ASSERT_GT(SessionHtmlCounter(*cluster, 1, 2, "SerializeWindowSizeXdc"), 8192);
     }
 
     Y_UNIT_TEST(XdcDisabledStaysOnMain) {
@@ -1059,6 +1136,7 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             TTestICCluster::EMPTY, /*checkerFactory=*/TTestICCluster::TCheckerFactory{},
             TDuration::Seconds(2), /*inflight=*/TNode::DefaultInflight(), customizer);
 
+        UNIT_ASSERT(GrabDirectSession(*cluster, 1, 2));
         auto* collector = new TPayloadCollectorActor;
         const TActorId collectorId = cluster->RegisterActor(collector, 2);
 

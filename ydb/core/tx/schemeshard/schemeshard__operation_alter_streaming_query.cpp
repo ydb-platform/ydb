@@ -202,7 +202,7 @@ class TAlterStreamingQuery : public TSubOperation {
             streamingQuery->ApplyACL(acl);
         }
 
-        context.SS->StreamingQueries[dstPath.Base()->PathId] = queryInfo;
+        context.SS->StreamingQueries.Set(dstPath.Base()->PathId, queryInfo);
     }
 
 public:

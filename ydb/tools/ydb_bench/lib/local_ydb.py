@@ -27,7 +27,8 @@ from ydb.tools.ydb_bench.lib.common import (
     atomic_write_json,
     atomic_write_text,
 )
-from ydb.tools.ydb_bench.lib.linux_telemetry import LinuxCpuMonitor
+from ydb.tools.ydb_bench.lib.linux_telemetry import CPU_METRIC_NAMES, LinuxCpuMonitor
+from ydb.tools.ydb_bench.lib.ydb_telemetry import YdbCountersMonitor
 from ydb.tools.ydb_bench.lib.load_control import evaluate_load, search_load
 from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
     GENERIC_TOTAL_RESULT,
@@ -42,6 +43,7 @@ from ydb.tools.ydb_bench.lib.local_ydb_workloads import (
     workload_result_schema,
 )
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION, write_manifest
+from ydb.tools.ydb_bench.lib.distributed_coordinator import DistributedCleanupError
 from ydb.tools.ydb_bench.lib.runner import run_command, start_managed_process
 from ydb.tools.ydb_bench.lib.system_info import collect_system_info
 from ydb.tools.ydb_bench.lib.topology import CpuTopology, discover_topology, plan_affinity, topology_record
@@ -275,6 +277,7 @@ def _cluster_config(static_nodes, disk_size_gb, hostname=None, actor_system=None
                 "use_auto_config": True,
                 "use_shared_threads": (actor_system or {}).get("use_shared_threads", False),
                 "use_united_pool": (actor_system or {}).get("use_united_pool", False),
+                "use_ring_queue": (actor_system or {}).get("use_ring_queue", True),
             },
         },
     }
@@ -329,6 +332,13 @@ class LocalYdbCluster:
     @property
     def static_pids(self):
         return tuple(process.pid for process in self.static_processes if process.poll() is None)
+
+    def monitoring_nodes(self):
+        return [
+            (role, index, node["mon_port"])
+            for role, nodes in (("static", self.static_nodes), ("dynamic", self.dynamic_nodes))
+            for index, node in enumerate(nodes, 1)
+        ]
 
     @property
     def dynamic_pids(self):
@@ -541,6 +551,14 @@ class LocalYdbCluster:
             if result.interrupted:
                 self._write_attempts("client-discovery", result, attempts)
                 raise BenchmarkInterrupted("YDB client endpoint discovery was interrupted")
+            if (
+                result.exit_code
+                and not result.timed_out
+                and "Status: UNAVAILABLE" in (line.strip() for line in result.stderr.splitlines())
+                and time.monotonic() < deadline
+            ):
+                time.sleep(1)
+                continue
             if result.timed_out or result.exit_code:
                 self._write_attempts("client-discovery", result, attempts)
                 details = result.stderr.strip() or result.stdout.strip() or "no diagnostics"
@@ -584,6 +602,16 @@ class LocalYdbCluster:
     def _node_ports(self):
         return {name: _next_available_port(candidates, name) for name, candidates in self.port_candidates.items()}
 
+    def _node_config(self, role, directory):
+        cpu_count = self.actor_system.get(role, {}).get("cpu_count")
+        if cpu_count is None:
+            return self.config_path
+        config = yaml.safe_load(self.config_path.read_text(encoding="utf-8"))
+        config["config"]["actor_system_config"]["cpu_count"] = cpu_count
+        path = directory / "cluster.yaml"
+        atomic_write_text(path, yaml.safe_dump(config, sort_keys=False))
+        return path
+
     def start(self):
         self._progress("preparing-cluster")
         self.directory.mkdir(parents=True, exist_ok=True)
@@ -602,7 +630,7 @@ class LocalYdbCluster:
                 self.ydbd,
                 "server",
                 "--yaml-config",
-                self.config_path,
+                self._node_config("static_nodes", node_directory),
                 "--node",
                 "static",
                 "--grpc-port",
@@ -706,7 +734,7 @@ class LocalYdbCluster:
                 self.ydbd,
                 "server",
                 "--yaml-config",
-                self.config_path,
+                self._node_config("dynamic_nodes", node_directory),
                 "--tenant",
                 self.database,
                 "--node-broker-port",
@@ -773,10 +801,10 @@ def _command_record(phase, repetition, command, cpu_affinity, result=None):
 def _aggregate_measurements(rows, workload_metrics=None):
     if not rows:
         raise BenchmarkError("cannot aggregate an empty workload measurement")
-    keys = tuple(rows[0])
-    expected_keys = set(keys)
+    keys = tuple(name for name in rows[0] if all(name in row for row in rows))
+    expected_keys = set(rows[0]) - set(CPU_METRIC_NAMES)
     for row in rows[1:]:
-        if set(row) != expected_keys:
+        if set(row) - set(CPU_METRIC_NAMES) != expected_keys:
             raise BenchmarkError("workload repetitions returned inconsistent metric keys")
     if workload_metrics is None:
         workload_metrics = GENERIC_TOTAL_RESULT.metrics
@@ -790,16 +818,7 @@ def _aggregate_measurements(rows, workload_metrics=None):
     return result
 
 
-_EXECUTOR_METRIC_NAMES = (
-    "static_cpu_mean",
-    "static_cpu_max",
-    "dynamic_cpu_mean",
-    "dynamic_cpu_max",
-    "cli_cpu_mean",
-    "cli_cpu_max",
-    "host_cpu_mean",
-    "host_cpu_max",
-)
+_EXECUTOR_METRIC_NAMES = CPU_METRIC_NAMES
 
 
 def _workload_metric_columns(benchmark, workload_metrics):
@@ -822,8 +841,10 @@ def _search_scaling_evidence(result, saturation_percent):
     # selected passing point.
     def dynamic_limited(item):
         return (
-            item.get("dynamic_cpu_mean", 0) >= saturation_percent
-            and item.get("static_cpu_mean", 0) < saturation_percent
+            "dynamic_cpu_mean" in item
+            and "static_cpu_mean" in item
+            and item["dynamic_cpu_mean"] >= saturation_percent
+            and item["static_cpu_mean"] < saturation_percent
         )
 
     failing = attempt_at(result.failing_load)
@@ -916,6 +937,8 @@ class WorkloadLifecycle:
         cancel_event,
         progress,
         command_timeout_seconds=None,
+        metrics_path=None,
+        command_runner=None,
     ):
         self.cluster = cluster
         self.workload_cli = workload_cli
@@ -933,6 +956,8 @@ class WorkloadLifecycle:
         ):
             raise BenchmarkError("workload command timeout must be a positive finite number")
         self.command_timeout_seconds = command_timeout_seconds
+        self.metrics_path = metrics_path
+        self.command_runner = command_runner
         self.definition = workload_definition(workload["type"])
         self._profile_opened = False
         self._profile_closed = False
@@ -1250,8 +1275,14 @@ class WorkloadLifecycle:
                 "cli": _role_capacity(self.affinities["ydb_cli"], self.topology),
             },
         )
+        ydb_monitor = YdbCountersMonitor(
+            self.metrics_path,
+            self.cluster.monitoring_nodes,
+            {**state.fields, "phase": phases["measure"], "repetition": repetition},
+        )
         monitor.start()
         try:
+            ydb_monitor.start()
             plan = build_run_plan(
                 self.workload_cli,
                 state.table_path,
@@ -1279,7 +1310,7 @@ class WorkloadLifecycle:
                 if configured_warmup is not None and warmup != configured_warmup:
                     progress_fields["configured_warmup_seconds"] = configured_warmup
             self.progress(phases["measure"], **progress_fields)
-            result = run_command(
+            result = (self.command_runner or run_command)(
                 plan.argv,
                 {},
                 self._plan_timeout(plan),
@@ -1288,7 +1319,10 @@ class WorkloadLifecycle:
                 on_process_started=lambda process: cli_pids.append(process.pid),
             )
         finally:
-            cpu = monitor.stop()
+            try:
+                cpu = monitor.stop()
+            finally:
+                ydb_monitor.stop()
         self.cluster.ensure_running("YDB process exited during workload measurement")
         commands.append(
             _command_record(
@@ -1338,6 +1372,8 @@ class WorkloadLifecycle:
         }
         if workload_result.details is not None:
             result_artifact["details"] = workload_result.details
+        if window is not None:
+            result_artifact["measurement_window"] = list(window)
         atomic_write_json(state.directory / "workload-result.json", result_artifact)
         collisions = sorted(set(workload_result.metrics).intersection(cpu))
         if collisions:
@@ -1406,10 +1442,11 @@ def run_local_ydb(
     work_dir_hint=None,
     event_sink=None,
     cancel_event=None,
+    runtime=None,
 ):
     """Run a local cluster profile using bundled ``ydbd`` and ``ydb`` executables."""
 
-    if not sys.platform.startswith("linux"):
+    if runtime is None and not sys.platform.startswith("linux"):
         raise BenchmarkError("local YDB benchmarks require Linux")
 
     del work_dir_hint
@@ -1422,8 +1459,11 @@ def run_local_ydb(
     metric_columns = _workload_metric_columns(benchmark, workload_metrics)
     metric_aggregations = {metric.name: metric.repetition_aggregation for metric in workload_metrics}
     topology = discover_topology()
-    affinities = plan_role_affinity(profile["affinity"], topology)
-    _validate_role_affinity(profile["geometry"], affinities)
+    if runtime is None:
+        affinities = plan_role_affinity(profile["affinity"], topology)
+        _validate_role_affinity(profile["geometry"], affinities)
+    else:
+        affinities = {"static_nodes": None, "dynamic_nodes": None, "ydb_cli": None}
     step = {
         "affinity": "roles",
         "background_load": "none",
@@ -1439,10 +1479,7 @@ def run_local_ydb(
         "state": "running",
         "started_at": _utc_now(),
         "tool_revision": tool_revision,
-        "binaries": {
-            name: {"name": binary.path.name, "sha256": binary.sha256, "size": binary.size}
-            for name, binary in binaries.items()
-        },
+        "binaries": {name: binary.manifest_record() for name, binary in binaries.items()},
         "platform": collect_system_info(),
         "cpu_topology": topology_record(topology),
         "parameters": profile,
@@ -1454,6 +1491,10 @@ def run_local_ydb(
         "progress": None,
     }
     manifest_path = output_directory / "run.json"
+    if runtime is not None:
+        manifest["distributed"] = runtime.metadata
+        manifest["coordinator_platform"] = manifest.pop("platform")
+        manifest["coordinator_topology"] = manifest.pop("cpu_topology")
     write_manifest(manifest_path, manifest)
     if event_sink is not None:
         event_sink(
@@ -1498,6 +1539,8 @@ def run_local_ydb(
         return compact
 
     def create_cluster(directory, geometry):
+        if runtime is not None:
+            return runtime.create_cluster(directory, geometry, publish_progress)
         return LocalYdbCluster(
             binaries["ydbd"].path,
             binaries["ydb_cli"].path,
@@ -1512,6 +1555,8 @@ def run_local_ydb(
         )
 
     def create_lifecycle(target_cluster):
+        if runtime is not None:
+            return runtime.create_lifecycle(target_cluster, publish_progress)
         return WorkloadLifecycle(
             target_cluster,
             WorkloadCli(target_cluster.ydb_cli, target_cluster.client_endpoint, target_cluster.database),
@@ -1525,6 +1570,7 @@ def run_local_ydb(
             cancel_event,
             publish_progress,
             command_timeout_seconds=(configuration.timeout_seconds if configuration.timeout_explicit else None),
+            metrics_path=output_directory / "ydb-metrics.jsonl",
         )
 
     cluster = create_cluster(output_directory / "cluster", profile["geometry"])
@@ -1630,6 +1676,8 @@ def run_local_ydb(
             scaling_evidence, scaling_evidence_reason = _search_scaling_evidence(result, saturation_percent)
             compute_limited = (
                 scaling_evidence is not None
+                and "dynamic_cpu_mean" in scaling_evidence
+                and "static_cpu_mean" in scaling_evidence
                 and scaling_evidence["dynamic_cpu_mean"] >= saturation_percent
                 and scaling_evidence["static_cpu_mean"] < saturation_percent
             )
@@ -1688,216 +1736,293 @@ def run_local_ydb(
             )
             cluster.add_dynamic_nodes(new_count - dynamic_nodes)
 
-        summary_rows = benchmark.summarize_metrics(
-            repetition_rows,
-            benchmark,
-            metric_columns,
-            metric_aggregations,
-        )
-        _write_csv(
-            output_directory / "repetitions.csv",
-            repetition_rows,
-            [item.name for item in benchmark.dimensions] + ["repetition"] + metric_columns,
-        )
-        atomic_write_text(
-            output_directory / "summary.csv",
-            benchmark.render_summary(summary_rows, benchmark, metric_columns, metric_aggregations),
-        )
+        def write_search_summary():
+            summary_rows = benchmark.summarize_metrics(
+                repetition_rows,
+                benchmark,
+                metric_columns,
+                metric_aggregations,
+            )
+            _write_csv(
+                output_directory / "repetitions.csv",
+                repetition_rows,
+                [item.name for item in benchmark.dimensions] + ["repetition"] + metric_columns,
+            )
+            atomic_write_text(
+                output_directory / "summary.csv",
+                benchmark.render_summary(summary_rows, benchmark, metric_columns, metric_aggregations),
+            )
+            return summary_rows
 
-        verification_repetitions = profile["measurement"].get("verification_repetitions", 0)
-        selected_load = manifest["result"]["selected_load"]
-        selected_dynamic_nodes = manifest["result"]["dynamic_nodes"]
-        manifest["result"]["metrics_source"] = "search"
-        verification = {
-            "status": "disabled" if verification_repetitions == 0 else "pending",
-            "configured_repetitions": verification_repetitions,
-            "completed_repetitions": 0,
-        }
-        manifest["verification"] = verification
-        if verification_repetitions and selected_load is None:
-            verification.update(
-                {
-                    "status": "skipped",
-                    "reason": "search did not select a feasible load",
-                    "accepted": False,
-                }
+        summary_rows = write_search_summary()
+
+        verification_round = 0
+        while True:
+            verification_repetitions = profile["measurement"].get("verification_repetitions", 0)
+            selected_load = manifest["result"]["selected_load"]
+            selected_dynamic_nodes = manifest["result"]["dynamic_nodes"]
+            manifest["result"]["metrics_source"] = "search"
+            adaptive_verification = (
+                "search" in profile["load"] and profile["load"]["objective"]["type"] == "latency-slo"
             )
-            manifest["result"]["holdout_accepted"] = False
-            write_manifest(manifest_path, manifest)
-        elif verification_repetitions:
-            verification_started_at = _utc_now()
-            verification_started_monotonic = time.monotonic()
-            fresh_verification_cluster = selected_dynamic_nodes != len(cluster.dynamic_nodes)
-            verification.update(
-                {
-                    "status": "running",
-                    "started_at": verification_started_at,
-                    "load": selected_load,
-                    "dynamic_nodes": selected_dynamic_nodes,
-                    "cluster": "fresh" if fresh_verification_cluster else "search",
-                }
-            )
-            write_manifest(manifest_path, manifest)
-            verification_rows = []
-            try:
-                if fresh_verification_cluster:
-                    close_lifecycle()
-                    lifecycle = None
-                    publish_progress(
-                        "restarting-verification-cluster",
-                        search_stage=manifest["result"]["search_stage"],
-                        dynamic_nodes=selected_dynamic_nodes,
-                    )
-                    cluster.stop()
-                    cluster_stopped = True
-                    verification_geometry = {
-                        **profile["geometry"],
-                        "dynamic_nodes": selected_dynamic_nodes,
-                        "max_dynamic_nodes": selected_dynamic_nodes,
-                    }
-                    cluster = create_cluster(output_directory / "verification-cluster", verification_geometry)
-                    cluster_stopped = False
-                    cluster.start()
-                    lifecycle = create_lifecycle(cluster)
-                    lifecycle.open_profile(
-                        output_directory / "verification" / "workload" / "profile",
-                        "ydb_bench_verify_profile",
-                        purpose="verification",
-                        progress_fields={"search_stage": manifest["result"]["search_stage"]},
-                    )
-                    lifecycle.open_geometry(
-                        output_directory / "verification" / "workload" / "geometry",
-                        "ydb_bench_verify_geometry_{:02d}".format(selected_dynamic_nodes),
-                        selected_dynamic_nodes,
-                        progress_fields={"search_stage": manifest["result"]["search_stage"]},
-                        purpose="verification",
-                    )
-                dynamic_nodes = selected_dynamic_nodes
-                for repetition in range(1, verification_repetitions + 1):
-                    directory = output_directory / "verification" / "repeat-{:03d}".format(repetition)
-                    table_path = "ydb_bench_verify_{}_{}_{}".format(dynamic_nodes, selected_load, repetition)
-                    metrics, commands = lifecycle.run_sample(
-                        selected_load,
-                        dynamic_nodes,
-                        repetition,
-                        verification_repetitions,
-                        directory,
-                        table_path,
-                        {
-                            "search_stage": manifest["result"]["search_stage"],
-                            "verification": True,
-                            "dynamic_nodes": dynamic_nodes,
-                            "parameter": profile["load"]["parameter"],
-                            "load": selected_load,
-                        },
-                        purpose="verification",
-                    )
-                    atomic_write_json(directory / "commands.json", commands)
-                    verification["completed_repetitions"] = repetition
-                    verification_rows.append(metrics)
-                    _write_csv(
-                        output_directory / "verification-repetitions.csv",
-                        verification_rows,
-                        [item.name for item in benchmark.dimensions] + ["repetition"] + metric_columns,
-                    )
-                    partial_summary = benchmark.summarize_metrics(
-                        verification_rows,
-                        benchmark,
-                        metric_columns,
-                        metric_aggregations,
-                    )
-                    atomic_write_text(
-                        output_directory / "verification-summary.csv",
-                        benchmark.render_summary(
-                            partial_summary,
-                            benchmark,
-                            metric_columns,
-                            metric_aggregations,
-                        ),
-                    )
-                    verification.update(
-                        {
-                            "repetitions_file": "verification-repetitions.csv",
-                            "summary_file": "verification-summary.csv",
-                        }
-                    )
-                    publish_progress(
-                        "verification-evaluating",
-                        verification={
-                            "status": "running",
-                            "configured_repetitions": verification_repetitions,
-                            "completed_repetitions": repetition,
-                        },
-                    )
-            except BaseException as error:
+            if adaptive_verification:
+                manifest["result"]["verification_mode"] = "adaptive"
+            verification = {
+                "status": "disabled" if verification_repetitions == 0 else "pending",
+                "adaptive": adaptive_verification,
+                "configured_repetitions": verification_repetitions,
+                "completed_repetitions": 0,
+            }
+            manifest["verification"] = verification
+            if verification_repetitions and selected_load is None:
                 verification.update(
                     {
-                        "status": (
-                            "cancelled" if isinstance(error, (BenchmarkInterrupted, KeyboardInterrupt)) else "failed"
-                        ),
-                        "finished_at": _utc_now(),
-                        "duration_seconds": time.monotonic() - verification_started_monotonic,
-                        "error": str(error),
+                        "status": "skipped",
+                        "reason": "search did not select a feasible load",
+                        "accepted": False,
+                    }
+                )
+                manifest["result"]["holdout_accepted"] = False
+                write_manifest(manifest_path, manifest)
+            elif verification_repetitions:
+                verification_started_at = _utc_now()
+                verification_started_monotonic = time.monotonic()
+                fresh_verification_cluster = selected_dynamic_nodes != len(cluster.dynamic_nodes)
+                verification.update(
+                    {
+                        "status": "running",
+                        "started_at": verification_started_at,
+                        "load": selected_load,
+                        "dynamic_nodes": selected_dynamic_nodes,
+                        "cluster": "fresh" if fresh_verification_cluster else "search",
                     }
                 )
                 write_manifest(manifest_path, manifest)
-                raise
+                verification_rows = []
+                try:
+                    if fresh_verification_cluster:
+                        close_lifecycle()
+                        lifecycle = None
+                        publish_progress(
+                            "restarting-verification-cluster",
+                            search_stage=manifest["result"]["search_stage"],
+                            dynamic_nodes=selected_dynamic_nodes,
+                        )
+                        cluster.stop()
+                        cluster_stopped = True
+                        verification_geometry = {
+                            **profile["geometry"],
+                            "dynamic_nodes": selected_dynamic_nodes,
+                            "max_dynamic_nodes": selected_dynamic_nodes,
+                        }
+                        cluster = create_cluster(output_directory / "verification-cluster", verification_geometry)
+                        cluster_stopped = False
+                        cluster.start()
+                        lifecycle = create_lifecycle(cluster)
+                        lifecycle.open_profile(
+                            output_directory / "verification" / "workload" / "profile",
+                            "ydb_bench_verify_profile",
+                            purpose="verification",
+                            progress_fields={"search_stage": manifest["result"]["search_stage"]},
+                        )
+                        lifecycle.open_geometry(
+                            output_directory / "verification" / "workload" / "geometry",
+                            "ydb_bench_verify_geometry_{:02d}".format(selected_dynamic_nodes),
+                            selected_dynamic_nodes,
+                            progress_fields={"search_stage": manifest["result"]["search_stage"]},
+                            purpose="verification",
+                        )
+                    dynamic_nodes = selected_dynamic_nodes
+                    for repetition in range(1, verification_repetitions + 1):
+                        directory = output_directory / "verification" / "repeat-{:03d}".format(repetition)
+                        table_path = "ydb_bench_verify_{}_{}_{}".format(dynamic_nodes, selected_load, repetition)
+                        metrics, commands = lifecycle.run_sample(
+                            selected_load,
+                            dynamic_nodes,
+                            repetition,
+                            verification_repetitions,
+                            directory,
+                            table_path,
+                            {
+                                "search_stage": manifest["result"]["search_stage"],
+                                "verification": True,
+                                "dynamic_nodes": dynamic_nodes,
+                                "parameter": profile["load"]["parameter"],
+                                "load": selected_load,
+                            },
+                            purpose="verification",
+                        )
+                        atomic_write_json(directory / "commands.json", commands)
+                        verification.setdefault("commands", []).extend(commands)
+                        verification["completed_repetitions"] = repetition
+                        verification_rows.append(metrics)
+                        _write_csv(
+                            output_directory / "verification-repetitions.csv",
+                            verification_rows,
+                            [item.name for item in benchmark.dimensions] + ["repetition"] + metric_columns,
+                        )
+                        partial_summary = benchmark.summarize_metrics(
+                            verification_rows,
+                            benchmark,
+                            metric_columns,
+                            metric_aggregations,
+                        )
+                        atomic_write_text(
+                            output_directory / "verification-summary.csv",
+                            benchmark.render_summary(
+                                partial_summary,
+                                benchmark,
+                                metric_columns,
+                                metric_aggregations,
+                            ),
+                        )
+                        verification.update(
+                            {
+                                "repetitions_file": "verification-repetitions.csv",
+                                "summary_file": "verification-summary.csv",
+                            }
+                        )
+                        publish_progress(
+                            "verification-evaluating",
+                            verification={
+                                "status": "running",
+                                "configured_repetitions": verification_repetitions,
+                                "completed_repetitions": repetition,
+                            },
+                        )
+                except BaseException as error:
+                    verification.update(
+                        {
+                            "status": (
+                                "cancelled"
+                                if isinstance(error, (BenchmarkInterrupted, KeyboardInterrupt))
+                                else "failed"
+                            ),
+                            "finished_at": _utc_now(),
+                            "duration_seconds": time.monotonic() - verification_started_monotonic,
+                            "error": str(error),
+                        }
+                    )
+                    write_manifest(manifest_path, manifest)
+                    raise
 
-            verified_metrics = _aggregate_measurements(
-                [
-                    {name: value for name, value in row.items() if name not in ("passed", "decision")}
-                    for row in verification_rows
-                ],
-                workload_metrics,
-            )
-            verified_metrics.pop("repetition", None)
-            accepted, decision = evaluate_load(profile["load"], selected_load, verified_metrics)
-            selected_throughput = (manifest["result"].get("selected_metrics") or {}).get("throughput")
-            if selected_throughput:
-                throughput_delta_percent = (verified_metrics["throughput"] / selected_throughput - 1.0) * 100.0
-            elif selected_throughput == 0 and verified_metrics["throughput"] == 0:
-                throughput_delta_percent = 0.0
-            else:
-                throughput_delta_percent = None
-            objective = profile["load"].get("objective", {})
-            evaluation_kind = "objective" if objective.get("type") == "latency-slo" else "validity"
-            target_role = objective.get("target_role")
-            saturation_percent = objective.get("cpu_saturation_percent", 95)
-            saturation_metric = {
-                "static": "static_cpu_mean",
-                "dynamic": "dynamic_cpu_mean",
-                "total": "host_cpu_mean",
-            }.get(target_role)
-            saturated_repetitions = (
-                sum(row[saturation_metric] >= saturation_percent for row in verification_rows)
-                if saturation_metric
-                else 0
-            )
-            verification.update(
-                {
-                    "status": "completed",
-                    "finished_at": _utc_now(),
-                    "duration_seconds": time.monotonic() - verification_started_monotonic,
-                    "accepted": accepted,
-                    "evaluation_kind": evaluation_kind,
-                    "decision": decision,
-                    "throughput_delta_percent": throughput_delta_percent,
-                }
-            )
-            if saturation_metric:
-                verification["saturated_repetitions"] = saturated_repetitions
-            manifest["result"].update(
-                {
-                    "verified_metrics": verified_metrics,
-                    "metrics_source": "verification",
-                    "holdout_accepted": accepted,
-                }
-            )
+                verified_metrics = _aggregate_measurements(
+                    [
+                        {name: value for name, value in row.items() if name not in ("passed", "decision")}
+                        for row in verification_rows
+                    ],
+                    workload_metrics,
+                )
+                verified_metrics.pop("repetition", None)
+                accepted, decision = evaluate_load(profile["load"], selected_load, verified_metrics)
+                selected_throughput = (manifest["result"].get("selected_metrics") or {}).get("throughput")
+                if selected_throughput:
+                    throughput_delta_percent = (verified_metrics["throughput"] / selected_throughput - 1.0) * 100.0
+                elif selected_throughput == 0 and verified_metrics["throughput"] == 0:
+                    throughput_delta_percent = 0.0
+                else:
+                    throughput_delta_percent = None
+                objective = profile["load"].get("objective", {})
+                evaluation_kind = "objective" if objective.get("type") == "latency-slo" else "validity"
+                target_role = objective.get("target_role")
+                saturation_percent = objective.get("cpu_saturation_percent", 95)
+                saturation_metric = {
+                    "static": "static_cpu_mean",
+                    "dynamic": "dynamic_cpu_mean",
+                    "total": "host_cpu_mean",
+                }.get(target_role)
+                saturated_repetitions = (
+                    sum(row[saturation_metric] >= saturation_percent for row in verification_rows)
+                    if saturation_metric
+                    else 0
+                )
+                verification.update(
+                    {
+                        "status": "completed",
+                        "finished_at": _utc_now(),
+                        "duration_seconds": time.monotonic() - verification_started_monotonic,
+                        "accepted": accepted,
+                        "evaluation_kind": evaluation_kind,
+                        "decision": decision,
+                        "throughput_delta_percent": throughput_delta_percent,
+                    }
+                )
+                if saturation_metric:
+                    verification["saturated_repetitions"] = saturated_repetitions
+                manifest["result"].update(
+                    {
+                        "verified_metrics": verified_metrics,
+                        "metrics_source": "verification",
+                        "holdout_accepted": accepted,
+                    }
+                )
+                publish_progress(
+                    "verification-completed",
+                    result=compact_result_progress(),
+                    verification={key: value for key, value in verification.items() if key != "commands"},
+                )
+
+            if not (
+                "search" in profile["load"]
+                and profile["load"]["objective"]["type"] == "latency-slo"
+                and verification.get("status") == "completed"
+                and not verification["accepted"]
+            ):
+                break
+
+            verification_round += 1
+            rejected_directory = output_directory / "verification-rejected-{:03d}".format(verification_round)
+            (output_directory / "verification").rename(rejected_directory)
+            for filename in ("verification-summary.csv", "verification-repetitions.csv"):
+                (output_directory / filename).rename(rejected_directory / filename)
+            rejected = {
+                **verification,
+                "directory": str(rejected_directory.relative_to(output_directory)),
+                "summary_file": str((rejected_directory / "verification-summary.csv").relative_to(output_directory)),
+                "repetitions_file": str(
+                    (rejected_directory / "verification-repetitions.csv").relative_to(output_directory)
+                ),
+            }
+            manifest.setdefault("rejected_verifications", []).append(rejected)
+            search_stage = manifest["result"]["search_stage"]
+            selected_attempt = manifest["result"]["selected_metrics"]["attempt"]
+            for attempt in manifest["attempts"]:
+                if attempt["attempt"] == selected_attempt:
+                    attempt["passed"] = False
+                    attempt["decision"] = "verification rejected: " + verification["decision"]
+                    attempt["verification_rejected"] = True
+                    attempt["verification_metrics"] = verified_metrics
             publish_progress(
-                "verification-completed",
-                result=compact_result_progress(),
-                verification=verification,
+                "resuming-search",
+                search_stage=search_stage,
+                dynamic_nodes=selected_dynamic_nodes,
+                load=selected_load,
+                reason=verification["decision"],
             )
+            # Verification may have restored the winning geometry from an earlier stage.
+            dynamic_nodes = selected_dynamic_nodes
+            geometry_directory = output_directory / "dynamic-nodes-{:02d}".format(dynamic_nodes)
+            previous_attempts = [item for item in manifest["attempts"] if item["search_stage"] == search_stage]
+            result = search_load(profile["load"], measure, on_attempt=on_attempt, previous_attempts=previous_attempts)
+            selected = next((item for item in result.attempts if item["load"] == result.selected_load), None)
+            updated = {
+                "outcome": result.outcome,
+                "selected_load": result.selected_load,
+                "selected_metrics": selected,
+                "passing_load": result.passing_load,
+                "failing_load": result.failing_load,
+                "stop_reason": result.stop_reason,
+            }
+            manifest["result"].update(updated)
+            manifest["result"].pop("verified_metrics", None)
+            manifest["result"].pop("holdout_accepted", None)
+            manifest["result"]["metrics_source"] = "search"
+            for search_record in manifest["searches"]:
+                if search_record["stage"] == search_stage:
+                    search_record.update(updated)
+            write_manifest(manifest_path, manifest)
+
+        summary_rows = write_search_summary()
 
         close_lifecycle()
         publish_progress("stopping-cluster", result=compact_result_progress())
@@ -1920,12 +2045,18 @@ def run_local_ydb(
                 "run.json",
                 "summary.csv",
                 "repetitions.csv",
-                "cluster/cluster.yaml",
+                "cluster/cluster.yaml" if runtime is None else "cluster/execution-plan.json",
             ]
+            if (output_directory / "ydb-metrics.jsonl").is_file():
+                artifacts.append("ydb-metrics.jsonl")
             if verification["status"] == "completed":
                 artifacts += ["verification-summary.csv", "verification-repetitions.csv"]
                 if verification.get("cluster") == "fresh":
-                    artifacts.append("verification-cluster/cluster.yaml")
+                    artifacts.append(
+                        "verification-cluster/cluster.yaml"
+                        if runtime is None
+                        else "verification-cluster/execution-plan.json"
+                    )
             event_sink(
                 {
                     "type": "step-artifacts",
@@ -1992,4 +2123,9 @@ def run_local_ydb(
             close_lifecycle(primary_error=sys.exc_info()[1])
         finally:
             if not cluster_stopped:
-                cluster.stop()
+                try:
+                    cluster.stop()
+                except DistributedCleanupError as error:
+                    manifest.update(state="recovery_required", status="recovery_required", error=str(error))
+                    write_manifest(manifest_path, manifest)
+                    raise

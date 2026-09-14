@@ -1052,6 +1052,45 @@
             "ListBase" : "TKqpOpAggregationTraits"
         },
         {
+            "Name": "TKqpOpWindowFunc",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "Function", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Kind", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Arguments", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TKqpOpWindowFuncList",
+            "ListBase": "TKqpOpWindowFunc"
+        },
+        {
+            "Name": "TKqpOpWindowFrame",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "FrameType", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "BeginKind", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "BeginValue", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "EndKind", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "EndValue", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKqpOpWindow",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpWindow"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "WindowFuncs", "Type": "TKqpOpWindowFuncList"},
+                {"Index": 2, "Name": "PartitionKeys", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "SortExpressions", "Type": "TKqpOpSortList"},
+                {"Index": 4, "Name": "Frame", "Type": "TKqpOpWindowFrame"}
+            ]
+        },
+        {
             "Name": "TKqpOpAggregate",
             "Base": "TCallable",
             "Match" : {"Type": "Callable", "Name": "KqpOpAggregate"},

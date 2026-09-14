@@ -23,23 +23,32 @@ private:
         WriteArtifactChunk,
         UpsertModuleArtifact,
         UpdateMetaReady,
+        VerifyStillCurrent,
+        DeleteStaleArtifactChunks,
+        DeleteStaleArtifacts,
+        ConfirmStillCurrent,
         UpdateMetaFailed,
     };
 
     NActors::TActorId ReplyTo_;
-    TString Md5_;
+    TString Name_;
     TString Manifest_;
     TString CpuSpec_;
     TString ModulesTablePath_;
     TString ModuleChunksTablePath_;
     TString ArtifactTablePath_;
     TString ArtifactChunksTablePath_;
+    //! Uid of every required library as of the snapshot this compile was
+    //! queued from: library artifacts are keyed by uid, and this actor never
+    //! reads the library rows itself.
+    THashMap<TString, TString> LibraryUids_;
 
     EStep Step_ = EStep::ReadModuleSource;
     NTableQuery::TModuleSourceRow ModuleSource_;
     NWasm::TWasmManifest ParsedManifest_;
     size_t NextLibraryIndex_ = 0;
     TString PendingLibraryName_;
+    TString PendingLibraryUid_;
     TString ModuleKind_;
     NTableQuery::TWasmArtifactRow ArtifactRow_;
     TVector<NTableQuery::TPendingChunkWrite> PendingChunkWrites_;
@@ -63,21 +72,23 @@ private:
 public:
     TWasmCompileActor(
         const NActors::TActorId& replyTo,
-        const TString& md5,
+        const TString& name,
         const TString& manifest,
         const TString& cpuSpec,
         const TString& modulesTablePath,
         const TString& moduleChunksTablePath,
         const TString& artifactTablePath,
-        const TString& artifactChunksTablePath)
+        const TString& artifactChunksTablePath,
+        THashMap<TString, TString> libraryUids)
         : ReplyTo_(replyTo)
-        , Md5_(md5)
+        , Name_(name)
         , Manifest_(manifest)
         , CpuSpec_(cpuSpec)
         , ModulesTablePath_(modulesTablePath)
         , ModuleChunksTablePath_(moduleChunksTablePath)
         , ArtifactTablePath_(artifactTablePath)
         , ArtifactChunksTablePath_(artifactChunksTablePath)
+        , LibraryUids_(std::move(libraryUids))
     {}
 
     void Bootstrap();

@@ -439,13 +439,13 @@ void TBaseCloudAuthRequestProxy::Authorize() {
         signature.SignedAt = AccessKeySignature_->SignedAt;
         request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithSignature{
             .Signature = std::move(signature),
-            .PeerName = SourceAddress_,
+            .TraceContext = {SourceAddress_, RequestId_},
             .Entries = entries,
         });
     } else {
         request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
             .Ticket = IamToken_,
-            .PeerName = SourceAddress_,
+            .TraceContext = {SourceAddress_, RequestId_},
             .Entries = entries,
         });
     }

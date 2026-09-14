@@ -368,6 +368,13 @@ void TPDisk::Stop() {
         {"marker", "BPD01"},
         {"ownerInfo", StartupOwnerInfo()});
 
+#if defined(__linux__)
+    if (SharedUringRouter) {
+        SharedUringRouter->StopSync();
+        SharedUringRouter.reset();
+    }
+#endif
+
     BlockDevice->Stop();
 
     // BlockDevice is stopped, the data will NOT hit the disk.
@@ -2057,6 +2064,118 @@ TOwner TPDisk::FindNextOwnerId() {
     return LastOwnerId;
 }
 
+void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs) {
+    if (SharedUringCreateAttempted) {
+        return;
+    }
+    SharedUringCreateAttempted = true;
+
+#if defined(__linux__)
+    TUringRouterConfig config;
+    config.IdleSpinUs = idleSpinUs;
+
+    TFileHandle fd = BlockDevice->DuplicateFd();
+    if (!fd.IsOpen()) {
+        YDB_LOG_P_LOG(PRI_INFO, "Shared UringRouter not created: no duplicable disk fd",
+            {"marker", "BPD94"});
+        Mon.FallbackPDiskCount->Inc();
+        return;
+    }
+    if (!TUringRouter::Probe(config)) {
+        YDB_LOG_P_LOG(PRI_INFO, "Shared UringRouter not created: io_uring probe failed",
+            {"marker", "BPD95"});
+        Mon.FallbackPDiskCount->Inc();
+        return;
+    }
+
+    TUringCounters counters;
+    counters.CompletionThreadCPU = Mon.UringCompletionThreadCPU;
+    counters.CompletionThreadBusyTimeNs = Mon.UringCompletionThreadBusyTimeNs;
+
+    auto router = std::make_shared<TUringRouter>(
+        std::move(fd),
+        PCtx->ActorSystem,
+        config,
+        std::move(counters));
+    if (ConfigureRouterForTest) {
+        ConfigureRouterForTest(*router);
+    }
+    router->RegisterFile();
+
+    router->SetSampleSink(MakeUringSampleSink());
+
+    router->Start();
+
+    if (router->IsBroken()) {
+        YDB_LOG_P_LOG(PRI_WARN, "Shared UringRouter not created: startup failed, falling back to PDisk I/O",
+            {"marker", "BPD99"});
+        Mon.FallbackPDiskCount->Inc();
+        return;
+    }
+
+    if (!router->IsFileRegistered()) {
+        YDB_LOG_P_LOG(PRI_WARN, "failed to register fixed file for io_uring",
+            {"marker", "BPD96"},
+            {"errno", router->GetRegisterFileErrno()});
+    }
+
+    if (router->GetUringFavor() != EUringFavor::SingleIssuer) {
+        YDB_LOG_P_LOG(PRI_WARN, "io_uring mode fallback",
+            {"marker", "BPD97"},
+            {"actualFavor", "Plain"});
+        Mon.FallbackUringCount->Inc();
+    } else {
+        Mon.RegularUringCount->Inc();
+    }
+
+    YDB_LOG_P_LOG(PRI_INFO, "started shared io_uring router",
+        {"marker", "BPD98"},
+        {"config", router->GetConfig().ToString()});
+
+    SharedUringRouter = std::move(router);
+#else
+    Mon.FallbackPDiskCount->Inc();
+#endif
+}
+
+#if defined(__linux__)
+TDeviceIoSampleSink TPDisk::MakeUringSampleSink() const {
+    const ui64 readBps = DriveModel.Speed(TDriveModel::OP_TYPE_READ);
+    const ui64 writeBps = DriveModel.Speed(TDriveModel::OP_TYPE_WRITE);
+    auto sampleAgg = Mon.DeviceOverestimationMerged;
+    return [readBps, writeBps, sampleAgg](const TDeviceIoSample& sample) {
+        TDeviceIoSample s = sample;
+        const ui64 speed = s.IsWrite ? writeBps : readBps;
+        s.BaseCostNs = speed ? s.Size * 1'000'000'000ull / speed : 0;
+        sampleAgg->Push(s);
+    };
+}
+#endif
+
+void TPDisk::CheckSharedUringRouter() {
+#if defined(__linux__)
+    if (!SharedUringRouter || SharedUringFailureReported || !SharedUringRouter->IsBroken()) {
+        return;
+    }
+    SharedUringFailureReported = true;
+    PCtx->ActorSystem->Send(PCtx->PDiskActor,
+        new TEvDeviceError("shared TUringRouter entered broken state"));
+#endif
+}
+
+void TPDisk::AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result) {
+    if (!evYardInit.GetUringRouterClient) {
+        return;
+    }
+
+    EnsureSharedUringRouter(evYardInit.UringIdleSpinUs);
+#if defined(__linux__)
+    result.UringRouter = SharedUringRouter;
+#else
+    Y_UNUSED(result);
+#endif
+}
+
 bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     // Just register cut log id and reply with starting points.
     TVDiskID vDiskId = evYardInit.VDiskIdWOGeneration();
@@ -2098,9 +2217,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
         delete ptr;
     });
-    if (evYardInit.GetDiskFd) {
-        result->DiskFd = BlockDevice->DuplicateFd();
-    }
+    AttachSharedUringRouter(evYardInit, *result);
     ownerData.VDiskId = vDiskId;
     ownerData.CutLogId = evYardInit.CutLogId;
     ownerData.WhiteboardProxyId = evYardInit.WhiteboardProxyId;
@@ -2272,10 +2389,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
     result->DiskFormat = TDiskFormatPtr(new TDiskFormat(Format), +[](TDiskFormat* ptr) {
         delete ptr;
     });
-    if (evYardInit.GetDiskFd) {
-        result->DiskFd = BlockDevice->DuplicateFd();
-
-    }
+    AttachSharedUringRouter(evYardInit, *result);
     WriteSysLogRestorePoint(new TCompletionEventSender(
         this, evYardInit.Sender, result.Release(), Mon.YardInit.Results), evYardInit.ReqId, {});
 
@@ -2927,7 +3041,7 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestYardInit: {
                 std::unique_ptr<TYardInit> init{static_cast<TYardInit*>(req.release())};
                 if (YardInitStart(*init)) {
-                    PendingYardInits.emplace(std::move(init));
+                    PendingYardInits.emplace_back(std::move(init));
                 }
                 break;
             }
@@ -2964,6 +3078,7 @@ void TPDisk::ProcessFastOperationsQueue() {
                 break;
             }
             case ERequestType::RequestWhiteboartReport:
+                CheckSharedUringRouter();
                 WhiteboardReport(static_cast<TWhiteboardReport&>(*req));
                 break;
             case ERequestType::RequestHttpInfo:
@@ -4046,7 +4161,7 @@ void TPDisk::ProcessPausedQueue() {
     }
 }
 
-void TPDisk::ProcessYardInitSet() {
+void TPDisk::ProcessPendingYardInits() {
     for (ui32 owner = 0; owner < OwnerData.size(); ++owner) {
         TOwnerData &data = OwnerData[owner];
         if (data.LogReader) {
@@ -4059,7 +4174,7 @@ void TPDisk::ProcessYardInitSet() {
 
     if (!PendingYardInits.empty()) {
         TGuard<TMutex> guard(StateMutex);
-        // Process pending queue
+        // Finish ready owners in arrival order without blocking them on busy owners.
         for (auto it = PendingYardInits.begin(); it != PendingYardInits.end();) {
             if (!OwnerData[(*it)->Owner].HaveRequestsInFlight()) {
                 YardInitFinish(**it);
@@ -4372,7 +4487,7 @@ void TPDisk::Update() {
     ProcessChunkForgetQueue();
     LastTact = tact;
 
-    ProcessYardInitSet();
+    ProcessPendingYardInits();
 
     Mon.UpdateDurationTracker.WaitingStart(isNothingToDo);
     LWTRACK(PDiskStartWaiting, UpdateCycleOrbit, PCtx->PDiskId);

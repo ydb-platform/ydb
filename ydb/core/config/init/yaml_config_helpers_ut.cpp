@@ -94,4 +94,31 @@ config:
         UNIT_ASSERT(config.HasLogConfig());
         UNIT_ASSERT_VALUES_EQUAL(config.GetLogConfig().GetDefaultLevel(), 3);
     }
+
+    Y_UNIT_TEST(ParseJsonConfig_AllowUnknownFields) {
+        auto json = LoadYamlAsJsonOrThrow(minimalValidConfig, "test.yaml");
+        json["config"]["fake_field"] = 123;
+        json["config"]["log_config"]["fake_field"] = 456;
+        json["config"]["log_config"]["default_level"] = 3;
+
+        NKikimrConfig::TAppConfig config;
+        UNIT_ASSERT_NO_EXCEPTION(ParseJsonConfigOrThrow(json, "test.yaml", config, true));
+        UNIT_ASSERT_VALUES_EQUAL(config.GetLogConfig().GetDefaultLevel(), 3);
+    }
+
+    Y_UNIT_TEST(ParseJsonConfig_AllowUnknownFieldsRejectsInvalidKnownField) {
+        auto json = LoadYamlAsJsonOrThrow(minimalValidConfig, "test.yaml");
+        json["config"]["fake_field"] = 123;
+        json["config"]["log_config"]["entry"].AppendValue("not-a-map");
+
+        NKikimrConfig::TAppConfig config;
+        try {
+            ParseJsonConfigOrThrow(json, "test.yaml", config, true);
+            UNIT_FAIL("Expected invalid value error");
+        } catch (const TInitializationException& e) {
+            AssertErrorCode(e, "YDBE-10003");
+            UNIT_ASSERT_STRING_CONTAINS(e.what(), "/config/log_config/entry/0");
+            UNIT_ASSERT_STRING_CONTAINS(e.what(), "expected json map");
+        }
+    }
 }

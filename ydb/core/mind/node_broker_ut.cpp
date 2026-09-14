@@ -133,9 +133,7 @@ void SetupServices(TTestActorRuntime &runtime,
         SubstGlobal(staticConfig, "$Node1", Sprintf("%" PRIu32, runtime.GetNodeId(0)));
 
         TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig =
-            new TNodeWardenConfig(STRAND_PDISK && !runtime.IsRealThreads()
-                                  ? static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime))
-                                  : static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory()));
+            new TNodeWardenConfig();
         google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig->MutableServiceSet());
 
         TIntrusivePtr<TNodeWardenConfig> existingNodeWardenConfig = NodeWardenConfigs[nodeIndex];
@@ -204,6 +202,7 @@ void SetupServices(TTestActorRuntime &runtime,
     // distconf, which is incidental to the node broker / nameservice under test.
     app.FeatureFlags.SetForceDistconfDisable(forceDistconfDisable);
 
+    SetupPDiskSubsystem(&runtime, STRAND_PDISK);
     runtime.Initialize(app.Unwrap());
 
     runtime.GetAppData().DynamicNameserviceConfig = new TDynamicNameserviceConfig;

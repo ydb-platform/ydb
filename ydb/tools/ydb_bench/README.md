@@ -9,12 +9,13 @@ build types store stripped server and CLI binaries to keep the bundle compact:
 ./ya make --build=profile ydb/tools/ydb_bench
 ```
 
-The tool provides four benchmarks:
+The tool provides five benchmarks:
 
 - `ping-bench`: pairwise actor ping throughput;
 - `star-ping-bench`: star-topology actor ping throughput.
 - `memory-bandwidth-bench`: mixed sequential-copy and random copy/write memory workload.
 - `local-ydb`: a local static/dynamic YDB cluster driven by the `kv` or `stock` YDB CLI workload.
+- `distributed-ydb`: an experimental fixed multi-host YDB cluster with configurable CLI generators.
 
 Inspect them and print the standard JSON Schema for the YAML configuration:
 
@@ -89,6 +90,7 @@ local-ydb:
     actor-system:
       use-shared-threads: false
       use-united-pool: false
+      use-ring-queue: true
     client:
       threads: 64
     load:
@@ -128,13 +130,32 @@ Each static node gets its own `NONE`-profile SectorMap with the virtual size
 specified by `disk-size-gb`, so benchmark results are not limited by a host
 block device.
 
-`actor-system.use-shared-threads` and `actor-system.use-united-pool` are
-independent boolean switches (both default to `false`). They set YDBD's
-`use_shared_threads` and `use_united_pool` in `actor_system_config` for all
+`actor-system.use-shared-threads`, `actor-system.use-united-pool` and
+`actor-system.use-ring-queue` are independent boolean switches. The first two
+default to `false`; `use-ring-queue` defaults to `true`, matching YDBD.
+They set YDBD's `use_shared_threads`, `use_united_pool` and `use_ring_queue` in `actor_system_config` for all
 static and dynamic nodes, including scaled and verification clusters, while
 keeping automatic pool sizing enabled. They do not affect the YDB CLI.
-The Builder exposes both switches; saved profile parameters and comparisons
+The Builder exposes all three switches; saved profile parameters and comparisons
 retain their values.
+
+Set `ydbd-binary: /absolute/path/to/ydbd` in a `local-ydb` profile to
+use a different YDBD build. The Builder exposes the same optional executable
+path. It refers to a readable executable on the benchmark host (not the browser
+machine); relative paths and `~` are not accepted. Omit it to use bundled YDBD.
+The YDB CLI remains bundled. All static, dynamic, scaled, and verification
+nodes use the selected binary. At the first use of each distinct path in a run,
+the executable is copied into the temporary run directory without stripping;
+subsequent profiles using that path reuse the snapshot. Profile manifests
+record its original path, SHA-256 and size. The original file is never modified.
+
+For a version selector in Builder, arrange executable files as
+`bin/ydbd/<version>` and start the server with
+`ydb_bench web --binaries-dir /absolute/path/to/bin` (default: `./bin`).
+For example, `bin/ydbd/stable-26-3-1` is an executable file, not a directory.
+The catalog is refreshed when Builder loads; only readable executable files
+are listed. Selecting a version writes its absolute path to `ydbd-binary`.
+Manual paths and bundled YDBD remain available.
 
 An explicitly configured profile `timeout` caps every YDB CLI setup, warmup,
 measurement, and cleanup command. Workload-specific safety limits still apply
@@ -153,8 +174,7 @@ discrete ternary search and, after confirming a plateau, selects the lowest
 CPU-saturated load within the configured throughput tolerance of the best
 saturated measurement. A plateau is confirmed only when the selected role's
 CPU is saturated. `latency-slo` uses the configured `multiplier` to find the
-first failing point, then a binary search to find the highest load whose
-millisecond percentile, error count, and achieved-rate ratio satisfy the SLO.
+first failing point, then alternates linear interpolation of the nearest latency measurements with binary steps to find the highest load whose millisecond percentile, error count, and achieved-rate ratio satisfy the SLO. It finishes only when that load and the next integer have been measured: the selected load passes and the next one fails. `resolution-percent` applies only to throughput search; older SLO configurations may still contain it, but it no longer stops refinement early. A passing configured maximum remains a lower bound, not a discovered capacity limit. This is an observed discrete boundary, not a guarantee against latency noise or nonmonotonic workloads.
 Automatic search is limited to 64 measurements per cluster-geometry stage.
 The `storage` preset can run a separate search after each dynamic-node scaling
 step, so a complete profile can contain more than 64 measurements.
@@ -172,7 +192,6 @@ For example:
         start: 1000
         maximum: 1000000
         multiplier: 2
-        resolution-percent: 2
       objective:
         type: latency-slo
         percentile: p99
@@ -206,13 +225,9 @@ post-search samples are included when deriving the conservative default
 cluster-control command budget. An explicitly configured `timeout` also caps
 each workload command; it remains a per-command safety bound rather than an
 absolute profile deadline.
-Verification never
-changes the selected load or dynamic-node scaling decision. Its holdout samples
-are written separately to `verification-repetitions.csv` and
-`verification-summary.csv`; a completed holdout becomes the reported metric
-source while the search measurements remain intact for diagnostics. Latency
-holdout metrics are evaluated with the same aggregate SLO contract as a search
-point. A throughput holdout is diagnostic: its request-error acceptance,
+For automatic latency-SLO search, verification participates in selection: a rejected candidate is marked failed and search resumes below it, reusing existing measurements in the selected geometry. Rejected verification samples and commands are retained in `verification-rejected-NNN/`, with their paths recorded in `run.json`. The final accepted samples are written to `verification-repetitions.csv` and `verification-summary.csv` and become the reported metrics. This adaptive verification is not an independent holdout. If no feasible point remains, no passing result is published. Cancellation, command failure and malformed output still fail the execution rather than being treated as latency evidence. The 64-search-measurement safety limit still applies across resumptions; exhausting it does not publish a precise boundary.
+
+For explicit points and throughput searches, verification does not change the selected load or dynamic-node scaling decision and remains an independent holdout. A throughput holdout is diagnostic: its request-error acceptance,
 throughput drift, and CPU saturation do not claim statistical reproducibility.
 
 When the winning stage is the last one, its cluster remains open until
@@ -223,6 +238,20 @@ geometry on a fresh cluster; that cluster's configuration is stored in
 The profile page separates the final **Result** from the **Discovery** process.
 Result presents the selected load, throughput, latency, errors, and CPU metrics;
 Discovery keeps the attempt history, synchronized search charts, and commands.
+Each attempt links to a separate page with YDB executor-pool counters, grouped by
+node and measurement repetition. Verification has its own metrics page.
+The collector samples the local monitoring endpoints every two seconds during
+measurements and saves `ydb-metrics.jsonl` with the profile artifacts.
+Thread-count gauges are displayed as threads (the original counters use threads
+multiplied by 100); elapsed and CPU microseconds can be displayed as raw counters
+or per-second deltas. Counter resets and failed samples break the rate series.
+Each counter has its own chart with lines for all pools of the selected
+node, including both microsecond counters. Hover values use
+two decimal places and share a time cursor across charts.
+Collection is best-effort, limited to 32 MiB per profile, 64 nodes and 32 pools
+per node. The attempt view retains at most 300 samples / 2 MiB and reports
+truncation; the full saved file can be downloaded. Historical runs without the
+artifact show an empty metrics page.
 
 During a local YDB run, the CLI reports cluster startup, workload initialization,
 warmup, measurement, cleanup, evaluation, and dynamic-node scaling milestones.
@@ -243,6 +272,142 @@ is pinned to one chiplet by default and its mask stays fixed throughout the
 search. The web UI Builder edits workload, geometry, load controller,
 measurement, and per-role affinity settings; the YAML tab exposes the same
 portable configuration directly.
+
+### Distributed YDB (experimental)
+
+`distributed-ydb` runs one fixed YDB cluster across the hosts in a placement
+template. All participating benchmark servers must run a compatible distributed
+peer protocol on Linux and be registered with the coordinator. The coordinator
+checks every host's identity and protocol before reserving any participant.
+Peer HTTP requests go server-to-server; the browser only talks to its own server.
+YDB nodes and the CLI also need direct network connectivity to the advertised
+hostnames and dynamically allocated gRPC, interconnect and monitoring ports.
+
+In **Cluster templates**, choose **New run**, select the workload's target tenant,
+then confirm **Prepare run**. This copies the current placement (including unsaved
+edits) into the New run YAML draft; it neither saves the template nor launches
+processes. The confirmation explicitly replaces any previous New run draft.
+Review the generated configuration in Builder or YAML, validate it, and use **Start run** separately.
+The initial draft uses the `kv` upsert workload, one thread per CLI, 4 vCPU
+per static/dynamic node, and no verification repetition. These are editable
+starting values, not recommendations for a particular machine.
+
+The legacy single-generator format uses the YAML editor. Its
+`cluster-template` field contains the complete placement snapshot, and `tenant`
+selects a database from that snapshot. `workload`, `actor-system`, `client`,
+`load`, `measurement`, and `timeout` reuse the local-YDB configuration contract.
+Actor-system vCPU is independent of affinity. Binary selection, node counts,
+logical locations, tenant assignments and CPU masks come from the template;
+there is no separate run-level geometry or affinity override.
+
+Supported legacy scope is SectorMap SSD storage with erasure `NONE`, one CLI
+generator, at least one static node, and a target tenant with dynamic nodes.
+Other tenant definitions are allowed, but only the selected tenant receives
+the workload. Geometry is fixed during search and verification. This is not a
+multi-generator throughput test or a durability/failure-tolerance benchmark.
+Launch through the web coordinator, not the standalone `run` command.
+
+#### Multi-generator Builder
+
+The Builder supports KV and stock workloads with up to 32 CLI generators,
+with fixed loads or search assigned to one generator.
+Its sections are Cluster, Storage, Tenants, Load generators and Run policy;
+YAML remains a separate top-level tab. Each CLI has its own target tenant,
+dataset, operation, client threads and thread/rate load. Storage and
+each tenant have separate actor-system flags and per-node `cpu-count` values.
+Placement and affinity remain in the template snapshot.
+
+The new format uses `cli-nodes` instead of the legacy profile-level
+`tenant`, `workload`, `client`, `actor-system` and `load` fields:
+
+```yaml
+distributed-ydb:
+  baseline:
+    cluster-template: # complete placement snapshot, supplied by the Builder
+      # ...
+    storage: {cpu-count: 8, use-shared-threads: true}
+    tenants:
+      /Root/bench: {cpu-count: 16, use-united-pool: true}
+    cli-nodes:
+      cli-write:
+        tenant: /Root/bench
+        dataset: shared-kv
+        workload: {type: kv, operation: upsert, options: {init-upserts: 1000}}
+        client: {threads: 32}
+        load: {parameter: threads, values: [32]}
+      cli-read:
+        tenant: /Root/bench
+        dataset: shared-kv
+        workload: {type: kv, operation: select, options: {init-upserts: 1000}}
+        client: {threads: 64}
+        load: {parameter: threads, values: [64]}
+    measurement: {warmup: 2, duration: 30, repetitions: 1, verification-repetitions: 0}
+```
+
+Every CLI in the template must have an entry. Dataset identity is the pair
+`(tenant, dataset)`: matching pairs share one initialization and cleanup, while
+different pairs are independent for KV. Shared workload types and options must match, including
+`init-upserts`; operations and loads can differ. Builder edits to shared dataset
+options apply to all generators using that pair.
+
+All datasets are initialized before any generator runs. CLI samples run
+concurrently, including multiple CLI nodes on the same host. Per-CLI results,
+latencies and measurement clocks are stored in `cli-results.json` beside each
+sample's host metrics; complete individual artifacts are in CLI-named directories.
+All generators currently must use the same `allow-errors` policy.
+For fixed load, summary throughput is the sum of individual rates. Percentiles are not merged;
+whole-cluster CPU aggregation is unavailable for these separate measurement
+windows. This is concurrent fixed load, not clock-synchronized traffic replay.
+
+The legacy single-CLI YAML and its search/verification remain supported.
+Conversion to the fixed-load Builder is explicit and replaces load settings
+with defaults. At most one CLI may own `load.search` and `load.objective`;
+all other generators must have one fixed load value. The selected CLI uses the
+same latency-SLO or maximize-throughput search and verification as local-ydb.
+Search decisions and headline workload metrics describe that CLI only, not the
+sum of foreground and background throughput. Individual results remain available
+in `cli-results.json`. Background generators run at their fixed load in each
+sample; this is not a continuous or clock-synchronized background workload.
+
+Both KV and stock are supported. Stock uses fixed table names, so all stock
+generators targeting one tenant must share the same dataset and options. Separate
+stock datasets require separate tenants. Initialization and cleanup run once per
+shared dataset, before and after the measurements.
+
+For example, replace one CLI's fixed `load` with:
+
+```yaml
+load:
+  parameter: threads
+  search: {start: 1, maximum: 256, multiplier: 2}
+  objective: {type: latency-slo, percentile: p99, max-ms: 20}
+```
+
+Use `measurement.verification-repetitions` to enable final verification. In the
+Builder, choose the workload and search objective under **Load generators**;
+verification is configured in **Run policy**. YAML remains a separate top-level tab.
+All participant servers must use the same distributed protocol version (2).
+
+Each worker freezes the selected binaries, resolves placement from its own
+topology and reserves ports. The coordinator retains that execution plan,
+binary checksums, results and host-qualified telemetry in one canonical run.
+Counters are viewed per host, without merging unrelated wall clocks. Aggregate
+CPU metrics require sufficient common measurement coverage and bounded clock
+uncertainty; missing coverage is not reported as zero utilization.
+
+Workers hold renewable leases. Cancellation or lease expiry stops their managed
+processes; stale requests cannot reopen a finished generation. Temporary binary
+copies are deleted after stopping, while original binaries remain unchanged.
+The coordinator downloads bounded diagnostic log tails and configurations after
+release. Unconfirmed cleanup is reported as `recovery_required`, not success.
+After a worker server restart, unfinished sessions are cleaned up automatically
+on Linux when their durable process ownership journal is available. Recovery
+uses process identity and pidfds, and retries unresolved cleanup every ten seconds.
+The coordinator waits for confirmed release from every participant before
+finalizing the interrupted run. Unreachable participants keep admission blocked.
+Older sessions without an ownership journal still require manual recovery.
+
+### Other benchmark profiles and CLI execution
 
 The memory benchmark runs every matrix combination in a separate process. Each
 worker owns and first-touches its private buffer after process affinity has been
@@ -360,8 +525,11 @@ than a request handler. Event history and bounded stdout/stderr tails reconnect
 after a page reload; cancellation is idempotent. The detail view shows the
 benchmark/profile/affinity/repeat queue, active timeout, progress, and published
 artifacts. On service recovery an in-progress manifest is marked
-`recovery_required`: it is never restarted unless an executor can prove its
-previous process stopped.
+`recovery_required`. Automatic recovery stops only processes identified by the
+run's durable ownership journal, preserves artifacts, and marks the interrupted
+run as failed after cleanup is confirmed. It does not restart the benchmark.
+Missing ownership evidence or unsupported process recovery keeps the run blocked
+for manual recovery rather than risking another workload.
 
 The server binds to `127.0.0.1` on a free port by default. A non-loopback
 listener requires the explicit `--allow-remote` opt-in.
@@ -418,3 +586,17 @@ Generic configurable summary charts remain available below the baseline table.
 Run manifests use schema version 4. Earlier manifests are intentionally not
 read as resumable results because they lack the immutable step plan and durable
 per-step artifact contract.
+# Actor-system capacity and CPU placement
+
+For local YDB, `actor-system.static-nodes.cpu-count` and `actor-system.dynamic-nodes.cpu-count` independently set the vCPU count used by YDB automatic actor-system configuration **per node**. They do not set an OS affinity mask or an exact executor thread count. These positive integers remain unchanged when dynamic nodes are added. `affinity` only controls eligible logical CPUs; its mask can be larger or smaller than the configured actor-system capacity. For example:
+
+```yaml
+actor-system:
+  static-nodes: {cpu-count: 8}
+  dynamic-nodes: {cpu-count: 8}
+affinity:
+  static-nodes: {mode: pack-numa-pack-chiplet, cpus: 16}
+  dynamic-nodes: {mode: pack-numa-pack-chiplet, cpus: 32}
+```
+
+An explicit actor-system count also works with `mode: none`. Omitting it preserves YDB's automatic detection from the process affinity (or available host CPUs). Linux CPU usage remains relative to the assigned CPUs, not this actor-system setting.

@@ -261,9 +261,11 @@ namespace NKikimr {
 
     struct TEvProxySessionsState : TEventLocal<TEvProxySessionsState, TEvBlobStorage::EvProxySessionsState> {
         TIntrusivePtr<TGroupQueues> GroupQueues;
+        bool IsDormant;
 
-        TEvProxySessionsState(const TIntrusivePtr<TGroupQueues>& groupQueues)
+        TEvProxySessionsState(const TIntrusivePtr<TGroupQueues>& groupQueues, bool isDormant = false)
             : GroupQueues(groupQueues)
+            , IsDormant(isDormant)
         {}
     };
 

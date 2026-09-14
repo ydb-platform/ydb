@@ -115,7 +115,7 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateTestShardSet);
 
-        auto testShardInfo = context.SS->TestShardSets[txState->TargetPathId];
+        auto testShardInfo = context.SS->TestShardSets.at(txState->TargetPathId);
         Y_VERIFY_S(testShardInfo, "test shard info is null. PathId: " << txState->TargetPathId);
 
         txState->ClearShardsInProgress();
@@ -389,9 +389,8 @@ public:
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateTestShardSet, newPath->PathId);
 
         auto testShardInfo = CreateTestShardSet(op, txState, context.SS);
-        context.SS->TestShardSets[newPath->PathId] = testShardInfo;
+        context.SS->TestShardSets.Set(newPath->PathId, testShardInfo);
         context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_SET_COUNT].Add(1); // Count TestShardSet objects, not tablets
-        context.SS->IncrementPathDbRefCount(newPath->PathId);
 
         TShardInfo shardInfo = TShardInfo::TestShardSetInfo(OperationId.GetTxId(), newPath->PathId);
         shardInfo.BindedChannels = channelsBinding;

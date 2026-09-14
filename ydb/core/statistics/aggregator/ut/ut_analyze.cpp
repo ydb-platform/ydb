@@ -18,6 +18,25 @@
 namespace NKikimr {
 namespace NStat {
 
+namespace {
+
+void CheckTableSummaryRowCount(TTestActorRuntime& runtime, const TPathId& pathId, ui64 expected) {
+    auto responses = GetStatistics(runtime, pathId, EStatType::TABLE_SUMMARY, {std::nullopt});
+    UNIT_ASSERT_VALUES_EQUAL(responses.size(), 1);
+    UNIT_ASSERT_C(responses[0].Success, "TABLE_SUMMARY was not saved");
+    UNIT_ASSERT(responses[0].TableSummary.Data);
+    UNIT_ASSERT_VALUES_EQUAL(responses[0].TableSummary.Data->GetRowCount(), expected);
+}
+
+TTableInfo ResolveRowTable(TTestActorRuntime& runtime, const TString& path) {
+    TTableInfo tableInfo;
+    tableInfo.Path = path;
+    tableInfo.PathId = ResolvePathId(runtime, path, &tableInfo.DomainKey, &tableInfo.SaTabletId);
+    return tableInfo;
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
 
     Y_UNIT_TEST_TWIN(Analyze, ColumnShard) {
@@ -44,7 +63,13 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
 
     Y_UNIT_TEST_TWIN(AnalyzeEqHeightHistogram, ColumnShard) {
         TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
-            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeCollectPrimaryKeyHistogram(true);
+            auto* cfg = settings.AppConfig->MutableStatisticsConfig();
+            cfg->SetAnalyzeCollectPrimaryKeyHistogram(true);
+            if constexpr (ColumnShard) {
+                cfg->SetAnalyzeColumnTableWholeTableScanMaxBytes(0);
+            } else {
+                cfg->SetAnalyzeRowTableWholeTableScanMaxBytes(0);
+            }
         });
         auto& runtime = *env.GetServer().GetRuntime();
         CreateDatabase(env, "Database");
@@ -651,19 +676,56 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         const auto tableInfo = PrepareTable(env, "Database", "Table", ColumnShard);
         auto sender = runtime.AllocateEdgeActor();
 
-        TBlockEvents<TEvStatistics::TEvSaveStatisticsQueryResponse> block(runtime);
+        size_t finals = 0;
+        TActorId saId;
+        auto resultWatch = runtime.AddObserver<TEvStatistics::TEvAnalyzeActorResult>(
+            [&](auto& ev) {
+                saId = ev->GetRecipientRewrite();
+                if (ev->Get()->Final) {
+                    ++finals;
+                }
+            });
+        Y_UNUSED(resultWatch);
+
+        TBlockEvents<TEvStatistics::TEvSaveStatisticsQueryResponse> block(runtime,
+            [&](auto& ev) {
+                return saId && ev->GetRecipientRewrite() == saId;
+            });
 
         auto analyzeRequest = MakeAnalyzeRequest({tableInfo.PathId});
         runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest.release());
 
-        runtime.WaitFor("TEvSaveStatisticsQueryResponse", [&]{ return block.size(); });
+        runtime.WaitFor("op1 collected", [&]{ return finals >= 1 && !block.empty(); });
+        const size_t op1Saves = block.size();
         runtime.AdvanceCurrentTime(TDuration::Days(2));
 
-        auto analyzeResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
+        auto analyzeResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(
+            sender, TDuration::Seconds(30));
+        UNIT_ASSERT(analyzeResponse);
         const auto& record = analyzeResponse->Get()->Record;
         UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), "operationId");
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
         UNIT_ASSERT(!record.GetIssues().empty());
+
+        auto analyzeRequest2 = MakeAnalyzeRequest({tableInfo.PathId}, "operationId2");
+        runtime.SendToPipe(tableInfo.SaTabletId, sender, analyzeRequest2.release());
+        runtime.WaitFor("op2 collected", [&]{ return finals >= 2 && block.size() > op1Saves; });
+
+        // Releasing only op1's blocked saves must not complete op2.
+        // Stop blocking first so a stale-triggered follow-up save can finish.
+        block.Stop();
+        block.Unblock(op1Saves);
+        auto staleResponse = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(
+            sender, TDuration::Seconds(3));
+        UNIT_ASSERT(!staleResponse);
+
+        block.Unblock();
+        auto response2 = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(
+            sender, TDuration::Seconds(30));
+        UNIT_ASSERT(response2);
+        UNIT_ASSERT_VALUES_EQUAL(response2->Get()->Record.GetOperationId(), "operationId2");
+        UNIT_ASSERT_VALUES_EQUAL(
+            response2->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
     }
 
     Y_UNIT_TEST_TWIN(AnalyzeCancel, ColumnShard) {
@@ -870,6 +932,58 @@ Y_UNIT_TEST_SUITE(AnalyzeStatistics) {
         UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
 
         ValidateStatistics(runtime, tableInfo.PathId);
+    }
+
+    Y_UNIT_TEST(AnalyzeRangeScanCountsNullKeys) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeRowTableWholeTableScanMaxBytes(0);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        ExecuteYqlScript(env, R"(
+            CREATE TABLE `Root/Database/Table` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (PARTITION_AT_KEYS = (10));
+        )");
+        ExecuteYqlScript(env, R"(
+            UPSERT INTO `Root/Database/Table` (Key, Value) VALUES
+                (NULL, "null"),
+                (1, "one"),
+                (11, "eleven");
+        )");
+
+        const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+        CheckTableSummaryRowCount(runtime, tableInfo.PathId, 3);
+    }
+
+    Y_UNIT_TEST(AnalyzePgKeyFallsBackToWholeTableScan) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.SetEnableTablePgTypes(true);
+            settings.AppConfig->MutableFeatureFlags()->SetEnableTablePgTypes(true);
+            settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeRowTableWholeTableScanMaxBytes(0);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        ExecuteYqlScript(env, R"(
+            CREATE TABLE `Root/Database/Table` (
+                Key pgint8,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )");
+        ExecuteYqlScript(env, R"(
+            UPSERT INTO `Root/Database/Table` (Key, Value) VALUES
+                (1pb, "one"),
+                (2pb, "two");
+        )");
+
+        const auto tableInfo = ResolveRowTable(runtime, "/Root/Database/Table");
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+        CheckTableSummaryRowCount(runtime, tableInfo.PathId, 2);
     }
 }
 

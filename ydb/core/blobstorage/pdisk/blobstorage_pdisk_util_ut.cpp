@@ -26,6 +26,22 @@
 
 namespace NKikimr { namespace NPDisk {
 
+class TDriveEstimatorTestPeer {
+public:
+    static void StopDevice(TDriveEstimator& estimator) {
+        estimator.Device->Stop();
+    }
+
+    static void Measure(TDriveEstimator& estimator, ui32 type) {
+        estimator.MeasureOperationDuration(type, TDriveEstimator::SectorSize);
+    }
+
+    static bool BatchRetired(TDriveEstimator& estimator) {
+        TGuard<TMutex> guard(estimator.Mtx);
+        return estimator.Counter == TDriveEstimator::Repeats;
+    }
+};
+
 Y_UNIT_TEST_SUITE(TPDiskUtil) {
 
     Y_UNIT_TEST(NativeThreadAppliesConfiguredAffinity) {
@@ -321,6 +337,26 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         TDriveModel model = estimator.EstimateDriveModel();
         UNIT_ASSERT_UNEQUAL(model.Speed(TDriveModel::OP_TYPE_AVG), 0);
         UNIT_ASSERT_UNEQUAL(model.SeekTimeNs(), 0);
+    }
+
+    Y_UNIT_TEST(DriveEstimatorReportsReleasedSeek) {
+        TTempFileHandle file;
+        file.Resize(1 << 30);
+        TDriveEstimator estimator(file.Name());
+        TDriveEstimatorTestPeer::StopDevice(estimator);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(estimator.EstimateDriveModel(), yexception, "seek I/O released");
+    }
+
+    Y_UNIT_TEST(DriveEstimatorRetiresRejectedBatchBeforeReportingError) {
+        TTempFileHandle file;
+        file.Resize(1 << 30);
+        TDriveEstimator estimator(file.Name());
+        TDriveEstimatorTestPeer::StopDevice(estimator);
+        for (const ui32 type : {TDriveModel::OP_TYPE_READ, TDriveModel::OP_TYPE_WRITE}) {
+            UNIT_ASSERT_EXCEPTION_CONTAINS(TDriveEstimatorTestPeer::Measure(estimator, type),
+                yexception, "I/O released");
+            UNIT_ASSERT(TDriveEstimatorTestPeer::BatchRetired(estimator));
+        }
     }
 
 void TestOffset(ui64 offset, ui64 size, ui64 expectedFirstSector, ui64 expectedLastSector,

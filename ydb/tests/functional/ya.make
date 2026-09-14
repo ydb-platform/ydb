@@ -15,6 +15,7 @@ RECURSE(
     dstool
     encryption
     hive
+    kafka
     kqp
     large_serializable
     limits

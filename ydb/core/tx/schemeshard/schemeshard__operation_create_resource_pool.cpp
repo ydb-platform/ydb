@@ -178,8 +178,7 @@ public:
         resourcePool->PathState = TPathElement::EPathState::EPathStateCreate;
         resourcePool->LastTxId  = OperationId.GetTxId();
 
-        context.SS->ResourcePools[newPathId] = resourcePoolInfo;
-        context.SS->IncrementPathDbRefCount(newPathId);
+        context.SS->ResourcePools.Set(newPathId, resourcePoolInfo);
         if (!acl.empty()) {
             resourcePool->ApplyACL(acl);
         }

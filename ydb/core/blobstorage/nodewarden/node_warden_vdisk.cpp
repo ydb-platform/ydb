@@ -38,6 +38,7 @@ namespace NKikimr::NStorage {
 
         if (vdisk.RuntimeData) {
             vdiskRunning = true;
+            vdisk.ShutdownActorId = vdisk.RuntimeData->ActorId;
             vdisk.TIntrusiveListItem<TVDiskRecord, TGroupRelationTag>::Unlink();
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, vdisk.RuntimeData->ActorId, {}, nullptr, 0));
             vdisk.RuntimeData.reset();
@@ -61,7 +62,7 @@ namespace NKikimr::NStorage {
         vdisk.ScrubCookie = 0; // disable reception of Scrub messages from this disk
         vdisk.ScrubCookieForController = 0; // and from controller too
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::ERROR;
-        vdisk.ShutdownPending = vdiskRunning; // Shutdown pending only if VDisk was running before poison
+        vdisk.ShutdownPending |= vdiskRunning;
         VDiskStatusChanged = true;
     }
 
@@ -94,6 +95,14 @@ namespace NKikimr::NStorage {
             return;
         }
 
+        // A removed slot can be recreated while its old incarnation drains.
+        for (const auto& [actorId, slot] : VDiskIdByActor) {
+            if (slot == vslotId) {
+                vdisk.ShutdownPending = true;
+                vdisk.ShutdownActorId = actorId;
+                break;
+            }
+        }
         if (vdisk.ShutdownPending) {
             vdisk.RestartAfterShutdown = true;
             return;
@@ -227,6 +236,10 @@ namespace NKikimr::NStorage {
                 if (Cfg->DDiskConfig->HasIdleSpinUs()) {
                     ddiskConfig.IdleSpinUs = Cfg->DDiskConfig->GetIdleSpinUs();
                 }
+                if (Cfg->DDiskConfig->HasIntegrityChecksumCacheBytes()) {
+                    ddiskConfig.IntegrityChecksumCacheBytes =
+                        Cfg->DDiskConfig->GetIntegrityChecksumCacheBytes();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {
@@ -273,6 +286,9 @@ namespace NKikimr::NStorage {
                 }
                 if (Cfg->PBufferConfig->HasEnableChecksums()) {
                     pbufferFormat.EnableChecksums = Cfg->PBufferConfig->GetEnableChecksums();
+                }
+                if (Cfg->PBufferConfig->HasRegistrationTimeoutMilliseconds()) {
+                    pbufferFormat.RegistrationTimeoutMilliseconds = Cfg->PBufferConfig->GetRegistrationTimeoutMilliseconds();
                 }
                 if (Cfg->PBufferConfig->HasPreallocateFreeSpaceThresholdPercent()) {
                     auto newValue = Cfg->PBufferConfig->GetPreallocateFreeSpaceThresholdPercent();
@@ -432,6 +448,9 @@ namespace NKikimr::NStorage {
         const TActorId actorId = as->Register(actor.release(), TMailboxType::Revolving, blobStorageExecutorPoolId);
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);
+        if (ddisk) {
+            DDiskActors.emplace(actorId, vslotId);
+        }
 
         YDB_LOG_DEBUG("StartLocalVDiskActor done",
             {"marker", "NW24"},
@@ -470,16 +489,31 @@ namespace NKikimr::NStorage {
     }
 
     void TNodeWarden::HandleGone(STATEFN_SIG) {
+        std::optional<ui32> restartPDisk;
+        if (auto it = DDiskActors.find(ev->Sender); it != DDiskActors.end()) {
+            const ui32 pdiskId = it->second.PDiskId;
+            DDiskActors.erase(it);
+            if (auto jt = PDiskRestartInFlight.find(pdiskId); jt != PDiskRestartInFlight.end()) {
+                jt->second.WaitingFor.erase(ev->Sender);
+                restartPDisk = pdiskId;
+            }
+        }
         if (const auto it = VDiskIdByActor.find(ev->Sender); it != VDiskIdByActor.end()) {
-            if (const auto jt = LocalVDisks.find(it->second); jt != LocalVDisks.end()) {
+            const auto slot = it->second;
+            VDiskIdByActor.erase(it);
+            if (const auto jt = LocalVDisks.find(slot); jt != LocalVDisks.end()) {
                 TVDiskRecord& vdisk = jt->second;
-                Y_ABORT_UNLESS(vdisk.ShutdownPending);
-                vdisk.ShutdownPending = false;
-                if (std::exchange(vdisk.RestartAfterShutdown, false)) {
-                    StartLocalVDiskActor(vdisk);
+                if (vdisk.ShutdownActorId == ev->Sender) {
+                    vdisk.ShutdownActorId = {};
+                    vdisk.ShutdownPending = false;
+                    if (std::exchange(vdisk.RestartAfterShutdown, false)) {
+                        StartLocalVDiskActor(vdisk);
+                    }
                 }
             }
-            VDiskIdByActor.erase(it);
+        }
+        if (restartPDisk) {
+            TrySendPDiskRestart(*restartPDisk);
         }
     }
 

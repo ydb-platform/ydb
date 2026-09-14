@@ -442,6 +442,7 @@ protected:
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
     TActorId CollectorActorId;
     TDeque<TEvTablet::TEvMoveData::TPtr> MoveDataRequestsQueue;
+    TActorId CopyBlobActorId;
 
     void OnDetach(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "OnDetach",
@@ -700,7 +701,7 @@ protected:
                 auto requestUid = ev->Get()->RequestUid;
                 auto newBlobId = State.AllocateLogoBlobId(blobId.BlobSize(), blobId.Channel(), requestUid);
 
-                RegisterWithSameMailbox(CreateKeyValueCopyBlobActor(SelfId(), Info(), blobId, newBlobId, requestUid));
+                CopyBlobActorId = Register(CreateKeyValueCopyBlobActor(SelfId(), Info(), blobId, newBlobId, requestUid));
 
                 YDB_LOG_DEBUG_COMP(NKikimrServices::KEYVALUE, "TEvAdvanceMoveDataResult::COPY_BLOB",
                     {"keyValue", TabletID()},
@@ -745,6 +746,8 @@ protected:
             {"blobId", ev->Get()->BlobId.ToString()},
             {"newBlobId", ev->Get()->NewBlobId.ToString()},
             {"requestUid", ev->Get()->RequestUid});
+
+        CopyBlobActorId = {};
 
         Execute(new TTxBlobCopied(
             this, ev->Get()->Result, ev->Get()->BlobId, ev->Get()->NewBlobId, ev->Get()->RequestUid));
@@ -811,6 +814,9 @@ public:
     {
         if (CollectorActorId) {
             ctx.Send(CollectorActorId, new TEvents::TEvPoisonPill);
+        }
+        if (CopyBlobActorId) {
+            ctx.Send(CopyBlobActorId, new TEvents::TEvPoisonPill);
         }
         State.Terminate(ctx);
         Die(ctx);

@@ -4,6 +4,7 @@
 #include "schemeshard_export_helpers.h"
 #include "schemeshard_export_uploaders.h"
 #include "schemeshard_impl.h"
+#include "common/operation_idempotency.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 

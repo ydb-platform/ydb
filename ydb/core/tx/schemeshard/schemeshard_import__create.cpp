@@ -5,6 +5,7 @@
 #include "schemeshard_import_getters.h"
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_import_scheme_query_executor.h"
+#include "common/operation_idempotency.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 

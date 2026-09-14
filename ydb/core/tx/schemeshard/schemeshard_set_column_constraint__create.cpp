@@ -3,7 +3,7 @@
 #include <ydb/core/tx/schemeshard/index/build_index_tx_base.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
-#include "schemeshard_xxport__helpers.h"
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 

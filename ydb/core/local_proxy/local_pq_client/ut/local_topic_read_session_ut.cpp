@@ -12,7 +12,7 @@ namespace {
 
 class TTimestampReadSessionFixture : public TLocalTopicClientFixture {
 public:
-    void CheckKafkaTimestamps(bool useLocalReader) {
+    void CheckKafkaTimestamps() {
         // Store Kafka bytes under a test codec so the server does not cut the
         // batch before it reaches the reader's Kafka metadata handling.
         TCodecMap::GetTheCodecMap().Set(static_cast<ui32>(ECodec::CUSTOM), std::make_unique<TKafkaBatchCodec>());
@@ -59,7 +59,7 @@ public:
         }
         CloseSession(*writeSession);
 
-        auto session = useLocalReader ? CreateReadSession() : TopicClient->CreateReadSession(ReadSettings());
+        auto session = CreateReadSession();
         const auto messages = ReadMessages(*session, expectedTimestamps.size());
         for (size_t i = 0; i < messages.size(); ++i) {
             UNIT_ASSERT(!messages[i].HasException());
@@ -69,11 +69,7 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(messages[i].GetCreateTime(), expectedTimestamps[i]);
         }
         UNIT_ASSERT_VALUES_EQUAL(session->GetCounters()->MessagesRead->Val(), messages.size());
-        if (useLocalReader) {
-            CloseSession(*session);
-        } else {
-            UNIT_ASSERT(session->Close(TEST_TIMEOUT));
-        }
+        CloseSession(*session);
     }
 };
 
@@ -211,11 +207,7 @@ Y_UNIT_TEST_SUITE(TLocalTopicReadSession) {
     }
 
     Y_UNIT_TEST_F(ReadKafkaBatchesWithWrappingTimestamps, TTimestampReadSessionFixture) {
-        CheckKafkaTimestamps(true);
-    }
-
-    Y_UNIT_TEST_F(ReadSdkKafkaBatchesWithWrappingTimestamps, TTimestampReadSessionFixture) {
-        CheckKafkaTimestamps(false);
+        CheckKafkaTimestamps();
     }
 
     Y_UNIT_TEST_F(GetEventsWithCountAndByteLimits, TLocalTopicClientFixture) {

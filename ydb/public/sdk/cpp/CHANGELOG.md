@@ -1,8 +1,10 @@
+## v3.23.0
+
 * Added optional `TRetryOperationSettings::StopToken` for cooperative cancellation between retry attempts.
 
 * Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
 
-# v3.22.0
+## v3.22.0
 
 * Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.
 

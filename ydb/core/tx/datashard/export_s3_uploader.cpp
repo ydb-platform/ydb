@@ -654,7 +654,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             Retry();
         } else {
             TStringBuilder prefixStr;
-            NStructuredLog::TTextWriter writer;
+NActors::NStructuredLog::TTextWriter writer;
             writer.Write(prefixStr, LogPrefix());
 
             Error = TStringBuilder() << prefixStr << " error: " << error;

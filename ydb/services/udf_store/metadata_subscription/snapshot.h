@@ -19,8 +19,8 @@ protected:
 public:
     using TBase::TBase;
 
-    const TUdfModule* GetUdfByMd5(const TString& md5) const;
-    std::vector<TString> GetUdfMd5s() const;
+    const TUdfModule* GetUdfByName(const TString& name) const;
+    std::vector<TString> GetUdfNames() const;
     const TUdfModule* GetLibraryByName(const TString& name) const;
     std::vector<TString> GetLibraryNames() const;
 };

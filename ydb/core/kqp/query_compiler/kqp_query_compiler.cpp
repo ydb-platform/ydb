@@ -1217,8 +1217,7 @@ private:
         }
 
         // Map connections produced by either optimization need partition-preserving task layout.
-        const bool enableShuffleElimination = Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination())
-            || Config->OptShuffleEliminationForAggregation.Get().GetOrElse(Config->GetDefaultEnableShuffleEliminationForAggregation());
+        const bool enableShuffleElimination = Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination());
         txProto.SetEnableShuffleElimination(enableShuffleElimination);
         txProto.SetHasEffects(hasEffectStage);
         txProto.SetHasPqSources(hasPqSources);

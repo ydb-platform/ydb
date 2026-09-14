@@ -534,6 +534,7 @@ RECURSE_FOR_TESTS(
     ut_kqp_scan
     ut_lock_rows
     ut_locks
+    ut_locks_transfer
     ut_minikql
     ut_minstep
     ut_object_storage_listing

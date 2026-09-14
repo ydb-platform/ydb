@@ -2496,21 +2496,21 @@ private:
             }
         }
 
-#define DEFINE_OPT(name, attr, transform)                                                               \
-        auto dst##name = isAnonymous                                                                    \
-            ? execCtx->Options_.Config()->Temporary##name.Get(cluster)                                  \
-            : execCtx->Options_.Config()->Published##name.Get(cluster);                                 \
-        if (EYtWriteMode::RenewKeepMeta == mode && storageAttrs.HasKey(attr)                            \
-            && execCtx->Options_.Config()->Temporary##name.Get(cluster)) {                              \
-            dst##name = OptionFromNode<decltype(dst##name)::value_type>(storageAttrs[attr]);            \
-        }                                                                                               \
-        if (const auto it = strOpts.find(EYtSettingType::name); it != strOpts.cend()) {                 \
-            dst##name = OptionFromString<decltype(dst##name)::value_type>(it->second);                  \
-        }                                                                                               \
-        if (dst##name && dst##name != execCtx->Options_.Config()->Temporary##name.Get(cluster)) {       \
-            forceMerge = true;                                                                          \
-            forceTransform = forceTransform || transform;                                               \
-            YQL_CLOG(INFO, ProviderYt) << "Option " #name " forces merge";                              \
+#define DEFINE_OPT(name, attr, transform)                                                       \
+        auto dst##name = isAnonymous                                                            \
+            ? execCtx->Options_.Config()->Temporary##name.Get(cluster)                          \
+            : execCtx->Options_.Config()->Published##name.Get(cluster);                         \
+        if (EYtWriteMode::RenewKeepMeta == mode && storageAttrs.HasKey(attr)                    \
+            && execCtx->Options_.Config()->Temporary##name.Get(cluster)) {                      \
+            dst##name = OptionFromNode<decltype(dst##name)::value_type>(storageAttrs[attr]);    \
+        }                                                                                       \
+        if (const auto it = strOpts.find(EYtSettingType::name); it != strOpts.cend()) {         \
+            dst##name = OptionFromString<decltype(dst##name)::value_type>(it->second);          \
+        }                                                                                       \
+        if (dst##name != execCtx->Options_.Config()->Temporary##name.Get(cluster)) {            \
+            forceMerge = true;                                                                  \
+            forceTransform = forceTransform || transform;                                       \
+            YQL_CLOG(INFO, ProviderYt) << "Option " #name " forces merge";                      \
         }
 
         DEFINE_OPT(CompressionCodec, "compression_codec", true);
@@ -6067,13 +6067,15 @@ private:
                     auth = Clusters_->GetAuth(options.Cluster());
                 }
 
-                if (!auth && Services_.YtTokenResolver) {
-                    auto ytName = Clusters_->TryGetYtName(options.Cluster());
-                    if (!ytName) {
-                        ythrow yexception() << "Unknown cluster name: " << options.Cluster();
-                    }
-                    if (auto token = Services_.YtTokenResolver->ResolveClusterToken(ytName)) {
-                        auth = *token;
+                if (!auth || auth->empty()) {
+                    if (Services_.YtTokenResolver) {
+                        auto ytName = Clusters_->TryGetYtName(options.Cluster());
+                        if (!ytName) {
+                            ythrow yexception() << "Unknown cluster name: " << options.Cluster();
+                        }
+                        if (auto token = Services_.YtTokenResolver->ResolveClusterToken(ytName, *session->Credentials_)) {
+                            auth = *token;
+                        }
                     }
                 }
 

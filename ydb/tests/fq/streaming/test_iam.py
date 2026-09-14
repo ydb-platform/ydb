@@ -24,15 +24,6 @@ class TestIamAuth(StreamingTestBase):
             CREATE SECRET `{secret_name}` WITH (value="{USER_TOKEN}");
         """)
 
-    def set_cloud_id(self, kikimr: Kikimr, cloud_id: str = "test-cloud-id") -> None:
-        """Set cloud_id user attribute on the database root path (/Root).
-
-        DescribeResourceId reads GetAttributes() of the database root, so we must
-        use ESchemeOpAlterUserAttributes rather than ALTER TABLE which only supports
-        table-level settings.
-        """
-        kikimr.cluster.client.add_attr("/", "Root", {"cloud_id": cloud_id}, token="root@builtin")
-
     def create_iam_source(
         self,
         kikimr: Kikimr,

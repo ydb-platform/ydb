@@ -37,6 +37,9 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/tablet/simple_tablet.h>
+#include <ydb/core/tablet/tablet_setup.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <util/string/builder.h>
 #include <regex>
@@ -1395,6 +1398,97 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const auto& vdiskMap = vdisks[0].GetMap();
         UNIT_ASSERT_C(vdiskMap.contains("VDiskState"), NJson::WriteJson(vdisks[0], false));
         UNIT_ASSERT_VALUES_EQUAL_C(vdiskMap.at("VDiskState").GetString(), "LocalRecoveryError", NJson::WriteJson(vdisks[0], false));
+    }
+
+    NJson::TJsonValue GetTabletInfo(TTestActorRuntime& runtime, const TActorId& sender) {
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+            "GET /viewer/tabletinfo?enums=true&direct=1 HTTP/1.1\r\n\r\n", endpoint, {});
+
+        TAutoPtr<IEventHandle> handle;
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender,
+            new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+        auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        return json;
+    }
+
+    std::optional<NJson::TJsonValue> FindTabletInfo(const NJson::TJsonValue& json, ui64 tabletId) {
+        const NJson::TJsonValue* tablets = nullptr;
+        if (!json.GetValuePointer("TabletStateInfo", &tablets) || !tablets->IsArray()) {
+            return std::nullopt;
+        }
+        for (const auto& tablet : tablets->GetArray()) {
+            if (tablet["TabletId"].GetStringRobust() == ToString(tabletId)) {
+                return tablet;
+            }
+        }
+        return std::nullopt;
+    }
+
+    NJson::TJsonValue WaitTabletInfoActive(TTestActorRuntime& runtime, const TActorId& sender, ui64 tabletId) {
+        NJson::TJsonValue json;
+        for (int i = 0; i < 60; ++i) {
+            json = GetTabletInfo(runtime, sender);
+            auto tablet = FindTabletInfo(json, tabletId);
+            if (tablet && (*tablet)["State"].GetStringRobust() == "Active") {
+                return *tablet;
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Tablet " << tabletId << " never became active: " << NJson::WriteJson(json, false));
+        return {};
+    }
+
+    void RunOutdatedBootAttempt(TTestActorRuntime& runtime, ui64 tabletId) {
+        auto launcher = runtime.AllocateEdgeActor(0);
+        auto setup = MakeIntrusive<TTabletSetupInfo>(&CreateSimpleTablet,
+            TMailboxType::Simple, ui32(0), TMailboxType::Simple, ui32(0));
+
+        runtime.Register(CreateTablet(launcher,
+                CreateTestTabletInfo(tabletId, TTabletTypes::Hive),
+                setup.Get(), /* suggestedGeneration */ 1),
+            0);
+
+        auto dead = runtime.GrabEdgeEvent<TEvTablet::TEvTabletDead>(launcher);
+        UNIT_ASSERT_VALUES_EQUAL(dead->Get()->TabletID, tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(dead->Get()->Reason, TEvTablet::TEvTabletDead::ReasonBootSuggestOutdated);
+
+        // wait for whiteboard update
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+    }
+
+    Y_UNIT_TEST(TestTabletInfoAfterOutdatedBoot)
+    {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(2)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        ui64 tabletId = runtime.GetAppData().DomainsInfo->GetHive();
+        auto running = WaitTabletInfoActive(runtime, sender, tabletId);
+
+        RunOutdatedBootAttempt(runtime, tabletId);
+
+        auto current = FindTabletInfo(GetTabletInfo(runtime, sender), tabletId);
+        UNIT_ASSERT(current);
+        UNIT_ASSERT_VALUES_EQUAL_C((*current)["State"].GetStringRobust(), "Active",
+            NJson::WriteJson(*current, false));
+        UNIT_ASSERT_VALUES_EQUAL_C((*current)["Generation"].GetStringRobust(),
+            running["Generation"].GetStringRobust(), NJson::WriteJson(*current, false));
     }
 
     Y_UNIT_TEST(ServerlessWithExclusiveNodes)

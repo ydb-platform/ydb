@@ -1,12 +1,13 @@
 #pragma once
 
 #include "schemeshard_info_types_base.h"
+#include "schemeshard_path_db_ref.h"
 
 namespace NKikimr {
 namespace NSchemeShard {
 
 struct TPublicationInfo {
-    TSet<std::pair<TPathId, ui64>> Paths;
+    TMap<std::pair<TPathId, ui64>, TPathDbRef> Paths;
     THashSet<TActorId> Subscribers;
 };
 

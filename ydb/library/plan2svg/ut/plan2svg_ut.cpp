@@ -142,6 +142,13 @@ Y_UNIT_TEST_SUITE(TPlan2SvgGolden) {
     Y_UNIT_TEST(WaitInputPeer) {
         CheckGolden("wait_input_peer");
     }
+
+    // Two queries in a single plan, so the second one starts at a non-zero time
+    // offset: everything it draws on the timeline, the hot (red) CPU regions
+    // included, has to be shifted by that offset.
+    Y_UNIT_TEST(MultiQueryHot) {
+        CheckGolden("multi_query_hot");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TPlan2SvgLoad) {

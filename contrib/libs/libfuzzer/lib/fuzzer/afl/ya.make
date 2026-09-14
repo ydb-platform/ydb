@@ -8,7 +8,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 SUBSCRIBER(g:cpp-contrib)
 
-VERSION(22.1.8)
+VERSION(23.1.0)
 
 NO_COMPILER_WARNINGS()
 

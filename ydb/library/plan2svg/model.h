@@ -138,6 +138,9 @@ public:
     ui64 UpdateTime = 0;
     bool External = false;
     TStringBuilder Svg;
+    // Tooltip of the "W" badge the CPU strip asks for. The badge itself is drawn
+    // at the very end of the stage, see TPlan::PrepareStageSvg.
+    TString WaitInputWarning;
     TConnection* IngressConnection = nullptr;
     std::vector<std::pair<ui64, ui64>> HotRegions;
     ui64 CriticalCpuTotal = 0;

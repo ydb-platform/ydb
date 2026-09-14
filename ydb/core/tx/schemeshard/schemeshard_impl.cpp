@@ -2,6 +2,7 @@
 #include "schemeshard_generated_column_utils.h"
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_svp_migration.h"
+#include "schemeshard_operation_registry.h"
 
 #include "olap/bg_tasks/adapter/adapter.h"
 #include "olap/bg_tasks/events/global.h"
@@ -709,36 +710,37 @@ TMessageSeqNo TSchemeShard::NextRound() {
 void TSchemeShard::Clear() {
     HasOrphanPlaceholders = false;
 
+    // disarm ref handles: the whole state resets, PathsById clears first
+    for (auto& [opId, txState] : TxInFlight) {
+        txState.DisarmPathRefs();
+    }
+    // ParentRefHeld bits die with their path elements below; nothing to disarm.
+    for (auto& [pathId, ref] : OwnDbRefs) {
+        ref.DetachWithoutRelease();
+    }
+    OwnDbRefs.clear();
+    for (auto& [txId, pub] : Publications) {
+        for (auto& [key, ref] : pub.Paths) {
+            ref.DetachWithoutRelease();
+        }
+    }
+    for (auto& [txId, operation] : Operations) {
+        for (auto& [key, ref] : operation->Publications) {
+            ref.DetachWithoutRelease();
+        }
+    }
+
     PathsById.clear();
 
-    Tables.clear();
+    for (auto* selfRefMap : DbRefMaps) {
+        selfRefMap->clear();
+    }
+
     TTLEnabledTables.clear();
-
-    Indexes.clear();
-    CdcStreams.clear();
-    Sequences.clear();
-    Replications.clear();
-    BlobDepots.clear();
-
     TablesWithSnapshots.clear();
     SnapshotTables.clear();
     SnapshotsStepIds.clear();
-
     LockedPaths.clear();
-
-    Topics.clear();
-    RtmrVolumes.clear();
-    SolomonVolumes.clear();
-    SubDomains.clear();
-    BlockStoreVolumes.clear();
-    FileStoreInfos.clear();
-    KesusInfos.clear();
-    OlapStores.clear();
-    ExternalTables.clear();
-    ExternalDataSources.clear();
-    Views.clear();
-    SysViews.clear();
-    Secrets.clear();
 
     ColumnTables = { };
     BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(
@@ -791,7 +793,19 @@ void TSchemeShard::Clear() {
     TabletCounters->Percentile()[COUNTER_SHARDS_WITH_ROW_DELETES].Clear();
 }
 
+void TSchemeShard::AcquireOwnDbRef(const TPathId& pathId, TRefLabel reason) {
+    const bool inserted = OwnDbRefs.emplace(pathId, TPathDbRef(this, pathId, reason)).second;
+    Y_VERIFY_S(inserted, "Duplicate self db ref, pathId: " << pathId << ", reason: " << reason.c_str());
+}
+
+void TSchemeShard::ReleaseOwnDbRef(const TPathId& pathId) {
+    OwnDbRefs.erase(pathId);
+}
+
 void TSchemeShard::IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug) {
+    if (IsBeingDestroyed) {
+        return;
+    }
     auto it = PathsById.find(pathId);
     Y_VERIFY_DEBUG_S(it != PathsById.end(), "pathId: " << pathId << " debug: " << debug);
     if (it != PathsById.end()) {
@@ -802,10 +816,12 @@ void TSchemeShard::IncrementPathDbRefCount(const TPathId& pathId, const TStringB
 }
 
 void TSchemeShard::DecrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug) {
+    if (IsBeingDestroyed) {
+        return;
+    }
     auto it = PathsById.find(pathId);
     Y_VERIFY_DEBUG_S(it != PathsById.end(), "pathId " << pathId << " " << debug);
     if (it != PathsById.end()) {
-        // FIXME: not all references are accounted right now
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FLAT_TX_SCHEMESHARD, "DecrementPathDbRefCount reason " << debug << " for pathId " << pathId << " was " << it->second->DbRefCount);
         Y_DEBUG_ABORT_UNLESS(it->second->DbRefCount > 0);
         if (it->second->DbRefCount > 0) {
@@ -822,6 +838,58 @@ void TSchemeShard::DecrementPathDbRefCount(const TPathId& pathId, const TStringB
                 }
             }
         }
+    }
+}
+
+void TSchemeShard::DebugCheckDbRefIntegrity() const {
+    auto pathExists = [this](const TPathId& id) { return PathsById.contains(id); };
+    for (const auto* selfRefMap : DbRefMaps) {
+        selfRefMap->DebugCheckConsistency(pathExists);
+    }
+
+    // Reconcile each path's DbRefCount against its actual references (self-ref maps,
+    // parent/self refs, tx states, publications, shards). A mismatch means a bad rollback.
+    THashMap<TPathId, ui64> counted;
+    auto bumpId = [&](const TPathId& id) {
+        ++counted[id];
+    };
+    auto bump = [&](const TPathDbRef& ref) {
+        if (ref) {
+            bumpId(ref.GetPathId());
+        }
+    };
+    for (const auto* selfRefMap : DbRefMaps) {
+        selfRefMap->DebugForEachRef(bumpId);
+    }
+    for (const auto& [id, path] : PathsById) {
+        if (path->ParentRefHeld) {
+            bumpId(path->ParentPathId);
+        }
+    }
+    for (const auto& [id, ref] : OwnDbRefs) {
+        bump(ref);
+    }
+    for (const auto& [opId, txState] : TxInFlight) {
+        bump(txState.TargetPathRef);
+        bump(txState.SourcePathRef);
+    }
+    for (const auto& [txId, pub] : Publications) {
+        for (const auto& [key, ref] : pub.Paths) {
+            bump(ref);
+        }
+    }
+    for (const auto& [txId, operation] : Operations) {
+        for (const auto& [key, ref] : operation->Publications) {
+            bump(ref);
+        }
+    }
+    for (const auto& [shardIdx, shardInfo] : ShardInfos) {
+        ++counted[shardInfo.PathId];
+    }
+    for (const auto& [id, path] : PathsById) {
+        Y_VERIFY_DEBUG_S(path->DbRefCount == counted.Value(id, 0),
+            "DbRefCount mismatch for pathId " << id << ": stored " << path->DbRefCount
+                << " vs counted " << counted.Value(id, 0));
     }
 }
 
@@ -2265,7 +2333,6 @@ void TSchemeShard::PersistRemoveCdcStream(NIceDb::TNiceDb &db, const TPathId& pa
     }
 
     CdcStreams.erase(pathId);
-    DecrementPathDbRefCount(pathId);
 }
 
 void TSchemeShard::PersistAlterUserAttributes(NIceDb::TNiceDb& db, TPathId pathId) {
@@ -2452,8 +2519,14 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
         if (!path->IsOrphanPlaceholder) {
             Y_ABORT_UNLESS(itParent->second->AllChildrenCount > 0);
             --itParent->second->AllChildrenCount;
-            DecrementPathDbRefCount(path->ParentPathId, "remove path");
         }
+    }
+
+    // Release the parent ref last: the subdomain-cleanup trigger checks DbRefCount
+    // and AllChildrenCount together, so the child's AllChildrenCount decrement must land first.
+    if (path->ParentRefHeld) {
+        DecrementPathDbRefCount(path->ParentPathId, "child path row");
+        path->ParentRefHeld = false;
     }
 }
 
@@ -2738,8 +2811,7 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
         }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
-        SubDomains.erase(it);
-        DecrementPathDbRefCount(pathId);
+        SubDomains.erase(pathId);
     }
 }
 
@@ -3609,8 +3681,7 @@ void TSchemeShard::PersistRemovePersQueueGroup(NIceDb::TNiceDb& db, TPathId path
             }
         }
 
-        Topics.erase(it);
-        DecrementPathDbRefCount(pathId);
+        Topics.erase(pathId);
     }
 
     db.Table<Schema::PersQueueGroups>().Key(pathId.LocalPathId).Delete();
@@ -3747,7 +3818,6 @@ void TSchemeShard::PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathI
         }
 
         ExternalTables.erase(pathId);
-        DecrementPathDbRefCount(pathId);
     }
 
     db.Table<Schema::ExternalTable>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -3781,7 +3851,6 @@ void TSchemeShard::PersistRemoveExternalDataSource(NIceDb::TNiceDb& db, TPathId 
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (ExternalDataSources.contains(pathId)) {
         ExternalDataSources.erase(pathId);
-        DecrementPathDbRefCount(pathId);
     }
 
     db.Table<Schema::ExternalDataSource>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -3834,7 +3903,7 @@ void TSchemeShard::PersistView(NIceDb::TNiceDb &db, TPathId pathId) {
 void TSchemeShard::PersistRemoveView(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (const auto view = Views.find(pathId); view != Views.end()) {
-        Views.erase(view);
+        Views.erase(pathId);
     }
     db.Table<Schema::View>().Key(pathId.LocalPathId).Delete();
 }
@@ -3860,7 +3929,7 @@ void TSchemeShard::PersistSysView(NIceDb::TNiceDb& db, TPathId pathId) {
 void TSchemeShard::PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (const auto sysView = SysViews.find(pathId); sysView != SysViews.end()) {
-        SysViews.erase(sysView);
+        SysViews.erase(pathId);
     }
 
     db.Table<Schema::SysView>().Key(pathId.LocalPathId).Delete();
@@ -3889,7 +3958,6 @@ void TSchemeShard::PersistRemoveResourcePool(NIceDb::TNiceDb& db, TPathId pathId
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (ResourcePools.contains(pathId)) {
         ResourcePools.erase(pathId);
-        DecrementPathDbRefCount(pathId);
     }
 
     db.Table<Schema::ResourcePool>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -3907,9 +3975,8 @@ void TSchemeShard::PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, 
 void TSchemeShard::PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (BackupCollections.contains(pathId)) {
-        UnregisterBackupCollectionTables(BackupCollections[pathId]);
+        UnregisterBackupCollectionTables(BackupCollections.at(pathId));
         BackupCollections.erase(pathId);
-        DecrementPathDbRefCount(pathId);
     }
 
     db.Table<Schema::BackupCollection>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -3976,7 +4043,6 @@ void TSchemeShard::PersistSecretRemove(NIceDb::TNiceDb& db, TPathId pathId) {
     }
 
     Secrets.erase(pathId);
-    DecrementPathDbRefCount(pathId);
     db.Table<Schema::Secrets>().Key(pathId.LocalPathId).Delete();
 }
 
@@ -4033,8 +4099,7 @@ void TSchemeShard::PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
 void TSchemeShard::PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (const auto it = StreamingQueries.find(pathId); it != StreamingQueries.end()) {
-        StreamingQueries.erase(it);
-        DecrementPathDbRefCount(pathId);
+        StreamingQueries.erase(pathId);
     }
 
     db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
@@ -4074,8 +4139,7 @@ void TSchemeShard::PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId) {
 void TSchemeShard::PersistRemoveTestShardSet(NIceDb::TNiceDb& db, TPathId pathId) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
     if (const auto it = TestShardSets.find(pathId); it != TestShardSets.end()) {
-        TestShardSets.erase(it);
-        DecrementPathDbRefCount(pathId);
+        TestShardSets.erase(pathId);
     }
     db.Table<Schema::TestShardSet>().Key(pathId.LocalPathId).Delete();
 }
@@ -4091,8 +4155,7 @@ void TSchemeShard::PersistRemoveRtmrVolume(NIceDb::TNiceDb &db, TPathId pathId) 
             db.Table<Schema::RTMRPartitions>().Key(pathId.LocalPathId, partition.second->ShardIdx.GetLocalId()).Delete();
         }
 
-        RtmrVolumes.erase(it);
-        DecrementPathDbRefCount(pathId);
+        RtmrVolumes.erase(pathId);
     }
 
     db.Table<Schema::RtmrVolumes>().Key(pathId.LocalPathId).Delete();
@@ -4140,8 +4203,7 @@ void TSchemeShard::PersistRemoveSolomonVolume(NIceDb::TNiceDb &db, TPathId pathI
             db.Table<Schema::SolomonPartitions>().Key(pathId.LocalPathId, part.first.GetLocalId()).Delete();
         }
 
-        SolomonVolumes.erase(it);
-        DecrementPathDbRefCount(pathId);
+        SolomonVolumes.erase(pathId);
     }
 
     db.Table<Schema::SolomonVolumes>().Key(pathId.LocalPathId).Delete();
@@ -4504,7 +4566,6 @@ void TSchemeShard::PersistRemoveBlockStoreVolume(NIceDb::TNiceDb& db, TPathId pa
 
         BlockStoreVolumes.erase(pathId);
 
-        DecrementPathDbRefCount(pathId);
     }
 
     db.Table<Schema::BlockStoreVolumes>().Key(pathId.LocalPathId).Delete();
@@ -4559,7 +4620,6 @@ void TSchemeShard::PersistRemoveFileStoreInfo(NIceDb::TNiceDb& db, TPathId pathI
         }
 
         FileStoreInfos.erase(pathId);
-        DecrementPathDbRefCount(pathId);
     }
 
     db.Table<Schema::FileStoreInfos>()
@@ -4615,7 +4675,6 @@ void TSchemeShard::PersistOlapStoreRemove(NIceDb::TNiceDb& db, TPathId pathId, b
 
     db.Table<Schema::OlapStores>().Key(pathId.LocalPathId).Delete();
     OlapStores.erase(pathId);
-    DecrementPathDbRefCount(pathId);
 }
 
 void TSchemeShard::PersistOlapStoreAlter(NIceDb::TNiceDb& db, TPathId pathId, const TOlapStoreInfo& storeInfo)
@@ -4742,7 +4801,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
     ColumnTables.Drop(pathId);
-    DecrementPathDbRefCount(pathId);
+    ReleaseOwnDbRef(pathId);
 
     auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
     Send(SysPartitionStatsCollector, ev.Release());
@@ -4803,7 +4862,6 @@ void TSchemeShard::PersistSequenceRemove(NIceDb::TNiceDb& db, TPathId pathId)
 
     db.Table<Schema::Sequences>().Key(pathId.LocalPathId).Delete();
     Sequences.erase(pathId);
-    DecrementPathDbRefCount(pathId);
 }
 
 void TSchemeShard::PersistSequenceAlter(NIceDb::TNiceDb& db, TPathId pathId, const TSequenceInfo& sequenceInfo)
@@ -4869,7 +4927,6 @@ void TSchemeShard::PersistReplicationRemove(NIceDb::TNiceDb& db, TPathId pathId)
     }
 
     Replications.erase(pathId);
-    DecrementPathDbRefCount(pathId);
     db.Table<Schema::Replications>().Key(pathId.LocalPathId).Delete();
 }
 
@@ -4966,7 +5023,6 @@ void TSchemeShard::PersistRemoveKesusInfo(NIceDb::TNiceDb& db, TPathId pathId)
         }
 
         KesusInfos.erase(pathId);
-        DecrementPathDbRefCount(pathId);
     }
 
     if (IsLocalId(pathId)) {
@@ -5108,7 +5164,6 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 
     Tables.erase(pathId);
-    DecrementPathDbRefCount(pathId, "remove table");
 
     auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
     Send(SysPartitionStatsCollector, ev.Release());
@@ -5153,7 +5208,6 @@ void TSchemeShard::PersistRemoveTableIndex(NIceDb::TNiceDb &db, TPathId pathId)
     }
     db.Table<Schema::MigratedTableIndex>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
     Indexes.erase(pathId);
-    DecrementPathDbRefCount(pathId);
 }
 
 void TSchemeShard::PersistAddTableShardPartitionConfig(NIceDb::TNiceDb& db, TShardIdx shardIdx, const NKikimrSchemeOp::TPartitionConfig& config)
@@ -5171,8 +5225,7 @@ void TSchemeShard::PersistAddTableShardPartitionConfig(NIceDb::TNiceDb& db, TSha
 }
 
 void TSchemeShard::PersistPublishingPath(NIceDb::TNiceDb& db, TTxId txId, TPathId pathId, ui64 version) {
-    IncrementPathDbRefCount(pathId, "publish path");
-
+    // DbRefCount reference is owned by the publication container entry
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::PublishingPaths>()
             .Key(txId, pathId.LocalPathId, version)
@@ -5185,8 +5238,7 @@ void TSchemeShard::PersistPublishingPath(NIceDb::TNiceDb& db, TTxId txId, TPathI
 }
 
 void TSchemeShard::PersistRemovePublishingPath(NIceDb::TNiceDb& db, TTxId txId, TPathId pathId, ui64 version) {
-    DecrementPathDbRefCount(pathId, "remove publishing");
-
+    // DbRefCount reference is released by the publication container entry erase
     if (pathId.OwnerId == TabletID()) {
         db.Table<Schema::PublishingPaths>()
             .Key(txId, pathId.LocalPathId, version)
@@ -5575,6 +5627,10 @@ TActorId TSchemeShard::TPipeClientFactory::CreateClient(const TActorContext& ctx
         }
     }
     return clientId;
+}
+
+TSchemeShard::~TSchemeShard() {
+    IsBeingDestroyed = true;
 }
 
 TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
@@ -6083,6 +6139,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvValidateUniqueIndexResponse, Handle);
         HFuncTraced(TEvDataShard::TEvBuildFulltextIndexResponse, Handle);
         HFuncTraced(TEvDataShard::TEvBuildFulltextDictResponse, Handle);
+        HFuncTraced(TEvIndexBuilder::TEvGetIndexStatsResponse, Handle);
         // } // NIndexBuilder
 
         // namespace NForcedCompaction {
@@ -6233,10 +6290,7 @@ TTxState &TSchemeShard::CreateTx(TOperationId opId, TTxState::ETxType txType, TP
     TTxState& txState = TxInFlight[opId];
     txState = TTxState(txType, targetPath, sourcePath);
     TabletCounters->Simple()[TxTypeInFlightCounter(txType)].Add(1);
-    IncrementPathDbRefCount(targetPath, "transaction target path");
-    if (sourcePath) {
-        IncrementPathDbRefCount(sourcePath, "transaction source path");
-    }
+    txState.AcquirePathRefs(this);
     LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "CreateTx for txid " << opId
                     << " type: " << TTxState::TypeName(txType)
@@ -6266,7 +6320,6 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RemoveTx for txid " << opId);
-    auto pathId = txState->TargetPathId;
 
     PersistRemoveTx(db, opId, *txState);
     TabletCounters->Simple()[TxTypeInFlightCounter(txState->TxType)].Sub(1);
@@ -6277,10 +6330,7 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
         TabletCounters->Cumulative()[TxTypeFinishedCounter(txState->TxType)].Increment(1);
     }
 
-    DecrementPathDbRefCount(pathId, "remove txstate target path");
-    if (txState->SourcePathId) {
-        DecrementPathDbRefCount(txState->SourcePathId, "remove txstate source path");
-    }
+    // TargetPathRef/SourcePathRef are released by TxInFlight.erase below
 
     // Check if this operation is part of an incremental restore and notify completion
     if (TxIdToIncrementalRestore.contains(opId.GetTxId())) {
@@ -6599,7 +6649,7 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             // and all operations have been completed.
             break;
         case TPathElement::EPathType::EPathTypeBlobDepot:
-            Y_ABORT("not implemented");
+            AbortUnimplementedSchemeOperation<NKikimrSchemeOp::ESchemeOpDropBlobDepot>();
         case TPathElement::EPathType::EPathTypeTestShardSet:
             PersistRemoveTestShardSet(db, node->PathId);
             break;

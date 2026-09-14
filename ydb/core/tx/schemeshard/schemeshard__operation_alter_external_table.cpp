@@ -349,7 +349,7 @@ public:
             }
         }
 
-        context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
+        context.SS->ExternalTables.Set(externalTable->PathId, externalTableInfo);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterExternalTable,
                                                   externalTable->PathId, dataSourcePath.Base()->PathId);

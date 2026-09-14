@@ -87,13 +87,4 @@ private:
 NProto::TError GetErrorFromPreconditionFailed(const NProto::TError& error);
 NProto::TError TranslateTxProxyError(NProto::TError error);
 
-////////////////////////////////////////////////////////////////////////////////
-
-std::unique_ptr<TEvSSProxy::TEvModifySchemeRequest>
-CreateModifySchemeRequestForAlterVolume(
-    TString path,
-    ui64 pathId,
-    ui64 version,
-    const NKikimrBlockStore::TVolumeConfig& volumeConfig);
-
 }   // namespace NYdb::NBS::NStorage

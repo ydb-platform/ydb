@@ -333,6 +333,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 {
     static THashMap<EStatusCode, ui32> CodesRate = BuildCodesRateMap({
         TStatus::DISALLOW_TEMP,
+        TStatus::DISALLOW_TEMP_SYS_TABLET,
         TStatus::ERROR_TEMP,
         TStatus::DISALLOW,
         TStatus::WRONG_REQUEST,
@@ -408,12 +409,15 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             "MaxPermissionCount cap exhausted: complete in-flight actions before requesting new ones");
         response.SetDeadline((TActivationContext::Now() + State->Config.DefaultRetryTime).GetValue());
     }
+    TVector<const TAction*> sysTabletDeferredActions;
 
-    for (const auto &action : request.GetActions()) {
-        if (capHit) {
-            break;
-        }
+    enum class EActionResult {
+        Ok,
+        Stop,
+        CapHit,
+    };
 
+    auto processAction = [&](const TAction &action, bool allowDefer) -> EActionResult {
         TDuration permissionDuration = State->Config.DefaultPermissionDuration;
         if (request.HasDuration())
             permissionDuration = TDuration::MicroSeconds(request.GetDuration());
@@ -426,6 +430,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         opts.PartialPermissionAllowed = allowPartial;
         opts.Priority = request.GetPriority();
         opts.RequestId = requestId;
+        opts.CapEnabled = allowDefer && capEnabled;
 
         TErrorInfo error;
 
@@ -451,53 +456,97 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             if (capEnabled && static_cast<ui32>(response.PermissionsSize()) >= maxPermissions) {
                 YDB_LOG_DEBUG_CTX(ctx, "MaxPermissionCount cap reached, deferring remaining actions",
                     {"maxPermissions", maxPermissions});
-                capHit = true;
+                return EActionResult::CapHit;
             }
-        } else {
-            YDB_LOG_DEBUG_CTX(ctx, "Result",
-                {"error", ToString(error.Code)},
-                {"reason", error.Reason.GetMessage()});
-
-            if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
-                response.MutableStatus()->SetCode(error.Code);
-                response.MutableStatus()->SetReason(error.Reason.GetMessage());
-                if (error.Code == TStatus::DISALLOW_TEMP
-                    || error.Code == TStatus::ERROR_TEMP)
-                    response.SetDeadline(error.Deadline.GetValue());
-            }
-
-            if (schedule) {
-                auto *scheduledAction = scheduled.AddActions();
-                scheduledAction->CopyFrom(action);
-
-                // Limit stored issues to avoid overloading the local database
-                if (storedIssues < MAX_ISSUES_TO_STORE) {
-                    *scheduledAction->MutableIssue() = ConvertIssue(error.Reason);
-                    ++storedIssues;
-                } else {
-                    scheduledAction->ClearIssue();
-                }
-            }
-
-            if (!allowPartial)
-                break;
+            return EActionResult::Ok;
         }
+
+        if (allowDefer && error.Code == TStatus::DISALLOW_TEMP_SYS_TABLET) {
+            YDB_LOG_DEBUG_CTX(ctx, "Result: DISALLOW_TEMP_SYS_TABLET",
+                {"deferringAction", action.ShortDebugString().data()});
+            sysTabletDeferredActions.push_back(&action);
+            return EActionResult::Ok;
+        }
+
+        YDB_LOG_DEBUG_CTX(ctx, "Result",
+            {"error", ToString(error.Code)},
+            {"reason", error.Reason.GetMessage()});
+
+        if (CodesRate[response.GetStatus().GetCode()] > CodesRate[error.Code]) {
+            response.MutableStatus()->SetCode(error.Code);
+            response.MutableStatus()->SetReason(error.Reason.GetMessage());
+            if (error.Code == TStatus::DISALLOW_TEMP
+                || error.Code == TStatus::ERROR_TEMP)
+                response.SetDeadline(error.Deadline.GetValue());
+        }
+
+        if (schedule) {
+            auto *scheduledAction = scheduled.AddActions();
+            scheduledAction->CopyFrom(action);
+
+            // Limit stored issues to avoid overloading the local database
+            if (storedIssues < MAX_ISSUES_TO_STORE) {
+                *scheduledAction->MutableIssue() = ConvertIssue(error.Reason);
+                ++storedIssues;
+            } else {
+                scheduledAction->ClearIssue();
+            }
+        }
+
+        return allowPartial ? EActionResult::Ok : EActionResult::Stop;
+    };
+
+    for (const auto &action : request.GetActions()) {
+        if (capHit) {
+            break;
+        }
+
+        const EActionResult result = processAction(action, /* allowDefer = */ true);
+        if (result == EActionResult::Stop) {
+            break;
+        }
+        if (result == EActionResult::CapHit) {
+            capHit = true;
+        }
+
         ++processedActions;
     }
+
+    while (capEnabled && !capHit && !sysTabletDeferredActions.empty()) {
+        const TAction *deferredAction = sysTabletDeferredActions.back();
+        sysTabletDeferredActions.pop_back();
+        const EActionResult result = processAction(*deferredAction, /* allowDefer = */ false);
+        if (result == EActionResult::Stop) {
+            break;
+        }
+        if (result == EActionResult::CapHit) {
+            capHit = true;
+        }
+    }
+
     ClusterInfo->RollbackLocks(point);
+
+    auto scheduleTail = [&](const TAction &action) {
+        auto* scheduledAction = scheduled.MutableActions()->Add();
+        scheduledAction->CopyFrom(action);
+        scheduledAction->ClearIssue();
+    };
 
     if (capHit && schedule && processedActions < static_cast<size_t>(request.ActionsSize())) {
         const auto& allActions = request.GetActions();
         auto* mutableActions = scheduled.MutableActions();
-        const size_t from = processedActions;
-
-        mutableActions->Reserve(mutableActions->size() + (allActions.size() - from));
-        std::for_each(allActions.begin() + from, allActions.end(), [mutableActions](const auto& action) {
-            auto* scheduledAction = mutableActions->Add();
-            scheduledAction->CopyFrom(action);
-            scheduledAction->ClearIssue();
-        });
+        mutableActions->Reserve(mutableActions->size() + (allActions.size() - processedActions));
+        std::for_each(allActions.begin() + processedActions, allActions.end(), scheduleTail);
         processedActions = allActions.size();
+    }
+
+    if (schedule && !sysTabletDeferredActions.empty()) {
+        auto* mutableActions = scheduled.MutableActions();
+        mutableActions->Reserve(mutableActions->size() + sysTabletDeferredActions.size());
+        std::for_each(sysTabletDeferredActions.begin(), sysTabletDeferredActions.end(),
+            [&scheduleTail](const TAction *deferredAction) {
+                scheduleTail(*deferredAction);
+            });
     }
 
     // Handle partial permission and reject cases. Partial permission requires
@@ -960,9 +1009,13 @@ void TCms::SortActionsBySysTabletPriority(
     TPermissionRequest &request) const
 {
     auto *actions = request.MutableActions();
-    std::partition(actions->begin(), actions->end(),
+    auto pivot = std::partition(actions->begin(), actions->end(),
         [this](const TAction &action) {
             return !ClusterInfo->HostHasSysTablet(action.GetHost());
+        });
+    std::partition(pivot, actions->end(),
+        [this](const TAction &action) {
+            return !ClusterInfo->HostHasRunningSystemTablet(action.GetHost());
         });
 }
 
@@ -987,6 +1040,16 @@ bool TCms::TryToLockNode(const TAction& action,
     {
         error.Code = TStatus::DISALLOW_TEMP;
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+        return false;
+    }
+
+    if (opts.CapEnabled
+        && ClusterInfo->NodeHasRunningSystemTablet(node.NodeId))
+    {
+        error.Code = TStatus::DISALLOW_TEMP_SYS_TABLET;
+        error.Reason = TReason(
+            TStringBuilder() << "Node " << node.NodeId
+                << " has a running system tablet");
         return false;
     }
 

@@ -57,6 +57,18 @@ TInfoUnit MakeGeneratedIgnoreIU(TPlanProps& props) {
     return TInfoUnit(TString(name));
 }
 
+bool ReferencesUnresolvedSubplan(const TExpression& expr, const TPlanProps& props) {
+    if (props.Subplans.Empty()) {
+        return false;
+    }
+    for (const auto& iu : expr.GetRawInputIUs()) {
+        if (props.Subplans.Find(iu)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op) {
     if (!op) {
         return {};
@@ -107,8 +119,8 @@ bool CanEliminateAggregateShuffle(const TOpAggregate& aggregate, const TRBOConte
         return false;
     }
 
-    const bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleEliminationForAggregation.Get()
-        .GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleEliminationForAggregation());
+    const bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get()
+        .GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
     if (!enableShuffleElimination) {
         return false;
     }

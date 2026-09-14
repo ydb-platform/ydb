@@ -51,6 +51,14 @@ message TOracleConfig
     // with a queue size of 10, then it is equivalent to the 90th percentile.
     // 0 - means the last (100th percentile).
     optional uint32 TimePredictionNthFromEnd = 8;
+
+    // Maximum duration before host returns online in milliseconds.
+    optional uint32 MaxDurationBeforeReturningOnline = 9;
+
+    // The minimum number of successful requests after which the host is brought
+    // back online. If the number of successes is less, the host will not go online,
+    // regardless of the time during which the successes occurred.
+    optional uint32 MinSuccessesCountBeforeReturningOnline = 10;
 }
 
 message TStorageServiceConfig
@@ -156,6 +164,22 @@ message TStorageServiceConfig
     // Defaults to true. When false, NBS does not calculate or attach per-block
     // checksums and DDisk/PersistentBuffer ignore checksum machinery.
     optional bool EnableChecksums = 32;
+
+    // Defaults to false. When true (and EnableChecksums is true), DDisk and
+    // PersistentBuffer recompute payload checksums before persisting a write.
+    optional bool CheckChecksumBeforeWrite = 35;
+
+    // Defaults to false. When true (and EnableChecksums is true), DDisk and
+    // PersistentBuffer validate payload checksums of data read from disk.
+    optional bool CheckChecksumWhenRead = 36;
+
+    // How long (in microseconds) the DDisk io_uring thread busy-polls before
+    // parking when idle. Defaults to 10.
+    optional uint32 IdleSpinUs = 37;
+
+    // Maximum memory used by the integrity checksum cache, in bytes.
+    // Defaults to 64 MiB per DDisk.
+    optional uint64 IntegrityChecksumCacheBytes = 38;
 
     // Maximum aggregate bandwidth in megabytes per second for copying ranges
     // within a DirectBlockGroup. 0 disables throttling.

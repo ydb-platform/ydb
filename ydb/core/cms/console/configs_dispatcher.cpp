@@ -72,6 +72,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::TliConfigItem,
     (ui32)NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem,
     (ui32)NKikimrConsole::TConfigItem::ColumnShardConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -1108,6 +1109,9 @@ try {
             break;
     }
 
+    // Trace only this replay. Reusing the tracer accumulates update history
+    // (including source file names) for the lifetime of the dispatcher.
+    RecordedInitialConfiguratorDeps->ConfigUpdateTracer = MakeDefaultConfigUpdateTracer();
     auto deps = RecordedInitialConfiguratorDeps->GetDeps();
     NConfig::TInitialConfigurator initCfg(deps);
 

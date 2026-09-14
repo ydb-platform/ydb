@@ -1,11 +1,11 @@
 #include "pb_io.h"
+#include "stream_adaptors.h"
 
 #include <library/cpp/binsaver/bin_saver.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <google/protobuf/io/tokenizer.h>
 #include <google/protobuf/message.h>
-#include <google/protobuf/messagext.h>
 #include <google/protobuf/text_format.h>
 
 #include <util/generic/string.h>
@@ -18,7 +18,7 @@ namespace NProtoBuf {
 
     class TEnumIdValuePrinter : public google::protobuf::TextFormat::FastFieldValuePrinter {
     public:
-        void PrintEnum(int32 val, const TString& /*name*/, google::protobuf::TextFormat::BaseTextGenerator* generator) const override {
+        void PrintEnum(int32 val, const TProtoStringType& /*name*/, google::protobuf::TextFormat::BaseTextGenerator* generator) const override {
             generator->PrintString(ToString(val));
         }
     };
@@ -39,7 +39,7 @@ namespace NProtoBuf {
     }
 
     void SerializeToBase64String(const Message& m, TString& dataBase64) {
-        TString rawData;
+        TProtoStringType rawData;
         if (!m.SerializeToString(&rawData)) {
             ythrow yexception() << "can't serialize " << m.GetTypeName();
         }
@@ -66,9 +66,9 @@ namespace NProtoBuf {
         TextFormat::Printer printer;
         printer.SetSingleLineMode(true);
         printer.SetUseUtf8StringEscaping(true);
-        TString result;
+        TProtoStringType result;
         printer.PrintToString(message, &result);
-        return result;
+        return TString{result};
     }
 
     bool MergePartialFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage) {
@@ -123,16 +123,16 @@ int operator&(NProtoBuf::Message& m, IBinSaver& f) {
     TStringStream ss;
     if (f.IsReading()) {
         f.Add(0, &ss.Str());
-        m.ParseFromArcadiaStream(&ss);
+        NProtoBufUtil::ParseFromArcadiaStream(m, &ss);
     } else {
-        m.SerializeToArcadiaStream(&ss);
+        NProtoBufUtil::SerializeToArcadiaStream(m, &ss);
         f.Add(0, &ss.Str());
     }
     return 0;
 }
 
 void SerializeToTextFormat(const NProtoBuf::Message& m, IOutputStream& out) {
-    NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
+    NProtoBufUtil::TCopyingOutputStreamAdaptor adaptor(&out);
 
     if (!NProtoBuf::TextFormat::Print(m, &adaptor) || !adaptor.Flush()) {
         ythrow yexception() << "SerializeToTextFormat failed on Print";
@@ -149,7 +149,7 @@ void SerializeToTextFormat(const NProtoBuf::Message& m, const TString& fileName)
 void SerializeToTextFormatWithEnumId(const NProtoBuf::Message& m, IOutputStream& out) {
     google::protobuf::TextFormat::Printer printer;
     printer.SetDefaultFieldValuePrinter(new NProtoBuf::TEnumIdValuePrinter());
-    NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
+    NProtoBufUtil::TCopyingOutputStreamAdaptor adaptor(&out);
 
     if (!printer.Print(m, &adaptor) || !adaptor.Flush()) {
          ythrow yexception() << "SerializeToTextFormatWithEnumId failed on Print";
@@ -161,7 +161,7 @@ void SerializeToTextFormatPretty(const NProtoBuf::Message& m, IOutputStream& out
     printer.SetUseUtf8StringEscaping(true);
     printer.SetUseShortRepeatedPrimitives(true);
 
-    NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
+    NProtoBufUtil::TCopyingOutputStreamAdaptor adaptor(&out);
 
     if (!printer.Print(m, &adaptor) || !adaptor.Flush()) {
          ythrow yexception() << "SerializeToTextFormatPretty failed on Print";
@@ -177,7 +177,7 @@ static void ConfigureParser(const EParseFromTextFormatOptions options,
 
 void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
                          const EParseFromTextFormatOptions options, IOutputStream* warningStream) {
-    NProtoBuf::io::TCopyingInputStreamAdaptor adaptor(&in);
+    NProtoBufUtil::TCopyingInputStreamAdaptor adaptor(&in);
     NProtoBuf::TextFormat::Parser p;
     ConfigureParser(options, p);
 
@@ -225,7 +225,7 @@ bool TryParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
 
 void MergeFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
                          const EParseFromTextFormatOptions options) {
-    NProtoBuf::io::TCopyingInputStreamAdaptor adaptor(&in);
+    NProtoBufUtil::TCopyingInputStreamAdaptor adaptor(&in);
     NProtoBuf::TextFormat::Parser p;
     ConfigureParser(options, p);
     if (!p.Merge(&adaptor, &m)) {

@@ -83,6 +83,9 @@ EMonPage ParsePage(const TCgiParameters& cgi)
     if (page == "latency") {
         return EMonPage::Latency;
     }
+    if (page == "memory") {
+        return EMonPage::Memory;
+    }
     return EMonPage::Overview;
 }
 
@@ -390,7 +393,10 @@ bool TPartitionActor::OnRenderAppHtmlPage(
         return true;
     }
 
-    if (page == EMonPage::Latency) {
+    if (page == EMonPage::Latency || page == EMonPage::Memory) {
+        if (page == EMonPage::Memory) {
+            data.FastPathServiceInfo = FastPathService->GetMonInfo();
+        }
         FastPathService->GatherMonSnapshots(std::nullopt)
             .Subscribe(
                 [data = std::move(data),

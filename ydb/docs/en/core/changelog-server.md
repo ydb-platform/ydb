@@ -9,7 +9,7 @@ Release date: September 16, 2026.
 #### Functionality
 
 * Added support for [incremental backups](./concepts/datamodel/backup-collection.md?version=v26.2), which store only changes relative to the preceding backup in a collection. This capability is disabled by default and can be enabled by the cluster administrator.
-* [Column-oriented tables](https://github.com/ydb-platform/ydb/issues/26498) can be exported to S3-compatible storage and YT and imported from S3-compatible storage. Tables with a large number of columns are not supported. This capability is disabled by default and can be enabled by the cluster administrator.
+* [Column-oriented tables](https://github.com/ydb-platform/ydb/issues/26498) can be exported and imported using S3-compatible storage. Tables with a large number of columns are not supported. This capability is disabled by default and can be enabled by the cluster administrator.
 * Added [export and import of row-oriented tables](./reference/ydb-cli/export-import/export-nfs.md?version=main) using a local file system, including file systems mounted over NFS. This capability is disabled by default and can be enabled by the cluster administrator.
 * Added [snapshot retention](https://github.com/ydb-platform/ydb/pull/36668) for long-running analytical queries over column-oriented tables, preventing snapshot data from being removed before a query completes. This capability is disabled by default and can be enabled by the cluster administrator.
 * QueryService can [notify SDKs when a node or session is shutting down](https://github.com/ydb-platform/ydb/pull/39274), allowing clients to stop sending new queries there. This capability is disabled by default and can be enabled by the cluster administrator.

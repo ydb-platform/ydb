@@ -114,7 +114,7 @@ size_t TArenaAllocatorPool::TSlots::GetAllocatedSize() const
     return Slots.size() * SlotSize;
 }
 
-TArenaAllocatorStats TArenaAllocatorPool::TSlots::GetStats(
+TArenaAllocatorSlotStats TArenaAllocatorPool::TSlots::GetStats(
     size_t chunkSize) const
 {
     return {
@@ -228,9 +228,9 @@ size_t TArenaAllocatorPool::GetUsedSize() const
     return UsedSize;
 }
 
-TVector<TArenaAllocatorStats> TArenaAllocatorPool::GetDetailedStat() const
+TArenaAllocatorStats TArenaAllocatorPool::GetDetailedStat() const
 {
-    TVector<TArenaAllocatorStats> result;
+    TArenaAllocatorStats result;
     result.reserve(SizeMap.size());
     for (const auto& [chunkSize, slots]: SizeMap) {
         result.push_back(slots.GetStats(chunkSize));

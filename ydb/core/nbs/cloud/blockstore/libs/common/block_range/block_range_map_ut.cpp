@@ -20,7 +20,7 @@ using TTestRangeMap = TBlockRangeMap<ui64, TEmptyType>;
 
 void PrintAllocatorStats(
     TStringBuf allocatorName,
-    const TVector<TArenaAllocatorStats>& allStats)
+    const TArenaAllocatorStats& allStats)
 {
     Cout << allocatorName << ':' << Endl;
     for (const auto& stats: allStats) {

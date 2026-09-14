@@ -213,9 +213,9 @@ public:
         return SlotSize;
     }
 
-    [[nodiscard]] TArenaAllocatorStats GetStats() const
+    [[nodiscard]] TArenaAllocatorSlotStats GetStats() const
     {
-        return TArenaAllocatorStats{
+        return TArenaAllocatorSlotStats{
             .SlotSize = SlotSize,
             .ArenaSize = ArenaSize,
             .ReservedSize = GetReservedSize(),
@@ -327,10 +327,10 @@ public:
         return AllocatedSize();
     }
 
-    [[nodiscard]] TVector<TArenaAllocatorStats> GetDetailedStat() const override
+    [[nodiscard]] TArenaAllocatorStats GetDetailedStat() const override
     {
         with_lock (Mutex) {
-            TVector<TArenaAllocatorStats> result;
+            TArenaAllocatorStats result;
             result.reserve(ArenasBySlotSize.size());
             for (const auto& entry: ArenasBySlotSize) {
                 result.push_back(entry.second.GetStats());

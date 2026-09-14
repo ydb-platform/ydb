@@ -43,7 +43,7 @@ public:
         return 0;
     }
 
-    TVector<TArenaAllocatorStats> GetDetailedStat() const override
+    TArenaAllocatorStats GetDetailedStat() const override
     {
         return {};
     }

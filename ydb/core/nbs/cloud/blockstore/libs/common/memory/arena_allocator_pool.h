@@ -30,7 +30,7 @@ public:
     // Returns the total size of chunks currently handed to clients.
     [[nodiscard]] size_t GetUsedSize() const;
     // Returns allocation statistics grouped by chunk size.
-    [[nodiscard]] TVector<TArenaAllocatorStats> GetDetailedStat() const;
+    [[nodiscard]] TArenaAllocatorStats GetDetailedStat() const;
 
 private:
     // Intrusive free list node stored in the first bytes of a free chunk
@@ -81,7 +81,7 @@ private:
         }
 
         [[nodiscard]] size_t GetAllocatedSize() const;
-        [[nodiscard]] TArenaAllocatorStats GetStats(size_t chunkSize) const;
+        [[nodiscard]] TArenaAllocatorSlotStats GetStats(size_t chunkSize) const;
 
         void OnAllocate(size_t chunkSize);
         void OnDeallocate(size_t chunkSize);

@@ -68,8 +68,7 @@ struct TTabletInfo
 
 struct TArenaMemoryUsage
 {
-    TVector<TArenaAllocatorStats> Slots;
-    TVector<TArenaAllocatorStats> PoolSlots;
+    TArenaAllocatorStats Slots;
 };
 
 struct TFastPathServiceInfo
@@ -102,6 +101,7 @@ struct TDbgSnapshot
     TVector<TConnectionSnapshot> Connections;
     TVChunkConfigs VChunkConfigs;
     TArenaPoolStats MemoryStats;
+    TArenaAllocatorStats DetailedMemoryStats;
     TDirtyMapStats DirtyMapStats;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;

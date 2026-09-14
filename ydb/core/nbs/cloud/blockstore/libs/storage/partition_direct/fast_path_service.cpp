@@ -149,6 +149,8 @@ TFastPathService::TFastPathService(
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
     , DirectBlockGroups(std::move(directBlockGroups))
+    , ArenaAllocator(
+          DirectBlockGroups.front()->GetArenaAllocatorPool()->GetAllocator())
     , ChaosInjectorControls(std::move(chaosInjectorControls))
     , Regions(CreateRegions(
           this,
@@ -530,36 +532,13 @@ void TFastPathService::PersistHostHealth(
 
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
-    TMap<size_t, TArenaAllocatorStats> poolStats;
-    for (const auto& dbg: DirectBlockGroups) {
-        for (const auto& stats: dbg->GetArenaAllocatorPool()->GetDetailedStat())
-        {
-            auto& total = poolStats[stats.SlotSize];
-            total.SlotSize = stats.SlotSize;
-            total.ArenaSize += stats.ArenaSize;
-            total.ReservedSize += stats.ReservedSize;
-            total.UsedSize += stats.UsedSize;
-            total.MaxUsedSize += stats.MaxUsedSize;
-            total.Count += stats.Count;
-        }
-    }
-    TVector<TArenaAllocatorStats> poolSlots;
-    for (const auto& [_, stats]: poolStats) {
-        poolSlots.push_back(stats);
-    }
-
     return {
         .LsnCounter = SequenceGenerator.load(),
         .LastSafeBarrier = LastSafeBarrier.load(),
         .TotalVChunks =
             Regions.size() * GetVChunksPerRegion(VolumeConfig->VChunkSize),
         .DbgCount = DirectBlockGroups.size(),
-        .ArenaMemoryUsage =
-            {.Slots = DirectBlockGroups.front()
-                          ->GetArenaAllocatorPool()
-                          ->GetAllocator()
-                          ->GetDetailedStat(),
-             .PoolSlots = std::move(poolSlots)},
+        .ArenaMemoryUsage = {.Slots = ArenaAllocator->GetDetailedStat()},
     };
 }
 

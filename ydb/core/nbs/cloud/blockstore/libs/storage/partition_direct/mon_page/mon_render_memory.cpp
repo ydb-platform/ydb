@@ -8,13 +8,34 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+namespace {
+
+void AggregateArenaPoolStats(
+    const TArenaAllocatorStats& stats,
+    TMap<size_t, TArenaAllocatorSlotStats>* result)
+{
+    for (const auto& slotStats: stats) {
+        auto& total = (*result)[slotStats.SlotSize];
+        total.SlotSize = slotStats.SlotSize;
+        total.ArenaSize += slotStats.ArenaSize;
+        total.ReservedSize += slotStats.ReservedSize;
+        total.UsedSize += slotStats.UsedSize;
+        total.MaxUsedSize += slotStats.MaxUsedSize;
+        total.Count += slotStats.Count;
+    }
+}
+
+}   // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void RenderMemory(IOutputStream& str, const TMonPageData& data)
 {
     TDirtyMapStats dirtyMapStats;
+    TMap<size_t, TArenaAllocatorSlotStats> arenaPoolStats;
     for (const auto& dbg: data.Dbgs) {
         dirtyMapStats.Aggregate(dbg.DirtyMapStats);
+        AggregateArenaPoolStats(dbg.DetailedMemoryStats, &arenaPoolStats);
     }
 
     HTML (str) {
@@ -127,9 +148,7 @@ void RenderMemory(IOutputStream& str, const TMonPageData& data)
                     size_t totalUsedSize = 0;
                     size_t totalMaxUsedSize = 0;
                     size_t totalCount = 0;
-                    for (const auto& usage:
-                         data.FastPathServiceInfo->ArenaMemoryUsage.PoolSlots)
-                    {
+                    for (const auto& [_, usage]: arenaPoolStats) {
                         totalReservedSize += usage.ReservedSize;
                         totalUsedSize += usage.UsedSize;
                         totalMaxUsedSize += usage.MaxUsedSize;

@@ -107,9 +107,21 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         TDbgSnapshot first = MakeDbg(1);
         first.MemoryStats.UsedSize = 1024;
         first.MemoryStats.ReservedSize = 4096;
+        first.DetailedMemoryStats = {
+            {.SlotSize = 256,
+             .ArenaSize = 1_MB,
+             .ReservedSize = 16_KB,
+             .UsedSize = 5_KB,
+             .MaxUsedSize = 8_KB}};
         TDbgSnapshot second = MakeDbg(2);
         second.MemoryStats.UsedSize = 2048;
         second.MemoryStats.ReservedSize = 8192;
+        second.DetailedMemoryStats = {
+            {.SlotSize = 512,
+             .ArenaSize = 2_MB,
+             .ReservedSize = 32_KB,
+             .UsedSize = 7_KB,
+             .MaxUsedSize = 12_KB}};
 
         TMonPageData data{
             .Page = EMonPage::Memory,

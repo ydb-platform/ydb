@@ -2183,6 +2183,7 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .Connections = std::move(connections),
         .VChunkConfigs = std::move(vChunkConfigs),
         .MemoryStats = ArenaAllocatorPool->GetMemoryStats(),
+        .DetailedMemoryStats = ArenaAllocatorPool->GetDetailedStat(),
         .DirtyMapStats = dirtyMapStats,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };

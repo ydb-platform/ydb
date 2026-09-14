@@ -134,13 +134,13 @@ void TPartition::FinishResetOffset(
 
 TMaybe<ui64> TPartition::ScanHeadForResetOffset(const THead& head, TInstant timestamp) const {
     for (const auto& batch : head.GetBatches()) {
-        TVector<TClientBlob> blobs;
         if (batch.Packed) {
+            TVector<TClientBlob> blobs;
             batch.UnpackTo(&blobs);
-        } else {
-            blobs = batch.Blobs;
-        }
-        if (auto found = FindFirstOffsetAtOrAfterTimestamp(timestamp, batch.GetOffset(), blobs)) {
+            if (auto found = FindFirstOffsetAtOrAfterTimestamp(timestamp, batch.GetOffset(), blobs)) {
+                return found;
+            }
+        } else if (auto found = FindFirstOffsetAtOrAfterTimestamp(timestamp, batch.GetOffset(), batch.Blobs)) {
             return found;
         }
     }

@@ -18,11 +18,11 @@
 #include <string>
 #include <vector>
 
-namespace NKikimr::NKqp::NLogToDB {
+namespace NKikimr::NKqp::NSchematizedLog {
 
 using namespace NActors::NStructuredLog;
 
-class TBaseDBLogColumn {
+class TSchematizedLogColumn {
 public:
     struct TDatabaseSettings {
         TString Extra;
@@ -47,14 +47,14 @@ public:
         }
     };
 
-    TBaseDBLogColumn() = default;
-    TBaseDBLogColumn(TString name, TString type)
-        : TBaseDBLogColumn(std::move(name), std::move(type), TDatabaseSettings()) {}
-    TBaseDBLogColumn(TString name, TString type, TDatabaseSettings settings)
+    TSchematizedLogColumn() = default;
+    TSchematizedLogColumn(TString name, TString type)
+        : TSchematizedLogColumn(std::move(name), std::move(type), TDatabaseSettings()) {}
+    TSchematizedLogColumn(TString name, TString type, TDatabaseSettings settings)
         : Name(std::move(name))
         , Type(std::move(type))
         , Settings(std::move(settings)) {}
-    virtual ~TBaseDBLogColumn() = default;
+    virtual ~TSchematizedLogColumn() = default;
 
     const TString Name;
     const TString Type;
@@ -75,7 +75,7 @@ public:
 };
 
 template <typename T>
-class TTypedDBLogColumn : public TBaseDBLogColumn {
+class TTypedDBLogColumn : public TSchematizedLogColumn {
 public:
     using TValueType = T;
     using TArrowBuilderType = TArrowTypeMapper<TValueType>::TArrowBuilderType;
@@ -85,7 +85,7 @@ public:
     std::shared_ptr<TArrowBuilderType> Builder;
 
     TTypedDBLogColumn(TString name, TDatabaseSettings settings)
-        : TBaseDBLogColumn(std::move(name), TypeName, std::move(settings)),
+        : TSchematizedLogColumn(std::move(name), TypeName, std::move(settings)),
         Builder(TArrowTypeMapper<TValueType>::CreateBuilder()) {}
 
     std::shared_ptr<arrow::DataType> GetArrowDataType() const override {

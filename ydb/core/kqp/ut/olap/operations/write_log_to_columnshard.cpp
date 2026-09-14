@@ -1,9 +1,7 @@
-#include "write_log_to_olap.h"
+#include "write_log_to_columnshard.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/olap/helpers/get_value.h>
@@ -11,8 +9,6 @@
 #include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
 #include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
-
-#include <ydb/core/kqp/ut/olap/operations/write_log_to_olap.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -23,27 +19,11 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr::NKqp::NLogToDB {
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
-void TBaseDBLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
-    if (message.Component != Component) {
-        return ;
-    }
+namespace NKikimr::NKqp::NSchematizedLog {
 
-    if (!TableExists) {
-        return ;
-    }
-
-    std::vector<std::shared_ptr<arrow::Array>> arrays;
-    for(auto& column: Columns) {
-        column->Write(message);
-        arrays.push_back(column->MakeArray());
-    }
-    auto batch = arrow::RecordBatch::Make(GetArrowSchema(), 1, arrays);
-    SendDataViaActorSystem(batch);
-}
-
-TString TBaseDBLogWriter::GetStoreDescription() {
+TString TColumnShardLogWriter::GetStoreDescription() {
 
     TStringBuilder sb;
     for (const auto& column : Columns) {
@@ -76,16 +56,7 @@ TString TBaseDBLogWriter::GetStoreDescription() {
     return storeDesc;
 }
 
-std::shared_ptr<arrow::Schema> TBaseDBLogWriter::GetArrowSchema() const {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(Columns.size());
-    for (const auto& column : Columns) {
-        fields.emplace_back(column->MakeArrowField());
-    }
-    return std::make_shared<arrow::Schema>(std::move(fields));
-}
-
-TString TBaseDBLogWriter::GetTableDescription() {
+TString TColumnShardLogWriter::GetTableDescription() {
     TStringBuilder sb;
     sb << "[";
     bool first = true;
@@ -116,7 +87,7 @@ TString TBaseDBLogWriter::GetTableDescription() {
     return result;
 }
 
-void TBaseDBLogWriter::WaitForSchemeOperation(TActorId sender, ui64 txId) {
+void TColumnShardLogWriter::WaitForSchemeOperation(TActorId sender, ui64 txId) {
     auto& server = GetRunner().GetTestServer();
     auto& runtime = *server.GetRuntime();
     auto& settings = server.GetSettings();
@@ -133,7 +104,7 @@ void TBaseDBLogWriter::WaitForSchemeOperation(TActorId sender, ui64 txId) {
     runtime.template GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
 }
 
-void TBaseDBLogWriter::ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme) {
+void TColumnShardLogWriter::ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modifyScheme) {
     auto& server = GetRunner().GetTestServer();
     auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
@@ -147,36 +118,36 @@ void TBaseDBLogWriter::ExecuteModifyScheme(NKikimrSchemeOp::TModifyScheme& modif
     WaitForSchemeOperation(sender, txId);
 }
 
-void TBaseDBLogWriter::CreateStore() {
-    TString scheme = GetStoreDescription();
+void TColumnShardLogWriter::CreateOrUpdateStorage() {
+    // Create column store
+    TString storeScheme = GetStoreDescription();
     NKikimrSchemeOp::TColumnStoreDescription store;
-    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(scheme, &store));
+    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(storeScheme, &store));
     NKikimrSchemeOp::TModifyScheme op;
     op.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnStore);
     op.SetWorkingDir("/Root");
     op.MutableCreateColumnStore()->CopyFrom(store);
     ExecuteModifyScheme(op);
-}
 
-void TBaseDBLogWriter::CreateTable() {
+    // Create column table
     TString storeOrDirName = Settings.StoreName;
-    TString scheme = GetTableDescription();
+    TString tableScheme = GetTableDescription();
     NKikimrSchemeOp::TColumnTableDescription table;
-    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(scheme, &table));
+    UNIT_ASSERT(::google::protobuf::TextFormat::ParseFromString(tableScheme, &table));
     TString workingDir = "/Root";
     if (!storeOrDirName.empty()) {
         workingDir += "/" + storeOrDirName;
     }
 
-    NKikimrSchemeOp::TModifyScheme op;
     op.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
     op.SetWorkingDir(workingDir);
     op.MutableCreateColumnTable()->CopyFrom(table);
-    // @was: helper.ExecuteModifyScheme(op);
     ExecuteModifyScheme(op);
+
+    TableExists = true;
 }
 
-void TBaseDBLogWriter::SendDataViaActorSystem(std::shared_ptr<arrow::RecordBatch> batch) {
+void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) {
 
     auto* runtime = GetRunner().GetTestServer().GetRuntime();
 

@@ -8,7 +8,7 @@
 #include <util/generic/string.h>
 #include <util/system/types.h>
 
-namespace NKikimr::NKqp::NLogToDB {
+namespace NKikimr::NKqp::NSchematizedLog {
 
 template <typename T> struct TArrowTypeMapper {};
 

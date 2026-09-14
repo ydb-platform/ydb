@@ -1,4 +1,4 @@
-#include "write_log_to_olap.h"
+#include "write_log_to_columnshard.h"
 
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/olap/helpers/get_value.h>
@@ -7,7 +7,7 @@
 #include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 
-#include <ydb/core/kqp/ut/olap/operations/write_log_to_olap.h>
+#include <ydb/core/kqp/ut/olap/operations/write_log_to_columnshard.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -22,7 +22,7 @@
 
 namespace NKikimr::NKqp {
 
-using namespace NKikimr::NKqp::NLogToDB;
+using namespace NKikimr::NKqp::NSchematizedLog;
 
 Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     Y_UNIT_TEST(WriteFails) {
@@ -688,12 +688,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWrite) {
     }
 }
 
-class TBaseTestExampleLogWriter : public TBaseDBLogWriter {
+class TBaseTestExampleLogWriter : public TColumnShardLogWriter {
 public:
     unsigned WrittenCount{0};
 
-    TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TBaseDBLogColumn>> columns)
-        : TBaseDBLogWriter(runner, component, TBaseDBLogWriter::TDatabaseSettings {
+    TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
+        : TColumnShardLogWriter(runner, component, TColumnShardLogWriter::TDatabaseSettings {
             .TableName = "olapTable",
             .StoreName = "olapStore"
         }, columns)
@@ -701,7 +701,7 @@ public:
 
     void Write(const NActors::NStructuredLog::TLogMessage& message) override
     {
-        TBaseDBLogWriter::Write(message);
+        TBaseSchematizedLogWriter::Write(message);
         WrittenCount++;
     }
 
@@ -828,11 +828,9 @@ struct TEnvironment {
     TKikimrRunner Kikimr;
     std::shared_ptr<TBaseTestExampleLogWriter> Writer;
 
-    TEnvironment(const TVector<std::shared_ptr<TBaseDBLogColumn>>& columns): Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
+    TEnvironment(const TVector<std::shared_ptr<TSchematizedLogColumn>>& columns): Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
         Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, NActorsServices::TEST, columns);
-        Writer->CreateStore();
-        Writer->CreateTable();
-        Writer->TableExists = true;
+        Writer->CreateOrUpdateStorage();
     }
 
     void WriteLog(const TEmitTestLog::TLogWriteFunc& writeFunc) {
@@ -840,7 +838,7 @@ struct TEnvironment {
         for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
             runtime->GetLogSettings(i)->Sinks.push_back(Writer);
         }
-        runtime->SetLogPriority(Writer->Component, NActors::NLog::PRI_TRACE);
+        runtime->SetLogPriority(Writer->GetComponent(), NActors::NLog::PRI_TRACE);
 
         runtime->Register(new TEmitTestLog(writeFunc));
     }
@@ -880,10 +878,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "[6u]", R"(["Test info message"])",   R"(["write_ut.cpp:862"])", R"(["3"])",  "[3u]"},
-            {"2u", "[5u]", R"(["Test notice message"])", R"(["write_ut.cpp:864"])", R"(["7"])",   "[7u]"},
-            {"3u", "[4u]", R"(["Test warn message"])",   R"(["write_ut.cpp:866"])", R"(["ace"])", "#"},
-            {"4u", "[3u]", R"(["Test error message"])",  R"(["write_ut.cpp:867"])", R"(#)",       "#"}});
+            {"1u", "[6u]", R"(["Test info message"])",   R"(["write_ut.cpp:860"])", R"(["3"])",  "[3u]"},
+            {"2u", "[5u]", R"(["Test notice message"])", R"(["write_ut.cpp:862"])", R"(["7"])",   "[7u]"},
+            {"3u", "[4u]", R"(["Test warn message"])",   R"(["write_ut.cpp:864"])", R"(["ace"])", "#"},
+            {"4u", "[3u]", R"(["Test error message"])",  R"(["write_ut.cpp:865"])", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -912,6 +910,31 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"2u", "[1u]", "#", "#"},
             {"3u", "[1u]", "[2u]", "#"},
             {"4u", "[1u]", "[2u]", "[3u]"}});
+    }
+
+    Y_UNIT_TEST(WriteMessageTime) {
+
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1),
+            std::make_shared<TDBLogMessageTimeColumn>()
+        });
+
+        // Write data
+        NActors::NStructuredLog::TLogMessage message;
+        message.Component = NActorsServices::TEST;
+        message.Time = TInstant::MicroSeconds(1789233327128336);
+        env.Writer->Write(message);
+        message.Time = TInstant::MicroSeconds(1789233327128337);
+        env.Writer->Write(message);
+        message.Time = TInstant::MicroSeconds(1789233327128338);
+        env.Writer->Write(message);
+        env.Writer->Flush();
+
+        // Fetch and check data
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1789233327128336u"},
+            {"2u", "1789233327128337u"},
+            {"3u", "1789233327128338u"}});
     }
 }
 
@@ -1057,6 +1080,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLogTypes) {
 
     Y_UNIT_TEST(String) {
         TestType<TString, ui64>(TString("s"), 1);
+    }
+
+    Y_UNIT_TEST(Instant) {
+        TestType<TInstant, TString>(TInstant::Now(), TString("s"));
     }
 
 }

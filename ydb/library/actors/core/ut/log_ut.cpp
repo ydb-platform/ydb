@@ -855,6 +855,9 @@ Y_UNIT_TEST_SUITE(TWriteLogSink) {
         void Write(const TLogMessage& message) override {
             Messages.push_back(message);
         }
+
+        void Flush() override {
+        }
     };
 
     Y_UNIT_TEST(SimpleWrite) {

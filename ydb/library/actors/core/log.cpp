@@ -551,6 +551,7 @@ namespace NActors {
                 .StructuredMessage = evLog->StructuredMessage.GetOrElse({})};
             for(auto& sink: Settings->Sinks) {
                 sink->Write(message);
+                sink->Flush();
             }
         }
         return OutputRecord(

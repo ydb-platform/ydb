@@ -89,22 +89,6 @@ template<class TImplActor>
 class TGRpcTestServer {
 public:
     TGRpcTestServer() {
-        NYdbGrpc::TServerOptions options;
-        Init(std::move(options));
-    }
-
-    explicit TGRpcTestServer(NYdbGrpc::TServerOptions options) {
-        Init(std::move(options));
-    }
-
-    ~TGRpcTestServer() {
-        if (GRpcServer) {
-            GRpcServer->Stop();
-        }
-    }
-
-private:
-    void Init(NYdbGrpc::TServerOptions options) {
         ui64 port = PortManager.GetPort(2134);
         ui64 grpc = PortManager.GetPort(2135);
         ServerSettings = new TServerSettings(port);
@@ -115,6 +99,7 @@ private:
 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
+        NYdbGrpc::TServerOptions options;
         options.SetPort(grpc);
         GRpcServer.Reset(new NYdbGrpc::TGRpcServer(options));
 
@@ -125,15 +110,17 @@ private:
 
         GRpcEndpoint = TStringBuilder() << "localhost:" << grpc;
     }
+
+    ~TGRpcTestServer() {
+        if (GRpcServer) {
+            GRpcServer->Stop();
+        }
+    }
+
 public:
     TServerSettings::TPtr ServerSettings;
-    // GRpcServer must be declared before Server so that it is destroyed AFTER
-    // Server. The TServer destructor stops the actor system, which destroys actors that hold
-    // TFacade objects. The TFacade destructor calls TGRpcStreamingRequest::FinishInternal(), which
-    // accesses Server->IsShuttingDown(). If GRpcServer were destroyed first,
-    // this would be a use-after-free.
-    THolder<NYdbGrpc::TGRpcServer> GRpcServer;
     TServer::TPtr Server;
+    THolder<NYdbGrpc::TGRpcServer> GRpcServer;
     TString GRpcEndpoint;
 
 private:
@@ -382,47 +369,6 @@ private:
     ui64 Counter = 0;
 };
 
-// Actor that attaches and reads but never finishes/closes the stream.
-// It keeps the IStreamCtx (TFacade) alive until the actor is destroyed,
-// which reproduces the LOGBROKER-10618 crash: when the gRPC server is
-// stopped (CQ shutdown) before the actor system is destroyed, the facade
-// destructor calls Detach() -> FinishInternal() -> Stream.Finish() on a
-// dead completion queue.
-class THangActor : public TActorBootstrapped<THangActor> {
-public:
-    THangActor(TIntrusivePtr<IContext> context)
-        : Context(std::move(context))
-    { }
-
-    void Bootstrap(const TActorContext& ctx) {
-        Y_UNUSED(ctx);
-        Context->Attach(SelfId());
-        Context->Read();
-        Attached.Signal();
-        Become(&THangActor::StateWork);
-    }
-
-    void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
-        // Intentionally do nothing: keep the stream open and the context alive.
-    }
-
-    STFUNC(StateWork) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(IContext::TEvReadFinished, Handle);
-        }
-    }
-
-public:
-    static TManualEvent Attached;
-
-private:
-    TIntrusivePtr<IContext> Context;
-};
-
-TManualEvent THangActor::Attached;
-
 Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
     Y_UNIT_TEST(SimpleEcho) {
         auto server = MakeHolder<TGRpcTestServer<TSimpleEchoActor>>();
@@ -537,46 +483,6 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
 
         auto status = stream->Finish();
         UNIT_ASSERT(status.ok());
-    }
-
-    // Regression test for LOGBROKER-10618.
-    // A streaming RPC is left hanging (the server actor holds the IStreamCtx
-    // and never finishes). When the gRPC server is stopped, its completion
-    // queues are shut down. Then the actor system is destroyed, which destroys
-    // the hanging actor and its IStreamCtx (TFacade). The facade destructor
-    // calls Detach() -> FinishInternal() -> Stream.Finish() on the already
-    // dead completion queue, which used to hit the Y_VERIFY
-    // "grpc_cq_begin_op(cq_, notify_tag) failed".
-    Y_UNIT_TEST(FinishAfterServerShutdownDoesNotCrash) {
-        NYdbGrpc::TServerOptions options;
-        // Short deadline so Stop() does not block for the default 30s while
-        // the hanging RPC keeps the server from draining.
-        options.SetGRpcShutdownDeadline(TDuration::MilliSeconds(100));
-
-        auto server = MakeHolder<TGRpcTestServer<THangActor>>(std::move(options));
-
-        auto channel = grpc::CreateChannel(server->GRpcEndpoint, grpc::InsecureChannelCredentials());
-        auto stub = NStreamingTest::TStreamingService::NewStub(channel);
-
-        {
-            grpc::ClientContext context;
-            auto stream = stub->Session(&context);
-            // The server actor (THangActor) now holds the IStreamCtx and never
-            // finishes the stream. Keep the client stream alive so the RPC stays
-            // in flight on the server side.
-            Y_UNUSED(stream);
-
-            // Wait until the server-side THangActor has been created and attached
-            // to the stream. This guarantees the IStreamCtx (TFacade) is held by
-            // the actor before we shut the server down, so the facade destructor
-            // will run after the completion queue is dead.
-            THangActor::Attached.WaitI();
-        }
-
-        // Destroy the server: GRpcServer->Stop() shuts down the CQs, then the
-        // actor system is destroyed, destroying THangActor and its IStreamCtx.
-        // Without the fix this crashes with the LOGBROKER-10618 Y_VERIFY.
-        server.Reset();
     }
 }
 

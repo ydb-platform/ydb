@@ -238,14 +238,7 @@ void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool
         server->Stop();
     }
 
-    // Do not destroy TGRpcServer objects here.
-    // KikimrStop() calls StopGRpcServers() before ActorSystem->Stop(), so destroying the
-    // servers here would leave dangling TServer* pointers in any
-    // TGRpcStreamingRequest objects that are still alive when the actor system
-    // destroys their holding actors. The servers are destroyed later when
-    // GRpcServersWrapper (a shared_ptr member of TKikimrRunner) is released in
-    // ~TKikimrRunner(), which runs after ActorSystem.Destroy().
-    // wrapper->Servers.clear();
+    wrapper->Servers.clear();
 }
 
 } // anonymous namespace

@@ -134,6 +134,8 @@ namespace NKikimr::NDDisk {
             EvRegisterPersistentBufferResult,
             EvUnregisterPersistentBuffer,
             EvUnregisterPersistentBufferResult,
+            EvGetPersistentBufferRegistrationToken,
+            EvGetPersistentBufferRegistrationTokenResult,
         };
     };
 
@@ -505,8 +507,11 @@ struct TPersistentBufferFormat {
     // are saved in the header. Existing checksum-formatted records remain readable.
     // Kept last to preserve existing positional aggregate initialization.
     bool EnableChecksums = true;
-    // Registration age limit. Closed registrations are retained for twice this interval.
+    // Registration token lifetime on the PB monotonic clock.
+    // Closed registrations are retained for twice this interval.
     ui32 RegistrationTimeoutMilliseconds = 5000;
+    // Actor-wide admission limit; token exhaustion returns OVERLOADED.
+    ui32 MaxRegistrationTokens = 1024;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \
@@ -541,12 +546,33 @@ struct TPersistentBufferFormat {
     struct TEvRegisterPersistentBufferResult;
     struct TEvUnregisterPersistentBufferResult;
 
+    struct TEvGetPersistentBufferRegistrationTokenResult;
+
+    DECLARE_DDISK_EVENT(GetPersistentBufferRegistrationToken) {
+        using TResult = TEvGetPersistentBufferRegistrationTokenResult;
+        TEvGetPersistentBufferRegistrationToken() = default;
+        explicit TEvGetPersistentBufferRegistrationToken(const TQueryCredentials& creds) {
+            creds.SerializeForRequest(Record.MutableCredentials());
+        }
+    };
+
+    DECLARE_DDISK_EVENT(GetPersistentBufferRegistrationTokenResult) {
+        TEvGetPersistentBufferRegistrationTokenResult() = default;
+        TEvGetPersistentBufferRegistrationTokenResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                const std::optional<TString>& errorReason = std::nullopt) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(*errorReason);
+            }
+        }
+    };
+
     DECLARE_DDISK_EVENT(RegisterPersistentBuffer) {
         using TResult = TEvRegisterPersistentBufferResult;
         TEvRegisterPersistentBuffer() = default;
-        TEvRegisterPersistentBuffer(const TQueryCredentials& creds, TInstant timestamp) {
+        TEvRegisterPersistentBuffer(const TQueryCredentials& creds, ui64 token) {
             creds.SerializeForRequest(Record.MutableCredentials());
-            Record.SetTimestampMicroseconds(timestamp.MicroSeconds());
+            Record.SetToken(token);
         }
     };
 

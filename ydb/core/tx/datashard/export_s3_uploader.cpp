@@ -2,6 +2,7 @@
 
 #include "datashard.h"
 #include "export_common.h"
+#include "export_create_table.h"
 #include "export_s3.h"
 #include "extstorage_usage_config.h"
 
@@ -235,17 +236,24 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         PutDataWithChecksum(std::move(Buffer), key, checksum, stateFunc, iv);
     }
 
-    void PutScheme(const Ydb::Table::CreateTableRequest& scheme) {
-        PutMessage(scheme, Settings.GetSchemeKey(), SchemeChecksum, &TThis::StateUploadScheme, Settings.EncryptionSettings.GetSchemeIV());
+    void PutScheme(const TString& scheme) {
+        PutDataWithChecksum(TString(scheme), Settings.GetSchemeKey(EnableTableBackupAsSql), SchemeChecksum,
+            &TThis::StateUploadScheme, Settings.EncryptionSettings.GetSchemeIV());
     }
 
     void UploadScheme() {
         Y_ENSURE(!SchemeUploaded);
 
         if (!Scheme) {
-            return Finish(false, TStringBuilder() << Settings.GetSchemeKey() << ": cannot infer scheme");
+            return Finish(false, TStringBuilder() << Settings.GetSchemeKey(EnableTableBackupAsSql) << ": cannot infer scheme");
         }
-        PutScheme(Scheme.GetRef());
+        if (Scheme->IsFail()) {
+            return Finish(false, TStringBuilder() << Settings.GetSchemeKey(EnableTableBackupAsSql) << ": " << Scheme->GetErrorMessage());
+        }
+        if (Scheme->GetResult().empty()) {
+            return Finish(false, TStringBuilder() << Settings.GetSchemeKey(EnableTableBackupAsSql) << ": empty scheme");
+        }
+        PutScheme(Scheme->GetResult());
     }
 
     void PutPermissions(const Ydb::Scheme::ModifyPermissionsRequest& permissions) {
@@ -332,8 +340,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         };
 
         if (EnableChecksums) {
-            TString checksumKey = ChecksumKey(Settings.GetSchemeKey());
-            UploadChecksum(std::move(SchemeChecksum), checksumKey, SchemeKeySuffix(false), nextStep);
+            TString checksumKey = ChecksumKey(Settings.GetSchemeKey(EnableTableBackupAsSql));
+            UploadChecksum(std::move(SchemeChecksum), checksumKey, SchemeKeySuffix(false, EnableTableBackupAsSql), nextStep);
         } else {
             nextStep();
         }
@@ -845,7 +853,7 @@ public:
     explicit TS3Uploader(
             const TActorId& dataShard, ui64 txId,
             const NKikimrSchemeOp::TBackupTask& task,
-            TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
+            TMaybe<TConclusion<TString>>&& scheme,
             TVector<TChangefeedExportDescriptions> changefeeds,
             TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
             TString&& metadata)
@@ -870,6 +878,7 @@ public:
         , PermissionsUploaded(ShardNum == 0 ? false : true)
         , EnableChecksums(task.GetEnableChecksums())
         , EnablePermissions(task.GetEnablePermissions())
+        , EnableTableBackupAsSql(task.GetEnableTableBackupAsSql())
     {
     }
 
@@ -1012,7 +1021,7 @@ private:
 
     const TActorId DataShard;
     const ui64 TxId;
-    const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
+    const TMaybe<TConclusion<TString>> Scheme;
     const TVector<TChangefeedExportDescriptions> Changefeeds;
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
@@ -1043,6 +1052,7 @@ private:
 
     bool EnableChecksums;
     bool EnablePermissions;
+    bool EnableTableBackupAsSql;
 
     TString DataChecksum;
     TString MetadataChecksum;
@@ -1058,7 +1068,7 @@ IActor* CreateUploaderBySettingsType(
     const TActorId& dataShard,
     ui64 txId,
     const NKikimrSchemeOp::TBackupTask& task,
-    TMaybe<Ydb::Table::CreateTableRequest>&& scheme,
+    TMaybe<TConclusion<TString>>&& scheme,
     TVector<TChangefeedExportDescriptions>&& changefeeds,
     TMaybe<Ydb::Scheme::ModifyPermissionsRequest>&& permissions,
     TString&& metadata)
@@ -1082,6 +1092,20 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
     auto scheme = (Task.GetShardNum() == 0)
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
+
+    TMaybe<TConclusion<TString>> schemeContent;
+    if (Task.GetShardNum() == 0) {
+        if (Task.GetEnableTableBackupAsSql()) {
+            schemeContent.ConstructInPlace(GenCreateTableQuery(Task));
+        } else if (scheme) {
+            TString content;
+            if (google::protobuf::TextFormat::PrintToString(*scheme, &content)) {
+                schemeContent.ConstructInPlace(std::move(content));
+            } else {
+                schemeContent.ConstructInPlace(TConclusionStatus::Fail("cannot serialize scheme"));
+            }
+        }
+    }
 
     const bool encrypted = Task.HasEncryptionSettings();
 
@@ -1171,7 +1195,7 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
 
     return CreateUploaderBySettingsType(
         dataShard, txId, Task,
-        std::move(scheme), std::move(changefeeds),
+        std::move(schemeContent), std::move(changefeeds),
         std::move(permissions), metadata.Serialize());
 }
 

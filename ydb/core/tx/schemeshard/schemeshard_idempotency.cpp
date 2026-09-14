@@ -1,4 +1,4 @@
-#include "schemeshard_impl.h"
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 

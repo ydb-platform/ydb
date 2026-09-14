@@ -37,39 +37,27 @@ namespace {
         std::atomic<i64> Offset = 0;
     };
 
-    // TAppData::TimeProvider is a process-global TIntrusivePtr. Actor threads
-    // (coordinator, metadata, pingers) read it without synchronization.
-    // Swapping it after the actor system has started is a TSAN data race
-    // (YDBBUGS-508 / #40339). CreateSetup uses UseRealThreads; TTestActorRuntime
-    // never restores the global in that mode, even after CleanupNodes. Same
-    // policy here and in blobstorage env / ydb_table_split_ut: install once
-    // before CreateSetup and never swap back. Add()/Reset() are atomic;
-    // Offset=0 is the wall clock.
+    // TAppData::TimeProvider is process-global; actor threads read it unsynchronized.
+    // Install once before CreateSetup() and never reassign (YDBBUGS-508 / #40339).
     class TScopedLeapTimeProvider: TNonCopyable {
     public:
-        TScopedLeapTimeProvider()
-            : Leap_(Installed())
-        {
-            if (!Leap_) {
-                Leap_ = MakeIntrusive<TLeapTimeProvider>();
-                Installed() = Leap_;
-                TIntrusivePtr<ITimeProvider> previous = Leap_;
-                DoSwap(TAppData::TimeProvider, previous);
-            }
-            Leap_->Reset();
+        TScopedLeapTimeProvider() {
+            Leap()->Reset();
         }
 
         TLeapTimeProvider* operator->() const {
-            return Leap_.Get();
+            return Leap();
         }
 
     private:
-        static TIntrusivePtr<TLeapTimeProvider>& Installed() {
-            static TIntrusivePtr<TLeapTimeProvider> leap;
-            return leap;
+        static TLeapTimeProvider* Leap() {
+            static TIntrusivePtr<TLeapTimeProvider> leap = [] {
+                auto p = MakeIntrusive<TLeapTimeProvider>();
+                TAppData::TimeProvider = p;
+                return p;
+            }();
+            return leap.Get();
         }
-
-        TIntrusivePtr<TLeapTimeProvider> Leap_;
     };
 
     class TBufferedCerr: TNonCopyable {

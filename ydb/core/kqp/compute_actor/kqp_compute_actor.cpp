@@ -186,7 +186,7 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
     RegisterKqpSysViewSource(*factory, counters);
     NYql::NDq::RegisterDqInputTransformLookupActorFactory(*factory);
 
-    RegisterDqSourceKikimrLookupProviderFactories(*factory);
+    NDqSourceLookup::RegisterKikimrLookupProviderFactories(*factory);
 
     if (federatedQuerySetup) {
         auto s3HttpRetryPolicy = NYql::GetFqHTTPRetryPolicy();

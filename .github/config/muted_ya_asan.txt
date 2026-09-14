@@ -244,6 +244,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToPosting
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.DimensionMismatchError
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.EmptyEmbeddingSkipped
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.MainToBuild
+ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.MainToPostingWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToBuild

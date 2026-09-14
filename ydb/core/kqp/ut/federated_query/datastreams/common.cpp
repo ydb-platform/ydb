@@ -147,6 +147,11 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
         queryServiceConfig.SetEnableMatchRecognize(true);
 
+        // Configure DatabaseNames for YDB connector routing. Use a dummy value
+        // that won't match any real database name, so YDB EDS in streaming tests
+        // are routed to PQ provider (topic access) instead of the connector.
+        queryServiceConfig.MutableGeneric()->MutableConnector()->AddDatabaseNames("__connector_only__");
+
         AppConfig->MutableTableServiceConfig()->SetDqChannelVersion(DqChannelsVersion);
 
         auto& authConfig = *AppConfig->MutableAuthConfig();

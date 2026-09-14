@@ -1,5 +1,6 @@
 #pragma once
-#include "schemeshard_idempotency.h"
+
+#include <ydb/core/tx/schemeshard/schemeshard_idempotency.h>
 #include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 
 #include <util/generic/string.h>

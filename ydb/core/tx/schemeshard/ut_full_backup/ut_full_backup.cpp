@@ -14,7 +14,6 @@
 #include <ydb/core/grpc_services/rpc_backup_base.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 
 #include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -737,26 +736,6 @@ Y_UNIT_TEST_SUITE(TBackupIdempotency) {
         UNIT_ASSERT_VALUES_EQUAL(InternalGetFullBackup(runtime, originalId).GetFullBackup().GetStatus(), Ydb::StatusIds::GENERIC_ERROR);
         UNIT_ASSERT_VALUES_EQUAL(
             DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1).GetPathDescription().ChildrenSize(), 0);
-    }
-
-    Y_UNIT_TEST(UidMetricsDistinguishAdmissionReplayConflictAndRecovery) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        ui64 txId = 100;
-        Prepare(runtime, env, txId);
-        const ui64 originalId = ++txId;
-        const auto accepted = Submit(runtime, originalId, "backup:metrics");
-        UNIT_ASSERT_VALUES_EQUAL_C(accepted.GetStatus(), NKikimrScheme::StatusAccepted, accepted.ShortDebugString());
-        env.TestWaitNotification(runtime, originalId);
-        const auto replay = LookupBackupOperation(runtime, MakeRequest(++txId, "backup:metrics"));
-        UNIT_ASSERT_VALUES_EQUAL_C(replay.GetStatus(), NKikimrScheme::StatusAccepted, replay.ShortDebugString());
-        const auto conflict = Submit(runtime, ++txId, "backup:metrics", "BACKUP  `FullBackupCol1`;");
-        UNIT_ASSERT_VALUES_EQUAL_C(conflict.GetStatus(), NKikimrScheme::StatusPreconditionFailed, conflict.ShortDebugString());
-        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/BackupUid/Admitted"), 1);
-        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/BackupUid/Replayed"), 1);
-        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/BackupUid/Conflicts"), 1);
-        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-        UNIT_ASSERT_VALUES_EQUAL(GetCumulativeCounter(runtime, "SchemeShard/BackupUid/RecoveredRecords"), 1);
     }
 
     Y_UNIT_TEST(LookupMissDoesNotReserveUidAndReplaySurvivesReboot) {

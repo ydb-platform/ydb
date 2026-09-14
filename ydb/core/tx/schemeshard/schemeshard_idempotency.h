@@ -1,6 +1,6 @@
 #pragma once
 
-#include "schemeshard_identificators.h"
+#include <ydb/core/tx/schemeshard/schemeshard_identificators.h>
 
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>

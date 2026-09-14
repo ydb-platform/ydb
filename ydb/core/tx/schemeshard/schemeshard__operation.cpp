@@ -1,7 +1,5 @@
 #include "schemeshard__operation.h"
 
-#include "common/operation_idempotency.h"
-
 #include "schemeshard__dispatch_op.h"
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
@@ -17,6 +15,7 @@
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 #include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
 #include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h>
 #include <ydb/core/test_tablet/events.h>

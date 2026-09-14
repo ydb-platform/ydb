@@ -1,6 +1,6 @@
 # Список изменений {{ ydb-short-name }} Server
 
-## Версия 26.3 {#26-3}
+## Версия 26.3 RC {#26-3-rc}
 
 Дата выхода: уточняется.
 
@@ -30,7 +30,6 @@
 * [Из `ydbd` удалены экспериментальный PostgreSQL wire protocol и синтаксис PostgreSQL SQL](https://github.com/ydb-platform/ydb/pull/45922). PostgreSQL-совместимые типы, функции `Pg::` и федеративные запросы к внешним базам PostgreSQL не затронуты.
 * [Добавлен кеш уровней KQP для векторных индексов](./dev/vector-indexes-kmeans-tree-type.md?version=v26.3). Максимальный размер кеша задается параметром `resource_manager.kqp_level_cache_max_size_bytes`.
 * [Добавлена поддержка интерфейса AccessService V2](https://github.com/ydb-platform/ydb/pull/43466), включая пакетные запросы авторизации. Интерфейс по умолчанию отключен и включается настройкой `feature_flags.enable_access_service_v2_interface: true`; изменение флага требует перезапуска сервера.
-* Доступны серверные [экспорт резервных копий в NFS и импорт из NFS](./concepts/backup.md?version=v26.3#nfs). Возможность по умолчанию отключена и включается [флагом](./reference/configuration/feature_flags.md?version=v26.3) `enable_fs_backups`.
 * [Структурированные значения в JSON-журнале](https://github.com/ydb-platform/ydb/pull/38208) можно выводить отдельными полями JSON вместо добавления в поле `message`. Поведение по умолчанию отключено и включается настройкой `log_config.enable_structured_log_in_json: true`.
 * [По умолчанию включено локальное удаление обработанных данных SyncLog](https://github.com/ydb-platform/ydb/pull/45158), что оптимизирует полную синхронизацию VDisk.
 * [Для колоночных таблиц доступны экспорт и импорт резервных копий](https://github.com/ydb-platform/ydb/pull/32930), включая операции с S3-совместимым хранилищем.

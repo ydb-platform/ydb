@@ -1,6 +1,6 @@
 # {{ ydb-short-name }} Server changelog
 
-## Version 26.3 {#26-3}
+## Version 26.3 RC {#26-3-rc}
 
 Release date: TBD.
 
@@ -30,7 +30,6 @@ Release date: TBD.
 * [Removed the experimental PostgreSQL wire protocol and PostgreSQL SQL syntax](https://github.com/ydb-platform/ydb/pull/45922) from `ydbd`. PostgreSQL-compatible types, `Pg::` functions, and federated queries to external PostgreSQL databases are not affected.
 * [Added an in-memory KQP level cache for vector indexes](./dev/vector-indexes-kmeans-tree-type.md?version=v26.3). Configure its maximum size with `resource_manager.kqp_level_cache_max_size_bytes`.
 * [Added support for the AccessService V2 interface](https://github.com/ydb-platform/ydb/pull/43466), including batched authorization requests. The interface is disabled by default and can be enabled with `feature_flags.enable_access_service_v2_interface: true`; changing this flag requires a server restart.
-* Server-side [backup export to and import from NFS](./concepts/backup.md?version=v26.3#nfs) are available. The capability is disabled by default and can be enabled with the [`enable_fs_backups`](./reference/configuration/feature_flags.md?version=v26.3) feature flag.
 * [Structured values in JSON logs](https://github.com/ydb-platform/ydb/pull/38208) can be emitted as separate JSON fields instead of being appended to `message`. The behavior is disabled by default and can be enabled with `log_config.enable_structured_log_in_json: true`.
 * [Local SyncLog data cutting is enabled by default](https://github.com/ydb-platform/ydb/pull/45158), improving full VDisk synchronization.
 * [Backup export and import are available for column-oriented tables](https://github.com/ydb-platform/ydb/pull/32930), including operations with S3-compatible storage.

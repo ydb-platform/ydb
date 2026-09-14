@@ -6,6 +6,7 @@
 #include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
@@ -47,7 +48,7 @@ public:
                 << "Another long-running operation with id '" << BuildId << "' already exists");
         }
 
-        const TString& uid = GetUid(request.GetOperationParams());
+        const TString& uid = GetUid(Ydb::TOperationId::SET_NOT_NULL, request.GetOperationParams());
         if (uid && Self->SetColumnConstraintOperationsByUid.contains(uid)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()
                 << "SetColumnConstraint operation with uid '" << uid << "' already exists");

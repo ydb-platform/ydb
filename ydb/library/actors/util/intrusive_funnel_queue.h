@@ -49,10 +49,11 @@ private:
 //
 // The consumer distinguishes the last item by changing Back from Front to null.
 // If that compare-exchange fails, a successor has already been reserved and the
-// consumer waits until its producer publishes Front->Next. This is why the queue
-// preserves FIFO order without locks, but is not lock-free as a whole: a producer
-// suspended between reserving Back and publishing Next temporarily blocks the
-// consumer.
+// consumer waits until its producer publishes Front->Next. TryPop reports this
+// transient state as Retry instead of waiting. This is why the queue preserves
+// FIFO order without locks, but is not lock-free as a whole: a producer suspended
+// between reserving Back and publishing Next temporarily blocks removal of the
+// front item.
 //
 // When removal of the last item races with a new push, Front is cleared with a
 // compare-exchange. It either succeeds before the producer publishes the new
@@ -72,18 +73,29 @@ private:
 // ----------------------
 //
 // The queue performs no allocation and does not own its items. An item must stay
-// alive from the beginning of Push until it is returned by Pop, and it must not
-// be pushed twice concurrently. Pop detaches the returned hook, allowing the item
-// to be destroyed or pushed again immediately.
+// alive from the beginning of Push until it is returned by Pop or TryPop, and it
+// must not be pushed twice concurrently. A successfully returned item is fully
+// detached, allowing it to be destroyed or pushed again immediately.
 //
-// Pop calls must be serialized with each other. Destruction of the queue must be
-// externally serialized with all Push and Pop calls.
+// Pop and TryPop calls must be serialized with each other. Destruction of the
+// queue must be externally serialized with all operations.
 template <class T, class TTag>
 class TIntrusiveFunnelQueue
 {
     using TItem = TIntrusiveFunnelQueueItem<T, TTag>;
 
 public:
+    enum class ETryPopStatus {
+        Item,
+        Empty,
+        Retry,
+    };
+
+    struct TTryPopResult {
+        ETryPopStatus Status;
+        T* Item;
+    };
+
     TIntrusiveFunnelQueue() noexcept
     {
         static_assert(std::derived_from<T, TItem>);
@@ -112,34 +124,16 @@ public:
     // Returns a detached item or nullptr. Must only be called by one consumer.
     T* Pop() noexcept
     {
-        T* const front = Front_.load(std::memory_order_acquire);
-        if (!front) {
-            return nullptr;
-        }
+        return PopImpl<true>().Item;
+    }
 
-        T* expected = front;
-        if (Back_.compare_exchange_strong(
-            expected,
-            nullptr,
-            std::memory_order_acq_rel,
-            std::memory_order_acquire))
-        {
-            expected = front;
-            Front_.compare_exchange_strong(
-                expected,
-                nullptr,
-                std::memory_order_acq_rel,
-                std::memory_order_acquire);
-        } else {
-            T* next = nullptr;
-            while (!(next = front->Next_.load(std::memory_order_acquire))) {
-                SpinLockPause();
-            }
-            Front_.store(next, std::memory_order_release);
-        }
-
-        front->Next_.store(nullptr, std::memory_order_relaxed);
-        return front;
+    // Makes one attempt to remove an item without waiting for a producer.
+    // Retry means that the queue is not empty, but a producer has not published
+    // the link to the next item yet. A caller receiving Retry must arrange a
+    // later attempt and must not treat it as an empty queue notification.
+    TTryPopResult TryPop() noexcept
+    {
+        return PopImpl<false>();
     }
 
     bool IsEmpty() const noexcept
@@ -148,6 +142,50 @@ public:
     }
 
 private:
+    template <bool Wait>
+    TTryPopResult PopImpl() noexcept
+    {
+        T* const front = Front_.load(std::memory_order_acquire);
+        if (!front) {
+            return {ETryPopStatus::Empty, nullptr};
+        }
+
+        T* expected = front;
+        if (Back_.load(std::memory_order_acquire) == front &&
+            Back_.compare_exchange_strong(
+                expected,
+                nullptr,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire))
+        {
+            expected = front;
+            // If this CAS fails, a producer has already published a new front.
+            // Either outcome leaves the queue in a valid state, so the result
+            // does not affect removal of the old front item.
+            Front_.compare_exchange_strong(
+                expected,
+                nullptr,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire);
+        } else {
+            T* next = front->Next_.load(std::memory_order_acquire);
+            if (!next) {
+                if constexpr (Wait) {
+                    do {
+                        SpinLockPause();
+                        next = front->Next_.load(std::memory_order_acquire);
+                    } while (!next);
+                } else {
+                    return {ETryPopStatus::Retry, nullptr};
+                }
+            }
+            Front_.store(next, std::memory_order_release);
+        }
+
+        front->Next_.store(nullptr, std::memory_order_relaxed);
+        return {ETryPopStatus::Item, front};
+    }
+
     alignas(PLATFORM_CACHE_LINE) std::atomic<T*> Front_ = nullptr;
     alignas(PLATFORM_CACHE_LINE) std::atomic<T*> Back_ = nullptr;
 };

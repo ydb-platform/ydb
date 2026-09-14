@@ -103,6 +103,23 @@ private:
     TIntrusiveFunnelQueue<TNode> Queue_;
 };
 
+class TIntrusiveFunnelQueueTryPopAdapter
+{
+public:
+    void Push(TNode* node) noexcept
+    {
+        Queue_.Push(node);
+    }
+
+    TNode* Pop() noexcept
+    {
+        return Queue_.TryPop().Item;
+    }
+
+private:
+    TIntrusiveFunnelQueue<TNode> Queue_;
+};
+
 class TLockFreeQueueAdapter
 {
 public:
@@ -216,6 +233,11 @@ void BM_TIntrusiveFunnelQueue(benchmark::State& state)
     RunMpsc<TIntrusiveFunnelQueueAdapter>(state);
 }
 
+void BM_TIntrusiveFunnelQueueTryPop(benchmark::State& state)
+{
+    RunMpsc<TIntrusiveFunnelQueueTryPopAdapter>(state);
+}
+
 void BM_TLockFreeQueue(benchmark::State& state)
 {
     RunMpsc<TLockFreeQueueAdapter>(state);
@@ -257,6 +279,12 @@ BENCHMARK(BM_TPooledFunnelQueue)
     ->Unit(benchmark::kNanosecond);
 
 BENCHMARK(BM_TIntrusiveFunnelQueue)
+    ->Apply(MpscArguments)
+    ->ArgNames({"producers", "items_per_producer"})
+    ->UseRealTime()
+    ->Unit(benchmark::kNanosecond);
+
+BENCHMARK(BM_TIntrusiveFunnelQueueTryPop)
     ->Apply(MpscArguments)
     ->ArgNames({"producers", "items_per_producer"})
     ->UseRealTime()

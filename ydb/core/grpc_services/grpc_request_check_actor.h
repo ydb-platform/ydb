@@ -38,6 +38,24 @@ struct TCloudPermissionsSettings {
     TString AccessServiceType;
 };
 
+// The outcome of the check of the user's right to connect to the database of the request.
+// What of it counts as a denial is up to the caller: the gRPC API lets a request through
+// unless the user provably has no right, while the HTTP monitoring is stricter than that.
+enum class EConnectRightVerdict {
+    // The user is allowed to connect to the database.
+    Allowed,
+    // There is no SecurityObject of the database to check the connect right against.
+    NoSecurityObject,
+    // The database has denied the connect right to the user.
+    NoConnectRight,
+};
+
+// A connect right verdict along with a human readable explanation of it for logging.
+struct TConnectRightCheckResult {
+    EConnectRightVerdict Verdict = EConnectRightVerdict::Allowed;
+    TStringBuf Reason;
+};
+
 template<typename TCtx>
 bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
     IRequestProxyCtx* requestProxyCtx = ctx;
@@ -703,28 +721,17 @@ private:
     }
 
     // Checks whether the user is allowed to connect to the database of the request.
-    // Shared by the gRPC enforcement path (CheckConnectRight) and by the HTTP monitoring observe mode
-    // (EvaluateHttpDatabaseAccessVerdict), so that both judge the access by exactly the same rules.
-    // The optional reason is filled in with a human readable explanation of the verdict for logging.
-    EHttpDatabaseAccessVerdict EvaluateConnectRightVerdict(TStringBuf* reason = nullptr) const {
-        const auto setReason = [reason](TStringBuf value) {
-            if (reason) {
-                *reason = value;
-            }
-        };
-
+    TConnectRightCheckResult CheckConnectRightOfUser() const {
         // An empty token at this point means that anonymous access is allowed by the system configuration,
         // as the EnforceUserTokenRequirement and EnforceUserTokenCheckRequirement flags have already been
         // validated earlier in the request processing pipeline.
         const auto& parsedToken = TBase::GetParsedToken();
         if (!parsedToken) {
-            setReason("anonymous requests allowed");
-            return EHttpDatabaseAccessVerdict::Ok;
+            return {EConnectRightVerdict::Allowed, "anonymous requests allowed"};
         }
 
         if (!SecurityObject_) {
-            setReason("no SecurityObject_");
-            return EHttpDatabaseAccessVerdict::NoSecurityObject;
+            return {EConnectRightVerdict::NoSecurityObject, "no SecurityObject_"};
         }
 
         // admins can connect to databases without having connect rights:
@@ -733,8 +740,7 @@ private:
         const auto& databaseOwner = SecurityObject_->GetOwnerSID();
         const bool isAdmin = TBase::IsUserAdmin() || IsDatabaseAdministrator(parsedToken.Get(), databaseOwner);
         if (isAdmin) {
-            setReason("user is a admin");
-            return EHttpDatabaseAccessVerdict::Ok;
+            return {EConnectRightVerdict::Allowed, "user is an admin"};
         }
 
         // The user-level connect right cannot limit node registration: registration is a
@@ -742,17 +748,14 @@ private:
         // one. Requiring here the root database as a cluster alias would add no value and
         // introduce technical issues.
         if (IsTokenAllowed(parsedToken.Get(), AppData()->RegisterDynamicNodeAllowedSIDs)) {
-            setReason("user is a special subject for node registration");
-            return EHttpDatabaseAccessVerdict::Ok;
+            return {EConnectRightVerdict::Allowed, "user is a special subject for node registration"};
         }
 
-        if (SecurityObject_->CheckAccess(NACLib::ConnectDatabase, *parsedToken)) {
-            setReason("user has connect right");
-            return EHttpDatabaseAccessVerdict::Ok;
+        if (!SecurityObject_->CheckAccess(NACLib::ConnectDatabase, *parsedToken)) {
+            return {EConnectRightVerdict::NoConnectRight, "user has no connect right"};
         }
 
-        setReason("user has no connect right");
-        return EHttpDatabaseAccessVerdict::NoConnectRight;
+        return {EConnectRightVerdict::Allowed, "user has connect right"};
     }
 
     std::pair<bool, std::optional<NYql::TIssue>> CheckConnectRight() {
@@ -761,17 +764,25 @@ private:
         }
 
         if (SkipCheckConnectRights_) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, there is no db provided from user",
+            YDB_LOG_DEBUG_COMP(
+                NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
+                TStringBuilder()
+                    << "Skip check permission connect db, AllowYdbRequestsWithoutDatabase is off, "
+                    << "there is no db provided from user: " << CheckedDatabaseName_,
                 {"database", CheckedDatabaseName_},
                 {"user", TBase::GetUserSID()},
                 {"ip", GrpcRequestBaseCtx_->GetPeerName()});
             return {false, std::nullopt};
         }
 
-        TStringBuf reason;
-        // A missing SecurityObject leaves nothing to check the access against, so the request is let through.
-        if (EvaluateConnectRightVerdict(&reason) != EHttpDatabaseAccessVerdict::NoConnectRight) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, TStringBuilder() << "Skip check permission connect db, " << reason,
+        // The gRPC API denies a request only when the database has explicitly denied the connect right
+        // to the user: with no SecurityObject there is nothing to check the right against, so such
+        // a request is let through.
+        const auto connectRight = CheckConnectRightOfUser();
+        if (connectRight.Verdict != EConnectRightVerdict::NoConnectRight) {
+            YDB_LOG_DEBUG_COMP(
+                NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
+                TStringBuilder() << "Skip check permission connect db, " << connectRight.Reason,
                 {"database", CheckedDatabaseName_},
                 {"user", TBase::GetUserSID()},
                 {"ip", GrpcRequestBaseCtx_->GetPeerName()});
@@ -796,13 +807,19 @@ private:
             return EHttpDatabaseAccessVerdict::EmptyDatabase;
         }
 
-        // The connect right is defined for a database only, so a request that points to any other
-        // path (a table or a topic inside a database, for example) is not a database-scoped one.
+        // We expect that object type passed in the request is a database.
         if (!IsDatabase(*RequestSchemeData_)) {
             return EHttpDatabaseAccessVerdict::NotADatabase;
         }
 
-        return EvaluateConnectRightVerdict();
+        switch (CheckConnectRightOfUser().Verdict) {
+            case EConnectRightVerdict::Allowed:
+                return EHttpDatabaseAccessVerdict::Ok;
+            case EConnectRightVerdict::NoSecurityObject:
+                return EHttpDatabaseAccessVerdict::NoSecurityObject;
+            case EConnectRightVerdict::NoConnectRight:
+                return EHttpDatabaseAccessVerdict::NoConnectRight;
+        }
     }
 
     const TActorId Owner_;

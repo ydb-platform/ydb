@@ -713,11 +713,13 @@ int main(int argc, char **argv) {
     for (ui32 i = 0; i < protoTests.PersistentBufferTestListSize(); ++i) {
         NDevicePerfTest::TPersistentBufferTest testProto = protoTests.GetPersistentBufferTestList(i);
         if (config.HasInFlightOverride()) {
-            for (ui32 measureType : xrange(3)) {
+            for (ui32 measureType : xrange(testProto.GetSweepMeasureTypes() ? 3 : 1)) {
                 for (ui32 inFlight = config.InFlightFrom; inFlight <= config.InFlightTo; inFlight *= 2) {
                     overridePBufferInFlight(testProto, inFlight);
                     for (ui32 run = 0; run < config.RunCount; ++run) {
-                        overridePBufferMeasureType(testProto, measureType);
+                        if (testProto.GetSweepMeasureTypes()) {
+                            overridePBufferMeasureType(testProto, measureType);
+                        }
                         THolder<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
                         test->SetPrinter(printer);
                         test->RunTest();
@@ -725,9 +727,11 @@ int main(int argc, char **argv) {
                 }
             }
         } else {
-            for (ui32 measureType : xrange(3)) {
+            for (ui32 measureType : xrange(testProto.GetSweepMeasureTypes() ? 3 : 1)) {
                 for (ui32 run = 0; run < config.RunCount; ++run) {
-                    overridePBufferMeasureType(testProto, measureType);
+                    if (testProto.GetSweepMeasureTypes()) {
+                        overridePBufferMeasureType(testProto, measureType);
+                    }
                     THolder<NKikimr::TPerfTest> test(new NKikimr::TPersistentBufferTest(config, testProto));
                     test->SetPrinter(printer);
                     test->RunTest();

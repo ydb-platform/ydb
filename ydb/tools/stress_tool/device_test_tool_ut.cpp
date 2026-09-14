@@ -375,7 +375,7 @@ Y_UNIT_TEST(DDiskTestWriteLargeIo) {
     ProbeTest<NDevicePerfTest::TDDiskTest, TDDiskTest32>(perfCfg.Str(), true);
 }
 
-void ProbePersistentBufferWrite(bool disableDDiskChecksums, bool forcePDiskFallback = false) {
+void ProbePersistentBufferWrite(bool disableDDiskChecksums, bool forcePDiskFallback = false, bool batching = true) {
     TStringStream perfCfg;
     perfCfg << R"___(
         PersistentBufferTestList: {
@@ -394,12 +394,17 @@ void ProbePersistentBufferWrite(bool disableDDiskChecksums, bool forcePDiskFallb
         }
     )___";
 
+    perfCfg << "Chunks: 10 EnableWritesBatching: " << (batching ? "true" : "false");
     ProbeTest<NDevicePerfTest::TPersistentBufferTest, TPersistentBufferTest32>(
         perfCfg.Str(), true, {}, disableDDiskChecksums, forcePDiskFallback);
 }
 
 Y_UNIT_TEST(PersistentBufferTestWrite) {
     ProbePersistentBufferWrite(false);
+}
+
+Y_UNIT_TEST(PersistentBufferTestWriteWithoutBatching) {
+    ProbePersistentBufferWrite(false, true, false);
 }
 
 Y_UNIT_TEST(PersistentBufferTestWriteChecksumsDisabled) {

@@ -90,6 +90,25 @@ actor instead of io_uring.
 - `BackgroundWriteRatio` - unmeasured background writes per measured read during read load; `0` disables them and `1.0` issues one write per read. Background writes share `InFlight` and interval pacing with measured reads.
 - `BackgroundWriteSizeKiB` - background write size in KiB (default `4`); must be a power of two and at least 4. When background writes are enabled, `ExpectedChunkSize` and each `AreaSize` must be divisible by this size.
 
+### Parameters for `PersistentBufferTestList`
+These describe load applied through Persistent Buffer (PB).
+
+Each outer `PersistentBufferTestList` entry contains a nested
+`PersistentBufferTestList` of load requests with `PersistentBufferWriteLoad` sources,
+and these PB configuration options:
+
+- `Chunks` - optional number of chunks allocated to PB; if omitted, the existing default of 512 chunks is used.
+- `EnableWritesBatching` - whether PB combines small writes into batches (default `true`).
+- `SweepMeasureTypes` - run each load three times, measuring writes, reads, and erases (default `true`). Set to `false` to run once with the load source's configured `MeasureType`.
+
+Within each `PersistentBufferWriteLoad` source, `RandomSeed` is an optional `uint64`
+seed for payload generation; when omitted, the seed is derived from the
+current time. Set an explicit `RandomSeed` and use `SweepMeasureTypes: false`
+with the desired `MeasureType` to compare a single measurement type using reproducible payloads.
+
+The PB load actor connects, registers its tablet, and lists existing records
+before starting the workload.
+
 ### Parameters for `InterconnectTestList`
 These describe network load generated through the actors library interconnect
 subsystem (`ydb/library/actors/interconnect/load.h`), reusing the same

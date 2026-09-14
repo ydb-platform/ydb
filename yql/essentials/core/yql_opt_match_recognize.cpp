@@ -35,6 +35,7 @@ bool IsStreaming(const TExprNode::TPtr& input, const TTypeAnnotationContext& typ
 TExprNode::TPtr ExpandMatchRecognizeMeasuresCallables(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& /* typeAnnCtx */) {
     YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
     static constexpr size_t MeasuresLambdasStartPos = 3;
+    // clang-format off
     return ctx.Builder(node->Pos())
         .Callable("MatchRecognizeMeasures")
             .Add(0, node->ChildPtr(0))
@@ -119,6 +120,7 @@ TExprNode::TPtr ExpandMatchRecognizeMeasuresCallables(const TExprNode::TPtr& nod
             })
         .Seal()
     .Build();
+    // clang-format on
 }
 
 std::unordered_set<std::string_view> FindUsedVars(const TExprNode::TPtr& params) {
@@ -148,8 +150,7 @@ std::unordered_set<std::string_view> FindUsedVars(const TExprNode::TPtr& params)
                     return false;
                 }
                 return true;
-            }
-        );
+            });
     }
 
     return result;
@@ -161,6 +162,7 @@ TExprNode::TPtr MarkUnusedPatternVars(const TExprNode::TPtr& node, TExprContext&
         const auto varName = node->Child(0)->Content();
         const auto output = FromString<bool>(node->Child(4)->Content());
         const auto varUnused = ("RowsPerMatch_AllRows" != rowsPerMatch->Content() || !output) && !usedVars.contains(varName);
+        // clang-format off
         return Build<TExprList>(ctx, pos)
             .Add(node->ChildPtr(0))
             .Add(node->ChildPtr(1))
@@ -170,6 +172,7 @@ TExprNode::TPtr MarkUnusedPatternVars(const TExprNode::TPtr& node, TExprContext&
             .Add<TCoAtom>().Build(ToString(varUnused))
         .Done()
         .Ptr();
+        // clang-format on
     }
     TExprNode::TListType newChildren;
     for (const auto& child : node->Children()) {
@@ -192,6 +195,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
 
     const auto isStreaming = IsStreaming(input, typeAnnCtx);
 
+    // clang-format off
     auto newInput = Build<TCoLambda>(ctx, pos)
         .Args({"partition"})
         .Body<TCoToFlow>()
@@ -199,6 +203,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
         .Build()
     .Done()
     .Ptr();
+    // clang-format on
 
     TExprNode::TPtr sortKey;
     TExprNode::TPtr sortOrder;
@@ -211,6 +216,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
             case 0:
                 return newInput;
             case 1: {
+                // clang-format off
                 auto timeOrderRecover = ctx.Builder(pos)
                     .Lambda()
                         .Param("partition")
@@ -259,6 +265,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
                     .Build()
                 .Done()
                 .Ptr();
+                // clang-format on
             }
             default:
                 ctx.AddError(TIssue(ctx.GetPosition(sortTraits->Pos()), "Expected no ORDER BY or ORDER BY timestamp for MATCH_RECOGNIZE"));
@@ -274,6 +281,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
     const auto usedVars = FindUsedVars(params);
     auto pattern = MarkUnusedPatternVars(params->ChildPtr(3), ctx, usedVars, rowsPerMatch);
     auto settings = AddSetting(*ctx.NewList(pos, {}), pos, "Streaming", ctx.NewAtom(pos, ToString(isStreaming)), ctx);
+    // clang-format off
     auto newMatchRecognize = ctx.Builder(pos)
         .Lambda()
             .Param("partition")
@@ -294,7 +302,9 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
             .Seal()
         .Seal()
     .Build();
+    // clang-format on
 
+    // clang-format off
     auto lambda = Build<TCoLambda>(ctx, pos)
         .Args({"partition"})
         .Body<TCoForwardList>()
@@ -305,6 +315,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
         .Build()
     .Done()
     .Ptr();
+    // clang-format on
 
     if (isStreaming) {
         TExprNode::TPtr keySelector;
@@ -313,20 +324,25 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
         } else {
             // Use pseudo partitioning with constant lambda to wrap TimeOrderRecover into DQ stage
             // TODO(zverevgeny): fixme
+            // clang-format off
             keySelector = Build<TCoLambda>(ctx, pos)
                 .Args({"row"})
                 .Body(MakeBool<true>(pos, ctx))
             .Done()
             .Ptr();
+            // clang-format on
         }
 
+        // clang-format off
         return Build<TCoShuffleByKeys>(ctx, pos)
             .Input(input)
             .KeySelectorLambda(keySelector)
             .ListHandlerLambda(lambda)
         .Done()
         .Ptr();
+        // clang-format on
     } else { // non-streaming
+        // clang-format off
         return Build<TCoPartitionsByKeys>(ctx, pos)
             .Input(input)
             .KeySelectorLambda(partitionKeySelector)
@@ -335,6 +351,7 @@ TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& 
             .ListHandlerLambda(lambda)
         .Done()
         .Ptr();
+        // clang-format on
     }
 }
 

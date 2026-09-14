@@ -169,6 +169,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
+    const TVector<EHostHealth>& hostHealths,
     ui32 dbgConnectionsConfigGeneration,
     NTransport::TStorageTransportPtr storageTransport,
     NMonitoring::TDynamicCounterPtr counters)
@@ -192,11 +193,12 @@ TDirectBlockGroup::TDirectBlockGroup(
           TabletGeneration,
           static_cast<ui32>(DirectBlockGroupIndex),
           dbgConnectionsConfigGeneration)
-    , Oracle(StorageConfig, this)
+    , Oracle(StorageConfig, this, hostHealths)
     , Counters(std::move(counters))
 {
     Y_ABORT_UNLESS(IsSupportedBlockSize(BlockSize));
     Y_ASSERT(pbufferIds.size() == ddisksIds.size());
+    Y_ASSERT(hostHealths.size() == ddisksIds.size());
     Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
 
     for (THostIndex host = 0; host < ddisksIds.size(); ++host) {
@@ -2149,15 +2151,20 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
 
     auto hostsStat = Oracle.BuildHostStats(TInstant::Now());
     TVChunkConfigs vChunkConfigs;
+    size_t allocatedMemorySize = 0;
+    size_t usedMemorySize = 0;
     for (const auto& weakVChunk: VChunks) {
         if (auto vChunk = weakVChunk.lock()) {
             vChunkConfigs[vChunk->GetConfig().GetVChunkIndex()] =
                 vChunk->GetConfig();
 
             for (THostIndex host = 0; host < GetHostCount(); ++host) {
-                hostsStat[host].AheadBlocks += vChunk->GetAheadBlocks(host);
-                hostsStat[host].BehindBlocks += vChunk->GetBehindBlocks(host);
+                auto& stat = hostsStat[host];
+                stat.FreshTotalBytes += vChunk->GetFreshTotalBytes(host);
+                stat.RottenTotalBytes += vChunk->GetRottenTotalBytes(host);
             }
+            allocatedMemorySize += vChunk->GetAllocatedMemorySize();
+            usedMemorySize += vChunk->GetUsedMemorySize();
         }
     }
 
@@ -2167,6 +2174,8 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .Hosts = std::move(hostsStat),
         .Connections = std::move(connections),
         .VChunkConfigs = std::move(vChunkConfigs),
+        .AllocatedMemorySize = allocatedMemorySize,
+        .UsedMemorySize = usedMemorySize,
         .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };
 }

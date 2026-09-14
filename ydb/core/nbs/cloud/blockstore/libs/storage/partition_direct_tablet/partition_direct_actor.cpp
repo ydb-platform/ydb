@@ -343,6 +343,8 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             persistentBufferDDiskIds.push_back(NBsController::TDDiskId(
                 connection.GetPersistentBufferDDiskId()));
         }
+        // Temporarily preserving original behavior
+        TVector<EHostHealth> hostHealths(ddiskIds.size(), EHostHealth::Online);
 
         const bool enableChecksums =
             nbsService->StorageConfig->GetEnableChecksums();
@@ -369,6 +371,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
+            std::move(hostHealths),
             conn.GetDBGConnectionsConfigGeneration(),
             std::move(transport),
             dbgCountersRoot);

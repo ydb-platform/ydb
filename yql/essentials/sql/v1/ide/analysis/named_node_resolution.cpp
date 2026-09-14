@@ -4,7 +4,10 @@
 
 #include <yql/essentials/sql/v1/ide/pure_ast/path_visitor.h>
 
+#include <util/generic/ptr.h>
+#include <util/generic/algorithm.h>
 #include <util/generic/scope.h>
+#include <util/stream/output.h>
 
 namespace NSQLPureAST {
 
@@ -697,7 +700,6 @@ INamedNodes::TPtr ResolveNamedNodes(IParseTree::TPtr input, const TEnvironment& 
 
 } // namespace NSQLPureAST
 
-template <>
-void Out<NSQLPureAST::TNamedNodeRef>(IOutputStream& out, const NSQLPureAST::TNamedNodeRef& value) {
+Y_DECLARE_OUT_SPEC(, NSQLPureAST::TNamedNodeRef, out, value) {
     out << value.Position << ":" << value.Name;
 }

@@ -23,6 +23,7 @@ SRCS(
     sticking_ut.cpp
     xdc_shuffle_ut.cpp
     v2_event_serializer_ut.cpp
+    v2_io_buffers_ut.cpp
     v2_serialize_window_ut.cpp
     v2_session_ut.cpp
 )

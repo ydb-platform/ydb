@@ -4,6 +4,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/index/index_utils.h>
 #include <ydb/core/tx/schemeshard/index/common.h>
+#include <ydb/core/statistics/events.h>
+#include <ydb/core/statistics/service/service.h>
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -196,6 +198,73 @@ private:
     }
 };
 
+class TGetStatisticsHelper: public TActorBootstrapped<TGetStatisticsHelper> {
+    using TThis = TGetStatisticsHelper;
+    using TBase = TActorBootstrapped<TThis>;
+
+    const TActorId ResponseActorId;
+    const TIndexBuildId BuildId;
+    const TPathId PathId;
+    THolder<NStat::TEvStatistics::TEvGetStatistics> Request;
+    TString LogPrefix;
+
+public:
+    TGetStatisticsHelper(const TActorId& responseActorId,
+        TIndexBuildId buildId, THolder<NStat::TEvStatistics::TEvGetStatistics> request)
+        : ResponseActorId(responseActorId)
+        , BuildId(buildId)
+        , PathId(request->StatRequests.at(0).PathId)
+        , Request(request.Release()) {
+        LogPrefix = TStringBuilder()
+            << "TGetStatisticsHelper: BuildIndexId: " << BuildId
+            << " ResponseActorId: " << ResponseActorId;
+    }
+
+    void Bootstrap() {
+        auto statServiceId = NStat::MakeStatServiceID(SelfId().NodeId());
+        this->Send(statServiceId, this->Request.Release(), IEventHandle::FlagTrackDelivery);
+        this->Become(&TThis::StateWork);
+    }
+
+    void HandleResponse(NStat::TEvStatistics::TEvGetStatisticsResult::TPtr& ev) {
+        auto *inRes = ev->Get();
+        auto response = MakeHolder<TEvIndexBuilder::TEvGetIndexStatsResponse>();
+        response->BuildId = ui64(BuildId);
+        response->PathId = PathId;
+        for (auto& stat: inRes->StatResponses) {
+            // Take the most detailed eq_height histogram
+            if (stat.Success &&
+                stat.Req.ColumnTags.AsMulti() &&
+                stat.Req.ColumnTags.AsMulti()->size() > response->FieldCount &&
+                stat.EqHeightHistogram.Data) {
+                response->FieldCount = stat.Req.ColumnTags.AsMulti()->size();
+                response->Histogram = stat.EqHeightHistogram.Data;
+            }
+        }
+        this->Send(ResponseActorId, response.Release());
+        this->PassAway();
+    }
+
+    void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev) {
+        LOG_E("TGetStatisticsHelper undelivered: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+        auto response = MakeHolder<TEvIndexBuilder::TEvGetIndexStatsResponse>();
+        response->BuildId = ui64(BuildId);
+        response->PathId = PathId;
+        this->Send(ResponseActorId, response.Release());
+        this->PassAway();
+    }
+
+private:
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NStat::TEvStatistics::TEvGetStatisticsResult, HandleResponse);
+            hFunc(TEvents::TEvUndelivered, HandleUndelivered);
+            default:
+                LOG_E("TGetStatisticsHelper unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+        }
+    }
+};
+
 // Fulltext rowid auto-provisioning: build a child TIndexBuildInfo that the parent fulltext build runs,
 // sequentially and before acquiring its own lock, to provision the rowid infrastructure. Each child is
 // a fully normal build (it takes and releases its own lock + snapshot via the standard pipeline) and
@@ -247,7 +316,7 @@ std::shared_ptr<TIndexBuildInfo> CreateRowIdProvisioningChild(
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
-    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+    TSchemeShard* ss, TIndexBuildInfo& buildInfo)
 {
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.InitiateTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
@@ -259,6 +328,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
     modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
 
     if (buildInfo.IsBuildIndex()) {
+        auto path = TPath::Init(buildInfo.TablePathId, ss);
+        const auto& tableInfo = ss->Tables.at(path->PathId);
+        // For TIndexBuildInfo::FillIndexPresharding()
+        buildInfo.IndexPartitions = tableInfo->GetPartitionStore().size();
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexBuild);
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
     } else if (buildInfo.IsBuildColumns()) {
@@ -1416,6 +1489,48 @@ private:
         LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
+    }
+
+    bool GetColumnStats(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
+            LOG_D("GetColumnStats " << buildInfo.DebugString());
+            buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+            SendGetColumnStatsRequest(buildInfo);
+            Progress(BuildId);
+        } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
+            LOG_D("GetColumnStats Done " << buildInfo.DebugString());
+            NIceDb::TNiceDb db{txc.DB};
+            buildInfo.SubState = TIndexBuildInfo::ESubState::None;
+            ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
+            Self->PersistBuildIndexState(db, buildInfo);
+            Progress(BuildId);
+            return true;
+        }
+        // Wait for the response
+        return false;
+    }
+
+    void SendGetColumnStatsRequest(TIndexBuildInfo& buildInfo) {
+        Y_ENSURE(buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildSecondaryIndex ||
+            buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex,
+            "Unknown operation kind in SendGetColumnStats");
+
+        auto event = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
+        event->StatType = NKikimr::NStat::EStatType::EQ_HEIGHT_HISTOGRAM;
+        // event->Database is not filled because in a serverless DB statistics belongs
+        // to the shared DB and statistics service resolves the DB itself
+
+        // Request all variants of statistics starting from just the 1st index column
+        // to all index columns + all table key columns
+        auto tags = buildInfo.GetSecondaryIndexKeyTags(Self);
+        for (size_t i = 1; i <= tags.size(); i++) {
+            event->StatRequests.emplace_back(buildInfo.TablePathId, std::vector<ui32>(tags.begin(), tags.begin() + i));
+        }
+
+        auto actor = new TGetStatisticsHelper(Self->SelfId(), buildInfo.Id, std::move(event));
+        TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
+
+        LOG_N("TTxBuildProgress: SendGetColumnStatsRequest: " << buildInfo);
     }
 
     void SendValidateUniqueIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -2872,7 +2987,12 @@ public:
                         ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
                     }
                 } else {
-                    ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
+                    if (buildInfo.IsBuildSimpleIndex() && !buildInfo.HasPartitionSettings() &&
+                        !buildInfo.IsRebuild) {
+                        ChangeState(BuildId, TIndexBuildInfo::EState::GatheringStatistics);
+                    } else {
+                        ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
+                    }
                 }
                 Progress(BuildId);
             }
@@ -2978,8 +3098,7 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::GatheringStatistics:
-            ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
-            Progress(BuildId);
+            GetColumnStats(txc, buildInfo);
             break;
         case TIndexBuildInfo::EState::Initiating:
             if (buildInfo.InitiateTxId == InvalidTxId) {
@@ -4764,6 +4883,45 @@ public:
     }
 };
 
+struct TSchemeShard::TIndexBuilder::TTxReplyStatistics: public TSchemeShard::TIndexBuilder::TTxReply {
+private:
+    TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr StatsResult;
+public:
+    explicit TTxReplyStatistics(TSelf* self, TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& statsResult)
+        : TTxReply(self, TIndexBuildId(statsResult->Get()->BuildId))
+        , StatsResult(statsResult)
+    {}
+
+    bool DoExecute([[maybe_unused]] TTransactionContext& txc, [[maybe_unused]] const TActorContext& ctx) override {
+        auto *res = StatsResult->Get();
+        const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
+        if (!buildInfoPtr) {
+            LOG_I("TTxReply : TEvGetStatisticsResult superfluous message"
+                << ", BuildIndexId " << BuildId << " not found");
+            return true;
+        }
+
+        // Do not persist statistics in the local schemeshard database
+        // (similar to the TUploadSampleK response)
+
+        auto& buildInfo = *buildInfoPtr->get();
+        if (buildInfo.TablePathId != res->PathId) {
+            LOG_I("TTxReply : TEvGetStatisticsResult result for a different table"
+                << ", pathId: " << res->PathId
+                << ", BuildIndexId " << BuildId);
+            buildInfo.IndexHistogramFields = 0;
+            buildInfo.IndexHistogram.reset();
+        } else {
+            buildInfo.IndexHistogramFields = res->FieldCount;
+            buildInfo.IndexHistogram = res->Histogram;
+        }
+        buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Done;
+        Progress(BuildId);
+
+        return true;
+    }
+};
+
 ITransaction* TSchemeShard::CreateTxReply(TEvTxAllocatorClient::TEvAllocateResult::TPtr& allocateResult) {
     return new TIndexBuilder::TTxReplyAllocate(this, allocateResult);
 }
@@ -4818,6 +4976,10 @@ ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvBuildFulltextIndexRes
 
 ITransaction* TSchemeShard::CreateTxReply(TEvDataShard::TEvBuildFulltextDictResponse::TPtr& response) {
     return new TIndexBuilder::TTxReplyFulltextDict(this, response);
+}
+
+ITransaction* TSchemeShard::CreateTxReply(TEvIndexBuilder::TEvGetIndexStatsResponse::TPtr& response) {
+    return new TIndexBuilder::TTxReplyStatistics(this, response);
 }
 
 ITransaction* TSchemeShard::CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId) {

@@ -12,7 +12,8 @@ namespace NKikimr::NUdfStore::NWasm {
 struct TWasmUdfInvocationContext {
     NYdb::NWasm::TWebAssemblyMemoryPool WebAssemblyPool;
     //! Declared result type of the running bridge UDF, so the guest can ask
-    //! the host to build a container of exactly that type (BridgeMakeDict).
+    //! the host to build a container of exactly that type (BridgeMakeDict,
+    //! BridgeMakeListTyped, and the type-navigation helpers).
     const NYql::NUdf::TType* ResultType = nullptr;
 
     explicit TWasmUdfInvocationContext(NYdb::NWasm::IWebAssemblyCompartment* compartment)

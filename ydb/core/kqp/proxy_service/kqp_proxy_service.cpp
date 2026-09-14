@@ -765,7 +765,7 @@ public:
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
         auto& span = PendingRequests.FindPtr(requestId)->Span;
         span = NWilson::TSpan(TComponentTracingLevels::TQueryProcessor::TopLevel,
-            std::move(ev->TraceId), "KQP request", NWilson::EFlags::AUTO_END);
+            std::move(ev->TraceId), "Query Proxy", NWilson::EFlags::AUTO_END);
         span.Attribute("ydb.actor.type", TString("TKqpProxyService"));
         AddQueryTraceAttributes(span, queryType, queryAction,
             database ? database : ev->Get()->GetDatabaseId(), ev->Get()->GetQuery());
@@ -883,6 +883,10 @@ public:
         StartQueryTimeout(requestId, timerDuration, status);
         span.Attribute("ydb.target_node_id", static_cast<i64>(targetId.NodeId()));
         span.Attribute("ydb.forwarded", targetId.NodeId() != SelfId().NodeId());
+        if (targetId.NodeId() != SelfId().NodeId()) {
+            PendingRequests.FindPtr(requestId)->RedirectSpan = MakeQueryRedirectTraceSpan(
+                span, SelfId().NodeId(), targetId.NodeId());
+        }
         PendingRequests.FindPtr(requestId)->QueryDispatched = true;
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
@@ -1072,6 +1076,7 @@ public:
 
         if constexpr (std::is_same_v<TEvent, TEvKqp::TEvQueryResponse::TPtr>) {
             EndProxyQueryTraceSpan(proxyRequest->Span, ev->Get()->Record);
+            EndQueryTraceSpan(proxyRequest->RedirectSpan, ev->Get()->Record.GetYdbStatus());
         }
         Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 

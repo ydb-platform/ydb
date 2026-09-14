@@ -1,10 +1,11 @@
-#include "kqp_query_tracing.h"
+#include "kqp_query_rendering.h"
 
-#include "kqp_query_stats_tracing.h"
+#include "kqp_query_stats_rendering.h"
 #include "kqp_trace_settings.h"
 
 #include <ydb/core/kqp/common/simple/helpers.h>
 #include <ydb/core/protos/kqp_physical.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/library/security/util.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
@@ -94,72 +95,16 @@ void AddWorkerQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescr
     }
 }
 
-void AddExecutionTraceCpuTime(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionStats& stats, ui64 cpuUs) {
-    if (!span.GetTraceId()) {
-        return;
-    }
-    NKqpProto::TKqpExecutionExtraStats extra;
-    stats.GetExtra().UnpackTo(&extra);
-    extra.SetCpuTimeUs(cpuUs);
-    stats.MutableExtra()->PackFrom(extra);
-    span.Attribute("ydb.cpu_us", static_cast<i64>(cpuUs));
-}
-
-ui64 GetExecutionTraceCpuTimeUs(const NYql::NDqProto::TDqExecutionStats& stats) {
-    NKqpProto::TKqpExecutionExtraStats extra;
-    return stats.GetExtra().UnpackTo(&extra) && extra.HasCpuTimeUs()
-        ? extra.GetCpuTimeUs() : stats.GetCpuTimeUs();
-}
-
-void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,
-        const TString& table, ui64 rows, ui64 retries) {
-    if (span) {
-        span.Attribute("db.collection.name", table);
-        span.Attribute("ydb.rows", static_cast<i64>(rows));
-        span.Attribute("ydb.read_retries", static_cast<i64>(retries));
-    }
-    if (span.GetTraceId() && retries) {
-        NKqpProto::TKqpTaskExtraStats extra;
-        stats.GetExtra().UnpackTo(&extra);
-        extra.SetReadRetriesCount(extra.GetReadRetriesCount() + retries);
-        stats.MutableExtra()->PackFrom(extra);
-    }
-}
-
-void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqComputeActorStats& stats) {
-    if (!span) {
-        return;
-    }
-    span.Attribute("ydb.cpu_us", static_cast<i64>(stats.GetCpuTimeUs()));
-    if (stats.TasksSize() == 1) {
-        const auto& task = stats.GetTasks(0);
-        span.Attribute("ydb.input_rows", static_cast<i64>(task.GetInputRows()));
-        span.Attribute("ydb.output_rows", static_cast<i64>(task.GetOutputRows()));
-        span.Attribute("ydb.wait_us", static_cast<i64>(task.GetWaitInputTimeUs() + task.GetWaitOutputTimeUs()));
-        span.Attribute("ydb.compute_cpu_us", static_cast<i64>(task.GetComputeCpuTimeUs()));
-        span.Attribute("ydb.build_cpu_us", static_cast<i64>(task.GetBuildCpuTimeUs()));
-        span.Attribute("ydb.node_id", static_cast<i64>(task.GetNodeId()));
-        span.Attribute("ydb.spilled_bytes", static_cast<i64>(
-            task.GetSpillingComputeWriteBytes() + task.GetSpillingChannelWriteBytes()));
-        if (task.GetCreateTimeMs() && task.GetStartTimeMs() >= task.GetCreateTimeMs()) {
-            span.Attribute("ydb.queue_delay_us", static_cast<i64>(
-                (task.GetStartTimeMs() - task.GetCreateTimeMs()) * 1000));
-        }
-        NKqpProto::TKqpTaskExtraStats extra;
-        if (task.GetExtra().UnpackTo(&extra)) {
-            span.Attribute("ydb.read_retries", static_cast<i64>(extra.GetReadRetriesCount()));
-        }
-    }
-}
-
 NWilson::TSpan MakeMetadataTraceSpan(const NWilson::TTraceId& parent, NActors::TActorSystem* actorSystem,
-        const TString& name, const TString& table, const char* purpose) {
+        EMetadataTraceOperation operation, const TString& table, const char* purpose) {
+    const bool loadsMetadata = operation == EMetadataTraceOperation::LoadMetadata;
+    const TString name = loadsMetadata ? "Load metadata" : "Load statistics";
     NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::Detailed,
         NWilson::TTraceId(parent), name, NWilson::EFlags::NONE, actorSystem);
     span.Attribute("db.collection.name", table);
     span.Attribute("ydb.actor.type", TString("TActorRequestHandler"));
     span.Attribute("ydb.code.component", TString("KqpTableMetadataLoader"));
-    span.Attribute("ydb.peer.actor.type", TString(name == "Load metadata" ? "SchemeCache" : "StatisticsService"));
+    span.Attribute("ydb.peer.actor.type", TString(loadsMetadata ? "SchemeCache" : "StatisticsService"));
     span.Attribute("ydb.compile_dependency.purpose", TString(purpose));
     return span;
 }
@@ -452,6 +397,51 @@ void AddQueryTraceAttributes(NWilson::TSpan& span, NKikimrKqp::EQueryType queryT
     }
 }
 
+void AddQuerySessionTraceAttributes(NWilson::TSpan& span, const TString& sessionId,
+        const ::Ydb::Table::TransactionControl* txControl) {
+    if (!span) {
+        return;
+    }
+    if (!sessionId.empty()) {
+        span.Attribute("ydb.session_id", sessionId);
+    }
+    if (!txControl) {
+        return;
+    }
+    span.Attribute("ydb.tx.commit", txControl->commit_tx());
+    switch (txControl->tx_selector_case()) {
+        case ::Ydb::Table::TransactionControl::kTxId:
+            span.Attribute("ydb.tx.id", txControl->tx_id());
+            break;
+        case ::Ydb::Table::TransactionControl::kBeginTx:
+            switch (txControl->begin_tx().tx_mode_case()) {
+                case ::Ydb::Table::TransactionSettings::kSerializableReadWrite:
+                    span.Attribute("ydb.tx.mode", TString("SerializableReadWrite"));
+                    break;
+                case ::Ydb::Table::TransactionSettings::kOnlineReadOnly:
+                    span.Attribute("ydb.tx.mode", TString("OnlineReadOnly"));
+                    break;
+                case ::Ydb::Table::TransactionSettings::kStaleReadOnly:
+                    span.Attribute("ydb.tx.mode", TString("StaleReadOnly"));
+                    break;
+                case ::Ydb::Table::TransactionSettings::kSnapshotReadOnly:
+                    span.Attribute("ydb.tx.mode", TString("SnapshotReadOnly"));
+                    break;
+                default:
+                    break;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+void SetQueryTraceTransactionId(NWilson::TSpan& span, const TString& txId) {
+    if (span && !txId.empty()) {
+        span.Attribute("ydb.tx.id", txId);
+    }
+}
+
 void EndQueryTraceSpan(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status) {
     if (!span) {
         return;
@@ -482,6 +472,18 @@ void EndProxyQueryTraceSpan(NWilson::TSpan& span, const NKikimrKqp::TEvQueryResp
         }
     }
     EndQueryTraceSpan(span, response.GetYdbStatus());
+}
+
+NWilson::TSpan MakeQueryRedirectTraceSpan(const NWilson::TSpan& parent, ui32 sourceNodeId, ui32 targetNodeId) {
+    NWilson::TSpan span(TComponentTracingLevels::TQueryProcessor::TopLevel,
+        parent.GetTraceId(), "KQP redirect", NWilson::EFlags::AUTO_END, parent.GetActorSystem());
+    if (span) {
+        span.Attribute("ydb.code.component", TString("KQP"));
+        span.Attribute("ydb.actor.type", TString("TKqpProxyService"));
+        span.Attribute("ydb.source_node_id", static_cast<i64>(sourceNodeId));
+        span.Attribute("ydb.target_node_id", static_cast<i64>(targetNodeId));
+    }
+    return span;
 }
 
 } // namespace NKikimr::NKqp

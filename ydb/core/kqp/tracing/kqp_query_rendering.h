@@ -12,11 +12,9 @@ class TKqpPhyQuery;
 class TKqpStatsQuery;
 } // namespace NKqpProto
 
-namespace NYql::NDqProto {
-class TDqComputeActorStats;
-class TDqExecutionStats;
-class TDqTaskStats;
-} // namespace NYql::NDqProto
+namespace Ydb::Table {
+class TransactionControl;
+} // namespace Ydb::Table
 
 namespace NKikimr::NKqp {
 
@@ -46,6 +44,11 @@ enum class EQueryTracePhase {
     Rollback,
 };
 
+enum class EMetadataTraceOperation {
+    LoadMetadata,
+    LoadStatistics,
+};
+
 NWilson::TSpan MakeQueryPhaseTraceSpan(ui8 verbosity, NWilson::TTraceId parent,
     EQueryTracePhase phase, NWilson::TFlags flags = NWilson::EFlags::NONE,
     NActors::TActorSystem* actorSystem = nullptr);
@@ -61,17 +64,16 @@ TString FallbackQueryTraceName(NKikimrKqp::EQueryType queryType,
 
 void AddQueryTraceAttributes(NWilson::TSpan& span, NKikimrKqp::EQueryType queryType,
     NKikimrKqp::EQueryAction action, const TString& database, const TString& query);
+void AddQuerySessionTraceAttributes(NWilson::TSpan& span, const TString& sessionId,
+    const ::Ydb::Table::TransactionControl* txControl);
+void SetQueryTraceTransactionId(NWilson::TSpan& span, const TString& txId);
 void EndQueryTraceSpan(NWilson::TSpan& span, Ydb::StatusIds::StatusCode status);
 void EndProxyQueryTraceSpan(NWilson::TSpan& span, const NKikimrKqp::TEvQueryResponse& response);
+NWilson::TSpan MakeQueryRedirectTraceSpan(const NWilson::TSpan& parent, ui32 sourceNodeId, ui32 targetNodeId);
 void AddWorkerQueryResultAttributes(NWilson::TSpan& span, const TQueryTraceDescription& description,
     const NKikimrKqp::TEvQueryResponse& response, const NKqpProto::TKqpStatsQuery* workerStats);
-void AddExecutionTraceCpuTime(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionStats& stats, ui64 cpuUs);
-ui64 GetExecutionTraceCpuTimeUs(const NYql::NDqProto::TDqExecutionStats& stats);
-void AddReadTraceStats(NWilson::TSpan& span, NYql::NDqProto::TDqTaskStats& stats,
-    const TString& table, ui64 rows, ui64 retries);
-void AddKqpTaskTraceAttributes(NWilson::TSpan& span, const NYql::NDqProto::TDqComputeActorStats& stats);
 NWilson::TSpan MakeMetadataTraceSpan(const NWilson::TTraceId& parent, NActors::TActorSystem* actorSystem,
-    const TString& name, const TString& table, const char* purpose);
+    EMetadataTraceOperation operation, const TString& table, const char* purpose);
 void MarkJoinedCompilation(NWilson::TSpan& waiter, const NWilson::TSpan& compilation);
 
 class TShardTraceEvents {

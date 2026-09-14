@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/kqp/tracing/kqp_scan_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_scan_rendering.h>
 #include "kqp_compute_actor.h"
 #include "kqp_compute_state.h"
 #include "kqp_scan_common.h"

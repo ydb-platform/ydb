@@ -1,6 +1,6 @@
-#include "kqp_execution_tracing.h"
+#include "kqp_execution_rendering.h"
 
-#include "kqp_query_tracing.h"
+#include "kqp_query_rendering.h"
 #include "kqp_trace_settings.h"
 
 #include <ydb/core/protos/kqp_stats.pb.h>
@@ -12,9 +12,25 @@
 #include <util/string/builder.h>
 
 #include <algorithm>
-#include <cstring>
 
 namespace NKikimr::NKqp {
+
+void AddExecutionTraceCpuTime(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionStats& stats, ui64 cpuUs) {
+    if (!span.GetTraceId()) {
+        return;
+    }
+    NKqpProto::TKqpExecutionExtraStats extra;
+    stats.GetExtra().UnpackTo(&extra);
+    extra.SetCpuTimeUs(cpuUs);
+    stats.MutableExtra()->PackFrom(extra);
+    span.Attribute("ydb.cpu_us", static_cast<i64>(cpuUs));
+}
+
+ui64 GetExecutionTraceCpuTimeUs(const NYql::NDqProto::TDqExecutionStats& stats) {
+    NKqpProto::TKqpExecutionExtraStats extra;
+    return stats.GetExtra().UnpackTo(&extra) && extra.HasCpuTimeUs()
+        ? extra.GetCpuTimeUs() : stats.GetCpuTimeUs();
+}
 
 void TBatchExecutionTrace::AddExecution(const NYql::NDqProto::TDqExecutionStats& stats) {
     NKqpProto::TKqpExecutionExtraStats extra;
@@ -48,20 +64,21 @@ ui64 TExecutionTrace::StartStage(const NWilson::TSpan& parent, std::pair<ui64, u
     }
     auto& stage = Stages_[stageId];
     if (!stage.Span.GetTraceId()) {
-        stage.Description = TTaskTraceDescription::FromStage(physicalStage);
-        stage.TaskCount = taskCount;
-        stage.Span = parent.CreateChild(TComponentTracingLevels::TQueryProcessor::Detailed,
-            stage.Description.StageName(), NWilson::EFlags::AUTO_END);
-        stage.Span.Attribute("ydb.tx_index", static_cast<i64>(stageId.first));
-        stage.Span.Attribute("ydb.stage_id", static_cast<i64>(stageId.second));
-        stage.Span.Attribute("ydb.code.component", TString("DqExecution"));
-        stage.Span.Attribute("ydb.timing_boundary", TString("tasks_launch_to_last_report"));
+        StartStageSpan(stage, parent, stageId, physicalStage, taskCount);
     }
-    ui64 spanId = 0;
-    if (stage.Span) {
-        memcpy(&spanId, stage.Span.GetTraceId().GetSpanIdPtr(), sizeof(spanId));
-    }
-    return spanId;
+    return GetTaskTraceSpanId(stage.Span.GetTraceId());
+}
+
+void TExecutionTrace::StartStageSpan(TStage& stage, const NWilson::TSpan& parent,
+        std::pair<ui64, ui32> stageId, const NKqpProto::TKqpPhyStage& physicalStage, ui64 taskCount) {
+    stage.Description = TTaskTraceDescription::FromStage(physicalStage);
+    stage.TaskCount = taskCount;
+    stage.Span = parent.CreateChild(TComponentTracingLevels::TQueryProcessor::Detailed,
+        stage.Description.StageName(), NWilson::EFlags::AUTO_END);
+    stage.Span.Attribute("ydb.tx_index", static_cast<i64>(stageId.first));
+    stage.Span.Attribute("ydb.stage_id", static_cast<i64>(stageId.second));
+    stage.Span.Attribute("ydb.code.component", TString("DqExecution"));
+    stage.Span.Attribute("ydb.timing_boundary", TString("tasks_launch_to_last_report"));
 }
 
 void TExecutionTrace::AnnotateTask(std::pair<ui64, ui32> stageId, NYql::NDqProto::TDqTask& task) const {
@@ -72,9 +89,7 @@ void TExecutionTrace::AnnotateTask(std::pair<ui64, ui32> stageId, NYql::NDqProto
     const auto& stage = it->second;
     stage.Description.Save(task);
     if (stage.Span) {
-        ui64 spanId = 0;
-        memcpy(&spanId, stage.Span.GetTraceId().GetSpanIdPtr(), sizeof(spanId));
-        SaveTaskTraceParent(task, spanId);
+        SaveTaskTraceParent(task, GetTaskTraceSpanId(stage.Span.GetTraceId()));
     }
 }
 
@@ -132,6 +147,7 @@ void TExecutionTrace::AddTask(ui64 txIndex, ui64 taskCount,
     sample.Id = task.GetTaskId();
     sample.Node = nodeId;
     sample.DurationUs = durationUs.value_or(0);
+    sample.DurationMeasured = durationUs.has_value();
     sample.CpuUs = task.GetCpuTimeUs();
     sample.InputRows = task.GetInputRows();
     sample.OutputRows = task.GetOutputRows();
@@ -142,31 +158,35 @@ void TExecutionTrace::AddTask(ui64 txIndex, ui64 taskCount,
     if (task.GetExtra().UnpackTo(&extra)) {
         sample.Retries = extra.GetReadRetriesCount() + extra.GetScanTaskExtraStats().GetRetriesCount();
     }
-    summary.FailedTasks += failed;
-    if (failed && summary.Status == Ydb::StatusIds::SUCCESS) {
+    RecordDetailedTask(summary, std::move(sample), status);
+    if (summary.Reports == summary.TaskCount) {
+        FinishStage(summary, Ydb::StatusIds::SUCCESS);
+    }
+}
+
+void TExecutionTrace::RecordDetailedTask(TStage& summary, TTask sample, Ydb::StatusIds::StatusCode status) {
+    summary.FailedTasks += sample.Failed;
+    if (sample.Failed && summary.Status == Ydb::StatusIds::SUCCESS) {
         summary.Status = status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
             ? Ydb::StatusIds::GENERIC_ERROR : status;
     }
     summary.CpuUs += sample.CpuUs;
     summary.InputRows += sample.InputRows;
     summary.OutputRows += sample.OutputRows;
-    summary.WaitUs += waitUs;
-    summary.SpilledBytes += spilledBytes;
-    if (summary.TasksByNode.contains(nodeId)
+    summary.WaitUs += sample.WaitUs;
+    summary.SpilledBytes += sample.SpilledBytes;
+    if (summary.TasksByNode.contains(sample.Node)
             || summary.TasksByNode.size() < NQueryTraceSettings::MAX_NODES_PER_STAGE) {
-        ++summary.TasksByNode[nodeId];
+        ++summary.TasksByNode[sample.Node];
     } else {
         ++summary.UnrepresentedNodeTasks;
     }
-    summary.Tasks.push_back(sample);
+    summary.Tasks.push_back(std::move(sample));
     std::sort(summary.Tasks.begin(), summary.Tasks.end(), [](const auto& lhs, const auto& rhs) {
         return lhs.Rank() > rhs.Rank();
     });
     if (summary.Tasks.size() > NQueryTraceSettings::MAX_TASKS_PER_STAGE) {
         summary.Tasks.pop_back();
-    }
-    if (summary.Reports == summary.TaskCount) {
-        FinishStage(summary, Ydb::StatusIds::SUCCESS);
     }
 }
 
@@ -174,14 +194,14 @@ void TExecutionTrace::FinishStage(TStage& stage, Ydb::StatusIds::StatusCode stat
     if (!stage.Span) {
         return;
     }
-    const double skew = stage.SumDurationUs
-        ? static_cast<double>(stage.MaxDurationUs) * stage.Durations / stage.SumDurationUs : 0;
+    const double skew = stage.MaxTaskSkew();
     NWilson::TArrayValue tasks;
     for (const auto& task : stage.Tasks) {
         tasks.emplace_back(NWilson::TKeyValueList{{
             {"ydb.task_id", static_cast<i64>(task.Id)},
             {"ydb.node_id", static_cast<i64>(task.Node)},
             {"ydb.duration_us", static_cast<i64>(task.DurationUs)},
+            {"ydb.duration_measured", task.DurationMeasured},
             {"ydb.cpu_us", static_cast<i64>(task.CpuUs)},
             {"ydb.input_rows", static_cast<i64>(task.InputRows)},
             {"ydb.output_rows", static_cast<i64>(task.OutputRows)},
@@ -224,7 +244,8 @@ void TExecutionTrace::FinishStage(TStage& stage, Ydb::StatusIds::StatusCode stat
         stage.Span.Attribute(key, value);
     }
     stage.Span.Attribute("ydb.task_stats_incomplete",
-        stage.Reports != stage.TaskCount || stage.Durations != stage.Reports || stage.FailedTasks);
+        stage.Reports != stage.TaskCount || stage.FailedTasks);
+    stage.Span.Attribute("ydb.task_duration_incomplete", stage.Durations != stage.Reports);
     EndQueryTraceSpan(stage.Span, stage.Status != Ydb::StatusIds::SUCCESS ? stage.Status : status);
 }
 
@@ -233,10 +254,9 @@ void TExecutionTrace::Finish(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionS
     double maxSkew = 0;
     bool incomplete = status != Ydb::StatusIds::SUCCESS || UnrepresentedStageTasks_;
     for (auto& [id, stage] : Stages_) {
-        const double skew = stage.SumDurationUs
-            ? static_cast<double>(stage.MaxDurationUs) * stage.Durations / stage.SumDurationUs : 0;
+        const double skew = stage.MaxTaskSkew();
         maxSkew = std::max(maxSkew, skew);
-        incomplete |= stage.Reports != stage.TaskCount || stage.Durations != stage.Reports || stage.FailedTasks;
+        incomplete |= stage.Reports != stage.TaskCount || stage.FailedTasks;
         FinishStage(stage, status == Ydb::StatusIds::SUCCESS && stage.Reports != stage.TaskCount
             ? Ydb::StatusIds::STATUS_CODE_UNSPECIFIED : status);
     }
@@ -247,6 +267,12 @@ void TExecutionTrace::Finish(NWilson::TSpan& span, NYql::NDqProto::TDqExecutionS
     span.Attribute("ydb.spilled_bytes", static_cast<i64>(SpilledBytes_));
     span.Attribute("ydb.max_task_skew", maxSkew);
     span.Attribute("ydb.task_stats_incomplete", incomplete);
+    bool durationIncomplete = false;
+    for (const auto& [id, stage] : Stages_) {
+        Y_UNUSED(id);
+        durationIncomplete |= stage.Durations != stage.Reports;
+    }
+    span.Attribute("ydb.task_duration_incomplete", durationIncomplete);
     span.Attribute("ydb.tasks_without_stage_details", static_cast<i64>(UnrepresentedStageTasks_));
     NKqpProto::TKqpExecutionExtraStats extra;
     stats.GetExtra().UnpackTo(&extra);

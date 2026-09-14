@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
-#include <ydb/core/kqp/tracing/kqp_task_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_task_rendering.h>
 
 #include <atomic>
 

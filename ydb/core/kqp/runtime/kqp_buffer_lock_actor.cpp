@@ -1,5 +1,5 @@
 #include "kqp_buffer_lock_actor.h"
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include "kqp_buffer_lookup_actor.h"
 
 #include <ydb/core/base/tablet_pipecache.h>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/tracing/kqp_query_tracing.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 
 #include "kqp_query_stats.h"
 #include "kqp_worker_common.h"
@@ -115,6 +115,8 @@ public:
             QueryTraceSpanName(QueryAction), NWilson::EFlags::AUTO_END);
         AddQueryTraceAttributes(KqpSessionSpan, QueryType, QueryAction,
             Database ? Database : AppData()->TenantName, RequestEv->GetQuery());
+        AddQuerySessionTraceAttributes(KqpSessionSpan, sessionId,
+            RequestEv->HasTxControl() ? &RequestEv->GetTxControl() : nullptr);
         KqpSessionSpan.Attribute("ydb.actor.type", TString("TKqpSessionActor"));
         if (KqpSessionSpan) {
             const auto fallback = FallbackQueryTraceName(QueryType, QueryAction);

@@ -63,7 +63,6 @@ def cluster(certificates, tmp_path_factory, request):
         additional_log_configs={'GRPC_SERVER': LogLevels.DEBUG},
     )
     security = config.yaml_config['domains_config']['security_config']
-    # A nonempty allowlist is essential: otherwise anonymous registration is allowed.
     security['register_dynamic_node_allowed_sids'] = getattr(
         request, 'param', ['root@builtin', 'dynamic-nodes@cert'],
     )
@@ -97,7 +96,6 @@ def registration_port():
 
 @pytest.fixture(scope='module')
 def node_config(cluster):
-    # Install a recognizable config for the test node type, without changing the server.
     request = msgbus_pb2.TConsoleRequest(SecurityToken='root@builtin')
     item = request.ConfigureRequest.Actions.add().AddConfigItem.ConfigItem
     item.UsageScope.TenantAndNodeTypeFilter.NodeType = 'node-auth-test'
@@ -105,7 +103,6 @@ def node_config(cluster):
     with grpc.insecure_channel(f'localhost:{cluster.nodes[1].port}') as channel:
         server_log = YdbGrpcLog(cluster)
         response = grpc_pb2_grpc.TGRpcServerStub(channel).ConsoleRequest(request, timeout=30)
-        # Flush the setup response before tests capture the same RPC method.
         server_log.response('ConsoleRequest')
     if response.Status.Code != StatusIds.SUCCESS:
         pytest.fail(f'Could not install the test config: {response}')

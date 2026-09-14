@@ -1273,7 +1273,6 @@ public:
             }
         }
 
-        // Track supplied files, including empty protobuf configs, independently of their contents.
         HasStaticConfig = !freeArgs.empty() || yamlConfigs.Main.has_value();
 
         if (yamlConfigs.Main) {
@@ -1499,10 +1498,7 @@ public:
         }
 
         const auto& authConfig = AppConfig.GetAuthConfig();
-        // Supplied auth files preserve the token default even without a full static config.
-        const bool useToken = HasStaticConfig
-            || ProtoConfigFileProvider.Has("auth-file")
-            || ProtoConfigFileProvider.Has("auth-token-file");
+        const bool useToken = HasStaticConfig || ProtoConfigFileProvider.Has("auth-file") || ProtoConfigFileProvider.Has("auth-token-file");
         const TNodeRegistrationSettings settings {
             domainName,
             cf.NodeHost,

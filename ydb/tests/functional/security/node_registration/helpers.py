@@ -25,8 +25,6 @@ class YdbGrpcLog:
         self.static_node_id = node.node_id
 
     def response(self, method):
-        # Tests issue requests sequentially. Start at the pre-request offset so
-        # previous requests and cluster setup cannot supply the expected line.
         pattern = re.compile(r'issuing response Name# [\w.]+/' + re.escape(method) + r' ')
         deadline = time.monotonic() + 10
         with self.path.open('rb') as log:
@@ -47,8 +45,6 @@ class YdbGrpcLog:
 
     def normalize(self, line):
         line = re.sub(r' peer# [^,\s]+', ' peer# <peer>', line)
-        # Discovery logs the result as binary protobuf in Any.value. Its
-        # contents are checked separately by registration_result().
         line = re.sub(
             r'(type_url: "type.googleapis.com/Ydb.Discovery.NodeRegistrationResult" value: )"(?:[^"\\]|\\.)*"',
             r'\1"<registration-result>"', line,

@@ -10,7 +10,6 @@ from ydb.public.api.protos import ydb_discovery_pb2
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 
 
-# A client certificate cannot be transmitted over plaintext gRPC.
 AUTH_CASES = [
     pytest.param('allowed', None, id='certificate-only'),
     pytest.param(None, 'root@builtin', id='token-only'),
@@ -70,7 +69,6 @@ def test_node_registration(
     token_location,
     tmp_path
 ):
-    # Re-register the same endpoint to exercise the normal lease renewal as well.
     host, port, address = 'localhost', registration_port, '127.0.0.1'
     with open_channel(cluster, certificates, protocol, certificate) as channel:
         if api == 'discovery':

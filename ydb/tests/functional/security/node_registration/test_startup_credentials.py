@@ -128,7 +128,6 @@ def client_certificate_args(certificates, tmp_path):
         'DomainsConfig { Domain { DomainId: 1 Name: "Root" } }',
     ], id='multiple-protobuf-files'),
     pytest.param('protobuf', 'AuthConfig {}', id='empty-auth-section'),
-    # Bootstrap auth values are applied after registration; preserve the legacy default here.
     pytest.param('protobuf', 'AuthConfig { NodeRegistrationToken: "" }', id='bootstrap-empty-token'),
     pytest.param('protobuf', 'AuthConfig { NodeRegistrationToken: "node@builtin" }', id='bootstrap-custom-token'),
     pytest.param('auth-file', '', id='empty-auth-file-without-static-config'),
@@ -216,7 +215,6 @@ def test_startup_registration_credentials(cluster, certificates, tmp_path, proto
             for index, content in enumerate(configs):
                 static_config = tmp_path / f'bootstrap-{index}.pb'
                 static_config.write_text(content)
-                # Positional paths reach the configurator through freeArgs.
                 command.append(str(static_config))
         elif config_source == 'missing-protobuf':
             command.append(str(tmp_path / 'missing.pb'))
@@ -241,8 +239,6 @@ def test_startup_registration_credentials(cluster, certificates, tmp_path, proto
 @pytest.mark.parametrize('cluster', [['dynamic-nodes@cert']], indirect=True, ids=['certificate-auth-only'])
 @pytest.mark.parametrize('empty_config_dir', [False, True], ids=['no-config', 'empty-config-directory'])
 def test_startup_registration_without_config(cluster, certificates, tmp_path, empty_config_dir):
-    # root@builtin is deliberately NOT allowed to register nodes on this cluster:
-    # its implicit transmission must fail even when a valid certificate is supplied.
     log_path = tmp_path / 'ydbd.log'
     with PortManager() as ports:
         command = [

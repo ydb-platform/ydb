@@ -4,7 +4,6 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/util/log_priority_mute_checker.h>
-#include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -41,7 +40,6 @@ class TKeyValueStorageRequest : public TActorBootstrapped<TKeyValueStorageReques
     THolder<TIntermediate> IntermediateResults;
 
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
-    TControlWrapper EnableMemoryProfiling;
     TKeyValueState *State;
     std::weak_ptr<TKeyValueStateLifetimeToken> StateLifetimeToken;
 
@@ -87,7 +85,6 @@ public:
         , TabletGeneration(tabletGeneration)
         , IntermediateResults(std::move(intermediate))
         , TabletInfo(const_cast<TTabletStorageInfo*>(tabletInfo))
-        , EnableMemoryProfiling(state->GetEnableMemoryProfiling())
         , State(state)
         , StateLifetimeToken(std::move(stateLifetimeToken))
         , Span(TWilsonTablet::TabletBasic, IntermediateResults->Span.GetTraceId(), "KeyValue.StorageRequest")
@@ -117,7 +114,6 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev, const TActorContext &ctx) {
-        TMemoryProfileGuard mpg("TKeyValueStorageRequest::HandlePutResult", EnableMemoryProfiling);
         const TDuration duration = TDuration::Seconds(PutTimer.Passed());
         IntermediateResults->Stat.PutLatencies.emplace_back(ev->Get()->Id.Channel(), duration.MilliSeconds());
 
@@ -283,7 +279,6 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev, const TActorContext &ctx) {
-        TMemoryProfileGuard mpg("TKeyValueStorageRequest::HandleGetResult", EnableMemoryProfiling);
         Y_ABORT_UNLESS(!InFlightBatchByCookie.empty());
 
         // Find the corresponding request (as replies come in random order)
@@ -520,7 +515,6 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        TMemoryProfileGuard mpg("TKeyValueStorageRequest::Bootstrap", EnableMemoryProfiling);
         // Check parameters and send requests
         if (IntermediateResults->Deadline != TInstant::Max()) {
             TInstant now = TAppData::TimeProvider->Now();
@@ -588,7 +582,6 @@ public:
     }
 
     bool SendSomeReadRequests(const TActorContext &ctx) {
-        TMemoryProfileGuard mpg("TKeyValueStorageRequest::SendSomeReadRequests", EnableMemoryProfiling);
         if (InFlightBatchByCookie.size() >= InFlightRequestsLimit) {
             return false;
         }
@@ -725,7 +718,6 @@ public:
     }
 
     void SendWriteRequests(const TActorContext &ctx) {
-        TMemoryProfileGuard mpg("TKeyValueStorageRequest::SendWriteRequests", EnableMemoryProfiling);
         auto sendWrite = [&](ui32 i, auto &request) -> void {
             using Type = std::decay_t<decltype(request)>;
             if constexpr (std::is_same_v<Type, TIntermediate::TWrite>) {
@@ -825,7 +817,6 @@ public:
     }
 
     STFUNC(StateWait) {
-        TMemoryProfileGuard mpg("TKeyValueStorageRequest::StateWait", EnableMemoryProfiling);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvGetResult, Handle);
             HFunc(TEvBlobStorage::TEvPutResult, Handle);

@@ -1,5 +1,6 @@
 #include "s3_storage_config.h"
 
+#include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -8,6 +9,7 @@
 #include <ydb/library/aws_init/aws.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/actor_type/index_constructor.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -71,6 +73,10 @@ public:
     ui16 GetPort() const {
         UNIT_ASSERT(Port.Defined());
         return *Port;
+    }
+
+    void SetMemoryProfilingEnabled(bool enabled) {
+        TControlBoard::SetValue(enabled, Runtime->GetAppData().Icb->S3WrapperControls.EnableMemoryProfiling);
     }
 
     template <typename TEvResponse>
@@ -223,6 +229,34 @@ public:
         }
     }
 
+    void MemoryProfiling() {
+        auto& tags = TLocalProcessKeyState<NActors::TActorActivityTag>::GetInstance();
+
+        PutObject();
+        UNIT_ASSERT_EXCEPTION(tags.GetIndexByName("TS3ExternalStorage::PutObject::Request-Start"), yexception);
+        UNIT_ASSERT_EXCEPTION(tags.GetIndexByName("TS3ExternalStorage::PutObject::Response-Start"), yexception);
+
+        SetMemoryProfilingEnabled(true);
+        GetObject(); // Writes an object and reads it back through the asynchronous callback.
+        auto request = DeleteObjectRequest().WithBucket("").WithKey("key");
+        auto response = Send<NExternalStorage::TEvDeleteObjectResponse>(
+            new NExternalStorage::TEvDeleteObjectRequest(request));
+        UNIT_ASSERT_C(response->Get()->IsSuccess(), response->Get()->Result.GetError().GetMessage());
+
+        for (const auto* operation : {"PutObject", "GetObject", "DeleteObject"}) {
+            for (const auto* phase : {"Request", "Response"}) {
+                const TString tag = TString("TS3ExternalStorage::") + operation + "::" + phase + "-Start";
+                UNIT_ASSERT_NO_EXCEPTION(tags.GetIndexByName(tag));
+            }
+        }
+        UNIT_ASSERT_NO_EXCEPTION(tags.GetIndexByName("TS3ExternalStorage::GetObject::ResponseStream-Start"));
+
+        SetMemoryProfilingEnabled(false);
+        HeadUnknownObject();
+        UNIT_ASSERT_EXCEPTION(tags.GetIndexByName("TS3ExternalStorage::HeadObject::Request-Start"), yexception);
+        UNIT_ASSERT_EXCEPTION(tags.GetIndexByName("TS3ExternalStorage::HeadObject::Response-Start"), yexception);
+    }
+
     void MultipartUpload() {
         const TString body = "body";
         TString uploadId;
@@ -340,6 +374,7 @@ private:
     UNIT_TEST(PutObject);
     UNIT_TEST(HeadObject);
     UNIT_TEST(GetObject);
+    UNIT_TEST(MemoryProfiling);
     UNIT_TEST(MultipartUpload);
     UNIT_TEST(AbortMultipartUpload);
     UNIT_TEST(HeadUnknownObject);

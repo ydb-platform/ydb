@@ -47,7 +47,6 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
-    ydb/library/actors/prof
     ydb/library/actors/protos
     ydb/core/base
     ydb/core/blobstorage/base

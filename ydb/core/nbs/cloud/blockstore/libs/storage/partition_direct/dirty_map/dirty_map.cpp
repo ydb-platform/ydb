@@ -166,10 +166,7 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange16 range)
             }
 
             if (!readSource.OnlyDDisk()) {
-                ++Stats.ReadFromPBufferCount;
                 ranges.push_back({.Key = item.Key, .Range = item.Range});
-            } else {
-                ++Stats.ReadFromDDiskCount;
             }
             return TInflightMap::EEnumerateContinuation::Continue;
         });
@@ -205,6 +202,14 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange16 range)
         }
 
         offsetBlocks += nonOverlappingRange.Range.Size();
+    }
+
+    for (const auto& hint: result.RangeHints) {
+        if (hint.PBufferKey.Lsn == 0) {
+            ++Stats.ReadFromDDiskCount;
+        } else {
+            ++Stats.ReadFromPBufferCount;
+        }
     }
 
     return result;

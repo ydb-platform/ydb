@@ -8,6 +8,7 @@ TString GetYdbEndpoint();
 TString GetYdbDatabase();
 
 TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode = true, bool autoAddEndpointAndDatabase = true, const THashMap<TString, TString>& env = {}, int expectedExitCode = 0);
+TString RunYdbWithStderr(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode, bool autoAddEndpointAndDatabase, const THashMap<TString, TString>& env, int expectedExitCode, TString* stderrOutput);
 TString RunYdbWithInput(const TList<TString>& args1, const TList<TString>& args2, const TString& input, bool checkExitCode = true, bool autoAddEndpointAndDatabase = true, const THashMap<TString, TString>& env = {}, int expectedExitCode = 0);
 
 ui64 GetFullTimeValue(const TString& output);

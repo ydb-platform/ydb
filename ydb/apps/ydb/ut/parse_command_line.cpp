@@ -1,8 +1,103 @@
 #include "mock_env.h"
 
+#include <ydb/public/sdk/cpp/tests/unit/client/oidc/helpers/test_server.h>
+
 using namespace fmt::literals;
 
 Y_UNIT_TEST_SUITE(ParseOptionsTest) {
+    Y_UNIT_TEST_F(OidcDeviceGrantPreservesOutputAndReusesCache, TCliTestFixture) {
+        TOidcTestServer issuer;
+        issuer.Enqueue(R"({"device_code":"private-device-code","user_code":"CODE\u001b[31m\n","verification_uri":"https://idp.example/verify","expires_in":60,"interval":1})", HTTP_OK);
+        issuer.Enqueue(R"({"access_token":"private-access-token","refresh_token":"private-refresh-token","token_type":"Bearer","expires_in":3600})", HTTP_OK);
+        const auto cacheFile = EnvFile("", "oidc-cache.json");
+        const TString yaml = fmt::format(
+            "issuer: {}\ncache_path: {}\ndevice_authorization_grant:\n  client_id: cli\n",
+            issuer.Issuer(), cacheFile);
+        const auto oidcFile = EnvFile(yaml, "oidc.yaml");
+        const auto staticFile = EnvFile("issuer: https://idp.example\nstatic_credentials:\n  access_token: private-access-token\n", "static.yaml");
+        ExpectToken("Bearer private-access-token");
+        const auto baseline = RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", staticFile, "scheme", "ls"});
+        TString stderrOutput;
+        ExpectToken("Bearer private-access-token");
+        const auto output = RunCliWithStderr({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", oidcFile, "scheme", "ls"}, {}, {}, &stderrOutput);
+        UNIT_ASSERT_VALUES_EQUAL(output, baseline);
+        UNIT_ASSERT_STRING_CONTAINS(stderrOutput, "https://idp.example/verify");
+        UNIT_ASSERT_STRING_CONTAINS(stderrOutput, "CODE\\x1B[31m\\x0A");
+        for (const TString secret : {"private-device-code", "private-access-token", "private-refresh-token"}) {
+            UNIT_ASSERT(!stderrOutput.Contains(secret));
+            UNIT_ASSERT(!output.Contains(secret));
+        }
+        const auto requests = issuer.Requests();
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(requests[0].Path, "/realm/device");
+        UNIT_ASSERT_VALUES_EQUAL(requests[0].Form.Get("client_id"), "cli");
+        UNIT_ASSERT_VALUES_EQUAL(requests[1].Form.Get("grant_type"), "urn:ietf:params:oauth:grant-type:device_code");
+        UNIT_ASSERT_VALUES_EQUAL(requests[1].Form.Get("device_code"), "private-device-code");
+        ExpectToken("Bearer private-access-token");
+        const auto cachedOutput = RunCliWithStderr({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", oidcFile, "scheme", "ls"}, {}, {}, &stderrOutput);
+        UNIT_ASSERT_VALUES_EQUAL(cachedOutput, baseline);
+        UNIT_ASSERT(!stderrOutput.Contains("CODE"));
+        UNIT_ASSERT_VALUES_EQUAL(issuer.Requests().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(issuer.DiscoveryCount(), 1);
+    }
+
+    Y_UNIT_TEST_F(OidcConfigProfileCreateAndUpdate, TCliTestFixture) {
+        const auto profiles = EnvFile("profiles: {}\n", "profiles.yaml");
+        RunCli({"--profile-file", profiles, "config", "profile", "create", "oidc", "--oidc-config", "/example/first.yaml"});
+        auto output = RunCli({"--profile-file", profiles, "config", "profile", "get", "oidc"});
+        UNIT_ASSERT_STRING_CONTAINS(output, "oidc-config: /example/first.yaml");
+        RunCli({"--profile-file", profiles, "config", "profile", "update", "oidc", "--oidc-config", "/example/second.yaml"});
+        output = RunCli({"--profile-file", profiles, "config", "profile", "get", "oidc"});
+        UNIT_ASSERT_STRING_CONTAINS(output, "oidc-config: /example/second.yaml");
+        UNIT_ASSERT(!output.Contains("first.yaml"));
+    }
+
+    Y_UNIT_TEST_F(OidcConfigConflictsWithExplicitToken, TCliTestFixture) {
+        const auto oidcFile = EnvFile("issuer: https://issuer.example\nstatic_credentials:\n  access_token: oidc-static\n", "oidc.yaml");
+        const auto tokenFile = EnvFile("other-token", "token");
+        ExpectFail();
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", oidcFile, "--token-file", tokenFile, "scheme", "ls"});
+    }
+
+    Y_UNIT_TEST_F(OidcConfigRejectsMalformedFile, TCliTestFixture) {
+        const auto oidcFile = EnvFile("issuer: [\n", "oidc.yaml");
+        ExpectFail();
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", oidcFile, "scheme", "ls"});
+    }
+
+    Y_UNIT_TEST_F(OidcConfigProfileDisplaysPath, TCliTestFixture) {
+        const TString profile = "profiles:\n  oidc:\n    authentication:\n      method: oidc-config\n      data: /example/oidc.yaml\n";
+        const auto output = RunCli({"config", "profile", "get", "oidc"}, {}, profile);
+        UNIT_ASSERT_STRING_CONTAINS(output, "oidc-config: /example/oidc.yaml");
+    }
+
+    Y_UNIT_TEST_F(OidcConfigFromCommandLine, TCliTestFixture) {
+        const auto oidcFile = EnvFile("issuer: https://issuer.example\nstatic_credentials:\n  access_token: oidc-static\n", "oidc.yaml");
+        ExpectToken("Bearer oidc-static");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", oidcFile, "scheme", "ls"});
+    }
+
+    Y_UNIT_TEST_F(OidcConfigFromProfile, TCliTestFixture) {
+        const auto oidcFile = EnvFile("issuer: https://issuer.example\nstatic_credentials:\n  access_token: oidc-profile\n", "oidc.yaml");
+        const TString profile = fmt::format(R"yaml(
+profiles:
+  oidc:
+    endpoint: {endpoint}
+    database: {database}
+    authentication:
+      method: oidc-config
+      data: {path}
+active_profile: oidc
+)yaml", "endpoint"_a = GetEndpoint(), "database"_a = GetDatabase(), "path"_a = oidcFile);
+        ExpectToken("Bearer oidc-profile");
+        RunCli({"scheme", "ls"}, {}, profile);
+    }
+
+    Y_UNIT_TEST_F(OidcConfigOverridesEnvironmentToken, TCliTestFixture) {
+        const auto oidcFile = EnvFile("issuer: https://issuer.example\nstatic_credentials:\n  access_token: oidc-explicit\n", "oidc.yaml");
+        ExpectToken("Bearer oidc-explicit");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", oidcFile, "scheme", "ls"}, {{"YDB_TOKEN", "environment"}});
+    }
     Y_UNIT_TEST_F(EndpointAndDatabaseFromCommandLine, TCliTestFixture) {
         RunCli(
             {

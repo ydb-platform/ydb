@@ -326,6 +326,14 @@ public:
         return TStatus::Success();
     }
 
+    static TStatus ValidateStatsCollectionMode(const TString& name, const TString& value) {
+        Ydb::Table::QueryStatsCollection::Mode mode;
+        if (!Ydb::Table::QueryStatsCollection::Mode_Parse(value, &mode)) {
+            return TStatus::Fail(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << to_upper(name) << " property got illegal value: " << value);
+        }
+        return TStatus::Success();
+    }
+
 private:
     static TValueStatus<TString> Validate(const TString& name, const TString& value, TValidator validator) {
         if (validator) {
@@ -1755,6 +1763,7 @@ public:
         TString WatermarkLateEventsPolicy;
         std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
         std::optional<TDuration> CheckpointInterval;
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> StatsCollectionMode;
     };
 
     TStartStreamingQueryTableActor(const TExternalContext& context, const TString& queryPath, const TSettings& settings)
@@ -2047,7 +2056,7 @@ private:
         request.SetDatabase(Context.GetDatabase());
         request.SetDatabaseId(Context.GetDatabaseId());
         request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-        request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
+        request.SetCollectStats(Settings.StatsCollectionMode.value_or(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL));
         request.SetSyntax(Ydb::Query::SYNTAX_YQL_V1);
         request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
         request.SetKeepSession(false);
@@ -2400,6 +2409,7 @@ private:
             .WatermarkLateEventsPolicy = QuerySettings.WatermarkLateEventsPolicy,
             .StreamingDisposition = QuerySettings.StreamingDisposition,
             .CheckpointInterval = QuerySettings.CheckpointInterval,
+            .StatsCollectionMode = QuerySettings.StatsCollectionMode,
         }));
         YDB_LOG_DEBUG("[StreamingQueries] Start TStartStreamingQueryTableActor",
             {"logPrefix", LogPrefix()},
@@ -2879,6 +2889,7 @@ private:
         CHECK_STATUS(validator.SaveDefault(EName::WatermarkLateEventsPolicy, "drop", &TPropertyValidator::ValidateEnum<NYql::NHoppingWindow::EPolicy>));
         CHECK_STATUS(validator.SaveDefault(EName::StreamingDisposition, DefaultStreamingDisposition));
         CHECK_STATUS(validator.SaveDefault(EName::CheckpointInterval, "", &TPropertyValidator::ValidateInterval<TPropertyValidator::MAX_PROTOBUF_DURATION_MICROSECONDS>));
+        CHECK_STATUS(validator.SaveDefault(EName::StatsCollectionMode, "", &TPropertyValidator::ValidateStatsCollectionMode));
         CHECK_STATUS(validator.Save(
             EName::QueryTextRevision,
             ToString(SchemeInfo ? TStreamingQuerySettings().FromProto(SchemeInfo->Properties).QueryTextRevision + 1 : 1)
@@ -2995,6 +3006,7 @@ private:
         CHECK_STATUS(validator.SaveDefault(EName::Run, previousSettings.Run ? "true" : "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS(validator.SaveDefault(EName::ResourcePool, previousSettings.ResourcePool));
         CHECK_STATUS(validator.SaveDefault(EName::CheckpointInterval, previousSettings.CheckpointIntervalString, &TPropertyValidator::ValidateInterval<TPropertyValidator::MAX_PROTOBUF_DURATION_MICROSECONDS>));
+        CHECK_STATUS(validator.SaveDefault(EName::StatsCollectionMode, previousSettings.StatsCollectionModeString, &TPropertyValidator::ValidateStatsCollectionMode));
         CHECK_STATUS_RET(force, validator.ExtractDefault(EName::Force, "false", &TPropertyValidator::ValidateBool));
         CHECK_STATUS_RET(queryText, validator.ExtractOptional(ESqlSettings::QUERY_TEXT_FEATURE, &TPropertyValidator::ValidateNotEmpty));
         CHECK_STATUS_RET(streamingDisposition, validator.ExtractOptional(EName::StreamingDisposition));

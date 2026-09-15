@@ -2998,7 +2998,7 @@ public:
         , Callbacks(args.Callback)
         , Counters(counters)
         , Alloc(args.Alloc)
-        , TxId(std::get<ui64>(args.TxId))
+        , TxId(args.TxId)
         , TableId(
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
@@ -3349,7 +3349,7 @@ private:
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     IDataBatcherPtr Batcher;
 
-    const ui64 TxId;
+    const NYql::NDq::TTxId TxId;
     const TTableId TableId;
     TKqpTableWriteActor* WriteTableActor = nullptr;
     TActorId WriteTableActorId;
@@ -3379,7 +3379,7 @@ struct TWriteToken {
 };
 
 struct TTransactionSettings {
-    ui64 TxId = 0;
+    NYql::NDq::TTxId TxId;
     ui64 LockTxId = 0;
     ui64 LockNodeId = 0;
     bool InconsistentTx = false;
@@ -6471,7 +6471,7 @@ public:
         , Callbacks(args.Callback)
         , Counters(counters)
         , BufferActorId(ActorIdFromProto(Settings.GetBufferActorId()))
-        , TxId(std::get<ui64>(args.TxId))
+        , TxId(args.TxId)
         , TableId(
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
@@ -6860,7 +6860,7 @@ private:
     bool Closed = false;
     bool InFlight = false;
 
-    const ui64 TxId;
+    const NYql::NDq::TTxId TxId;
     const TTableId TableId;
     std::vector<NScheme::TTypeInfo> ReturningColumnsTypes;
 

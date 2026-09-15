@@ -24,6 +24,6 @@ struct TFileTopicClientSettings {
     bool SkipDatabasePrefix = false;
 };
 
-TString SkipDatabasePrefix(const TString& path, const TString& database);
+TString SkipDatabasePrefix(const TString& path, const TString& database, bool isCluster = false);
 
 } // namespace NYql

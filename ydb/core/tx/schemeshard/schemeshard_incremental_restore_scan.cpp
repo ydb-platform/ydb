@@ -520,7 +520,7 @@ private:
         finalize.SetBackupCollectionPathId(state.BackupCollectionPathId.LocalPathId);
 
         CollectTargetTablePaths(state, finalize);
-        CollectBackupTablePaths(state, finalize);
+        CollectBackupTablePaths(state, finalize, ctx);
 
         NIceDb::TNiceDb db(txc.DB);
         Self->EnqueueIncrementalRestoreItem(
@@ -566,27 +566,36 @@ private:
     }
 
     void CollectBackupTablePaths(TIncrementalRestoreState& state,
-                               NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize) {
+                               NKikimrSchemeOp::TIncrementalRestoreFinalize& finalize,
+                               const TActorContext& ctx) {
         auto opIt = Self->LongIncrementalRestoreOps.find(TOperationId(OperationId, 0));
         if (opIt != Self->LongIncrementalRestoreOps.end()) {
             const auto& op = opIt->second;
 
-            TString bcPathString = TPath::Init(state.BackupCollectionPathId, Self).PathString();
+            const auto bcPath = TPath::Init(state.BackupCollectionPathId, Self);
+            TString bcPathString = bcPath.PathString();
 
-            TString fullBackupPath = JoinPath({bcPathString, op.GetFullBackupTrimmedName()});
+            TVector<TString> relativeTablePaths;
             for (const auto& tablePath : op.GetTablePathList()) {
-                TPath fullPath = TPath::Resolve(tablePath, Self);
-                TString tableName = fullPath.LeafName();
-                TString sourceTablePath = JoinPath({fullBackupPath, tableName});
+                std::pair<TString, TString> paths;
+                TString err;
+                if (!TrySplitPathByDb(tablePath, bcPath.GetDomainPathString(), paths, err)) {
+                    LOG_E("Failed to split backup table path: " << err);
+                    continue;
+                }
+                relativeTablePaths.push_back(std::move(paths.second));
+            }
+
+            TString fullBackupPath = JoinPath({bcPathString, NBackup::FullBackupDirName(op.GetFullBackupTrimmedName())});
+            for (const auto& relativeTablePath : relativeTablePaths) {
+                TString sourceTablePath = JoinPath({fullBackupPath, relativeTablePath});
                 finalize.AddBackupTablePaths(sourceTablePath);
             }
 
             for (const auto& incrBackupName : op.GetIncrementalBackupTrimmedNames()) {
-                TString incrBackupPath = JoinPath({bcPathString, incrBackupName});
-                for (const auto& tablePath : op.GetTablePathList()) {
-                    TPath fullPath = TPath::Resolve(tablePath, Self);
-                    TString tableName = fullPath.LeafName();
-                    TString sourceTablePath = JoinPath({incrBackupPath, tableName});
+                TString incrBackupPath = JoinPath({bcPathString, NBackup::IncrementalBackupDirName(incrBackupName)});
+                for (const auto& relativeTablePath : relativeTablePaths) {
+                    TString sourceTablePath = JoinPath({incrBackupPath, relativeTablePath});
                     finalize.AddBackupTablePaths(sourceTablePath);
                 }
             }

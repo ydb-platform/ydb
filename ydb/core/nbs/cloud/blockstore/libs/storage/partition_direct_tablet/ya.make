@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    bsc_proxy.cpp
     delete_partition.cpp
     load_actor_adapter.cpp
     part_add_host_to_dbg.cpp

@@ -10,6 +10,9 @@ TVector<TString> SplitPath(TString path);
 TString JoinPath(const TVector<TString>& path);
 TString CanonizePath(const TString &path);
 TString CanonizePath(const TVector<TString>& path);
+// Remap an absolute database name to the cluster root. Relative and empty
+// names retain their existing meaning; this does not resolve resource paths.
+TString ResolveDatabasePath(const TString& database, const TString& root);
 ui32 CanonizedPathLen(const TVector<TString>& path);
 TStringBuf ExtractDomain(const TString& path) noexcept;
 TStringBuf ExtractDomain(TStringBuf path) noexcept;
@@ -29,6 +32,8 @@ bool TrySplitPathByDb(const TString& path, const TString& database,
  */
 TString NormalizePath(TStringBuf database, TStringBuf path);
 TString NormalizePath(const TString& database, const TString& path);
+// Resolve relative resources and, when supplied, the original absolute database alias.
+TString ResolvePathToDatabase(TStringBuf database, TStringBuf path, TStringBuf databaseFromRequest = {});
 
 template <typename TIter>
 TString CombinePath(TIter begin, TIter end, bool canonize = true) {

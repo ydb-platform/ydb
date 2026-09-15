@@ -47,7 +47,8 @@ private:
         auto ev = std::make_unique<TEvTxUserProxy::TEvNavigate>();
         SetAuthToken(ev, *TBase::Request_);
         SetDatabase(ev.get(), *TBase::Request_);
-        ev->Record.MutableDescribePath()->SetPath(TBase::GetProtoRequest()->path());
+        ev->Record.MutableDescribePath()->SetPath(
+            TBase::Request_->GetDatabaseRelativePath(TBase::GetProtoRequest()->path()));
 
         TBase::Send(MakeTxProxyID(), ev.release());
         TBase::Become(&TThis::StateDescribeScheme);

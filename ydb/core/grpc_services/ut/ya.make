@@ -7,6 +7,7 @@ IF (SANITIZER_TYPE)
 ENDIF()
 
 SRCS(
+    grpc_request_proxy_simple_ut.cpp
     rpc_calls_ut.cpp
     rpc_load_rows_ut.cpp
     operation_helpers_ut.cpp

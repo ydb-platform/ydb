@@ -407,6 +407,11 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWriteInit::TPtr& ev, const
         CloseSession("no topic in init request",  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
+    if constexpr (Protocol == EProtocol::Topic) {
+        if (TopicsController.GetConverterFactory()->GetNoDCMode()) {
+            topic_path = Request->GetDatabaseRelativePath(topic_path);
+        }
+    }
 
     if constexpr (Protocol == EProtocol::PQv1) {
         if (InitRequest.message_group_id().empty()) {
@@ -786,7 +791,9 @@ bool TWriteSessionActor<Protocol>::CreatePartitionWriterCache(const TActorContex
         if (Request->GetDatabaseName()) {
             opts.WithDatabase(*Request->GetDatabaseName());
         }
-        opts.WithTopicPath(InitRequest.path());
+        opts.WithTopicPath(TopicsController.GetConverterFactory()->GetNoDCMode() && IsStartWithSlash(InitRequest.path())
+            ? Request->GetDatabaseRelativePath(InitRequest.path())
+            : InitRequest.path());
         if (Request->GetSerializedToken()) {
             opts.WithToken(Request->GetSerializedToken());
         }

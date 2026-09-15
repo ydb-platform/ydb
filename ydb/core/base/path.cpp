@@ -7,6 +7,28 @@
 
 namespace NKikimr {
 
+TString ResolveDatabasePath(const TString& database, const TString& root) {
+    if (database.empty() || database[0] != '/') {
+        return database;
+    }
+
+    const TString path = CanonizePath(database);
+    const TString rootPath = CanonizePath(root);
+    if (path.empty() || rootPath.empty()) {
+        return database;
+    }
+
+    const auto separator = path.find('/', 1);
+    if (path.substr(0, separator) == rootPath) {
+        return path;
+    }
+    // A former root database becomes a tenant without losing its name.
+    if (separator == TString::npos) {
+        return rootPath + path;
+    }
+    return rootPath + path.substr(separator);
+}
+
 TVector<TString> SplitPath(TString path) {
     TVector<TString> res;
     if (path.empty())
@@ -187,6 +209,30 @@ TString NormalizePath(const TString& database, const TString& path) {
         return path;
     }
     return NormalizePathJoin(database, path);
+}
+
+TString ResolvePathToDatabase(TStringBuf database, TStringBuf path, TStringBuf databaseFromRequest) {
+    if (path.empty()) {
+        return TString{path};
+    }
+    if (!path.StartsWith('/')) {
+        return NormalizePathJoin(database, path);
+    }
+    if (!database.StartsWith('/') || !databaseFromRequest.StartsWith('/')) {
+        return TString{path};
+    }
+
+    const TString target = CanonizePath(TString{database});
+    const TString source = CanonizePath(TString{databaseFromRequest});
+    const TString resource = CanonizePath(TString{path});
+    // A target path can also be under the old alias, for example /root -> /root/db.
+    if (target.empty() || source.empty() || resource == target || IsPathUnderDatabase(target, resource)) {
+        return TString{path};
+    }
+    if (resource == source || IsPathUnderDatabase(source, resource)) {
+        return target + resource.substr(source.size());
+    }
+    return TString{path};
 }
 
 ui32 CanonizedPathLen(const TVector<TString>& path) {

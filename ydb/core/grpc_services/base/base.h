@@ -25,6 +25,7 @@
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/events.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/util/ulid.h>
 #include <ydb/library/actors/util/rope.h>
@@ -74,6 +75,7 @@ inline void EndGrpcRequestSpanWithStatus(NWilson::TSpan& span, Ydb::StatusIds::S
 
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path);
 std::pair<TString, TString> SplitPath(const TString& path);
+
 TString DatabaseFromDomain(const TAppData* appdata);
 
 inline grpc::ByteBuffer MakeByteBufferFromSerializedResult(TString&& serializedResult) {
@@ -343,6 +345,24 @@ class IAuditCtx : public virtual IRequestCtxBaseMtSafe {
 public:
     virtual void AddAuditLogPart(const TStringBuf& name, const TString& value) = 0;
     virtual const TAuditLogParts& GetAuditLogParts() const = 0;
+    virtual bool UseStrictDatabaseRelativePaths() const {
+        return false;
+    }
+
+    TString GetDatabaseRelativePath(TStringBuf path) const {
+        const auto database = GetDatabaseName();
+        if (!UseStrictDatabaseRelativePaths() && !path.empty() && !path.StartsWith('/')) {
+            return NKikimr::NormalizePath(
+                NKikimr::CanonizePath(database.GetOrElse(TString())),
+                NKikimr::CanonizePath(TString{path}));
+        }
+        return NKikimr::ResolvePathToDatabase(database.GetOrElse(TString()), path, GetDatabaseRootAlias());
+    }
+
+protected:
+    virtual TString GetDatabaseRootAlias() const {
+        return {};
+    }
 };
 
 class IRequestCtxBase
@@ -480,6 +500,8 @@ class IRequestProxyCtx
     friend class TGRpcRequestProxyHandleMethods;
 private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
+    virtual const TMaybe<TString> GetDatabaseNameFromRequest() const = 0;
+
 public:
     virtual ~IRequestProxyCtx() = default;
 
@@ -513,6 +535,28 @@ public:
 
     // validation
     virtual bool Validate(TString& error) = 0;
+
+    const TMaybe<TString> GetDatabaseName() const final {
+        return ResolvedDatabaseName ? ResolvedDatabaseName : GetDatabaseNameFromRequest();
+    }
+
+    bool UseStrictDatabaseRelativePaths() const final {
+        const auto providedDatabase = GetDatabaseNameFromRequest();
+        // An explicitly resolved database makes slashless resource names relative,
+        // even when they start with the target database name.
+        return providedDatabase && !providedDatabase->empty()
+            && (!IsStartWithSlash(*providedDatabase) || UseDatabaseRootAlias)
+            && CanonizePath(*providedDatabase) != GetDatabaseName().GetOrElse(TString());
+    }
+
+    // Store the resolved database for request processing without updating counters.
+    void SetDatabaseName(const TString& database) {
+        ResolvedDatabaseName = database;
+    }
+
+    void SetUseDatabaseRootAlias(bool enabled) {
+        UseDatabaseRootAlias = enabled;
+    }
 
     // counters
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
@@ -550,8 +594,15 @@ public:
 
     virtual TString GetRpcMethodName() const = 0;
 
+protected:
+    TString GetDatabaseRootAlias() const override {
+        return UseDatabaseRootAlias ? GetDatabaseNameFromRequest().GetOrElse(TString()) : TString();
+    }
+
 private:
     NWilson::TTraceId UserFacingTraceId;
+    TMaybe<TString> ResolvedDatabaseName;
+    bool UseDatabaseRootAlias = false;
 };
 
 // Request context
@@ -666,7 +717,7 @@ public:
         return false;
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database_;
     }
 
@@ -883,6 +934,13 @@ struct TYdbGrpcMethodAccessorTraits {
     }
 };
 
+template <typename TReq>
+struct TYdbGrpcDatabaseNameAccessorTraits {
+    static const TMaybe<TString> GetDatabaseName(const TReq&, const NYdbGrpc::IRequestContextBase* ctx) {
+        return ExtractDatabaseName(ctx->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+    }
+};
+
 template <ui32 TRpcId, typename TReq, typename TResp>
 class TGRpcRequestBiStreamWrapper
     : public IRequestProxyCtx
@@ -952,7 +1010,7 @@ public:
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1303,8 +1361,8 @@ public:
         return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
-        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
+        return TYdbGrpcDatabaseNameAccessorTraits<TRequest>::GetDatabaseName(*GetProtoRequest(), Ctx_.Get());
     }
 
     TString GetRpcMethodName() const override {
@@ -1964,7 +2022,7 @@ public:
         if (status == Ydb::StatusIds::SUCCESS) {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
-                    Database,
+                    GetDatabaseName().GetOrElse(Database),
                     YdbToken,
                     UserToken,
                     GetAuditLogParts()
@@ -2063,7 +2121,7 @@ public:
         return Span.GetTraceId();
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database ? TMaybe<TString>(Database) : Nothing();
     }
 

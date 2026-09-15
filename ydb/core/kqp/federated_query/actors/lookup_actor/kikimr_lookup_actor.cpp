@@ -203,7 +203,8 @@ namespace {
             const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
             const NKikimr::NMiniKQL::THolderFactory& holderFactory,
             const size_t maxKeysInRequest,
-            bool isMultiMatches = false)
+            bool isMultiMatches,
+            TCollectStatsLevel statsLevel)
             : ParentId(std::move(parentId))
             , Alloc(alloc)
             , KeyTypeHelper(keyTypeHelper)
@@ -218,6 +219,18 @@ namespace {
             , SelectBody(MakeSelect())
             , SelectWithKeys(MakeSelectWithKeys())
         {
+            switch(statsLevel) {
+                // Shift priorities by one level (minimum level is Basic)
+#define TRANSLATE(DQ, PROTO) \
+                case TCollectStatsLevel::DQ: \
+                    StatsMode = Ydb::Query::STATS_MODE_##PROTO; \
+                    break
+                TRANSLATE(None, NONE);
+                TRANSLATE(Basic, NONE);
+                TRANSLATE(Full, BASIC);
+                TRANSLATE(Profile, FULL);
+#undef TRANSLATE
+            }
             if (auto token = LookupSource.GetToken(); !token.empty()) {
                 Token.emplace(token);
             }
@@ -977,11 +990,10 @@ namespace {
                 tx_control.mutable_begin_tx()->mutable_snapshot_read_only();
                 tx_control.set_commit_tx(true);
             }
-            YDB_LOG_DEBUG("QueryStatsMode",
-                    COMMON_LOG,
-                    {"mode", (request.set_stats_mode(Ydb::Query::STATS_MODE_BASIC), "BASIC")}); // intentional side effects, order important
-            YDB_LOG_TRACE("QueryStatsMode",
-                    {"mode", (request.set_stats_mode(Ydb::Query::STATS_MODE_FULL), "FULL")}); // intentional side effects, order important
+            if (IS_DEBUG_LOG_ENABLED(YDB_LOG_THIS_FILE_COMPONENT)) {
+                // unless debug log enabled, stats collection is useless
+                request.set_stats_mode(StatsMode == Ydb::Query::STATS_MODE_FULL && IS_TRACE_LOG_ENABLED(YDB_LOG_THIS_FILE_COMPONENT) ? Ydb::Query::STATS_MODE_PROFILE : StatsMode);
+            }
             YDB_LOG_TRACE("Query",
                     COMMON_LOG,
                     {"query", request.DebugString()});
@@ -1003,6 +1015,7 @@ namespace {
         const size_t MaxKeysInRequest;
         const bool IsMultiMatches;
         TMaybe<TString> Token;
+        Ydb::Query::StatsMode StatsMode;
         static inline constexpr std::string_view KeyTupleListName = "$keyTupleList"sv;
         NYql::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper = new NKikimr::NMiniKQL::TTypeInfoHelper();
         const TString SelectBody;
@@ -1038,7 +1051,8 @@ namespace {
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         const size_t maxKeysInRequest,
-        const bool isMultiMatches
+        const bool isMultiMatches,
+        TCollectStatsLevel statsLevel
     )
     {
         auto guard = Guard(*alloc);
@@ -1053,7 +1067,9 @@ namespace {
             typeEnv,
             holderFactory,
             maxKeysInRequest,
-            isMultiMatches);
+            isMultiMatches,
+            statsLevel
+        );
         return {actor, actor};
     }
 

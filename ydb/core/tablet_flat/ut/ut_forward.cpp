@@ -668,7 +668,7 @@ Y_UNIT_TEST_SUITE(NFwd_TFlatIndexCache) {
     TPartEggs CookPart() {
         NPage::TConf conf;
 
-        conf.WriteBTreeIndex = false;
+        conf.WriteBTreeIndexV1 = false;
         conf.WriteFlatIndex = true;
         conf.Group(0).PageRows = 2;
         conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
@@ -1025,7 +1025,7 @@ Y_UNIT_TEST_SUITE(NFwd_TBTreeIndexCache) {
     TPartEggs CookPart() {
         NPage::TConf conf;
 
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
         conf.WriteFlatIndex = false;
         conf.Group(0).PageRows = 2;
@@ -1804,10 +1804,9 @@ private:
 static TPartEggs CookPartV2() {
     NPage::TConf conf;
 
-    conf.WriteBTreeIndex = true;
+    conf.WriteBTreeIndexV1 = false;
     conf.WriteBTreeIndexV2 = true;
     conf.WriteFlatIndex = false;
-    conf.BTreeIndexV2KeepV1Shadow = false;
     conf.Group(0).PageRows = 2;
     conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
 

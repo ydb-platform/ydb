@@ -778,6 +778,8 @@ public:
     void UpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
     // under UpdateMutex of the descriptor
     void SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descriptor);
+    // the progress of every input descriptor once more, for a sender which may have missed it; under Mutex
+    void ResendUpdates();
 
     // SendFromWaiters has taken a chunk off the WaitQueue of a channel and not sequenced it yet
     virtual void OnWaiterDequeued() {}

@@ -607,9 +607,10 @@ namespace {
             TLookupState::TPtr State;
         };
 
-        // SessionInfo::TPtr is std::unique_ptr<TSessionInfo, [actorSystem]() {
+        // SessionInfo::TPtr is (approx)
+        // std::unique_ptr<TSessionInfo, [actorSystem]() {
         //      actorSystem->Send(ServiceActorId(), TEvRelease);
-        // }
+        // }>
         //
         // LookupActor
         //              PoolActor

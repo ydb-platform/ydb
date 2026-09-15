@@ -2560,6 +2560,16 @@ message TImmediateControlsConfig {
             DefaultValue: 10 }];
     }
     optional TRetroTracingControls RetroTracingControls = 23;
+
+    message TS3WrapperControls {
+        optional uint64 EnableMemoryProfiling = 1 [(ControlOptions) = {
+            Description: "Enable memory allocation tags for S3 wrapper requests and responses",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0
+        }];
+    }
+    optional TS3WrapperControls S3WrapperControls = 24;
 };
 
 message TMeteringConfig {

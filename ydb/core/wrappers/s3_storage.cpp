@@ -1,5 +1,7 @@
 #include "s3_storage.h"
 
+#include <ydb/core/control/immediate_control_board_impl.h>
+
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/internal/AWSHttpResourceClient.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/stream/PreallocatedStreamBuf.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/utils/stream/ResponseStream.h>
@@ -47,10 +49,12 @@ public:
             IRequestContext::TPtr requestContext,
             const Aws::S3::Model::StorageClass storageClass,
             const TReplyAdapterContainer& replyAdapter,
-            TIntrusivePtr<TS3ExternalStorage::TS3RequestCounters> counters)
+            TIntrusivePtr<TS3ExternalStorage::TS3RequestCounters> counters,
+            const TControlWrapper& enableMemoryProfiling)
         : AsyncCallerContext()
         , ActorSystem(sys)
         , Sender(sender)
+        , EnableMemoryProfiling(enableMemoryProfiling)
         , Counters(std::move(counters))
         , RequestContext(requestContext)
         , StorageClass(storageClass)
@@ -60,6 +64,10 @@ public:
 
     const TActorSystem* GetActorSystem() const {
         return ActorSystem;
+    }
+
+    bool IsMemoryProfilingEnabled() const {
+        return EnableMemoryProfiling;
     }
 
     virtual const typename TEvRequest::TRequest& PrepareRequest(typename TEvRequest::TPtr& ev) {
@@ -127,6 +135,7 @@ protected:
 private:
     const TActorSystem* ActorSystem;
     const TActorId Sender;
+    const TControlWrapper EnableMemoryProfiling;
 
 protected:
     const TInstant Start = TInstant::Now();
@@ -207,6 +216,7 @@ public:
         Buffer.resize(range.second - range.first + 1);
         this->BytesRead = Buffer.size();
         request.SetResponseStreamFactory([this]() {
+            TMemoryProfileGuard mpg("TS3ExternalStorage::GetObject::ResponseStream", this->IsMemoryProfilingEnabled());
             return Aws::New<DefaultUnderlyingStream>("StreamContext",
                 MakeUnique<TOutputStreamBuf>("StreamContext", Buffer));
             }
@@ -364,6 +374,14 @@ NMonitoring::TCounterForPtr* TS3ExternalStorage::TS3RequestCounters::GetSuccessR
     auto* counter = GetRequestsCountCounter(OkStatusName, 200, -1);
     SuccessRequests.store(counter, std::memory_order_release);
     return counter;
+}
+
+void TS3ExternalStorage::InitMemoryProfiling() const {
+    if (HasAppData() && AppData()->Icb) {
+        std::call_once(MemoryProfilingInitFlag, [this] {
+            TControlBoard::RegisterSharedControl(EnableMemoryProfiling, AppData()->Icb->S3WrapperControls.EnableMemoryProfiling);
+        });
+    }
 }
 
 TS3ExternalStorage::~TS3ExternalStorage() {

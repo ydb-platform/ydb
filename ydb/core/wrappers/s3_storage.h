@@ -4,12 +4,15 @@
 
 #include "abstract.h"
 
+#include <ydb/core/control/immediate_control_board_wrapper.h>
+
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/auth/AWSCredentials.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/client/AWSClient.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/client/ClientConfiguration.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/S3Client.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/prof/tag.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -100,6 +103,11 @@ private:
     bool Verbose = false;
     TS3CountersRoot Counters;
 
+    mutable std::once_flag MemoryProfilingInitFlag;
+    mutable TControlWrapper EnableMemoryProfiling{0, 0, 1};
+
+    void InitMemoryProfiling() const;
+
     mutable std::mutex RunningQueriesMutex;
     mutable std::condition_variable RunningQueriesNotifier;
     mutable int RunningQueriesCount = 0;
@@ -117,10 +125,13 @@ private:
 
     template <typename TEvRequest, typename TEvResponse, template <typename...> typename TContext>
     void Call(typename TEvRequest::TPtr& ev, TFunc<typename TEvRequest::TRequest, typename TEvResponse::TOutcome> func) const {
+        InitMemoryProfiling();
+        static const TString memoryTag = TString("TS3ExternalStorage::") + TString(TEvRequest::RequestName) + "::Request";
+        TMemoryProfileGuard mpg(memoryTag, EnableMemoryProfiling);
         using TCtx = TContext<TEvRequest, TEvResponse>;
         ev->Get()->MutableRequest().WithBucket(Bucket);
 
-        auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext(), StorageClass, ReplyAdapter, GetRequestCounters<TEvRequest>());
+        auto ctx = std::make_shared<TCtx>(TlsActivationContext->ActorSystem(), ev->Sender, ev->Get()->GetRequestContext(), StorageClass, ReplyAdapter, GetRequestCounters<TEvRequest>(), EnableMemoryProfiling);
         auto callback = [this](
             const Aws::S3::S3Client*,
             const typename TEvRequest::TRequest& request,
@@ -128,6 +139,8 @@ private:
             const std::shared_ptr<const Aws::Client::AsyncCallerContext>& context)
         {
             const auto* ctx = static_cast<const TCtx*>(context.get());
+            static const TString memoryTag = TString("TS3ExternalStorage::") + TString(TEvRequest::RequestName) + "::Response";
+            TMemoryProfileGuard mpg(memoryTag, ctx->IsMemoryProfilingEnabled());
 
             Y_DEFER {
                 std::unique_lock guard(RunningQueriesMutex);

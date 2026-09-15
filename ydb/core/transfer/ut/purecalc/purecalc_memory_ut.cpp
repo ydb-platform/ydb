@@ -229,7 +229,8 @@ TVector<ui64> ApplyPositions(
     TPullListProgram<TMessageInputSpec, TUsedProbeSpec>& program,
     ui64& usedAtBind,
     size_t applyCount,
-    size_t extraBytes)
+    size_t extraBytes,
+    bool consumeToEos = true)
 {
     TVector<ui64> used;
     used.reserve(applyCount);
@@ -243,7 +244,9 @@ TVector<ui64> ApplyPositions(
         auto stream = program.Apply(MakeHolder<TMessageVectorStream>(TVector<TMessage>{input}));
         used.push_back(usedAtBind);
         UNIT_ASSERT(stream->Fetch());
-        UNIT_ASSERT(!stream->Fetch());
+        if (consumeToEos) {
+            UNIT_ASSERT(!stream->Fetch());
+        }
         stream.Destroy();
     }
     return used;
@@ -268,6 +271,27 @@ Y_UNIT_TEST(JsonYsonUnusedFieldDoesNotGrowMkqlUsed) {
         last < ExtraBytes * 2,
         TStringBuilder()
             << "MKQL used bytes at Apply() bind kept unused JSON/Yson payload on a pooled pull-list worker: warmup="
+            << warmup << " last=" << last
+            << " extra=" << ExtraBytes
+            << " applies=" << ApplyCount
+            << " used=" << JoinValues(used));
+}
+
+Y_UNIT_TEST(JsonYsonUnusedFieldDoesNotGrowMkqlUsedAfterPartialFetch) {
+    constexpr size_t ExtraBytes = 256_KB;
+    constexpr size_t ApplyCount = 16;
+    constexpr size_t WarmupApplies = 3;
+
+    ui64 usedAtBind = 0;
+    auto program = MakePositionsProgram("OFF", &usedAtBind);
+    const auto used = ApplyPositions(*program, usedAtBind, ApplyCount, ExtraBytes, /*consumeToEos=*/false);
+
+    const ui64 warmup = used[WarmupApplies];
+    const ui64 last = used.back();
+    UNIT_ASSERT_C(
+        last < ExtraBytes * 2,
+        TStringBuilder()
+            << "MKQL used bytes at next Apply() bind kept unused JSON/Yson payload after destroying a pull-list stream before EOS: warmup="
             << warmup << " last=" << last
             << " extra=" << ExtraBytes
             << " applies=" << ApplyCount

@@ -30,13 +30,44 @@ TUnboxedValuePod AsciiContainsIgnoreCaseImpl(const TUnboxedValuePod* args) {
     return TUnboxedValuePod(AsciiContainsIgnoreCaseMemchr(haystack, needle));
 }
 
-BEGIN_SIMPLE_STRICT_ARROW_UDF(T_yql_AsciiContainsIgnoreCase, bool(TOptional<char*>, char*)) // NOLINT(readability-identifier-naming)
-{
-    Y_UNUSED(valueBuilder);
-    return AsciiContainsIgnoreCaseImpl(args);
-}
+inline constexpr char AsciiContainsIgnoreCaseName[] = "_yql_AsciiContainsIgnoreCase";
+inline constexpr char AsciiContainsIgnoreCaseBlocksName[] = "_yql_AsciiContainsIgnoreCase_BlocksImpl";
 
-END_SIMPLE_ARROW_UDF(T_yql_AsciiContainsIgnoreCase, TAsciiContainsIgnoreCaseKernelExec::Do);
+template <typename TInput>
+class TAsciiContainsIgnoreCase: public TBoxedValue {
+public:
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        Y_UNUSED(valueBuilder);
+        return AsciiContainsIgnoreCaseImpl(args);
+    }
+
+    static void DeclareSignature(const TStringRef&, TType*, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        builder.SimpleSignature<bool(TOptional<TInput>, char*)>().IsStrict();
+        if (!typesOnly) {
+            builder.Implementation(new TAsciiContainsIgnoreCase());
+        }
+    }
+};
+
+template <typename TInput>
+class TAsciiContainsIgnoreCaseBlockImpl {
+public:
+    static void DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        builder.IsStrict();
+        PrepareSimpleArrowUdf(builder, builder.SimpleSignatureType<bool(TOptional<TInput>, char*)>(), userType,
+            TAsciiContainsIgnoreCaseKernelExec::Do, typesOnly, TString(name), arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE);
+    }
+};
+
+using TAsciiContainsIgnoreCaseScalar = TUserDataTypeFuncFactory<true, false, AsciiContainsIgnoreCaseName,
+    TAsciiContainsIgnoreCase, char*, TUtf8>;
+using TAsciiContainsIgnoreCaseBlockTypes = TUserDataTypeFuncFactory<true, true, AsciiContainsIgnoreCaseBlocksName,
+    TAsciiContainsIgnoreCaseBlockImpl, char*, TUtf8>;
+
+class T_yql_AsciiContainsIgnoreCase: public TAsciiContainsIgnoreCaseScalar { // NOLINT(readability-identifier-naming)
+public:
+    using TBlockType = TAsciiContainsIgnoreCaseBlockTypes;
+};
 
 SIMPLE_MODULE(TOlapKernelsModule, T_yql_AsciiContainsIgnoreCase)
 

@@ -1721,8 +1721,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             .IsCloud = true,
         };
 
-        ExecQuery(fmt::format(
-            R"sql(
+        constexpr auto createExternalDataSourceSolomonTemplate = R"sql(
                 CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
                     SOURCE_TYPE = "Monium.Metrics",
                     LOCATION = "localhost:{solomon_port}",
@@ -1734,7 +1733,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     CLUSTER = "{cluster}",
                     USE_TLS = "false"
                 );
-            )sql",
+            )sql";
+
+        ExecQuery(fmt::format(
+            createExternalDataSourceSolomonTemplate,
             "secret"_a = secretPath,
             "cloud_id"_a = cloudId,
             "project"_a = soLocation.ProjectId,
@@ -1774,6 +1776,37 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 ])";
         auto results = GetSolomonMetrics(soLocation);
         UNIT_ASSERT_VALUES_EQUAL(results, expectedMetrics);
+        ExecQuery(fmt::format(
+            "DROP EXTERNAL DATA SOURCE `{solomon_source}`",
+            "solomon_source"_a = solomonSourceName));
+
+        ExecQuery(fmt::format(
+            createExternalDataSourceSolomonTemplate,
+            "secret"_a = secretPath,
+            "cloud_id"_a = cloudId,
+            "project"_a = soLocation.ProjectId,
+            "cluster"_a = soLocation.FolderId,
+            "service_account_id"_a = serviceAccountUnavailableToken,
+            "solomon_source"_a = solomonSourceName,
+            "solomon_port"_a = getenv("SOLOMON_HTTP_PORT")
+        ));
+
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{solomon_sink}`.`{solomon_service}`
+                SELECT
+                    13333 AS value,
+                    "test-insert" AS sensor,
+                    Timestamp("2025-03-12T14:40:39Z") AS ts;
+                )",
+                "solomon_sink"_a = solomonSourceName,
+                "solomon_service"_a = soLocation.Service
+            ),
+            EStatus::EXTERNAL_ERROR,
+            TStringBuilder() << "Too busy to respond forever");
+
+        ExecQuery(fmt::format(
+            "DROP EXTERNAL DATA SOURCE `{solomon_source}`",
+            "solomon_source"_a = solomonSourceName));
 
         constexpr char pqBadSourceName[] = "sourceNameCloudBad";
         constexpr char serviceAccountBadId[] = "bad-sa";

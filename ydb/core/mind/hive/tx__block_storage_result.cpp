@@ -47,13 +47,21 @@ public:
                     SideEffects.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
                 } else {
                     tablet->ConfirmedStorageVersion = tablet->TabletStorageInfo->Version;
-                    tablet->State = ETabletState::ReadyToWork;
+                    if (tablet->ChannelProfileNewGroup.any()) {
+                        tablet->State = ETabletState::GroupAssignment;
+                    } else {
+                        tablet->State = ETabletState::ReadyToWork;
+                    }
                     db.Table<Schema::Tablet>().Key(tablet->Id).Update(
-                        NIceDb::TUpdate<Schema::Tablet::State>(ETabletState::ReadyToWork),
+                        NIceDb::TUpdate<Schema::Tablet::State>(tablet->State),
                         NIceDb::TUpdate<Schema::Tablet::ConfirmedStorageVersion>(
                             tablet->ConfirmedStorageVersion));
-                    tablet->NotifyStorageInfo(SideEffects);
-                    if (tablet->IsBootingSuppressed()) {
+                    if (tablet->ChannelProfileNewGroup.none()) {
+                        tablet->NotifyStorageInfo(SideEffects);
+                    }
+                    if (tablet->IsReadyToAssignGroups()) {
+                        tablet->InitiateAssignTabletGroups();
+                    } else if (tablet->IsBootingSuppressed()) {
                         // Use best effort to kill currently running tablet
                         SideEffects.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration));
                     } else {

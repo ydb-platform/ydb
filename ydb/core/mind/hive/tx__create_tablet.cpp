@@ -128,7 +128,9 @@ public:
 
         if (newChannels.any()) {
             tablet.ChannelProfileNewGroup |= newChannels;
-            tablet.State = ETabletState::GroupAssignment;
+            if (tablet.IsReadyToReassignTablet()) {
+                tablet.State = ETabletState::GroupAssignment;
+            }
             tablet.ChannelProfileReassignReason = NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO;
             tablet.BoundChannels = BoundChannels;
             for (auto& bind : tablet.BoundChannels) {

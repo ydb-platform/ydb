@@ -52,9 +52,7 @@ public:
     }
 
     [[nodiscard]] size_t GetAllocatedCount() const;
-    // Returns the total size of slots allocated from the arena.
-    [[nodiscard]] size_t GetAllocatedSize() const;
-    // Returns the total size of chunks currently handed to clients.
+    [[nodiscard]] TArenaPoolStats GetMemoryStats() const;
     [[nodiscard]] size_t GetUsedSize() const;
 
 private:
@@ -109,6 +107,7 @@ private:
     // Upper bound for the total number of chunks in the pool.
     size_t MaxChunks;
     size_t UsedChunks = 0;
+    size_t AllocationCount = 0;
 
     TVector<std::unique_ptr<TSlot>> Slots;
     // Slot currently being carved into chunks.

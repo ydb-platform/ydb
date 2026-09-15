@@ -37,6 +37,11 @@ namespace NKafka {
             return;
         }
         VALIDATE_PRODUCER_IN_REQUEST(TAddPartitionsToTxnResponseData);
+        if (CommitStarted) {
+            SendFailResponse<TAddPartitionsToTxnResponseData>(ev, EKafkaErrors::CONCURRENT_TRANSACTIONS,
+                "previous Kafka transaction is still completing");
+            return;
+        }
 
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
             for (auto& partitionInRequest : topicInRequest.Partitions) {
@@ -60,6 +65,11 @@ namespace NKafka {
             return;
         }
         VALIDATE_PRODUCER_IN_REQUEST(TAddOffsetsToTxnResponseData);
+        if (CommitStarted) {
+            SendFailResponse<TAddOffsetsToTxnResponseData>(ev, EKafkaErrors::CONCURRENT_TRANSACTIONS,
+                "previous Kafka transaction is still completing");
+            return;
+        }
         SendOkResponse<TAddOffsetsToTxnResponseData>(ev);
     }
 
@@ -74,6 +84,11 @@ namespace NKafka {
             return;
         }
         VALIDATE_PRODUCER_IN_REQUEST(TTxnOffsetCommitResponseData);
+        if (CommitStarted) {
+            SendFailResponse<TTxnOffsetCommitResponseData>(ev, EKafkaErrors::CONCURRENT_TRANSACTIONS,
+                "previous Kafka transaction is still completing");
+            return;
+        }
 
         // save offsets for future use
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
@@ -122,7 +137,7 @@ namespace NKafka {
         bool txnAborted = !ev->Get()->Request->Committed;
         if (CommitStarted) {
             if (txnAborted) {
-                SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::CONCURRENT_TRANSACTIONS,
                     "Commit already in progress");
                 return;
             }
@@ -204,7 +219,10 @@ namespace NKafka {
             YDB_LOG_WARN(error,
                 {LogPrefix()},
                 {"error", error});
-            FailEndTxnRetryable(ctx, error->data());
+            const auto errorCode = (ydbStatus == Ydb::StatusIds::OVERLOADED)
+                ? EKafkaErrors::CONCURRENT_TRANSACTIONS
+                : EKafkaErrors::COORDINATOR_NOT_AVAILABLE;
+            FailEndTxnRetryable(ctx, error->data(), errorCode);
             return;
         }
 
@@ -307,8 +325,8 @@ namespace NKafka {
         PendingEndTxnRequests.clear();
     }
 
-    void TTransactionActor::FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage) {
-        ReplyPendingEndTxn(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, errorMessage);
+    void TTransactionActor::FailEndTxnRetryable(const TActorContext& ctx, const TString& errorMessage, EKafkaErrors errorCode) {
+        ReplyPendingEndTxn(errorCode, errorMessage);
         ++KqpCookie;
         if (Kqp) {
             Kqp->CloseKqpSession(ctx);

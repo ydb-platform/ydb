@@ -93,10 +93,9 @@ namespace {
     // Helper: make a TConf with WriteBTreeIndexV2 = true, no V1 shadow (V2-only)
     NPage::TConf MakeV2Conf(bool fin = true, ui32 page = 7 * 1024) {
         NPage::TConf conf{ fin, page };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = false;
         conf.WriteBTreeIndexV2 = true;
         conf.WriteFlatIndex = false;
-        conf.BTreeIndexV2KeepV1Shadow = false;
         return conf;
     }
 
@@ -777,7 +776,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
     Y_UNIT_TEST(Conf) {
         NPage::TConf conf;
 
-        UNIT_ASSERT_VALUES_EQUAL(conf.WriteBTreeIndex, true);
+        UNIT_ASSERT_VALUES_EQUAL(conf.WriteBTreeIndexV1, true);
         UNIT_ASSERT_VALUES_EQUAL(conf.WriteFlatIndex, true);
     }
 
@@ -790,7 +789,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -821,7 +820,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -852,7 +851,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
         conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         conf.Group(0).BTreeIndexNodeKeysMin = 3;
@@ -886,7 +885,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
         conf.Final = false;
         conf.Group(0).PageRows = 33;
@@ -921,7 +920,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
         conf.Group(0).PageRows = 3;
         conf.Group(1).PageRows = 4;
@@ -960,7 +959,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
         conf.Group(0).PageRows = 3;
         conf.Group(1).PageRows = 4;
@@ -1012,7 +1011,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
         conf.SmallEdge = 133;
         conf.LargeEdge = 333;
@@ -1181,7 +1180,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0, 1});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
 
         NPage::TConf v2Conf = MakeV2Conf();
@@ -1203,7 +1202,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0, 1});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
 
         NPage::TConf v2Conf = MakeV2Conf();
@@ -1225,7 +1224,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0, 1});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         v1Conf.Group(0).BTreeIndexNodeKeysMin = 3;
@@ -1251,7 +1250,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Final = false;
         v1Conf.Group(0).PageRows = 33;
@@ -1279,7 +1278,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Group(0).PageRows = 3;
         v1Conf.Group(1).PageRows = 4;
@@ -1310,7 +1309,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Group(0).PageRows = 3;
         v1Conf.Group(1).PageRows = 4;
@@ -1400,7 +1399,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -1430,7 +1429,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 
         // V1 part
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         TPartCook v1Cook(lay, v1Conf);
         feedRows(v1Cook, lay);
@@ -1469,7 +1468,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 
         // V1 part with multi-level btree
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         v1Conf.Group(0).BTreeIndexNodeKeysMin = 3;
@@ -1522,7 +1521,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         };
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Group(0).PageRows = 3;
         v1Conf.Group(1).PageRows = 4;
@@ -1602,7 +1601,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -1701,7 +1700,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 
         NPage::TConf v2Conf = MakeV2Conf();
         UNIT_ASSERT_VALUES_EQUAL(v2Conf.WriteBTreeIndexV2, true);
-        UNIT_ASSERT_VALUES_EQUAL(v2Conf.WriteBTreeIndex, true);
+        UNIT_ASSERT_VALUES_EQUAL(v2Conf.WriteBTreeIndexV1, false);
     }
 
     // -----------------------------------------------------------------------
@@ -1717,7 +1716,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -1767,7 +1766,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -1825,7 +1824,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         NPage::TConf conf = MakeV2Conf();
         conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         conf.Group(0).BTreeIndexNodeKeysMin = 3;
-        conf.BTreeIndexV2KeepV1Shadow = true;
+        conf.WriteBTreeIndexV1 = true;
 
         TPartCook cook(lay, conf);
         for (ui32 i : xrange(700)) {
@@ -1890,7 +1889,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         NPage::TConf conf = MakeV2Conf();
         conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         conf.Group(0).BTreeIndexNodeKeysMin = 3;
-        conf.BTreeIndexV2KeepV1Shadow = true;
+        conf.WriteBTreeIndexV1 = true;
 
         TPartCook cook(lay, conf);
         for (ui32 i : xrange(700)) {
@@ -1977,7 +1976,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             .Key({0});
 
         NPage::TConf conf = MakeV2Conf();
-        conf.BTreeIndexV2KeepV1Shadow = true;
+        conf.WriteBTreeIndexV1 = true;
         // Force many small btree pages so V2's larger children produce more levels.
         // Group 1 uses short format (20 vs 36 bytes per child, 80% larger for V2).
         conf.Group(0).BTreeIndexNodeTargetSize = 1024;

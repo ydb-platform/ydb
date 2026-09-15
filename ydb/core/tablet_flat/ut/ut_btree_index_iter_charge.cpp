@@ -227,7 +227,7 @@ namespace {
             .Key({0, 1});
 
         // these tests are based on comparison of flat and b-tree indexes
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteFlatIndex = true;
 
         TPartCook cook(lay, conf);
@@ -1302,10 +1302,9 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
 namespace {
     NPage::TConf MakeV2Conf(TTestParams params) {
         NPage::TConf conf;
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = false;
         conf.WriteBTreeIndexV2 = true;
         conf.WriteFlatIndex = false;
-        conf.BTreeIndexV2KeepV1Shadow = false;
         switch (params.Levels) {
         case 0:
             conf.Group(0).PageRows = 999;

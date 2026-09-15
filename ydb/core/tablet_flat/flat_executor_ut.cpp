@@ -6421,8 +6421,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
             auto &appData = env->GetAppData();
             appData.FeatureFlags.SetEnableLocalDBBtreeIndex(bTreeIndex.value());
             appData.FeatureFlags.SetEnableLocalDBFlatIndex(!bTreeIndex.value());
-            appData.FeatureFlags.SetEnableLocalDBBtreeIndexV2(bTreeIndex.value() && bTreeIndexV2);
-            appData.FeatureFlags.SetEnableLocalDBBtreeIndexV2ShadowV1Write(false);
+            appData.FeatureFlags.SetEnableLocalDBBtreeIndexV2(bTreeIndexV2);
         }
     }
 
@@ -6534,7 +6533,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        SetupEnvironment(env, true, true);
+        SetupEnvironment(env, false, true);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);

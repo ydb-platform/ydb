@@ -190,6 +190,43 @@ int BlobStorageValueCountInAllGroups(TMyEnvBase& env, const TString& value) {
     return count;
 }
 
+enum : ui32 {
+    ExternalBlobEdge = 1024,
+};
+
+class TTxInitSchemaExternalBlobs : public ITransaction {
+public:
+    explicit TTxInitSchemaExternalBlobs(ui32 tableId)
+        : TableId(tableId)
+    { }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        if (txc.DB.GetScheme().GetTableInfo(TableId)) {
+            return true;
+        }
+
+        TCompactionPolicy policy;
+        policy.MinBTreeIndexNodeSize = 128;
+
+        txc.DB.Alter()
+            .AddTable("test" + ToString(TableId), TableId)
+            .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false, false)
+            .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false, false)
+            .AddColumnToKey(TableId, KeyColumnId)
+            .SetFamilyBlobs(TableId, NTable::TColumn::LeaderFamily, 16, ExternalBlobEdge)
+            .SetCompactionPolicy(TableId, policy);
+
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+    }
+
+private:
+    const ui32 TableId;
+};
+
 Y_UNIT_TEST_SUITE(Vacuum) {
     ui32 TestTabletFlags = ui32(NFake::TDummy::EFlg::Comp) | ui32(NFake::TDummy::EFlg::Vac);
 
@@ -798,6 +835,47 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         UNIT_ASSERT_VALUES_EQUAL(ev3->Get()->VacuumGeneration, 555);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
+    }
+}
+
+Y_UNIT_TEST_SUITE(MoveData) {
+
+    ui32 TestTabletFlags = ui32(NFake::TDummy::EFlg::Comp) | ui32(NFake::TDummy::EFlg::Vac);
+
+    NKikimrTabletBase::TEvMoveDataResponse::EStatus MoveData(TMyEnvBase& env, const std::vector<ui32>& groups) {
+        env.SendAsync(new TEvTablet::TEvMoveData(groups));
+
+        return env.GrabEdgeEvent<TEvTablet::TEvMoveDataResponse>()->Get()->Record.GetStatus();
+    }
+
+    Y_UNIT_TEST(MoveCurrentGroup) {
+        TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env.FireDummyTablet(TestTabletFlags);
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }) });
+
+        // Channel 1 still writes to group 1 in the default fake storage layout
+        UNIT_ASSERT_EQUAL(MoveData(env, { 1 }),
+            NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch);
+    }
+
+    Y_UNIT_TEST(MoveDataVacuumCompletes) {
+        TString value(size_t(100 * 1024), 'a');
+
+        TMyEnvBase env;
+        env.Env.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env.FireDummyTablet(TestTabletFlags);
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchemaExternalBlobs(101) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value) });
+        env.SendSync(new NFake::TEvCompact(101));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        UNIT_ASSERT_EQUAL(MoveData(env, { }),
+            NKikimrTabletBase::TEvMoveDataResponse::Success);
+
+        int readRows = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(101, readRows) });
+        UNIT_ASSERT_VALUES_EQUAL(readRows, 1);
     }
 }
 } // namespace NKikimr::NTable

@@ -417,6 +417,7 @@ public:
 
     // move data methods
     bool IsMoveDataInProgress() const { return MoveDataIsInProgress; }
+    const TSet<ui32>& GetMoveDataGroups() const { return MoveDataGroups; }
 
     void ClearMoveDataBlobMovingStage();
     void ClearMoveDataTrashCheckingStage();

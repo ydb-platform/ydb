@@ -11,6 +11,10 @@
 
 #include <ydb/core/protos/blobstorage_base.pb.h>
 
+#include <util/generic/hash_set.h>
+
+#include <memory>
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -36,6 +40,10 @@ namespace NTabletFlatExecutor {
         NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
         THolder<NTable::TCompactionParams> Params;
         NTable::TRowVersionRanges::TSnapshot RemovedRowVersions;
+
+        // Set for compactions that also have to drag external blobs out of the
+        // BlobStorage groups being decommissioned, see TExecutor::MoveData
+        std::shared_ptr<const THashSet<ui32>> MoveDataGroups;
 
         // Fulltext compact compaction support
         bool IsFulltextCompact = false;

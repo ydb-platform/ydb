@@ -3,6 +3,7 @@
 #include "flat_fwd_iface.h"
 #include "flat_fwd_page.h"
 #include "flat_fwd_misc.h"
+#include "flat_page_blobs.h"
 #include "flat_part_screen.h"
 #include "flat_part_slice.h"
 #include "util_fmt_abort.h"
@@ -17,10 +18,14 @@ namespace NFwd {
     public:
         using TEdges = TVector<ui32>;
 
-        TBlobs(TIntrusiveConstPtr<NPage::TFrames> frames, TIntrusiveConstPtr<TSlices> slices, TEdges edge, bool trace)
+        TBlobs(TIntrusiveConstPtr<NPage::TFrames> frames, TIntrusiveConstPtr<TSlices> slices, TEdges edge, bool trace,
+                    TIntrusiveConstPtr<NPage::TExtBlobs> blobs = nullptr,
+                    std::shared_ptr<const THashSet<ui32>> forceMaterializeGroups = nullptr)
             : Edge(std::move(edge))
             , Frames(std::move(frames))
             , Filter(std::move(slices))
+            , Blobs(std::move(blobs))
+            , ForceMaterializeGroups(std::move(forceMaterializeGroups))
             , Trace(trace ? new THoles{ } : nullptr)
         {
             Tags.resize(Frames->Stats().Tags.size(), 0);
@@ -46,7 +51,7 @@ namespace NFwd {
 
             auto &page = Preload(head, 0).Lookup(ref);
 
-            return { page.Touch(ref, Stat), more, page.Size < Edge[page.Tag] };
+            return { page.Touch(ref, Stat), more, NeedMaterialize(ref, page.Tag, page.Size) };
         }
 
         void Forward(IPageLoadingQueue *head, ui64 upper) override
@@ -89,6 +94,17 @@ namespace NFwd {
         }
 
     private:
+        /* Blobs that have to be passed to the client as values instead of
+            references. Small enough blobs are materialized so they may be
+            repacked on write, and blobs left in the groups being decommissioned
+            are materialized so compaction rewrites them elsewhere.
+         */
+        bool NeedMaterialize(TPageId ref, ui16 tag, ui64 size) const
+        {
+            return size < Edge[tag]
+                || (Blobs && ForceMaterializeGroups && ForceMaterializeGroups->contains(Blobs->Glob(ref).Group));
+        }
+
         TPage& Lookup(ui32 ref)
         {
             const auto end = Pages.begin() + Offset;
@@ -143,7 +159,7 @@ namespace NFwd {
                     auto &page = Lookup(Grow);
                     const auto rel = Frames->Relation(Grow);
 
-                    if (!Tags.at(page.Tag) || page.Size >= Edge.at(page.Tag) || !Filter.Has(rel.Row)) {
+                    if (!Tags.at(page.Tag) || !Filter.Has(rel.Row) || !NeedMaterialize(Grow, page.Tag, page.Size)) {
                         /* Page doesn't fits to load criteria   */
                     } else if (page.Fetch == EFetch::None) {
                         auto size = head->AddToQueue(Grow, EPage::Opaque);
@@ -227,6 +243,8 @@ namespace NFwd {
         const TVector<ui32> Edge;       /* Desired bytes limit of blobs */
         const TIntrusiveConstPtr<NPage::TFrames> Frames;
         const TSlicesRowFilter Filter;
+        const TIntrusiveConstPtr<NPage::TExtBlobs> Blobs; /* Catalog, only for extern blobs */
+        const std::shared_ptr<const THashSet<ui32>> ForceMaterializeGroups;
         TVector<ui8> Tags;              /* Ever used col tags on env    */
         TPageId Lower = 0;              /* Pinned frame lower bound ref */
         TPageId Upper = 0;              /* Pinned frame upper bound ref */

@@ -79,7 +79,7 @@ public:
 
 public:
     const EMemoryConsumerKind Kind;
-    const TActorId ActorId;
+    TActorId ActorId; // mutable: QueryExecution duplicate registration rebinds this
 private:
     std::atomic<ui64> Consumption = 0;
 };
@@ -145,6 +145,9 @@ public:
         , Counters(counters)
     {
         Consumers.emplace(EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache, MakeIntrusive<TColumnTablesPortionsMetaDataCacheMemoryConsumer>());
+        if (const auto* limitBytes = ResourceBrokerSelfConfig.QueueLimits.FindPtr(NLocalDb::KqpResourceManagerQueue)) {
+            SelfConfigQueryExecutionLimit = *limitBytes;
+        }
     }
 
     void Bootstrap(const TActorContext& ctx) {
@@ -171,6 +174,14 @@ public:
 
         YDB_LOG_INFO_CTX(ctx, "Bootstrapped with config",
             {"config", Config});
+
+        // RB self-config override is ctor-fixed; MC-driven otherwise
+        if (SelfConfigQueryExecutionLimit) {
+            YDB_LOG_INFO_CTX(ctx, "QueryExecution deferring to RB self-config override",
+                {"selfConfigLimit", HumanReadableBytes(*SelfConfigQueryExecutionLimit)});
+        } else {
+            YDB_LOG_INFO_CTX(ctx, "QueryExecution MC-driven (no RB self-config override)");
+        }
     }
 
 private:
@@ -324,12 +335,20 @@ private:
 
     void Handle(TEvConsumerRegister::TPtr &ev, const TActorContext& ctx) {
         const auto *msg = ev->Get();
-        auto consumer = Consumers.emplace(msg->Kind, MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender));
-        Y_ABORT_UNLESS(consumer.second, "Consumer kinds should be unique");
-        YDB_LOG_INFO_CTX(ctx, "Consumer registered",
-            {"msgKind", msg->Kind},
-            {"sender", ev->Sender});
-        Send(ev->Sender, new TEvConsumerRegistered(consumer.first->second));
+        auto [it, inserted] = Consumers.emplace(msg->Kind, MakeIntrusive<TMemoryConsumer>(msg->Kind, ev->Sender));
+        if (inserted) {
+            YDB_LOG_INFO_CTX(ctx, "Consumer registered",
+                {"msgKind", msg->Kind},
+                {"sender", ev->Sender});
+        } else {
+            Y_ABORT_UNLESS(msg->Kind == EMemoryConsumerKind::QueryExecution,
+                "Duplicate registration for kind %d is not allowed", (int)msg->Kind);
+            // QE re-registers on actor restart: rebind so limits reach the new actor
+            it->second->ActorId = ev->Sender;
+            YDB_LOG_WARN_CTX(ctx, "Duplicate QueryExecution registration; ActorId rebound to new sender",
+                {"sender", ev->Sender});
+        }
+        Send(ev->Sender, new TEvConsumerRegistered(it->second));
     }
 
     void Handle(TEvMemTableRegister::TPtr &ev, const TActorContext& ctx) {
@@ -400,6 +419,7 @@ private:
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case EMemoryConsumerKind::QueryExecution:
                 return consumer.Consumption;
         }
     }
@@ -409,7 +429,7 @@ private:
             case EMemoryConsumerKind::MemTable:
             case EMemoryConsumerKind::SharedCache:
                 return Max(consumer.Consumption, consumer.GetLimit(coefficient));
-            // column tables memory limits are not flexible for now, use only their consumption:
+            // column tables and query execution use only their consumption:
             case EMemoryConsumerKind::ColumnTablesBlobCache:
             case EMemoryConsumerKind::ColumnTablesDataAccessorCache:
             case EMemoryConsumerKind::ColumnTablesColumnDataCache:
@@ -417,6 +437,7 @@ private:
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case EMemoryConsumerKind::QueryExecution:
                 return consumer.Consumption;
         }
     }
@@ -433,6 +454,8 @@ private:
             case EMemoryConsumerKind::ColumnTablesScanGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesCompGroupedMemory:
             case EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory:
+            case EMemoryConsumerKind::QueryExecution:
+                // BuildConsumerState resolves a self-config override into min=max, so limitBytes equals the RB queue limit there
                 Send(consumer.ActorId, new TEvConsumerLimit(limitBytes));
                 break;
             case EMemoryConsumerKind::ColumnTablesPortionsMetaDataCache:
@@ -451,11 +474,16 @@ private:
         }
     }
 
+    // One number for both gates: the kqp_rm queue limit and the QueryExecution consumer limit
+    ui64 ResolveQueryExecutionLimitBytes(ui64 hardLimitBytes) const {
+        return SelfConfigQueryExecutionLimit.value_or(GetQueryExecutionLimitBytes(Config, hardLimitBytes));
+    }
+
     void ProcessResourceBrokerConfig(const TActorContext& ctx, NKikimrMemory::TMemoryStats& memoryStats, ui64 hardLimitBytes, ui64 activitiesLimitBytes) {
         TResourceBrokerConfig config{
             .LimitBytes = activitiesLimitBytes,
             .QueueLimits = {
-                {NLocalDb::KqpResourceManagerQueue, GetQueryExecutionLimitBytes(Config, hardLimitBytes)},
+                {NLocalDb::KqpResourceManagerQueue, ResolveQueryExecutionLimitBytes(hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionIndexationQueue, GetColumnTablesCompactionIndexationQueueLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionTtlQueue, GetColumnTablesTtlQueueLimitBytes(Config, hardLimitBytes)},
                 {NLocalDb::ColumnShardCompactionGeneralQueue, GetColumnTablesGeneralQueueQueueLimitBytes(Config, hardLimitBytes)},
@@ -470,12 +498,17 @@ private:
         }
 
         // TODO: counters and logs for all column table queues
-        ui64 queryExecutionConsumption = TAlignedPagePool::GetGlobalPagePoolSize();
-        YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
-            {"consumption", HumanReadableBytes(queryExecutionConsumption)},
-            {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
-        Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
-        Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
+        auto* qeConsumer = Consumers.FindPtr(EMemoryConsumerKind::QueryExecution);
+        ui64 queryExecutionConsumption = qeConsumer
+            ? (*qeConsumer)->GetConsumption() // the consumer is the sole reporter once registered
+            : TAlignedPagePool::GetGlobalPagePoolSize();
+        if (!qeConsumer) {
+            YDB_LOG_INFO_CTX(ctx, "Consumer QueryExecution state",
+                {"consumption", HumanReadableBytes(queryExecutionConsumption)},
+                {"limit", HumanReadableBytes(config.QueueLimits[NLocalDb::KqpResourceManagerQueue])});
+            Counters->GetCounter("Consumer/QueryExecution/Consumption")->Set(queryExecutionConsumption);
+            Counters->GetCounter("Consumer/QueryExecution/Limit")->Set(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
+        }
         memoryStats.SetQueryExecutionConsumption(memoryStats.GetQueryExecutionConsumption() + queryExecutionConsumption);
         memoryStats.SetQueryExecutionLimit(config.QueueLimits[NLocalDb::KqpResourceManagerQueue]);
 
@@ -557,6 +590,9 @@ private:
                 stats.SetQueryExecutionConsumption(stats.GetQueryExecutionConsumption() + consumer.Consumption);
                 break;
             }
+            case EMemoryConsumerKind::QueryExecution:
+                // ProcessResourceBrokerConfig is the sole writer of QueryExecution whiteboard stats
+                break;
         }
     }
 
@@ -603,6 +639,11 @@ private:
                 result.MinBytes = result.MaxBytes = GetPortionsMetaDataCacheLimitBytes(Config, hardLimitBytes);
                 break;
             }
+            case EMemoryConsumerKind::QueryExecution: {
+                // min=max: static consumer, and the same resolution the kqp_rm queue limit uses
+                result.MinBytes = result.MaxBytes = ResolveQueryExecutionLimitBytes(hardLimitBytes);
+                break;
+            }
         }
 
         if (result.MinBytes > result.MaxBytes) {
@@ -622,6 +663,7 @@ private:
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TMap<EMemoryConsumerKind, TConsumerCounters> ConsumerCounters;
     std::optional<TResourceBrokerConfig> CurrentResourceBrokerConfig;
+    std::optional<ui64> SelfConfigQueryExecutionLimit; // set from RB self-config; ctor-fixed
 };
 
 }

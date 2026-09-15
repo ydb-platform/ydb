@@ -659,6 +659,218 @@ Y_UNIT_TEST(GroupedMemoryLimiter_ConfigCS) {
     checkMemoryLimits();
 }
 
+Y_UNIT_TEST(QueryExecution_Register) {
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(1000_MB);
+    memoryControllerConfig->SetQueryExecutionLimitPercent(15);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    // Register QE consumer
+    runtime.Send(new IEventHandle(MakeMemoryControllerId(0), sender,
+        new TEvConsumerRegister(EMemoryConsumerKind::QueryExecution)));
+    auto registered = runtime.GrabEdgeEvent<TEvConsumerRegistered>(sender);
+    UNIT_ASSERT(registered->Get()->Consumer != nullptr);
+
+    // Report 7 MB consumption via the returned consumer interface
+    registered->Get()->Consumer->SetConsumption(7_MB);
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+
+    // Generic consumer loop is now the sole writer of Consumption counter
+    UNIT_ASSERT_VALUES_EQUAL(
+        server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Consumption")->Val(),
+        static_cast<i64>(7_MB));
+
+    // MC sends TEvConsumerLimit(150 MB = 15% of 1000 MB) to the registered actor each tick
+    auto limitEv = runtime.GrabEdgeEvent<TEvConsumerLimit>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(limitEv->Get()->LimitBytes, 150_MB);
+}
+
+Y_UNIT_TEST(QueryExecution_DuplicateRegister) {
+    // Duplicate QE registration: Y_ABORT removed, ActorId rebound to new sender which receives the next limit
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(1000_MB);
+    memoryControllerConfig->SetQueryExecutionLimitPercent(15);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    auto& runtime = *server->GetRuntime();
+    auto sender1 = runtime.AllocateEdgeActor();
+    auto sender2 = runtime.AllocateEdgeActor();
+
+    runtime.Send(new IEventHandle(MakeMemoryControllerId(0), sender1,
+        new TEvConsumerRegister(EMemoryConsumerKind::QueryExecution)));
+    auto reg1 = runtime.GrabEdgeEvent<TEvConsumerRegistered>(sender1);
+    UNIT_ASSERT(reg1->Get()->Consumer != nullptr);
+
+    // Second registration rebinds ActorId; same consumer object (consumption preserved)
+    runtime.Send(new IEventHandle(MakeMemoryControllerId(0), sender2,
+        new TEvConsumerRegister(EMemoryConsumerKind::QueryExecution)));
+    auto reg2 = runtime.GrabEdgeEvent<TEvConsumerRegistered>(sender2);
+    UNIT_ASSERT(reg2->Get()->Consumer != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(reg1->Get()->Consumer.Get(), reg2->Get()->Consumer.Get());
+
+    // After next tick, sender2 (new ActorId) receives TEvConsumerLimit; sender1 does not
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    auto limitEv = runtime.GrabEdgeEvent<TEvConsumerLimit>(sender2);
+    UNIT_ASSERT(limitEv != nullptr);
+    UNIT_ASSERT_VALUES_EQUAL(limitEv->Get()->LimitBytes, 150_MB);
+}
+
+Y_UNIT_TEST(QueryExecution_LimitParity) {
+    // BuildConsumerState min=max guarantees TEvConsumerLimit == RB queue limit every tick
+    using namespace NResourceBroker;
+
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetQueryExecutionLimitPercent(15);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    server->ProcessMemoryInfo->CGroupLimit = 1000_MB;
+    auto& runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+    auto rbSender = runtime.AllocateEdgeActor();
+    InitRoot(server, sender);
+
+    // Register QE consumer
+    runtime.Send(new IEventHandle(MakeMemoryControllerId(0), sender,
+        new TEvConsumerRegister(EMemoryConsumerKind::QueryExecution)));
+    auto registered = runtime.GrabEdgeEvent<TEvConsumerRegistered>(sender);
+    UNIT_ASSERT(registered->Get()->Consumer != nullptr);
+
+    // Subscribe to RB config changes for parity check
+    runtime.Send(new IEventHandle(MakeResourceBrokerID(), rbSender,
+        new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue, /*subscribe=*/ true)));
+    auto rbConfig = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(rbSender);
+    UNIT_ASSERT_VALUES_EQUAL(rbConfig->Get()->QueueConfig->GetLimit().GetMemory(), 150_MB);
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+
+    // MC sends TEvConsumerLimit twice (2 ticks); both must equal RB queue limit
+    auto limitEv = runtime.GrabEdgeEvent<TEvConsumerLimit>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(limitEv->Get()->LimitBytes, 150_MB);
+    limitEv = runtime.GrabEdgeEvent<TEvConsumerLimit>(sender); // drain second
+    UNIT_ASSERT_VALUES_EQUAL(limitEv->Get()->LimitBytes, 150_MB);
+
+    // Change memory, verify parity is maintained
+    server->ProcessMemoryInfo->CGroupLimit = 500_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+
+    limitEv = runtime.GrabEdgeEvent<TEvConsumerLimit>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(limitEv->Get()->LimitBytes, 75_MB);
+
+    // RB subscriber also gets the updated limit
+    rbConfig = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(rbSender);
+    UNIT_ASSERT_VALUES_EQUAL(rbConfig->Get()->QueueConfig->GetLimit().GetMemory(), 75_MB);
+}
+
+Y_UNIT_TEST(QueryExecution_LimitParityUnderSelfConfigOverride) {
+    // A self-config override below the formula must reach both gates, not just the queue one
+    using namespace NResourceBroker;
+
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(1000_MB);
+    memoryControllerConfig->SetQueryExecutionLimitPercent(15); // the formula alone would give 150 MB
+
+    auto resourceBrokerConfig = serverSettings.AppConfig->MutableResourceBrokerConfig();
+    auto queue = resourceBrokerConfig->AddQueues();
+    queue->SetName(NLocalDb::KqpResourceManagerQueue);
+    queue->MutableLimit()->SetMemory(40_MB);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    server->ProcessMemoryInfo->CGroupLimit = 1000_MB;
+    auto& runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+    auto rbSender = runtime.AllocateEdgeActor();
+    InitRoot(server, sender);
+
+    runtime.Send(new IEventHandle(MakeMemoryControllerId(0), sender,
+        new TEvConsumerRegister(EMemoryConsumerKind::QueryExecution)));
+    auto registered = runtime.GrabEdgeEvent<TEvConsumerRegistered>(sender);
+    UNIT_ASSERT(registered->Get()->Consumer != nullptr);
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+
+    auto limitEv = runtime.GrabEdgeEvent<TEvConsumerLimit>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(limitEv->Get()->LimitBytes, 40_MB);
+
+    runtime.Send(new IEventHandle(MakeResourceBrokerID(), rbSender,
+        new TEvResourceBroker::TEvConfigRequest(NLocalDb::KqpResourceManagerQueue)));
+    auto rbConfig = runtime.GrabEdgeEvent<TEvResourceBroker::TEvConfigResponse>(rbSender);
+    UNIT_ASSERT_VALUES_EQUAL(rbConfig->Get()->QueueConfig->GetLimit().GetMemory(), 40_MB);
+}
+
+Y_UNIT_TEST(QueryExecution_Neutrality) {
+    // QE with nonzero Consumption must leave the SharedCache and MemTable limits untouched, coefficient in (0, 1)
+    TPortManager pm;
+    TServerSettings serverSettings(pm.GetPort(2134));
+    serverSettings.SetDomainName("Root")
+        .SetUseRealThreads(false);
+
+    auto memoryControllerConfig = serverSettings.AppConfig->MutableMemoryControllerConfig();
+    memoryControllerConfig->SetHardLimitBytes(1000_MB);
+    memoryControllerConfig->SetQueryExecutionLimitPercent(15);
+
+    auto server = MakeIntrusive<TWithMemoryControllerServer>(serverSettings);
+    server->ProcessMemoryInfo->CGroupLimit = 1000_MB;
+    auto& runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+    InitRoot(server, sender);
+
+    // AllocatedMemory 100 MB keeps the coefficient near 0.59, inside (0, 1); the counter is scaled by 1e9
+    server->ProcessMemoryInfo->AllocatedMemory = 100_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+
+    i64 coeff = server->MemoryControllerCounters->GetCounter("Stats/Coefficient")->Val();
+    // Verify coefficient is actually in the interesting regime (0 < coef < 1; counter = coef * 1e9)
+    UNIT_ASSERT_GT(coeff, 0);
+    UNIT_ASSERT_LT(coeff, 1000000000); // coefficient < 1.0
+
+    i64 scLimit = server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit")->Val();
+    i64 mtLimit = server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Limit")->Val();
+
+    // QE with nonzero consumption must leave every elastic-consumer limit unchanged: the two effects cancel exactly
+    runtime.Send(new IEventHandle(MakeMemoryControllerId(0), sender,
+        new TEvConsumerRegister(EMemoryConsumerKind::QueryExecution)));
+    auto registered = runtime.GrabEdgeEvent<TEvConsumerRegistered>(sender);
+    registered->Get()->Consumer->SetConsumption(50_MB);
+    // AllocatedMemory stays at 100 MB (includes QE's page-pool bytes); math cancels
+
+    runtime.SimulateSleep(TDuration::Seconds(2));
+
+    // Only SC/MT limits and coefficient must be unchanged; ResultingConsumersConsumption grows by QE limit
+    UNIT_ASSERT_VALUES_EQUAL(
+        server->MemoryControllerCounters->GetCounter("Consumer/SharedCache/Limit")->Val(), scLimit);
+    UNIT_ASSERT_VALUES_EQUAL(
+        server->MemoryControllerCounters->GetCounter("Consumer/MemTable/Limit")->Val(), mtLimit);
+    UNIT_ASSERT_VALUES_EQUAL(
+        server->MemoryControllerCounters->GetCounter("Stats/Coefficient")->Val(), coeff);
+
+    // Boundary of the same property: AllocatedMemory below consumersConsumption makes SafeDiff clamp
+    // otherConsumption to 0, so neutrality no longer holds -- but CanZeroLimit=false keeps the QE limit positive
+    server->ProcessMemoryInfo->AllocatedMemory = 50_MB;
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Stats/OtherConsumption")->Val(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(server->MemoryControllerCounters->GetCounter("Consumer/QueryExecution/Limit")->Val(), 150_MB);
+}
+
 Y_UNIT_TEST(ColumnShardCaches_Config) {
     using namespace NResourceBroker;
 

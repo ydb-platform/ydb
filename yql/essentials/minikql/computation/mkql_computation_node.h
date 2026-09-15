@@ -492,13 +492,19 @@ struct TComputationPatternOpts {
                                               TAllocState* allocStatePtr = nullptr) const;
 };
 
+enum class ECompileStatus {
+    NoCompilationStarted,
+    Compiled,
+    RejectedBySize,
+};
+
 class IComputationPattern: public TAtomicRefCount<IComputationPattern> {
 public:
     using TPtr = TIntrusivePtr<IComputationPattern>;
 
     virtual ~IComputationPattern() = default;
     virtual void Compile(TString optLLVM, IStatsRegistry* stats) = 0;
-    virtual bool IsCompiled() const = 0;
+    virtual ECompileStatus GetCompileStatus() const = 0;
     virtual size_t CompiledCodeSize() const = 0;
     virtual void RemoveCompiledCode() = 0;
     virtual THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) = 0;

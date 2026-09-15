@@ -4,6 +4,13 @@
 
 namespace NKikimr::NMemory {
 
+namespace {
+
+// An eighth of a kind limit is split equally among its registrants regardless of demand
+constexpr ui64 BootstrapLimitDivisor = 8;
+
+}
+
 void TRegistrantConsumer::SetReport(TConsumerReport report) {
     Used.store(report.Used);
     Demand.store(report.Demand);
@@ -50,15 +57,18 @@ TVector<TConsumerShare> TConsumerCollection::ComputeLimitShares(ui64 limitBytes)
         demands.push_back(consumer->GetReport().Demand);
         totalDemand += demands.back();
     }
-    // The demand-covered part splits proportionally; the surplus splits equally so an idle registrant can still grow.
-    const ui64 covered = Min(totalDemand, limitBytes);
-    const ui64 surplusShare = (limitBytes - covered) / Registrants.size();
+    // A slice of the limit ignores demand: a cache that obeys its limit and reports only Used could never grow out of zero
+    const ui64 bootstrapShare = limitBytes / (BootstrapLimitDivisor * Registrants.size());
+    const ui64 rest = limitBytes - bootstrapShare * Registrants.size();
+    // The demand-covered part of the rest splits proportionally; what demand leaves over splits equally.
+    const ui64 covered = Min(totalDemand, rest);
+    const ui64 surplusShare = (rest - covered) / Registrants.size();
     size_t index = 0;
     for (const auto& [registrant, consumer] : Registrants) {
         const ui64 demandShare = totalDemand
             ? static_cast<ui64>(static_cast<unsigned __int128>(covered) * demands[index] / totalDemand)
             : 0;
-        result.push_back({.Registrant = registrant, .Bytes = demandShare + surplusShare});
+        result.push_back({.Registrant = registrant, .Bytes = bootstrapShare + demandShare + surplusShare});
         ++index;
     }
     return result;

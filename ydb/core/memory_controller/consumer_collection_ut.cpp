@@ -125,10 +125,10 @@ Y_UNIT_TEST(LimitShareSplitsByDemandPlusSurplus) {
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 350);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 250);
 
-    // Demands exceed 400: only the proportional cut remains
+    // Demands exceed 400: the 25-byte bootstrap slices plus the proportional cut of the remaining 350
     shares = AsMap(collection.ComputeLimitShares(400));
-    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 240);
-    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 160);
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 235);
+    UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 165);
 
     // An idle registrant still receives its surplus split so it can start growing
     c1->SetReport({});
@@ -141,6 +141,31 @@ Y_UNIT_TEST(LimitShareSplitsByDemandPlusSurplus) {
     shares = AsMap(collection.ComputeLimitShares(600));
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(1)), 300);
     UNIT_ASSERT_VALUES_EQUAL(shares.at(Registrant(2)), 300);
+}
+
+Y_UNIT_TEST(LimitShareColdRegistrantGrowsOutOfZero) {
+    constexpr ui64 Limit = 1'000'000;
+    TConsumerCollection collection;
+    auto warm = collection.Register(Registrant(1));
+    auto cold = collection.Register(Registrant(2));
+    warm->SetConsumption(Limit);
+
+    // Both obey their limits and report only Used, the way the existing caches do
+    ui64 previous = 0;
+    for (int tick = 0; tick < 60; ++tick) {
+        auto shares = AsMap(collection.ComputeLimitShares(Limit));
+        UNIT_ASSERT_LE(shares.at(Registrant(1)) + shares.at(Registrant(2)), Limit);
+        if (tick < 10) {
+            UNIT_ASSERT_GT(shares.at(Registrant(2)), previous);
+        }
+        previous = shares.at(Registrant(2));
+        warm->SetConsumption(shares.at(Registrant(1)));
+        cold->SetConsumption(shares.at(Registrant(2)));
+    }
+
+    // Two saturated caches converge to an equal split instead of freezing the first comer's advantage
+    UNIT_ASSERT_GE(previous, Limit * 45 / 100);
+    UNIT_ASSERT_LE(previous, Limit * 55 / 100);
 }
 
 Y_UNIT_TEST(ReleaseRequests) {

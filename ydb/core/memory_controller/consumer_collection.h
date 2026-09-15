@@ -49,7 +49,7 @@ public:
     // Sum of the clamped reports over live entries.
     TConsumerReport GetTotal() const;
 
-    // Limit share: every registrant gets a ceiling -- its demand's cut of the limit plus an equal split of the surplus.
+    // Limit share: an equal bootstrap slice, a demand-proportional cut of the rest and an equal split of what demand leaves over.
     TVector<TConsumerShare> ComputeLimitShares(ui64 limitBytes) const;
 
     // Release request: bytes each registrant is asked to free, proportional to and capped by its Reclaimable; zero requests are omitted.

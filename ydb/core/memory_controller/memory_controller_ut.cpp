@@ -1,7 +1,11 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <memory_controller.h>
 #include <memory_controller_config.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/tablet/resource_broker.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tablet_flat/shared_cache_counters.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
@@ -32,15 +36,48 @@ void UpsertRows(TServer::TPtr server, TActorId sender, ui32 keyFrom = 0, ui32 ke
     ExecSQL(server, sender, query);
 }
 
+struct TFixedProcessMemoryInfoProvider : public IProcessMemoryInfoProvider {
+    TProcessMemoryInfo Get() const override {
+        return ProcessMemoryInfo;
+    }
+
+    TProcessMemoryInfo ProcessMemoryInfo{0_MB, 0_MB, {}, {}, {}, {}};
+};
+
+// A memory controller on a bare runtime, driven through the provider and edge actors
+struct TControllerFixture {
+    TTestBasicRuntime Runtime;
+    TIntrusivePtr<TFixedProcessMemoryInfoProvider> Provider = MakeIntrusive<TFixedProcessMemoryInfoProvider>();
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CountersRoot = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+    TActorId MemoryController;
+
+    explicit TControllerFixture(const NKikimrConfig::TMemoryControllerConfig& config) {
+        Runtime.Initialize(TAppPrepare().Unwrap());
+        MemoryController = Runtime.Register(CreateMemoryController(
+            TDuration::Seconds(1), TIntrusivePtr<IProcessMemoryInfoProvider>(Provider), config, TResourceBrokerConfig{}, CountersRoot));
+        Runtime.EnableScheduleForActor(MemoryController);
+        NActors::TDispatchOptions bootstrapOptions;
+        bootstrapOptions.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        Runtime.DispatchEvents(bootstrapOptions);
+        Counters = GetServiceCounters(CountersRoot, "utils")->GetSubgroup("component", "memory_controller");
+    }
+
+    i64 Counter(const TString& name, bool derivative = false) const {
+        return Counters->GetCounter(name, derivative)->Val();
+    }
+
+    TIntrusivePtr<IMemoryConsumer> Register(TActorId registrant, EMemoryConsumerKind kind) {
+        Runtime.Send(new IEventHandle(MemoryController, registrant, new TEvConsumerRegister(kind)));
+        return Runtime.GrabEdgeEvent<TEvConsumerRegistered>(registrant)->Get()->Consumer;
+    }
+
+    void Tick() {
+        Runtime.SimulateSleep(TDuration::Seconds(2));
+    }
+};
+
 class TWithMemoryControllerServer : public TServer {
-    struct TProcessMemoryInfoProvider : public IProcessMemoryInfoProvider {
-        TProcessMemoryInfo Get() const override {
-            return ProcessMemoryInfo;
-        }
-
-        TProcessMemoryInfo ProcessMemoryInfo{0_MB, 0_MB, {}, {}, {}, {}};
-    };
-
 public:
     TWithMemoryControllerServer(const TServerSettings& settings)
         : TServer(settings, false)
@@ -59,7 +96,7 @@ public:
 
 private:
     void PreInitialize() {
-        ProcessMemoryInfoProvider = MakeIntrusive<TProcessMemoryInfoProvider>();
+        ProcessMemoryInfoProvider = MakeIntrusive<TFixedProcessMemoryInfoProvider>();
         ProcessMemoryInfo = &ProcessMemoryInfoProvider->ProcessMemoryInfo;
 
         // copy-paste from TMemoryControllerInitializer::InitializeServices
@@ -95,7 +132,7 @@ private:
     }
 
 private:
-    TIntrusivePtr<TProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
+    TIntrusivePtr<TFixedProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
 
 public:
     THolder<TSharedPageCacheCounters> SharedPageCacheCounters;
@@ -719,6 +756,84 @@ Y_UNIT_TEST(ColumnShardCaches_Config) {
     server->ProcessMemoryInfo->CGroupLimit = currentHardMemoryLimit;
     runtime.SimulateSleep(TDuration::Seconds(2));
     checkMemoryLimits();
+}
+
+Y_UNIT_TEST(ConsumerReportDegradedCoefficient) {
+    // Min != Max for SharedCache, so the searched coefficient is what turns its limit
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    config.SetSharedCacheMinBytes(20_MB);
+    config.SetSharedCacheMaxBytes(60_MB);
+    config.SetMemTableMinBytes(10_MB);
+    config.SetMemTableMaxBytes(10_MB);
+    config.SetQueryExecutionLimitBytes(50_MB);
+    TControllerFixture fixture(config);
+
+    const TActorId sender = fixture.Runtime.AllocateEdgeActor();
+    auto sharedCacheConsumer = fixture.Register(sender, EMemoryConsumerKind::SharedCache);
+    fixture.Runtime.Send(new IEventHandle(fixture.MemoryController, sender, new TEvMemTableRegister(1)));
+    auto memTableConsumer = fixture.Runtime.GrabEdgeEvent<TEvMemTableRegistered>(sender)->Get()->Consumer;
+    sharedCacheConsumer->SetConsumption(30_MB);
+    memTableConsumer->SetConsumption(7_MB);
+
+    // Nothing else allocated: the whole elastic range fits, so the search saturates at 1 - 2^-20
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/Coefficient"), 999999046);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 62914520);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Runtime.GrabEdgeEvent<TEvConsumerLimit>(sender)->Get()->LimitBytes, 62914520);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Reservation"), 31457240);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/MemTable/Limit"), 10_MB);
+
+    // Foreign allocation leaves less than the minimums demand: the search bottoms out and the limit is the minimum
+    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 120_MB;
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Stats/Coefficient"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit"), 20_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/SharedCache/Reservation"), 0);
+
+    // Interior point: the 100 MB target utilization minus 53 MB of other memory and the 10 MB memtable leaves 37 MB
+    fixture.Provider->ProcessMemoryInfo.AllocatedMemory = 90_MB;
+    fixture.Tick();
+    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Stats/Coefficient") / 1e9, (37.0 - 20.0) / 40.0, 1e-5);
+    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Consumer/SharedCache/Limit") / double(1_MB), 37.0, 0.01);
+    UNIT_ASSERT_DOUBLES_EQUAL(fixture.Counter("Consumer/SharedCache/Reservation") / double(1_MB), 7.0, 0.01);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/MemTable/Limit"), 10_MB);
+}
+
+Y_UNIT_TEST(ConsumerReportClamp) {
+    NKikimrConfig::TMemoryControllerConfig config;
+    config.SetHardLimitBytes(200_MB);
+    TControllerFixture fixture(config);
+    auto consumer = fixture.Register(fixture.Runtime.AllocateEdgeActor(), EMemoryConsumerKind::ColumnTablesBlobCache);
+
+    // An invalid report that breaks both invariants is clamped where MC reads it
+    consumer->SetReport({.Used = 100_MB, .Demand = 10_MB, .Reclaimable = 500_MB});
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Consumption"), 100_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Demand"), 100_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Reclaimable"), 100_MB);
+
+    consumer->SetReport({.Used = 100_MB, .Demand = 150_MB, .Reclaimable = 40_MB});
+    fixture.Tick();
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Consumption"), 100_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Demand"), 150_MB);
+    UNIT_ASSERT_VALUES_EQUAL(fixture.Counter("Consumer/ColumnTablesBlobCache/Reclaimable"), 40_MB);
+}
+
+Y_UNIT_TEST(SetConsumptionForwardsDegradedReport) {
+    struct TRecorder : public IMemoryConsumer {
+        TConsumerReport Last;
+
+        void SetReport(TConsumerReport report) override {
+            Last = report;
+        }
+    };
+
+    auto recorder = MakeIntrusive<TRecorder>();
+    recorder->SetConsumption(42);
+    UNIT_ASSERT_VALUES_EQUAL(recorder->Last.Used, 42);
+    UNIT_ASSERT_VALUES_EQUAL(recorder->Last.Demand, 42);
+    UNIT_ASSERT_VALUES_EQUAL(recorder->Last.Reclaimable, 0);
 }
 }
 

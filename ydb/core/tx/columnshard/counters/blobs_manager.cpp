@@ -29,6 +29,10 @@ THistoryCutterCounters::THistoryCutterCounters(const TCommonCountersOwner& sameA
     , ChannelsPoisoned(TBase::GetValue("Channels/Poisoned"))
     , EntriesDisproved(TBase::GetValue("Entries/Disproved"))
     , EntriesProven(TBase::GetDeriviative("Entries/Proven/Count"))
+    , SeedingState(TBase::GetValue("Seed/State"))
+    , PortionKeysCount(TBase::GetValue("PortionKeys/Count"))
+    , Tombstones(TBase::GetValue("Seed/Tombstones"))
+    , Underflows(TBase::GetDeriviative("Underflows/Count"))
 {
 }
 

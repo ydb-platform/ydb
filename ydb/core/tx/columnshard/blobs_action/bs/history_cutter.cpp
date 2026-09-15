@@ -26,6 +26,14 @@ THistoryCutterWrapper::THistoryCutterWrapper(const TIntrusivePtr<TTabletStorageI
     , SharedBlobs(sharedBlobs)
     , TabletActorId(tabletActorId)
 {
+    Enabled = ComputeEnabled();
+}
+
+bool THistoryCutterWrapper::ComputeEnabled() {
+    if (NYDBTest::TControllers::GetColumnShardController()->IsCSCutHistoryEnabled()) {
+        return true;
+    }
+    return HasAppData() && AppData()->FeatureFlags.GetEnableColumnshardGroupDecommission();
 }
 
 TDuration THistoryCutterWrapper::GetNominateCadence() {
@@ -49,10 +57,7 @@ bool THistoryCutterWrapper::IsMeasureOnly() {
 }
 
 bool THistoryCutterWrapper::IsEnabled() const {
-    if (NYDBTest::TControllers::GetColumnShardController()->IsCSCutHistoryEnabled()) {
-        return true;
-    }
-    return HasAppData() && AppData()->FeatureFlags.GetEnableColumnshardGroupDecommission();
+    return Enabled;
 }
 
 bool THistoryCutterWrapper::SeenGroupsCheckPasses(
@@ -146,6 +151,17 @@ void THistoryCutterWrapper::PublishLevels(const std::optional<ui64> sweepCandida
     Published.EntriesDisproved = disproved;
 }
 
+void THistoryCutterWrapper::PublishSeedLevels() {
+    const ui64 state = static_cast<ui64>(SeedingState);
+    const ui64 keys = PortionKeys.size();
+    const ui64 tombs = SeedTombstones.size();
+    Signals.OnSeedLevelsDelta(
+        (i64)state - (i64)Published.SeedingStateVal, (i64)keys - (i64)Published.PortionKeysCountVal, (i64)tombs - (i64)Published.TombstonesVal);
+    Published.SeedingStateVal = state;
+    Published.PortionKeysCountVal = keys;
+    Published.TombstonesVal = tombs;
+}
+
 void THistoryCutterWrapper::IncrementCounter(const TEntryKey& key) {
     ++Counters[key];
 }
@@ -158,6 +174,7 @@ void THistoryCutterWrapper::DecrementCounter(const TEntryKey& key) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cut_history_channel_poisoned")("channel", key.Channel)(
                 "from_generation", key.FromGeneration)("reason", "counter_underflow");
             PublishLevels();
+            Signals.OnUnderflow();
         }
         return;
     }
@@ -167,10 +184,13 @@ void THistoryCutterWrapper::DecrementCounter(const TEntryKey& key) {
 }
 
 void THistoryCutterWrapper::OnPortionAdded(const TPortionDataAccessor& accessor) {
-    if (!IsEnabled()) {
+    if (!Enabled) {
         return;
     }
     const ui64 portionId = accessor.GetPortionInfo().GetPortionId();
+    if (PortionKeys.contains(portionId)) {
+        return;
+    }
     TStackVec<TEntryKey, 2> keys;
     for (const auto& blobId : accessor.GetBlobIds()) {
         TEntryKey key;
@@ -191,24 +211,33 @@ void THistoryCutterWrapper::OnPortionAdded(const TPortionDataAccessor& accessor)
     }
     if (!keys.empty()) {
         PortionKeys.emplace(portionId, std::move(keys));
+        PublishSeedLevels();
     }
 }
 
 void THistoryCutterWrapper::OnPortionRemoved(const ui64 portionId) {
-    if (!IsEnabled()) {
+    if (!Enabled) {
         return;
+    }
+    if (SeedingState == ESeedState::Seeding) {
+        SeedTombstones.insert(portionId);
     }
     const TStackVec<TEntryKey, 2>* keys = PortionKeys.FindPtr(portionId);
     if (!keys) {
+        PublishSeedLevels();
         return;
     }
     for (const auto& key : *keys) {
         DecrementCounter(key);
     }
     PortionKeys.erase(portionId);
+    PublishSeedLevels();
 }
 
-void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUnifiedBlobId>>& portionBlobIds) {
+void THistoryCutterWrapper::BeginSeeding() {
+    ++ReseedEpoch;
+    ++SeedRun;
+    SeedTombstones.clear();
     Counters.clear();
     CutState.clear();
     PoisonedChannels.clear();
@@ -221,12 +250,20 @@ void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUni
     SweepSurvivors.clear();
     SweepPortionIds.clear();
     SweepPortionOffset = 0;
+    SeedingState = ESeedState::Seeding;
     PublishLevels(0);
+    PublishSeedLevels();
+}
 
-    if (!IsEnabled()) {
+void THistoryCutterWrapper::ApplySeedBatch(const THashMap<ui64, std::vector<TUnifiedBlobId>>& portionBlobIds) {
+    if (SeedingState != ESeedState::Seeding || !Enabled) {
         return;
     }
     for (const auto& [portionId, blobIds] : portionBlobIds) {
+        // Add if absent; a portion erased while seeding stays out of the counters.
+        if (PortionKeys.contains(portionId) || SeedTombstones.contains(portionId)) {
+            continue;
+        }
         TStackVec<TEntryKey, 2> keys;
         for (const auto& blobId : blobIds) {
             TEntryKey key;
@@ -249,10 +286,33 @@ void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUni
             PortionKeys.emplace(portionId, std::move(keys));
         }
     }
+    PublishSeedLevels();
+}
+
+void THistoryCutterWrapper::FinishSeeding() {
+    if (SeedingState != ESeedState::Seeding) {
+        return;
+    }
+    SeedTombstones.clear();
+    SeedingState = ESeedState::Seeded;
+    PublishSeedLevels();
+}
+
+void THistoryCutterWrapper::FailSeeding(TInternalPathId pathId, ui64 portionId, const TString& reason) {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "cut_history_seeding_failed")("path_id", pathId)("portion_id", portionId)(
+        "reason", reason);
+    SeedingState = ESeedState::Failed;
+    PublishSeedLevels();
+}
+
+void THistoryCutterWrapper::OnBootComplete(const THashMap<ui64, std::vector<TUnifiedBlobId>>& portionBlobIds) {
+    BeginSeeding();
+    ApplySeedBatch(portionBlobIds);
+    FinishSeeding();
 }
 
 bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
-    if (!IsEnabled()) {
+    if (!Enabled || SeedingState != ESeedState::Seeded) {
         return false;
     }
     if (SweepInFlight) {
@@ -323,6 +383,7 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
     }
     SweepInFlight = true;
     ++SweepRound;
+    NominateEpoch = ReseedEpoch;
     Signals.OnNomination();
     PublishLevels(batch.size());
     SweepSurvivors = batch;
@@ -413,6 +474,10 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
             continue;
         }
 
+        if (SeedingState != ESeedState::Seeded || ReseedEpoch != NominateEpoch) {
+            CutState[key] = ECutState::None;
+            continue;
+        }
         Signals.OnEntryProven();
         if (IsMeasureOnly()) {
             // Nothing durable happens: reset to None so the next round re-measures the same entry.

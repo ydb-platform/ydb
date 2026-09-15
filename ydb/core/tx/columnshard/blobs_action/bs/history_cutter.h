@@ -52,6 +52,13 @@ enum class ECutState {
     Cut,
 };
 
+enum class ESeedState {
+    Unseeded,
+    Seeding,
+    Seeded,
+    Failed,
+};
+
 // Two-tier engine for CutTabletHistory on the ColumnShard data channels.
 class THistoryCutterWrapper {
 public:
@@ -103,6 +110,7 @@ public:
 protected:
     void StartSweepForTest(TVector<TEntryKey>&& candidates) {
         SweepInFlight = true;
+        NominateEpoch = ReseedEpoch;
         SweepSurvivors = candidates;
         for (const auto& key : SweepSurvivors) {
             CutState[key] = ECutState::Verifying;
@@ -133,10 +141,27 @@ protected:
         return PortionKeys.size();
     }
 
+    ESeedState GetSeedingStateForTest() const {
+        return SeedingState;
+    }
+
+    ui64 GetReseedEpochForTest() const {
+        return ReseedEpoch;
+    }
+
+    size_t GetTombstoneCountForTest() const {
+        return SeedTombstones.size();
+    }
+
     // protected for tests: no public call sequence reaches the underflow branch.
     void DecrementCounter(const TEntryKey& key);
 
 public:
+    void BeginSeeding();
+    void ApplySeedBatch(const THashMap<ui64, std::vector<TUnifiedBlobId>>& portionBlobIds);
+    void FinishSeeding();
+    void FailSeeding(TInternalPathId pathId, ui64 portionId, const TString& reason);
+
     void SetPortionSnapshot(TVector<std::pair<TInternalPathId, ui64>>&& ids);
 
     TVector<std::pair<TInternalPathId, ui64>> GetNextBatch(size_t batchSize, bool& isLast);
@@ -176,11 +201,18 @@ private:
 
     // Call after any change to PoisonedChannels or DisprovedAt; omitted sweepCandidates leaves it unchanged.
     void PublishLevels(std::optional<ui64> sweepCandidates = {});
+    // Call after any change to SeedingState, PortionKeys, or SeedTombstones.
+    void PublishSeedLevels();
+
+    static bool ComputeEnabled();
 
     struct TPublishedLevels {
         ui64 SweepCandidates = 0;
         ui64 ChannelsPoisoned = 0;
         ui64 EntriesDisproved = 0;
+        ui64 SeedingStateVal = 0;
+        ui64 PortionKeysCountVal = 0;
+        ui64 TombstonesVal = 0;
     };
 
     TPublishedLevels Published;
@@ -194,6 +226,17 @@ private:
     std::weak_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> SharedBlobs;
     TActorId TabletActorId;
     TActorId LauncherActorId;
+
+    // Computed once in the constructor; guards all tier-1 bookkeeping and sweep gating.
+    bool Enabled = false;
+
+    // Seeding state machine: Unseeded → Seeding → Seeded (or Failed).
+    ESeedState SeedingState = ESeedState::Unseeded;
+    ui64 ReseedEpoch = 0;
+    ui64 SeedRun = 0;
+    THashSet<ui64> SeedTombstones;
+    // ReseedEpoch captured at nomination time; cut is aborted if it changed by OnBatchComplete.
+    ui64 NominateEpoch = 0;
 
     // Tier-1 state (all ephemeral — reconstructed on restart).
     THashMap<TEntryKey, ui64> Counters;

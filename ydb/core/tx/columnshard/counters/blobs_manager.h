@@ -54,6 +54,10 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr ChannelsPoisoned;
     NMonitoring::TDynamicCounters::TCounterPtr EntriesDisproved;
     NMonitoring::TDynamicCounters::TCounterPtr EntriesProven;
+    NMonitoring::TDynamicCounters::TCounterPtr SeedingState;
+    NMonitoring::TDynamicCounters::TCounterPtr PortionKeysCount;
+    NMonitoring::TDynamicCounters::TCounterPtr Tombstones;
+    NMonitoring::TDynamicCounters::TCounterPtr Underflows;
 
 public:
     THistoryCutterCounters(const TCommonCountersOwner& sameAs, const TString& componentName);
@@ -80,6 +84,17 @@ public:
     // Passed every gate and the final re-check; in measure-only mode this is where the entry stops.
     void OnEntryProven() const {
         EntriesProven->Add(1);
+    }
+
+    // Delta-based level sensors for seeding state machine.
+    void OnSeedLevelsDelta(const i64 seedingState, const i64 portionKeys, const i64 tombstones) const {
+        SeedingState->Add(seedingState);
+        PortionKeysCount->Add(portionKeys);
+        Tombstones->Add(tombstones);
+    }
+
+    void OnUnderflow() const {
+        Underflows->Add(1);
     }
 };
 

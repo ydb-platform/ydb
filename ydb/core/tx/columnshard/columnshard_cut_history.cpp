@@ -136,7 +136,8 @@ void TColumnShard::SetupCutHistory() {
         TablesManager.SetPortionsObserver(observer);
     }
     // Boot starts with empty counters, so tier-1 can only undercount: the sweep disproves or the channel poisons.
-    cutter->OnBootComplete({});
+    cutter->BeginSeeding();
+    cutter->FinishSeeding();
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, const TActorContext& ctx) {

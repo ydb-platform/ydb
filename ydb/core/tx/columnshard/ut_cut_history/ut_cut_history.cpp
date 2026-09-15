@@ -91,6 +91,7 @@ private:
 using TEntryKey = NOlap::NBlobOperations::NBlobStorage::TEntryKey;
 using THistoryCutterWrapper = NOlap::NBlobOperations::NBlobStorage::THistoryCutterWrapper;
 using ECutState = NOlap::NBlobOperations::NBlobStorage::ECutState;
+using ESeedState = NOlap::NBlobOperations::NBlobStorage::ESeedState;
 
 // Only a live sensor instance is needed: values are asserted through the cutter's own state.
 static const NColumnShard::THistoryCutterCounters& TestSignals() {
@@ -104,6 +105,10 @@ public:
     using THistoryCutterWrapper::GetCounterForTest;
     using THistoryCutterWrapper::GetCutStateForTest;
     using THistoryCutterWrapper::GetDisprovalAttemptsForTest;
+    using THistoryCutterWrapper::GetPortionKeysCountForTest;
+    using THistoryCutterWrapper::GetReseedEpochForTest;
+    using THistoryCutterWrapper::GetSeedingStateForTest;
+    using THistoryCutterWrapper::GetTombstoneCountForTest;
     using THistoryCutterWrapper::IsChannelPoisonedForTest;
     using THistoryCutterWrapper::IsDrained;
     using THistoryCutterWrapper::StartSweepForTest;
@@ -524,6 +529,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         CommitFirstGcRound(bm, CurrentGen, shared);
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
         cutter.SetLauncherActorId(edgeLauncher);
+        cutter.OnBootComplete({});
         const TEntryKey key{ DataChannel, OldFromGen };
 
         bool nominated = false;
@@ -586,6 +592,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         // GC round NOT yet committed.
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
         cutter.SetLauncherActorId(edgeLauncher);
+        cutter.OnBootComplete({});
         const TEntryKey key{ DataChannel, OldFromGen };
 
         // First round: GC not committed → entry stays None after a clean sweep.
@@ -646,6 +653,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         CommitFirstGcRound(bm, CurrentGen, shared);
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
         cutter.SetLauncherActorId(edgeLauncher);
+        cutter.OnBootComplete({});
 
         const TEntryKey keyX0{ DataChannel, 0 };
         const TEntryKey keyX10{ DataChannel, 10 };
@@ -700,6 +708,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/3, { { OldFromGen, OldGroup }, { CurrentGen, 200 } });
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
         cutter.SetLauncherActorId(edgeLauncher);
+        cutter.OnBootComplete({});
         const TEntryKey key{ DataChannel, OldFromGen };
 
         // Start a GC round (advance 60s first to pass the throttle window); it pins IsDrained while in flight.
@@ -766,6 +775,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/3, { { OldFromGen, OldGroup }, { CurrentGen, 200 } });
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
         cutter.SetLauncherActorId(edgeLauncher);
+        cutter.OnBootComplete({});
         const TEntryKey key{ DataChannel, OldFromGen };
 
         auto tryNominate = [&](bool expected) {
@@ -979,6 +989,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         CommitFirstGcRound(bm, CurrentGen, shared);
         TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
         cutter.SetLauncherActorId(edgeLauncher);
+        cutter.OnBootComplete({});
         const TEntryKey middle{ Channel, 5 };
 
         cutter.StartSweepForTest({ middle });
@@ -1038,6 +1049,147 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         });
         UNIT_ASSERT(cutter.GetCutStateForTest(earlier) == ECutState::None);
         UNIT_ASSERT(guard->GetCut().empty());
+    }
+
+    // BeginSeeding increments ReseedEpoch and resets state; FinishSeeding transitions to Seeded.
+    Y_UNIT_TEST(SeedingStateMachineTransitions) {
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 5050;
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, 5);
+        TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
+
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Unseeded);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetReseedEpochForTest(), 0u);
+
+        cutter.BeginSeeding();
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Seeding);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetReseedEpochForTest(), 1u);
+
+        cutter.FinishSeeding();
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Seeded);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetReseedEpochForTest(), 1u);
+
+        // Second seeding round increments the epoch again.
+        cutter.BeginSeeding();
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Seeding);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetReseedEpochForTest(), 2u);
+        cutter.FinishSeeding();
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Seeded);
+    }
+
+    // TryNominate returns false while Unseeded or Seeding; returns true after Seeded.
+    Y_UNIT_TEST(TryNominateGatedBySeededState) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        runtime.GetAppData().ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 5151;
+        static constexpr ui32 CurrentGen = 5;
+
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, CurrentGen, /*nChannels=*/3, { { 0, 100 }, { CurrentGen, 200 } });
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
+
+        bool result = false;
+        runInActor([&](const NActors::TActorContext& ctx) {
+            result = cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT_C(!result, "Unseeded state must block nomination");
+        UNIT_ASSERT(guard->GetNominated().empty());
+
+        cutter.BeginSeeding();
+        runInActor([&](const NActors::TActorContext& ctx) {
+            result = cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT_C(!result, "Seeding state must block nomination");
+
+        cutter.FinishSeeding();
+        runInActor([&](const NActors::TActorContext& ctx) {
+            result = cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT_C(result, "Seeded state must allow nomination");
+        UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
+    }
+
+    // OnBootComplete = BeginSeeding + ApplySeedBatch + FinishSeeding; portions seeded into counters are correct.
+    Y_UNIT_TEST(OnBootCompleteSeeds) {
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 5252;
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, 5);
+        TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
+
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
+        portionBlobs[10].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 3)));
+        cutter.OnBootComplete(portionBlobs);
+
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Seeded);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetReseedEpochForTest(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetPortionKeysCountForTest(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(TEntryKey{ 2, 0 }), 1u);
+    }
+
+    // Portions removed during seeding are tombstoned; FinishSeeding erases them from PortionKeys.
+    Y_UNIT_TEST(TombstonedPortionIsNotSeeded) {
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 5353;
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, 5);
+        TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
+
+        cutter.BeginSeeding();
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Seeding);
+
+        // A portion erased while seeding runs, before the scan batch that still lists it.
+        cutter.OnPortionRemoved(99);
+        UNIT_ASSERT_VALUES_EQUAL_C(cutter.GetTombstoneCountForTest(), 1u, "removed portion must be tombstoned during Seeding");
+
+        // The batch was read before the erase and still lists the portion.
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> batch;
+        batch[99].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 3)));
+        cutter.ApplySeedBatch(batch);
+        UNIT_ASSERT_VALUES_EQUAL_C(cutter.GetPortionKeysCountForTest(), 0u, "an erased portion must not be seeded");
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(TEntryKey{ 2, 0 }), 0u);
+
+        cutter.FinishSeeding();
+        UNIT_ASSERT(cutter.GetSeedingStateForTest() == ESeedState::Seeded);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetPortionKeysCountForTest(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(TEntryKey{ 2, 0 }), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetTombstoneCountForTest(), 0u);
+    }
+
+    // OnBatchComplete aborts the cut when ReseedEpoch changes between nomination and completion.
+    Y_UNIT_TEST(StaleNominationAbortedOnReseed) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.ColumnShardConfig.SetCutHistoryMeasureOnly(false);
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 5454;
+        auto [info, bm, shared] = MakeCutterEnv(TabletId, 5, /*nChannels=*/3, { { 0, 100 }, { 5, 200 } });
+        CommitFirstGcRound(bm, 5, shared);
+        TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
+        const TEntryKey key{ 2, 0 };
+        const auto ctx = NActors::TActivationContext::AsActorContext();
+
+        cutter.OnBootComplete({});
+        cutter.StartSweepForTest({ key });
+        const ui64 epochAtNominate = cutter.GetReseedEpochForTest();
+
+        // A re-seed happens while the sweep is in flight: epoch advances.
+        cutter.BeginSeeding();
+        cutter.FinishSeeding();
+        UNIT_ASSERT_C(cutter.GetReseedEpochForTest() > epochAtNominate, "re-seed must advance the epoch");
+
+        // The in-flight sweep completing now must NOT produce a cut.
+        cutter.SetPortionSnapshot({});
+        cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
+        UNIT_ASSERT_C(cutter.GetCutStateForTest(key) == ECutState::None, "stale nomination must not cut after a re-seed");
+        UNIT_ASSERT_C(guard->GetCut().empty(), "no TEvCutTabletHistory for a stale nomination");
     }
 
 }   // TCutHistoryCutterCounters

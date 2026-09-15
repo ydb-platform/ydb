@@ -8,6 +8,19 @@ namespace NYdb::NBS::NBlockStore {
 
 Y_UNIT_TEST_SUITE(TBlockRangeTest)
 {
+    Y_UNIT_TEST(ConvertRangeSafe)
+    {
+        const auto range16 = TBlockRange16::MakeClosedInterval(123, 65534);
+        const TBlockRange64 range64 = ConvertRangeSafe<TBlockRange64>(range16);
+
+        UNIT_ASSERT_VALUES_EQUAL(123, range64.Start);
+        UNIT_ASSERT_VALUES_EQUAL(65534, range64.End);
+
+        const TBlockRange16 convertedBack =
+            ConvertRangeSafe<TBlockRange16>(range64);
+        UNIT_ASSERT_VALUES_EQUAL(range16, convertedBack);
+    }
+
     Y_UNIT_TEST(Difference)
     {
         {   // cut left

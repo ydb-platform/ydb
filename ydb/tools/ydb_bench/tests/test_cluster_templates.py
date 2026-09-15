@@ -12,6 +12,7 @@ from urllib.request import Request, urlopen
 
 from ydb.tools.ydb_bench.lib import cluster_templates, cluster_templates_ui, topology as topology_module, web
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
+from ydb.tools.ydb_bench.lib.config import load_config
 from ydb.tools.ydb_bench.lib.topology import CpuTopology
 
 
@@ -54,6 +55,54 @@ class ClusterTemplatesTest(unittest.TestCase):
             self.assertNotIn("actor_system", node)
         self.assertEqual(saved["nodes"][1]["affinity"]["count"], 8)
         self.store.save(saved, {"amd", "sas"})
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is required")
+    def test_template_run_draft_is_detached_and_valid_for_real_parser(self):
+        self.value["data_centers"] = [{"name": "dc", "racks": ["dc-R1"]}]
+        self.value["tenants"] = [{"path": "/Root/bench", "storage_kind": "ssd", "storage_groups": 1}]
+        for node in self.value["nodes"]:
+            node["location"] = {"data_center": "dc", "rack": "dc-R1"}
+            if node["role"] == "dynamic":
+                node["tenant"] = "/Root/bench"
+        self.value["nodes"].append(
+            {
+                "name": "cli",
+                "role": "cli",
+                "host_id": "amd",
+                "binary": "bundled",
+                "affinity": {"kind": "strategy", "mode": "none", "count": 1},
+            }
+        )
+        template = self.store.save(self.value, {"amd", "sas"})
+        from ydb.tools.ydb_bench.lib import distributed_builder_ui
+
+        script = (
+            distributed_builder_ui.JS
+            + "\nconst defaultLocalYdbWorkload=()=>({options:{}});\n"
+            + cluster_templates_ui.JS.split("async function renderClusterTemplates")[0]
+            + r"""
+const assert=require('assert');
+const template=JSON.parse(require('fs').readFileSync(0,'utf8'));
+const original=JSON.stringify(template),draft=ctRunDraft(template,'/Root/bench');
+assert.equal(JSON.stringify(template),original);
+assert.throws(()=>ctRunDraft(template,'/Root/missing'),/Select a tenant/);
+template.nodes[0].name='changed later';
+assert(!draft.includes('changed later'));
+assert(draft.includes('"nodes":\n'));
+process.stdout.write(draft);
+"""
+        )
+        draft = subprocess.check_output([shutil.which("node"), "-e", script], input=json.dumps(template), text=True)
+        path = self.root / "draft.yaml"
+        path.write_text(draft)
+        profile = load_config(path).runs[0]
+        self.assertEqual("distributed-ydb", profile.benchmark.name)
+        self.assertEqual([1], profile.parameters["local_ydb"]["load"]["values"])
+        self.assertEqual(
+            4, profile.parameters["local_ydb"]["actor_system"]["tenants"]["/Root/bench"]["dynamic_nodes"]["cpu_count"]
+        )
+        self.assertEqual("/Root/bench", profile.parameters["local_ydb"]["distributed"]["tenant"])
+        self.assertEqual([template], self.store.list())
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is required")
     def test_view_specific_node_information_and_rack_names(self):

@@ -193,8 +193,11 @@ const assert=require('assert'),enc=encodeURIComponent,api=async path=>path;
                             return_value=[
                                 {
                                     'id': 'same-comparison',
-                                    'profiles': [['same-run', 'same-profile']],
-                                    'baseline': ['same-run', 'same-profile'],
+                                    'profiles': [
+                                        ['same-run', 'same-profile'],
+                                        ['same-run', 'same-profile', 'distributed-ydb'],
+                                    ],
+                                    'baseline': ['same-run', 'same-profile', 'distributed-ydb'],
                                 }
                             ],
                         )
@@ -208,6 +211,11 @@ const assert=require('assert'),enc=encodeURIComponent,api=async path=>path;
                 self.assertEqual(len({record['id'] for record in comparisons}), 3)
                 for record in comparisons:
                     self.assertEqual(record['profiles'][0][0], reference(record['host_id'], 'same-run'))
+                    self.assertEqual(
+                        record['profiles'][1],
+                        [reference(record['host_id'], 'same-run'), 'same-profile', 'distributed-ydb'],
+                    )
+                    self.assertEqual(record['baseline'], record['profiles'][1])
                 profiles = federation.profiles([reference(first.id, 'same-run'), reference(second.id, 'same-run')])
                 self.assertEqual(len({row['run'] for row in profiles['entries']}), 2)
                 self.assertEqual(profiles['errors'], [])

@@ -182,10 +182,10 @@ void AssertMessageMeta(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent
     UNIT_ASSERT_VALUES_EQUAL_C(GetMessageMetaKey(msg, field), expectedValue, "Field " << field << " not found in message meta");
 }
 
-TString MakeKafkaRequestFrame(TRequestHeaderData& header, const TString& body) {
+TString MakeKafkaRequestFrame(TRequestHeaderData& header, const TString& body, TKafkaVersion headerVersion) {
     TKafkaWriteBuffer payload(256);
     TKafkaWritable writable(payload);
-    header.Write(writable, RequestHeaderVersion(header.RequestApiKey, header.RequestApiVersion));
+    header.Write(writable, headerVersion);
     writable.write(body.data(), body.size());
 
     const TString payloadBytes = payload.AsString();
@@ -195,6 +195,35 @@ TString MakeKafkaRequestFrame(TRequestHeaderData& header, const TString& body) {
     frameWritable << size;
     frameWritable.write(payloadBytes.data(), payloadBytes.size());
     return frame.AsString();
+}
+
+TString MakeKafkaRequestFrame(TRequestHeaderData& header, const TString& body) {
+    return MakeKafkaRequestFrame(
+        header,
+        body,
+        RequestHeaderVersion(header.RequestApiKey, header.RequestApiVersion));
+}
+
+TApiVersionsResponseData ReadApiVersionsResponse(TSocketInput& input, i32 correlationId, TKafkaVersion requestVersion) {
+    TKafkaInt32 size = 0;
+    input.Load(&size, sizeof(size));
+    NKafka::NormalizeNumber(size);
+    UNIT_ASSERT_GT(size, 0);
+
+    TBuffer buffer;
+    buffer.Resize(static_cast<size_t>(size));
+    input.Load(buffer.Data(), static_cast<size_t>(size));
+
+    TKafkaReadable readable(buffer);
+    readable.SetAllowCompressed(true);
+
+    TResponseHeaderData responseHeader;
+    responseHeader.Read(readable, ResponseHeaderVersion(API_VERSIONS, requestVersion));
+    UNIT_ASSERT_VALUES_EQUAL(responseHeader.CorrelationId, correlationId);
+
+    TApiVersionsResponseData response;
+    response.Read(readable, ApiVersionsResponseWriteVersion(requestVersion));
+    return response;
 }
 
 TString MakeMetadataRequestWithHugeTopicsArray(TKafkaVersion version) {
@@ -3422,6 +3451,46 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto retry = client.ApiVersions();
         UNIT_ASSERT_VALUES_EQUAL(retry->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
         UNIT_ASSERT_VALUES_EQUAL(retry->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
+    }
+
+    Y_UNIT_TEST(ApiVersionsUnsupportedVersionNonFlexibleHeaderKeepsConnection) {
+        TInsecureTestServer testServer;
+
+        TRequestHeaderData unsupportedHeader;
+        unsupportedHeader.RequestApiKey = API_VERSIONS;
+        unsupportedHeader.RequestApiVersion = 5;
+        unsupportedHeader.CorrelationId = 1;
+        unsupportedHeader.ClientId = "";
+        const TString unsupportedFrame = MakeKafkaRequestFrame(
+            unsupportedHeader, TString{}, ApiVersionsFallbackRequestHeaderVersion);
+
+        TRequestHeaderData supportedHeader;
+        supportedHeader.RequestApiKey = API_VERSIONS;
+        supportedHeader.RequestApiVersion = 2;
+        supportedHeader.CorrelationId = 2;
+        supportedHeader.ClientId = "";
+        const TString supportedFrame = MakeKafkaRequestFrame(supportedHeader, TString{});
+
+        TNetworkAddress addr("localhost", testServer.Port);
+        TSocket socket(addr);
+        socket.SetSocketTimeout(5, 0);
+        TSocketOutput output(socket);
+        TSocketInput input(socket);
+
+        output.Write(unsupportedFrame.data(), unsupportedFrame.size());
+        output.Flush();
+        const auto unsupported = ReadApiVersionsResponse(input, 1, 5);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNSUPPORTED_VERSION));
+        UNIT_ASSERT_VALUES_EQUAL(unsupported.ApiKeys.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported.ApiKeys[0].ApiKey, static_cast<TKafkaInt16>(API_VERSIONS));
+        UNIT_ASSERT_VALUES_EQUAL(unsupported.ApiKeys[0].MinVersion, 0);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported.ApiKeys[0].MaxVersion, AdvertisedApiVersionsMax);
+
+        output.Write(supportedFrame.data(), supportedFrame.size());
+        output.Flush();
+        const auto supported = ReadApiVersionsResponse(input, 2, 2);
+        UNIT_ASSERT_VALUES_EQUAL(supported.ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(supported.ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
     }
 
     Y_UNIT_TEST(GetApiVersionsAdvertisesProduceMinZero) {

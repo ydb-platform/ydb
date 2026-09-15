@@ -3,6 +3,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vchunk_stats.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
@@ -58,13 +59,16 @@ struct TTabletInfo
     ui64 TabletId = 0;
     ui32 Generation = 0;
     ui32 BlockSize = 0;
+    ui64 BlockCount = 0;
+    ui64 VChunkBlockCount = 0;
+    ui64 RegionBlockCount = 0;
     TString DiskId;
     TString State;   // "INIT" / "WORK"
 };
 
 struct TArenaMemoryUsage
 {
-    TVector<TArenaAllocatorStats> Slots;
+    TArenaAllocatorStats Slots;
 };
 
 struct TFastPathServiceInfo
@@ -96,8 +100,9 @@ struct TDbgSnapshot
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
     TVChunkConfigs VChunkConfigs;
-    size_t AllocatedMemorySize = 0;
-    size_t UsedMemorySize = 0;
+    TArenaPoolStats MemoryStats;
+    TArenaAllocatorStats DetailedMemoryStats;
+    TDirtyMapStats DirtyMapStats;
     // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
     size_t LatencyHistoryCapacity = 0;
 };

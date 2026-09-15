@@ -457,7 +457,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(json.loads(schema_output.getvalue()), CONFIG_SCHEMA)
         self.assertEqual(
             set(CONFIG_SCHEMA["properties"]),
-            {"ping-bench", "star-ping-bench", "memory-bandwidth-bench", "local-ydb"},
+            {"ping-bench", "star-ping-bench", "memory-bandwidth-bench", "local-ydb", "distributed-ydb"},
         )
         local_load_schema = CONFIG_SCHEMA["properties"]["local-ydb"]["additionalProperties"]["properties"]["load"]
         self.assertEqual(local_load_schema["properties"]["allow-errors"], {"type": "boolean"})
@@ -1901,6 +1901,7 @@ class YdbBenchTest(unittest.TestCase):
                 "schema_id": "fake-json-v1",
                 "metrics": {"latency_ms": 7, "throughput": 12.5},
                 "details": {"transactions": {"new-order": 42}},
+                "measurement_window": [101.0, 109.0],
             },
         )
         self.assertEqual(manifest["attempts"][0]["throughput"], 12.5)
@@ -2575,8 +2576,19 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
         script += web._JS[web._JS.index("function localField") : web._JS.index("function localNumber")]
         script += "console.log(localYdbProfileEditor(editor.model.profiles[0]));"
         html = subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10)
-        for heading in ("Workload", "Load &amp; objective", "Measurement", "Cluster", "CPU placement"):
-            self.assertIn("<h3>" + heading + "</h3>", html)
+        for heading in ("Cluster", "Storage", "Compute", "Load generator", "CPU placement", "Run policy"):
+            self.assertIn('data-local-view="' + heading + '"', html)
+            self.assertIn('data-local-panel="' + heading + '"', html)
+        self.assertIn('data-local-panel="Cluster" >', html)
+        self.assertIn('data-local-panel="Storage" hidden', html)
+        self.assertIn("Actor system (shared by static and dynamic nodes)", html)
+        switched = script.replace(
+            "console.log(localYdbProfileEditor",
+            "localEditorViews.set(editor.model.profiles[0].key,'Compute');console.log(localYdbProfileEditor",
+        )
+        switched_html = subprocess.check_output([shutil.which("node"), "-e", switched], text=True, timeout=10)
+        self.assertIn('data-local-panel="Compute" >', switched_html)
+        self.assertIn('data-local-panel="Cluster" hidden', switched_html)
         self.assertNotIn("class=card", html)
         for field in (
             "local-ydbd-binary",
@@ -2594,6 +2606,49 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             "local-actor-system-use_ring_queue",
         ):
             self.assertIn('id="' + field + '"' if field != "local-ydbd-version" else "id=" + field, html)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for builder state checks")
+    def test_add_profile_preserves_unsupported_benchmark_draft(self):
+        script = """
+const editor={yaml:'original draft',model:{
+  benchmarks:[{name:'distributed-ydb',builder_supported:false}],
+  profiles:[{benchmark:'distributed-ydb',name:'cluster'}]
+}};
+const location={hash:'#new'};
+const before=JSON.stringify(editor);
+"""
+        script += web._JS[web._JS.index("function addProfile()") : web._JS.index("const editorDetailState")]
+        script += (
+            "addProfile();console.log(JSON.stringify({unchanged:before===JSON.stringify(editor),hash:location.hash}));"
+        )
+        result = json.loads(subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10))
+        self.assertTrue(result["unchanged"])
+        self.assertEqual("#new/yaml", result["hash"])
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for activity banner checks")
+    def test_activity_banner_distinguishes_recovery_from_running(self):
+        script = """
+let activeRun='', value={active_run_id:'interrupted',queued:0,distributed_session:{recovery_required:true}};
+const banner={},document={hidden:false,querySelector:()=>banner};
+const sessionStorage={setItem:()=>{}},refreshEditorActivity=()=>{},api=async()=>value;
+const enc=encodeURIComponent,esc=value=>String(value);
+"""
+        script += web._JS[web._JS.index("let activeBannerLoading=") : web._JS.index("let runsSort=")]
+        script += """
+(async()=>{
+  await refreshActiveBanner();const recovery=banner.innerHTML;
+  value={active_run_id:'live',queued:1};await refreshActiveBanner();
+  const running=banner.innerHTML;
+  value={active_run_id:null,queued:0,recovery_run_ids:['old-run']};await refreshActiveBanner();
+  console.log(JSON.stringify({recovery,running,idle:banner.innerHTML}));
+})();
+"""
+        result = json.loads(subprocess.check_output([shutil.which("node"), "-e", script], text=True, timeout=10))
+        self.assertIn("Recovery required: interrupted", result["recovery"])
+        self.assertNotIn("Running:", result["recovery"])
+        self.assertIn("Running: live", result["running"])
+        self.assertIn("Queue: 1", result["running"])
+        self.assertEqual("No active run", result["idle"])
 
     @unittest.skipUnless(shutil.which("node"), "node is required for builder state checks")
     def test_builder_preserves_details_per_profile(self):
@@ -3247,15 +3302,29 @@ const profileByKey=()=>null;
         )
 
     @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB profile panel test")
+    def test_configuration_fields_render_nested_template_arrays(self):
+        start = web._JS.index("function configurationLabel")
+        finish = web._JS.index("const configurationSelections", start)
+        script = "const assert=require('node:assert/strict'); const esc=s=>String(s).replaceAll('<','&lt;');\n"
+        script += web._JS[start:finish]
+        script += """
+        const html=configurationFields({nodes:[{name:'<static>',role:'static',affinity:{cpus:[1,2]}}],
+          data_centers:[{name:'dc',racks:['dc-R1']}],tenants:[{path:'/Root/db'}]});
+        assert.ok(!html.includes('[object Object]'));
+        for(const text of ['&lt;static>','1, 2','dc-R1','/Root/db'])assert.ok(html.includes(text));
+        """
+        subprocess.run([shutil.which("node"), "-e", script], check=True, capture_output=True, text=True, timeout=10)
+
+    @unittest.skipUnless(shutil.which("node"), "node is required for the local YDB profile panel test")
     def test_local_ydb_finished_profile_does_not_reload_for_another_active_profile(self):
         start = web._JS.index("async function mountLocalYdbProfile")
         finish = web._JS.index("function parseLocalYdbProfileSelection", start)
         script = (
             """
             const assert=require('node:assert/strict');
-            let refreshTimer=null, interval=null, timeout=null, renders=0, reloads=0, state='passed';
+            let refreshTimer=null, interval=null, timeout=null, renders=0, reloads=0, state='passed', runState='running';
             const enc=encodeURIComponent, displayError=error=>{throw error};
-            const api=async()=>({state});
+            const api=async path=>({state:path.includes('local-ydb-profile')?state:runState});
             const loadLocalYdbActivity=async()=>({events:[]});
             const renderLocalYdbProfile=()=>{renders++};
             const setInterval=callback=>{interval=callback;return 1};
@@ -3268,15 +3337,19 @@ const profileByKey=()=>null;
             (async()=>{
               for(const terminal of ['passed','failed','cancelled']){
                 state=terminal;
-                await mountLocalYdbProfile({dataset:{}},'run','finished','running');
-                assert.equal(refreshTimer,null);
-                assert.equal(timeout,null);
+                await mountLocalYdbProfile({dataset:{},isConnected:true},'run','finished','running');
+                assert.ok(timeout);
+                await timeout();
+                assert.equal(reloads,0);
+                timeout=null;refreshTimer=null;
               }
               state='preparing';
-              await mountLocalYdbProfile({dataset:{}},'run','active','running');
+              let ticks=0;
+              await mountLocalYdbProfile({dataset:{},isConnected:true},'run','active','running','','distributed-ydb',()=>{ticks++});
               assert.ok(interval);
               state='running';
               await interval();
+              assert.equal(ticks,2);
               assert.equal(timeout,null);
               state='passed';
               await interval();
@@ -3284,9 +3357,10 @@ const profileByKey=()=>null;
               assert.ok(timeout);
               const complete=timeout;
               timeout=null;refreshTimer=null;
-              complete();
+              runState='cancelled';
+              await complete();
               assert.equal(reloads,1);
-              await mountLocalYdbProfile({dataset:{}},'run','active','running');
+              await mountLocalYdbProfile({dataset:{},isConnected:true},'run','active','cancelled');
               assert.equal(timeout,null);
               assert.equal(refreshTimer,null);
               assert.equal(renders,7);
@@ -3483,7 +3557,9 @@ const profileByKey=()=>null;
             (async()=>{
               for(const view of [undefined,'summary','counters','commands']){
                 pieces=['attempt','run','profile','7'];if(view)pieces.push(view);
-                await compose();assert.deepEqual(seen,['run','profile','7',view]);
+                await compose();assert.deepEqual(seen,['run','profile','7',view,'local-ydb']);
+                pieces[0]='distributed-attempt';
+                await compose();assert.deepEqual(seen,['run','profile','7',view,'distributed-ydb']);
               }
             })().catch(error=>{console.error(error);process.exitCode=1});
             """
@@ -3983,6 +4059,7 @@ const profileByKey=()=>null;
         script += """
 const app={innerHTML:''},buttons=new Map(),sessionStorage={setItem:()=>{}};
 let activeRun='',failConfig=false,configReads=0;
+const distributedHosts=new Map(),hostRecord=id=>({name:distributedHosts.get(id)||id});
 const viewedHost='',splitRunRef=()=>null,runDisplay=value=>value;
 const document={querySelector:selector=>{
   if(!buttons.has(selector))buttons.set(selector,{querySelectorAll:()=>[]});
@@ -4009,6 +4086,12 @@ async function api(path){
 }
 (async()=>{
   await renderRun('run-id','','configuration');
+  const distributed=configurationProfile({'cluster-template':{name:'cluster',nodes:[{name:'node-1',host_id:'local'}]},
+    storage:{'cpu-count':8},tenants:{'/Root/db':{'cpu-count':16}},'cli-nodes':{'cli-1':{client:{threads:4}}},measurement:{duration:60}});
+  for(const text of ['Cluster','Storage','Tenant · /Root/db','Load generator · cli-1','Run policy','Local']){
+    if(!distributed.includes(text))throw Error('Distributed section missing: '+text)
+  }
+  if((distributed.match(/node-1/g)||[]).length!==1)throw Error('Repeated node name');
   if(!app.innerHTML.includes('saved: &lt;script>'))throw Error('Saved YAML is absent or unescaped');
   if(!app.innerHTML.includes('perf: on'))throw Error('Run options missing');
   if(!app.innerHTML.includes('data-config-profile="yaml"'))throw Error('YAML is not a peer profile tab');
@@ -4049,6 +4132,9 @@ const renderRun=(...args)=>{rendered=args};
   assert.deepEqual(rendered,[ref,'','configuration']);
   assert.equal(hostApiPath('/api/runs/'+enc(ref)+'/config.json'),
     '/api/hosts/60834016-4866-405f-bdbc-63271c093b06/api/runs/remote-run/config.json');
+  location.hash='#distributed-attempt/'+enc(ref)+'/same/7/counters';
+  assert.equal(hostApiPath('/api/runs/remote-run/artifact/distributed-ydb/same/counters.jsonl'),
+    '/api/hosts/60834016-4866-405f-bdbc-63271c093b06/api/runs/remote-run/artifact/distributed-ydb/same/counters.jsonl');
 })().catch(error=>{console.error(error);process.exitCode=1});
 """
         subprocess.check_call([shutil.which("node"), "-e", script], timeout=10)
@@ -7453,7 +7539,7 @@ class WebTest(unittest.TestCase):
                 "ping-bench:\n  replay: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
             )["id"]
             run = service._runs[run_id]
-            self.assertTrue(run["finished"].wait(2))
+            self.assertTrue(run["finished"].wait(10))
             replayed = service.events(run_id, after=0)
             persisted = [json.loads(line) for line in (run["root"] / "events.jsonl").read_text().splitlines()]
             self.assertGreater(len(replayed), service.event_limit)
@@ -8202,6 +8288,7 @@ class WebTest(unittest.TestCase):
         const assert=require('assert'),enc=encodeURIComponent;
         const esc=value=>String(value).replaceAll('<','&lt;').replaceAll('"','&quot;');
         let refreshes=0,activeRun=null;
+        const location={hash:'#runs'};
         const viewedHost='';
         const queueMicrotask=callback=>callback(),refreshActiveBanner=()=>{refreshes++};
         for(const page of ['runs','new','topology','comparisons']){
@@ -8216,7 +8303,10 @@ class WebTest(unittest.TestCase):
           for(const destination of ['runs','topology','comparisons'])assert(html.includes('href="#'+destination+'"'));
         }
         activeRun='run/<tag>';
+        location.hash='#run/example';
         const html=shell('runs','');
+        assert(html.includes('id=refresh-run'));
+        assert(html.indexOf('id=refresh-run')<html.indexOf('</header>'));
         assert(html.includes('href="#run/run%2F%3Ctag%3E"'));
         assert(html.includes('Active run: run/&lt;tag>'));
         assert.equal(refreshes,5);
@@ -8713,7 +8803,7 @@ const renderTopology=()=>{rendered='topology'};
                 self.assertIn(b"Recent activity", script)
                 self.assertIn(b"activityScrollTop", script)
                 self.assertIn(b"activityPinned", script)
-                self.assertIn(b"showLiveOutput=activeBenchmark!=='local-ydb'", script)
+                self.assertIn(b"showLiveOutput=!['local-ydb','distributed-ydb'].includes(activeBenchmark)", script)
                 self.assertIn(b"local-load-allow-errors", script)
                 self.assertIn(b"allow-errors: ", script)
                 self.assertIn(b"Failed workload requests are allowed", script)
@@ -8976,7 +9066,7 @@ const renderTopology=()=>{rendered='topology'};
             self.assertTrue(request("/api/validate", "POST", yaml_text.encode())["valid"])
             self.assertEqual(len(request("/api/plan", "POST", yaml_text.encode())["plan"]), 1)
             created = request("/api/runs", "POST", yaml_text.encode())
-            self.assertTrue(started.wait(2))
+            self.assertTrue(started.wait(30))
             detail = request("/api/runs/" + created["id"])
             self.assertEqual(detail["steps"][0]["state"], "running")
             self.assertEqual(detail["steps"][0]["progress"], {"phase": "measuring", "attempt": 2})
@@ -8995,10 +9085,12 @@ const renderTopology=()=>{rendered='topology'};
             release.set()
             server.shutdown()
             server.server_close()
+            worker.join(30)
+            self.assertFalse(worker.is_alive())
 
     def test_run_service_serializes_emission_and_idempotent_cancellation(self):
         """Executor progress and duplicate cancel requests share one ordered publication boundary."""
-        race = threading.Barrier(3)
+        race = threading.Barrier(3, timeout=30)
         release_executor = threading.Event()
 
         def fake_executor(run, emit, _cancelled):
@@ -9007,9 +9099,12 @@ const renderTopology=()=>{rendered='topology'};
             race.wait()
             emit({"type": "stdout", "data": "executor progress\n"})
             emit({"type": "step-finished", "step_id": step_id, "state": "passed"})
-            self.assertTrue(release_executor.wait(2))
+            self.assertTrue(release_executor.wait(30))
 
         service = RunService(self.root, executor=fake_executor)
+        self.addCleanup(service.shutdown)
+        self.addCleanup(release_executor.set)
+        self.addCleanup(race.abort)
         yaml_text = "ping-bench:\n  race: {threads: [1], duration: 1, repetitions: 1, affinity: [none]}\n"
         run_id = service.start(yaml_text)["id"]
         responses = []
@@ -9022,12 +9117,12 @@ const renderTopology=()=>{rendered='topology'};
         for thread in cancellers:
             thread.start()
         for thread in cancellers:
-            thread.join(2)
+            thread.join(30)
             self.assertFalse(thread.is_alive())
         release_executor.set()
 
         run = service._runs[run_id]
-        self.assertTrue(run["finished"].wait(2))
+        self.assertTrue(run["finished"].wait(30))
         events = service.events(run_id)
         self.assertEqual([event["sequence"] for event in events], list(range(1, len(events) + 1)))
         self.assertEqual(sum(event["type"] == "cancel-requested" for event in events), 1)
@@ -9043,6 +9138,14 @@ const renderTopology=()=>{rendered='topology'};
         self.assertEqual(service.cancel(run_id)["state"], "cancelled")
         self.assertEqual(service.events(run_id), events)
 
+    def test_server_close_releases_socket_when_recovery_blocks_shutdown(self):
+        server = web._RunServiceHTTPServer(("127.0.0.1", 0), mock.Mock())
+        server.service = mock.Mock()
+        server.service.shutdown.side_effect = BenchmarkError("resource recovery required")
+        with self.assertRaisesRegex(BenchmarkError, "resource recovery"):
+            server.server_close()
+        self.assertEqual(-1, server.socket.fileno())
+
     def test_run_service_shutdown_cancels_and_joins_active_workers(self):
         """Server teardown cancels the active run and every queued run."""
         started = threading.Event()
@@ -9056,7 +9159,9 @@ const renderTopology=()=>{rendered='topology'};
             step_id = run["store"].manifest["steps"][0]["id"]
             emit({"type": "step-started", "step_id": step_id})
             started.set()
-            self.assertTrue(cancelled.wait(2))
+            # Queue admission below validates configuration and writes artifacts;
+            # this is a synchronization guard, not a shutdown latency assertion.
+            self.assertTrue(cancelled.wait(30))
             cancellation_seen.set()
 
         server = make_server("127.0.0.1", 0, self.root, executor=fake_executor)

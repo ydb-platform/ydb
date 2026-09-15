@@ -1,6 +1,7 @@
 #include "part_database.h"
 #include "partition_direct_actor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render.h>
 
@@ -204,10 +205,14 @@ TLocalDbContents MakeLocalDbContents(const TTxPartition::TMonitoring& args)
 
 TTabletInfo TPartitionActor::MakeMonTabletInfo() const
 {
+    const ui32 blockSize = VolumeConfig.GetBlockSize();
     return {
         .TabletId = TabletID(),
         .Generation = Executor()->Generation(),
-        .BlockSize = VolumeConfig.GetBlockSize(),
+        .BlockSize = blockSize,
+        .BlockCount = VolumeConfig.GetPartitions(0).GetBlockCount(),
+        .VChunkBlockCount = StorageConfig->GetVChunkSize() / blockSize,
+        .RegionBlockCount = RegionSize / blockSize,
         .DiskId = VolumeConfig.GetDiskId(),
         .State = FastPathService ? "WORK" : "INIT",
     };

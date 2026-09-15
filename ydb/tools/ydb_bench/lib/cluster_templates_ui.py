@@ -182,6 +182,15 @@ function ctNodeInfo(node,view,hostName){
   }
   return details.join(' · ');
 }
+function ctRunDraft(record,tenant){
+  if(!record.tenants?.some(item=>item.path===tenant)||
+     !record.nodes.some(node=>node.role==='dynamic'&&node.tenant===tenant)){
+    throw Error('Select a tenant with at least one dynamic node')
+  }
+  const lines=['distributed-ydb:','  cluster:'];
+  serializeDistributedYdb(lines,{distributed_config:distributedDefault(record,tenant)});
+  return lines.join('\n')+'\n'
+}
 async function renderClusterTemplates(id){
   clearRefresh();const generation=(renderClusterTemplates.version||0)+1,current=location.hash;
   renderClusterTemplates.version=generation;
@@ -286,6 +295,7 @@ async function renderClusterTemplates(id){
       app.innerHTML=shell('cluster-templates',
         '<div class=runs-toolbar><a href="#cluster-templates">Cluster templates</a><div class=runs-actions>'+
         '<button id=ct-copy>Copy template</button>'+(record.id?'<button id=ct-delete>Delete template</button>':'')+
+        '<button id=ct-run>New run</button>'+
         '<button id=ct-save class=primary>Save template</button></div></div><div id=ct-error></div>'+
         '<div class=ct-fields><label>Template name<input id=ct-name maxlength=200 value="'+esc(record.name)+'"></label></div>'+
         '<p class=muted>Placement only · does not start a cluster</p><div class="profile-tabs ct-placement-tabs">'+
@@ -423,6 +433,17 @@ async function renderClusterTemplates(id){
       const del=app.querySelector('#ct-delete');if(del)del.onclick=async()=>{
         if(!confirm('Delete template "'+record.name+'"?'))return;
         try{await api('/api/cluster-templates/delete',jsonOptions({id:record.id,revision:record.revision}));if(active())setRoute('cluster-templates')}catch(e){error(e)}
+      };
+      app.querySelector('#ct-run').onclick=()=>{
+        const tenants=record.tenants.filter(t=>record.nodes.some(n=>n.role==='dynamic'&&n.tenant===t.path));
+        if(!tenants.length){error(Error('Add a tenant and assign at least one dynamic node before preparing a run'));return}
+        dialog('Prepare run','<label>Target tenant<select name=tenant>'+tenants.map(t=>
+          '<option value="'+esc(t.path)+'">'+esc(t.path)+'</option>').join('')+'</select></label>'+
+          '<p>Use the current placement as a snapshot in a new distributed-ydb YAML draft. '+
+          'This replaces the New run draft, but does not save the template or start any workload.</p>',data=>{
+            editor.yaml=ctRunDraft(record,data.get('tenant'));editor.perf=false;editor.continueOnError=false;
+            editor.model=null;editor.selected=null;editor.error=null;editorHost='';saveDraft();setRoute('new/yaml');
+          });
       };
       app.querySelector('#ct-save').onclick=async e=>{
         if(saving)return;saving=true;e.currentTarget.disabled=true;

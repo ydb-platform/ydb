@@ -849,6 +849,31 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             return;
         }
 
+        // Pending acknowledgements belong to replica groups, not their positions
+        // in the configuration: reconfiguration may reorder or remove groups.
+        TVector<size_t> previousGroups(info->RingGroups.size(), Max<size_t>());
+        if (GroupInfo) {
+            for (size_t next : xrange(info->RingGroups.size())) {
+                for (size_t previous : xrange(GroupInfo->RingGroups.size())) {
+                    if (info->RingGroups[next].Rings == GroupInfo->RingGroups[previous].Rings) {
+                        previousGroups[next] = previous;
+                        break;
+                    }
+                }
+            }
+        }
+        for (auto& [cookie, update] : UpdateAcks) {
+            for (auto& [pathVersion, acks] : update.PathAcks) {
+                TVector<ui32> remapped(info->RingGroups.size(), 0);
+                for (size_t next : xrange(previousGroups.size())) {
+                    if (previousGroups[next] != Max<size_t>()) {
+                        remapped[next] = acks[previousGroups[next]];
+                    }
+                }
+                acks.swap(remapped);
+            }
+        }
+
         THashSet<TActorId> neededReplicas;
 
         GroupInfo = info;

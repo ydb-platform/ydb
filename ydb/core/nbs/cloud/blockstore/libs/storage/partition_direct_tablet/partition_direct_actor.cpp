@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
@@ -334,14 +335,14 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
     Y_ABORT_UNLESS(nbsService->Scheduler);
     Y_ABORT_UNLESS(nbsService->Timer);
 
+    const ui32 volumeDbgCount = DefaultVolumeDirectBlockGroupCount;
     TVector<IDirectBlockGroupPtr> directBlockGroups;
     auto arenaAllocator = CreateArenaAllocator();
-    directBlockGroups.reserve(DirectBlockGroupsCount);
+    directBlockGroups.reserve(volumeDbgCount);
     TVector<NTransport::IChaosInjectorControlPtr> chaosInjectorControls;
-    chaosInjectorControls.reserve(DirectBlockGroupsCount);
+    chaosInjectorControls.reserve(volumeDbgCount);
 
-    auto executors =
-        nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
+    auto executors = nbsService->ExecutorPool.GetExecutors(volumeDbgCount);
 
     // Session counters are aggregated at the disk level: all direct block
     // groups of this tablet share the same counters chain, so per-group
@@ -351,7 +352,7 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
         StorageConfig->GetDDiskPoolName(),
         DiskDescription);
 
-    for (ui32 dbgIndex = 0; dbgIndex < DirectBlockGroupsCount; dbgIndex++) {
+    for (ui32 dbgIndex = 0; dbgIndex < volumeDbgCount; dbgIndex++) {
         const auto& conn =
             DirectBlockGroupsConnections.GetDirectBlockGroupConnections(
                 dbgIndex);
@@ -434,15 +435,18 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 
     auto request = MakeAllocateDDiskBlockGroupRequest();
 
-    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-    const ui64 regionsCount =
-        AlignUp(blockCount * VolumeConfig.GetBlockSize(), RegionSize) /
-        RegionSize;
+    const ui64 regionsCount = GetRegionCount(
+        VolumeConfig.GetPartitions(0).GetBlockCount(),
+        VolumeConfig.GetBlockSize(),
+        StorageConfig->GetVChunkSize());
+    const ui32 vChunkPerDbgCount = GetVChunkCountPerDirectBlockGroup(
+        regionsCount,
+        DefaultVolumeDirectBlockGroupCount);
 
-    for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
+    for (size_t i = 0; i < DefaultVolumeDirectBlockGroupCount; i++) {
         auto* query = request->Record.AddQueries();
         query->SetDirectBlockGroupId(i);
-        query->SetTargetNumVChunks(regionsCount);
+        query->SetTargetNumVChunks(vChunkPerDbgCount);
     }
 
     NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
@@ -709,11 +713,8 @@ void TPartitionActor::HandleInitialAllocationResult(
     const auto* msg = ev->Get();
 
     if (msg->Record.GetStatus() == NKikimrProto::EReplyStatus::OK) {
-        Y_ABORT_UNLESS(
-            msg->Record.GetResponses().size() == DirectBlockGroupsCount);
-
         TDirectBlockGroupsConnections ids;
-        for (size_t i = 0; i < DirectBlockGroupsCount; i++) {
+        for (size_t i = 0; i < VChunkPerRegionCount; i++) {
             auto* directBlockGroupConnections =
                 ids.AddDirectBlockGroupConnections();
             const auto& response = msg->Record.GetResponses()[i];

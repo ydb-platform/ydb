@@ -41,7 +41,7 @@ public:
         };
         auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
         return Env->Runtime->Register(CreateBlobCheckerOrchestratorActor(
-                bscActorId, std::move(groups), TDuration::Zero(), counters),
+                bscActorId, std::move(groups), TDuration::Seconds(1), counters),
                 TActorId(), 0, std::nullopt, 1);
     }
 
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(BlobCheckerActors) {
         const TActorId bscActorId = env.Env->Runtime->AllocateEdgeActor(1);
         const TLogoBlobID cursor = MakeBlobId(10);
         TBlobCheckerGroupStatus status(EBlobCheckerResultStatusFlags::DataIssues,
-                TMonotonic::Zero(), cursor);
+                TInstant::Zero(), cursor);
 
         auto assimilation = StartOrchestratorWorker(env, status, bscActorId);
         const auto* request = assimilation->Get<TEvBlobStorage::TEvAssimilate>();
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(BlobCheckerActors) {
         TActorTestEnv env;
         const TActorId bscActorId = env.Env->Runtime->AllocateEdgeActor(1);
         TBlobCheckerGroupStatus status(EBlobCheckerResultStatusFlags::ScanFinished,
-                TMonotonic::Zero(), MakeBlobId(10));
+                TInstant::Zero(), MakeBlobId(10));
 
         auto assimilation = StartOrchestratorWorker(env, status, bscActorId);
         UNIT_ASSERT(!assimilation->Get<TEvBlobStorage::TEvAssimilate>()->SkipBlobsUpTo);
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(BlobCheckerActors) {
         TActorTestEnv env;
         const TActorId bscActorId = env.Env->Runtime->AllocateEdgeActor(1);
         const TActorId staleWorkerId = env.Env->Runtime->AllocateEdgeActor(1);
-        TBlobCheckerGroupStatus status(0, TMonotonic::Zero(), {});
+        TBlobCheckerGroupStatus status(0, TInstant::Zero(), {});
 
         TActorId orchestratorId;
         auto assimilation = StartOrchestratorWorker(env, status, bscActorId, &orchestratorId);
